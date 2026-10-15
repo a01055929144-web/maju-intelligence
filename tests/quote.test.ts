@@ -9,6 +9,7 @@ import {
   calculateSalesPrice,
   findCatalogMatch,
   resolveQuoteValidUntil,
+  resolveQuoteAgreementTaxType,
   toCustomerQuoteLines,
   validateSalesQuoteInput,
   type QuoteLine
@@ -33,6 +34,12 @@ describe("quote tax snapshots", () => {
       { quantity: 0.5, taxType: "taxable", unitPrice: 101 },
       { quantity: 2, taxType: "exempt", unitPrice: 500 }
     ])).toEqual({ taxableSupplyAmount: 51, exemptSupplyAmount: 1000, taxAmount: 5, totalAmount: 1056 });
+  });
+
+  it("uses snapshot first, falls back to catalog tax, and never guesses", () => {
+    expect(resolveQuoteAgreementTaxType("exempt", "taxable")).toBe("exempt");
+    expect(resolveQuoteAgreementTaxType(null, "exempt")).toBe("exempt");
+    expect(resolveQuoteAgreementTaxType(null, null)).toBeNull();
   });
 });
 

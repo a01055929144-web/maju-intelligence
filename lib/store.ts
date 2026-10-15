@@ -23,7 +23,7 @@ import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 import { validateDeliveryRouteUnitInput, type DeliveryRouteUnit, type DeliveryRouteUnitInput } from "../domains/delivery/route-unit";
 import type { LeadActionRepository } from "@/domains/lead/lead-action";
-import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
+import { calculateQuoteTaxLine, resolveQuoteAgreementTaxType, type QuoteTaxType } from "../domains/quote/quote";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -6339,8 +6339,8 @@ async function buildSalesQuoteItemRows(companyId: string, quoteId: string, items
   const catalogById = new Map(catalogs.map((item) => [item.id, item]));
   return items.map((item, index) => {
     const catalog = item.productCatalogId ? catalogById.get(item.productCatalogId) : undefined;
-    const taxType: QuoteTaxType = catalog?.tax_type === "exempt" ? "exempt" : "taxable";
-    const amounts = calculateQuoteTaxLine(item.salesUnitPrice, item.quantity, taxType);
+    const taxType: QuoteTaxType | null = catalog?.tax_type === "exempt" || catalog?.tax_type === "taxable" ? catalog.tax_type : null;
+    const amounts = calculateQuoteTaxLine(item.salesUnitPrice, item.quantity, taxType || "taxable");
     return {
       company_id: companyId,
       conversion_ratio_snapshot: catalog?.purchase_to_sales_ratio ?? null,
@@ -6779,7 +6779,17 @@ async function applyQuoteContractPrices(companyId: string, quoteId: string, cust
     `sales_quote_items?select=id,product_catalog_id,sales_unit_snapshot,unit,sales_unit_price,tax_type_snapshot&company_id=eq.${encodeURIComponent(companyId)}&quote_id=eq.${encodeURIComponent(quoteId)}&order=sort_order.asc`
   );
   const connected = items.filter((item) => item.product_catalog_id);
-  for (const item of connected) {
+  const catalogIds = Array.from(new Set(connected.map((item) => item.product_catalog_id as string)));
+  const catalogs = catalogIds.length ? await supabaseRequest<Array<{ id: string; tax_type: QuoteTaxType | null }>>(
+    `product_catalog?select=id,tax_type&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${catalogIds.map(encodeURIComponent).join(",")})`
+  ) : [];
+  const catalogTaxById = new Map(catalogs.map((item) => [item.id, item.tax_type]));
+  const resolvedItems = connected.map((item) => ({
+    ...item,
+    resolvedTaxType: resolveQuoteAgreementTaxType(item.tax_type_snapshot, catalogTaxById.get(item.product_catalog_id as string))
+  }));
+  const applicableItems = resolvedItems.filter((item): item is typeof item & { resolvedTaxType: QuoteTaxType } => item.resolvedTaxType !== null);
+  for (const item of applicableItems) {
     const active = await supabaseRequest<Array<{ effective_from: string; effective_until: string | null; ended_at: string | null; ended_by_name: string | null; id: string }>>(
       `customer_price_agreements?select=id,effective_from,effective_until,ended_at,ended_by_name&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(customerId)}&product_catalog_id=eq.${encodeURIComponent(item.product_catalog_id!)}&status=eq.active`
     );
@@ -6795,7 +6805,7 @@ async function applyQuoteContractPrices(companyId: string, quoteId: string, cust
         company_id: companyId, created_by_name: actorName || null, customer_id: customerId, effective_from: today,
         product_catalog_id: item.product_catalog_id, sales_unit: item.sales_unit_snapshot || item.unit || "EA",
         source_quote_id: quoteId, source_quote_item_id: item.id, status: "active",
-        tax_type: item.tax_type_snapshot === "exempt" ? "exempt" : "taxable", unit_price: Math.round(Number(item.sales_unit_price))
+        tax_type: item.resolvedTaxType, unit_price: Math.round(Number(item.sales_unit_price))
       }) });
     } catch (error) {
       await Promise.all(active.map((previous) => supabaseRequest(
@@ -6809,7 +6819,7 @@ async function applyQuoteContractPrices(companyId: string, quoteId: string, cust
       throw new Error(message);
     }
   }
-  return { appliedCount: connected.length, unlinkedCount: items.length - connected.length };
+  return { appliedCount: applicableItems.length, taxUnconfirmedCount: resolvedItems.length - applicableItems.length, unlinkedCount: items.length - connected.length };
 }
 
 export async function acceptSalesQuote(companyId: string, quoteId: string, actorName?: string) {
@@ -6819,8 +6829,8 @@ export async function acceptSalesQuote(companyId: string, quoteId: string, actor
   const quote = quotes[0];
   if (!quote) throw new Error("이 회사의 견적을 찾지 못했습니다.");
   if (quote.status !== "sent" && quote.status !== "accepted") throw new Error("발행한 견적만 수락 처리할 수 있습니다.");
-  if (quote.status === "accepted" && quote.pricing_applied_at) return { alreadyApplied: true, appliedCount: 0, pendingCustomerConversion: false, unlinkedCount: 0 };
-  const result = quote.customer_id ? await applyQuoteContractPrices(companyId, quoteId, quote.customer_id, actorName) : { appliedCount: 0, unlinkedCount: 0 };
+  if (quote.status === "accepted" && quote.pricing_applied_at) return { alreadyApplied: true, appliedCount: 0, pendingCustomerConversion: false, taxUnconfirmedCount: 0, unlinkedCount: 0 };
+  const result = quote.customer_id ? await applyQuoteContractPrices(companyId, quoteId, quote.customer_id, actorName) : { appliedCount: 0, taxUnconfirmedCount: 0, unlinkedCount: 0 };
   await supabaseRequest(`sales_quotes?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}`, {
     method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ accepted_at: new Date().toISOString(), accepted_by_name: actorName || null,
       accepted_via: "staff", pricing_applied_at: quote.customer_id ? new Date().toISOString() : null, status: "accepted", updated_at: new Date().toISOString() })

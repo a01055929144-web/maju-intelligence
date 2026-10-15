@@ -90,6 +90,12 @@ export function calculateQuoteTaxTotals(lines: Array<{ quantity: number; taxType
   );
 }
 
+export function resolveQuoteAgreementTaxType(snapshot?: string | null, catalog?: string | null): QuoteTaxType | null {
+  if (snapshot === "taxable" || snapshot === "exempt") return snapshot;
+  if (catalog === "taxable" || catalog === "exempt") return catalog;
+  return null;
+}
+
 /** 거래처 공유 데이터에는 매입가·마진·예상 이익을 구조적으로 포함하지 않습니다. */
 export function toCustomerQuoteLines(lines: QuoteLine[]): CustomerQuoteLine[] {
   return lines
