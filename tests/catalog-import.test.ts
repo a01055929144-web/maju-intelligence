@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildCatalogPreview,
   buildSupplierProductWrite,
+  convertedUnitCost,
+  inferTaxType,
   parseProductText,
   planSupplierMatchRefresh,
   rankProductCandidates,
@@ -128,8 +130,21 @@ describe("catalog import", () => {
       "supplier",
     ).products[0];
     const write = buildSupplierProductWrite("company", "supplier", parsed);
-    expect(write).toMatchObject({ latest_cost: 1250, cost_confirmed: true, source_fingerprint: "supplier:code:one" });
-    const plan = planSupplierMatchRefresh(["supplier-product"], [{ supplierProductId: "supplier-product", productCatalogId: "catalog", matchStatus: "confirmed" }]);
+    expect(write).toMatchObject({
+      latest_cost: 1250,
+      cost_confirmed: true,
+      source_fingerprint: "supplier:code:one",
+    });
+    const plan = planSupplierMatchRefresh(
+      ["supplier-product"],
+      [
+        {
+          supplierProductId: "supplier-product",
+          productCatalogId: "catalog",
+          matchStatus: "confirmed",
+        },
+      ],
+    );
     expect(plan.unresolvedSupplierIds).toEqual([]);
   });
   it("keeps only three ranked candidates and excludes rejected catalog items", () => {
@@ -140,9 +155,31 @@ describe("catalog import", () => {
     ).products[0];
     const candidates = rankProductCandidates(
       source,
-      ["a", "b", "c", "d"].map((id) => ({ id, name: source.name, brand: source.brand, origin: source.origin, specValue: source.specValue, specUnit: source.specUnit, unit: source.unit })),
+      ["a", "b", "c", "d"].map((id) => ({
+        id,
+        name: source.name,
+        brand: source.brand,
+        origin: source.origin,
+        specValue: source.specValue,
+        specUnit: source.specUnit,
+        unit: source.unit,
+      })),
       new Set(["a"]),
     );
-    expect(candidates.map((candidate) => candidate.target.id)).toEqual(["b", "c", "d"]);
+    expect(candidates.map((candidate) => candidate.target.id)).toEqual([
+      "b",
+      "c",
+      "d",
+    ]);
+  });
+  it("infers tax type from VAT and supply amount", () => {
+    expect(inferTaxType(0, 10_000)).toBe("exempt");
+    expect(inferTaxType(1_000, 10_000)).toBe("taxable");
+    expect(inferTaxType(300, 10_000)).toBeUndefined();
+  });
+  it("uses converted cost only after the ratio is confirmed", () => {
+    expect(convertedUnitCost(10_000, 10, true)).toBe(1_000);
+    expect(convertedUnitCost(10_000, 10, false)).toBeUndefined();
+    expect(convertedUnitCost(10_000, 0, true)).toBeUndefined();
   });
 });

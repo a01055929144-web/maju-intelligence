@@ -28,6 +28,8 @@ export type SupplierProductAdminItem = {
   matchStatus: "auto" | "candidate" | "confirmed" | "unmatched";
   matchedCatalogId?: string;
   matchedCatalogName?: string;
+  suggestedRatio?: number;
+  conversionConfirmed: boolean;
 };
 export async function listProductImportWorkspace(companyId: string) {
   const [suppliers, products, matches, catalog] = await Promise.all([
@@ -43,9 +45,11 @@ export async function listProductImportWorkspace(companyId: string) {
         product_catalog_id: string;
         match_status: "auto" | "candidate" | "confirmed";
         candidate_rank: number | null;
+        purchase_to_sales_ratio: number | null;
+        conversion_confirmed: boolean;
       }>
     >(
-      `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status,candidate_rank&company_id=eq.${enc(companyId)}&order=candidate_rank.asc.nullslast`,
+      `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status,candidate_rank,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${enc(companyId)}&order=candidate_rank.asc.nullslast`,
     ),
     db<Array<Record<string, unknown>>>(
       `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
@@ -84,9 +88,41 @@ export async function listProductImportWorkspace(companyId: string) {
         matchedCatalogName: m
           ? catalogNames.get(m.product_catalog_id)
           : undefined,
+        suggestedRatio:
+          m?.purchase_to_sales_ratio == null
+            ? p.parsed_pack_quantity == null
+              ? undefined
+              : Number(p.parsed_pack_quantity)
+            : Number(m.purchase_to_sales_ratio),
+        conversionConfirmed: Boolean(m?.conversion_confirmed),
       } satisfies SupplierProductAdminItem;
     }),
   };
+}
+
+export async function confirmSupplierProductConversion(
+  companyId: string,
+  supplierProductId: string,
+  ratio: number,
+) {
+  if (!Number.isFinite(ratio) || ratio <= 0)
+    throw new Error("환산 비율은 0보다 커야 합니다.");
+  const rows = await db<Array<{ id: string }>>(
+    `supplier_product_matches?select=id&company_id=eq.${enc(companyId)}&supplier_product_id=eq.${enc(supplierProductId)}&match_status=in.(auto,confirmed)&limit=1`,
+  );
+  if (!rows[0]) throw new Error("확정된 표준 품목 매핑이 없습니다.");
+  await db(
+    `supplier_product_matches?id=eq.${enc(rows[0].id)}&company_id=eq.${enc(companyId)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        purchase_to_sales_ratio: ratio,
+        conversion_confirmed: true,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
 }
 
 export async function saveProductCatalogImport(input: {
@@ -256,13 +292,13 @@ export async function saveProductCatalogImport(input: {
         catalog.map((c) => ({
           id: String(c.id),
           record: c,
-            barcodes: Array.isArray(c.barcodes) ? c.barcodes.map(String) : [],
-            brand: c.brand_name ? String(c.brand_name) : undefined,
-            name: String(c.canonical_name || c.purchase_product_name || ""),
-            origin: c.origin_name ? String(c.origin_name) : undefined,
-            specUnit: c.spec_unit ? String(c.spec_unit) : undefined,
-            specValue: c.spec_value == null ? undefined : Number(c.spec_value),
-            unit: c.purchase_unit ? String(c.purchase_unit) : undefined,
+          barcodes: Array.isArray(c.barcodes) ? c.barcodes.map(String) : [],
+          brand: c.brand_name ? String(c.brand_name) : undefined,
+          name: String(c.canonical_name || c.purchase_product_name || ""),
+          origin: c.origin_name ? String(c.origin_name) : undefined,
+          specUnit: c.spec_unit ? String(c.spec_unit) : undefined,
+          specValue: c.spec_value == null ? undefined : Number(c.spec_value),
+          unit: c.purchase_unit ? String(c.purchase_unit) : undefined,
         })),
         rejected,
       );
@@ -343,29 +379,51 @@ export async function createCatalogFromSupplierProducts(
   const products = await db<Array<Record<string, unknown>>>(
     `supplier_products?select=*&company_id=eq.${enc(companyId)}&id=in.(${ids.map(enc).join(",")})`,
   );
-  const rows = products.map((p) => ({
-    company_id: companyId,
-    source: "supplier",
-    source_key: `standard:${p.id}`,
-    purchase_product_name: p.raw_name,
-    purchase_spec: p.raw_spec || null,
-    purchase_unit: p.raw_unit || "EA",
-    purchase_price: p.latest_cost || 0,
-    canonical_name: p.parsed_name || p.raw_name,
-    brand_name: p.parsed_brand || null,
-    origin_name: p.parsed_origin || null,
-    spec_value: p.parsed_spec_value || null,
-    spec_unit: p.parsed_spec_unit || null,
-    pack_quantity: p.parsed_pack_quantity || null,
-    usage_tags: Array.isArray((p.parser_metadata as Json)?.usage_tags)
-      ? (p.parser_metadata as Json).usage_tags
-      : [],
-    barcodes: p.barcode ? [p.barcode] : [],
-    match_status: "matched",
-    is_active: true,
-  }));
+  const sourceKeys = products.map((p) => `standard:${p.id}`);
+  const existing = sourceKeys.length
+    ? await db<Array<{ id: string; source_key: string }>>(
+        `product_catalog?select=id,source_key&company_id=eq.${enc(companyId)}&source=eq.supplier&source_key=in.(${sourceKeys.map(enc).join(",")})`,
+      )
+    : [];
+  const existingBySource = new Map(
+    existing.map((row) => [row.source_key, row.id]),
+  );
+  const rows = products
+    .filter((p) => !existingBySource.has(`standard:${p.id}`))
+    .map((p) => ({
+      company_id: companyId,
+      source: "supplier",
+      source_key: `standard:${p.id}`,
+      purchase_product_name: p.raw_name,
+      purchase_spec: p.raw_spec || null,
+      purchase_unit: p.raw_unit || "EA",
+      purchase_price: p.latest_cost || 0,
+      canonical_name: p.parsed_name || p.raw_name,
+      brand_name: p.parsed_brand || null,
+      origin_name: p.parsed_origin || null,
+      spec_value: p.parsed_spec_value || null,
+      spec_unit: p.parsed_spec_unit || null,
+      pack_quantity: p.parsed_pack_quantity || null,
+      product_code: null,
+      purchase_to_sales_ratio: p.parsed_pack_quantity || null,
+      tax_type: p.parsed_tax_type || null,
+      usage_tags: Array.isArray((p.parser_metadata as Json)?.usage_tags)
+        ? (p.parser_metadata as Json).usage_tags
+        : [],
+      barcodes: p.barcode ? [p.barcode] : [],
+      match_status: "matched",
+      is_active: true,
+    }));
+  const rowsWithCodes = [];
+  for (const row of rows) {
+    const code = await db<string>("rpc/next_product_code", {
+      method: "POST",
+      body: JSON.stringify({ p_company_id: companyId }),
+    });
+    rowsWithCodes.push({ ...row, product_code: code });
+  }
   let created: Array<{ id: string; source_key: string }> = [];
-  for (const part of chunks(rows))
+  for (const part of chunks(rowsWithCodes))
     created = created.concat(
       await db<Array<{ id: string; source_key: string }>>(
         `product_catalog?on_conflict=company_id,source,source_key`,
@@ -378,7 +436,10 @@ export async function createCatalogFromSupplierProducts(
         },
       ),
     );
-  const catalogBySource = new Map(created.map((x) => [x.source_key, x.id]));
+  const catalogBySource = new Map([
+    ...Array.from(existingBySource.entries()),
+    ...created.map((x) => [x.source_key, x.id] as const),
+  ]);
   const matches = products
     .map((p) => ({
       company_id: companyId,
@@ -393,6 +454,8 @@ export async function createCatalogFromSupplierProducts(
       spec_matches: true,
       unit_matches: true,
       confirmed_at: new Date().toISOString(),
+      purchase_to_sales_ratio: p.parsed_pack_quantity || null,
+      conversion_confirmed: false,
     }))
     .filter((x) => x.product_catalog_id);
   for (const part of chunks(matches))

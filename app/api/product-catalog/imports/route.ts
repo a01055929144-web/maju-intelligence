@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import {
   createCatalogFromSupplierProducts,
+  confirmSupplierProductConversion,
   listProductImportWorkspace,
   saveProductCatalogImport,
 } from "@/lib/product-catalog-import";
@@ -119,6 +120,8 @@ export async function POST(request: NextRequest) {
     excludedCount?: number;
     warnings?: string[];
     supplierProductIds?: string[];
+    supplierProductId?: string;
+    ratio?: number;
   };
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok)
@@ -129,6 +132,14 @@ export async function POST(request: NextRequest) {
       { status: 403 },
     );
   try {
+    if (body?.action === "confirm-conversion") {
+      await confirmSupplierProductConversion(
+        scope.companyId!,
+        body.supplierProductId || "",
+        Number(body.ratio),
+      );
+      return NextResponse.json({ ok: true });
+    }
     if (body?.action === "create-standards")
       return NextResponse.json(
         await createCatalogFromSupplierProducts(

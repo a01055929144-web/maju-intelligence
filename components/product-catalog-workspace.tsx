@@ -37,6 +37,8 @@ const labels: Record<CatalogField, string> = {
   buyerCode: "구매처코드",
   date: "일자",
   quantity: "수량",
+  supplyAmount: "공급가액",
+  vat: "부가세",
 };
 const money = (value?: number) =>
   value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
@@ -101,6 +103,32 @@ export function ProductCatalogWorkspace({
     } finally {
       setLoading(false);
     }
+  }
+  async function confirmConversion(item: SupplierProductAdminItem) {
+    const ratio = Number(
+      window.prompt(
+        "매입 1단위가 판매 몇 단위인지 확인해 주세요.",
+        String(item.suggestedRatio || 1),
+      ),
+    );
+    if (!ratio || ratio <= 0) return;
+    const response = await fetch("/api/product-catalog/imports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "confirm-conversion",
+        companyId,
+        supplierProductId: item.id,
+        ratio,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.message || "환산 비율을 저장하지 못했습니다.");
+      return;
+    }
+    setMessage("환산 비율을 확정했습니다.");
+    await load();
   }
   const items = workspace?.items || [];
   return (
@@ -225,9 +253,24 @@ export function ProductCatalogWorkspace({
                       </td>
                       <td className="px-4 py-3">
                         {item.matchedCatalogName ? (
-                          <span className="font-semibold text-emerald-700">
-                            {item.matchedCatalogName}
-                          </span>
+                          <div>
+                            <span className="font-semibold text-emerald-700">
+                              {item.matchedCatalogName}
+                            </span>
+                            <div className="mt-1 text-xs">
+                              {item.conversionConfirmed ? (
+                                `환산 ${item.suggestedRatio || 1}:1 확정`
+                              ) : (
+                                <button
+                                  className="font-bold text-amber-700 underline"
+                                  onClick={() => void confirmConversion(item)}
+                                  type="button"
+                                >
+                                  환산 {item.suggestedRatio || 1}:1 확인
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                           <span className="text-slate-500">후보 확인 필요</span>
                         )}

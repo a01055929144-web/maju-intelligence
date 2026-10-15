@@ -1,44 +1,111 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { listProductCatalogForAdmin, updateProductCatalogForAdmin, type UpdateProductCatalogInput } from "@/lib/product-catalog-admin";
-
+import {
+  createProductCatalogForAdmin,
+  listProductCatalogForAdmin,
+  updateProductCatalogForAdmin,
+  type SaveProductCatalogInput,
+} from "@/lib/product-catalog-admin";
 export const dynamic = "force-dynamic";
-
+type Scope = Awaited<ReturnType<typeof getRequestAuthScope>>;
+function denied(scope: Scope) {
+  if (!scope.ok)
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!scopeHasCapability(scope, "manage_sales"))
+    return NextResponse.json(
+      { message: "상품 원장을 관리할 권한이 없습니다." },
+      { status: 403 },
+    );
+  return null;
+}
+function actor(scope: Scope) {
+  return {
+    userId: scope.ok ? scope.customerSession?.userId : undefined,
+    name: scope.ok
+      ? scope.customerSession?.name || scope.adminSession?.name || "운영자"
+      : "운영자",
+  };
+}
 export async function GET(request: NextRequest) {
-  const scope = await getRequestAuthScope(request);
-  if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "상품 원장을 조회할 권한이 없습니다." }, { status: 403 });
+  const scope = await getRequestAuthScope(
+      request,
+      request.nextUrl.searchParams.get("companyId") || undefined,
+    ),
+    error = denied(scope);
+  if (error) return error;
   try {
-    const items = await listProductCatalogForAdmin(scope.companyId!, request.nextUrl.searchParams.get("q") || "");
-    return NextResponse.json({ items });
-  } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "상품 원장을 불러오지 못했습니다." }, { status: 500 });
+    return NextResponse.json({
+      items: await listProductCatalogForAdmin(
+        scope.companyId!,
+        request.nextUrl.searchParams.get("q") || "",
+      ),
+    });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        message:
+          e instanceof Error ? e.message : "상품 원장을 불러오지 못했습니다.",
+      },
+      { status: 500 },
+    );
   }
 }
-
-export async function PATCH(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as ({ companyId?: string; id?: string } & Partial<UpdateProductCatalogInput>) | null;
-  const scope = await getRequestAuthScope(request, body?.companyId);
-  if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "상품 원장을 수정할 권한이 없습니다." }, { status: 403 });
-  if (!body?.id || !body.name || !body.unit || !body.matchStatus || body.purchasePrice == null) {
-    return NextResponse.json({ message: "필수 상품 정보가 누락되었습니다." }, { status: 400 });
-  }
+async function payload(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as
+    | ({ companyId?: string; id?: string } & Partial<SaveProductCatalogInput>)
+    | null;
+  return { body, scope: await getRequestAuthScope(request, body?.companyId) };
+}
+export async function POST(request: NextRequest) {
+  const { body, scope } = await payload(request),
+    error = denied(scope);
+  if (error) return error;
+  if (!body?.name)
+    return NextResponse.json(
+      { message: "품목명을 입력해 주세요." },
+      { status: 400 },
+    );
   try {
-    const item = await updateProductCatalogForAdmin(scope.companyId!, body.id, {
-      matchStatus: body.matchStatus,
-      name: body.name,
-      purchasePrice: Number(body.purchasePrice),
-      salesName: body.salesName,
-      salesPrice: body.salesPrice == null ? undefined : Number(body.salesPrice),
-      salesSpec: body.salesSpec,
-      salesUnit: body.salesUnit,
-      spec: body.spec,
-      unit: body.unit
+    return NextResponse.json({
+      item: await createProductCatalogForAdmin(
+        scope.companyId!,
+        body as SaveProductCatalogInput,
+        actor(scope),
+      ),
     });
-    return NextResponse.json({ item });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "상품 원장을 수정하지 못했습니다.";
-    return NextResponse.json({ message }, { status: /필수|이상|필요/.test(message) ? 400 : 500 });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        message: e instanceof Error ? e.message : "품목을 생성하지 못했습니다.",
+      },
+      { status: 400 },
+    );
+  }
+}
+export async function PATCH(request: NextRequest) {
+  const { body, scope } = await payload(request),
+    error = denied(scope);
+  if (error) return error;
+  if (!body?.id || !body.name)
+    return NextResponse.json(
+      { message: "품목 정보를 확인해 주세요." },
+      { status: 400 },
+    );
+  try {
+    return NextResponse.json({
+      item: await updateProductCatalogForAdmin(
+        scope.companyId!,
+        body.id,
+        body as SaveProductCatalogInput,
+        actor(scope),
+      ),
+    });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        message: e instanceof Error ? e.message : "품목을 수정하지 못했습니다.",
+      },
+      { status: 400 },
+    );
   }
 }

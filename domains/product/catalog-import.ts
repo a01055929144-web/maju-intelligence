@@ -10,6 +10,8 @@ export const catalogFields = [
   "buyerCode",
   "date",
   "quantity",
+  "supplyAmount",
+  "vat",
 ] as const;
 export type CatalogField = (typeof catalogFields)[number];
 export type CatalogMapping = Partial<Record<CatalogField, string>>;
@@ -33,6 +35,7 @@ export type ParsedProduct = {
   specValue?: number;
   unit: string;
   usageTags: string[];
+  parsedTaxType?: "taxable" | "exempt";
   salesMin?: number;
   salesMedian?: number;
   observations: Array<{
@@ -57,7 +60,28 @@ const aliases: Record<CatalogField, string[]> = {
   buyerCode: ["거래처코드", "구매처코드"],
   date: ["일자", "거래일", "출고일"],
   quantity: ["수량", "출고수량"],
+  supplyAmount: ["공급가액", "공급액", "과세표준"],
+  vat: ["부가세", "세액", "VAT"],
 };
+
+export function inferTaxType(vat?: number, supplyAmount?: number) {
+  if (vat == null || vat < 0) return undefined;
+  if (vat === 0) return "exempt" as const;
+  if (supplyAmount && supplyAmount > 0) {
+    const rate = vat / supplyAmount;
+    if (rate >= 0.08 && rate <= 0.12) return "taxable" as const;
+  }
+  return undefined;
+}
+
+export function convertedUnitCost(
+  cost: number,
+  ratio?: number,
+  confirmed = false,
+) {
+  if (!confirmed || !ratio || ratio <= 0) return undefined;
+  return cost / ratio;
+}
 export const normalizeHeader = (v: unknown) =>
   String(v ?? "")
     .trim()
@@ -227,6 +251,10 @@ export function buildCatalogPreview(
       specValue: p.specValue,
       unit: text(val(latest, mapping, "unit")) || "미정",
       usageTags: p.usageTags,
+      parsedTaxType: inferTaxType(
+        num(val(latest, mapping, "vat")),
+        num(val(latest, mapping, "supplyAmount")),
+      ),
       salesMin: sales.length ? Math.min(...sales) : undefined,
       salesMedian: median(sales),
       observations: rs.map((r, i) => ({
@@ -278,9 +306,9 @@ export function scoreProductMatch(
     origin: eq(source.origin, target.origin),
     spec: Boolean(
       source.specValue &&
-        target.specValue &&
-        source.specUnit === target.specUnit &&
-        source.specValue === target.specValue,
+      target.specValue &&
+      source.specUnit === target.specUnit &&
+      source.specValue === target.specValue,
     ),
     unit: eq(source.unit, target.unit),
   };
@@ -293,11 +321,18 @@ export function scoreProductMatch(
   return { auto: Object.values(flags).every(Boolean), flags, score };
 }
 
-export function rankProductCandidates<T extends { id: string; barcodes?: string[]; brand?: string; name: string; origin?: string; specUnit?: string; specValue?: number; unit?: string }>(
-  source: ParsedProduct,
-  targets: T[],
-  rejectedCatalogIds = new Set<string>(),
-) {
+export function rankProductCandidates<
+  T extends {
+    id: string;
+    barcodes?: string[];
+    brand?: string;
+    name: string;
+    origin?: string;
+    specUnit?: string;
+    specValue?: number;
+    unit?: string;
+  },
+>(source: ParsedProduct, targets: T[], rejectedCatalogIds = new Set<string>()) {
   return targets
     .filter((target) => !rejectedCatalogIds.has(target.id))
     .map((target) => ({ target, result: scoreProductMatch(source, target) }))
@@ -357,6 +392,7 @@ export function buildSupplierProductWrite(
     parsed_pack_quantity: product.packQuantity || null,
     parsed_spec_unit: product.specUnit || null,
     parsed_spec_value: product.specValue || null,
+    parsed_tax_type: product.parsedTaxType || null,
     parser_metadata: { usage_tags: product.usageTags },
     raw_name: product.rawName,
     raw_spec: product.rawSpec || null,
