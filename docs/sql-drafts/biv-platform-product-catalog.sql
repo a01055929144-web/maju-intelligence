@@ -1,6 +1,7 @@
 -- BIV platform product catalog strategy draft, 2026-10-16.
 -- REVIEW ONLY. DO NOT EXECUTE IN ANY ENVIRONMENT UNTIL EACH PHASE IS APPROVED.
 -- This file intentionally contains the complete target model; implementation must split it by phase.
+-- For the platform admin console, the three biv-platform-admin-phase-*.sql files are now normative.
 
 begin;
 
