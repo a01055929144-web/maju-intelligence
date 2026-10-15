@@ -1255,7 +1255,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     }
   }
 
-  async function convertToCustomer(lead: PermitLeadItem): Promise<{ customerId?: string; existingCustomer?: boolean; message?: string; ok: boolean }> {
+  async function convertToCustomer(lead: PermitLeadItem): Promise<{
+    customerId?: string;
+    existingCustomer?: boolean;
+    message?: string;
+    ok: boolean;
+    pricingAppliedCount?: number;
+    pricingFailedCount?: number;
+  }> {
     setActionMessage("");
     try {
       const previewResponse = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { cache: "no-store" }, 12000);
@@ -1288,9 +1295,16 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
           ok: false
         };
       }
-      setActionMessage(`${lead.businessName}을(를) 거래처로 전환했습니다.`);
+      const successMessage = payload?.message || `${lead.businessName}을(를) 거래처로 전환했습니다.`;
+      setActionMessage(successMessage);
       void loadLeads();
-      return { customerId: payload?.customerId, ok: true };
+      return {
+        customerId: payload?.customerId,
+        message: payload?.message,
+        ok: true,
+        pricingAppliedCount: payload?.pricingAppliedCount,
+        pricingFailedCount: payload?.pricingFailedCount
+      };
     } catch {
       setActionMessage("네트워크 오류로 처리하지 못했습니다.");
       return { ok: false };
@@ -2793,7 +2807,14 @@ function PermitLeadDetailPanel({
   readonly lead: PermitLeadItem;
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string) => Promise<PermitLeadActionResult>;
   readonly onClose: () => void;
-  readonly onConvert: (lead: PermitLeadItem) => Promise<{ customerId?: string; existingCustomer?: boolean; message?: string; ok: boolean }>;
+  readonly onConvert: (lead: PermitLeadItem) => Promise<{
+    customerId?: string;
+    existingCustomer?: boolean;
+    message?: string;
+    ok: boolean;
+    pricingAppliedCount?: number;
+    pricingFailedCount?: number;
+  }>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
   readonly onOpenQuote: (lead: PermitLeadItem) => void;
 }) {
@@ -2823,6 +2844,7 @@ function PermitLeadDetailPanel({
   const [copyMessage, setCopyMessage] = useState("");
   const [convertedCustomerId, setConvertedCustomerId] = useState("");
   const [matchedExistingCustomer, setMatchedExistingCustomer] = useState(false);
+  const [pricingFailureMessage, setPricingFailureMessage] = useState("");
   const [converting, setConverting] = useState(false);
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
@@ -3235,6 +3257,11 @@ function PermitLeadDetailPanel({
                   setConvertedCustomerId(result.customerId);
                   setMatchedExistingCustomer(Boolean(result.existingCustomer));
                 }
+                setPricingFailureMessage(
+                  result.pricingFailedCount
+                    ? result.message || "계약 단가 반영에 실패했습니다."
+                    : ""
+                );
                 setConverting(false);
               }}
               type="button"
@@ -3275,6 +3302,14 @@ function PermitLeadDetailPanel({
               <div className="mt-3">
                 <CustomerAttachmentUploadPanel customerId={convertedCustomerId} customerName={lead.businessName} />
               </div>
+              {pricingFailureMessage ? (
+                <p
+                  className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800"
+                  role="alert"
+                >
+                  {pricingFailureMessage}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

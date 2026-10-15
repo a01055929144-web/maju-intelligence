@@ -112,7 +112,7 @@ export async function saveProductSupplierProfile(
         + `&business_number=eq.${profile.business_number}&id=neq.${enc(supplierId)}&limit=1`
     );
     if (duplicate[0]) {
-      throw new Error(`이미 ${duplicate[0].name} 매입처에서 사용 중인 사업자등록번호입니다.`);
+      throw new Error("이미 등록된 사업자번호입니다.");
     }
   }
 
@@ -130,7 +130,7 @@ export async function saveProductSupplierProfile(
     return toSupplierProfile(rows[0]);
   } catch (error) {
     if (error instanceof Error && /product_suppliers_company_business_number_uq|duplicate key|23505/i.test(error.message)) {
-      throw new Error("이미 다른 매입처에서 사용 중인 사업자등록번호입니다.");
+      throw new Error("이미 등록된 사업자번호입니다.");
     }
     throw error;
   }

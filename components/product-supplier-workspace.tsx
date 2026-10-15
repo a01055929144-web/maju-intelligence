@@ -7,6 +7,12 @@ import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/pro
 
 const money = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
 const date = (value?: string) => value ? new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "없음";
+const businessNumber = (value?: string) => {
+  const digits = (value || "").replace(/[^0-9]/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+};
 
 export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?: string; data: ProductSupplierDirectory }) {
   const [suppliers, setSuppliers] = useState(data.suppliers);
@@ -107,7 +113,7 @@ function SupplierProfileCard({
   supplier: ProductSupplierSummary;
 }) {
   const [form, setForm] = useState({
-    businessNumber: supplier.businessNumber || "",
+    businessNumber: businessNumber(supplier.businessNumber),
     contactEmail: supplier.contactEmail || "",
     contactName: supplier.contactName || "",
     contactPhone: supplier.contactPhone || "",
@@ -163,7 +169,7 @@ function SupplierProfileCard({
               className="maju-input w-full"
               inputMode="numeric"
               maxLength={12}
-              onChange={(event) => update("businessNumber", event.target.value)}
+              onChange={(event) => update("businessNumber", businessNumber(event.target.value))}
               placeholder="000-00-00000"
               value={form.businessNumber}
             />

@@ -69,11 +69,10 @@ describe("atomic quote acceptance RPC", () => {
   });
 
   it("sets the converted quote customer before using the same RPC", () => {
-    const source = readFileSync(resolve(process.cwd(), "lib/store.ts"), "utf8");
-    const start = source.indexOf("async function applyAcceptedLeadQuotesAfterCustomerConversion");
-    const end = source.indexOf("export type SalesKpiSnapshot", start);
-    const conversionSource = source.slice(start, end);
-    expect(conversionSource.indexOf("customer_id: customerId")).toBeLessThan(conversionSource.indexOf("acceptSalesQuoteWithRpc"));
-    expect(conversionSource).not.toContain("applyQuoteContractPrices");
+    const source = readFileSync(resolve(process.cwd(), "lib/quote-conversion-pricing.ts"), "utf8");
+    expect(source.indexOf("customer_id: customerId")).toBeLessThan(source.indexOf("await acceptQuote"));
+    expect(source).toContain("pricing_applied_at=is.null");
+    expect(source).toContain("customer_id.eq.${encodeURIComponent(customerId)}");
+    expect(source).not.toContain("applyQuoteContractPrices");
   });
 });

@@ -25,6 +25,7 @@ import { validateDeliveryRouteUnitInput, type DeliveryRouteUnit, type DeliveryRo
 import type { LeadActionRepository } from "@/domains/lead/lead-action";
 import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
+import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -6781,15 +6782,19 @@ export async function acceptSalesQuote(companyId: string, quoteId: string, actor
   return acceptSalesQuoteWithRpc(companyId, quoteId, actorName);
 }
 
-async function applyAcceptedLeadQuotesAfterCustomerConversion(companyId: string, leadId: string, customerId: string, actorName?: string) {
-  const quotes = await supabaseRequest<Array<{ id: string; pricing_applied_at: string | null }>>(
-    `sales_quotes?select=id,pricing_applied_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&customer_id=is.null&status=eq.accepted`
-  ).catch(() => []);
-  for (const quote of quotes.filter((item) => !item.pricing_applied_at)) {
-    await supabaseRequest(`sales_quotes?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quote.id)}`, { method: "PATCH", headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ customer_id: customerId, updated_at: new Date().toISOString() }) });
-    await acceptSalesQuoteWithRpc(companyId, quote.id, actorName);
-  }
+async function applyAcceptedLeadQuotesAfterCustomerConversion(
+  companyId: string,
+  leadId: string,
+  customerId: string,
+  actorName?: string
+) {
+  return applyAcceptedQuotePricesAfterConversion({
+    acceptQuote: (quoteId) => acceptSalesQuoteWithRpc(companyId, quoteId, actorName),
+    companyId,
+    customerId,
+    leadId,
+    request: supabaseRequest
+  });
 }
 
 export type SalesKpiSnapshot = {
@@ -9763,7 +9768,13 @@ export async function convertPermitLeadToCustomer(
   leadId: string,
   auditContext: CustomerMasterAuditContext = {},
   assignment?: { assignedStaffMemberId?: string; deliveryTerritoryId?: string }
-): Promise<{ ok: boolean; customerId?: string; message?: string }> {
+): Promise<{
+  ok: boolean;
+  customerId?: string;
+  message?: string;
+  pricingAppliedCount?: number;
+  pricingFailedCount?: number;
+}> {
   if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
@@ -9859,14 +9870,23 @@ export async function convertPermitLeadToCustomer(
     })
   }).catch(() => null);
 
-  await applyAcceptedLeadQuotesAfterCustomerConversion(
-    companyId,
-    leadId,
-    created.customer.id,
-    auditContext.actorName
-  ).catch(() => null);
+  let pricingResult = { pricingAppliedCount: 0, pricingFailedCount: 0 };
+  try {
+    pricingResult = await applyAcceptedLeadQuotesAfterCustomerConversion(
+      companyId,
+      leadId,
+      created.customer.id,
+      auditContext.actorName
+    );
+  } catch (error) {
+    console.error("accepted quote lookup failed after customer conversion", error);
+    pricingResult.pricingFailedCount = 1;
+  }
 
-  return { ok: true, customerId: created.customer.id };
+  const message = pricingResult.pricingFailedCount
+    ? `수락된 견적 ${pricingResult.pricingFailedCount}건의 계약 단가를 반영하지 못했습니다. 거래처 상세에서 다시 시도해 주세요.`
+    : undefined;
+  return { ok: true, customerId: created.customer.id, message, ...pricingResult };
 }
 
 export async function getPermitLeadConversionPreview(companyId: string, leadId: string) {

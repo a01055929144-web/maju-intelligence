@@ -41,7 +41,7 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : "매입처 기본정보를 저장하지 못했습니다.";
     const status = /찾지 못했습니다/.test(message)
       ? 404
-      : /10자리|이하|사용 중/.test(message)
+      : /10자리|이하|등록된|사용 중/.test(message)
         ? 400
         : 500;
     return NextResponse.json({ message }, { status });
