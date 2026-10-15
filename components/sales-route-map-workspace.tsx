@@ -6944,7 +6944,7 @@ function QuoteDrawer({
   const [recommendationCount, setRecommendationCount] = useState<10 | 20 | 30>(10);
   const [recommendationBasis, setRecommendationBasis] = useState("");
   const [isRecommending, setIsRecommending] = useState(false);
-  const [catalog, setCatalog] = useState<Array<{ id: string; matchStatus: QuoteLine["matchStatus"]; name: string; purchasePrice: number; salesName?: string; salesPrice?: number; spec?: string; unit: string }>>([]);
+  const [catalog, setCatalog] = useState<Array<{ costOptions?: Array<{ cost: number; isDefault: boolean; supplierName: string }>; id: string; matchStatus: QuoteLine["matchStatus"]; name: string; purchasePrice: number; salesName?: string; salesPrice?: number; spec?: string; unit: string }>>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState("");
   const [serverQuoteId, setServerQuoteId] = useState("");
@@ -7483,7 +7483,7 @@ function QuoteDrawer({
                         value={row.qty}
                       />
                     </td>
-                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} /></td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-[9px] text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
                     <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowMargin(row.id, Number(event.target.value) || 0)} type="number" value={row.marginRate} /></td>
                     <td className="px-2 py-1.5">
                       <input
@@ -7572,7 +7572,7 @@ function QuoteDrawer({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-          <button className="maju-button-secondary w-full disabled:opacity-60" disabled={publishing || !customerRows.length} onClick={() => void persistQuote("draft")} type="button">
+          <button className="maju-button-secondary w-full disabled:opacity-60" disabled={publishing || !customerRows.length || Boolean(publishedUrl)} onClick={() => void persistQuote("draft")} title={publishedUrl?"발행한 견적은 임시저장으로 되돌릴 수 없습니다.":undefined} type="button">
             {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             임시저장
           </button>

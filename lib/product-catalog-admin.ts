@@ -1,4 +1,5 @@
 export type ProductCatalogAdminItem = {
+  costOptions?: Array<{ cost: number; isDefault: boolean; supplierName: string }>;
   id: string;
   matchStatus: "inactive" | "matched" | "requested" | "unmatched";
   name: string;
@@ -83,10 +84,25 @@ export async function listProductCatalogForAdmin(companyId: string, query = "") 
   const search = token
     ? `&or=(purchase_product_name.ilike.*${encodeURIComponent(token)}*,sales_product_name.ilike.*${encodeURIComponent(token)}*)`
     : "";
-  const rows = await request<ProductCatalogRow[]>(
-    `product_catalog?select=${select}&company_id=eq.${encodeURIComponent(companyId)}${search}&order=updated_at.desc&limit=300`
-  );
-  return rows.map(toItem);
+  const [rows, matches, supplierProducts, suppliers, defaults] = await Promise.all([
+    request<ProductCatalogRow[]>(`product_catalog?select=${select}&company_id=eq.${encodeURIComponent(companyId)}${search}&order=updated_at.desc&limit=300`),
+    request<Array<{ product_catalog_id: string; supplier_product_id: string }>>(`supplier_product_matches?select=product_catalog_id,supplier_product_id&company_id=eq.${encodeURIComponent(companyId)}&match_status=in.(auto,confirmed)&limit=3000`).catch(() => []),
+    request<Array<{ id: string; latest_cost: number | null; cost_confirmed: boolean; supplier_id: string }>>(`supplier_products?select=id,supplier_id,latest_cost,cost_confirmed&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&limit=3000`).catch(() => []),
+    request<Array<{ id: string; name: string }>>(`product_suppliers?select=id,name&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true`).catch(() => []),
+    request<Array<{ product_catalog_id: string; supplier_product_id: string }>>(`product_supplier_defaults?select=product_catalog_id,supplier_product_id&company_id=eq.${encodeURIComponent(companyId)}`).catch(() => [])
+  ]);
+  const products = new Map(supplierProducts.map((item) => [item.id, item]));
+  const supplierNames = new Map(suppliers.map((item) => [item.id, item.name]));
+  const defaultKeys = new Set(defaults.map((item) => `${item.product_catalog_id}:${item.supplier_product_id}`));
+  const options = new Map<string, ProductCatalogAdminItem["costOptions"]>();
+  for (const match of matches) {
+    const product = products.get(match.supplier_product_id);
+    if (!product?.cost_confirmed || product.latest_cost == null) continue;
+    const list = options.get(match.product_catalog_id) || [];
+    list.push({ cost: Number(product.latest_cost), isDefault: defaultKeys.has(`${match.product_catalog_id}:${match.supplier_product_id}`), supplierName: supplierNames.get(product.supplier_id) || "유통사" });
+    options.set(match.product_catalog_id, list);
+  }
+  return rows.map((row) => ({ ...toItem(row), costOptions: (options.get(row.id) || []).sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.cost - b.cost) }));
 }
 
 export async function updateProductCatalogForAdmin(companyId: string, id: string, input: UpdateProductCatalogInput) {

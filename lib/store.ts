@@ -6490,6 +6490,9 @@ export async function getSalesQuoteForEdit(companyId: string, quoteId: string): 
 export async function updateSalesQuote(companyId: string, quoteId: string, input: Omit<CreateSalesQuoteInput, "companyId" | "createdByName">) {
   const existing = await getSalesQuoteForEdit(companyId, quoteId);
   if (!existing) throw new Error("이 회사에서 수정할 수 있는 견적이 아닙니다.");
+  if (existing.status === "sent" && input.status === "draft") {
+    throw new Error("발행한 견적은 임시저장으로 되돌릴 수 없습니다. 발행 상태로 저장하거나 새 견적으로 복제해 주세요.");
+  }
   if (input.items.some((item) => item.photoUrl && !isCompanySalesQuotePhotoPath(companyId, item.photoUrl))) {
     throw new Error("회사 범위를 벗어난 견적 사진은 사용할 수 없습니다.");
   }

@@ -32,6 +32,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ ...quote, publicUrl: body.status === "draft" ? undefined : `${request.nextUrl.origin}/quote/${quote.publicToken}` });
   } catch (error) {
     const message = error instanceof Error ? error.message : "견적서를 수정하지 못했습니다.";
-    return NextResponse.json({ message }, { status: message.includes("이 회사") ? 404 : 500 });
+    return NextResponse.json({ message }, { status: message.includes("이 회사") ? 404 : /되돌릴 수|수정할 수 없는 상태/.test(message) ? 409 : 500 });
   }
 }
