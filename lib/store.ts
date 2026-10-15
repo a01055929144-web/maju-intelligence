@@ -23,7 +23,8 @@ import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 import { validateDeliveryRouteUnitInput, type DeliveryRouteUnit, type DeliveryRouteUnitInput } from "../domains/delivery/route-unit";
 import type { LeadActionRepository } from "@/domains/lead/lead-action";
-import { calculateQuoteTaxLine, resolveQuoteAgreementTaxType, type QuoteTaxType } from "../domains/quote/quote";
+import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
+import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -6738,12 +6739,6 @@ function getKstDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", { day: "2-digit", month: "2-digit", timeZone: "Asia/Seoul", year: "numeric" }).format(date);
 }
 
-function previousDateKey(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00+09:00`);
-  date.setUTCDate(date.getUTCDate() - 1);
-  return getKstDateKey(date);
-}
-
 export async function listCustomerContractPrices(companyId: string, customerId: string): Promise<CustomerContractPrice[]> {
   const rows = await supabaseRequest<Array<{
     effective_from: string; effective_until: string | null; id: string; product_catalog_id: string;
@@ -6773,69 +6768,17 @@ export async function closeCustomerContractPrice(companyId: string, agreementId:
   if (!rows[0]) throw new Error("종료할 계약 단가를 찾지 못했습니다.");
 }
 
-async function applyQuoteContractPrices(companyId: string, quoteId: string, customerId: string, actorName?: string) {
-  const today = getKstDateKey();
-  const items = await supabaseRequest<Array<{ id: string; product_catalog_id: string | null; sales_unit_snapshot: string | null; unit: string; sales_unit_price: number; tax_type_snapshot: QuoteTaxType | null }>>(
-    `sales_quote_items?select=id,product_catalog_id,sales_unit_snapshot,unit,sales_unit_price,tax_type_snapshot&company_id=eq.${encodeURIComponent(companyId)}&quote_id=eq.${encodeURIComponent(quoteId)}&order=sort_order.asc`
-  );
-  const connected = items.filter((item) => item.product_catalog_id);
-  const catalogIds = Array.from(new Set(connected.map((item) => item.product_catalog_id as string)));
-  const catalogs = catalogIds.length ? await supabaseRequest<Array<{ id: string; tax_type: QuoteTaxType | null }>>(
-    `product_catalog?select=id,tax_type&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${catalogIds.map(encodeURIComponent).join(",")})`
-  ) : [];
-  const catalogTaxById = new Map(catalogs.map((item) => [item.id, item.tax_type]));
-  const resolvedItems = connected.map((item) => ({
-    ...item,
-    resolvedTaxType: resolveQuoteAgreementTaxType(item.tax_type_snapshot, catalogTaxById.get(item.product_catalog_id as string))
-  }));
-  const applicableItems = resolvedItems.filter((item): item is typeof item & { resolvedTaxType: QuoteTaxType } => item.resolvedTaxType !== null);
-  for (const item of applicableItems) {
-    const active = await supabaseRequest<Array<{ effective_from: string; effective_until: string | null; ended_at: string | null; ended_by_name: string | null; id: string }>>(
-      `customer_price_agreements?select=id,effective_from,effective_until,ended_at,ended_by_name&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(customerId)}&product_catalog_id=eq.${encodeURIComponent(item.product_catalog_id!)}&status=eq.active`
-    );
-    try {
-      for (const previous of active) {
-        const sameDay = previous.effective_from >= today;
-        await supabaseRequest(`customer_price_agreements?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(previous.id)}`, {
-          method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ ended_at: new Date().toISOString(), ended_by_name: actorName || null,
-            effective_until: sameDay ? null : previousDateKey(today), status: sameDay ? "cancelled" : "ended", updated_at: new Date().toISOString() })
-        });
-      }
-      await supabaseRequest("customer_price_agreements", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({
-        company_id: companyId, created_by_name: actorName || null, customer_id: customerId, effective_from: today,
-        product_catalog_id: item.product_catalog_id, sales_unit: item.sales_unit_snapshot || item.unit || "EA",
-        source_quote_id: quoteId, source_quote_item_id: item.id, status: "active",
-        tax_type: item.resolvedTaxType, unit_price: Math.round(Number(item.sales_unit_price))
-      }) });
-    } catch (error) {
-      await Promise.all(active.map((previous) => supabaseRequest(
-        `customer_price_agreements?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(previous.id)}`,
-        { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ effective_until: previous.effective_until,
-          ended_at: previous.ended_at, ended_by_name: previous.ended_by_name, status: "active", updated_at: new Date().toISOString() }) }
-      ).catch(() => null)));
-      const message = error instanceof Error && /no_overlap|exclusion|23P01/i.test(error.message)
-        ? "이미 적용 중인 계약 단가 기간과 겹칩니다. 기존 계약 기간을 확인해 주세요."
-        : error instanceof Error ? error.message : "계약 단가를 반영하지 못했습니다.";
-      throw new Error(message);
-    }
-  }
-  return { appliedCount: applicableItems.length, taxUnconfirmedCount: resolvedItems.length - applicableItems.length, unlinkedCount: items.length - connected.length };
+async function acceptSalesQuoteWithRpc(companyId: string, quoteId: string, actorName?: string) {
+  return invokeQuoteAcceptanceRpc(supabaseRequest, {
+    actorName,
+    companyId,
+    effectiveDate: getKstDateKey(),
+    quoteId
+  });
 }
 
 export async function acceptSalesQuote(companyId: string, quoteId: string, actorName?: string) {
-  const quotes = await supabaseRequest<Array<{ customer_id: string | null; id: string; lead_id: string | null; pricing_applied_at: string | null; status: string }>>(
-    `sales_quotes?select=id,status,customer_id,lead_id,pricing_applied_at&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}&limit=1`
-  );
-  const quote = quotes[0];
-  if (!quote) throw new Error("이 회사의 견적을 찾지 못했습니다.");
-  if (quote.status !== "sent" && quote.status !== "accepted") throw new Error("발행한 견적만 수락 처리할 수 있습니다.");
-  if (quote.status === "accepted" && quote.pricing_applied_at) return { alreadyApplied: true, appliedCount: 0, pendingCustomerConversion: false, taxUnconfirmedCount: 0, unlinkedCount: 0 };
-  const result = quote.customer_id ? await applyQuoteContractPrices(companyId, quoteId, quote.customer_id, actorName) : { appliedCount: 0, taxUnconfirmedCount: 0, unlinkedCount: 0 };
-  await supabaseRequest(`sales_quotes?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quoteId)}`, {
-    method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ accepted_at: new Date().toISOString(), accepted_by_name: actorName || null,
-      accepted_via: "staff", pricing_applied_at: quote.customer_id ? new Date().toISOString() : null, status: "accepted", updated_at: new Date().toISOString() })
-  });
-  return { ...result, alreadyApplied: false, pendingCustomerConversion: !quote.customer_id };
+  return acceptSalesQuoteWithRpc(companyId, quoteId, actorName);
 }
 
 async function applyAcceptedLeadQuotesAfterCustomerConversion(companyId: string, leadId: string, customerId: string, actorName?: string) {
@@ -6843,9 +6786,9 @@ async function applyAcceptedLeadQuotesAfterCustomerConversion(companyId: string,
     `sales_quotes?select=id,pricing_applied_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&customer_id=is.null&status=eq.accepted`
   ).catch(() => []);
   for (const quote of quotes.filter((item) => !item.pricing_applied_at)) {
-    await applyQuoteContractPrices(companyId, quote.id, customerId, actorName);
     await supabaseRequest(`sales_quotes?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(quote.id)}`, { method: "PATCH", headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ customer_id: customerId, pricing_applied_at: new Date().toISOString(), updated_at: new Date().toISOString() }) });
+      body: JSON.stringify({ customer_id: customerId, updated_at: new Date().toISOString() }) });
+    await acceptSalesQuoteWithRpc(companyId, quote.id, actorName);
   }
 }
 
