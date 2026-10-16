@@ -16,6 +16,7 @@ export type BusinessDocumentLineInput = {
   taxType: ErpTaxType;
   quantity: number;
   unitPrice: number;
+  memo?: string;
 };
 export type SaveBusinessDocumentInput = {
   id?: string;
@@ -25,6 +26,7 @@ export type SaveBusinessDocumentInput = {
   supplierId?: string;
   originalDocumentId?: string;
   memo?: string;
+  reason?: string;
   lines: BusinessDocumentLineInput[];
 };
 export type ErpActor = { name: string; userId?: string };
@@ -44,8 +46,17 @@ type LineRow = {
   unit_snapshot: string; tax_type_snapshot: ErpTaxType; quantity: number; unit_price: number;
   supply_amount: number; tax_amount: number; total_amount: number;
 };
-type LineInsertRow = Omit<LineRow, "id" | "supply_amount" | "tax_amount" | "total_amount"> & {
-  company_id: string;
+type SaveDocumentRpcLine = {
+  product_catalog_id: string | null;
+  supplier_product_id: string | null;
+  product_code: string | null;
+  product_name: string;
+  specification: string | null;
+  unit: string;
+  tax_type: ErpTaxType;
+  quantity: number;
+  unit_price: number;
+  memo: string | null;
 };
 
 export type BusinessDocumentListItem = ReturnType<typeof mapDocument>;
@@ -131,52 +142,27 @@ function validateDraft(input: SaveBusinessDocumentInput) {
 }
 
 export function buildBusinessDocumentLineRows(
-  companyId: string,
-  documentId: string,
   lines: BusinessDocumentLineInput[],
-): LineInsertRow[] {
-  return lines.map((line, index) => ({
-    company_id: companyId,
-    document_id: documentId,
-    sort_order: index + 1,
+): SaveDocumentRpcLine[] {
+  return lines.map((line) => ({
     product_catalog_id: line.productCatalogId || null,
     supplier_product_id: line.supplierProductId || null,
-    product_code_snapshot: line.productCode?.trim() || null,
-    product_name_snapshot: line.productName.trim(),
-    specification_snapshot: line.specification?.trim() || null,
-    unit_snapshot: line.unit.trim() || "EA",
-    tax_type_snapshot: line.taxType,
+    product_code: line.productCode?.trim() || null,
+    product_name: line.productName.trim(),
+    specification: line.specification?.trim() || null,
+    unit: line.unit.trim() || "EA",
+    tax_type: line.taxType,
     quantity: line.quantity,
     unit_price: Math.round(line.unitPrice),
+    memo: line.memo?.trim() || null,
   }));
-}
-
-export async function replaceDraftLinesWithCompensation(input: {
-  isNewDocument: boolean;
-  replaceLines: () => Promise<void>;
-  deleteNewHeader: () => Promise<void>;
-  restorePreviousLines: () => Promise<void>;
-}) {
-  try {
-    await input.replaceLines();
-  } catch (error) {
-    try {
-      if (input.isNewDocument) await input.deleteNewHeader();
-      else await input.restorePreviousLines();
-    } catch (recoveryError) {
-      const cause = error instanceof Error ? error.message : "알 수 없는 오류";
-      const recovery = recoveryError instanceof Error ? recoveryError.message : "알 수 없는 복구 오류";
-      throw new Error(`전표 품목 저장 실패 후 복구하지 못했습니다. (${cause}; 복구: ${recovery})`);
-    }
-    throw error;
-  }
 }
 
 export async function saveBusinessDocument(companyId: string, input: SaveBusinessDocumentInput, actor: ErpActor) {
   validateDraft(input);
   const partner = await getPartnerSnapshot(companyId, input);
   const existing = input.id ? await getBusinessDocument(companyId, input.id) : null;
-  if (existing && existing.status !== "draft") throw new Error("확정되거나 취소된 전표는 수정할 수 없습니다.");
+  if (existing?.status === "cancelled") throw new Error("삭제된 전표는 수정할 수 없습니다.");
   if (existing && existing.documentType !== input.documentType) throw new Error("전표 유형은 변경할 수 없습니다.");
   let documentNumber = existing?.documentNumber;
   if (!documentNumber || documentNumber.slice(documentNumber.indexOf("-") + 1, documentNumber.lastIndexOf("-")) !== input.documentDate.slice(0, 4)) {
@@ -194,50 +180,38 @@ export async function saveBusinessDocument(companyId: string, input: SaveBusines
     tax_amount: totals.taxAmount, total_amount: totals.totalAmount, created_by_user_id: actor.userId || null, created_by_name: actor.name,
   };
   let documentId = existing?.id;
-  let previousLineRows: LineInsertRow[] = [];
-  if (documentId) {
-    previousLineRows = await supabaseRequest<LineInsertRow[]>(
-      `business_document_lines?select=company_id,document_id,sort_order,product_catalog_id,supplier_product_id,product_code_snapshot,product_name_snapshot,specification_snapshot,unit_snapshot,tax_type_snapshot,quantity,unit_price&company_id=eq.${enc(companyId)}&document_id=eq.${enc(documentId)}&order=sort_order`,
-    );
-    await supabaseRequest(`business_documents?company_id=eq.${enc(companyId)}&id=eq.${enc(documentId)}`, { method: "PATCH", body: JSON.stringify(payload) });
-  } else {
+  if (!documentId) {
     const rows = await supabaseRequest<Array<{ id: string }>>("business_documents", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) });
     documentId = rows[0]?.id;
   }
   if (!documentId) throw new Error("전표를 저장하지 못했습니다.");
   const isNewDocument = !existing;
-  const lineRows = buildBusinessDocumentLineRows(companyId, documentId, input.lines);
+  const lineRows = buildBusinessDocumentLineRows(input.lines);
   try {
-    await replaceDraftLinesWithCompensation({
-      isNewDocument,
-      replaceLines: async () => {
-        if (!isNewDocument) {
-          await supabaseRequest(
-            `business_document_lines?company_id=eq.${enc(companyId)}&document_id=eq.${enc(documentId)}`,
-            { method: "DELETE" },
-          );
-        }
-        await supabaseRequest("business_document_lines", {
-          method: "POST",
-          body: JSON.stringify(lineRows),
-        });
-      },
-      deleteNewHeader: async () => {
+    await supabaseRpc("save_business_document", {
+      p_company_id: companyId,
+      p_document_id: documentId,
+      p_partner_id: partner.id,
+      p_document_date: input.documentDate,
+      p_memo: input.memo?.trim() || null,
+      p_lines: lineRows,
+      p_actor_user_id: actor.userId || null,
+      p_actor_name: actor.name,
+      p_reason: input.reason?.trim() || null,
+    });
+  } catch (error) {
+    if (isNewDocument) {
+      try {
         await supabaseRequest(
           `business_documents?company_id=eq.${enc(companyId)}&id=eq.${enc(documentId)}&status=eq.draft`,
           { method: "DELETE" },
         );
-      },
-      restorePreviousLines: async () => {
-        if (previousLineRows.length) {
-          await supabaseRequest("business_document_lines", {
-            method: "POST",
-            body: JSON.stringify(previousLineRows),
-          });
-        }
-      },
-    });
-  } catch (error) {
+      } catch (cleanupError) {
+        const cause = error instanceof Error ? error.message : "알 수 없는 오류";
+        const cleanup = cleanupError instanceof Error ? cleanupError.message : "알 수 없는 정리 오류";
+        throw new Error(`전표 저장 실패 후 작성중 헤더를 정리하지 못했습니다. (${cause}; 정리: ${cleanup})`);
+      }
+    }
     throw new Error(`전표 품목 저장에 실패했습니다. 다시 저장해 주세요. (${error instanceof Error ? error.message : "알 수 없는 오류"})`);
   }
   return getBusinessDocument(companyId, documentId);

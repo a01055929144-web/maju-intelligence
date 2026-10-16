@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { calculateErpLine, calculateErpTotals, calculateLedgerBalance } from "../domains/erp/business-document";
 import {
   buildBusinessDocumentLineRows,
-  replaceDraftLinesWithCompensation,
 } from "../lib/business-documents";
 
 describe("ERP 전표 금액", () => {
@@ -22,8 +21,8 @@ describe("ERP 전표 금액", () => {
     expect(calculateLedgerBalance(1000, [11000, -5000, -11000])).toBe(-4000);
   });
 
-  it("품목 INSERT payload에 DB 생성 금액 컬럼을 포함하지 않는다", () => {
-    const [row] = buildBusinessDocumentLineRows("company-1", "document-1", [{
+  it("품목 RPC payload에 DB 생성 금액 컬럼을 포함하지 않는다", () => {
+    const [row] = buildBusinessDocumentLineRows([{
       productName: "테스트 품목",
       quantity: 1.25,
       taxType: "taxable",
@@ -32,36 +31,33 @@ describe("ERP 전표 금액", () => {
     }]);
 
     expect(row).toMatchObject({
-      company_id: "company-1",
-      document_id: "document-1",
-      product_name_snapshot: "테스트 품목",
+      product_name: "테스트 품목",
       quantity: 1.25,
       unit_price: 101,
+      memo: null,
     });
     expect(row).not.toHaveProperty("supply_amount");
     expect(row).not.toHaveProperty("tax_amount");
     expect(row).not.toHaveProperty("total_amount");
   });
 
-  it("신규 전표 품목 저장 실패 시 생성된 헤더를 삭제한다", async () => {
-    const calls: string[] = [];
-    await expect(replaceDraftLinesWithCompensation({
-      isNewDocument: true,
-      replaceLines: async () => { calls.push("replace"); throw new Error("insert failed"); },
-      deleteNewHeader: async () => { calls.push("delete-header"); },
-      restorePreviousLines: async () => { calls.push("restore-lines"); },
-    })).rejects.toThrow("insert failed");
-    expect(calls).toEqual(["replace", "delete-header"]);
-  });
-
-  it("기존 전표 품목 저장 실패 시 이전 품목을 복원한다", async () => {
-    const calls: string[] = [];
-    await expect(replaceDraftLinesWithCompensation({
-      isNewDocument: false,
-      replaceLines: async () => { calls.push("replace"); throw new Error("insert failed"); },
-      deleteNewHeader: async () => { calls.push("delete-header"); },
-      restorePreviousLines: async () => { calls.push("restore-lines"); },
-    })).rejects.toThrow("insert failed");
-    expect(calls).toEqual(["replace", "restore-lines"]);
+  it("RPC 품목 payload는 허용된 키만 포함한다", () => {
+    const [row] = buildBusinessDocumentLineRows([{
+      productCatalogId: "product-1",
+      supplierProductId: "supplier-product-1",
+      productCode: " P-001 ",
+      productName: " 양파 ",
+      specification: " 10kg ",
+      unit: " 망 ",
+      taxType: "exempt",
+      quantity: 2,
+      unitPrice: 15000,
+      memo: " 산지 직송 ",
+    }]);
+    expect(Object.keys(row).sort()).toEqual([
+      "memo", "product_catalog_id", "product_code", "product_name", "quantity",
+      "specification", "supplier_product_id", "tax_type", "unit", "unit_price",
+    ].sort());
+    expect(row).toMatchObject({ product_name: "양파", specification: "10kg", unit: "망", memo: "산지 직송" });
   });
 });
