@@ -1,5 +1,5 @@
--- REVIEW ONLY. 운영 DB 실행 금지.
--- 실행 승인 후 사용할 수 있도록 begin...commit 형태로 작성한 1단계 초안입니다.
+-- 운영 적용 완료(2026-10-16). 재실행 금지.
+-- 운영 DB에서 검증된 ERP 1단계 최종본을 기록한 파일입니다.
 
 begin;
 
@@ -148,6 +148,11 @@ create table if not exists public.partner_ledger_entries (
     or (entry_type in ('receipt', 'payment', 'sale_return', 'purchase_return') and amount < 0)
     or (entry_type in ('adjustment', 'reversal') and amount <> 0)
   ),
+  constraint partner_ledger_entries_source_check check (
+    (entry_type in ('sale', 'purchase', 'sale_return', 'purchase_return') and source_document_id is not null)
+    or (entry_type in ('receipt', 'payment') and source_document_id is null)
+    or entry_type in ('adjustment', 'reversal')
+  ),
   constraint partner_ledger_entries_customer_fk foreign key (company_id, customer_id)
     references public.normalized_customers(company_id, id) on delete restrict,
   constraint partner_ledger_entries_supplier_fk foreign key (company_id, supplier_id)
@@ -225,10 +230,21 @@ begin
     return old;
   end if;
 
-  if new.company_id <> old.company_id
-     or new.document_type <> old.document_type
-     or new.document_number <> old.document_number then
-    raise exception 'company, document type, and document number are immutable';
+  if new.company_id <> old.company_id or new.document_type <> old.document_type then
+    raise exception 'company and document type are immutable';
+  end if;
+  if old.status <> 'draft' and new.document_number <> old.document_number then
+    raise exception 'document number is immutable after confirmation';
+  end if;
+  if new.status is distinct from old.status then
+    if not (
+      (old.status = 'draft' and new.status = 'confirmed'
+        and coalesce(current_setting('app.erp_document_transition', true), '') = 'confirm')
+      or (old.status = 'confirmed' and new.status = 'cancelled'
+        and coalesce(current_setting('app.erp_document_transition', true), '') = 'cancel')
+    ) then
+      raise exception 'document status can only change through confirm_business_document or cancel_business_document';
+    end if;
   end if;
 
   if old.status = 'confirmed' then
@@ -311,7 +327,9 @@ create or replace function public.confirm_business_document(
 language plpgsql security invoker set search_path = '' as $$
 declare
   v_document public.business_documents%rowtype;
+  v_original public.business_documents%rowtype;
   v_taxable bigint; v_exempt bigint; v_tax bigint; v_total bigint; v_signed_total bigint;
+  v_returned_total bigint;
 begin
   select * into v_document from public.business_documents
   where company_id = p_company_id and id = p_document_id for update;
@@ -326,17 +344,14 @@ begin
     if v_document.original_document_id is null then
       raise exception 'return document requires an original document';
     end if;
-    if not exists (
-      select 1 from public.business_documents original
-      where original.company_id = p_company_id
-        and original.id = v_document.original_document_id
-        and original.status in ('confirmed', 'cancelled')
-        and (
-          (v_document.document_type = 'sale_return' and original.document_type = 'sale')
-          or (v_document.document_type = 'purchase_return' and original.document_type = 'purchase')
-        )
-    ) then
-      raise exception 'return document origin does not match its type';
+    select * into v_original from public.business_documents
+    where company_id = p_company_id and id = v_document.original_document_id for update;
+    if not found or v_original.status <> 'confirmed'
+       or not ((v_document.document_type = 'sale_return' and v_original.document_type = 'sale')
+         or (v_document.document_type = 'purchase_return' and v_original.document_type = 'purchase'))
+       or v_original.customer_id is distinct from v_document.customer_id
+       or v_original.supplier_id is distinct from v_document.supplier_id then
+      raise exception 'return must reference a confirmed original document of the same type and partner';
     end if;
   end if;
   select
@@ -350,12 +365,22 @@ begin
     where company_id = p_company_id and document_id = p_document_id) then
     raise exception 'document requires at least one line';
   end if;
+  if v_document.original_document_id is not null then
+    select coalesce(sum(total_amount), 0) into v_returned_total
+    from public.business_documents
+    where company_id = p_company_id and original_document_id = v_document.original_document_id and status = 'confirmed';
+    if v_returned_total + v_total > v_original.total_amount then
+      raise exception 'return total exceeds the remaining amount of the original document';
+    end if;
+  end if;
+  perform set_config('app.erp_document_transition', 'confirm', true);
   update public.business_documents set
     taxable_supply_amount = v_taxable, exempt_supply_amount = v_exempt,
     tax_amount = v_tax, total_amount = v_total, status = 'confirmed',
     confirmed_by_user_id = p_actor_user_id, confirmed_by_name = p_actor_name,
     confirmed_at = now(), updated_at = now()
   where company_id = p_company_id and id = p_document_id returning * into v_document;
+  perform set_config('app.erp_document_transition', '', true);
   v_signed_total := case when v_document.document_type in ('sale_return','purchase_return')
     then -v_total else v_total end;
   insert into public.partner_ledger_entries(
@@ -393,10 +418,16 @@ begin
   where company_id = p_company_id
     and idempotency_key = 'document:' || p_document_id || ':confirm';
   if not found then raise exception 'confirmed ledger entry not found'; end if;
+  if exists (select 1 from public.business_documents
+    where company_id = p_company_id and original_document_id = p_document_id and status = 'confirmed') then
+    raise exception 'cancel the confirmed return documents of this document first';
+  end if;
+  perform set_config('app.erp_document_transition', 'cancel', true);
   update public.business_documents set
     status = 'cancelled', cancelled_by_user_id = p_actor_user_id,
     cancelled_by_name = p_actor_name, cancelled_at = now(), updated_at = now()
   where company_id = p_company_id and id = p_document_id returning * into v_document;
+  perform set_config('app.erp_document_transition', '', true);
   insert into public.partner_ledger_entries(
     company_id, partner_type, customer_id, supplier_id, entry_date, entry_type,
     amount, supply_amount, tax_amount, source_document_id, idempotency_key,
