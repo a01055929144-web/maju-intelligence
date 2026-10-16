@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FilePlus2, Printer, RotateCcw, Search, WalletCards, X } from "lucide-react";
+import { FilePlus2, Printer, RotateCcw, Search, Trash2, WalletCards, X } from "lucide-react";
 import { calculateErpLine, calculateErpTotals, type ErpTaxType } from "@/domains/erp/business-document";
 
 type DocType = "sale" | "purchase" | "sale_return" | "purchase_return";
@@ -53,6 +53,20 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
       setEditor(result.document); setMessage(action === "return" ? "반품 전표 초안을 만들었습니다." : "처리했습니다."); await load();
     } catch (e) { setMessage(e instanceof Error ? e.message : "처리하지 못했습니다."); } finally { setBusy(false); }
   };
+  const removeDraft = async (doc: Doc) => {
+    if (doc.status !== "draft" || !window.confirm(`${doc.documentNumber} 작성중 전표를 삭제할까요?`)) return;
+    setBusy(true); setMessage("삭제 중입니다…");
+    try {
+      await api(`/api/business-documents/${doc.id}${suffix}`, { method: "DELETE" });
+      setEditor(null);
+      setMessage("작성중 전표를 삭제했습니다.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "전표를 삭제하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -76,11 +90,11 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
         {!documents.length && <div className="p-12 text-center text-sm text-slate-500">조건에 맞는 전표가 없습니다.</div>}
       </div>
     </> : <LedgerPanel companyId={companyId} options={options} />}
-    {editor && <DocumentEditor busy={busy} companyId={companyId} doc={editor} options={options} onAct={act} onClose={() => setEditor(null)} onSaved={async (doc) => { setEditor(doc); setMessage("전표를 저장했습니다."); await load(); }} />}
+    {editor && <DocumentEditor busy={busy} companyId={companyId} doc={editor} options={options} onAct={act} onClose={() => setEditor(null)} onDelete={removeDraft} onSaved={async (doc) => { setEditor(doc); setMessage("전표를 저장했습니다."); await load(); }} />}
   </div>;
 }
 
-function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onSaved }: { busy: boolean; companyId: string; doc: Doc; options: Options; onAct: (doc: Doc, action: "confirm" | "cancel" | "return") => Promise<void>; onClose: () => void; onSaved: (doc: Doc) => Promise<void> }) {
+function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelete, onSaved }: { busy: boolean; companyId: string; doc: Doc; options: Options; onAct: (doc: Doc, action: "confirm" | "cancel" | "return") => Promise<void>; onClose: () => void; onDelete: (doc: Doc) => Promise<void>; onSaved: (doc: Doc) => Promise<void> }) {
   const [form, setForm] = useState({ ...doc, lines: doc.lines?.length ? doc.lines : [emptyLine()] });
   const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
   const [contractPrices, setContractPrices] = useState<Record<string, { taxType: ErpTaxType; unitPrice: number }>>({});
@@ -119,7 +133,7 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onSaved
       <div className="space-y-2"><div className="flex items-center justify-between"><h3 className="font-bold">품목</h3>{isDraft && <button className="maju-button-secondary" onClick={() => setForm({ ...form, lines: [...form.lines, emptyLine()] })}>+ 품목 추가</button>}</div>{form.lines.map((line, index) => { const amount = calculateErpLine({ quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), taxType: line.taxType }); return <div key={line.id || index} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-[2fr_0.7fr_0.7fr_1fr_0.8fr_auto]"><select disabled={!isDraft} className="maju-input" value={line.productCatalogId || line.supplierProductId || ""} onChange={(e) => chooseProduct(index, e.target.value)}><option value="">품목 선택</option>{catalog.map((x) => <option key={x.id} value={x.id}>{"raw_name" in x ? x.raw_name : x.canonical_name || x.purchase_product_name}</option>)}</select><input disabled={!isDraft} className="maju-input" type="number" min="0.001" step="0.001" value={line.quantity} onChange={(e) => patchLine(index, { quantity: Number(e.target.value) })} /><input disabled={!isDraft} className="maju-input" value={line.unit} onChange={(e) => patchLine(index, { unit: e.target.value })} /><input disabled={!isDraft} className="maju-input" type="number" min="0" value={line.unitPrice} onChange={(e) => patchLine(index, { unitPrice: Number(e.target.value) })} /><select disabled={!isDraft} className="maju-input" value={line.taxType} onChange={(e) => patchLine(index, { taxType: e.target.value as ErpTaxType })}><option value="taxable">과세</option><option value="exempt">면세</option></select><div className="flex items-center gap-2 text-right"><strong className="min-w-24">{money(amount.totalAmount)}</strong>{isDraft && <button className="text-red-500" onClick={() => setForm({ ...form, lines: form.lines.filter((_, i) => i !== index) })}>삭제</button>}</div></div>; })}</div>
       <div className="ml-auto grid max-w-lg grid-cols-2 gap-2 rounded-xl bg-slate-50 p-4 text-sm"><span>과세 공급가</span><b className="text-right">{money(totals.taxableSupplyAmount)}</b><span>면세 공급가</span><b className="text-right">{money(totals.exemptSupplyAmount)}</b><span>부가세</span><b className="text-right">{money(totals.taxAmount)}</b><span className="text-base font-bold">합계</span><b className="text-right text-lg text-teal-800">{money(totals.totalAmount)}</b></div>
     </div>
-    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{form.status === "confirmed" && <><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy} onClick={() => void onAct(form, "return")}><RotateCcw className="h-4 w-4" /> 반품 작성</button>}<button className="maju-button-secondary text-red-600" disabled={busy} onClick={() => void onAct(form, "cancel")}>취소</button></>}{isDraft && <><button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
+    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{form.status === "confirmed" && <><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy} onClick={() => void onAct(form, "return")}><RotateCcw className="h-4 w-4" /> 반품 작성</button>}<button className="maju-button-secondary text-red-600" disabled={busy} onClick={() => void onAct(form, "cancel")}>취소</button></>}{isDraft && <>{form.id && <button className="maju-button-secondary mr-auto text-red-600" disabled={busy || saving} onClick={() => void onDelete(form)}><Trash2 className="h-4 w-4" /> 작성중 삭제</button>}<button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
   </div></div>;
 }
 

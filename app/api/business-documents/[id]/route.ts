@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { getBusinessDocument, saveBusinessDocument, type SaveBusinessDocumentInput } from "@/lib/business-documents";
+import {
+  deleteBusinessDocumentDraft,
+  getBusinessDocument,
+  saveBusinessDocument,
+  type SaveBusinessDocumentInput,
+} from "@/lib/business-documents";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const scope = await getRequestAuthScope(request); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -15,5 +20,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!body) return NextResponse.json({ message: "전표 정보를 확인해 주세요." }, { status: 400 });
   try { return NextResponse.json({ document: await saveBusinessDocument(scope.companyId!, { ...body, id: (await params).id }, { userId: scope.customerSession?.userId, name: scope.customerSession?.name || scope.adminSession?.name || "운영자" }) }); }
   catch (e) { return NextResponse.json({ message: e instanceof Error ? e.message : "전표를 수정하지 못했습니다." }, { status: 400 }); }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
+  if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!scopeHasCapability(scope, "manage_sales")) {
+    return NextResponse.json({ message: "전표를 삭제할 권한이 없습니다." }, { status: 403 });
+  }
+  try {
+    await deleteBusinessDocumentDraft(scope.companyId!, (await params).id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "전표를 삭제하지 못했습니다." },
+      { status: 400 },
+    );
+  }
 }
 

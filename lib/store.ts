@@ -88,6 +88,7 @@ export type ExcelMappingPreset = {
 export type CompanySettings = {
   id: string;
   name: string;
+  businessRegistrationNumber?: string;
   businessType: string;
   deliveryCompleteMessage?: string;
   deliveryIssueMessage?: string;
@@ -11885,6 +11886,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
   const fallback = {
     id,
     name: fallbackName,
+    businessRegistrationNumber: "",
     businessType: "식자재 유통",
     deliveryCompleteMessage: "요청하신 위치에 배송 적재 완료했습니다.",
     deliveryIssueMessage: "배송 중 확인이 필요한 사항이 있어 안내드립니다.",
@@ -11910,6 +11912,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
   type CompanyRow = {
     id: string;
     name: string;
+    business_registration_number?: string | null;
     business_type: string | null;
     delivery_complete_message?: string | null;
     delivery_issue_message?: string | null;
@@ -11932,7 +11935,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
 
   try {
     rows = await supabaseRequest<Array<CompanyRow>>(
-      `companies?select=id,name,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,origin_lat,origin_lng,sms_sender_phone,status,telegram_chat_id,workspace_type,default_quote_margin_percent,default_quote_valid_days,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
+      `companies?select=id,name,business_registration_number,business_type,delivery_complete_message,delivery_issue_message,delivery_partial_message,notification_phone,notification_sender_name,owner_name,origin_address,origin_lat,origin_lng,sms_sender_phone,status,telegram_chat_id,workspace_type,default_quote_margin_percent,default_quote_valid_days,updated_at&id=eq.${encodeURIComponent(id)}&limit=1`
     );
   } catch (error) {
     if (!isMissingTelegramChatIdColumnError(error) && !isMissingColumnError(error)) throw error;
@@ -11953,6 +11956,7 @@ export async function getCompanySettings(companyId?: string, fallbackName = "마
   return {
     id: row.id,
     name: row.name,
+    businessRegistrationNumber: row.business_registration_number || "",
     businessType: row.business_type || "",
     deliveryCompleteMessage: row.delivery_complete_message || fallback.deliveryCompleteMessage,
     deliveryIssueMessage: row.delivery_issue_message || fallback.deliveryIssueMessage,
