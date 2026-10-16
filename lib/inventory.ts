@@ -21,6 +21,10 @@ function embeddedProduct(row: BalanceRow) {
 export async function listInventory(companyId: string, input: { cursor?: string; search?: string; filter?: InventoryFilter } = {}) {
   const filter = input.filter || "all";
   const search = input.search?.trim() || "";
+  const trackedSettings = filter === "tracked" ? await supabaseRequest<Array<{ product_catalog_id: string; tracking_enabled: boolean; safety_stock_quantity: number }>>(
+    `product_inventory_settings?select=product_catalog_id,tracking_enabled,safety_stock_quantity&company_id=eq.${enc(companyId)}&tracking_enabled=eq.true${input.cursor ? `&product_catalog_id=gt.${enc(input.cursor)}` : ""}&order=product_catalog_id.asc&limit=${INVENTORY_PAGE_SIZE + 1}`,
+  ) : null;
+  if (trackedSettings && trackedSettings.length === 0) return { items: [], nextCursor: null };
   const productSelect = "product_catalog!inventory_balances_product_fk!inner(id,product_code,canonical_name,purchase_product_name,sales_unit)";
   const query = [
     `select=product_catalog_id,on_hand_quantity,inventory_value,average_unit_cost,negative_cost_estimate,updated_at,${productSelect}`,
@@ -29,17 +33,18 @@ export async function listInventory(companyId: string, input: { cursor?: string;
   if (input.cursor) query.push(`product_catalog_id=gt.${enc(input.cursor)}`);
   if (filter === "negative") query.push("on_hand_quantity=lt.0");
   if (filter === "in_stock") query.push("on_hand_quantity=neq.0");
+  if (trackedSettings) query.push(`product_catalog_id=in.(${trackedSettings.slice(0, INVENTORY_PAGE_SIZE).map((setting) => enc(setting.product_catalog_id)).join(",")})`);
   if (search) {
     const term = search.replace(/[(),]/g, " ").trim();
     query.push(`product_catalog.or=(canonical_name.ilike.*${enc(term)}*,purchase_product_name.ilike.*${enc(term)}*,product_code.ilike.*${enc(term)}*)`);
   }
   let balances = await supabaseRequest<BalanceRow[]>(`inventory_balances?${query.join("&")}`);
-  const hasMore = balances.length > INVENTORY_PAGE_SIZE;
+  const hasMore = trackedSettings ? trackedSettings.length > INVENTORY_PAGE_SIZE : balances.length > INVENTORY_PAGE_SIZE;
   balances = balances.slice(0, INVENTORY_PAGE_SIZE);
   const productIds = balances.map((row) => row.product_catalog_id);
-  const settings = productIds.length ? await supabaseRequest<Array<{ product_catalog_id: string; tracking_enabled: boolean; safety_stock_quantity: number }>>(
+  const settings = trackedSettings?.slice(0, INVENTORY_PAGE_SIZE) || (productIds.length ? await supabaseRequest<Array<{ product_catalog_id: string; tracking_enabled: boolean; safety_stock_quantity: number }>>(
     `product_inventory_settings?select=product_catalog_id,tracking_enabled,safety_stock_quantity&company_id=eq.${enc(companyId)}&product_catalog_id=in.(${productIds.map(enc).join(",")})`,
-  ) : [];
+  ) : []);
   const settingById = new Map(settings.map((setting) => [setting.product_catalog_id, setting]));
   const items = balances.map((balance) => {
     const product = embeddedProduct(balance); const setting = settingById.get(balance.product_catalog_id);
@@ -51,14 +56,39 @@ export async function listInventory(companyId: string, input: { cursor?: string;
       negativeCostEstimate: Boolean(balance.negative_cost_estimate), safetyStock: Number(setting?.safety_stock_quantity || 0),
       trackingEnabled: setting?.tracking_enabled ?? true, updatedAt: balance.updated_at || null,
     };
-  }).filter((item) => filter !== "tracked" || item.trackingEnabled);
-  return { items, nextCursor: hasMore ? balances.at(-1)?.product_catalog_id || null : null };
+  });
+  const nextCursor = hasMore ? (trackedSettings ? trackedSettings[INVENTORY_PAGE_SIZE - 1]?.product_catalog_id : balances.at(-1)?.product_catalog_id) || null : null;
+  return { items, nextCursor };
 }
 
 export async function listInventoryMovements(companyId: string, productId: string) {
   return supabaseRequest<Array<{ id: string; movement_type: string; quantity_delta: number; value_delta: number; unit_cost: number | null; business_date: string; source_document_number_snapshot: string | null; reason: string | null; actor_name: string | null; created_at: string }>>(
     `inventory_movements?select=id,movement_type,quantity_delta,value_delta,unit_cost,business_date,source_document_number_snapshot,reason,actor_name,created_at&company_id=eq.${enc(companyId)}&product_catalog_id=eq.${enc(productId)}&order=created_at.desc&limit=200`,
   );
+}
+
+export async function searchStocktakeProducts(companyId: string, search = "") {
+  const productQuery = [
+    "select=id,product_code,canonical_name,purchase_product_name,sales_unit",
+    `company_id=eq.${enc(companyId)}`,
+    "order=canonical_name.asc",
+    "limit=50",
+  ];
+  const term = search.trim().replace(/[(),]/g, " ");
+  if (term) productQuery.push(`or=(canonical_name.ilike.*${enc(term)}*,purchase_product_name.ilike.*${enc(term)}*,product_code.ilike.*${enc(term)}*)`);
+  const products = await supabaseRequest<ProductRow[]>(`product_catalog?${productQuery.join("&")}`);
+  const productIds = products.map((product) => product.id);
+  const balances = productIds.length ? await supabaseRequest<Array<{ product_catalog_id: string; on_hand_quantity: number }>>(
+    `inventory_balances?select=product_catalog_id,on_hand_quantity&company_id=eq.${enc(companyId)}&product_catalog_id=in.(${productIds.map(enc).join(",")})`,
+  ) : [];
+  const onHandById = new Map(balances.map((balance) => [balance.product_catalog_id, Number(balance.on_hand_quantity || 0)]));
+  return products.map((product) => ({
+    id: product.id,
+    code: product.product_code,
+    name: product.canonical_name || product.purchase_product_name,
+    baseUnit: product.sales_unit || "EA",
+    onHand: onHandById.get(product.id) || 0,
+  }));
 }
 
 export async function listUnitConversions(companyId: string, input: { search?: string; productId?: string } = {}) {

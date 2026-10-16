@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { supabaseRequest } = vi.hoisted(() => ({ supabaseRequest: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest }));
 
-import { createAndPostStocktake, listInventory, listInventoryIssues, listUnitConversions } from "../lib/inventory";
+import { createAndPostStocktake, listInventory, listInventoryIssues, listUnitConversions, searchStocktakeProducts } from "../lib/inventory";
 
 describe("inventory data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
@@ -30,6 +30,19 @@ describe("inventory data access", () => {
     await listUnitConversions("company-1", { productId: "product-1" });
     expect(supabaseRequest).toHaveBeenCalledTimes(2);
     expect(supabaseRequest.mock.calls[1][0]).toContain("product_catalog_id=eq.product-1");
+  });
+
+  it("filters tracked inventory before balance pagination", async () => {
+    supabaseRequest.mockResolvedValueOnce([{ product_catalog_id: "product-1", tracking_enabled: true, safety_stock_quantity: 0 }]).mockResolvedValueOnce([]);
+    await listInventory("company-1", { filter: "tracked" });
+    expect(supabaseRequest.mock.calls[0][0]).toContain("tracking_enabled=eq.true");
+    expect(supabaseRequest.mock.calls[1][0]).toContain("product_catalog_id=in.(product-1)");
+  });
+
+  it("searches the catalog for first stocktake products and treats missing balances as zero", async () => {
+    supabaseRequest.mockResolvedValueOnce([{ id: "product-1", product_code: "P-1", canonical_name: "두부", purchase_product_name: "두부", sales_unit: "모" }]).mockResolvedValueOnce([]);
+    await expect(searchStocktakeProducts("company-1", "두부")).resolves.toEqual([{ id: "product-1", code: "P-1", name: "두부", baseUnit: "모", onHand: 0 }]);
+    expect(supabaseRequest.mock.calls[0][0]).toContain("limit=50");
   });
 
   it("limits inventory issue scanning to recent pages", async () => {

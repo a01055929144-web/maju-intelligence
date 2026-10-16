@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { createAndPostStocktake, listInventory, listInventoryIssues, listInventoryMovements, listUnitConversions, saveUnitConversion } from "@/lib/inventory";
+import { createAndPostStocktake, listInventory, listInventoryIssues, listInventoryMovements, listUnitConversions, saveUnitConversion, searchStocktakeProducts } from "@/lib/inventory";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get("search") || undefined;
   try {
     if (mode === "movements" && productId) return NextResponse.json({ movements: await listInventoryMovements(scope.companyId!, productId) });
+    if (mode === "stocktake-products") return NextResponse.json({ products: await searchStocktakeProducts(scope.companyId!, search) });
     if (mode === "conversions") return NextResponse.json(await listUnitConversions(scope.companyId!, { search, productId }));
     if (mode === "issues") return NextResponse.json(await listInventoryIssues(scope.companyId!, Number(request.nextUrl.searchParams.get("page") || 0)));
     const filter = request.nextUrl.searchParams.get("filter");
