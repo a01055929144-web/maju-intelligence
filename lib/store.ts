@@ -6589,7 +6589,9 @@ export async function updateSalesQuote(companyId: string, quoteId: string, input
 export type SalesQuoteListItem = {
   createdAt: string;
   createdByName?: string;
+  customerId?: string;
   id: string;
+  pricingAppliedAt?: string;
   publicEnabled: boolean;
   publicToken: string;
   quoteNumber: string;
@@ -6607,16 +6609,18 @@ export async function listSalesQuotes(companyId: string, limit = 100): Promise<S
     const quotes = await supabaseRequest<Array<{
       created_at: string;
       created_by_name: string | null;
+      customer_id: string | null;
       id: string;
       public_enabled: boolean;
       public_token: string;
+      pricing_applied_at: string | null;
       quote_number: string;
       recipient_name: string | null;
       status: SalesQuoteListItem["status"];
       title: string;
       valid_until: string;
     }>>(
-      `sales_quotes?select=id,quote_number,title,status,valid_until,public_token,public_enabled,recipient_name,created_by_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=${safeLimit}`
+      `sales_quotes?select=id,quote_number,title,status,valid_until,public_token,public_enabled,recipient_name,created_by_name,created_at,customer_id,pricing_applied_at&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=${safeLimit}`
     );
     if (!quotes.length) return [];
 
@@ -6641,7 +6645,9 @@ export async function listSalesQuotes(companyId: string, limit = 100): Promise<S
     return quotes.map((quote) => ({
       createdAt: quote.created_at,
       createdByName: quote.created_by_name || undefined,
+      customerId: quote.customer_id || undefined,
       id: quote.id,
+      pricingAppliedAt: quote.pricing_applied_at || undefined,
       publicEnabled: Boolean(quote.public_enabled),
       publicToken: quote.public_token,
       quoteNumber: quote.quote_number,
@@ -6655,6 +6661,24 @@ export async function listSalesQuotes(companyId: string, limit = 100): Promise<S
     if (isMissingSalesQuoteSchemaError(error)) return [];
     throw error;
   }
+}
+
+export type PendingAcceptedQuote = {
+  id: string;
+  quoteNumber: string;
+};
+
+export async function listPendingAcceptedQuotesForCustomer(
+  companyId: string,
+  customerId: string
+): Promise<PendingAcceptedQuote[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<Array<{ id: string; quote_number: string }>>(
+    `sales_quotes?select=id,quote_number&company_id=eq.${encodeURIComponent(companyId)}`
+      + `&customer_id=eq.${encodeURIComponent(customerId)}`
+      + "&status=eq.accepted&pricing_applied_at=is.null&order=created_at.desc&limit=100"
+  );
+  return rows.map((row) => ({ id: row.id, quoteNumber: row.quote_number }));
 }
 
 export type PublicSalesQuote = {
@@ -9884,7 +9908,7 @@ export async function convertPermitLeadToCustomer(
   }
 
   const message = pricingResult.pricingFailedCount
-    ? `수락된 견적 ${pricingResult.pricingFailedCount}건의 계약 단가를 반영하지 못했습니다. 거래처 상세에서 다시 시도해 주세요.`
+    ? `수락된 견적 ${pricingResult.pricingFailedCount}건의 계약 단가를 반영하지 못했습니다. 영업관리의 견적 원장 또는 거래처 상세의 계약 단가에서 다시 반영해 주세요.`
     : undefined;
   return { ok: true, customerId: created.customer.id, message, ...pricingResult };
 }

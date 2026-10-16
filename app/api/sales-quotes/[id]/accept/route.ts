@@ -13,7 +13,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const result = await acceptSalesQuote(scope.companyId!, id, getCustomerOperationalName(scope.customerSession) || scope.adminSession?.name);
     return NextResponse.json({
       ...result,
-      message: result.pendingCustomerConversion
+      message: result.alreadyApplied
+        ? "이미 계약 단가가 반영된 견적입니다."
+        : result.pendingCustomerConversion
         ? "수락 처리했습니다. 거래처 전환 후 계약 단가가 자동 반영됩니다."
         : `수락 처리했습니다. 계약 단가 ${result.appliedCount}개를 반영했습니다.${result.unlinkedCount ? ` 표준 품목 연결 필요 ${result.unlinkedCount}개.` : ""}${result.taxUnconfirmedCount ? ` 과세구분 확인 필요 ${result.taxUnconfirmedCount}개.` : ""}`
     });

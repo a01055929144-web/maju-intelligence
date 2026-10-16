@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { closeCustomerContractPrice, listCustomerContractPrices } from "@/lib/store";
+import { closeCustomerContractPrice, listCustomerContractPrices, listPendingAcceptedQuotesForCustomer } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "계약 단가를 조회할 권한이 없습니다." }, { status: 403 });
   const { id } = await params;
-  return NextResponse.json({ agreements: await listCustomerContractPrices(scope.companyId!, id) });
+  const [agreements, pendingQuotes] = await Promise.all([
+    listCustomerContractPrices(scope.companyId!, id),
+    listPendingAcceptedQuotesForCustomer(scope.companyId!, id)
+  ]);
+  return NextResponse.json({ agreements, pendingQuotes });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
