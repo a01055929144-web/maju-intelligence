@@ -91,7 +91,11 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onSaved
     if (!isSale || !form.customerId) { setContractPrices({}); return; }
     const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
     void api<{ agreements: Array<{ productCatalogId: string; status: string; taxType: ErpTaxType; unitPrice: number }> }>(`/api/customers/${form.customerId}/contract-prices${query}`)
-      .then(({ agreements }) => setContractPrices(Object.fromEntries(agreements.filter((item) => item.status === "active").map((item) => [item.productCatalogId, { taxType: item.taxType, unitPrice: item.unitPrice }])))
+      .then(({ agreements }) => setContractPrices(Object.fromEntries(
+        agreements
+          .filter((item) => item.status === "active")
+          .map((item) => [item.productCatalogId, { taxType: item.taxType, unitPrice: item.unitPrice }]),
+      )))
       .catch(() => setContractPrices({}));
   }, [companyId, form.customerId, isSale]);
   const save = async () => {
