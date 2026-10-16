@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Bot,
+  Boxes,
   Building2,
   Database,
   FileSpreadsheet,
@@ -31,6 +32,7 @@ export type CustomerWorkspaceKey =
   | "product-catalog"
   | "product-standards"
   | "erp-documents"
+  | "inventory"
   | "sales-performance"
   | "revenue-ledger"
   | "billing"
@@ -85,7 +87,8 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       },
       { active: "product-catalog", description: "회사가 판매하는 마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" },
       { active: "product-standards", description: "내 상품과 BIV 표준 품목 연결", href: "/revenue/products?tab=mapping", icon: Database, label: "표준 품목 관리" }
-      ,{ active: "erp-documents", description: "매출·매입 전표와 거래처원장", href: "/operations/documents", icon: FileSpreadsheet, label: "전표·거래처원장" }
+      ,{ active: "erp-documents", description: "매출·매입 전표와 거래처원장", href: "/operations/documents", icon: FileSpreadsheet, label: "전표·거래처원장" },
+      { active: "inventory", description: "현재고, 단위 환산, 미연결과 실사", href: "/operations/inventory", icon: Boxes, label: "재고관리" }
     ]
   },
   {

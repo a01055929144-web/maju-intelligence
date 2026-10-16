@@ -1,0 +1,6 @@
+import { redirect } from "next/navigation";
+import { CustomerAppShell } from "@/components/customer-app-shell";
+import { InventoryWorkspace } from "@/components/inventory-workspace";
+import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+export const dynamic = "force-dynamic";
+export default async function InventoryPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) { const params=await searchParams;const customer=await getCustomerSession();const admin=await getAdminSession();if(!customer&&!admin)redirect('/dashboard/login');if(customer&&!customerHasCapability(customer,'manage_sales'))redirect('/dashboard');if(!customer&&admin&&!params?.companyId)redirect('/admin/companies');const companyId=resolvePageCompanyId(customer,admin,params?.companyId)||'';const preview=Boolean(admin&&!customer);return <CustomerAppShell active="inventory" companyName={customer?.companyName||"선택 고객사"} mode={preview?'admin-preview':'customer'} previewCompanyId={preview?companyId:undefined} subtitle="현재고·단위 환산·미연결 전표·실사를 한 곳에서 관리합니다." title="재고관리" userName={customer?.name||admin?.name||"관리자"} workspaceRole={customer?.workspaceRole}><section className="mx-auto max-w-[1560px] px-4 py-4"><InventoryWorkspace companyId={preview?companyId:""}/></section></CustomerAppShell>;}
