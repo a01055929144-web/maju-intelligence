@@ -4,7 +4,7 @@ import { customerNavigationGroups, flattenCustomerNavigationItems } from "../lib
 
 describe("customer navigation", () => {
   it("keeps the confirmed ERP-oriented sidebar groups", () => {
-    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["영업", "운영 관리", "TMS 물류효율화", "설정·데이터"]);
+    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["영업", "거래처", "전표·정산", "상품·재고", "배송", "설정"]);
   });
 
   it("keeps sales, supplier, customer, product and logistics destinations reachable", () => {
@@ -14,8 +14,14 @@ describe("customer navigation", () => {
       "/dashboard?view=leads&leadType=permit", "/dashboard?view=leads&leadType=keyword", "/assistant",
       "/revenue/pipeline", "/revenue/contacts", "/sales/performance", "/purchasing/suppliers",
       "/crm/timeline", "/revenue/transactions", "/revenue/products", "/revenue/products?tab=mapping",
+      "/operations/documents", "/operations/documents?tab=ledger", "/operations/inventory",
       "/dashboard", "/routes/today", "/dashboard?view=history", "/dashboard/settings?section=tms#territory-settings"
     ]));
+  });
+
+  it("does not duplicate an exact navigation destination", () => {
+    const identities = flattenCustomerNavigationItems().map((item) => `${item.active}:${item.href}`);
+    expect(new Set(identities).size).toBe(identities.length);
   });
 
   it("does not expose the future group messaging placeholder", () => {
