@@ -158,6 +158,15 @@ export function buildBusinessDocumentLineRows(
   }));
 }
 
+export function shouldRenumberDraftDocument(
+  existing: Pick<BusinessDocumentDetail, "status" | "documentNumber"> | null,
+  documentDate: string,
+) {
+  if (!existing || existing.status !== "draft") return false;
+  const parts = existing.documentNumber.split("-");
+  return parts.length < 3 || parts[1] !== documentDate.slice(0, 4);
+}
+
 export async function saveBusinessDocument(companyId: string, input: SaveBusinessDocumentInput, actor: ErpActor) {
   validateDraft(input);
   const partner = await getPartnerSnapshot(companyId, input);
@@ -165,7 +174,8 @@ export async function saveBusinessDocument(companyId: string, input: SaveBusines
   if (existing?.status === "cancelled") throw new Error("삭제된 전표는 수정할 수 없습니다.");
   if (existing && existing.documentType !== input.documentType) throw new Error("전표 유형은 변경할 수 없습니다.");
   let documentNumber = existing?.documentNumber;
-  if (!documentNumber || documentNumber.slice(documentNumber.indexOf("-") + 1, documentNumber.lastIndexOf("-")) !== input.documentDate.slice(0, 4)) {
+  const shouldRenumber = shouldRenumberDraftDocument(existing, input.documentDate);
+  if (!documentNumber || shouldRenumber) {
     documentNumber = await supabaseRpc<string>("next_erp_number", { p_company_id: companyId, p_sequence_kind: input.documentType, p_business_date: input.documentDate });
   }
   const totals = calculateErpTotals(input.lines.map((line) => ({ quantity: line.quantity, unitPrice: line.unitPrice, taxType: line.taxType })));
@@ -180,6 +190,12 @@ export async function saveBusinessDocument(companyId: string, input: SaveBusines
     tax_amount: totals.taxAmount, total_amount: totals.totalAmount, created_by_user_id: actor.userId || null, created_by_name: actor.name,
   };
   let documentId = existing?.id;
+  if (documentId && shouldRenumber) {
+    await supabaseRequest(
+      `business_documents?company_id=eq.${enc(companyId)}&id=eq.${enc(documentId)}&status=eq.draft`,
+      { method: "PATCH", body: JSON.stringify({ document_number: documentNumber }) },
+    );
+  }
   if (!documentId) {
     const rows = await supabaseRequest<Array<{ id: string }>>("business_documents", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) });
     documentId = rows[0]?.id;
@@ -254,6 +270,44 @@ export async function createReturnDraft(companyId: string, originalId: string, a
   }, actor);
 }
 
+export async function moveBusinessDocumentLines(companyId: string, input: {
+  documentId: string; lineIds: string[]; targetPartnerId: string; reason?: string;
+}, actor: ErpActor) {
+  if (!input.lineIds.length) throw new Error("이동할 품목을 선택해 주세요.");
+  if (!input.targetPartnerId) throw new Error("이동할 거래처를 선택해 주세요.");
+  try {
+    const id = await supabaseRpc<string>("move_business_document_lines", {
+      p_company_id: companyId,
+      p_document_id: input.documentId,
+      p_line_ids: input.lineIds,
+      p_target_partner_id: input.targetPartnerId,
+      p_actor_user_id: actor.userId || null,
+      p_actor_name: actor.name,
+      p_reason: input.reason?.trim() || null,
+    });
+    return getBusinessDocument(companyId, id);
+  } catch (error) { throw new Error(toKoreanErpError(error)); }
+}
+
+export async function copyBusinessDocumentLines(companyId: string, input: {
+  documentId: string; lineIds: string[]; targetDocumentType: "sale" | "purchase"; targetPartnerId: string;
+}, actor: ErpActor) {
+  if (!input.lineIds.length) throw new Error("복사할 품목을 선택해 주세요.");
+  if (!input.targetPartnerId) throw new Error("복사할 거래처를 선택해 주세요.");
+  try {
+    const id = await supabaseRpc<string>("copy_business_document_lines", {
+      p_company_id: companyId,
+      p_document_id: input.documentId,
+      p_line_ids: input.lineIds,
+      p_target_document_type: input.targetDocumentType,
+      p_target_partner_id: input.targetPartnerId,
+      p_actor_user_id: actor.userId || null,
+      p_actor_name: actor.name,
+    });
+    return getBusinessDocument(companyId, id);
+  } catch (error) { throw new Error(toKoreanErpError(error)); }
+}
+
 export async function listErpOptions(companyId: string) {
   const [customers, suppliers, products, supplierProducts] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string }>>(`normalized_customers?select=id,customer_name&company_id=eq.${enc(companyId)}&order=customer_name&limit=5000`),
@@ -292,5 +346,16 @@ export function toKoreanErpError(error: unknown) {
   if (/document number year/i.test(message)) return "거래일 연도와 전표번호 연도가 달라 재저장이 필요합니다.";
   if (/erp_document_transition|status change/i.test(message)) return "전표 상태는 확정·취소 버튼으로만 변경할 수 있습니다.";
   if (/same type and partner/i.test(message)) return "반품은 같은 거래처의 확정 원전표에서만 작성할 수 있습니다.";
+  if (/tax invoiced/i.test(message)) return "세금계산서가 발행된 전표는 수정·이동·삭제할 수 없습니다. 반품 전표로 정정해 주세요.";
+  if (/draft tax invoice/i.test(message)) return "세금계산서 초안에 포함된 전표입니다. 초안에서 제외한 뒤 수정해 주세요.";
+  if (/another year/i.test(message)) return "발행 전표는 다른 연도로 거래일을 옮길 수 없습니다.";
+  if (/return documents must stay/i.test(message)) return "반품 전표는 원전표 거래처에서만 처리할 수 있습니다.";
+  if (/delete the confirmed return documents before moving/i.test(message)) return "반품 전표를 먼저 삭제해야 이동할 수 있습니다.";
+  if (/below the confirmed returns/i.test(message)) return "확정된 반품 금액보다 낮게 수정할 수 없습니다.";
+  if (/single partner/i.test(message)) return "세금계산서는 한 거래처의 전표만 묶을 수 있습니다.";
+  if (/all lines selected/i.test(message)) return "전체 품목을 옮기려면 '거래처 이동'을 사용해 주세요.";
+  if (/same as the current partner/i.test(message)) return "현재 거래처와 같은 거래처로는 옮길 수 없습니다.";
+  if (/lines of return documents/i.test(message)) return "반품 전표의 품목은 이동할 수 없습니다.";
+  if (/selected lines do not belong/i.test(message)) return "선택한 품목을 다시 확인해 주세요.";
   return message || "전표를 처리하지 못했습니다.";
 }

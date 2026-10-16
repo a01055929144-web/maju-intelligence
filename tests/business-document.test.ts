@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calculateErpLine, calculateErpTotals, calculateLedgerBalance } from "../domains/erp/business-document";
 import {
   buildBusinessDocumentLineRows,
+  shouldRenumberDraftDocument,
 } from "../lib/business-documents";
 
 describe("ERP 전표 금액", () => {
@@ -59,5 +60,11 @@ describe("ERP 전표 금액", () => {
       "specification", "supplier_product_id", "tax_type", "unit", "unit_price",
     ].sort());
     expect(row).toMatchObject({ product_name: "양파", specification: "10kg", unit: "망", memo: "산지 직송" });
+  });
+
+  it("작성중 전표만 거래일 연도가 달라질 때 재채번한다", () => {
+    expect(shouldRenumberDraftDocument({ status: "draft", documentNumber: "S-2026-000001" }, "2027-01-02")).toBe(true);
+    expect(shouldRenumberDraftDocument({ status: "draft", documentNumber: "S-2026-000001" }, "2026-12-31")).toBe(false);
+    expect(shouldRenumberDraftDocument({ status: "confirmed", documentNumber: "S-2026-000001" }, "2027-01-02")).toBe(false);
   });
 });
