@@ -35,8 +35,10 @@ import {
   X
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
 import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
@@ -153,6 +155,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const [hasInstagramOnly, setHasInstagramOnly] = useState(false);
   const [kakaoMatchFilter, setKakaoMatchFilter] = useState<"" | "matched_no_phone" | "unregistered" | "needs_confirmation">("");
   const [excludeExcluded, setExcludeExcluded] = useState(true);
+  const [showClosedOrNonTarget, setShowClosedOrNonTarget] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -521,6 +524,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     const keyword = tableSearch.trim().toLowerCase();
     const normalizedKeyword = normalizeLeadSearchToken(keyword);
     return leads
+      .filter((lead) => showClosedOrNonTarget || (lead.isActive && lead.isTargetIndustry && !/폐업|취소|말소/.test(lead.permitStatus || "")))
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
@@ -543,7 +547,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter]);
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter, showClosedOrNonTarget]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -1232,7 +1236,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     }
   }
 
-  async function runLeadAction(lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string): Promise<PermitLeadActionResult> {
+  async function runLeadAction(lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string): Promise<PermitLeadActionResult> {
     setActionMessage("");
     try {
       const response = await fetchWithTimeout(
@@ -1240,7 +1244,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actionType, result, memo })
+          body: JSON.stringify({ actionType, followUpAt, result, memo })
         },
         12000
       );
@@ -2226,6 +2230,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                 <input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />
                 제외 처리된 리드도 표시
               </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />
+                폐업·대상 외 업종도 표시
+              </label>
               {openDateFilterMode === "custom" ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5">
                   <span className="text-[11px] font-black text-slate-400">개시일</span>
@@ -2840,7 +2848,7 @@ function PermitLeadDetailPanel({
 }: {
   readonly intent?: PermitLeadActionIntent;
   readonly lead: PermitLeadItem;
-  readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string) => Promise<PermitLeadActionResult>;
+  readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string) => Promise<PermitLeadActionResult>;
   readonly onClose: () => void;
   readonly onConvert: (lead: PermitLeadItem) => Promise<{
     customerId?: string;
@@ -2881,6 +2889,7 @@ function PermitLeadDetailPanel({
   const [matchedExistingCustomer, setMatchedExistingCustomer] = useState(false);
   const [pricingFailureMessage, setPricingFailureMessage] = useState("");
   const [converting, setConverting] = useState(false);
+  const [businessHoursDraft, setBusinessHoursDraft] = useState("");
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
@@ -2976,11 +2985,11 @@ function PermitLeadDetailPanel({
     };
   }, [lead.id]);
 
-  function buildActionMemo(result: string) {
+  function buildActionMemo(result: string, followUpDate = nextActionDate) {
     const parts = [
       `결과: ${result}`,
       instagramHandle ? `인스타: ${instagramHandle}` : "",
-      nextActionDate ? `다음 액션일: ${nextActionDate}` : "",
+      followUpDate ? `다음 액션일: ${followUpDate}` : "",
       actionMemo.trim()
     ].filter(Boolean);
     return parts.join("\n");
@@ -3028,10 +3037,12 @@ function PermitLeadDetailPanel({
   }
 
   async function recordAction(actionType: PermitLeadActionKind, result: string): Promise<boolean> {
-    const memo = buildActionMemo(result);
+    const followUpDate = needsVisitFollowUp(result) ? (nextActionDate || getDefaultVisitFollowUpDate()) : nextActionDate;
+    if (followUpDate !== nextActionDate) setNextActionDate(followUpDate);
+    const memo = buildActionMemo(result, followUpDate);
     setDetailActionMessage("");
     setSavingAction(result);
-    const saved = await onAction(lead, actionType, result, memo);
+    const saved = await onAction(lead, actionType, result, memo, followUpDate || undefined);
     setSavingAction("");
     if (!saved.ok) {
       setDetailActionMessage(saved.message || "컨택 이력을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
@@ -3052,7 +3063,19 @@ function PermitLeadDetailPanel({
     setHistoryState("ready");
     setHistoryOpen(true);
     setDetailActionMessage(`${result} 이력을 저장했습니다.`);
+    if (result === "거래 시작") await convertLeadToCustomer();
     return true;
+  }
+
+  async function convertLeadToCustomer() {
+    setConverting(true);
+    const result = await onConvert(lead);
+    if (result.customerId) {
+      setConvertedCustomerId(result.customerId);
+      setMatchedExistingCustomer(Boolean(result.existingCustomer));
+    }
+    setPricingFailureMessage(result.pricingFailedCount ? result.message || "계약 단가 반영에 실패했습니다." : "");
+    setConverting(false);
   }
 
   function focusMobileSection(section: "history" | "result") {
@@ -3326,20 +3349,7 @@ function PermitLeadDetailPanel({
             <button
               className="maju-button-secondary mt-2 h-10 w-full justify-center text-xs disabled:opacity-50"
               disabled={converting || Boolean(convertedCustomerId)}
-              onClick={async () => {
-                setConverting(true);
-                const result = await onConvert(lead);
-                if (result.customerId) {
-                  setConvertedCustomerId(result.customerId);
-                  setMatchedExistingCustomer(Boolean(result.existingCustomer));
-                }
-                setPricingFailureMessage(
-                  result.pricingFailedCount
-                    ? result.message || "계약 단가 반영에 실패했습니다."
-                    : ""
-                );
-                setConverting(false);
-              }}
+              onClick={() => void convertLeadToCustomer()}
               type="button"
             >
               {converting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
@@ -3378,6 +3388,15 @@ function PermitLeadDetailPanel({
               <div className="mt-3">
                 <CustomerAttachmentUploadPanel customerId={convertedCustomerId} customerName={lead.businessName} />
               </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">배송지</p><p className="mt-1 text-xs font-bold text-slate-800">{lead.address || "주소 확인 필요"}</p></div>
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">권역</p><p className="mt-1 text-xs font-bold text-slate-800">주소 기준 추천 후 사용자 확인</p></div>
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">오늘 코스</p><p className="mt-1 text-xs font-bold text-slate-800">미반영 · 지도에서 배정</p></div>
+              </div>
+              <a className="maju-button-secondary mt-2 h-9 w-full justify-center text-xs" href={withPermitLeadCompanyQuery(`/dashboard?view=customers&customerId=${encodeURIComponent(convertedCustomerId)}`)}>
+                배송지·권역·코스 바로 확인
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
               {pricingFailureMessage ? (
                 <p
                   className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800"
@@ -3737,6 +3756,7 @@ function PermitLeadDetailPanel({
             ) : null}
           </div>
 
+          {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><div className="mt-2 flex gap-2"><button className="maju-button-secondary h-8 text-xs" disabled type="button">저장 구조 승인 후 저장</button><button className="maju-button-secondary h-8 text-xs" disabled type="button">지금 방문 가능 필터</button><button className="maju-button-secondary h-8 text-xs" disabled type="button">오늘 브레이크 있음</button></div></div> : null}
           <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={resultSectionRef}>
             <button aria-expanded={resultOpen} className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setResultOpen((value) => !value)} type="button">
               <div>
@@ -3765,12 +3785,16 @@ function PermitLeadDetailPanel({
                 placeholder="통화 내용, DM 답변, 방문 시 확인할 내용 등을 남겨주세요."
                 value={actionMemo}
               />
-              <PermitActionButton disabled={!lead.phone || Boolean(savingAction)} icon={Phone} label="통화 성공" loading={savingAction === "통화 성공"} onClick={() => void recordAction("call", "통화 성공")} />
-              <PermitActionButton disabled={!lead.phone || Boolean(savingAction)} icon={Phone} label="부재중" loading={savingAction === "부재중"} onClick={() => void recordAction("call", "부재중")} />
-              <PermitActionButton disabled={Boolean(savingAction)} icon={MessageCircle} label="DM 발송" loading={savingAction === "DM 발송"} onClick={() => void recordAction("dm", "DM 발송")} />
-              <PermitActionButton disabled={Boolean(savingAction)} icon={MessageCircle} label="관심 있음" loading={savingAction === "관심 있음"} onClick={() => void recordAction("dm", "관심 있음")} />
-              <PermitActionButton disabled={Boolean(savingAction)} icon={MapPin} label="방문 예정" loading={savingAction === "다음 방문"} onClick={() => void recordAction("visit", "다음 방문")} />
-              <PermitActionButton disabled={Boolean(savingAction)} icon={CircleSlash} label="보류" loading={savingAction === "보류"} onClick={() => void recordAction("hold", "보류")} />
+              {STANDARD_VISIT_RESULTS.map((result) => (
+                <PermitActionButton
+                  disabled={Boolean(savingAction)}
+                  icon={result === "거절" ? CircleSlash : result === "거래 시작" ? UserCheck : MapPin}
+                  key={result}
+                  label={result}
+                  loading={savingAction === result}
+                  onClick={() => void recordAction(VISIT_RESULT_ACTION_TYPE[result] as PermitLeadActionKind, result)}
+                />
+              ))}
               </div>
             ) : null}
           </div>

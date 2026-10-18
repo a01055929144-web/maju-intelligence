@@ -12,6 +12,8 @@ export type LeadAction = {
 export type RecordLeadActionInput = {
   actionType: LeadActionType;
   actorName: string;
+  collateralTypes?: string[];
+  followUpAt?: string;
   memo?: string;
   result?: string;
 };

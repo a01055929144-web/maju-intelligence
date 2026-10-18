@@ -9,7 +9,7 @@ const VALID_ACTION_TYPES: LeadActionType[] = ["call", "dm", "visit", "hold", "ex
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as
-    | { actionType?: string; companyId?: string; memo?: string; result?: string }
+    | { actionType?: string; collateralTypes?: string[]; companyId?: string; followUpAt?: string; memo?: string; result?: string }
     | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
@@ -31,6 +31,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ]);
     const result = await recordLeadContact(leadActionRepository, scope.companyId!, id, {
       actionType: body.actionType as LeadActionType,
+      collateralTypes: body.collateralTypes,
+      followUpAt: body.followUpAt,
       result: body.result,
       memo: body.memo,
       actorName

@@ -5,7 +5,7 @@ export function recordLeadContact(
   repository: LeadActionRepository,
   companyId: string,
   leadId: string,
-  input: { actionType: LeadActionType; actorName: string; memo?: string; result?: string }
+  input: { actionType: LeadActionType; actorName: string; collateralTypes?: string[]; followUpAt?: string; memo?: string; result?: string }
 ) {
   if (!companyId || !leadId) throw new Error("회사와 리드 정보가 필요합니다.");
   return repository.record(companyId, leadId, input);

@@ -361,9 +361,9 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "C등급", value: "C" }
 ];
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
-  { helper: "신규·영업 리드와 거래처", icon: MapPin, label: "영업 동선", shortLabel: "영업", value: "map" },
+  { helper: "신규·영업 리드와 거래처", icon: MapPin, label: "지도", shortLabel: "지도", value: "map" },
   { helper: "검색·상세·편집", icon: Store, label: "거래처", shortLabel: "원장", value: "customers" },
-  { helper: "코스·배송 상태", icon: Navigation, label: "배송 동선", shortLabel: "배송", value: "course" },
+  { helper: "선택 매장 경유·티맵", icon: Navigation, label: "동선", shortLabel: "동선", value: "course" },
   { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
   // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
   // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.

@@ -5,7 +5,7 @@ import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seo
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
-import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate } from "./leads";
+import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate, type LeadDuplicateMatch } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolveKakaoPlace, resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -5146,6 +5146,7 @@ async function excludeMatchingLeadsForNewCustomer(
     }]);
     if (!duplicate) return;
     const reason = `이미 등록된 거래처(${duplicate.reason})`;
+    const matchAudit = getLeadCustomerMatchAudit(duplicate.reason);
     await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(lead.id)}&company_id=eq.${encodeURIComponent(companyId)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -5153,6 +5154,9 @@ async function excludeMatchingLeadsForNewCustomer(
         exclude_reason: reason,
         is_duplicate: true,
         matched_customer_id: customerId,
+        matched_customer_at: new Date().toISOString(),
+        matched_customer_method: matchAudit.method,
+        matched_customer_confidence: matchAudit.confidence,
         next_action: "제외 검토",
         next_action_reasons: [reason],
         status: "제외",
@@ -5160,6 +5164,15 @@ async function excludeMatchingLeadsForNewCustomer(
       })
     }).catch(() => null);
   }));
+}
+
+function getLeadCustomerMatchAudit(reason: LeadDuplicateMatch["reason"]): {
+  confidence: number;
+  method: "business_number" | "name_address";
+} {
+  return reason === "사업자번호 일치"
+    ? { confidence: 100, method: "business_number" }
+    : { confidence: reason === "상호명·주소 일치" ? 95 : 90, method: "name_address" };
 }
 
 async function upsertNormalizedCustomerWithOptionalPlaceLinks(
@@ -7547,6 +7560,32 @@ export async function saveAnalysis(
     }
   }
 
+  // 단건·지도 등록과 같은 findLeadCustomerDuplicate 규칙을 엑셀/일괄 등록에도 적용합니다.
+  // import_id가 이번 업로드인 행만 대상으로 하므로 기존 거래처를 다시 훑거나 상태를 바꾸지 않습니다.
+  if (options.uploadType !== "sales-analysis" && normalizedRowsSaved > 0) {
+    const importedCustomers = await supabaseRequest<Array<{
+      address: string | null;
+      business_registration_number: string | null;
+      customer_name: string;
+      id: string;
+      phone: string | null;
+    }>>(
+      `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}&import_id=eq.${encodeURIComponent(importId)}&limit=5000`
+    ).catch(() => []);
+    for (let offset = 0; offset < importedCustomers.length; offset += 5) {
+      await Promise.all(importedCustomers.slice(offset, offset + 5).map((customer) => excludeMatchingLeadsForNewCustomer(
+        companyId,
+        customer.id,
+        {
+          address: customer.address || "",
+          businessName: customer.customer_name,
+          businessNumber: customer.business_registration_number || "",
+          phone: customer.phone || ""
+        }
+      )));
+    }
+  }
+
   const masterRows = await getNormalizedCustomersForAnalysis(companyId);
   report = analyzeCompany(masterRows.length ? masterRows : rows);
   report = {
@@ -7930,14 +7969,14 @@ const PERMIT_EXCLUDED_INDUSTRY_KEYWORDS = [
 
 // 업종 원문/상호명에서 대표 업종을 분류하는 규칙입니다. 필요에 따라 계속 추가할 수 있습니다.
 export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
-  { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식"] },
-  { primary: "카페/디저트", keywords: ["카페", "커피", "디저트", "베이커리", "제과", "빵집"] },
+  { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식", "식당", "닭갈비", "갈비", "칼국수", "전집", "막창", "김밥", "튀김", "반찬", "혼밥", "도시락"] },
+  { primary: "카페/디저트", keywords: ["카페", "커피", "coffee", "디저트", "도넛", "베이커리", "제과", "빵집", "빠띠시에", "떡집"] },
   { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
   { primary: "중식", keywords: ["중식", "마라탕", "양꼬치", "짬뽕", "짜장"] },
   { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드"] },
   { primary: "주점", keywords: ["주점", "포차", "호프", "술집"] },
-  { primary: "양식", keywords: ["양식", "파스타", "스테이크", "브런치"] },
-  { primary: "뷔페/단체급식", keywords: ["뷔페", "단체급식", "구내식당", "케이터링"] }
+  { primary: "양식", keywords: ["양식", "파스타", "스테이크", "브런치", "타코"] },
+  { primary: "뷔페/단체급식", keywords: ["뷔페", "부페", "단체급식", "구내식당", "케이터링"] }
 ];
 
 /**
@@ -8387,6 +8426,9 @@ export async function ingestPermitLeadRows(
       industry_tags: classification.tags,
       is_target_industry: classification.isTarget,
       matched_customer_id: duplicateMatch?.customerId || null,
+      matched_customer_at: duplicateMatch ? new Date().toISOString() : null,
+      matched_customer_method: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).method : null,
+      matched_customer_confidence: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).confidence : null,
       is_duplicate: isDuplicate,
       exclude_reason: !isActive
         ? "폐업·휴업 등 비활성 상태"
@@ -9155,6 +9197,11 @@ const PERMIT_LEAD_ACTION_TO_STATUS: Record<PermitLeadActionType, string> = {
 };
 
 const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
+  부재: "방문 대상",
+  관심: "미팅 예정",
+  "단가표 전달": "재연락 예정",
+  "재방문 예정": "재연락 예정",
+  "거래 시작": "거래처 전환",
   "통화 성공": "연락 완료",
   부재중: "전화 대상",
   "DM 발송": "DM 발송",
@@ -9172,7 +9219,7 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
 export async function recordPermitLeadAction(
   companyId: string,
   leadId: string,
-  input: { actionType: PermitLeadActionType; actorName?: string; memo?: string; result?: string }
+  input: { actionType: PermitLeadActionType; actorName?: string; collateralTypes?: string[]; followUpAt?: string; memo?: string; result?: string }
 ): Promise<{ action?: PermitLeadActionItem; ok: boolean; status: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, status: "" };
 
@@ -9191,6 +9238,8 @@ export async function recordPermitLeadAction(
       company_id: companyId,
       lead_id: leadId,
       action_type: input.actionType,
+      collateral_types: input.collateralTypes || [],
+      follow_up_at: input.followUpAt || null,
       result: input.result || null,
       memo: input.memo || null,
       actor_name: input.actorName || null
@@ -10093,6 +10142,7 @@ export async function convertPermitLeadToCustomer(
   );
   if (duplicateMatch) {
     const reason = `이미 등록된 거래처(${duplicateMatch.reason})`;
+    const matchAudit = getLeadCustomerMatchAudit(duplicateMatch.reason);
     await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -10100,6 +10150,9 @@ export async function convertPermitLeadToCustomer(
         exclude_reason: reason,
         is_duplicate: true,
         matched_customer_id: duplicateMatch.customerId,
+        matched_customer_at: new Date().toISOString(),
+        matched_customer_method: matchAudit.method,
+        matched_customer_confidence: matchAudit.confidence,
         next_action: "제외 검토",
         next_action_reasons: [reason],
         status: "제외",
@@ -10146,7 +10199,14 @@ export async function convertPermitLeadToCustomer(
     {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ status: "거래처 전환", matched_customer_id: created.customer.id, updated_at: new Date().toISOString() })
+      body: JSON.stringify({
+        status: "거래처 전환",
+        matched_customer_id: created.customer.id,
+        matched_customer_at: new Date().toISOString(),
+        matched_customer_method: "conversion",
+        matched_customer_confidence: 100,
+        updated_at: new Date().toISOString()
+      })
     }
   );
 

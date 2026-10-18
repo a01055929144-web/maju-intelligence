@@ -1,5 +1,5 @@
--- REVIEW ONLY. 운영 DB에 실행하지 마세요.
--- matched_customer_id 기존 판정을 유지하면서 매칭 시각·방법만 감사용으로 보강하는 초안입니다.
+-- 운영 적용 완료(2026-10-19). 재실행 금지.
+-- 기록본: supabase/migrations/20261019090000_lead_customer_match_audit.sql
 begin;
 
 alter table public.business_permit_leads

@@ -21,4 +21,8 @@ export function isHoldModulePath(pathname: string) {
   return HOLD_MODULE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_LEAD_BUSINESS_HOURS_UI_ENABLED || "") {
+  return value === "true" || value === "1";
+}
+
 export const CORE_LEADS_HREF = "/dashboard?view=leads&leadType=permit";
