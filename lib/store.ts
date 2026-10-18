@@ -7,7 +7,7 @@ import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviews
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
 import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate } from "./leads";
 import { summarizePastedReviewText } from "./review-summarizer";
-import { resolvePlaceLinks } from "./place-links";
+import { resolveKakaoPlace, resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
 import { isTelegramAccessFailure, isTelegramConfigured, sendTelegramMessage } from "./telegram";
 import { hasCustomerKakaoIndustryEvidence, hasLeadKakaoIndustryEvidence, resolveKakaoIndustryBackfill } from "./industry-backfill";
@@ -26,6 +26,7 @@ import type { LeadActionRepository } from "@/domains/lead/lead-action";
 import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
+import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
@@ -7844,6 +7845,14 @@ export type PermitLeadItem = {
   grade: "A" | "B" | "C" | null;
   naverPlaceUrl?: string;
   kakaoPlaceUrl?: string;
+  kakaoMatchAttempted?: boolean;
+  kakaoMatchConfirmed?: boolean;
+  kakaoMatchedAddress?: string;
+  kakaoMatchedName?: string;
+  kakaoMatchDistanceM?: number;
+  kakaoMatchMethod?: "region" | "name_only";
+  kakaoPhoneSuggestion?: string;
+  kakaoPlaceId?: string;
   googlePlaceUrl?: string;
   instagramUrl?: string;
   reviewCount?: number;
@@ -8129,6 +8138,50 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
   };
 }
 
+type LeadEnrichmentMetadataRow = {
+  attempted_at: string;
+  lead_id: string;
+  metadata: Record<string, unknown> | null;
+};
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+}
+
+function toKakaoMatchMethod(value: unknown): PermitLeadItem["kakaoMatchMethod"] {
+  return value === "name_only" ? "name_only" : value === "region" || value === "region_detail" ? "region" : undefined;
+}
+
+async function attachLatestLeadEnrichmentMetadata(companyId: string, leads: PermitLeadItem[]) {
+  if (!leads.length) return leads;
+  const events = await supabaseRequest<LeadEnrichmentMetadataRow[]>(
+    `lead_enrichment_events?select=lead_id,attempted_at,metadata&company_id=eq.${encodeURIComponent(companyId)}&order=attempted_at.desc&limit=5000`
+  ).catch(() => []);
+  const latestByLead = new Map<string, Record<string, unknown>>();
+  for (const event of events) {
+    const eventType = event.metadata?.event_type;
+    if (!["external_info_enrichment", "kakao_match_confirmed", "kakao_match_rejected"].includes(String(eventType || ""))) continue;
+    if (!latestByLead.has(event.lead_id)) latestByLead.set(event.lead_id, event.metadata || {});
+  }
+  return leads.map((lead) => {
+    const metadata = latestByLead.get(lead.id);
+    if (!metadata || metadata.event_type === "kakao_match_rejected") return lead;
+    if (metadata.kakao_matched !== true) return { ...lead, kakaoMatchAttempted: true };
+    const distance = Number(metadata.distance_m ?? metadata.kakao_match_distance_m);
+    return {
+      ...lead,
+      kakaoMatchAttempted: true,
+      kakaoMatchConfirmed: metadata.match_confirmed === true,
+      kakaoMatchedAddress: typeof metadata.matched_address === "string" ? metadata.matched_address : undefined,
+      kakaoMatchedName: typeof metadata.matched_name === "string" ? metadata.matched_name : undefined,
+      kakaoMatchDistanceM: Number.isFinite(distance) ? distance : undefined,
+      kakaoMatchMethod: toKakaoMatchMethod(metadata.match_method ?? metadata.kakao_query_variant),
+      kakaoPhoneSuggestion: typeof metadata.proposed_phone === "string" ? metadata.proposed_phone : undefined,
+      kakaoPlaceId: typeof metadata.kakao_place_id === "string" ? metadata.kakao_place_id : undefined
+    };
+  });
+}
+
 export type PermitLeadIngestResult = {
   total: number;
   inserted: number;
@@ -8350,12 +8403,13 @@ export async function ingestPermitLeadRows(
   }
 
   if (inserts.length) {
-    await supabaseRequest("business_permit_leads", {
+    const insertedRows = await supabaseRequest<Array<{ id: string }>>("business_permit_leads?select=id", {
       method: "POST",
-      headers: { Prefer: "return=minimal" },
+      headers: { Prefer: "return=representation" },
       body: JSON.stringify(inserts)
     });
     result.inserted = inserts.length;
+    scheduleIngestKakaoEnrichment(companyId, insertedRows.map((row) => row.id), options.source);
   }
   // 2026-08-26 효율화: 기존 리드 갱신을 한 건씩 순차 PATCH하던 것을 mapWithConcurrency로 묶어
   // 동시에 처리합니다(각 요청 자체는 그대로 개별 PATCH라 동작은 동일, 왕복 대기 시간만 줄어듭니다).
@@ -8956,7 +9010,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
     `business_permit_leads?select=*&${params.join("&")}&order=score_total.desc,permit_date.desc.nullslast&limit=${limit}`
   ).catch(() => []);
 
-  let leads = rows.map(toPermitLeadItem);
+  let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
   if (filters.hasPhone) leads = leads.filter((lead) => Boolean(lead.phone));
 
   // 2026-09-07: 예전에는 total이 이미 상한으로 잘린 leads.length라서 실제 전체 건수와 달랐습니다
@@ -9293,6 +9347,7 @@ type LeadEnrichmentEventContext = {
   actorName?: string;
   actorUserId?: string;
   source: LeadEnrichmentEventSource;
+  trigger?: "cron" | "ingest" | "manual";
 };
 
 function isMissingLeadEnrichmentEventStoreError(error: unknown) {
@@ -9319,7 +9374,7 @@ async function recordLeadEnrichmentEvent(input: {
         company_id: input.companyId,
         lead_id: input.leadId,
         message: input.message || null,
-        metadata: input.metadata || {},
+        metadata: { ...(input.metadata || {}), ...(input.context.trigger ? { trigger: input.context.trigger } : {}) },
         source: input.context.source,
         succeeded: input.succeeded
       })
@@ -9484,8 +9539,14 @@ export function buildLeadEnrichmentEventOutcome(input: {
   kakaoMatch?: {
     documentCount: number;
     matched: boolean;
+    matchedAddress?: string;
+    matchedName?: string;
     matchDistanceM: number | null;
+    matchMethod?: string;
     phoneFound: boolean;
+    placeId?: string;
+    appliedPhone?: string;
+    proposedPhone?: string;
     queryVariant: string;
   };
 }) {
@@ -9509,6 +9570,12 @@ export function buildLeadEnrichmentEventOutcome(input: {
       kakao_matched: input.kakaoMatch?.matched ?? false,
       kakao_phone_found: input.kakaoMatch?.phoneFound ?? false,
       kakao_query_variant: input.kakaoMatch?.queryVariant ?? "none",
+      kakao_place_id: input.kakaoMatch?.placeId || null,
+      match_method: input.kakaoMatch?.matchMethod || input.kakaoMatch?.queryVariant || "none",
+      matched_address: input.kakaoMatch?.matchedAddress || null,
+      matched_name: input.kakaoMatch?.matchedName || null,
+      proposed_phone: input.kakaoMatch?.proposedPhone || null,
+      applied_phone: input.kakaoMatch?.appliedPhone || null,
       persisted: input.persisted,
       skipped_fields: input.skippedFields,
       sources: input.sources
@@ -9516,6 +9583,88 @@ export function buildLeadEnrichmentEventOutcome(input: {
     operationSucceeded: input.persisted && (contactFieldsFilled > 0 || sourceNames.length > 0),
     retrySucceeded: contactFieldsFilled > 0
   };
+}
+
+export function shouldAutoApplyKakaoPhone(queryVariant: string) {
+  return queryVariant !== "name_only";
+}
+
+export function shouldClearKakaoPhoneOnReject(currentPhone?: string | null, appliedPhone?: string | null) {
+  return Boolean(appliedPhone?.trim() && currentPhone?.trim() === appliedPhone.trim());
+}
+
+async function enrichPermitLeadKakaoOnIngest(companyId: string, leadId: string) {
+  const restKey = process.env.KAKAO_REST_KEY;
+  if (!restKey || restKey === "replace-with-kakao-rest-api-key") return;
+  const rows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row) return;
+
+  const match = await resolveKakaoPlace({
+    address: row.address || undefined,
+    customerName: row.business_name,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined
+  }).catch(() => null);
+  if (!match) return;
+
+  const payload: Record<string, unknown> = {};
+  if (match.matched && match.placeUrl) payload.kakao_place_url = match.placeUrl;
+  if (match.matched && shouldAutoApplyKakaoPhone(match.queryVariant) && !row.phone && match.phone) payload.phone = match.phone;
+  if (Object.keys(payload).length) {
+    payload.updated_at = new Date().toISOString();
+    await supabaseRequest(
+      `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,
+      { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(payload) }
+    );
+  }
+
+  const outcome = buildLeadEnrichmentEventOutcome({
+    afterAddress: row.address || undefined,
+    afterPhone: (payload.phone as string | undefined) || row.phone || undefined,
+    beforeAddress: row.address || undefined,
+    beforePhone: row.phone || undefined,
+    persisted: true,
+    skippedFields: [],
+    sources: { googleReviews: false, keywordVolume: false, placeLinks: match.matched },
+    kakaoMatch: {
+      appliedPhone: typeof payload.phone === "string" ? payload.phone : undefined,
+      documentCount: match.documentCount,
+      matched: match.matched,
+      matchedAddress: match.matchedAddress,
+      matchedName: match.matchedName,
+      matchDistanceM: match.distanceM,
+      matchMethod: match.queryVariant === "name_only" ? "name_only" : match.matched ? "region" : "none",
+      phoneFound: Boolean(match.phone),
+      placeId: match.placeId,
+      proposedPhone: match.queryVariant === "name_only" ? match.phone : undefined,
+      queryVariant: match.queryVariant
+    }
+  });
+  await recordLeadEnrichmentEvent({
+    companyId,
+    context: { source: "cron", trigger: "ingest" },
+    leadId,
+    message: outcome.message,
+    metadata: outcome.metadata,
+    succeeded: outcome.retrySucceeded
+  });
+}
+
+function scheduleIngestKakaoEnrichment(companyId: string, leadIds: string[], source?: string) {
+  if (!leadIds.length || (!AUTO_PERMIT_SYNC_SOURCES.has(source || "") && source !== "kakao_keyword_search")) return;
+  try {
+    after(async () => {
+      await mapWithConcurrency(leadIds, LEAD_CONTACT_BACKFILL_CONCURRENCY, (leadId) =>
+        enrichPermitLeadKakaoOnIngest(companyId, leadId).catch(() => null)
+      );
+    });
+  } catch (error) {
+    // after()를 사용할 수 없는 테스트/비요청 컨텍스트에서는 수집 성공을 우선하고 일일 크론이 이어받습니다.
+    if (process.env.NODE_ENV !== "test") console.error("lead ingest enrichment scheduling skipped:", error);
+  }
 }
 
 /**
@@ -9537,6 +9686,13 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   const row = rows[0];
   if (!row) return { ok: false, persisted: false, sources: emptySources, message: "리드를 찾을 수 없습니다." };
 
+  const priorEvents = await supabaseRequest<Array<{ metadata: Record<string, unknown> | null }>>(
+    `lead_enrichment_events?select=metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&order=attempted_at.desc&limit=100`
+  ).catch(() => []);
+  const rejectedKakaoPlaceIds = Array.from(
+    new Set(priorEvents.flatMap((event) => stringArray(event.metadata?.rejected_place_ids)))
+  );
+
   const payload: Record<string, unknown> = {};
   const sources = { ...emptySources };
 
@@ -9545,7 +9701,8 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
       address: row.address || undefined,
       customerName: row.business_name,
       latitude: row.latitude ?? undefined,
-      longitude: row.longitude ?? undefined
+      longitude: row.longitude ?? undefined,
+      rejectedKakaoPlaceIds
     },
     {
       googleMapUrl: row.google_place_url || undefined,
@@ -9558,7 +9715,8 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     payload.naver_place_url = placeLinks.naverPlaceUrl || row.naver_place_url;
     payload.kakao_place_url = placeLinks.kakaoPlaceUrl || row.kakao_place_url;
     payload.google_place_url = placeLinks.googleMapUrl || row.google_place_url;
-    if (!row.phone && placeLinks.enrichedPhone) payload.phone = placeLinks.enrichedPhone;
+    const canApplyKakaoPhone = shouldAutoApplyKakaoPhone(placeLinks.kakaoQueryVariant);
+    if (!row.phone && placeLinks.enrichedPhone && canApplyKakaoPhone) payload.phone = placeLinks.enrichedPhone;
     if ((!row.industry_primary || row.industry_primary === "미분류") && placeLinks.enrichedIndustry) payload.industry_primary = placeLinks.enrichedIndustry;
     // 주소 미확인 리드 보강(2026-08-24 피드백: "영업리드들의 정보들이 비어져있는게 많네") — 인허가
     // 원본 데이터에 주소가 없을 때만 카카오 로컬 검색 결과의 도로명/지번 주소로 채웁니다.
@@ -9665,8 +9823,14 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     kakaoMatch: {
       documentCount: placeLinks?.kakaoDocumentCount ?? 0,
       matched: placeLinks?.kakaoMatched ?? false,
+      matchedAddress: placeLinks?.kakaoMatchedAddress,
+      matchedName: placeLinks?.kakaoMatchedName,
       matchDistanceM: placeLinks?.kakaoMatchDistanceM ?? null,
+      matchMethod: placeLinks?.kakaoQueryVariant === "name_only" ? "name_only" : placeLinks?.kakaoMatched ? "region" : "none",
       phoneFound: placeLinks?.kakaoPhoneFound ?? false,
+      placeId: placeLinks?.kakaoPlaceId,
+      appliedPhone: "phone" in payload ? String(payload.phone || "") : undefined,
+      proposedPhone: placeLinks?.kakaoQueryVariant === "name_only" ? placeLinks?.enrichedPhone : undefined,
       queryVariant: placeLinks?.kakaoQueryVariant ?? "none"
     }
   });
@@ -9701,7 +9865,8 @@ export async function enrichPermitLeadExternalInfo(
         succeeded: eventContext.source === "cron" ? enrichmentEvent.retrySucceeded : enrichmentEvent.operationSucceeded
       });
     }
-    return result;
+    const [lead] = result.lead ? await attachLatestLeadEnrichmentMetadata(companyId, [result.lead]) : [];
+    return { ...result, lead };
   } catch (error) {
     await recordLeadEnrichmentEvent({
       companyId,
@@ -9713,6 +9878,89 @@ export async function enrichPermitLeadExternalInfo(
     });
     throw error;
   }
+}
+
+export async function updatePermitLeadKakaoMatch(
+  companyId: string,
+  leadId: string,
+  action: "apply_suggestion" | "reject_match",
+  eventContext: LeadEnrichmentEventContext
+): Promise<{ lead?: PermitLeadItem; message: string; ok: boolean }> {
+  if (!isProductionStoreConfigured()) return { message: "데이터베이스가 연결되어 있지 않습니다.", ok: false };
+  const [leadRows, events] = await Promise.all([
+    supabaseRequest<PermitLeadRow[]>(
+      `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    ),
+    supabaseRequest<LeadEnrichmentMetadataRow[]>(
+      `lead_enrichment_events?select=lead_id,attempted_at,metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&order=attempted_at.desc&limit=100`
+    ).catch(() => [])
+  ]);
+  const row = leadRows[0];
+  if (!row) return { message: "리드를 찾을 수 없습니다.", ok: false };
+  const matchedEvent = events.find((event) => event.metadata?.kakao_matched === true);
+  const metadata = matchedEvent?.metadata || {};
+  const placeId = typeof metadata.kakao_place_id === "string" ? metadata.kakao_place_id : "";
+  if (!placeId) return { message: "처리할 카카오 매칭 정보가 없습니다.", ok: false };
+
+  if (action === "apply_suggestion") {
+    const proposedPhone = typeof metadata.proposed_phone === "string" ? metadata.proposed_phone.trim() : "";
+    if (!proposedPhone) return { message: "반영할 전화번호 제안이 없습니다.", ok: false };
+    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (!row.phone) payload.phone = proposedPhone;
+    const updatedRows = await supabaseRequest<PermitLeadRow[]>(
+      `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&select=*`,
+      { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) }
+    );
+    await recordLeadEnrichmentEvent({
+      companyId,
+      context: eventContext,
+      leadId,
+      message: "카카오 상호명 매칭 확인",
+      metadata: { ...metadata, applied_phone: row.phone ? null : proposedPhone, event_type: "kakao_match_confirmed", match_confirmed: true },
+      succeeded: true
+    });
+    const [lead] = await attachLatestLeadEnrichmentMetadata(companyId, updatedRows.map(toPermitLeadItem));
+    return { lead, message: row.phone ? "기존 전화번호를 유지하고 장소 매칭만 확인했습니다." : "제안 전화번호를 반영했습니다.", ok: true };
+  }
+
+  const rejectedPlaceIds = Array.from(
+    new Set([...events.flatMap((event) => stringArray(event.metadata?.rejected_place_ids)), placeId])
+  );
+  const appliedPhone = typeof metadata.applied_phone === "string" ? metadata.applied_phone.trim() : "";
+  const shouldClearPhone = shouldClearKakaoPhoneOnReject(row.phone, appliedPhone);
+  const updatedRows = await supabaseRequest<PermitLeadRow[]>(
+    `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&select=*`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        kakao_place_url: null,
+        ...(shouldClearPhone ? { phone: null } : {}),
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
+  await recordLeadEnrichmentEvent({
+    companyId,
+    context: eventContext,
+    leadId,
+    message: "카카오 장소 매칭 해제",
+    metadata: {
+      event_type: "kakao_match_rejected",
+      kakao_matched: false,
+      kakao_place_id: placeId,
+      rejected_place_ids: rejectedPlaceIds,
+      removed_auto_phone: shouldClearPhone
+    },
+    succeeded: true
+  });
+  return {
+    lead: updatedRows[0] ? toPermitLeadItem(updatedRows[0]) : undefined,
+    message: shouldClearPhone
+      ? "카카오 매칭과 자동 반영 전화번호를 해제했습니다. 직접 입력한 전화번호는 유지됩니다."
+      : "카카오 매칭을 해제했습니다. 직접 입력한 전화번호는 유지됩니다.",
+    ok: true
+  };
 }
 
 export type LeadContactInfoBackfillResult = {

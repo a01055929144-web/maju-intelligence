@@ -8,7 +8,9 @@ import {
   normalizeBusinessNumber,
   normalizeNameForDuplicateCheck,
   resolveExistingCustomerStaffAssignment,
-  resolveNewCustomerStaffAssignment
+  resolveNewCustomerStaffAssignment,
+  shouldAutoApplyKakaoPhone,
+  shouldClearKakaoPhoneOnReject
 } from "../lib/store";
 
 describe("extractCustomerAdministrativeArea", () => {
@@ -311,5 +313,18 @@ describe("buildLeadEnrichmentEventOutcome", () => {
 
     expect(outcome.retrySucceeded).toBe(false);
     expect(outcome.operationSucceeded).toBe(false);
+  });
+});
+
+describe("Kakao lead contact safeguards", () => {
+  it("does not auto-apply a phone from a name-only match", () => {
+    expect(shouldAutoApplyKakaoPhone("name_only")).toBe(false);
+    expect(shouldAutoApplyKakaoPhone("region")).toBe(true);
+  });
+
+  it("clears only the phone value previously applied by Kakao", () => {
+    expect(shouldClearKakaoPhoneOnReject("02-1234-5678", "02-1234-5678")).toBe(true);
+    expect(shouldClearKakaoPhoneOnReject("010-9999-9999", "02-1234-5678")).toBe(false);
+    expect(shouldClearKakaoPhoneOnReject("010-9999-9999", null)).toBe(false);
   });
 });

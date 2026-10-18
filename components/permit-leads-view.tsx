@@ -151,6 +151,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
   const [gradeFilter, setGradeFilter] = useState("");
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [hasInstagramOnly, setHasInstagramOnly] = useState(false);
+  const [kakaoMatchFilter, setKakaoMatchFilter] = useState<"" | "matched_no_phone" | "unregistered" | "needs_confirmation">("");
   const [excludeExcluded, setExcludeExcluded] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
@@ -254,6 +255,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         gradeFilter?: string;
         hasInstagramOnly?: boolean;
         hasPhoneOnly?: boolean;
+        kakaoMatchFilter?: "" | "matched_no_phone" | "unregistered" | "needs_confirmation";
         industryFilter?: string;
         openDateEnd?: string;
         openDateFilterMode?: LeadOpenDateFilterMode;
@@ -271,6 +273,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         setGradeFilter(saved.gradeFilter || "");
         setHasInstagramOnly(Boolean(saved.hasInstagramOnly));
         setHasPhoneOnly(Boolean(saved.hasPhoneOnly));
+        setKakaoMatchFilter(saved.kakaoMatchFilter || "");
         setIndustryFilter(saved.industryFilter || "");
         setOpenDateEnd(saved.openDateEnd || "");
         setOpenDateFilterMode(saved.openDateFilterMode || "all");
@@ -301,6 +304,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         gradeFilter,
         hasInstagramOnly,
         hasPhoneOnly,
+        kakaoMatchFilter,
         industryFilter,
         openDateEnd,
         openDateFilterMode,
@@ -313,7 +317,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
         tableSearch
       })
     );
-  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, statusFilter, tableSearch]);
+  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, statusFilter, tableSearch]);
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
@@ -521,6 +525,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
+      .filter((lead) => {
+        if (!kakaoMatchFilter) return true;
+        if (kakaoMatchFilter === "matched_no_phone") return Boolean(lead.kakaoMatchMethod && !lead.phone);
+        if (kakaoMatchFilter === "needs_confirmation") return lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed;
+        return lead.kakaoMatchAttempted === true && !lead.kakaoMatchMethod;
+      })
       .filter((lead) => statusFilter !== QUOTE_FOLLOW_UP_STATUS_FILTER || lead.status === "견적 발송" || lead.status === "재연락 예정")
       .filter(
         (lead) =>
@@ -533,7 +543,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly]);
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -708,6 +718,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
       gradeFilter ||
       hasPhoneOnly ||
       hasInstagramOnly ||
+      kakaoMatchFilter ||
       !excludeExcluded ||
       showNearbyOnly ||
       tableSearch
@@ -727,6 +738,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     setGradeFilter("");
     setHasPhoneOnly(false);
     setHasInstagramOnly(false);
+    setKakaoMatchFilter("");
     setExcludeExcluded(true);
     setShowNearbyOnly(false);
     setTableSearch("");
@@ -1469,6 +1481,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
     Boolean(gradeFilter),
     hasPhoneOnly,
     hasInstagramOnly,
+    Boolean(kakaoMatchFilter),
     !excludeExcluded,
     showNearbyOnly,
     Boolean(tableSearch)
@@ -2199,6 +2212,16 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                 <input checked={hasInstagramOnly} onChange={(event) => setHasInstagramOnly(event.target.checked)} type="checkbox" />
                 인스타 확인된 곳만
               </label>
+              <select
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
+                onChange={(event) => setKakaoMatchFilter(event.target.value as typeof kakaoMatchFilter)}
+                value={kakaoMatchFilter}
+              >
+                <option value="">카카오 상태 전체</option>
+                <option value="matched_no_phone">연락처 없음 · 카카오 매칭됨</option>
+                <option value="unregistered">카카오 미등록</option>
+                <option value="needs_confirmation">확인 필요 · 상호명만</option>
+              </select>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />
                 제외 처리된 리드도 표시
@@ -2630,6 +2653,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                               title={`${PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]} · ${PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}`}
                             />
                             <p className="truncate font-bold text-slate-950">{lead.businessName}</p>
+                            {lead.kakaoMatchMethod ? (
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                                  lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
+                                    ? "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200"
+                                    : "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100"
+                                }`}
+                                title={lead.kakaoMatchedAddress || "카카오 장소 매칭"}
+                              >
+                                {lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed ? "카카오 확인 필요" : "카카오 지역 일치"}
+                              </span>
+                            ) : null}
                           </div>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                           {(() => {
@@ -2849,6 +2884,7 @@ function PermitLeadDetailPanel({
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
+  const [kakaoMatchBusy, setKakaoMatchBusy] = useState<"apply_suggestion" | "reject_match" | "">("");
   const [externalSignals, setExternalSignals] = useState({
     googlePlaceUrl: lead.googlePlaceUrl || "",
     kakaoPlaceUrl: lead.kakaoPlaceUrl || "",
@@ -3126,6 +3162,8 @@ function PermitLeadDetailPanel({
 
       const updatedLead = payload.lead;
       if (updatedLead) {
+        const mergedLead = { ...lead, ...updatedLead } as PermitLeadItem;
+        onLeadUpdated(mergedLead);
         setExternalSignals({
           googlePlaceUrl: updatedLead.googlePlaceUrl || externalSignals.googlePlaceUrl,
           kakaoPlaceUrl: updatedLead.kakaoPlaceUrl || externalSignals.kakaoPlaceUrl,
@@ -3156,6 +3194,33 @@ function PermitLeadDetailPanel({
     }
   }
 
+  async function updateKakaoMatch(action: "apply_suggestion" | "reject_match") {
+    setKakaoMatchBusy(action);
+    setExternalInfoMessage("");
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/enrich`),
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { lead?: PermitLeadItem; message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok || !payload.lead) {
+        setExternalInfoMessage(payload?.message || "카카오 매칭을 변경하지 못했습니다.");
+        return;
+      }
+      onLeadUpdated(payload.lead);
+      setExternalSignals((current) => ({
+        ...current,
+        kakaoPlaceUrl: payload.lead?.kakaoPlaceUrl || ""
+      }));
+      setExternalInfoMessage(payload.message || "카카오 매칭을 변경했습니다.");
+    } catch {
+      setExternalInfoMessage("카카오 매칭 변경 중 네트워크 오류가 발생했습니다.");
+    } finally {
+      setKakaoMatchBusy("");
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
       <div
@@ -3178,6 +3243,17 @@ function PermitLeadDetailPanel({
                 {PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]}
               </span>
               <span className="text-xs font-semibold text-slate-500">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
+              {lead.kakaoMatchMethod ? (
+                <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${
+                  lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
+                    ? "bg-amber-50 text-amber-800"
+                    : "bg-teal-100 text-teal-800"
+                }`}>
+                  {lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
+                    ? "카카오 매칭 · 상호명만(확인 필요)"
+                    : "카카오 매칭 · 지역 일치"}
+                </span>
+              ) : null}
             </span>
             <h3 className="mt-1 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
@@ -3455,7 +3531,7 @@ function PermitLeadDetailPanel({
                 네이버
               </a>
               <a className="maju-button-secondary h-8 justify-center px-2 text-xs" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank">
-                카카오
+                카카오맵에서 보기
               </a>
               <a className="maju-button-secondary h-8 justify-center px-2 text-xs" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank">
                 구글
@@ -3487,6 +3563,43 @@ function PermitLeadDetailPanel({
                 이력 기록
               </button>
             </div>
+            {lead.kakaoMatchMethod ? (
+              <div className={`mt-2 rounded-lg border p-2.5 ${
+                lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
+                  ? "border-amber-200 bg-amber-50/70"
+                  : "border-teal-100 bg-teal-50/60"
+              }`}>
+                <p className="text-xs font-black text-slate-900">
+                  {lead.kakaoMatchedName || lead.businessName}
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
+                  {lead.kakaoMatchedAddress || "매칭 주소 확인 필요"}
+                  {typeof lead.kakaoMatchDistanceM === "number" ? ` · 약 ${lead.kakaoMatchDistanceM.toLocaleString()}m` : ""}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed && lead.kakaoPhoneSuggestion ? (
+                    <button
+                      className="maju-button-primary h-8 justify-center px-2.5 text-xs"
+                      disabled={Boolean(kakaoMatchBusy)}
+                      onClick={() => void updateKakaoMatch("apply_suggestion")}
+                      type="button"
+                    >
+                      {kakaoMatchBusy === "apply_suggestion" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      전화 {lead.kakaoPhoneSuggestion} 반영
+                    </button>
+                  ) : null}
+                  <button
+                    className="maju-button-secondary h-8 justify-center px-2.5 text-xs text-rose-700"
+                    disabled={Boolean(kakaoMatchBusy)}
+                    onClick={() => void updateKakaoMatch("reject_match")}
+                    type="button"
+                  >
+                    {kakaoMatchBusy === "reject_match" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleSlash className="h-3.5 w-3.5" />}
+                    매칭 해제
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {externalInfoMessage ? <p className="mt-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px] font-bold text-slate-600">{externalInfoMessage}</p> : null}
           </div>
 

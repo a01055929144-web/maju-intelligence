@@ -3,6 +3,7 @@ export type PlaceLinkInput = {
   customerName: string;
   latitude?: number;
   longitude?: number;
+  rejectedKakaoPlaceIds?: string[];
 };
 
 export type KakaoQueryVariant = "existing" | "name_only" | "region" | "region_detail" | "none";
@@ -21,6 +22,9 @@ export type PlaceLinks = {
   kakaoDocumentCount: number;
   kakaoPhoneFound: boolean;
   kakaoMatchDistanceM: number | null;
+  kakaoMatchedAddress: string;
+  kakaoMatchedName: string;
+  kakaoPlaceId: string;
   naverMatched: boolean;
 };
 
@@ -54,6 +58,9 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     kakaoDocumentCount: kakaoResult.documentCount,
     kakaoPhoneFound: Boolean(kakaoResult.phone),
     kakaoMatchDistanceM: kakaoResult.distanceM,
+    kakaoMatchedAddress: kakaoResult.matchedAddress,
+    kakaoMatchedName: kakaoResult.matchedName,
+    kakaoPlaceId: kakaoResult.placeId,
     naverMatched: Boolean(resolvedNaverPlaceUrl)
   };
 }
@@ -81,7 +88,7 @@ function buildPlaceSearchQuery(input: PlaceLinkInput) {
   return [input.customerName, input.address].map((value) => value?.trim()).filter(Boolean).join(" ");
 }
 
-type KakaoPlaceResult = {
+export type KakaoPlaceResult = {
   placeUrl: string;
   phone: string;
   industry: string;
@@ -89,6 +96,9 @@ type KakaoPlaceResult = {
   distanceM: number | null;
   documentCount: number;
   matched: boolean;
+  matchedAddress: string;
+  matchedName: string;
+  placeId: string;
   queryVariant: KakaoQueryVariant;
 };
 
@@ -110,13 +120,17 @@ const emptyKakaoPlaceResult = (documentCount = 0): KakaoPlaceResult => ({
   documentCount,
   industry: "",
   matched: false,
+  matchedAddress: "",
+  matchedName: "",
+  placeId: "",
   phone: "",
   placeUrl: "",
   queryVariant: "none"
 });
 
 function existingKakaoPlaceResult(placeUrl: string): KakaoPlaceResult {
-  return { ...emptyKakaoPlaceResult(), matched: true, placeUrl, queryVariant: "existing" };
+  const placeId = placeUrl.match(/place\.map\.kakao\.com\/(\d+)/)?.[1] || "";
+  return { ...emptyKakaoPlaceResult(), matched: true, placeId, placeUrl, queryVariant: "existing" };
 }
 
 export function isActualKakaoPlaceUrl(value?: string) {
@@ -169,6 +183,11 @@ export function isKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeyw
   return distanceM == null || distanceM <= 1000;
 }
 
+export function isAllowedKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeywordDocument) {
+  const rejectedPlaceIds = new Set((input.rejectedKakaoPlaceIds || []).map((value) => value.trim()).filter(Boolean));
+  return !rejectedPlaceIds.has(document.id?.trim() || "") && isKakaoPlaceCandidate(input, document);
+}
+
 function normalizePlaceName(value: string) {
   return value.toLowerCase().replace(/\(주\)|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }
@@ -189,7 +208,7 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResult> {
+export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResult> {
   const empty = emptyKakaoPlaceResult();
   const restKey = process.env.KAKAO_REST_KEY;
   if (!restKey || restKey === "replace-with-kakao-rest-api-key") return empty;
@@ -208,7 +227,7 @@ async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResul
       const payload = (await response.json()) as { documents?: KakaoKeywordDocument[] };
       const documents = payload.documents || [];
       inspectedDocuments += documents.length;
-      const place = documents.find((document) => isKakaoPlaceCandidate(input, document));
+      const place = documents.find((document) => isAllowedKakaoPlaceCandidate(input, document));
       if (!place) continue;
 
       const placeUrl = place.place_url || (place.id ? `https://place.map.kakao.com/${place.id}` : "");
@@ -222,6 +241,9 @@ async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResul
         distanceM: kakaoCandidateDistanceM(input, place),
         documentCount: documents.length,
         matched: Boolean(placeUrl),
+        matchedAddress: place.road_address_name?.trim() || place.address_name?.trim() || "",
+        matchedName: place.place_name?.trim() || "",
+        placeId: place.id?.trim() || "",
         queryVariant: attempt.variant
       };
     } catch {

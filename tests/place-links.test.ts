@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildKakaoPlaceSearchQueries, isKakaoPlaceCandidate } from "../lib/place-links";
+import { buildKakaoPlaceSearchQueries, isAllowedKakaoPlaceCandidate, isKakaoPlaceCandidate } from "../lib/place-links";
 
 describe("buildKakaoPlaceSearchQueries", () => {
   it("tries broad region, local detail, then name only without the full address", () => {
@@ -56,6 +56,19 @@ describe("isKakaoPlaceCandidate", () => {
           road_address_name: "경기 의정부시 오목로225번길 30",
           x: "127.100",
           y: "37.800"
+        }
+      )
+    ).toBe(false);
+  });
+
+  it("does not accept a place that the user previously rejected", () => {
+    expect(
+      isAllowedKakaoPlaceCandidate(
+        { ...lead, rejectedKakaoPlaceIds: ["12345"] },
+        {
+          id: "12345",
+          place_name: "가장맛있는족발 민락점",
+          road_address_name: "경기 의정부시 오목로225번길 30"
         }
       )
     ).toBe(false);
