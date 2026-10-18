@@ -8154,9 +8154,12 @@ function toKakaoMatchMethod(value: unknown): PermitLeadItem["kakaoMatchMethod"] 
 
 async function attachLatestLeadEnrichmentMetadata(companyId: string, leads: PermitLeadItem[]) {
   if (!leads.length) return leads;
-  const events = await supabaseRequest<LeadEnrichmentMetadataRow[]>(
-    `lead_enrichment_events?select=lead_id,attempted_at,metadata&company_id=eq.${encodeURIComponent(companyId)}&order=attempted_at.desc&limit=5000`
-  ).catch(() => []);
+  const leadIdBatches = Array.from({ length: Math.ceil(leads.length / 100) }, (_, index) => leads.slice(index * 100, index * 100 + 100).map((lead) => lead.id));
+  const events = (await Promise.all(leadIdBatches.map((leadIds) =>
+    supabaseRequest<LeadEnrichmentMetadataRow[]>(
+      `lead_enrichment_events?select=lead_id,attempted_at,metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${leadIds.join(",")})&metadata->>event_type=in.(external_info_enrichment,kakao_match_confirmed,kakao_match_rejected)&order=attempted_at.desc&limit=${leadIds.length * 20}`
+    ).catch(() => [])
+  ))).flat();
   const latestByLead = new Map<string, Record<string, unknown>>();
   for (const event of events) {
     const eventType = event.metadata?.event_type;
@@ -8180,6 +8183,10 @@ async function attachLatestLeadEnrichmentMetadata(companyId: string, leads: Perm
       kakaoPlaceId: typeof metadata.kakao_place_id === "string" ? metadata.kakao_place_id : undefined
     };
   });
+}
+
+function findKakaoMatchEvidence(events: Array<{ metadata: Record<string, unknown> | null }>, placeId: string) {
+  return events.find((event) => event.metadata?.kakao_matched === true && event.metadata?.kakao_place_id === placeId)?.metadata;
 }
 
 export type PermitLeadIngestResult = {
@@ -9812,6 +9819,9 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   }
 
   const updatedLead = updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined;
+  const retainedKakaoEvidence = placeLinks?.kakaoQueryVariant === "existing" && placeLinks.kakaoPlaceId
+    ? findKakaoMatchEvidence(priorEvents, placeLinks.kakaoPlaceId)
+    : undefined;
   const enrichmentEvent = buildLeadEnrichmentEventOutcome({
     afterAddress: updatedLead?.address,
     afterPhone: updatedLead?.phone,
@@ -9823,14 +9833,18 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     kakaoMatch: {
       documentCount: placeLinks?.kakaoDocumentCount ?? 0,
       matched: placeLinks?.kakaoMatched ?? false,
-      matchedAddress: placeLinks?.kakaoMatchedAddress,
-      matchedName: placeLinks?.kakaoMatchedName,
-      matchDistanceM: placeLinks?.kakaoMatchDistanceM ?? null,
-      matchMethod: placeLinks?.kakaoQueryVariant === "name_only" ? "name_only" : placeLinks?.kakaoMatched ? "region" : "none",
-      phoneFound: placeLinks?.kakaoPhoneFound ?? false,
+      matchedAddress: placeLinks?.kakaoMatchedAddress || (retainedKakaoEvidence?.matched_address as string | undefined),
+      matchedName: placeLinks?.kakaoMatchedName || (retainedKakaoEvidence?.matched_name as string | undefined),
+      matchDistanceM: placeLinks?.kakaoMatchDistanceM ?? (Number(retainedKakaoEvidence?.distance_m ?? retainedKakaoEvidence?.kakao_match_distance_m) || null),
+      matchMethod: placeLinks?.kakaoQueryVariant === "existing"
+        ? String(retainedKakaoEvidence?.match_method || retainedKakaoEvidence?.kakao_query_variant || "none")
+        : placeLinks?.kakaoQueryVariant === "name_only" ? "name_only" : placeLinks?.kakaoMatched ? "region" : "none",
+      phoneFound: placeLinks?.kakaoPhoneFound ?? retainedKakaoEvidence?.kakao_phone_found === true,
       placeId: placeLinks?.kakaoPlaceId,
-      appliedPhone: "phone" in payload ? String(payload.phone || "") : undefined,
-      proposedPhone: placeLinks?.kakaoQueryVariant === "name_only" ? placeLinks?.enrichedPhone : undefined,
+      appliedPhone: "phone" in payload ? String(payload.phone || "") : typeof retainedKakaoEvidence?.applied_phone === "string" ? retainedKakaoEvidence.applied_phone : undefined,
+      proposedPhone: placeLinks?.kakaoQueryVariant === "name_only"
+        ? placeLinks?.enrichedPhone
+        : typeof retainedKakaoEvidence?.proposed_phone === "string" ? retainedKakaoEvidence.proposed_phone : undefined,
       queryVariant: placeLinks?.kakaoQueryVariant ?? "none"
     }
   });
@@ -9897,7 +9911,12 @@ export async function updatePermitLeadKakaoMatch(
   ]);
   const row = leadRows[0];
   if (!row) return { message: "리드를 찾을 수 없습니다.", ok: false };
-  const matchedEvent = events.find((event) => event.metadata?.kakao_matched === true);
+  const storedPlaceId = row.kakao_place_url?.match(/place\.map\.kakao\.com\/(\d+)/)?.[1] || "";
+  const matchedEvent = events.find((event) =>
+    event.metadata?.kakao_matched === true
+    && (!storedPlaceId || event.metadata?.kakao_place_id === storedPlaceId)
+    && (action !== "apply_suggestion" || typeof event.metadata?.proposed_phone === "string")
+  );
   const metadata = matchedEvent?.metadata || {};
   const placeId = typeof metadata.kakao_place_id === "string" ? metadata.kakao_place_id : "";
   if (!placeId) return { message: "처리할 카카오 매칭 정보가 없습니다.", ok: false };

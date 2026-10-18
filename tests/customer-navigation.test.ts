@@ -1,22 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { customerNavigationGroups, flattenCustomerNavigationItems } from "../lib/customer-navigation";
+import { customerNavigationGroups, flattenCustomerNavigationItems, getCustomerNavigationGroups, holdNavigationGroups } from "../lib/customer-navigation";
 
 describe("customer navigation", () => {
-  it("keeps the confirmed ERP-oriented sidebar groups", () => {
-    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["영업", "거래처", "전표·정산", "상품·재고", "배송", "설정"]);
+  it("shows only the three focused groups by default", () => {
+    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["영업", "동선", "설정"]);
   });
 
-  it("keeps sales, supplier, customer, product and logistics destinations reachable", () => {
+  it("keeps the focused sales and logistics destinations reachable", () => {
     const flattened = flattenCustomerNavigationItems();
 
     expect(flattened.map((item) => item.href)).toEqual(expect.arrayContaining([
-      "/dashboard?view=leads&leadType=permit", "/dashboard?view=leads&leadType=keyword", "/assistant",
-      "/revenue/pipeline", "/revenue/contacts", "/sales/performance", "/purchasing/suppliers",
-      "/crm/timeline", "/revenue/transactions", "/revenue/products", "/revenue/products?tab=mapping",
-      "/operations/documents", "/operations/documents?tab=ledger", "/operations/inventory",
+      "/dashboard?view=leads&leadType=permit", "/dashboard?view=leads&leadType=keyword", "/revenue/contacts",
       "/dashboard", "/routes/today", "/dashboard?view=history", "/dashboard/settings?section=tms#territory-settings"
     ]));
+  });
+
+  it("exposes held destinations only through the explicit module switch", () => {
+    expect(getCustomerNavigationGroups(false)).toEqual(customerNavigationGroups);
+    expect(getCustomerNavigationGroups(true)).toEqual([...customerNavigationGroups, ...holdNavigationGroups]);
   });
 
   it("does not duplicate an exact navigation destination", () => {

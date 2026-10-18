@@ -5,6 +5,7 @@ import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master"
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { RequestTiming } from "@/lib/performance-timing";
+import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
@@ -24,6 +25,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   }
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
+  const showHoldModules = areHoldModulesEnabled(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
@@ -72,6 +74,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       hidePageTitle
       mode={customerSession ? "customer" : "admin-preview"}
       previewCompanyId={customerSession ? undefined : companyId}
+      showHoldModules={showHoldModules}
       subtitle="거래처 위치, 배송차 배정, 경유 코스 계산을 지도에서 바로 처리합니다"
       title="지도 홈"
       userName={customerSession?.name || adminSession?.email || "관리자"}
@@ -82,6 +85,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
+          holdModulesEnabled={showHoldModules}
           canManageStaff={canManageStaff}
           mapMarkers={mapMarkers}
           routePlan={routePlan}

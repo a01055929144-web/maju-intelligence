@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
+import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { getBusinessNumberExceptions, getCompanyJobTitles, getCompanySettings, getCompanyStaffInvitations, getCompanyStaffMemberOptions, getCustomerMaster, getDeliveryTerritories, listDeliveryRouteUnits, vehicleMasterRepository } from "@/lib/store";
 import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
 import { CompanyClosurePanel } from "./company-closure-panel";
@@ -57,6 +58,7 @@ export default async function CompanySettingsPage() {
           </Link>
       }
       subtitle="회사, 출발지, 직원 권한을 관리합니다."
+      showHoldModules={areHoldModulesEnabled(session.companyId)}
       title="회사 설정"
       userName={session.name}
       workspaceRole={session.workspaceRole}
@@ -78,7 +80,7 @@ export default async function CompanySettingsPage() {
           ))}
         </nav>
         <div className="space-y-5">
-          <div className="scroll-mt-24" id="company-settings"><CompanySettingsForm initial={company} /></div>
+          <div className="scroll-mt-24" id="company-settings"><CompanySettingsForm initial={company} showHoldModules={areHoldModulesEnabled(session.companyId)} /></div>
           <div className="scroll-mt-24" id="staff-settings">
             <StaffManagementPanel
               canManageMembers={customerHasCapability(session, "manage_members")}

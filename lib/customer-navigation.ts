@@ -1,22 +1,4 @@
-import {
-  BarChart3,
-  Bot,
-  Boxes,
-  Building2,
-  Database,
-  FileSpreadsheet,
-  History,
-  LayoutDashboard,
-  LucideIcon,
-  MapPinned,
-  MessageSquareText,
-  PackageSearch,
-  Route,
-  Settings,
-  Sparkles,
-  Store,
-  Truck
-} from "lucide-react";
+import { BarChart3, Bot, Boxes, Building2, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck } from "lucide-react";
 
 export type CustomerWorkspaceKey =
   | "dashboard"
@@ -63,40 +45,13 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/dashboard?view=leads&leadType=permit", icon: Building2, label: "신규 리드" },
       { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/dashboard?view=leads&leadType=keyword", icon: Sparkles, label: "영업 리드" },
-      { active: "revenue", description: "영업 현황과 견적 원장", href: "/revenue/pipeline", icon: FileSpreadsheet, label: "견적 관리" },
-      { active: "sales-contacts", description: "컨택 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "연락 기록" },
-      { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
-      { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" }
+      { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "연락 기록" }
     ]
   },
   {
-    label: "거래처",
+    label: "동선",
     items: [
-      { active: "customers-summary", description: "거래처 수, 등급, 데이터 보완 상태", href: "/crm/summary", icon: LayoutDashboard, label: "거래처 현황" },
-      { active: "customers", description: "거래처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처" },
-      { active: "suppliers", description: "매입처, 매입 상품, 원가와 업로드 이력", href: "/purchasing/suppliers", icon: Truck, label: "매입처" }
-    ]
-  },
-  {
-    label: "전표·정산",
-    items: [
-      { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "전표" },
-      { active: "erp-documents", description: "매출처·매입처 기간별 원장", href: "/operations/documents?tab=ledger", icon: History, label: "거래처원장" },
-      { active: "revenue-ledger", description: "기존 ERP 업로드 거래 자료", href: "/revenue/transactions", icon: History, label: "이전 거래 자료" }
-    ]
-  },
-  {
-    label: "상품·재고",
-    items: [
-      { active: "product-catalog", description: "회사가 판매하는 마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" },
-      { active: "product-standards", description: "내 상품과 BIV 표준 품목 연결", href: "/revenue/products?tab=mapping", icon: Database, label: "표준 품목" },
-      { active: "inventory", description: "현재고, 단위 환산, 미연결과 실사", href: "/operations/inventory", icon: Boxes, label: "재고관리" }
-    ]
-  },
-  {
-    label: "배송",
-    items: [
-      { active: "dashboard", description: "거래처와 배송 현황 통합 지도", href: "/dashboard", icon: MapPinned, label: "배송 지도" },
+      { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/dashboard", icon: MapPinned, label: "지도" },
       { active: "routes-today", description: "오늘 배송 순서와 완료 상태", href: "/routes/today", icon: Route, label: "오늘 코스" },
       { active: "delivery-history", description: "날짜별 운행·배송 완료 기록", href: "/dashboard?view=history", icon: History, label: "배송 이력" },
       { active: "territory", description: "배송 권역과 호차·차량 관리", href: "/dashboard/settings?section=tms#territory-settings", icon: Truck, label: "권역·호차" }
@@ -113,20 +68,43 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   // 단체메시지는 카카오 연동 범위가 확정될 때까지 메뉴에도 "준비 중" 항목을 만들지 않습니다.
 ];
 
+export const holdNavigationGroups: CustomerNavigationGroup[] = [
+  {
+    label: "보류 모듈",
+    items: [
+      { active: "revenue", description: "영업 현황과 견적 원장", href: "/revenue/pipeline", icon: FileSpreadsheet, label: "견적 관리" },
+      { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
+      { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" },
+      { active: "customers-summary", description: "거래처 데이터 현황", href: "/crm/summary", icon: LayoutDashboard, label: "거래처 현황" },
+      { active: "customers", description: "거래처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처" },
+      { active: "suppliers", description: "매입처와 원가", href: "/purchasing/suppliers", icon: Truck, label: "매입처" },
+      { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "전표" },
+      { active: "revenue-ledger", description: "기존 거래 자료", href: "/revenue/transactions", icon: History, label: "이전 거래 자료" },
+      { active: "product-catalog", description: "마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" },
+      { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고관리" }
+    ]
+  }
+];
+
+export function getCustomerNavigationGroups(includeHoldModules = false) {
+  return includeHoldModules ? [...customerNavigationGroups, ...holdNavigationGroups] : customerNavigationGroups;
+}
+
 /** Expands each group's items into a flat leaf-item list — items with children contribute their children, not the parent. */
 export function flattenCustomerNavigationItems(groups: CustomerNavigationGroup[] = customerNavigationGroups): CustomerNavigationItem[] {
   return groups.flatMap((group) => group.items.flatMap((item) => (item.children && item.children.length ? item.children : [item])));
 }
 
 export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
-  return flattenCustomerNavigationItems().find((item) => item.active === active)?.label || "배송 지도";
+  return flattenCustomerNavigationItems(getCustomerNavigationGroups(true)).find((item) => item.active === active)?.label || "지도";
 }
 
 export function getCustomerQuickActions() {
   return [
-    { active: "dashboard" as const, helper: "통합 지도", icon: MapPinned, label: "배송 지도" },
-    { active: "customers" as const, helper: "원장", icon: Building2, label: "매출처" },
-    { active: "revenue" as const, helper: "기회", icon: BarChart3, label: "영업" }
+    { active: "dashboard" as const, helper: "신규 후보", href: "/dashboard?view=leads&leadType=permit", icon: Building2, label: "신규 리드" },
+    { active: "dashboard" as const, helper: "영업 후보", href: "/dashboard?view=leads&leadType=keyword", icon: Sparkles, label: "영업 리드" },
+    { active: "dashboard" as const, helper: "통합 지도", href: "/dashboard", icon: MapPinned, label: "지도" },
+    { active: "routes-today" as const, helper: "배송 순서", href: "/routes/today", icon: Route, label: "오늘 코스" }
   ];
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildKakaoPlaceSearchQueries, isAllowedKakaoPlaceCandidate, isKakaoPlaceCandidate } from "../lib/place-links";
+import { buildKakaoPlaceSearchQueries, isAllowedKakaoPlaceCandidate, isKakaoPlaceCandidate, selectKakaoPlaceResult } from "../lib/place-links";
 
 describe("buildKakaoPlaceSearchQueries", () => {
   it("tries broad region, local detail, then name only without the full address", () => {
@@ -72,5 +72,34 @@ describe("isKakaoPlaceCandidate", () => {
         }
       )
     ).toBe(false);
+  });
+});
+
+describe("selectKakaoPlaceResult", () => {
+  const fresh = {
+    address: "서울 강남구 역삼동 1",
+    distanceM: 100,
+    documentCount: 1,
+    industry: "한식",
+    matched: true,
+    matchedAddress: "서울 강남구 역삼동 1",
+    matchedName: "새 장소",
+    phone: "02-111-2222",
+    placeId: "222",
+    placeUrl: "https://place.map.kakao.com/222",
+    queryVariant: "region" as const
+  };
+
+  it("keeps the stored place when a retry cannot match", () => {
+    const selected = selectKakaoPlaceResult({ ...fresh, matched: false, placeId: "", placeUrl: "", queryVariant: "none" }, "https://place.map.kakao.com/111");
+    expect(selected.placeId).toBe("111");
+    expect(selected.queryVariant).toBe("existing");
+  });
+
+  it("does not mix a different fresh place with the stored link", () => {
+    const selected = selectKakaoPlaceResult(fresh, "https://place.map.kakao.com/111");
+    expect(selected.placeUrl).toBe("https://place.map.kakao.com/111");
+    expect(selected.placeId).toBe("111");
+    expect(selected.matchedName).toBe("");
   });
 });

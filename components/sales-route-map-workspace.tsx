@@ -321,6 +321,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
+  readonly holdModulesEnabled?: boolean;
   /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
    * 목록을 그대로 내려받아, ChurnRiskAlert가 마운트되자마자 같은 데이터를 다시 fetch하는 중복
    * 네트워크 왕복을 없앱니다. */
@@ -360,9 +361,9 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
   { label: "C등급", value: "C" }
 ];
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
-  { helper: "마커·등급·배송차", icon: MapPin, label: "지도", shortLabel: "위치", value: "map" },
+  { helper: "신규·영업 리드와 거래처", icon: MapPin, label: "영업 동선", shortLabel: "영업", value: "map" },
   { helper: "검색·상세·편집", icon: Store, label: "거래처", shortLabel: "원장", value: "customers" },
-  { helper: "선택·경유·티맵", icon: Navigation, label: "코스", shortLabel: "경유", value: "course" },
+  { helper: "코스·배송 상태", icon: Navigation, label: "배송 동선", shortLabel: "배송", value: "course" },
   { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
   // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
   // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.
@@ -424,7 +425,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -2774,7 +2775,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       setSelectedId(previewStore.id);
                       setPreviewStoreId("");
                     }}
-                    onOpenQuote={(targetStore) =>
+                    onOpenQuote={holdModulesEnabled ? (targetStore) =>
                       setQuoteSubject({
                         address: targetStore.address,
                         customerId: targetStore.id,
@@ -2785,8 +2786,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         phone: targetStore.phone,
                         reviewKeywords: targetStore.reviewKeywords,
                         reviewSummary: targetStore.reviewSummary
-                      })
-                    }
+                      }) : undefined}
                     onSave={(edit) => updateStore(previewStore.id, edit)}
                     store={previewStore}
                     vehicleOptions={vehicleNameOptions}
@@ -2809,9 +2809,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       setPreviewLeadId("");
                     }}
                     onDismiss={dismissLeadFromMap}
-                    onOpenQuote={(lead) =>
-                      setQuoteSubject(getPermitLeadQuoteSubject(lead))
-                    }
+                    onOpenQuote={holdModulesEnabled ? (lead) => setQuoteSubject(getPermitLeadQuoteSubject(lead)) : undefined}
                     onRestore={restoreLeadFromMap}
                   />
                 ) : null}
@@ -3027,9 +3025,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
       {activeView === "leads" ? (
         <PermitLeadsView
-          onOpenQuote={(lead) =>
-            setQuoteSubject(getPermitLeadQuoteSubject(lead))
-          }
+          onOpenQuote={holdModulesEnabled ? (lead) => setQuoteSubject(getPermitLeadQuoteSubject(lead)) : undefined}
           stores={allStores}
         />
       ) : null}
@@ -6606,7 +6602,7 @@ function PermitLeadMapQuickCard({
   readonly onClose: () => void;
   readonly onConverted: () => void;
   readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
-  readonly onOpenQuote: (lead: PermitLeadItem) => void;
+  readonly onOpenQuote?: (lead: PermitLeadItem) => void;
   readonly onRestore: (lead: PermitLeadItem) => void | Promise<void>;
 }) {
   const [isConverting, setIsConverting] = useState(false);
@@ -6903,9 +6899,11 @@ function PermitLeadMapQuickCard({
             <MessageSquareText className="h-3.5 w-3.5" />
             맞춤 DM 문구 복사
           </button>
-          <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
-            견적서 작성
-          </button>
+          {onOpenQuote ? (
+            <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
+              견적서 작성
+            </button>
+          ) : null}
           <button className="maju-button-primary h-8 justify-center text-xs disabled:opacity-60" disabled={isConverting} onClick={() => void convert()} type="button">
             {isConverting ? "전환 중..." : "거래처로 전환"}
           </button>

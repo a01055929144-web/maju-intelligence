@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { listSalesContactLedger, type SalesContactLedgerItem } from "@/lib/store";
 
 type DueFilter = "all" | "overdue" | "today" | "upcoming" | "none";
@@ -23,6 +24,7 @@ export default async function SalesContactsPage({
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const showHoldModules = areHoldModulesEnabled(companyId);
   const query = params?.q?.trim() || "";
   const action = params?.action?.trim() || "";
   const due = isDueFilter(params?.due) ? params.due : "all";
@@ -79,6 +81,7 @@ export default async function SalesContactsPage({
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
+      showHoldModules={showHoldModules}
       subtitle="모바일 영업에서 남긴 컨택과 후속 연락일을 한곳에서 관리합니다."
       title="컨택·리마인드 원장"
       userName={customerSession?.name || "관리자"}
@@ -89,7 +92,7 @@ export default async function SalesContactsPage({
           active="contacts"
           companyId={companyId}
           contactCount={items.length}
-          showProducts={Boolean(adminSession || (customerSession && customerHasCapability(customerSession, "manage_sales")))}
+          showProducts={showHoldModules && Boolean(adminSession || (customerSession && customerHasCapability(customerSession, "manage_sales")))}
         />
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

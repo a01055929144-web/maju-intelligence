@@ -5,13 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { WorkspaceSelectionPanel } from "@/components/workspace-selection-panel";
 import { getCustomerSession } from "@/lib/auth";
 import { getCustomerWorkspaces } from "@/lib/store";
+import { CORE_LEADS_HREF } from "@/lib/feature-modules";
 
 export default async function WorkspacesPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
 
   const workspaces = await getCustomerWorkspaces({ email: session.email, userId: session.userId });
-  if (workspaces.length <= 1) redirect("/dashboard");
+  if (workspaces.length <= 1) redirect(CORE_LEADS_HREF);
 
   return (
     <main className="min-h-screen bg-[#eef1f4] px-4 py-5 sm:px-6 sm:py-8">

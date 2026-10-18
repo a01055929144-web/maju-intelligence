@@ -30,7 +30,7 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   telegram: "텔레그램 알림 설정"
 };
 
-export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
+export function CompanySettingsForm({ initial, showHoldModules = false }: { initial: CompanySettings; showHoldModules?: boolean }) {
   const [form, setForm] = useState({
     businessType: initial.businessType,
     deliveryCompleteMessage: initial.deliveryCompleteMessage || "요청하신 위치에 배송 적재 완료했습니다.",
@@ -532,7 +532,7 @@ export function CompanySettingsForm({ initial }: { initial: CompanySettings }) {
             </summary>
             <div className="grid gap-2 border-t border-slate-200 p-2">
               <QuickLink href="/dashboard" label="지도 홈 보기" />
-              <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" />
+              {showHoldModules ? <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" /> : null}
               <QuickLink href="/" label="거래처 관리 · 등록으로 이동" />
             </div>
           </details>

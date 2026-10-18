@@ -125,7 +125,7 @@ function getLeadInstagramWebSearchUrl(lead: PermitLeadItem): string {
 // 탭만 보는 사용자도 이 코드를 전부 내려받고 있었습니다. next/dynamic으로 별도 청크로 분리해,
 // "리드" 탭을 실제로 열 때만 이 파일의 JS를 내려받도록 합니다.
 
-export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote: (lead: PermitLeadItem) => void; readonly stores: StoreRow[] }) {
+export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?: (lead: PermitLeadItem) => void; readonly stores: StoreRow[] }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [queues, setQueues] = useState<PermitLeadQueues | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
@@ -2789,7 +2789,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote:
                                   setSelectedLead(lead);
                                   return;
                                 }
-                                onOpenQuote(lead);
+                                onOpenQuote?.(lead);
                               }}
                               type="button"
                             >
@@ -2851,7 +2851,7 @@ function PermitLeadDetailPanel({
     pricingFailedCount?: number;
   }>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
-  readonly onOpenQuote: (lead: PermitLeadItem) => void;
+  readonly onOpenQuote?: (lead: PermitLeadItem) => void;
 }) {
   const confidence = getLeadConfidence(lead);
   const [savedInstagramUrl, setSavedInstagramUrl] = useState(lead.instagramUrl || "");
@@ -3065,7 +3065,7 @@ function PermitLeadDetailPanel({
 
   async function recordQuoteRequest() {
     const saved = await recordAction("quote", "견적 요청");
-    if (saved) onOpenQuote(lead);
+    if (saved) onOpenQuote?.(lead);
   }
 
   async function recordQuoteSent() {
@@ -3119,7 +3119,7 @@ function PermitLeadDetailPanel({
   }
 
   function openQuoteDraft() {
-    onOpenQuote(lead);
+    onOpenQuote?.(lead);
   }
 
   async function copyDmScript() {
@@ -3321,7 +3321,7 @@ function PermitLeadDetailPanel({
                 지도
               </a>
               <PermitLeadActionRailButton icon={Instagram} label="DM" onClick={() => void copyDmScript()} primary={intent === "dm"} />
-              <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} />
+              {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : null}
             </div>
             <button
               className="maju-button-secondary mt-2 h-10 w-full justify-center text-xs disabled:opacity-50"
@@ -3498,10 +3498,12 @@ function PermitLeadDetailPanel({
                       {savingAction === "보류" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleSlash className="h-3.5 w-3.5" />}
                       보류 기록
                     </button>
-                    <button className="maju-button-secondary h-8 justify-center text-xs" onClick={openQuoteDraft} type="button">
-                      <FileImage className="h-3.5 w-3.5" />
-                      견적 초안
-                    </button>
+                    {onOpenQuote ? (
+                      <button className="maju-button-secondary h-8 justify-center text-xs" onClick={openQuoteDraft} type="button">
+                        <FileImage className="h-3.5 w-3.5" />
+                        견적 초안
+                      </button>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -3603,7 +3605,7 @@ function PermitLeadDetailPanel({
             {externalInfoMessage ? <p className="mt-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px] font-bold text-slate-600">{externalInfoMessage}</p> : null}
           </div>
 
-          <div className="rounded-xl border border-teal-100 bg-white p-3">
+          {onOpenQuote ? <div className="rounded-xl border border-teal-100 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-slate-950">견적 진행</p>
@@ -3645,7 +3647,7 @@ function PermitLeadDetailPanel({
             <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-400">
               {nextActionDate ? `재연락 예정은 ${nextActionDate} 기준으로 저장됩니다.` : "상단 빠른 액션 또는 아래 영업 결과 기록에서 재연락일을 먼저 선택하세요."}
             </p>
-          </div>
+          </div> : null}
 
           <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
             <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />

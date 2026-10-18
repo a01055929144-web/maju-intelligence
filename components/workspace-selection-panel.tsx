@@ -5,6 +5,7 @@ import { ArrowRight, Building2, Loader2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { CORE_LEADS_HREF } from "@/lib/feature-modules";
 import type { CustomerWorkspaceSummary } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
 
@@ -38,7 +39,7 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
         setError(data?.message || "워크스페이스를 전환하지 못했습니다.");
         return;
       }
-      window.location.href = "/dashboard";
+      window.location.href = CORE_LEADS_HREF;
     } catch (error) {
       setError(error instanceof Error ? error.message : "워크스페이스를 전환하지 못했습니다.");
     } finally {
@@ -77,7 +78,7 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
       if (workspace.companyId === currentCompanyId) {
         // 지금 쓰던 워크스페이스를 나갔습니다. 서버가 남은 워크스페이스로 세션을 전환해줬으면
         // 대시보드로, 남은 워크스페이스가 없으면 로그인 화면으로 이동합니다.
-        window.location.href = payload?.switchedTo ? "/dashboard" : "/dashboard/login";
+        window.location.href = payload?.switchedTo ? CORE_LEADS_HREF : "/dashboard/login";
         return;
       }
       setWorkspaceList((current) => current.filter((item) => item.companyId !== workspace.companyId));

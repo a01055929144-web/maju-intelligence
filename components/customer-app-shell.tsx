@@ -15,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
-import { customerNavigationGroups, CustomerWorkspaceKey, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
+import { CustomerWorkspaceKey, getCustomerNavigationGroups, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 
 type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
@@ -25,6 +25,7 @@ type CustomerAppShellProps = {
   readonly hidePageTitle?: boolean;
   readonly mode?: "admin-preview" | "customer";
   readonly previewCompanyId?: string;
+  readonly showHoldModules?: boolean;
   readonly rightAction?: ReactNode;
   readonly title: string;
   readonly subtitle?: string;
@@ -32,7 +33,7 @@ type CustomerAppShellProps = {
   readonly workspaceRole?: string;
 };
 
-export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, subtitle, title, workspaceRole }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
@@ -58,7 +59,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
   };
-  const visibleNavigationGroups = customerNavigationGroups;
+  const visibleNavigationGroups = getCustomerNavigationGroups(showHoldModules);
 
   useEffect(() => {
     const syncSearch = () => setCurrentSearch(window.location.search);
@@ -103,7 +104,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
               {collapsed ? (
                 <>
-                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
+                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard?view=leads&leadType=permit")} title="MAJU Intelligence">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                   </Link>
                   <button
@@ -117,7 +118,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 </>
               ) : (
                 <div className="flex w-full items-center justify-between gap-2">
-                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
+                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard?view=leads&leadType=permit")}>
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-bold">MAJU Intelligence</span>

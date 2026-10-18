@@ -36,7 +36,7 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
   const existingKakaoUrl = existing.kakaoPlaceUrl?.trim() || "";
   const existingKakaoMatched = isActualKakaoPlaceUrl(existingKakaoUrl);
   const freshKakaoResult = await resolveKakaoPlace(input);
-  const kakaoResult = freshKakaoResult.matched ? freshKakaoResult : existingKakaoMatched ? existingKakaoPlaceResult(existingKakaoUrl) : freshKakaoResult;
+  const kakaoResult = selectKakaoPlaceResult(freshKakaoResult, existingKakaoMatched ? existingKakaoUrl : undefined);
   const kakaoPlaceUrl = existingKakaoMatched ? existingKakaoUrl : kakaoResult.placeUrl || fallbackLinks.kakaoPlaceUrl;
   const existingNaverUrl = existing.naverPlaceUrl?.trim() || "";
   const resolvedNaverPlaceUrl = isActualNaverPlaceUrl(existingNaverUrl) ? existingNaverUrl : await resolveNaverPlaceUrl(query);
@@ -131,6 +131,14 @@ const emptyKakaoPlaceResult = (documentCount = 0): KakaoPlaceResult => ({
 function existingKakaoPlaceResult(placeUrl: string): KakaoPlaceResult {
   const placeId = placeUrl.match(/place\.map\.kakao\.com\/(\d+)/)?.[1] || "";
   return { ...emptyKakaoPlaceResult(), matched: true, placeId, placeUrl, queryVariant: "existing" };
+}
+
+export function selectKakaoPlaceResult(freshResult: KakaoPlaceResult, existingPlaceUrl?: string) {
+  const existingUrl = existingPlaceUrl?.trim() || "";
+  if (!isActualKakaoPlaceUrl(existingUrl)) return freshResult;
+  const existingResult = existingKakaoPlaceResult(existingUrl);
+  if (freshResult.matched && freshResult.placeId === existingResult.placeId) return freshResult;
+  return existingResult;
 }
 
 export function isActualKakaoPlaceUrl(value?: string) {
