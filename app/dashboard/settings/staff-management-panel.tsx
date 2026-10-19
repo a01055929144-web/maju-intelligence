@@ -237,7 +237,11 @@ export function StaffManagementPanel({
 
     const updated = payload.invitation as StaffInvitation;
     setInvitations((current) => current.map((item) => (item.id === invitation.id ? { ...updated, matchedCustomerCount: item.matchedCustomerCount } : item)));
-    setMessage(payload.persisted ? "직원 이름과 연결 정보가 저장되었습니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다." : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요.");
+    setMessage(
+      payload.persisted
+        ? "직원 이름과 연결 정보가 저장되었습니다. 로그인 중인 직원은 다시 로그인하면 새 이름이 반영됩니다. 목록을 새로고침하면 매칭 거래처 수가 갱신됩니다."
+        : "직원 정보가 화면에 반영되었습니다. 저장 상태는 시스템 점검에서 확인하세요."
+    );
   }
 
   async function addJobTitle() {
