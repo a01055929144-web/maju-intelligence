@@ -40,6 +40,6 @@
 ## 검증
 
 - 대상 테스트: 3 files / 7 tests 통과.
-- 전체 테스트(Windows): 27 files / 108 tests 통과, 7 suites가 sandbox 임시 SSR 파일 ENOENT로 로딩 실패. assertion 실패는 없다.
-- `tsc`, lint, API 인증 경계, production build 통과.
-- Linux CI 결과는 push 후 확인한다.
+- 전체 테스트(Windows): 34 files / 161 tests 통과.
+- 최초 Linux CI는 npm 11이 잠금 파일의 선택 의존성 누락을 검출했고, 잠금 파일 동기화 후에는 Vitest의 `@/` 별칭 미해석을 검출했다. 서버 저장소의 도메인 import를 상대 경로로 바꿔 운영 번들과 테스트 해석을 일치시켰다.
+- `tsc`, lint, API 인증 경계(122 routes / 16 public), production build 통과.
