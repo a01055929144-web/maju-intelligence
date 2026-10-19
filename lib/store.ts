@@ -8855,6 +8855,13 @@ export type CompanySalesAreaState = {
   unrecognizedRegions: CompanyLeadSearchRegion[];
 };
 
+export type CompanySalesAreaRecommendation = {
+  administrativeArea: string;
+  customerCount: number;
+  existingLeadCount: number;
+  recentLeadCount: number;
+};
+
 export async function getCompanyLeadSearchRegions(companyId: string): Promise<CompanyLeadSearchRegion[]> {
   if (!isProductionStoreConfigured()) return [];
   const rows = await supabaseRequest<
@@ -8899,6 +8906,49 @@ export async function getCompanySalesAreaState(companyId: string): Promise<Compa
 /** 회사가 저장한 영업 지역을 우선하고, 없으면 출발지와 활성 배송 권역을 기본값으로 사용합니다. */
 export async function getCompanySalesAdministrativeAreas(companyId: string): Promise<string[]> {
   return (await getCompanySalesAreaState(companyId)).effectiveAreas;
+}
+
+export async function getCompanySalesAreaRecommendations(companyId: string): Promise<CompanySalesAreaRecommendation[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const customers = await supabaseRequest<Array<{ address: string | null }>>(
+    `normalized_customers?select=address&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
+  ).catch(() => []);
+  const customerCounts = new Map<string, number>();
+  for (const customer of customers) {
+    const area = extractCustomerAdministrativeArea(customer.address);
+    if (area) customerCounts.set(area, (customerCounts.get(area) || 0) + 1);
+  }
+  const areas = Array.from(customerCounts.keys());
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const leadCounts = await Promise.all(areas.map(async (area) => {
+    const baseFilters = [
+      `company_id=eq.${encodeURIComponent(companyId)}`,
+      `administrative_area=eq.${encodeURIComponent(area)}`
+    ];
+    const [existingLeadCount, recentLeadCount] = await Promise.all([
+      supabasePermitLeadCount(baseFilters).catch(() => 0),
+      supabasePermitLeadCount([...baseFilters, `created_at=gte.${encodeURIComponent(thirtyDaysAgo)}`]).catch(() => 0)
+    ]);
+    return { existingLeadCount, recentLeadCount };
+  }));
+  return areas
+    .map((administrativeArea, index) => ({
+      administrativeArea,
+      customerCount: customerCounts.get(administrativeArea) || 0,
+      existingLeadCount: leadCounts[index]?.existingLeadCount || 0,
+      recentLeadCount: leadCounts[index]?.recentLeadCount || 0
+    }))
+    .sort((left, right) => right.customerCount - left.customerCount || right.recentLeadCount - left.recentLeadCount || left.administrativeArea.localeCompare(right.administrativeArea))
+    .slice(0, 24);
+}
+
+export async function countCompanyLeadsInAdministrativeArea(companyId: string, administrativeArea: string) {
+  const normalized = extractCustomerAdministrativeArea(administrativeArea);
+  if (!normalized || !isProductionStoreConfigured()) return 0;
+  return supabasePermitLeadCount([
+    `company_id=eq.${encodeURIComponent(companyId)}`,
+    `administrative_area=eq.${encodeURIComponent(normalized)}`
+  ]).catch(() => 0);
 }
 
 export function isAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {

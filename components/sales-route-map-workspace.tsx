@@ -64,6 +64,7 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
@@ -616,7 +617,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
   const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
   const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState(true);
+  const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState<boolean | null>(null);
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
@@ -857,6 +858,24 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       setAllLeadsLoadState("error");
     }
   }
+
+  const handleMapSalesAreaSnapshot = useCallback((snapshot: SalesAreaSelectorSnapshot) => {
+    setMapSalesRegionsConfigured(snapshot.salesAreaState.effectiveAreas.length > 0);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!active) return;
+        setMapSalesRegionsConfigured(Boolean(payload?.salesAreaState?.effectiveAreas?.length));
+      })
+      .catch(() => {
+        if (active) setMapSalesRegionsConfigured(null);
+      });
+    return () => { active = false; };
+  }, []);
 
   // 2026-09-07 버그 리포트: "리드 표에서는 잘 가져오는데 지도에서는 표시가 안 된다" — 원인은
   // allLeadsLoadState가 한 번 "ready"가 되면(첫 토글 때 리드가 아직 0건이었던 경우 등) 이후
@@ -2373,6 +2392,24 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             )}
           </div>
         ) : null}
+        {activeView === "map" && mapSalesRegionsConfigured === false ? (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-black text-amber-950">영업할 지역을 골라 주세요</p>
+              <p className="mt-1 text-xs font-semibold text-amber-800">현재는 기존 리드를 전체 표시합니다. 지역을 고르면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.</p>
+            </div>
+            <SalesAreaSelector
+              compact
+              mapCenterPoint={mapCenterPoint}
+              onChanged={() => {
+                setShowAllLeadsOnMap(true);
+                setShowOutsideSalesAreaOnMap(false);
+                void loadAllLeadsForMap();
+              }}
+              onSnapshot={handleMapSalesAreaSnapshot}
+            />
+          </div>
+        ) : null}
         {activeView === "map" && leadRadiusOpen ? (
           <div className="space-y-2 rounded-lg border border-teal-100 bg-teal-50/60 px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -2492,7 +2529,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         ) : null}
         {activeView === "map" && showAllLeadsOnMap ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            {!mapSalesRegionsConfigured ? (
+            {mapSalesRegionsConfigured === false ? (
               <p className="w-full rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
                 현재는 기존 리드를 전체 표시합니다. <Link className="underline" href="/dashboard/settings/company">영업 지역을 설정</Link>하면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.
               </p>
@@ -2502,7 +2539,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               리드 전체 필터
             </span>
             <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 청록 테두리·★ = 기거래처 인근 리드." />
-            {mapSalesRegionsConfigured ? (
+            {mapSalesRegionsConfigured === true ? (
               <label className="flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600">
                 <input checked={showOutsideSalesAreaOnMap} onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
                 지역 밖도 보기
