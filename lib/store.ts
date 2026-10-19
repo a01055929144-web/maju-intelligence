@@ -12,7 +12,8 @@ import {
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
-  resolveVisitResultStatus
+  resolveVisitResultStatus,
+  shouldApplySalesAreaFilter
 } from "../domains/lead/lead-policy";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolveKakaoPlace, resolvePlaceLinks } from "./place-links";
@@ -9237,8 +9238,9 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
   if (!filters.includeOutsideSalesArea) {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
-    if (!salesAreas.length) return { leads: [], total: 0 };
-    params.push(`administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})`);
+    if (shouldApplySalesAreaFilter(salesAreas, Boolean(filters.includeOutsideSalesArea))) {
+      params.push(`administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})`);
+    }
   }
   // 2026-09-07 피드백("리드는 총 500개인데 왜 지도에 표시는 적게 나오는지") 대응: 300건(최대
   // 500건) 상한 때문에 그 이후 순위의 리드는 아예 조회조차 되지 않아 목록/지도 어디에도 나타나지

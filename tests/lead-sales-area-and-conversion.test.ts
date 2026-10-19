@@ -4,7 +4,8 @@ import {
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
-  resolveVisitResultStatus
+  resolveVisitResultStatus,
+  shouldApplySalesAreaFilter
 } from "../domains/lead/lead-policy";
 
 describe("lead sales area and conversion state", () => {
@@ -13,6 +14,12 @@ describe("lead sales area and conversion state", () => {
     expect(isLeadAddressInSalesAreas("서울 강남구 테헤란로 1", areas)).toBe(true);
     expect(isLeadAddressInSalesAreas("서울특별시 마포구 월드컵로 1", areas)).toBe(false);
     expect(isLeadAddressInSalesAreas("", areas)).toBe(false);
+  });
+
+  it("keeps existing leads visible until a sales area is configured", () => {
+    expect(shouldApplySalesAreaFilter([], false)).toBe(false);
+    expect(shouldApplySalesAreaFilter(["서울특별시 강남구"], false)).toBe(true);
+    expect(shouldApplySalesAreaFilter(["서울특별시 강남구"], true)).toBe(false);
   });
 
   it("normalizes the same administrative area used by ingestion and database filters", () => {

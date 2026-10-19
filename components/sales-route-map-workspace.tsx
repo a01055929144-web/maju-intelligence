@@ -616,6 +616,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
   const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
   const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState(true);
+  const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
@@ -840,13 +842,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     try {
       // 숨김(제외) 리드도 함께 받아와서, "활성/숨김" 토글로 클라이언트에서 바로 전환할 수 있게
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
-      const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits?excludeExcluded=false"), { cache: "no-store" });
+      const params = new URLSearchParams({ excludeExcluded: "false" });
+      if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) {
         setAllLeadsLoadState("error");
         return;
       }
       setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
+      setMapSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
       setAllLeadsLoadState("ready");
     } catch {
       setAllLeadsLoadState("error");
@@ -861,7 +866,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -2487,11 +2492,22 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         ) : null}
         {activeView === "map" && showAllLeadsOnMap ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            {!mapSalesRegionsConfigured ? (
+              <p className="w-full rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                현재는 기존 리드를 전체 표시합니다. <Link className="underline" href="/dashboard/settings/company">영업 지역을 설정</Link>하면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.
+              </p>
+            ) : null}
             <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-600">
               <Layers className="h-3.5 w-3.5" />
               리드 전체 필터
             </span>
             <InfoTooltip text="마커 색: 초록 = 등급 미평가, 보라 = A등급, 파랑 = B등급, 회색 = C등급. 청록 테두리·★ = 기거래처 인근 리드." />
+            {mapSalesRegionsConfigured ? (
+              <label className="flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600">
+                <input checked={showOutsideSalesAreaOnMap} onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
+                지역 밖도 보기
+              </label>
+            ) : null}
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
                 <button

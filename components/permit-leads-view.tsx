@@ -2105,7 +2105,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
           </p>
         ) : null}
         {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-violet-50 !px-3 !py-2 !text-violet-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
-        {!salesRegionsConfigured ? <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">회사 정보에서 영업 지역을 설정하면 신규 리드가 들어옵니다.</p> : null}
+        {!salesRegionsConfigured ? <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">현재는 기존 리드를 전체 표시합니다. <a className="underline" href="/dashboard/settings/company">영업 지역을 설정</a>하면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.</p> : null}
 
         <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
           <div className="flex flex-wrap items-center gap-2">

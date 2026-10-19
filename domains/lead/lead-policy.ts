@@ -17,6 +17,10 @@ export function isLeadAddressInSalesAreas(address: string | null | undefined, ar
   return Boolean(area && areas.includes(area));
 }
 
+export function shouldApplySalesAreaFilter(areas: readonly string[], includeOutsideSalesArea: boolean) {
+  return !includeOutsideSalesArea && areas.length > 0;
+}
+
 export function resolveVisitResultStatus(actionType: string, result?: string) {
   if (result === "거래 시작") return "전환 진행";
   if (result === "거절" || result === "제외" || actionType === "exclude") return "제외";
