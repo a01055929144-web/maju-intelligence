@@ -27,6 +27,7 @@ Thumbs.db
 
 # vercel
 .vercel/
+.tmp-boundary/
 
 # typescript
 *.tsbuildinfo

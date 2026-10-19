@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, Plus, X } from "lucide-react";
+import { KakaoAddressMap, type KakaoSalesAreaStat } from "@/components/kakao-address-map";
 import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
 type Region = { id: string; label: string };
@@ -44,6 +45,10 @@ export function SalesAreaSelector({
   const [district, setDistrict] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [mapMetric, setMapMetric] = useState<"customers" | "recentLeads">("recentLeads");
+  const [mapStats, setMapStats] = useState<KakaoSalesAreaStat[]>([]);
+  const [mapStatsLoading, setMapStatsLoading] = useState(false);
+  const [mapLoadTiming, setMapLoadTiming] = useState<number | null>(null);
   const districts = KOREAN_ADMINISTRATIVE_AREAS[province] || [];
 
   const previewCompanyId = useCallback(() => {
@@ -69,6 +74,22 @@ export function SalesAreaSelector({
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setDistrict(""); }, [province]);
+  useEffect(() => {
+    let active = true;
+    setMapStatsLoading(true);
+    fetch(withPreviewCompany(`/api/leads/permits/sales-area-stats?province=${encodeURIComponent(province)}`), { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (active) setMapStats(Array.isArray(payload?.stats) ? payload.stats : []);
+      })
+      .catch(() => {
+        if (active) setMapStats([]);
+      })
+      .finally(() => {
+        if (active) setMapStatsLoading(false);
+      });
+    return () => { active = false; };
+  }, [province, withPreviewCompany]);
 
   const unrecognizedIds = useMemo(() => new Set(snapshot.salesAreaState.unrecognizedRegions.map((item) => item.id)), [snapshot.salesAreaState.unrecognizedRegions]);
 
@@ -105,6 +126,19 @@ export function SalesAreaSelector({
       setMessage("영업 지역을 해제했습니다.");
     }
     setBusy(false);
+  }
+
+  async function toggleBoundaryArea(administrativeArea: string) {
+    const explicitRegion = snapshot.regions.find((region) => region.label === administrativeArea);
+    if (explicitRegion) {
+      await removeArea(explicitRegion.id);
+      return;
+    }
+    if (snapshot.salesAreaState.effectiveAreas.includes(administrativeArea)) {
+      setMessage("출발지·배송 권역에서 적용된 기본 지역은 회사 정보 또는 권역 설정에서 변경해주세요.");
+      return;
+    }
+    await addArea(administrativeArea);
   }
 
   async function addMapCenter() {
@@ -172,6 +206,37 @@ export function SalesAreaSelector({
           {districts.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
         <button className="maju-button-primary" disabled={!snapshot.canManage || !district || busy} onClick={() => void addArea(`${province} ${district}`)} type="button"><Plus className="h-4 w-4" />추가</button>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
+          <div>
+            <p className="text-xs font-black text-slate-900">지도에서 지역 선택</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">경계를 누르면 지역 정보와 추가·해제 버튼이 열립니다.</p>
+          </div>
+          <div className="flex rounded-lg bg-slate-100 p-0.5">
+            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "recentLeads" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("recentLeads")} type="button">최근 30일 신규</button>
+            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "customers" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("customers")} type="button">거래처 수</button>
+          </div>
+        </div>
+        <KakaoAddressMap
+          mapClassName="h-[300px] rounded-none border-0 sm:h-[360px]"
+          markers={[]}
+          salesAreaBoundary={{
+            canManage: snapshot.canManage,
+            metric: mapMetric,
+            onLoadTiming: setMapLoadTiming,
+            onToggle: (administrativeArea) => void toggleBoundaryArea(administrativeArea),
+            province,
+            selectedAreas: snapshot.salesAreaState.effectiveAreas,
+            stats: mapStats
+          }}
+          showList={false}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500">
+          <span>옅음 → 진함: {mapMetric === "recentLeads" ? "신규 리드 수" : "거래처 수"} · 선택 지역은 청록색 테두리</span>
+          <span>{mapStatsLoading ? "집계 불러오는 중" : mapLoadTiming == null ? "경계 불러오는 중" : `경계 표시 ${Math.round(mapLoadTiming)}ms`}</span>
+        </div>
+        <p className="border-t border-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">행정경계: 국가데이터처 SGIS (2025.07.01 기준)</p>
       </div>
       {mapCenterPoint ? <button className="maju-button-secondary w-full justify-center" disabled={!snapshot.canManage || busy} onClick={() => void addMapCenter()} type="button"><MapPin className="h-4 w-4" />현재 지도 중심의 시·군·구 추가</button> : null}
       {!snapshot.canManage ? <p className="text-xs font-semibold text-slate-500">영업 지역은 회사 또는 거래처 관리 권한이 있는 사용자만 변경할 수 있습니다.</p> : null}

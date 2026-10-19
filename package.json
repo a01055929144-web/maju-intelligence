@@ -13,7 +13,8 @@
     "ops:check-env": "node scripts/check-production-env.mjs",
     "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
     "ops:backfill-industries": "node scripts/backfill-kakao-industries.mjs",
-    "ops:verify-persisted": "node scripts/verify-production-persistence.mjs"
+    "ops:verify-persisted": "node scripts/verify-production-persistence.mjs",
+    "maps:build-sales-areas": "node scripts/build-sales-area-boundaries.mjs"
   },
   "dependencies": {
     "@types/react": "^18.3.3",
@@ -42,6 +43,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "15.5.27",
     "magic-string": "^0.30.17",
+    "mapshaper": "0.7.90",
     "vite": "^8.3.0",
     "vitest": "^5.0.0"
   },

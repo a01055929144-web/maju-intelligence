@@ -64,6 +64,23 @@ export type KakaoLeadSearchInteraction = {
   readonly onLocked: (point: { lat: number; lng: number }, radiusMeters: number) => void;
 };
 
+export type KakaoSalesAreaStat = {
+  readonly administrativeArea: string;
+  readonly customerCount: number;
+  readonly recentLeadCount: number;
+  readonly totalLeadCount: number;
+};
+
+export type KakaoSalesAreaBoundarySelection = {
+  readonly canManage: boolean;
+  readonly metric: "customers" | "recentLeads";
+  readonly onLoadTiming?: (milliseconds: number) => void;
+  readonly onToggle: (administrativeArea: string) => void;
+  readonly province: string;
+  readonly selectedAreas: ReadonlyArray<string>;
+  readonly stats: ReadonlyArray<KakaoSalesAreaStat>;
+};
+
 type KakaoAddressMapProps = {
   readonly controlsOffsetClassName?: string;
   readonly controlsOffsetPx?: number;
@@ -76,6 +93,7 @@ type KakaoAddressMapProps = {
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
+  readonly salesAreaBoundary?: KakaoSalesAreaBoundarySelection;
   readonly showList?: boolean;
 };
 
@@ -127,6 +145,10 @@ type KakaoMarkerImage = object;
 type KakaoSize = object;
 type KakaoPoint = object;
 type KakaoPolyline = object;
+type KakaoPolygon = {
+  setMap: (map: KakaoMap | null) => void;
+  setOptions: (options: { fillColor?: string; fillOpacity?: number; strokeColor?: string; strokeOpacity?: number; strokeWeight?: number }) => void;
+};
 
 type KakaoMapMouseEvent = {
   latLng?: KakaoLatLng;
@@ -176,10 +198,20 @@ type KakaoMapsApi = {
     strokeStyle: string;
     strokeWeight: number;
   }) => KakaoPolyline;
+  Polygon: new (options: {
+    fillColor: string;
+    fillOpacity: number;
+    map: KakaoMap;
+    path: KakaoLatLng[] | KakaoLatLng[][];
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeWeight: number;
+    zIndex?: number;
+  }) => KakaoPolygon;
   Size: new (width: number, height: number) => KakaoSize;
   event: {
     addListener(target: KakaoMap, eventName: "click", handler: (event: KakaoMapMouseEvent) => void): void;
-    addListener(target: object, eventName: string, handler: () => void): void;
+    addListener(target: object, eventName: string, handler: (event: KakaoMapMouseEvent) => void): void;
   };
   load: (callback: () => void) => void;
   services: {
@@ -205,6 +237,21 @@ const emptyRoutePath: ReadonlyArray<KakaoRoutePoint> = [];
 const defaultMapClassName = "h-[360px]";
 const kakaoSdkTimeoutMs = 5000;
 const kakaoGeocodeTimeoutMs = 4500;
+const SALES_AREA_BOUNDARY_BASE = "/maps/sales-areas/2025";
+const SALES_AREA_BOUNDARY_FILES: Record<string, string> = {
+  "서울특별시": "seoul.geojson", "부산광역시": "busan.geojson", "대구광역시": "daegu.geojson", "인천광역시": "incheon.geojson",
+  "광주광역시": "gwangju.geojson", "대전광역시": "daejeon.geojson", "울산광역시": "ulsan.geojson", "세종특별자치시": "sejong.geojson",
+  "경기도": "gyeonggi.geojson", "강원특별자치도": "gangwon.geojson", "충청북도": "chungbuk.geojson", "충청남도": "chungnam.geojson",
+  "전북특별자치도": "jeonbuk.geojson", "전라남도": "jeonnam.geojson", "경상북도": "gyeongbuk.geojson", "경상남도": "gyeongnam.geojson",
+  "제주특별자치도": "jeju.geojson"
+};
+
+type SalesAreaBoundaryFeature = {
+  geometry: { coordinates: number[][][] | number[][][][]; type: "Polygon" | "MultiPolygon" };
+  properties: { administrativeArea: string; district: string; province: string };
+};
+
+type SalesAreaBoundaryCollection = { features: SalesAreaBoundaryFeature[]; type: "FeatureCollection" };
 
 // 2026-08-24 피드백: "전반적으로 속도가 더뎌, 빠른 속도가 중요할 것 같아". 지도를 열 때마다 모든
 // 거래처·리드 주소를 매번 카카오 API로 다시 지오코딩하고 있었는데, 주소가 늘어날수록(거래처가
@@ -253,6 +300,7 @@ export function KakaoAddressMap({
   onMarkerClick,
   radiusOverlay,
   routePath = emptyRoutePath,
+  salesAreaBoundary,
   showList = true
 }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -316,8 +364,13 @@ export function KakaoAddressMap({
   // 차량 effect가 "마지막으로 처리한" mapBootId를 기억해뒀다가, 이 값과 최신 mapBootId가 다르면
   // (지도가 그 사이에 다시 만들어졌으면) 이전 오버레이 참조를 비웁니다.
   const vehicleAnimBootIdRef = useRef(0);
+  const salesAreaPolygonsRef = useRef<KakaoPolygon[]>([]);
+  const salesAreaInfoOverlayRef = useRef<KakaoCustomOverlay | null>(null);
+  const salesAreaBoundaryRef = useRef(salesAreaBoundary);
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
+  const salesAreaSelectedSignature = salesAreaBoundary?.selectedAreas.join("|") || "";
+  const salesAreaStatsSignature = JSON.stringify(salesAreaBoundary?.stats || []);
   // 부모(sales-route-map-workspace.tsx)는 markers를 렌더마다 새 배열/새 객체로 다시 만듭니다.
   // 이 원본 배열을 boot effect·반경 effect의 의존성으로 그대로 쓰면, 실제 마커 구성은 그대로인데
   // 배열 참조만 바뀐 리렌더(다른 화면의 주기적 새로고침 등)마다 지도 전체가 다시 만들어지고 모든
@@ -343,6 +396,10 @@ export function KakaoAddressMap({
   useEffect(() => {
     onCenterChangeRef.current = onCenterChange;
   }, [onCenterChange]);
+
+  useEffect(() => {
+    salesAreaBoundaryRef.current = salesAreaBoundary;
+  }, [salesAreaBoundary]);
 
   useEffect(() => {
     radiusOnClearRef.current = radiusOverlay?.onClear;
@@ -535,7 +592,7 @@ export function KakaoAddressMap({
 
         if (ignore) return;
 
-        if (found === 0 && !hasRoadPath) {
+        if (found === 0 && !hasRoadPath && !salesAreaBoundary) {
           console.error(`[KakaoAddressMap] 카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
           setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
           setStatus("fallback");
@@ -590,7 +647,133 @@ export function KakaoAddressMap({
     // 멈추는 현상을 유발) 안 되기 때문입니다. 포커스 이동은 아래의 가벼운 effect가 캐시된
     // 좌표로만 처리하고, 클릭 콜백은 onMarkerClickRef로 최신 값을 유지합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appKey, canUseKakao, markersSignature, routePath]);
+  }, [appKey, canUseKakao, markersSignature, routePath, salesAreaBoundary?.province]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const kakao = window.kakao;
+    const boundary = salesAreaBoundaryRef.current;
+    if (status !== "ready" || !map || !kakao?.maps || !boundary) return;
+    const filename = SALES_AREA_BOUNDARY_FILES[boundary.province];
+    if (!filename) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    salesAreaPolygonsRef.current.forEach((polygon) => polygon.setMap(null));
+    salesAreaPolygonsRef.current = [];
+    salesAreaInfoOverlayRef.current?.setMap(null);
+    salesAreaInfoOverlayRef.current = null;
+
+    const selectedAreas = new Set(boundary.selectedAreas);
+    const stats = new Map(boundary.stats.map((item) => [item.administrativeArea, item]));
+    const maximum = Math.max(1, ...boundary.stats.map((item) => boundary.metric === "customers" ? item.customerCount : item.recentLeadCount));
+    const colorFor = (administrativeArea: string) => {
+      if (selectedAreas.has(administrativeArea)) return { fill: "#0f766e", opacity: 0.5, stroke: "#0f766e", weight: 3 };
+      const stat = stats.get(administrativeArea);
+      const value = boundary.metric === "customers" ? stat?.customerCount || 0 : stat?.recentLeadCount || 0;
+      const ratio = value / maximum;
+      if (ratio >= 0.66) return { fill: "#14b8a6", opacity: 0.34, stroke: "#64748b", weight: 1 };
+      if (ratio >= 0.33) return { fill: "#5eead4", opacity: 0.28, stroke: "#94a3b8", weight: 1 };
+      return { fill: "#ccfbf1", opacity: 0.22, stroke: "#94a3b8", weight: 1 };
+    };
+    const showInfo = (feature: SalesAreaBoundaryFeature, position: KakaoLatLng, interactive: boolean) => {
+      salesAreaInfoOverlayRef.current?.setMap(null);
+      const stat = stats.get(feature.properties.administrativeArea);
+      const selected = selectedAreas.has(feature.properties.administrativeArea);
+      const content = document.createElement("div");
+      content.className = "min-w-[220px] rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-xl";
+      const title = document.createElement("p");
+      title.className = "font-black text-slate-950";
+      title.textContent = feature.properties.administrativeArea;
+      const detail = document.createElement("p");
+      detail.className = "mt-1 font-semibold text-slate-600";
+      detail.textContent = `거래처 ${(stat?.customerCount || 0).toLocaleString()}곳 · 최근 30일 신규 ${(stat?.recentLeadCount || 0).toLocaleString()}건 · 전체 리드 ${(stat?.totalLeadCount || 0).toLocaleString()}건`;
+      content.append(title, detail);
+      if (interactive) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "mt-2 h-8 w-full rounded-lg bg-teal-700 px-3 font-black text-white disabled:bg-slate-200 disabled:text-slate-500";
+        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시";
+        button.textContent = boundary.province === "세종특별자치시"
+          ? "세종은 현재 선택 대상이 아닙니다"
+          : !boundary.canManage
+            ? "조회 권한만 있습니다"
+            : selected ? "영업 지역 해제" : "영업 지역 추가";
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          salesAreaBoundaryRef.current?.onToggle(feature.properties.administrativeArea);
+        });
+        content.append(button);
+      }
+      const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.12, zIndex: 20 });
+      salesAreaInfoOverlayRef.current = overlay;
+    };
+
+    const startedAt = performance.now();
+    fetch(`${SALES_AREA_BOUNDARY_BASE}/${filename}`, { cache: "force-cache", signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`행정경계 파일을 불러오지 못했습니다: ${response.status}`);
+        return response.json() as Promise<SalesAreaBoundaryCollection>;
+      })
+      .then((collection) => {
+        if (cancelled) return;
+        const bounds = new kakao.maps.LatLngBounds();
+        for (const feature of collection.features) {
+          const polygonSets = feature.geometry.type === "MultiPolygon"
+            ? feature.geometry.coordinates as number[][][][]
+            : [feature.geometry.coordinates as number[][][]];
+          for (const polygonCoordinates of polygonSets) {
+            const paths = polygonCoordinates.map((ring) => ring.map(([lng, lat]) => {
+              const point = new kakao.maps.LatLng(lat, lng);
+              bounds.extend(point);
+              return point;
+            }));
+            const colors = colorFor(feature.properties.administrativeArea);
+            const polygon = new kakao.maps.Polygon({
+              fillColor: colors.fill, fillOpacity: colors.opacity, map, path: paths,
+              strokeColor: colors.stroke, strokeOpacity: 0.9, strokeWeight: colors.weight, zIndex: 3
+            });
+            kakao.maps.event.addListener(polygon, "mouseover", (event) => {
+              polygon.setOptions({ fillOpacity: Math.max(colors.opacity, 0.45), strokeWeight: Math.max(colors.weight, 2) });
+              if (event.latLng) showInfo(feature, event.latLng, false);
+            });
+            kakao.maps.event.addListener(polygon, "mouseout", () => {
+              polygon.setOptions({ fillOpacity: colors.opacity, strokeWeight: colors.weight });
+              salesAreaInfoOverlayRef.current?.setMap(null);
+            });
+            kakao.maps.event.addListener(polygon, "click", (event) => {
+              if (event.latLng) showInfo(feature, event.latLng, true);
+            });
+            salesAreaPolygonsRef.current.push(polygon);
+          }
+        }
+        map.setBounds(bounds, 48, 48, 48, 48);
+        const elapsed = performance.now() - startedAt;
+        salesAreaBoundaryRef.current?.onLoadTiming?.(elapsed);
+        console.info(`[SalesAreaBoundary] ${boundary.province} 경계+렌더 ${Math.round(elapsed)}ms`);
+      })
+      .catch((error) => {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.error("[SalesAreaBoundary] 경계 로딩 실패", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      salesAreaPolygonsRef.current.forEach((polygon) => polygon.setMap(null));
+      salesAreaPolygonsRef.current = [];
+      salesAreaInfoOverlayRef.current?.setMap(null);
+      salesAreaInfoOverlayRef.current = null;
+    };
+  }, [
+    mapBootId,
+    salesAreaBoundary?.canManage,
+    salesAreaBoundary?.metric,
+    salesAreaBoundary?.province,
+    salesAreaSelectedSignature,
+    salesAreaStatsSignature,
+    status
+  ]);
 
   // 2026-09-07 피드백("자동차가 스르륵 미끄러지듯 이동하는 진짜 부드러운 애니메이션") 대응.
   // 위 boot effect와 별개로, 라이브 차량 마커만 여기서 직접 그리고 위치를 갱신합니다. 핵심은

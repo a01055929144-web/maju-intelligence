@@ -1,0 +1,126 @@
+{
+  "source": "국가데이터처 SGIS 기반 행정동 경계",
+  "sourceDate": "2025-07-01",
+  "generatedAt": "2026-10-19T15:50:20.353Z",
+  "provinces": {
+    "서울특별시": {
+      "file": "seoul.geojson",
+      "featureCount": 25,
+      "bytes": 26160,
+      "gzipBytes": 5573,
+      "sha256": "758bca9ceee62f2f10989a04b9628c839824c3e98f96085c41f699921d4a5bea"
+    },
+    "부산광역시": {
+      "file": "busan.geojson",
+      "featureCount": 16,
+      "bytes": 18395,
+      "gzipBytes": 4347,
+      "sha256": "1f8d9532686c2b962fbd19147b7cf2ba92d4c81bb1c1dc16023baa086b2c41ce"
+    },
+    "대구광역시": {
+      "file": "daegu.geojson",
+      "featureCount": 9,
+      "bytes": 15727,
+      "gzipBytes": 4156,
+      "sha256": "a9b7cbf045f00092b34fab3cb46211aa175bf14f52185d4fd59e45627086bae0"
+    },
+    "인천광역시": {
+      "file": "incheon.geojson",
+      "featureCount": 10,
+      "bytes": 21928,
+      "gzipBytes": 6154,
+      "sha256": "7234c8fad17ddc1a282090f8466932ce2845857d258f1da892363571e0274e34"
+    },
+    "광주광역시": {
+      "file": "gwangju.geojson",
+      "featureCount": 5,
+      "bytes": 8094,
+      "gzipBytes": 2074,
+      "sha256": "e35d6cee999b1d3816997742c5c068196fbafd7c1424942d90ad178fd335c1bd"
+    },
+    "대전광역시": {
+      "file": "daejeon.geojson",
+      "featureCount": 5,
+      "bytes": 8091,
+      "gzipBytes": 2132,
+      "sha256": "f09e7d6db7254c14682018b51b98a683e9eadbce6c40b368a3a33c3170dbe9f1"
+    },
+    "울산광역시": {
+      "file": "ulsan.geojson",
+      "featureCount": 5,
+      "bytes": 8964,
+      "gzipBytes": 2469,
+      "sha256": "79c337e888466220a4493946781dee94fd4aac16bab15ebd96da47ac14be48fc"
+    },
+    "세종특별자치시": {
+      "file": "sejong.geojson",
+      "featureCount": 1,
+      "bytes": 3255,
+      "gzipBytes": 1163,
+      "sha256": "4226f07156de0ba036d74b8e0d3254a37c0328809993cd6da8635ad4d2d569be"
+    },
+    "경기도": {
+      "file": "gyeonggi.geojson",
+      "featureCount": 31,
+      "bytes": 73027,
+      "gzipBytes": 18995,
+      "sha256": "0fbb837545caa479ebb4f7223befc4e86700516d7c704bf924138678b0a6408d"
+    },
+    "강원특별자치도": {
+      "file": "gangwon.geojson",
+      "featureCount": 18,
+      "bytes": 70172,
+      "gzipBytes": 18729,
+      "sha256": "0da5a0a2e2e1307cf4882d3959656ccd9f474924cf7ffc10f4a0781d82837830"
+    },
+    "충청북도": {
+      "file": "chungbuk.geojson",
+      "featureCount": 11,
+      "bytes": 37477,
+      "gzipBytes": 9902,
+      "sha256": "dc416cc9a73cbdc94abcd288d2118cc14cb8112d6a214fbdd1b9108d5512bd6e"
+    },
+    "충청남도": {
+      "file": "chungnam.geojson",
+      "featureCount": 15,
+      "bytes": 50438,
+      "gzipBytes": 13620,
+      "sha256": "55317e6425c8ced198868acb84c2360c7cbd153c83f869295eb841b592d9429c"
+    },
+    "전라남도": {
+      "file": "jeonnam.geojson",
+      "featureCount": 22,
+      "bytes": 121494,
+      "gzipBytes": 34916,
+      "sha256": "5229623ce573303cb86fc7131077d44e6401e99dbe4c819e0b600c5c73b0b6fa"
+    },
+    "경상북도": {
+      "file": "gyeongbuk.geojson",
+      "featureCount": 22,
+      "bytes": 84734,
+      "gzipBytes": 23424,
+      "sha256": "66feb29c74f5432b8fa8b3be90dc87eed668e671a391e3211b7899f4ce9741d6"
+    },
+    "경상남도": {
+      "file": "gyeongnam.geojson",
+      "featureCount": 18,
+      "bytes": 71667,
+      "gzipBytes": 19921,
+      "sha256": "e9864a9b5a90c24828eac3a9072d31b817d2113f6810636031db80bb23ecf0a2"
+    },
+    "제주특별자치도": {
+      "file": "jeju.geojson",
+      "featureCount": 2,
+      "bytes": 9490,
+      "gzipBytes": 2809,
+      "sha256": "0c72e397c1c5fca841e6243c9e48afcb900e353772402504d237bdf1982ba470"
+    },
+    "전북특별자치도": {
+      "file": "jeonbuk.geojson",
+      "featureCount": 14,
+      "bytes": 47786,
+      "gzipBytes": 12459,
+      "sha256": "215bea1c657a3ad590c80ad3c590113c238472acec8b5396aef5378a4e9f95af"
+    }
+  }
+}

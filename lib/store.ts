@@ -28,6 +28,7 @@ import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titl
 import { maskPhoneNumber } from "./phone";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
+import { KOREAN_ADMINISTRATIVE_AREAS } from "./korean-administrative-areas";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "../domains/delivery/vehicle-master";
@@ -8950,6 +8951,46 @@ export async function countCompanyLeadsInAdministrativeArea(companyId: string, a
     `company_id=eq.${encodeURIComponent(companyId)}`,
     `administrative_area=eq.${encodeURIComponent(normalized)}`
   ]).catch(() => 0);
+}
+
+export type CompanySalesAreaMapStat = {
+  administrativeArea: string;
+  customerCount: number;
+  recentLeadCount: number;
+  totalLeadCount: number;
+};
+
+/** 지도 색칠용 집계를 시·도 한 번에 반환합니다. 개별 polygon이 API를 호출하지 않도록 서버에서 묶습니다. */
+export async function getCompanySalesAreaMapStats(companyId: string, province: string): Promise<CompanySalesAreaMapStat[]> {
+  const districts = KOREAN_ADMINISTRATIVE_AREAS[province] || [];
+  if (!districts.length || !isProductionStoreConfigured()) return [];
+  const areas = districts.map((district) => `${province} ${district}`);
+  const customers = await supabaseRequest<Array<{ address: string | null }>>(
+    `normalized_customers?select=address&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
+  ).catch(() => []);
+  const customerCounts = new Map<string, number>();
+  for (const customer of customers) {
+    const area = extractCustomerAdministrativeArea(customer.address);
+    if (area?.startsWith(`${province} `)) customerCounts.set(area, (customerCounts.get(area) || 0) + 1);
+  }
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const stats: CompanySalesAreaMapStat[] = [];
+  for (let offset = 0; offset < areas.length; offset += 6) {
+    const batch = areas.slice(offset, offset + 6);
+    const rows = await Promise.all(batch.map(async (administrativeArea) => {
+      const filters = [
+        `company_id=eq.${encodeURIComponent(companyId)}`,
+        `administrative_area=eq.${encodeURIComponent(administrativeArea)}`
+      ];
+      const [totalLeadCount, recentLeadCount] = await Promise.all([
+        supabasePermitLeadCount(filters),
+        supabasePermitLeadCount([...filters, `created_at=gte.${encodeURIComponent(thirtyDaysAgo)}`])
+      ]);
+      return { administrativeArea, customerCount: customerCounts.get(administrativeArea) || 0, recentLeadCount, totalLeadCount };
+    }));
+    stats.push(...rows);
+  }
+  return stats;
 }
 
 export function isAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {
