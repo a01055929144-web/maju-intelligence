@@ -22,7 +22,7 @@ export function isHoldModulePath(pathname: string) {
 }
 
 export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_LEAD_BUSINESS_HOURS_UI_ENABLED || "") {
-  return value === "true" || value === "1";
+  return value !== "false" && value !== "0";
 }
 
 export const CORE_LEADS_HREF = "/dashboard?view=leads&leadType=permit";

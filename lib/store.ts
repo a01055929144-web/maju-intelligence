@@ -6,6 +6,8 @@ import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeyw
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
 import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate, type LeadDuplicateMatch } from "./leads";
+import type { LeadBusinessHourInterval } from "@/domains/lead/business-hours";
+import { isLeadAddressInSalesAreas, resolveVisitResultStatus } from "@/domains/lead/lead-policy";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolveKakaoPlace, resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -5176,18 +5178,20 @@ async function excludeMatchingLeadsForNewCustomer(
   const lookup = businessNumber
     ? `business_number=eq.${encodeURIComponent(businessNumber)}`
     : `business_name=ilike.${encodeURIComponent(customer.businessName)}`;
-  const inactiveStatuses = ["제외", "거래처 전환"].map(encodeURIComponent).join(",");
+  const inactiveStatuses = ["제외"].map(encodeURIComponent).join(",");
   const leads = await supabaseRequest<Array<{
     address: string | null;
     business_name: string;
     business_number: string | null;
     id: string;
+    matched_customer_id: string | null;
     phone: string | null;
+    status: string;
   }>>(
-    `business_permit_leads?select=id,business_name,address,phone,business_number&company_id=eq.${encodeURIComponent(companyId)}&status=not.in.(${inactiveStatuses})&${lookup}`
+    `business_permit_leads?select=id,business_name,address,phone,business_number,matched_customer_id,status&company_id=eq.${encodeURIComponent(companyId)}&status=not.in.(${inactiveStatuses})&${lookup}`
   ).catch(() => []);
 
-  await Promise.all(leads.filter((lead) => lead.id !== skipLeadId).map(async (lead) => {
+  await Promise.all(leads.filter((lead) => lead.id !== skipLeadId && !(lead.status === "거래처 전환" && lead.matched_customer_id)).map(async (lead) => {
     const duplicate = findLeadCustomerDuplicate({
       address: customer.address,
       businessName: customer.businessName,
@@ -5213,9 +5217,9 @@ async function excludeMatchingLeadsForNewCustomer(
         matched_customer_at: new Date().toISOString(),
         matched_customer_method: matchAudit.method,
         matched_customer_confidence: matchAudit.confidence,
-        next_action: "제외 검토",
+        next_action: "거래처 확인",
         next_action_reasons: [reason],
-        status: "제외",
+        status: "거래처 전환",
         updated_at: new Date().toISOString()
       })
     }).catch(() => null);
@@ -7956,6 +7960,7 @@ export type PermitLeadItem = {
   source?: string;
   createdAt: string;
   updatedAt: string;
+  businessHourIntervals?: LeadBusinessHourInterval[];
 };
 
 export type PermitLeadActionItem = {
@@ -8293,6 +8298,7 @@ export type PermitLeadIngestResult = {
   excludedNonTarget: number;
   skippedNoName: number;
   classifiedAsSalesLead: number;
+  excludedOutsideSalesArea?: number;
 };
 
 const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
@@ -8323,6 +8329,9 @@ export async function ingestPermitLeadRows(
   rows: PermitLeadIngestRow[],
   options: { source?: string } = {}
 ): Promise<PermitLeadIngestResult> {
+  const isAutoPermitSync = AUTO_PERMIT_SYNC_SOURCES.has(options.source || "");
+  const salesAreas = isAutoPermitSync ? await getCompanySalesAdministrativeAreas(companyId) : [];
+  const eligibleRows = isAutoPermitSync ? rows.filter((row) => isAddressInSalesAreas(row.address, salesAreas)) : rows;
   const result: PermitLeadIngestResult = {
     total: rows.length,
     inserted: 0,
@@ -8331,17 +8340,17 @@ export async function ingestPermitLeadRows(
     excludedInactive: 0,
     excludedNonTarget: 0,
     skippedNoName: 0,
-    classifiedAsSalesLead: 0
+    classifiedAsSalesLead: 0,
+    excludedOutsideSalesArea: Math.max(0, rows.length - eligibleRows.length)
   };
-  if (!rows.length || !isProductionStoreConfigured()) return result;
+  if (!eligibleRows.length || !isProductionStoreConfigured()) return result;
 
-  const isAutoPermitSync = AUTO_PERMIT_SYNC_SOURCES.has(options.source || "");
   const newLeadStaleCutoff = new Date();
   newLeadStaleCutoff.setDate(newLeadStaleCutoff.getDate() - NEW_LEAD_MAX_AGE_DAYS);
 
   await upsertCompany(companyId, "마주식자재");
 
-  const businessNumbers = Array.from(new Set(rows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)));
+  const businessNumbers = Array.from(new Set(eligibleRows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)));
   const [existingCustomerRows, existingLeadsByBizNo] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>>(
       `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
@@ -8376,7 +8385,7 @@ export async function ingestPermitLeadRows(
   const inserts: Record<string, unknown>[] = [];
   const updates: Array<{ id: string; payload: Record<string, unknown> }> = [];
 
-  for (const row of rows) {
+  for (const row of eligibleRows) {
     const businessName = (row.businessName || "").trim();
     if (!businessName) {
       result.skippedNoName += 1;
@@ -8831,6 +8840,26 @@ export async function getCompanyLeadSearchRegions(companyId: string): Promise<Co
   }));
 }
 
+/** 회사가 저장한 영업 지역을 우선하고, 없으면 출발지와 활성 배송 권역을 기본값으로 사용합니다. */
+export async function getCompanySalesAdministrativeAreas(companyId: string): Promise<string[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const explicit = await getCompanyLeadSearchRegions(companyId);
+  const explicitAreas = explicit.map((item) => extractCustomerAdministrativeArea(item.label)).filter(Boolean);
+  if (explicitAreas.length) return Array.from(new Set(explicitAreas));
+  const [companies, areas] = await Promise.all([
+    supabaseRequest<Array<{ origin_address: string | null }>>(`companies?select=origin_address&id=eq.${encodeURIComponent(companyId)}&limit=1`).catch(() => []),
+    supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}`).catch(() => [])
+  ]);
+  return Array.from(new Set([
+    extractCustomerAdministrativeArea(companies[0]?.origin_address),
+    ...areas.map((item) => normalizeAdministrativeArea(item.administrative_area))
+  ].filter(Boolean)));
+}
+
+export function isAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {
+  return isLeadAddressInSalesAreas(address, areas);
+}
+
 /**
  * 고객사가 직접 입력한 확장 탐색 지역(예: "서울 마포구 합정동")을 저장합니다. 좌표는 저장 시점에
  * 한 번만 geocodeRegionLabel로 확정해두고(재탐색마다 다시 지오코딩하지 않음), 좌표를 못 찾아도
@@ -9093,7 +9122,59 @@ export type PermitLeadFilters = {
   limit?: number;
   period?: PermitLeadPeriod | "all";
   status?: string;
+  includeOutsideSalesArea?: boolean;
 };
+
+type LeadBusinessHourRow = {
+  lead_id: string;
+  weekday: number;
+  interval_index: number;
+  opens_at: string | null;
+  closes_at: string | null;
+  is_closed: boolean;
+};
+
+export async function listLeadBusinessHours(companyId: string, leadIds: string[]) {
+  if (!isProductionStoreConfigured() || !leadIds.length) return new Map<string, LeadBusinessHourInterval[]>();
+  const result = new Map<string, LeadBusinessHourInterval[]>();
+  for (let offset = 0; offset < leadIds.length; offset += 200) {
+    const ids = leadIds.slice(offset, offset + 200).map(encodeURIComponent).join(",");
+    const rows = await supabaseRequest<LeadBusinessHourRow[]>(
+      `lead_business_hour_intervals?select=lead_id,weekday,interval_index,opens_at,closes_at,is_closed&company_id=eq.${encodeURIComponent(companyId)}&source=eq.manual&lead_id=in.(${ids})&order=weekday,interval_index`
+    ).catch(() => []);
+    for (const row of rows) {
+      const current = result.get(row.lead_id) || [];
+      current.push({ weekday: row.weekday, intervalIndex: row.interval_index, opensAt: row.opens_at?.slice(0, 5), closesAt: row.closes_at?.slice(0, 5), isClosed: row.is_closed });
+      result.set(row.lead_id, current);
+    }
+  }
+  return result;
+}
+
+export async function saveLeadBusinessHours(
+  companyId: string,
+  leadId: string,
+  intervals: LeadBusinessHourInterval[],
+  actor: { userId?: string; name?: string }
+) {
+  const owned = await supabaseRequest<Array<{ id: string }>>(
+    `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(leadId)}&limit=1`
+  );
+  if (!owned.length) throw new Error("리드를 찾을 수 없습니다.");
+  await supabaseRequest(`lead_business_hour_intervals?company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&source=eq.manual`, { method: "DELETE" });
+  if (intervals.length) {
+    await supabaseRequest("lead_business_hour_intervals", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(intervals.map((item) => ({
+        company_id: companyId, lead_id: leadId, weekday: item.weekday, interval_index: item.intervalIndex,
+        opens_at: item.opensAt || null, closes_at: item.closesAt || null, is_closed: item.isClosed,
+        source: "manual", edited_by_user_id: actor.userId || null, edited_by_name: actor.name || null, updated_at: new Date().toISOString()
+      })))
+    });
+  }
+  return intervals;
+}
 
 export async function listPermitLeads(companyId: string, filters: PermitLeadFilters = {}): Promise<{ leads: PermitLeadItem[]; total: number }> {
   if (!isProductionStoreConfigured()) return { leads: [], total: 0 };
@@ -9116,6 +9197,12 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   ).catch(() => []);
 
   let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
+  const hours = await listLeadBusinessHours(companyId, leads.map((lead) => lead.id));
+  leads = leads.map((lead) => ({ ...lead, businessHourIntervals: hours.get(lead.id) || [] }));
+  if (!filters.includeOutsideSalesArea) {
+    const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
+    leads = salesAreas.length ? leads.filter((lead) => isAddressInSalesAreas(lead.address, salesAreas)) : [];
+  }
   if (filters.hasPhone) leads = leads.filter((lead) => Boolean(lead.phone));
 
   // 2026-09-07: 예전에는 total이 이미 상한으로 잘린 leads.length라서 실제 전체 건수와 달랐습니다
@@ -9257,7 +9344,7 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
   관심: "미팅 예정",
   "단가표 전달": "재연락 예정",
   "재방문 예정": "재연락 예정",
-  "거래 시작": "거래처 전환",
+  "거래 시작": "전환 진행",
   "통화 성공": "연락 완료",
   부재중: "전화 대상",
   "DM 발송": "DM 발송",
@@ -9270,6 +9357,10 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
   거절: "제외",
   제외: "제외"
 };
+
+export function resolvePermitLeadStatus(actionType: PermitLeadActionType, result?: string) {
+  return resolveVisitResultStatus(actionType, result) || (result && PERMIT_LEAD_RESULT_TO_STATUS[result]) || PERMIT_LEAD_ACTION_TO_STATUS[actionType] || "검토 필요";
+}
 
 /** 전화/DM/방문/보류/제외 등 영업 행동을 기록하고, 그 결과로 리드 상태를 갱신합니다. */
 export async function recordPermitLeadAction(
@@ -9302,7 +9393,7 @@ export async function recordPermitLeadAction(
     })
   });
 
-  const nextStatus = (input.result && PERMIT_LEAD_RESULT_TO_STATUS[input.result]) || PERMIT_LEAD_ACTION_TO_STATUS[input.actionType] || "검토 필요";
+  const nextStatus = resolvePermitLeadStatus(input.actionType, input.result);
   await supabaseRequest(
     `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,
     {
@@ -10122,6 +10213,15 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
     ).catch(() => []);
   }
 
+  const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
+  if (!salesAreas.length || !rows.length) return empty;
+  const candidateIds = rows.map((row) => row.id).map(encodeURIComponent).join(",");
+  const candidateAddresses = await supabaseRequest<Array<{ id: string; address: string | null }>>(
+    `business_permit_leads?select=id,address&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${candidateIds})`
+  ).catch(() => []);
+  const eligibleIds = new Set(candidateAddresses.filter((row) => isAddressInSalesAreas(row.address, salesAreas)).map((row) => row.id));
+  rows = rows.filter((row) => eligibleIds.has(row.id));
+
   // 2026-08-26 효율화: 리드를 한 건씩 순차로 보강하던 것을 findNearbyPermitLeads와 동일한
   // mapWithConcurrency 패턴으로 묶어 동시에 처리합니다(카카오 로컬 검색 호출 자체는 그대로 유지).
   const outcomes = await mapWithConcurrency(rows, LEAD_CONTACT_BACKFILL_CONCURRENCY, (row) =>
@@ -10168,6 +10268,7 @@ export async function convertPermitLeadToCustomer(
 ): Promise<{
   ok: boolean;
   customerId?: string;
+  existingCustomer?: boolean;
   message?: string;
   pricingAppliedCount?: number;
   pricingFailedCount?: number;
@@ -10197,7 +10298,7 @@ export async function convertPermitLeadToCustomer(
     }))
   );
   if (duplicateMatch) {
-    const reason = `이미 등록된 거래처(${duplicateMatch.reason})`;
+    const reason = `기존 거래처와 연결됨(${duplicateMatch.reason})`;
     const matchAudit = getLeadCustomerMatchAudit(duplicateMatch.reason);
     await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`, {
       method: "PATCH",
@@ -10209,16 +10310,17 @@ export async function convertPermitLeadToCustomer(
         matched_customer_at: new Date().toISOString(),
         matched_customer_method: matchAudit.method,
         matched_customer_confidence: matchAudit.confidence,
-        next_action: "제외 검토",
+        next_action: "거래처 확인",
         next_action_reasons: [reason],
-        status: "제외",
+        status: "거래처 전환",
         updated_at: new Date().toISOString()
       })
     });
     return {
-      ok: false,
+      ok: true,
       customerId: duplicateMatch.customerId,
-      message: `${duplicateMatch.customerName} 거래처와 중복되어 전환하지 않았습니다. (${duplicateMatch.reason})`
+      existingCustomer: true,
+      message: `${duplicateMatch.customerName} 기존 거래처와 연결했습니다. (${duplicateMatch.reason})`
     };
   }
 

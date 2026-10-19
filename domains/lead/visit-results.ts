@@ -35,7 +35,7 @@ export function needsVisitFollowUp(result: string): result is StandardVisitResul
 }
 
 export function getDefaultVisitFollowUpDate(base = new Date()) {
-  const date = new Date(base);
-  date.setDate(date.getDate() + 3);
-  return date.toISOString().slice(0, 10);
+  const kst = new Date(base.getTime() + 9 * 60 * 60 * 1000);
+  kst.setUTCDate(kst.getUTCDate() + 3);
+  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
 }

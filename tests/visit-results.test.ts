@@ -24,5 +24,7 @@ describe("standard visit results", () => {
     expect(needsVisitFollowUp("관심")).toBe(true);
     expect(needsVisitFollowUp("부재")).toBe(false);
     expect(getDefaultVisitFollowUpDate(new Date("2026-10-18T00:00:00.000Z"))).toBe("2026-10-21");
+    // 2026-10-18 08:00 KST: UTC 날짜가 전날이어도 KST 기준 +3일이어야 합니다.
+    expect(getDefaultVisitFollowUpDate(new Date("2026-10-17T23:00:00.000Z"))).toBe("2026-10-21");
   });
 });

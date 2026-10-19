@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { getPermitLeadQueues, ingestPermitLeadRows, listPermitLeads, PermitLeadIngestRow, PermitLeadPeriod } from "@/lib/store";
+import { getCompanySalesAdministrativeAreas, getPermitLeadQueues, ingestPermitLeadRows, listPermitLeads, PermitLeadIngestRow, PermitLeadPeriod } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +19,15 @@ export async function GET(request: NextRequest) {
   const grade = params.get("grade") || undefined;
   const hasPhone = params.get("hasPhone") === "true";
   const excludeExcluded = params.get("excludeExcluded") !== "false";
+  const includeOutsideSalesArea = params.get("includeOutsideSalesArea") === "true";
 
-  const [{ leads, total }, queues] = await Promise.all([
-    listPermitLeads(scope.companyId!, { period, industry, action, grade, hasPhone, excludeExcluded }),
-    getPermitLeadQueues(scope.companyId!)
+  const [{ leads, total }, queues, salesAreas] = await Promise.all([
+    listPermitLeads(scope.companyId!, { period, industry, action, grade, hasPhone, excludeExcluded, includeOutsideSalesArea }),
+    getPermitLeadQueues(scope.companyId!),
+    getCompanySalesAdministrativeAreas(scope.companyId!)
   ]);
 
-  return NextResponse.json({ leads, total, queues });
+  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0 });
 }
 
 // POST: 사업자 인허가 데이터 업로드(엑셀/CSV를 클라이언트에서 미리 파싱한 행 배열)를 일괄 적재합니다.

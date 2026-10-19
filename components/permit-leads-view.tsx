@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
+import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lead/business-hours";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
@@ -154,8 +155,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [hasInstagramOnly, setHasInstagramOnly] = useState(false);
   const [kakaoMatchFilter, setKakaoMatchFilter] = useState<"" | "matched_no_phone" | "unregistered" | "needs_confirmation">("");
+  const [businessHoursFilter, setBusinessHoursFilter] = useState<"" | "available" | "break">("");
   const [excludeExcluded, setExcludeExcluded] = useState(true);
   const [showClosedOrNonTarget, setShowClosedOrNonTarget] = useState(false);
+  const [showOutsideSalesArea, setShowOutsideSalesArea] = useState(false);
+  const [salesRegionsConfigured, setSalesRegionsConfigured] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -344,6 +348,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     if (gradeFilter) params.set("grade", gradeFilter);
     if (hasPhoneOnly) params.set("hasPhone", "true");
     if (!excludeExcluded) params.set("excludeExcluded", "false");
+    if (showOutsideSalesArea) params.set("includeOutsideSalesArea", "true");
 
     fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
@@ -354,11 +359,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         }
         setLeads(Array.isArray(payload.leads) ? payload.leads : []);
         setQueues(payload.queues || null);
+        setSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
         setLoadState("ready");
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showOutsideSalesArea]);
 
   useEffect(() => {
     loadLeads();
@@ -535,6 +541,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         if (kakaoMatchFilter === "needs_confirmation") return lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed;
         return lead.kakaoMatchAttempted === true && !lead.kakaoMatchMethod;
       })
+      .filter((lead) => {
+        if (!businessHoursFilter) return true;
+        const availability = getLeadVisitAvailability(lead.businessHourIntervals || []);
+        return businessHoursFilter === "available" ? availability.isVisitAvailableNow : availability.hasBreakToday;
+      })
       .filter((lead) => statusFilter !== QUOTE_FOLLOW_UP_STATUS_FILTER || lead.status === "견적 발송" || lead.status === "재연락 예정")
       .filter(
         (lead) =>
@@ -547,7 +558,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter, showClosedOrNonTarget]);
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -2086,6 +2097,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
           </p>
         ) : null}
         {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-violet-50 !px-3 !py-2 !text-violet-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
+        {!salesRegionsConfigured ? <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">회사 정보에서 영업 지역을 설정하면 신규 리드가 들어옵니다.</p> : null}
 
         <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -2098,6 +2110,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                 value={tableSearch}
               />
             </label>
+            <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖 보기</label>
+            <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "available" ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} type="button">지금 방문 가능</button>
+            <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "break" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} type="button">오늘 브레이크 있음</button>
             {leadQualityMode === "permit" ? <select
               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
               onChange={(event) => {
@@ -2889,7 +2904,10 @@ function PermitLeadDetailPanel({
   const [matchedExistingCustomer, setMatchedExistingCustomer] = useState(false);
   const [pricingFailureMessage, setPricingFailureMessage] = useState("");
   const [converting, setConverting] = useState(false);
+  const [conversionFailed, setConversionFailed] = useState(false);
   const [businessHoursDraft, setBusinessHoursDraft] = useState("");
+  const [businessHoursSaving, setBusinessHoursSaving] = useState(false);
+  const [businessHoursMessage, setBusinessHoursMessage] = useState("");
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
@@ -2942,6 +2960,8 @@ function PermitLeadDetailPanel({
     setHistoryOpen(false);
     setHistoryVisibleCount(5);
     setDetailActionMessage("");
+    setBusinessHoursDraft("");
+    setBusinessHoursMessage("");
     setResultOpen(Boolean(intent));
     setExternalSignals({
       googlePlaceUrl: lead.googlePlaceUrl || "",
@@ -3067,12 +3087,32 @@ function PermitLeadDetailPanel({
     return true;
   }
 
+  async function saveBusinessHours() {
+    setBusinessHoursSaving(true);
+    setBusinessHoursMessage("");
+    try {
+      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/business-hours`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quickInput: businessHoursDraft })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.message || "영업시간을 저장하지 못했습니다.");
+      onLeadUpdated({ ...lead, businessHourIntervals: payload.intervals || [] });
+      setBusinessHoursMessage("영업시간을 저장했습니다.");
+    } catch (error) {
+      setBusinessHoursMessage(error instanceof Error ? error.message : "영업시간을 저장하지 못했습니다.");
+    } finally { setBusinessHoursSaving(false); }
+  }
+
   async function convertLeadToCustomer() {
     setConverting(true);
+    setConversionFailed(false);
     const result = await onConvert(lead);
     if (result.customerId) {
       setConvertedCustomerId(result.customerId);
       setMatchedExistingCustomer(Boolean(result.existingCustomer));
+    } else if (!result.ok) {
+      setConversionFailed(true);
+      setDetailActionMessage("거래처 연결 실패 — 아래 버튼으로 다시 시도해 주세요.");
     }
     setPricingFailureMessage(result.pricingFailedCount ? result.message || "계약 단가 반영에 실패했습니다." : "");
     setConverting(false);
@@ -3353,7 +3393,7 @@ function PermitLeadDetailPanel({
               type="button"
             >
               {converting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
-              {convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처 확인" : "거래처 전환 완료") : converting ? "전환 중..." : "거래처로 전환"}
+              {convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처 확인" : "거래처 전환 완료") : converting ? "전환 중..." : conversionFailed ? "거래처 연결 다시 시도" : "거래처로 전환"}
             </button>
           </div>
 
@@ -3756,7 +3796,7 @@ function PermitLeadDetailPanel({
             ) : null}
           </div>
 
-          {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><div className="mt-2 flex gap-2"><button className="maju-button-secondary h-8 text-xs" disabled type="button">저장 구조 승인 후 저장</button><button className="maju-button-secondary h-8 text-xs" disabled type="button">지금 방문 가능 필터</button><button className="maju-button-secondary h-8 text-xs" disabled type="button">오늘 브레이크 있음</button></div></div> : null}
+          {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">현재 · {formatLeadBusinessHours(lead.businessHourIntervals || [])}</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><button className="maju-button-secondary mt-2 h-8 text-xs" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button>{businessHoursMessage ? <p className="mt-2 text-[11px] font-bold text-amber-900">{businessHoursMessage}</p> : null}</div> : null}
           <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={resultSectionRef}>
             <button aria-expanded={resultOpen} className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setResultOpen((value) => !value)} type="button">
               <div>

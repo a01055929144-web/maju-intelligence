@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 DB에 실행하지 마세요.
+-- 운영 적용 완료(2026-10-19). 재실행 금지.
 -- 요일별 영업 구간과 출처를 보관합니다. 담당자 입력(manual)이 외부 API보다 우선입니다.
 begin;
 
@@ -45,4 +45,4 @@ revoke all on public.lead_business_hour_intervals from public, anon, authenticat
 -- 복사하고, 2단계에서 customer_business_hour_intervals로 원본 구조를 복제합니다. 리드 테이블을
 -- 계속 참조하지 않아 리드 보존/삭제 정책과 거래처 운영시간이 결합되지 않게 합니다.
 
-rollback;
+commit;
