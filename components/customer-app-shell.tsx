@@ -43,7 +43,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
-  const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings";
+  const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings/company";
   const settingsLabel = mode === "admin-preview" ? "고객사" : "출발지";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
   const compactMapHome = fullBleed && hidePageTitle;

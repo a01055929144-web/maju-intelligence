@@ -26,6 +26,7 @@ import type { LeadActionRepository } from "@/domains/lead/lead-action";
 import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
+import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "@/domains/organization/staff-display-name";
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
@@ -1029,10 +1030,43 @@ export function groupRowsByColumnSignature(rows: Array<Record<string, unknown>>)
 
 export async function getCompanyStaffMemberOptions(companyId: string): Promise<CompanyStaffMemberOption[]> {
   if (!isProductionStoreConfigured()) return [];
-  const rows = await supabaseRequest<Array<{ id: string; role: string; app_users: { name: string | null } | null }>>(
-    `company_members?select=id,role,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active&order=created_at.asc`
+  const rows = await supabaseRequest<Array<{ id: string; role: string; user_id: string; app_users: { name: string | null } | null }>>(
+    `company_members?select=id,user_id,role,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active&order=created_at.asc`
   );
-  return rows.map((row) => ({ id: row.id, name: row.app_users?.name?.trim() || "이름 미등록 직원", role: row.role }));
+  const userIds = rows.map((row) => row.user_id).filter(Boolean);
+  const invitationNames = await getAcceptedStaffInvitationNames(companyId, userIds);
+  return rows.map((row) => ({
+    id: row.id,
+    name: resolveCompanyStaffDisplayName({ appUserName: row.app_users?.name, invitationEmployeeName: invitationNames.get(row.user_id) }),
+    role: row.role
+  }));
+}
+
+/** 직원 설정 선택지에 필요한 문자열만 읽어 거래처 원장 전체 로드를 피합니다. */
+export async function getCustomerAssignmentOptionValues(companyId: string) {
+  if (!isProductionStoreConfigured()) return { managers: [] as string[], vehicles: [] as string[] };
+  const rows = await supabaseRequest<Array<{ delivery_manager: string | null; delivery_vehicle: string | null }>>(
+    `normalized_customers?select=delivery_manager,delivery_vehicle&company_id=eq.${encodeURIComponent(companyId)}&order=customer_name.asc&limit=5000`
+  );
+  const unique = (values: Array<string | null>) =>
+    Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "ko"));
+  return {
+    managers: unique(rows.map((row) => row.delivery_manager)),
+    vehicles: unique(rows.map((row) => row.delivery_vehicle))
+  };
+}
+
+async function getAcceptedStaffInvitationNames(companyId: string, userIds: string[]) {
+  if (!userIds.length) return new Map<string, string>();
+  const filter = userIds.map((id) => encodeURIComponent(id)).join(",");
+  const rows = await supabaseRequest<Array<{ accepted_by: string | null; employee_name: string | null }>>(
+    `staff_invitations?select=accepted_by,employee_name&company_id=eq.${encodeURIComponent(companyId)}&status=eq.accepted&accepted_by=in.(${filter})&order=accepted_at.desc`
+  ).catch(() => []);
+  const names = new Map<string, string>();
+  rows.forEach((row) => {
+    if (row.accepted_by && row.employee_name && !names.has(row.accepted_by)) names.set(row.accepted_by, row.employee_name);
+  });
+  return names;
 }
 
 export async function getDeliveryTerritories(companyId: string): Promise<DeliveryTerritoryItem[]> {
@@ -2617,7 +2651,7 @@ export async function createStaffAccountDirect(input: DirectStaffAccountInput, a
   };
 }
 
-export async function getCompanyStaffInvitations(companyId: string): Promise<{ invitations: StaffInvitation[]; persisted: boolean }> {
+export async function getCompanyStaffInvitations(companyId: string, options: { includeMatchedCustomerCounts?: boolean } = {}): Promise<{ invitations: StaffInvitation[]; persisted: boolean }> {
   if (!companyId) throw new Error("고객사 ID가 필요합니다.");
 
   if (!isProductionStoreConfigured()) {
@@ -2684,7 +2718,7 @@ export async function getCompanyStaffInvitations(companyId: string): Promise<{ i
   // 매칭되는지"를 미리 보여줘서, 관리자가 0곳인 직원만 골라 수동으로 연결할 수 있게 합니다.
   // 거래처 목록은 회사당 한 번만 불러와 재사용합니다(초대 건마다 다시 조회하지 않음).
   const acceptedInvitations = invitations.filter((invitation) => invitation.status === "accepted");
-  if (acceptedInvitations.length) {
+  if (acceptedInvitations.length && options.includeMatchedCustomerCounts !== false) {
     const { customers } = await getCustomerMaster(companyId).catch(() => ({ customers: [] as CustomerMasterItem[] }));
     for (const invitation of acceptedInvitations) {
       const assignmentScope: CustomerAssignmentScope = {
@@ -2950,11 +2984,11 @@ export async function deleteStaffInvitation(
 async function getStaffAssignmentOverride(
   companyId: string,
   userId: string
-): Promise<{ assignedManagerName?: string; assignedVehicle?: string } | null> {
+): Promise<{ assignedManagerName?: string; assignedVehicle?: string; employeeName?: string } | null> {
   if (!isProductionStoreConfigured()) return null;
 
-  const rows = await supabaseRequest<Array<{ assigned_manager_name: string | null; assigned_vehicle: string | null }>>(
-    `staff_invitations?select=assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=eq.${encodeURIComponent(
+  const rows = await supabaseRequest<Array<{ assigned_manager_name: string | null; assigned_vehicle: string | null; employee_name: string | null }>>(
+    `staff_invitations?select=assigned_manager_name,assigned_vehicle,employee_name&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=eq.${encodeURIComponent(
       userId
     )}&status=eq.accepted&order=accepted_at.desc&limit=1`
   ).catch(() => []);
@@ -2963,7 +2997,8 @@ async function getStaffAssignmentOverride(
   if (!row) return null;
   return {
     assignedManagerName: row.assigned_manager_name || undefined,
-    assignedVehicle: row.assigned_vehicle || undefined
+    assignedVehicle: row.assigned_vehicle || undefined,
+    employeeName: normalizeInvitedEmployeeName(row.employee_name)
   };
 }
 
@@ -2973,6 +3008,8 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
   assignedManagerName?: string;
   assignedVehicle?: string;
   companyOwnerName?: string;
+  companyDisplayName?: string;
+  invitedEmployeeName?: string;
   routeUnitName?: string;
   vehicleDisplayName?: string;
   userPhone?: string;
@@ -2985,11 +3022,11 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     Array<{
       id: string;
       role: StaffInvitation["role"] | "owner" | "member";
-      app_users: { phone: string | null; status: string | null } | null;
+      app_users: { name: string | null; phone: string | null; status: string | null } | null;
       companies: { owner_name: string | null; status: string | null } | null;
     }>
   >(
-    `company_members?select=id,role,app_users(status,phone),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
+    `company_members?select=id,role,app_users(status,phone,name),companies(status,owner_name)&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(
       input.userId
     )}&status=eq.active&limit=1`
   );
@@ -3007,6 +3044,11 @@ export async function getActiveCustomerMembership(input: { companyId: string; us
     companyMemberId: member.id,
     assignedManagerName: assignment?.assignedManagerName,
     assignedVehicle: assignment?.assignedVehicle,
+    companyDisplayName: resolveCompanyStaffDisplayName({
+      appUserName: member.app_users?.name,
+      invitationEmployeeName: assignment?.employeeName
+    }),
+    invitedEmployeeName: assignment?.employeeName,
     companyOwnerName: member.companies?.owner_name?.trim() || undefined,
     routeUnitName: routeUnitDisplay.routeUnitName,
     vehicleDisplayName: routeUnitDisplay.vehicleDisplayName,
@@ -3072,9 +3114,13 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   if (isCompanyClosedStatus(company.status)) {
     throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
   }
-  const displayName = input.name || invitation.employee_name || "모바일 직원";
+  const displayName = resolveCompanyStaffDisplayName({ appUserName: input.name, invitationEmployeeName: invitation.employee_name });
+  const socialProfileName = input.name?.trim() || "모바일 직원";
   const loginEmail = input.email || `kakao-${kakaoUserId}@maju.local`;
   const now = new Date().toISOString();
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
+    `app_users?select=id,name&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
+  ).catch(() => []);
 
   const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
     method: "POST",
@@ -3088,7 +3134,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
         email: loginEmail,
         kakao_user_id: kakaoUserId,
         last_login_at: now,
-        name: displayName,
+        name: preserveSocialProfileName(existingUsers[0]?.name, socialProfileName),
         phone: invitation.employee_phone || normalizeKakaoPhone(input.phoneNumber) || null,
         role: "customer_member",
         status: "active"
@@ -3123,7 +3169,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       companyId: invitation.company_id,
       companyName: company.name,
       email: user.email || loginEmail,
-      name: user.name || displayName,
+      name: displayName,
       persisted: true,
       userId: user.id,
       workspaceRole: existingMembership.role || invitation.role || "member",
@@ -3169,7 +3215,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     companyId: invitation.company_id,
     companyName: company.name,
     email: user.email || loginEmail,
-    name: user.name || displayName,
+    name: displayName,
     persisted: true,
     userId: user.id,
     workspaceRole: invitation.role || "member",
@@ -3242,6 +3288,9 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
   }
 
   const now = new Date().toISOString();
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
+    `app_users?select=id,name&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
+  ).catch(() => []);
   const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
     method: "POST",
     headers: {
@@ -3254,7 +3303,7 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
         email: loginEmail,
         kakao_user_id: kakaoUserId,
         last_login_at: now,
-        name: displayName,
+        name: preserveSocialProfileName(existingUsers[0]?.name, displayName),
         role: "customer_user",
         status: "active"
       }
@@ -3352,9 +3401,13 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
   if (isCompanyClosedStatus(company.status)) {
     throw new Error("이 회사는 탈퇴(폐쇄) 처리되어 더 이상 로그인할 수 없습니다. 회사 관리자에게 문의해주세요.");
   }
-  const displayName = input.name || invitation.employee_name || "모바일 직원";
+  const displayName = resolveCompanyStaffDisplayName({ appUserName: input.name, invitationEmployeeName: invitation.employee_name });
+  const socialProfileName = input.name?.trim() || "모바일 직원";
   const loginEmail = input.email || `${input.provider}-${providerUserId}@maju.local`;
   const now = new Date().toISOString();
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
+    `app_users?select=id,name&${providerColumn}=eq.${encodeURIComponent(providerUserId)}&limit=1`
+  ).catch(() => []);
 
   const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>(`app_users?on_conflict=${providerColumn}`, {
     method: "POST",
@@ -3368,7 +3421,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
         email: loginEmail,
         [providerColumn]: providerUserId,
         last_login_at: now,
-        name: displayName,
+        name: preserveSocialProfileName(existingUsers[0]?.name, socialProfileName),
         phone: invitation.employee_phone || null,
         role: "customer_member",
         status: "active"
@@ -3397,7 +3450,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
       companyId: invitation.company_id,
       companyName: company.name,
       email: user.email || loginEmail,
-      name: user.name || displayName,
+      name: displayName,
       persisted: true,
       userId: user.id,
       workspaceRole: existingMembership.role || invitation.role || "member",
@@ -3443,7 +3496,7 @@ export async function acceptStaffOAuthInvitation(input: StaffOAuthAcceptInput): 
     companyId: invitation.company_id,
     companyName: company.name,
     email: user.email || loginEmail,
-    name: user.name || displayName,
+    name: displayName,
     persisted: true,
     userId: user.id,
     workspaceRole: invitation.role || "member",
@@ -3477,6 +3530,9 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
   }
 
   const now = new Date().toISOString();
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
+    `app_users?select=id,name&${providerColumn}=eq.${encodeURIComponent(providerUserId)}&limit=1`
+  ).catch(() => []);
   const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>(`app_users?on_conflict=${providerColumn}`, {
     method: "POST",
     headers: {
@@ -3489,7 +3545,7 @@ export async function createPersonalOAuthWorkspace(input: PersonalOAuthWorkspace
         email: loginEmail,
         [providerColumn]: providerUserId,
         last_login_at: now,
-        name: displayName,
+        name: preserveSocialProfileName(existingUsers[0]?.name, displayName),
         role: "customer_user",
         status: "active"
       }
@@ -3605,10 +3661,13 @@ function toStaffVehicleLocation(row: {
     const name = value?.trim() || "";
     return /^(개인 사용자|배송기사|모바일 직원)$/.test(name) ? "" : name;
   };
+  const companyDisplayName = resolveCompanyStaffDisplayName({
+    appUserName: identity?.userName,
+    invitationEmployeeName: identity?.employeeName
+  });
   const displayName =
+    usableName(companyDisplayName) ||
     usableName(identity?.assignedManagerName) ||
-    usableName(identity?.employeeName) ||
-    usableName(identity?.userName) ||
     usableName(row.driver_name || undefined) ||
     "이름 미등록 직원";
   return {
@@ -4471,14 +4530,11 @@ export async function getCustomerMaster(
     const staffMemberIds = Array.from(new Set(fetched.map((row) => row.assigned_staff_member_id).filter((value): value is string => Boolean(value))));
     const vehicleIds = Array.from(new Set(fetched.map((row) => row.delivery_vehicle_id).filter((value): value is string => Boolean(value))));
     const territoryIds = Array.from(new Set(fetched.map((row) => row.delivery_territory_id).filter((value): value is string => Boolean(value))));
-    const staffMemberIdFilter = staffMemberIds.map((value) => encodeURIComponent(value)).join(",");
     const vehicleIdFilter = vehicleIds.map((value) => encodeURIComponent(value)).join(",");
     const territoryIdFilter = territoryIds.map((value) => encodeURIComponent(value)).join(",");
     const [staffRows, vehicleRows, territoryRows] = await Promise.all([
       staffMemberIds.length
-        ? supabaseRequest<Array<{ app_users: { name: string | null } | null; id: string }>>(
-            `company_members?select=id,app_users(name)&company_id=eq.${encodeURIComponent(id)}&id=in.(${staffMemberIdFilter})`
-          )
+        ? getCompanyStaffMemberOptions(id).then((options) => options.filter((option) => staffMemberIds.includes(option.id)))
         : Promise.resolve([]),
       vehicleIds.length
         ? supabaseRequest<Array<{ id: string; name: string | null }>>(
@@ -4491,7 +4547,7 @@ export async function getCustomerMaster(
           )
         : Promise.resolve([])
     ]);
-    const staffNameByMemberId = new Map(staffRows.map((row) => [row.id, row.app_users?.name?.trim() || null]));
+    const staffNameByMemberId = new Map(staffRows.map((row) => [row.id, row.name?.trim() || null]));
     const vehicleNameById = new Map(vehicleRows.map((row) => [row.id, row.name?.trim() || null]));
     const territoryNameById = new Map(territoryRows.map((row) => [row.id, row.name?.trim() || null]));
     fetched = fetched.map((row) => ({
@@ -10168,10 +10224,8 @@ export async function convertPermitLeadToCustomer(
 
   let selectedStaffName: string | undefined;
   if (assignment?.assignedStaffMemberId) {
-    const selectedStaff = await supabaseRequest<Array<{ app_users: { name: string | null } | null }>>(
-      `company_members?select=app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(assignment.assignedStaffMemberId)}&status=eq.active&limit=1`
-    ).catch(() => []);
-    selectedStaffName = selectedStaff[0]?.app_users?.name?.trim() || undefined;
+    const selectedStaff = await getCompanyStaffMemberOptions(companyId).catch(() => []);
+    selectedStaffName = selectedStaff.find((staff) => staff.id === assignment.assignedStaffMemberId)?.name;
   }
 
   const created = await upsertCustomerMaster(
@@ -10252,10 +10306,13 @@ export async function getPermitLeadConversionPreview(companyId: string, leadId: 
   ).catch(() => []);
   let leadStaff: { staffMemberId: string; staffName: string } | undefined;
   if (actions[0]?.actor_user_id) {
-    const members = await supabaseRequest<Array<{ id: string; app_users: { name: string | null } | null }>>(
-      `company_members?select=id,app_users(name)&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(actions[0].actor_user_id)}&status=eq.active&limit=1`
+    const members = await supabaseRequest<Array<{ id: string }>>(
+      `company_members?select=id&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(actions[0].actor_user_id)}&status=eq.active&limit=1`
     ).catch(() => []);
-    if (members[0]) leadStaff = { staffMemberId: members[0].id, staffName: members[0].app_users?.name?.trim() || actions[0].actor_name || "리드 담당자" };
+    if (members[0]) {
+      const staffOptions = await getCompanyStaffMemberOptions(companyId).catch(() => []);
+      leadStaff = { staffMemberId: members[0].id, staffName: staffOptions.find((staff) => staff.id === members[0].id)?.name || actions[0].actor_name || "리드 담당자" };
+    }
   }
   return { recommendation, leadStaff };
 }

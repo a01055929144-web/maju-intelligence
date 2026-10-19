@@ -68,6 +68,7 @@ import type { LoadingPositionMediaItem } from "@/components/loading-position-gal
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import { normalizeStoredMapPanelMode, parseStoredLeadVisibility } from "@/lib/map-preferences";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -379,6 +380,7 @@ const workspaceViewDescriptions: Record<WorkspaceView, string> = {
 const originMarkerId = "origin-hub";
 export const tmapWaypointLimit = 15;
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v1";
+const MAP_LEADS_VISIBLE_STORAGE_KEY = "maju:map-leads-visible:v1";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
@@ -451,16 +453,20 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
   const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
   useEffect(() => {
-    const savedMode = window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY);
-    if (
-      savedMode === "split" ||
-      savedMode === "driver" ||
-      savedMode === "customer" ||
-      savedMode === "newLead" ||
-      savedMode === "salesLead" ||
-      savedMode === "map"
-    ) {
-      setMapPanelMode(savedMode);
+    try {
+      const savedMode = window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY);
+      // v1에 저장된 리드 패널 값은 과거에 리드 표시까지 강제로 켰습니다. 이제 지도 패널과
+      // 마커 표시 여부를 분리하므로 거래처 패널로 안전하게 이관합니다.
+      const compatibleMode = normalizeStoredMapPanelMode(savedMode);
+      if (compatibleMode) {
+        setMapPanelModeState(compatibleMode);
+        setLeftCollapsed(compatibleMode === "customer" || compatibleMode === "map");
+        setRightCollapsed(compatibleMode === "driver" || compatibleMode === "map");
+        if (compatibleMode === "customer") setRightPanelTab("stores");
+      }
+      setShowAllLeadsOnMap(parseStoredLeadVisibility(window.localStorage.getItem(MAP_LEADS_VISIBLE_STORAGE_KEY)));
+    } catch {
+      // 브라우저 저장소가 차단돼도 기본값(거래처만 표시)으로 지도를 사용할 수 있어야 합니다.
     }
   }, []);
   const [liveVehicleLocations, setLiveVehicleLocations] = useState<StaffVehicleLocation[]>(staffVehicleLocations);
@@ -635,7 +641,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 거치지 않고 리드 데이터를 불러오고, 신규/영업 구분과 지도 마커·목록을 같은 기준으로 맞춥니다.
   function setMapPanelMode(mode: MapPanelMode) {
     setMapPanelModeState(mode);
-    window.localStorage.setItem(MAP_PANEL_MODE_STORAGE_KEY, mode);
+    try {
+      window.localStorage.setItem(MAP_PANEL_MODE_STORAGE_KEY, mode === "newLead" || mode === "salesLead" ? "customer" : mode);
+    } catch {
+      // 저장소 차단 시 현재 탭에서만 상태를 유지합니다.
+    }
     if (mode === "split") {
       setLeftCollapsed(false);
       setRightCollapsed(false);
@@ -658,9 +668,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       return;
     }
     setRightPanelTab("leads");
-    setShowAllLeadsOnMap(true);
+    setMapLeadsVisible(true);
     setShowDismissedLeadsOnMap(false);
     setMapLeadTypeFilter(mode === "newLead" ? "new" : "sales");
+  }
+
+  function setMapLeadsVisible(visible: boolean) {
+    setShowAllLeadsOnMap(visible);
+    try {
+      window.localStorage.setItem(MAP_LEADS_VISIBLE_STORAGE_KEY, String(visible));
+    } catch {
+      // 저장소 차단 시 현재 탭에서만 상태를 유지합니다.
+    }
   }
   // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
   // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
@@ -1965,9 +1984,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 className={`flex h-9 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-semibold transition ${
                   showAllLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"
                 }`}
-                onClick={() =>
-                  setShowAllLeadsOnMap((value) => {
-                    const next = !value;
+                onClick={() => {
+                    const next = !showAllLeadsOnMap;
                     setRightPanelTab(next ? "leads" : "stores");
                     if (next) {
                       setLeftCollapsed(true);
@@ -1978,8 +1996,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       setRightCollapsed(false);
                       setMapPanelModeState("customer");
                     }
-                    return next;
-                  })
+                    setMapLeadsVisible(next);
+                  }
                 }
                 title="지도에 활성 신규·영업 리드 전체를 표시합니다."
                 type="button"
@@ -2056,7 +2074,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <div className="shrink-0 px-4 pt-3">
             <Link
               className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
-              href="/dashboard/settings"
+              href="/dashboard/settings/company"
             >
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>물류 출발지 주소가 아직 설정되지 않아, 배송·영업 거리가 기본 주소 기준으로 계산되고 있습니다. 회사 설정에서 출발지 주소를 등록해주세요.</span>
@@ -2186,7 +2204,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                           setPreviewLeadId(lead.id);
                           // 검색 결과에서 리드를 고르면 해당 마커와 우측 리드 목록도 같은 대상을
                           // 가리키도록 전체 리드 레이어를 함께 켭니다. 이미 켜져 있으면 변화가 없습니다.
-                          setShowAllLeadsOnMap(true);
+                          setMapLeadsVisible(true);
                           setRightPanelTab("leads");
                           setMapPanelMode(getPermitLeadType(lead) === "new" ? "newLead" : "salesLead");
                           setShowExternalResults(false);

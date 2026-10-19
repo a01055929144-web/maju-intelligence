@@ -318,7 +318,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
           />
         </section>
 
-        <section className="maju-section-card">
+        {showHoldModules ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-100">
               <FileText className="mr-1 h-3.5 w-3.5" />
@@ -348,7 +348,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
             onSave={() => void saveSection("quotes")}
             state={saveStates.quotes}
           />
-        </section>
+        </section> : null}
 
         <section className="maju-section-card">
           <div className="maju-card-header">

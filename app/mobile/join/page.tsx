@@ -46,6 +46,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
                 <div>
                   <p className="text-lg font-bold text-slate-950">{invitePreview.companyName}</p>
                   <p className="mt-1 text-sm font-medium text-slate-600">{invitePreview.employeeName} · {invitePreview.maskedPhone || "연락처 미등록"}</p>
+                  <p className="mt-2 rounded-lg bg-white/80 px-3 py-2 text-sm font-black text-teal-900">이 이름으로 등록됩니다: {invitePreview.employeeName}</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">담당 업무 · {getRoleLabel(invitePreview.role)}</p>
                   {invitePreview.status === "pending" ? (
                     <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-700">

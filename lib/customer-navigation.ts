@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, Building2, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck } from "lucide-react";
+import { BarChart3, Bot, Boxes, Building2, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
 
 export type CustomerWorkspaceKey =
   | "dashboard"
@@ -21,6 +21,7 @@ export type CustomerWorkspaceKey =
   | "assistant"
   | "report"
   | "settings"
+  | "settings-staff"
   | "data"
   | "data-management";
 
@@ -54,15 +55,16 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/dashboard", icon: MapPinned, label: "지도" },
       { active: "routes-today", description: "오늘 배송 순서와 완료 상태", href: "/routes/today", icon: Route, label: "오늘 코스" },
       { active: "delivery-history", description: "날짜별 운행·배송 완료 기록", href: "/dashboard?view=history", icon: History, label: "배송 이력" },
-      { active: "territory", description: "배송 권역과 호차·차량 관리", href: "/dashboard/settings?section=tms#territory-settings", icon: Truck, label: "권역·호차" }
+      { active: "territory", description: "배송 권역과 호차·차량 관리", href: "/dashboard/settings/routes", icon: Truck, label: "권역·호차" }
     ]
   },
   {
     label: "설정",
     items: [
+      { active: "settings", description: "회사, 출발지와 알림 기준", href: "/dashboard/settings/company", icon: Settings, label: "회사 정보" },
+      { active: "settings-staff", description: "직원 이름, 권한과 담당 업무", href: "/dashboard/settings/staff", icon: Users, label: "직원 관리" },
       { active: "data", description: "거래처·매출·매입 데이터 등록", href: "/", icon: FileSpreadsheet, label: "엑셀 업로드" },
-      { active: "data-management", description: "업로드, 저장, 누락 확인", href: "/customers/data", icon: Database, label: "업로드 이력" },
-      { active: "settings", description: "회사, 직원, 권한과 운영 기준", href: "/dashboard/settings?section=company#company-settings", icon: Settings, label: "회사·직원 설정" }
+      { active: "data-management", description: "업로드, 저장, 누락 확인", href: "/customers/data", icon: Database, label: "업로드 이력" }
     ]
   }
   // 단체메시지는 카카오 연동 범위가 확정될 때까지 메뉴에도 "준비 중" 항목을 만들지 않습니다.

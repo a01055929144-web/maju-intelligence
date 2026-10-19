@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Fragment, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Trash2, Users, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Pencil, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
@@ -481,7 +481,19 @@ export function StaffManagementPanel({
                       <Fragment key={invitation.id}>
                         <tr className="border-b border-slate-100 align-top hover:bg-slate-50/60">
                           <td className="max-w-[180px] px-3 py-3">
-                            <p className="truncate font-black text-slate-950">{invitation.employeeName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="min-w-0 flex-1 truncate font-black text-slate-950">{invitation.employeeName}</p>
+                              <button
+                                aria-label={`${invitation.employeeName} 이름 수정`}
+                                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800 disabled:opacity-40"
+                                disabled={!canManageMembers}
+                                onClick={() => setExpandedId(expanded ? "" : invitation.id)}
+                                type="button"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                수정
+                              </button>
+                            </div>
                             <p className="mt-1 truncate text-xs font-bold text-slate-500">{formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
                           </td>
                           <td className="px-3 py-3">

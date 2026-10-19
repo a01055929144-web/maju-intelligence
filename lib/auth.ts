@@ -114,7 +114,11 @@ export async function getCustomerSession() {
       companyMemberId: membership.companyMemberId,
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,
-      operationalDisplayName: role === "owner" ? membership.companyOwnerName : session.operationalDisplayName,
+      invitedEmployeeName: membership.invitedEmployeeName || session.invitedEmployeeName,
+      operationalDisplayName:
+        role === "owner"
+          ? membership.companyOwnerName || membership.companyDisplayName
+          : membership.companyDisplayName || session.operationalDisplayName,
       operationalPhone: membership.userPhone || session.operationalPhone,
       routeUnitName: membership.routeUnitName,
       vehicleDisplayName: membership.vehicleDisplayName,
@@ -225,7 +229,7 @@ export function getCustomerAssignmentKeys(session: CustomerSession | null): Cust
 /** Returns the stable operations-facing name used by delivery, GPS, and assignment screens. */
 export function getCustomerOperationalName(session: CustomerSession | null) {
   if (!session) return "";
-  const candidates = [session.assignedManagerName, session.invitedEmployeeName, session.operationalDisplayName, session.name];
+  const candidates = [session.invitedEmployeeName, session.operationalDisplayName, session.assignedManagerName, session.name];
   for (const candidate of candidates) {
     const normalized = candidate?.trim();
     if (normalized && !/^(개인 사용자|직원|모바일 직원|배송기사|모바일 담당자)$/.test(normalized)) return normalized;

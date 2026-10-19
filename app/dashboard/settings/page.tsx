@@ -1,116 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
-import { CustomerAppShell } from "@/components/customer-app-shell";
-import { customerHasCapability, getCustomerSession } from "@/lib/auth";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
-import { getBusinessNumberExceptions, getCompanyJobTitles, getCompanySettings, getCompanyStaffInvitations, getCompanyStaffMemberOptions, getCustomerMaster, getDeliveryTerritories, listDeliveryRouteUnits, vehicleMasterRepository } from "@/lib/store";
-import { BusinessNumberExceptionsPanel } from "./business-number-exceptions-panel";
-import { CompanyClosurePanel } from "./company-closure-panel";
-import { CompanySettingsForm } from "./settings-form";
-import { StaffManagementPanel } from "./staff-management-panel";
-import { SalesKpiSettingsPanel } from "./sales-kpi-settings-panel";
-import { TerritoryManagementPanel } from "./territory-management-panel";
-import { RouteUnitManagementPanel } from "./route-unit-management-panel";
+import { getCustomerSession } from "@/lib/auth";
+import { LegacySettingsRedirect } from "./legacy-settings-redirect";
 
-export default async function CompanySettingsPage() {
+const SECTION_ROUTES: Record<string, string> = {
+  advanced: "/dashboard/settings/advanced",
+  company: "/dashboard/settings/company",
+  staff: "/dashboard/settings/staff",
+  tms: "/dashboard/settings/routes"
+};
+
+export default async function LegacyCompanySettingsPage({ searchParams }: { searchParams?: Promise<{ section?: string }> }) {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
-
-  const [company, staff, businessNumberExceptions, customerMaster, jobTitles, territories, territoryStaff, routeUnits, vehicleMaster] = await Promise.all([
-    getCompanySettings(session.companyId, session.companyName),
-    getCompanyStaffInvitations(session.companyId).catch(() => ({ invitations: [], persisted: false })),
-    getBusinessNumberExceptions(session.companyId).catch(() => ({ exceptions: [], persisted: false })),
-    getCustomerMaster(session.companyId).catch(() => ({ customers: [], source: "empty" as const, truncated: false })),
-    getCompanyJobTitles(session.companyId).catch(() => ({ jobTitles: [], persisted: false })),
-    getDeliveryTerritories(session.companyId).catch(() => []),
-    getCompanyStaffMemberOptions(session.companyId).catch(() => []),
-    listDeliveryRouteUnits(session.companyId).catch(() => []),
-    listVehicleMaster(vehicleMasterRepository, session.companyId).catch(() => ({ available: false, vehicles: [] }))
-  ]);
-
-  // 직원 배정 기준(담당자명/배송차량)을 자유 입력이 아니라 실제 거래처에 등록된 값 중에서
-  // 고르게 하기 위한 목록입니다. 새 이름이 필요하면 화면에서 바로 추가할 수 있습니다.
-  // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 저장 시점에는
-  // 이제 trim()하지만(lib/store.ts의 upsertCustomerMaster), 그 전에 이미 앞뒤 공백이 섞여 저장된
-  // 기존 거래처 레코드가 있으면 눈에는 똑같아 보이는 값이 서로 다른 옵션으로 두 번 나타납니다.
-  // 목록을 만들 때도 trim() 기준으로 모아 이런 레거시 중복이 드롭다운에 더 이상 갈라져 보이지
-  // 않도록 합니다(저장된 원본 값 자체를 고치는 것은 아니며, 표시만 정리합니다).
-  const managerOptions = Array.from(
-    new Set(customerMaster.customers.map((customer) => customer.deliveryManager?.trim()).filter((value): value is string => Boolean(value)))
-  ).sort((a, b) => a.localeCompare(b, "ko"));
-  const vehicleOptions = Array.from(
-    new Set(customerMaster.customers.map((customer) => customer.deliveryVehicle?.trim()).filter((value): value is string => Boolean(value)))
-  ).sort((a, b) => a.localeCompare(b, "ko"));
-
-  return (
-    <CustomerAppShell
-      active="settings"
-      companyName={session.companyName}
-      rightAction={
-          <Link
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-            href="/dashboard"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            대시보드
-          </Link>
-      }
-      subtitle="회사, 출발지, 직원 권한을 관리합니다."
-      showHoldModules={areHoldModulesEnabled(session.companyId)}
-      title="회사 설정"
-      userName={session.name}
-      workspaceRole={session.workspaceRole}
-    >
-      <section className="mx-auto max-w-[1560px] px-3 py-3 sm:px-4 sm:py-4">
-        <nav aria-label="회사 설정 바로가기" className="maju-toolbar-scroll mb-4 flex items-center gap-1 overflow-x-auto border-b border-slate-200">
-          {[
-            ["#company-settings", "회사·출발지"],
-            ["#staff-settings", "직원·권한"],
-            ["#territory-settings", "배송 권역"],
-            ["#route-unit-settings", "호차·차량"],
-            ["#sales-kpi-settings", "영업 KPI"],
-            ["#business-number-settings", "사업자번호 예외"],
-            ...(session.workspaceRole === "owner" ? [["#company-closure", "회사 이용 종료"]] : [])
-          ].map(([href, label]) => (
-            <a className="flex h-11 shrink-0 items-center px-3 text-sm font-semibold text-slate-500 transition hover:bg-slate-100/70 hover:text-slate-950" href={href} key={href}>
-              {label}
-            </a>
-          ))}
-        </nav>
-        <div className="space-y-5">
-          <div className="scroll-mt-24" id="company-settings"><CompanySettingsForm initial={company} showHoldModules={areHoldModulesEnabled(session.companyId)} /></div>
-          <div className="scroll-mt-24" id="staff-settings">
-            <StaffManagementPanel
-              canManageMembers={customerHasCapability(session, "manage_members")}
-              initialInvitations={staff.invitations}
-              initialJobTitles={jobTitles.jobTitles}
-              managerOptions={managerOptions}
-              vehicleOptions={vehicleOptions}
-            />
-          </div>
-          <div className="scroll-mt-24" id="territory-settings">
-            <TerritoryManagementPanel
-              canManage={customerHasCapability(session, "manage_company")}
-              initialStaff={territoryStaff}
-              initialTerritories={territories}
-            />
-          </div>
-          <div className="scroll-mt-24" id="route-unit-settings">
-            <RouteUnitManagementPanel
-              canManage={customerHasCapability(session, "manage_company")}
-              initialRouteUnits={routeUnits}
-              initialStaff={territoryStaff}
-              initialTerritories={territories}
-              initialVehicles={vehicleMaster.vehicles}
-            />
-          </div>
-          <div className="scroll-mt-24" id="sales-kpi-settings"><SalesKpiSettingsPanel canManage={customerHasCapability(session, "manage_company")} /></div>
-          <div className="scroll-mt-24" id="business-number-settings"><BusinessNumberExceptionsPanel initialExceptions={businessNumberExceptions.exceptions} /></div>
-          {session.workspaceRole === "owner" ? <div className="scroll-mt-24" id="company-closure"><CompanyClosurePanel companyName={company.name} /></div> : null}
-        </div>
-      </section>
-    </CustomerAppShell>
-  );
+  const section = (await searchParams)?.section;
+  if (section && SECTION_ROUTES[section]) redirect(SECTION_ROUTES[section]);
+  return <LegacySettingsRedirect />;
 }
