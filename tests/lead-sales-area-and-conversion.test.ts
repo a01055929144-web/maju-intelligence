@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractLeadAdministrativeArea,
+  getAdministrativeAreaForEnrichedAddress,
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
@@ -25,6 +26,12 @@ describe("lead sales area and conversion state", () => {
   it("normalizes the same administrative area used by ingestion and database filters", () => {
     expect(extractLeadAdministrativeArea("서울 강남구 테헤란로 1")).toBe("서울특별시 강남구");
     expect(extractLeadAdministrativeArea("경기도 성남시 분당구 판교로 1")).toBe("경기도 성남시");
+    expect(extractLeadAdministrativeArea("서울특별시 송파구 올림픽로 300")).toBe("서울특별시 송파구");
+  });
+
+  it("fills the administrative area when enrichment discovers the first address", () => {
+    expect(getAdministrativeAreaForEnrichedAddress(null, "서울특별시 송파구 올림픽로 300")).toBe("서울특별시 송파구");
+    expect(getAdministrativeAreaForEnrichedAddress("서울특별시 강남구", "서울특별시 송파구")).toBeUndefined();
   });
 
   it("classifies matched customers by real sales activity, excluding technical records", () => {

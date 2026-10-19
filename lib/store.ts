@@ -9,6 +9,7 @@ import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicat
 import type { LeadBusinessHourInterval } from "../domains/lead/business-hours";
 import {
   extractLeadAdministrativeArea,
+  getAdministrativeAreaForEnrichedAddress,
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
@@ -10020,7 +10021,10 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     if ((!row.industry_primary || row.industry_primary === "미분류") && placeLinks.enrichedIndustry) payload.industry_primary = placeLinks.enrichedIndustry;
     // 주소 미확인 리드 보강(2026-08-24 피드백: "영업리드들의 정보들이 비어져있는게 많네") — 인허가
     // 원본 데이터에 주소가 없을 때만 카카오 로컬 검색 결과의 도로명/지번 주소로 채웁니다.
-    if (!row.address && placeLinks.enrichedAddress) payload.address = placeLinks.enrichedAddress;
+    if (!row.address && placeLinks.enrichedAddress) {
+      payload.address = placeLinks.enrichedAddress;
+      payload.administrative_area = getAdministrativeAreaForEnrichedAddress(row.address, placeLinks.enrichedAddress);
+    }
     sources.placeLinks = placeLinks.kakaoMatched || placeLinks.naverMatched;
   }
 
@@ -10079,7 +10083,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     "rating",
     "keyword_volume"
   ];
-  const profileFieldKeys = ["phone", "industry_primary", "address"];
+  const profileFieldKeys = ["phone", "industry_primary", "address", "administrative_area"];
   const payloadTiers = [
     Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)),
     Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key))),

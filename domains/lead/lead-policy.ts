@@ -21,6 +21,14 @@ export function shouldApplySalesAreaFilter(areas: readonly string[], includeOuts
   return !includeOutsideSalesArea && areas.length > 0;
 }
 
+export function getAdministrativeAreaForEnrichedAddress(
+  currentAddress?: string | null,
+  enrichedAddress?: string | null
+) {
+  if (currentAddress || !enrichedAddress) return undefined;
+  return extractLeadAdministrativeArea(enrichedAddress) || null;
+}
+
 export function resolveVisitResultStatus(actionType: string, result?: string) {
   if (result === "거래 시작") return "전환 진행";
   if (result === "거절" || result === "제외" || actionType === "exclude") return "제외";
