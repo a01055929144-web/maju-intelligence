@@ -248,7 +248,7 @@ const SALES_AREA_BOUNDARY_FILES: Record<string, string> = {
 
 type SalesAreaBoundaryFeature = {
   geometry: { coordinates: number[][][] | number[][][][]; type: "Polygon" | "MultiPolygon" };
-  properties: { administrativeArea: string; district: string; province: string };
+  properties: { administrativeArea: string; district: string; parentAdministrativeArea: string; province: string };
 };
 
 type SalesAreaBoundaryCollection = { features: SalesAreaBoundaryFeature[]; type: "FeatureCollection" };
@@ -666,8 +666,11 @@ export function KakaoAddressMap({
     const selectedAreas = new Set(boundary.selectedAreas);
     const stats = new Map(boundary.stats.map((item) => [item.administrativeArea, item]));
     const maximum = Math.max(1, ...boundary.stats.map((item) => boundary.metric === "customers" ? item.customerCount : item.recentLeadCount));
-    const colorFor = (administrativeArea: string) => {
-      if (selectedAreas.has(administrativeArea)) return { fill: "#0f766e", opacity: 0.5, stroke: "#0f766e", weight: 3 };
+    const isSelected = (feature: SalesAreaBoundaryFeature) => selectedAreas.has(feature.properties.administrativeArea)
+      || selectedAreas.has(feature.properties.parentAdministrativeArea);
+    const colorFor = (feature: SalesAreaBoundaryFeature) => {
+      const administrativeArea = feature.properties.administrativeArea;
+      if (isSelected(feature)) return { fill: "#0f766e", opacity: 0.5, stroke: "#0f766e", weight: 3 };
       const stat = stats.get(administrativeArea);
       const value = boundary.metric === "customers" ? stat?.customerCount || 0 : stat?.recentLeadCount || 0;
       const ratio = value / maximum;
@@ -678,7 +681,9 @@ export function KakaoAddressMap({
     const showInfo = (feature: SalesAreaBoundaryFeature, position: KakaoLatLng, interactive: boolean) => {
       salesAreaInfoOverlayRef.current?.setMap(null);
       const stat = stats.get(feature.properties.administrativeArea);
+      const parentStat = stats.get(feature.properties.parentAdministrativeArea);
       const selected = selectedAreas.has(feature.properties.administrativeArea);
+      const parentSelected = selectedAreas.has(feature.properties.parentAdministrativeArea);
       const content = document.createElement("div");
       content.className = "min-w-[220px] rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-xl";
       const title = document.createElement("p");
@@ -688,21 +693,42 @@ export function KakaoAddressMap({
       detail.className = "mt-1 font-semibold text-slate-600";
       detail.textContent = `거래처 ${(stat?.customerCount || 0).toLocaleString()}곳 · 최근 30일 신규 ${(stat?.recentLeadCount || 0).toLocaleString()}건 · 전체 리드 ${(stat?.totalLeadCount || 0).toLocaleString()}건`;
       content.append(title, detail);
+      if (feature.properties.parentAdministrativeArea !== feature.properties.administrativeArea) {
+        const parentDetail = document.createElement("p");
+        parentDetail.className = "mt-1 text-[11px] font-semibold text-slate-500";
+        parentDetail.textContent = `${feature.properties.parentAdministrativeArea} 전체 · 거래처 ${(parentStat?.customerCount || 0).toLocaleString()}곳 · 신규 ${(parentStat?.recentLeadCount || 0).toLocaleString()}건`;
+        content.append(parentDetail);
+      }
       if (interactive) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mt-2 h-8 w-full rounded-lg bg-teal-700 px-3 font-black text-white disabled:bg-slate-200 disabled:text-slate-500";
-        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시";
+        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시" || parentSelected;
         button.textContent = boundary.province === "세종특별자치시"
           ? "세종은 현재 선택 대상이 아닙니다"
           : !boundary.canManage
             ? "조회 권한만 있습니다"
-            : selected ? "영업 지역 해제" : "영업 지역 추가";
+            : parentSelected ? "시 전체가 적용 중입니다"
+              : selected ? "이 구 해제" : "이 구 추가";
         button.addEventListener("click", (event) => {
           event.stopPropagation();
           salesAreaBoundaryRef.current?.onToggle(feature.properties.administrativeArea);
         });
         content.append(button);
+        if (feature.properties.parentAdministrativeArea !== feature.properties.administrativeArea) {
+          const parentButton = document.createElement("button");
+          parentButton.type = "button";
+          parentButton.className = "mt-1.5 h-8 w-full rounded-lg border border-teal-200 bg-white px-3 font-black text-teal-800 disabled:border-slate-200 disabled:text-slate-400";
+          parentButton.disabled = !boundary.canManage;
+          parentButton.textContent = !boundary.canManage
+            ? "조회 권한만 있습니다"
+            : parentSelected ? `${feature.properties.parentAdministrativeArea.split(" ").at(-1)} 전체 해제` : `${feature.properties.parentAdministrativeArea.split(" ").at(-1)} 전체 추가`;
+          parentButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            salesAreaBoundaryRef.current?.onToggle(feature.properties.parentAdministrativeArea);
+          });
+          content.append(parentButton);
+        }
       }
       const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.12, zIndex: 20 });
       salesAreaInfoOverlayRef.current = overlay;
@@ -727,7 +753,7 @@ export function KakaoAddressMap({
               bounds.extend(point);
               return point;
             }));
-            const colors = colorFor(feature.properties.administrativeArea);
+            const colors = colorFor(feature);
             const polygon = new kakao.maps.Polygon({
               fillColor: colors.fill, fillOpacity: colors.opacity, map, path: paths,
               strokeColor: colors.stroke, strokeOpacity: 0.9, strokeWeight: colors.weight, zIndex: 3

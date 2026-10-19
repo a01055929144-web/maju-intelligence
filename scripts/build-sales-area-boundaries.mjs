@@ -41,10 +41,18 @@ function deriveProperties(properties = {}) {
   const parts = String(properties.adm_nm || properties.ADM_NM || properties.full_nm || "").trim().split(/\s+/);
   const province = normalizeProvince(String(properties.sidonm || properties.SIDO_NM || parts[0] || ""));
   let district = String(properties.sggnm || properties.SGG_NM || parts[1] || "").trim();
-  const parentCity = GENERAL_GU_CITIES.find((city) => district.startsWith(city) || parts[1]?.startsWith(city));
-  if (parentCity) district = parentCity;
+  const parentCity = GENERAL_GU_CITIES.find((city) => district.includes(city) || parts.includes(city));
+  let parentSalesArea = "";
+  if (parentCity) {
+    const cityIndex = parts.indexOf(parentCity);
+    const spacedGu = cityIndex >= 0 && parts[cityIndex + 1]?.endsWith("구") ? parts[cityIndex + 1] : "";
+    const compactGu = district.replace(parentCity, "").trim();
+    const gu = spacedGu || (compactGu.endsWith("구") ? compactGu : "");
+    parentSalesArea = `${province} ${parentCity}`;
+    district = gu ? `${parentCity} ${gu}` : parentCity;
+  }
   if (!province || !district) throw new Error(`행정구역 이름을 해석하지 못했습니다: ${JSON.stringify(properties)}`);
-  return { district, province, sales_area: `${province} ${district}` };
+  return { district, parent_sales_area: parentSalesArea || `${province} ${district}`, province, sales_area: `${province} ${district}` };
 }
 
 function normalizeInput(inputPath, outputPath) {
@@ -104,7 +112,7 @@ async function main() {
   const mapshaperBin = path.resolve("node_modules/mapshaper/bin/mapshaper");
   execFileSync(process.execPath, [mapshaperBin,
     normalizedPath,
-    "-dissolve", "sales_area", "copy-fields=province,district",
+    "-dissolve", "sales_area", "copy-fields=province,district,parent_sales_area",
     "-simplify", "weighted", "8%", "keep-shapes",
     "-clean",
     "-o", "precision=0.00001", "format=geojson", dissolvedPath
@@ -116,6 +124,7 @@ async function main() {
     const metadata = geometryMetadata(feature.geometry);
     feature.properties = {
       administrativeArea: feature.properties.sales_area,
+      parentAdministrativeArea: feature.properties.parent_sales_area,
       province: feature.properties.province,
       district: feature.properties.district,
       centroid: metadata.centroid.map(roundCoordinate),

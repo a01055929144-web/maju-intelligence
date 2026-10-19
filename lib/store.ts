@@ -9,7 +9,9 @@ import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicat
 import type { LeadBusinessHourInterval } from "../domains/lead/business-hours";
 import {
   extractLeadAdministrativeArea,
+  extractLeadAdministrativeSubarea,
   getAdministrativeAreaForEnrichedAddress,
+  getAdministrativeSubareaForEnrichedAddress,
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
@@ -28,7 +30,7 @@ import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titl
 import { maskPhoneNumber } from "./phone";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
-import { KOREAN_ADMINISTRATIVE_AREAS } from "./korean-administrative-areas";
+import { getSelectableSalesAreaKeys, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS } from "./korean-administrative-areas";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "../domains/delivery/vehicle-master";
@@ -932,6 +934,19 @@ export function extractCustomerAdministrativeArea(address?: string | null) {
   const localIndex = tokens.findIndex((token, index) => index > 0 && /(?:시|군|구)$/.test(token));
   if (localIndex < 0) return "";
   return `${first} ${tokens[localIndex]}`;
+}
+
+export function extractCustomerAdministrativeSubarea(address?: string | null) {
+  return extractLeadAdministrativeSubarea(address);
+}
+
+function normalizeSelectableSalesArea(value?: string | null) {
+  const subarea = extractCustomerAdministrativeSubarea(value);
+  if (subarea) {
+    const parent = extractCustomerAdministrativeArea(value);
+    if ((KOREAN_GENERAL_GU_AREAS[parent] || []).some((gu) => subarea === `${parent} ${gu}`)) return subarea;
+  }
+  return extractCustomerAdministrativeArea(value);
 }
 
 function normalizeAdministrativeArea(value?: string | null) {
@@ -8014,6 +8029,7 @@ type PermitLeadRow = {
   open_date: string | null;
   address: string | null;
   administrative_area: string | null;
+  administrative_subarea: string | null;
   phone: string | null;
   jurisdiction: string | null;
   latitude: number | null;
@@ -8504,6 +8520,7 @@ export async function ingestPermitLeadRows(
       open_date: toPostgresDate(row.openDate) || toPostgresDate(row.permitDate),
       address: row.address || null,
       administrative_area: extractLeadAdministrativeArea(row.address) || null,
+      administrative_subarea: extractLeadAdministrativeSubarea(row.address) || null,
       phone: row.phone || null,
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
@@ -8885,7 +8902,7 @@ export async function getCompanySalesAreaState(companyId: string): Promise<Compa
     return { defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none", unrecognizedRegions: [] };
   }
   const explicit = await getCompanyLeadSearchRegions(companyId);
-  const explicitAreas = explicit.map((item) => extractCustomerAdministrativeArea(item.label)).filter(Boolean);
+  const explicitAreas = explicit.map((item) => normalizeSelectableSalesArea(item.label)).filter(Boolean);
   const [companies, areas] = await Promise.all([
     supabaseRequest<Array<{ origin_address: string | null }>>(`companies?select=origin_address&id=eq.${encodeURIComponent(companyId)}&limit=1`).catch(() => []),
     supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}`).catch(() => [])
@@ -8901,7 +8918,7 @@ export async function getCompanySalesAreaState(companyId: string): Promise<Compa
     effectiveAreas,
     explicitAreas: recognizedExplicitAreas,
     source: recognizedExplicitAreas.length ? "explicit" : defaultAreas.length ? "default" : "none",
-    unrecognizedRegions: explicit.filter((item) => !extractCustomerAdministrativeArea(item.label))
+    unrecognizedRegions: explicit.filter((item) => !normalizeSelectableSalesArea(item.label))
   };
 }
 
@@ -8945,11 +8962,12 @@ export async function getCompanySalesAreaRecommendations(companyId: string): Pro
 }
 
 export async function countCompanyLeadsInAdministrativeArea(companyId: string, administrativeArea: string) {
-  const normalized = extractCustomerAdministrativeArea(administrativeArea);
+  const normalized = normalizeSelectableSalesArea(administrativeArea);
   if (!normalized || !isProductionStoreConfigured()) return 0;
+  const isSubarea = Boolean(extractCustomerAdministrativeSubarea(normalized));
   return supabasePermitLeadCount([
     `company_id=eq.${encodeURIComponent(companyId)}`,
-    `administrative_area=eq.${encodeURIComponent(normalized)}`
+    `${isSubarea ? "administrative_subarea" : "administrative_area"}=eq.${encodeURIComponent(normalized)}`
   ]).catch(() => 0);
 }
 
@@ -8964,7 +8982,7 @@ export type CompanySalesAreaMapStat = {
 export async function getCompanySalesAreaMapStats(companyId: string, province: string): Promise<CompanySalesAreaMapStat[]> {
   const districts = KOREAN_ADMINISTRATIVE_AREAS[province] || [];
   if (!districts.length || !isProductionStoreConfigured()) return [];
-  const areas = districts.map((district) => `${province} ${district}`);
+  const areas = getSelectableSalesAreaKeys(province);
   const customers = await supabaseRequest<Array<{ address: string | null }>>(
     `normalized_customers?select=address&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
   ).catch(() => []);
@@ -8972,15 +8990,18 @@ export async function getCompanySalesAreaMapStats(companyId: string, province: s
   for (const customer of customers) {
     const area = extractCustomerAdministrativeArea(customer.address);
     if (area?.startsWith(`${province} `)) customerCounts.set(area, (customerCounts.get(area) || 0) + 1);
+    const subarea = extractCustomerAdministrativeSubarea(customer.address);
+    if (subarea?.startsWith(`${province} `)) customerCounts.set(subarea, (customerCounts.get(subarea) || 0) + 1);
   }
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const stats: CompanySalesAreaMapStat[] = [];
   for (let offset = 0; offset < areas.length; offset += 6) {
     const batch = areas.slice(offset, offset + 6);
     const rows = await Promise.all(batch.map(async (administrativeArea) => {
+      const isSubarea = Boolean(extractCustomerAdministrativeSubarea(administrativeArea));
       const filters = [
         `company_id=eq.${encodeURIComponent(companyId)}`,
-        `administrative_area=eq.${encodeURIComponent(administrativeArea)}`
+        `${isSubarea ? "administrative_subarea" : "administrative_area"}=eq.${encodeURIComponent(administrativeArea)}`
       ];
       const [totalLeadCount, recentLeadCount] = await Promise.all([
         supabasePermitLeadCount(filters),
@@ -8997,6 +9018,11 @@ export function isAddressInSalesAreas(address: string | null | undefined, areas:
   return isLeadAddressInSalesAreas(address, areas);
 }
 
+function salesAreaPostgrestFilter(areas: readonly string[]) {
+  const encoded = areas.map(encodeURIComponent).join(",");
+  return `or=(administrative_area.in.(${encoded}),administrative_subarea.in.(${encoded}))`;
+}
+
 /**
  * 고객사가 직접 입력한 확장 탐색 지역(예: "서울 마포구 합정동")을 저장합니다. 좌표는 저장 시점에
  * 한 번만 geocodeRegionLabel로 확정해두고(재탐색마다 다시 지오코딩하지 않음), 좌표를 못 찾아도
@@ -9005,7 +9031,7 @@ export function isAddressInSalesAreas(address: string | null | undefined, areas:
 export async function addCompanyLeadSearchRegion(companyId: string, label: string): Promise<CompanyLeadSearchRegion> {
   const trimmed = label.trim();
   if (!trimmed) throw new Error("지역명을 입력해주세요.");
-  const administrativeArea = extractCustomerAdministrativeArea(trimmed);
+  const administrativeArea = normalizeSelectableSalesArea(trimmed);
   if (!administrativeArea) throw new Error("시·도와 시·군·구를 함께 입력해주세요. 예: 서울특별시 강남구");
   if (!isProductionStoreConfigured()) {
     return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString() };
@@ -9331,7 +9357,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (!filters.includeOutsideSalesArea) {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     if (shouldApplySalesAreaFilter(salesAreas, Boolean(filters.includeOutsideSalesArea))) {
-      params.push(`administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})`);
+      params.push(salesAreaPostgrestFilter(salesAreas));
     }
   }
   // 2026-09-07 피드백("리드는 총 500개인데 왜 지도에 표시는 적게 나오는지") 대응: 300건(최대
@@ -10065,6 +10091,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     if (!row.address && placeLinks.enrichedAddress) {
       payload.address = placeLinks.enrichedAddress;
       payload.administrative_area = getAdministrativeAreaForEnrichedAddress(row.address, placeLinks.enrichedAddress);
+      payload.administrative_subarea = getAdministrativeSubareaForEnrichedAddress(row.address, placeLinks.enrichedAddress);
     }
     sources.placeLinks = placeLinks.kakaoMatched || placeLinks.naverMatched;
   }
@@ -10124,7 +10151,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     "rating",
     "keyword_volume"
   ];
-  const profileFieldKeys = ["phone", "industry_primary", "address", "administrative_area"];
+  const profileFieldKeys = ["phone", "industry_primary", "address", "administrative_area", "administrative_subarea"];
   const payloadTiers = [
     Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined)),
     Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== undefined && !externalFieldKeys.includes(key))),
@@ -10352,14 +10379,14 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
     if (!dueIds.length) return empty;
     const dueOrder = new Map(dueIds.map((id, index) => [id, index]));
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})&id=in.(${dueIds.map(encodeURIComponent).join(",")})`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&${salesAreaPostgrestFilter(salesAreas)}&id=in.(${dueIds.map(encodeURIComponent).join(",")})`
     ).catch(() => []);
     rows = rows.sort((left, right) => (dueOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (dueOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)).slice(0, limit);
   } catch (error) {
     if (!isMissingLeadEnrichmentEventStoreError(error)) throw error;
     // 마이그레이션 적용 전/롤백 중에는 기존 후보 조회로 폴백해 보강 자체가 중단되지 않게 합니다.
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&${salesAreaPostgrestFilter(salesAreas)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
     ).catch(() => []);
   }
 

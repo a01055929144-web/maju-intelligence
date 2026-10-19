@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, Plus, X } from "lucide-react";
 import { KakaoAddressMap, type KakaoSalesAreaStat } from "@/components/kakao-address-map";
-import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
+import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
 type Region = { id: string; label: string };
 type Recommendation = { administrativeArea: string; customerCount: number; existingLeadCount: number; recentLeadCount: number };
@@ -49,7 +49,14 @@ export function SalesAreaSelector({
   const [mapStats, setMapStats] = useState<KakaoSalesAreaStat[]>([]);
   const [mapStatsLoading, setMapStatsLoading] = useState(false);
   const [mapLoadTiming, setMapLoadTiming] = useState<number | null>(null);
-  const districts = KOREAN_ADMINISTRATIVE_AREAS[province] || [];
+  const districtOptions = useMemo(() => (KOREAN_ADMINISTRATIVE_AREAS[province] || []).flatMap((item) => {
+    const parent = `${province} ${item}`;
+    const generalGus = KOREAN_GENERAL_GU_AREAS[parent] || [];
+    return [
+      { label: generalGus.length ? `${item} 전체` : item, value: item },
+      ...generalGus.map((gu) => ({ label: `${item} · ${gu}`, value: `${item} ${gu}` }))
+    ];
+  }), [province]);
 
   const previewCompanyId = useCallback(() => {
     if (typeof window === "undefined") return "";
@@ -203,7 +210,7 @@ export function SalesAreaSelector({
         </select>
         <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold" disabled={!snapshot.canManage || busy} onChange={(event) => setDistrict(event.target.value)} value={district}>
           <option value="">시·군·구 선택</option>
-          {districts.map((item) => <option key={item} value={item}>{item}</option>)}
+          {districtOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
         <button className="maju-button-primary" disabled={!snapshot.canManage || !district || busy} onClick={() => void addArea(`${province} ${district}`)} type="button"><Plus className="h-4 w-4" />추가</button>
       </div>

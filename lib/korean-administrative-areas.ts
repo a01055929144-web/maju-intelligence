@@ -19,3 +19,25 @@ export const KOREAN_ADMINISTRATIVE_AREAS: Record<string, readonly string[]> = {
 };
 
 export const KOREAN_PROVINCES = Object.keys(KOREAN_ADMINISTRATIVE_AREAS);
+
+export const KOREAN_GENERAL_GU_AREAS: Record<string, readonly string[]> = {
+  "경기도 고양시": ["덕양구", "일산동구", "일산서구"],
+  "경기도 부천시": ["원미구", "소사구", "오정구"],
+  "경기도 성남시": ["수정구", "중원구", "분당구"],
+  "경기도 수원시": ["장안구", "권선구", "팔달구", "영통구"],
+  "경기도 안산시": ["상록구", "단원구"],
+  "경기도 안양시": ["만안구", "동안구"],
+  "경기도 용인시": ["처인구", "기흥구", "수지구"],
+  "충청북도 청주시": ["상당구", "서원구", "흥덕구", "청원구"],
+  "충청남도 천안시": ["동남구", "서북구"],
+  "전북특별자치도 전주시": ["완산구", "덕진구"],
+  "경상북도 포항시": ["남구", "북구"],
+  "경상남도 창원시": ["의창구", "성산구", "마산합포구", "마산회원구", "진해구"]
+};
+
+export function getSelectableSalesAreaKeys(province: string) {
+  return (KOREAN_ADMINISTRATIVE_AREAS[province] || []).flatMap((district) => {
+    const parent = `${province} ${district}`;
+    return [parent, ...(KOREAN_GENERAL_GU_AREAS[parent] || []).map((gu) => `${parent} ${gu}`)];
+  });
+}

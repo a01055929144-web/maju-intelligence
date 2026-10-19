@@ -12,9 +12,28 @@ export function extractLeadAdministrativeArea(address?: string | null) {
   return localIndex < 0 ? "" : `${first} ${tokens[localIndex]}`;
 }
 
+export function extractLeadAdministrativeSubarea(address?: string | null) {
+  const tokens = (address || "").replace(/[(),]/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return "";
+  const province = PROVINCE_ALIASES[tokens[0]] || tokens[0];
+  const cityIndex = tokens.findIndex((token, index) => index > 0 && token.endsWith("시"));
+  const district = cityIndex >= 0 ? tokens[cityIndex + 1] : undefined;
+  return district?.endsWith("구") ? `${province} ${tokens[cityIndex]} ${district}` : "";
+}
+
+export function extractLeadAdministrativeAreas(address?: string | null) {
+  return {
+    administrativeArea: extractLeadAdministrativeArea(address),
+    administrativeSubarea: extractLeadAdministrativeSubarea(address)
+  };
+}
+
 export function isLeadAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {
-  const area = extractLeadAdministrativeArea(address);
-  return Boolean(area && areas.includes(area));
+  const { administrativeArea, administrativeSubarea } = extractLeadAdministrativeAreas(address);
+  return Boolean(
+    (administrativeArea && areas.includes(administrativeArea)) ||
+    (administrativeSubarea && areas.includes(administrativeSubarea))
+  );
 }
 
 export function shouldApplySalesAreaFilter(areas: readonly string[], includeOutsideSalesArea: boolean) {
@@ -27,6 +46,14 @@ export function getAdministrativeAreaForEnrichedAddress(
 ) {
   if (currentAddress || !enrichedAddress) return undefined;
   return extractLeadAdministrativeArea(enrichedAddress) || null;
+}
+
+export function getAdministrativeSubareaForEnrichedAddress(
+  currentAddress?: string | null,
+  enrichedAddress?: string | null
+) {
+  if (currentAddress || !enrichedAddress) return undefined;
+  return extractLeadAdministrativeSubarea(enrichedAddress) || null;
 }
 
 export function resolveVisitResultStatus(actionType: string, result?: string) {

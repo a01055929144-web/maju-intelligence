@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractLeadAdministrativeArea,
+  extractLeadAdministrativeSubarea,
   getAdministrativeAreaForEnrichedAddress,
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
@@ -26,7 +27,17 @@ describe("lead sales area and conversion state", () => {
   it("normalizes the same administrative area used by ingestion and database filters", () => {
     expect(extractLeadAdministrativeArea("서울 강남구 테헤란로 1")).toBe("서울특별시 강남구");
     expect(extractLeadAdministrativeArea("경기도 성남시 분당구 판교로 1")).toBe("경기도 성남시");
+    expect(extractLeadAdministrativeSubarea("경기도 성남시 분당구 판교로 1")).toBe("경기도 성남시 분당구");
+    expect(extractLeadAdministrativeSubarea("경기도 성남시 수정구 산성대로 1")).toBe("경기도 성남시 수정구");
+    expect(extractLeadAdministrativeSubarea("서울특별시 송파구 올림픽로 300")).toBe("");
     expect(extractLeadAdministrativeArea("서울특별시 송파구 올림픽로 300")).toBe("서울특별시 송파구");
+  });
+
+  it("supports a general-gu selection and its existing parent-city selection", () => {
+    expect(isLeadAddressInSalesAreas("경기도 성남시 분당구 판교로 1", ["경기도 성남시 분당구"])).toBe(true);
+    expect(isLeadAddressInSalesAreas("경기도 성남시 수정구 산성대로 1", ["경기도 성남시 분당구"])).toBe(false);
+    expect(isLeadAddressInSalesAreas("경기도 성남시 수정구 산성대로 1", ["경기도 성남시"])).toBe(true);
+    expect(isLeadAddressInSalesAreas("서울특별시 강남구 테헤란로 1", ["서울특별시 강남구"])).toBe(true);
   });
 
   it("fills the administrative area when enrichment discovers the first address", () => {
