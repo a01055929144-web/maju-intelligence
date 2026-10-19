@@ -20,9 +20,10 @@ export async function GET(request: NextRequest) {
   const hasPhone = params.get("hasPhone") === "true";
   const excludeExcluded = params.get("excludeExcluded") !== "false";
   const includeOutsideSalesArea = params.get("includeOutsideSalesArea") === "true";
+  const includeExistingCustomers = params.get("includeExistingCustomers") === "true";
 
   const [{ leads, total }, queues, salesAreas] = await Promise.all([
-    listPermitLeads(scope.companyId!, { period, industry, action, grade, hasPhone, excludeExcluded, includeOutsideSalesArea }),
+    listPermitLeads(scope.companyId!, { period, industry, action, grade, hasPhone, excludeExcluded, includeOutsideSalesArea, includeExistingCustomers }),
     getPermitLeadQueues(scope.companyId!),
     getCompanySalesAdministrativeAreas(scope.companyId!)
   ]);

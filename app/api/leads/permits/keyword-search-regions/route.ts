@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { addCompanyLeadSearchRegion, getCompanyLeadSearchRegions, removeCompanyLeadSearchRegion } from "@/lib/store";
+import { addCompanyLeadSearchRegion, getCompanyLeadSearchRegions, getCompanySalesAreaState, removeCompanyLeadSearchRegion } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "탐색 지역을 확인할 권한이 없습니다." }, { status: 403 });
   }
 
-  const regions = await getCompanyLeadSearchRegions(scope.companyId!).catch(() => []);
-  return NextResponse.json({ regions });
+  const [regions, salesAreaState] = await Promise.all([
+    getCompanyLeadSearchRegions(scope.companyId!).catch(() => []),
+    getCompanySalesAreaState(scope.companyId!).catch(() => ({ defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none" as const, unrecognizedRegions: [] }))
+  ]);
+  return NextResponse.json({ regions, salesAreaState });
 }
 
 // POST: 새 탐색 지역을 추가합니다(지역명을 카카오 키워드 검색으로 좌표화해 저장).

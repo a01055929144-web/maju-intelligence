@@ -159,6 +159,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const [excludeExcluded, setExcludeExcluded] = useState(true);
   const [showClosedOrNonTarget, setShowClosedOrNonTarget] = useState(false);
   const [showOutsideSalesArea, setShowOutsideSalesArea] = useState(false);
+  const [showExistingCustomers, setShowExistingCustomers] = useState(false);
   const [salesRegionsConfigured, setSalesRegionsConfigured] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
@@ -271,6 +272,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         openDateYear?: string;
         periodFilter?: "all" | PermitLeadPeriod;
         showAdvancedFilters?: boolean;
+        showExistingCustomers?: boolean;
         statusFilter?: string;
         tableSearch?: string;
       };
@@ -289,6 +291,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         setOpenDateYear(saved.openDateYear || "");
         setPeriodFilter(saved.periodFilter || "all");
         setShowAdvancedFilters(Boolean(saved.showAdvancedFilters));
+        setShowExistingCustomers(Boolean(saved.showExistingCustomers));
         setStatusFilter(saved.statusFilter || "");
         setTableSearch(saved.tableSearch || "");
       }
@@ -320,11 +323,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         openDateYear,
         periodFilter,
         showAdvancedFilters,
+        showExistingCustomers,
         statusFilter,
         tableSearch
       })
     );
-  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, statusFilter, tableSearch]);
+  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, showExistingCustomers, statusFilter, tableSearch]);
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
@@ -349,6 +353,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     if (hasPhoneOnly) params.set("hasPhone", "true");
     if (!excludeExcluded) params.set("excludeExcluded", "false");
     if (showOutsideSalesArea) params.set("includeOutsideSalesArea", "true");
+    if (showExistingCustomers) params.set("includeExistingCustomers", "true");
 
     fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
@@ -364,7 +369,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showOutsideSalesArea]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showExistingCustomers, showOutsideSalesArea]);
 
   useEffect(() => {
     loadLeads();
@@ -683,6 +688,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     openDateStart,
     openDateYear,
     periodFilter,
+    showExistingCustomers,
     showNearbyOnly,
     statusFilter,
     tableSearch
@@ -735,6 +741,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       hasInstagramOnly ||
       kakaoMatchFilter ||
       !excludeExcluded ||
+      showExistingCustomers ||
       showNearbyOnly ||
       tableSearch
   );
@@ -755,6 +762,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     setHasInstagramOnly(false);
     setKakaoMatchFilter("");
     setExcludeExcluded(true);
+    setShowExistingCustomers(false);
     setShowNearbyOnly(false);
     setTableSearch("");
   }
@@ -2244,6 +2252,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />
                 제외 처리된 리드도 표시
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={showExistingCustomers} onChange={(event) => setShowExistingCustomers(event.target.checked)} type="checkbox" />
+                기존 거래처도 표시
               </label>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />

@@ -7,7 +7,13 @@ import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviews
 import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-datalab";
 import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate, type LeadDuplicateMatch } from "./leads";
 import type { LeadBusinessHourInterval } from "../domains/lead/business-hours";
-import { isLeadAddressInSalesAreas, resolveVisitResultStatus } from "../domains/lead/lead-policy";
+import {
+  extractLeadAdministrativeArea,
+  isLeadAddressInSalesAreas,
+  isUserSalesLeadAction,
+  resolveMatchedCustomerLeadStatus,
+  resolveVisitResultStatus
+} from "../domains/lead/lead-policy";
 import { summarizePastedReviewText } from "./review-summarizer";
 import { resolveKakaoPlace, resolvePlaceLinks } from "./place-links";
 import { CustomerRow, sampleCustomers } from "./sample-data";
@@ -5191,7 +5197,7 @@ async function excludeMatchingLeadsForNewCustomer(
     `business_permit_leads?select=id,business_name,address,phone,business_number,matched_customer_id,status&company_id=eq.${encodeURIComponent(companyId)}&status=not.in.(${inactiveStatuses})&${lookup}`
   ).catch(() => []);
 
-  await Promise.all(leads.filter((lead) => lead.id !== skipLeadId && !(lead.status === "거래처 전환" && lead.matched_customer_id)).map(async (lead) => {
+  const matches = leads.filter((lead) => lead.id !== skipLeadId && !(lead.status === "거래처 전환" && lead.matched_customer_id)).flatMap((lead) => {
     const duplicate = findLeadCustomerDuplicate({
       address: customer.address,
       businessName: customer.businessName,
@@ -5204,9 +5210,22 @@ async function excludeMatchingLeadsForNewCustomer(
       id: lead.id,
       phone: lead.phone || ""
     }]);
-    if (!duplicate) return;
+    return duplicate ? [{ duplicate, lead }] : [];
+  });
+  const matchedLeadIds = matches.map(({ lead }) => lead.id);
+  const actionRows = matchedLeadIds.length
+    ? await supabaseRequest<Array<{ action_type: string; lead_id: string; result: string | null }>>(
+      `lead_actions?select=lead_id,action_type,result&company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${matchedLeadIds.map(encodeURIComponent).join(",")})`
+    ).catch(() => [])
+    : [];
+  const userActionLeadIds = new Set(
+    actionRows.filter((action) => isUserSalesLeadAction(action.action_type, action.result)).map((action) => action.lead_id)
+  );
+
+  await Promise.all(matches.map(async ({ duplicate, lead }) => {
     const reason = `이미 등록된 거래처(${duplicate.reason})`;
     const matchAudit = getLeadCustomerMatchAudit(duplicate.reason);
+    const status = resolveMatchedCustomerLeadStatus(userActionLeadIds.has(lead.id));
     await supabaseRequest(`business_permit_leads?id=eq.${encodeURIComponent(lead.id)}&company_id=eq.${encodeURIComponent(companyId)}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -5219,7 +5238,7 @@ async function excludeMatchingLeadsForNewCustomer(
         matched_customer_confidence: matchAudit.confidence,
         next_action: "거래처 확인",
         next_action_reasons: [reason],
-        status: "거래처 전환",
+        status,
         updated_at: new Date().toISOString()
       })
     }).catch(() => null);
@@ -7991,6 +8010,7 @@ type PermitLeadRow = {
   permit_date: string | null;
   open_date: string | null;
   address: string | null;
+  administrative_area: string | null;
   phone: string | null;
   jurisdiction: string | null;
   latitude: number | null;
@@ -8480,6 +8500,7 @@ export async function ingestPermitLeadRows(
       permit_date: toPostgresDate(row.permitDate),
       open_date: toPostgresDate(row.openDate) || toPostgresDate(row.permitDate),
       address: row.address || null,
+      administrative_area: extractLeadAdministrativeArea(row.address) || null,
       phone: row.phone || null,
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
@@ -8825,6 +8846,14 @@ export type CompanyLeadSearchRegion = {
   createdAt: string;
 };
 
+export type CompanySalesAreaState = {
+  defaultAreas: string[];
+  effectiveAreas: string[];
+  explicitAreas: string[];
+  source: "default" | "explicit" | "none";
+  unrecognizedRegions: CompanyLeadSearchRegion[];
+};
+
 export async function getCompanyLeadSearchRegions(companyId: string): Promise<CompanyLeadSearchRegion[]> {
   if (!isProductionStoreConfigured()) return [];
   const rows = await supabaseRequest<
@@ -8840,20 +8869,35 @@ export async function getCompanyLeadSearchRegions(companyId: string): Promise<Co
   }));
 }
 
-/** 회사가 저장한 영업 지역을 우선하고, 없으면 출발지와 활성 배송 권역을 기본값으로 사용합니다. */
-export async function getCompanySalesAdministrativeAreas(companyId: string): Promise<string[]> {
-  if (!isProductionStoreConfigured()) return [];
+/** 직접 지정값, 출발지·배송 권역 기본값과 인식 실패값을 함께 반환합니다. */
+export async function getCompanySalesAreaState(companyId: string): Promise<CompanySalesAreaState> {
+  if (!isProductionStoreConfigured()) {
+    return { defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none", unrecognizedRegions: [] };
+  }
   const explicit = await getCompanyLeadSearchRegions(companyId);
   const explicitAreas = explicit.map((item) => extractCustomerAdministrativeArea(item.label)).filter(Boolean);
-  if (explicitAreas.length) return Array.from(new Set(explicitAreas));
   const [companies, areas] = await Promise.all([
     supabaseRequest<Array<{ origin_address: string | null }>>(`companies?select=origin_address&id=eq.${encodeURIComponent(companyId)}&limit=1`).catch(() => []),
     supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}`).catch(() => [])
   ]);
-  return Array.from(new Set([
+  const defaultAreas = Array.from(new Set([
     extractCustomerAdministrativeArea(companies[0]?.origin_address),
     ...areas.map((item) => normalizeAdministrativeArea(item.administrative_area))
   ].filter(Boolean)));
+  const recognizedExplicitAreas = Array.from(new Set(explicitAreas));
+  const effectiveAreas = recognizedExplicitAreas.length ? recognizedExplicitAreas : defaultAreas;
+  return {
+    defaultAreas,
+    effectiveAreas,
+    explicitAreas: recognizedExplicitAreas,
+    source: recognizedExplicitAreas.length ? "explicit" : defaultAreas.length ? "default" : "none",
+    unrecognizedRegions: explicit.filter((item) => !extractCustomerAdministrativeArea(item.label))
+  };
+}
+
+/** 회사가 저장한 영업 지역을 우선하고, 없으면 출발지와 활성 배송 권역을 기본값으로 사용합니다. */
+export async function getCompanySalesAdministrativeAreas(companyId: string): Promise<string[]> {
+  return (await getCompanySalesAreaState(companyId)).effectiveAreas;
 }
 
 export function isAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {
@@ -8868,11 +8912,13 @@ export function isAddressInSalesAreas(address: string | null | undefined, areas:
 export async function addCompanyLeadSearchRegion(companyId: string, label: string): Promise<CompanyLeadSearchRegion> {
   const trimmed = label.trim();
   if (!trimmed) throw new Error("지역명을 입력해주세요.");
+  const administrativeArea = extractCustomerAdministrativeArea(trimmed);
+  if (!administrativeArea) throw new Error("시·도와 시·군·구를 함께 입력해주세요. 예: 서울특별시 강남구");
   if (!isProductionStoreConfigured()) {
-    return { id: globalThis.crypto.randomUUID(), companyId, label: trimmed, createdAt: new Date().toISOString() };
+    return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString() };
   }
 
-  const point = await geocodeRegionLabel(trimmed).catch(() => null);
+  const point = await geocodeRegionLabel(administrativeArea).catch(() => null);
   const rows = await supabaseRequest<
     Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
   >("company_lead_search_regions", {
@@ -8881,7 +8927,7 @@ export async function addCompanyLeadSearchRegion(companyId: string, label: strin
     body: JSON.stringify([
       {
         company_id: companyId,
-        label: trimmed,
+        label: administrativeArea,
         latitude: point?.lat ?? null,
         longitude: point?.lng ?? null
       }
@@ -9123,6 +9169,7 @@ export type PermitLeadFilters = {
   period?: PermitLeadPeriod | "all";
   status?: string;
   includeOutsideSalesArea?: boolean;
+  includeExistingCustomers?: boolean;
 };
 
 type LeadBusinessHourRow = {
@@ -9185,7 +9232,14 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
+  if (filters.hasPhone) params.push("phone=not.is.null");
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
+  if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
+  if (!filters.includeOutsideSalesArea) {
+    const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
+    if (!salesAreas.length) return { leads: [], total: 0 };
+    params.push(`administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})`);
+  }
   // 2026-09-07 피드백("리드는 총 500개인데 왜 지도에 표시는 적게 나오는지") 대응: 300건(최대
   // 500건) 상한 때문에 그 이후 순위의 리드는 아예 조회조차 되지 않아 목록/지도 어디에도 나타나지
   // 않았습니다. 데이터 양이 많아져도 화면(테이블 페이지네이션·지도)이 감당하도록 상한을 대폭
@@ -9199,20 +9253,11 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   let leads = await attachLatestLeadEnrichmentMetadata(companyId, rows.map(toPermitLeadItem));
   const hours = await listLeadBusinessHours(companyId, leads.map((lead) => lead.id));
   leads = leads.map((lead) => ({ ...lead, businessHourIntervals: hours.get(lead.id) || [] }));
-  if (!filters.includeOutsideSalesArea) {
-    const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
-    leads = salesAreas.length ? leads.filter((lead) => isAddressInSalesAreas(lead.address, salesAreas)) : [];
-  }
-  if (filters.hasPhone) leads = leads.filter((lead) => Boolean(lead.phone));
-
   // 2026-09-07: 예전에는 total이 이미 상한으로 잘린 leads.length라서 실제 전체 건수와 달랐습니다
   // (예: DB에 500건이어도 300건만 받아와 "총 300건"으로 잘못 표시). hasPhone처럼 조회 이후
   // 자바스크립트로만 걸러지는 필터가 없을 때는, 같은 조건으로 count=exact를 별도 조회해 진짜
   // 전체 건수를 돌려줍니다.
-  let total = leads.length;
-  if (!filters.hasPhone) {
-    total = await supabasePermitLeadCount(params).catch(() => leads.length);
-  }
+  const total = await supabasePermitLeadCount(params).catch(() => leads.length);
 
   return { leads, total };
 }
@@ -10199,28 +10244,29 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
   if (!isProductionStoreConfigured()) return empty;
 
   let rows: Array<{ id: string }>;
+  const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
+  if (!salesAreas.length) return empty;
   try {
     const dueRows = await supabaseRequest<Array<{ lead_id: string }>>("rpc/list_leads_due_for_enrichment", {
       method: "POST",
-      body: JSON.stringify({ p_company_id: companyId, p_limit: limit })
+      body: JSON.stringify({ p_company_id: companyId, p_limit: 500 })
     });
-    rows = dueRows.map((row) => ({ id: row.lead_id }));
+    const dueIds = dueRows.map((row) => row.lead_id);
+    if (!dueIds.length) return empty;
+    const dueOrder = new Map(dueIds.map((id, index) => [id, index]));
+    rows = await supabaseRequest<Array<{ id: string }>>(
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})&id=in.(${dueIds.map(encodeURIComponent).join(",")})`
+    ).catch(() => []);
+    rows = rows.sort((left, right) => (dueOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (dueOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)).slice(0, limit);
   } catch (error) {
     if (!isMissingLeadEnrichmentEventStoreError(error)) throw error;
     // 마이그레이션 적용 전/롤백 중에는 기존 후보 조회로 폴백해 보강 자체가 중단되지 않게 합니다.
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&administrative_area=in.(${salesAreas.map(encodeURIComponent).join(",")})&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
     ).catch(() => []);
   }
 
-  const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
-  if (!salesAreas.length || !rows.length) return empty;
-  const candidateIds = rows.map((row) => row.id).map(encodeURIComponent).join(",");
-  const candidateAddresses = await supabaseRequest<Array<{ id: string; address: string | null }>>(
-    `business_permit_leads?select=id,address&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${candidateIds})`
-  ).catch(() => []);
-  const eligibleIds = new Set(candidateAddresses.filter((row) => isAddressInSalesAreas(row.address, salesAreas)).map((row) => row.id));
-  rows = rows.filter((row) => eligibleIds.has(row.id));
+  if (!rows.length) return empty;
 
   // 2026-08-26 효율화: 리드를 한 건씩 순차로 보강하던 것을 findNearbyPermitLeads와 동일한
   // mapWithConcurrency 패턴으로 묶어 동시에 처리합니다(카카오 로컬 검색 호출 자체는 그대로 유지).

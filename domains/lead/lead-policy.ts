@@ -22,3 +22,13 @@ export function resolveVisitResultStatus(actionType: string, result?: string) {
   if (result === "거절" || result === "제외" || actionType === "exclude") return "제외";
   return undefined;
 }
+
+const TECHNICAL_LEAD_ACTION_RESULTS = new Set(["외부 정보 보강", "인스타 정보 수정"]);
+
+export function isUserSalesLeadAction(actionType?: string | null, result?: string | null) {
+  return !(actionType === "hold" && TECHNICAL_LEAD_ACTION_RESULTS.has(result || ""));
+}
+
+export function resolveMatchedCustomerLeadStatus(hasUserSalesAction: boolean) {
+  return hasUserSalesAction ? "거래처 전환" : "기존 거래처";
+}
