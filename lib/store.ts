@@ -8,6 +8,13 @@ import { fetchKeywordVolumeScores, isNaverDatalabConfigured } from "./naver-data
 import { enrichLeadRecommendations, findLeadCustomerDuplicate, type LeadDuplicateCandidate, type LeadDuplicateMatch } from "./leads";
 import type { LeadBusinessHourInterval } from "../domains/lead/business-hours";
 import {
+  buildLeadCanonicalFingerprint,
+  buildLeadSourceRecordKey,
+  isClosedPermitRecord
+} from "../domains/lead/canonical-identity";
+import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
+export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
+import {
   extractLeadAdministrativeArea,
   extractLeadAdministrativeSubarea,
   getAdministrativeAreaForEnrichedAddress,
@@ -7950,6 +7957,8 @@ export type PermitLeadIngestRow = {
   industry?: string;
   latitude?: number;
   longitude?: number;
+  sourceRecordKey?: string;
+  closeDate?: string;
 };
 
 export type PermitLeadItem = {
@@ -8059,52 +8068,6 @@ type PermitLeadRow = {
   created_at: string;
   updated_at: string;
 };
-
-// 유통사가 취급하는 식자재와 무관해 영업 대상에서 자동 제외할 업종 키워드입니다.
-const PERMIT_EXCLUDED_INDUSTRY_KEYWORDS = [
-  "미용실", "이용원", "네일", "피부관리", "학원", "교습소", "공인중개사", "부동산중개",
-  "병원", "의원", "약국", "한의원", "동물병원", "세탁", "정비", "카센터", "숙박업", "모텔",
-  "여관", "고시원", "PC방", "노래연습장", "당구장", "골프연습장", "체육시설", "독서실", "안경"
-];
-
-// 업종 원문/상호명에서 대표 업종을 분류하는 규칙입니다. 필요에 따라 계속 추가할 수 있습니다.
-export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: string[] }> = [
-  { primary: "한식", keywords: ["한식", "국밥", "해장국", "백반", "찌개", "곰탕", "설렁탕", "분식", "식당", "닭갈비", "갈비", "칼국수", "전집", "막창", "김밥", "튀김", "반찬", "혼밥", "도시락"] },
-  { primary: "카페/디저트", keywords: ["카페", "커피", "coffee", "디저트", "도넛", "베이커리", "제과", "빵집", "빠띠시에", "떡집"] },
-  { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
-  { primary: "중식", keywords: ["중식", "마라탕", "양꼬치", "짬뽕", "짜장"] },
-  { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드"] },
-  { primary: "주점", keywords: ["주점", "포차", "호프", "술집"] },
-  { primary: "양식", keywords: ["양식", "파스타", "스테이크", "브런치", "타코"] },
-  { primary: "뷔페/단체급식", keywords: ["뷔페", "부페", "단체급식", "구내식당", "케이터링"] }
-];
-
-/**
- * 인허가 원본 업종명/상호명에서 대표 업종과 보조 키워드 태그를 뽑고, 식자재 유통 영업 대상
- * 업종인지 판단합니다. 명확히 비대상인 키워드가 있으면 즉시 제외하고, 규칙에 없는 일반
- * 음식점류는 "미분류(확인 필요)"로 남겨 영업자가 직접 판단하게 합니다(무리하게 제외하지 않음).
- */
-export function classifyPermitLeadIndustry(rawIndustryText: string, businessName: string) {
-  const haystack = `${rawIndustryText || ""} ${businessName || ""}`;
-
-  for (const excluded of PERMIT_EXCLUDED_INDUSTRY_KEYWORDS) {
-    if (haystack.includes(excluded)) {
-      return { primary: rawIndustryText?.trim() || "비대상 업종", tags: [] as string[], isTarget: false };
-    }
-  }
-
-  for (const rule of PERMIT_INDUSTRY_RULES) {
-    const matchedTags = rule.keywords.filter((keyword) => haystack.includes(keyword));
-    if (matchedTags.length) return { primary: rule.primary, tags: matchedTags, isTarget: true };
-  }
-
-  const looksLikeFoodService = /음식점|식당|분식|급식|주점|카페|제과|호프|포차/.test(rawIndustryText || "");
-  return {
-    primary: rawIndustryText?.trim() || "미분류",
-    tags: [] as string[],
-    isTarget: looksLikeFoodService || !rawIndustryText?.trim()
-  };
-}
 
 /**
  * 기준 날짜(호출하는 쪽에서 개업일 우선, 없으면 인허가일을 넘겨줌)로 오늘/이번 주(월요일 시작)/
@@ -8357,6 +8320,85 @@ const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
 const AUTO_PERMIT_SYNC_SOURCES = new Set(["gov_restaurant_api", "seoul_opendata_api"]);
 const NEW_LEAD_MAX_AGE_DAYS = 90;
 
+type ExistingCanonicalLeadRow = {
+  id: string;
+  business_name: string;
+  business_number: string | null;
+  address: string | null;
+  phone: string | null;
+  canonical_fingerprint: string | null;
+  source_list: string[] | null;
+  keyword_volume: number | null;
+  review_count: number | null;
+  rating: number | null;
+};
+
+async function listExistingCanonicalLeadRows(companyId: string, areas: readonly string[]) {
+  const pageSize = 1000;
+  const rows: ExistingCanonicalLeadRow[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const areaFilter = areas.length ? `&${salesAreaPostgrestFilter(areas)}` : "";
+    const page = await supabaseRequest<ExistingCanonicalLeadRow[]>(
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}${areaFilter}&order=id.asc&offset=${offset}&limit=${pageSize}`
+    ).catch(() => []);
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function listExistingLeadsByBusinessNumbers(companyId: string, businessNumbers: string[]) {
+  const rows: ExistingCanonicalLeadRow[] = [];
+  for (let offset = 0; offset < businessNumbers.length; offset += 100) {
+    const batch = businessNumbers.slice(offset, offset + 100).map(encodeURIComponent).join(",");
+    rows.push(...await supabaseRequest<ExistingCanonicalLeadRow[]>(
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${batch})`
+    ).catch(() => []));
+  }
+  return rows;
+}
+
+async function listExistingLeadSourceRows(companyId: string) {
+  const pageSize = 1000;
+  const rows: Array<{ lead_id: string; source: string; source_record_key: string }> = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await supabaseRequest<Array<{ lead_id: string; source: string; source_record_key: string }>>(
+      `business_permit_lead_source_records?select=lead_id,source,source_record_key&company_id=eq.${encodeURIComponent(companyId)}&order=id.asc&offset=${offset}&limit=${pageSize}`
+    ).catch(() => []);
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function upsertPermitLeadSourceRecords(
+  companyId: string,
+  source: string,
+  records: Array<{ leadId: string; sourceRecordKey: string; row: PermitLeadIngestRow }>
+) {
+  if (!records.length) return;
+  const now = new Date().toISOString();
+  await supabaseRequest(
+    "business_permit_lead_source_records?on_conflict=company_id,source,source_record_key",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(records.map(({ leadId, sourceRecordKey, row }) => ({
+        company_id: companyId,
+        lead_id: leadId,
+        source,
+        source_record_key: sourceRecordKey,
+        permit_status: row.permitStatus || null,
+        permit_date: toPostgresDate(row.permitDate),
+        open_date: toPostgresDate(row.openDate),
+        phone: row.phone || null,
+        raw_payload: row,
+        last_seen_at: now
+      })))
+    }
+  );
+}
+
 /**
  * 사업자 인허가 데이터 업로드(엑셀/CSV) 결과를 일괄 적재합니다. 이미 저장된 사업자번호는
  * 최신 인허가 상태로 갱신(upsert)하고, 처음 보는 사업자번호는 새 리드로 추가합니다.
@@ -8389,19 +8431,25 @@ export async function ingestPermitLeadRows(
 
   await upsertCompany(companyId, "마주식자재");
 
-  const businessNumbers = Array.from(new Set(eligibleRows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)));
-  const [existingCustomerRows, existingLeadsByBizNo] = await Promise.all([
+  const ingestAreas = Array.from(new Set(eligibleRows.flatMap((row) => [
+    extractLeadAdministrativeArea(row.address),
+    extractLeadAdministrativeSubarea(row.address)
+  ]).filter((area): area is string => Boolean(area))));
+  const ingestBusinessNumbers = Array.from(new Set(
+    eligibleRows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)
+  ));
+
+  const [existingCustomerRows, areaLeadRows, businessNumberLeadRows, existingSourceRows] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>>(
       `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
     ).catch(() => []),
-    businessNumbers.length
-      ? supabaseRequest<Array<{ id: string; business_number: string; keyword_volume: number | null; review_count: number | null; rating: number | null }>>(
-          `business_permit_leads?select=id,business_number,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${businessNumbers
-            .map(encodeURIComponent)
-            .join(",")})`
-        ).catch(() => [])
-      : Promise.resolve([])
+    listExistingCanonicalLeadRows(companyId, ingestAreas),
+    listExistingLeadsByBusinessNumbers(companyId, ingestBusinessNumbers),
+    listExistingLeadSourceRows(companyId)
   ]);
+  const existingLeadRows = Array.from(
+    new Map([...areaLeadRows, ...businessNumberLeadRows].map((row) => [row.id, row])).values()
+  );
   const duplicateCandidates: LeadDuplicateCandidate[] = existingCustomerRows.map((row) => ({
     id: row.id,
     customerName: row.customer_name,
@@ -8409,20 +8457,40 @@ export async function ingestPermitLeadRows(
     address: row.address,
     phone: row.phone
   }));
-  const leadBizNoToId = new Map(existingLeadsByBizNo.map((row) => [row.business_number, row.id]));
+  const leadById = new Map<string, ExistingCanonicalLeadRow>(existingLeadRows.map((row) => [row.id, row]));
+  const leadByBusinessNumber = new Map<string, ExistingCanonicalLeadRow>(
+    existingLeadRows
+      .filter((row) => row.business_number)
+      .map((row): [string, ExistingCanonicalLeadRow] => [normalizeBusinessNumber(row.business_number || ""), row])
+  );
+  const leadByFingerprint = new Map<string, ExistingCanonicalLeadRow>(
+    existingLeadRows
+      .map((row): [string, ExistingCanonicalLeadRow] => [row.canonical_fingerprint || buildLeadCanonicalFingerprint({
+        businessName: row.business_name,
+        businessNumber: row.business_number || undefined,
+        address: row.address || undefined
+      }), row])
+      .filter(([fingerprint]) => Boolean(fingerprint))
+  );
+  const leadIdBySourceKey = new Map(existingSourceRows.map((row) => [`${row.source}:${row.source_record_key}`, row.lead_id]));
   // 재수집(업데이트) 시 이미 보강된 검색량/리뷰 값을 점수 계산에 계속 반영하기 위한 조회맵입니다.
   // 이게 없으면 크론이 매일 같은 리드를 재수집할 때마다 keyword_demand_score/place_activity_score가
   // 0으로 리셋되어, 어렵게 보강한 점수가 다음 날 사라지는 문제가 생깁니다.
   const leadEnrichmentByBizNo = new Map(
-    existingLeadsByBizNo.map((row) => [
-      row.business_number,
+    existingLeadRows.filter((row) => row.business_number).map((row) => [
+      normalizeBusinessNumber(row.business_number || ""),
       { keywordVolume: row.keyword_volume ?? undefined, reviewCount: row.review_count ?? undefined, rating: row.rating ?? undefined }
     ])
   );
 
   const today = new Date();
-  const inserts: Record<string, unknown>[] = [];
-  const updates: Array<{ id: string; payload: Record<string, unknown> }> = [];
+  const source = options.source || "manual_upload";
+  const inserts: Array<{
+    payload: Record<string, unknown>;
+    sourceRecords: Array<{ sourceRecordKey: string; row: PermitLeadIngestRow }>;
+  }> = [];
+  const pendingInsertByFingerprint = new Map<string, number>();
+  const updates: Array<{ id: string; payload: Record<string, unknown>; sourceRecordKey: string; row: PermitLeadIngestRow }> = [];
 
   for (const row of eligibleRows) {
     const businessName = (row.businessName || "").trim();
@@ -8433,6 +8501,7 @@ export async function ingestPermitLeadRows(
 
     const businessNumber = normalizeBusinessNumber(row.businessNumber || "");
     const isActive = isPermitStatusActive(row.permitStatus);
+    const isClosedRecord = isClosedPermitRecord(row.permitStatus, row.closeDate);
     if (!isActive) result.excludedInactive += 1;
 
     const classification = classifyPermitLeadIndustry(row.industry || "", businessName);
@@ -8457,7 +8526,27 @@ export async function ingestPermitLeadRows(
     // 카카오 키워드 탐색(영업리드) 리드와 똑같이 검색량·리뷰 기반 점수와 "영업리드" 정렬 모드,
     // 야간 추천 점수 갱신(route_fit_score 등)의 대상이 됩니다 — 상대방 정보(연락처·주소·업종·
     // 검색량·리뷰)는 그대로 다 채워지고, 다만 "최근에 문을 열었다"는 보장만 없는 것으로 다룹니다.
-    const existingId = businessNumber ? leadBizNoToId.get(businessNumber) : undefined;
+    const canonicalFingerprint = buildLeadCanonicalFingerprint({
+      businessName,
+      businessNumber,
+      address: row.address
+    });
+    const sourceRecordKey = buildLeadSourceRecordKey({
+      businessName,
+      businessNumber,
+      address: row.address,
+      sourceRecordKey: row.sourceRecordKey
+    });
+    const sourceMatchedLeadId = leadIdBySourceKey.get(`${source}:${sourceRecordKey}`);
+    const existingLead =
+      (sourceMatchedLeadId ? leadById.get(sourceMatchedLeadId) : undefined) ||
+      (businessNumber ? leadByBusinessNumber.get(businessNumber) : undefined) ||
+      leadByFingerprint.get(canonicalFingerprint);
+    const existingId = existingLead?.id;
+
+    // 폐업·취소·말소 이벤트는 신규 영업 기회가 아닙니다. 원천에서 기존 대표 리드를 찾았을 때만
+    // 상태를 갱신하고, 일치하는 리드가 없으면 새 행을 만들지 않습니다.
+    if (isClosedRecord && !existingId) continue;
     // isNewLead는 소스와 무관하게 "확인된 최근(90일 내) 개업/인허가일이 있는가"만 봅니다 — 카카오
     // 키워드 탐색(영업리드)은 애초에 날짜가 없어 항상 false이고, gov/seoul 자동 동기화는 날짜가
     // 있어야 true입니다. 수동 업로드는 담당자가 직접 고른 리드라 날짜가 없어도 신규로 취급합니다.
@@ -8521,11 +8610,13 @@ export async function ingestPermitLeadRows(
       address: row.address || null,
       administrative_area: extractLeadAdministrativeArea(row.address) || null,
       administrative_subarea: extractLeadAdministrativeSubarea(row.address) || null,
-      phone: row.phone || null,
+      phone: existingLead?.phone || row.phone || null,
       latitude: row.latitude ?? null,
       longitude: row.longitude ?? null,
       jurisdiction: row.jurisdiction || null,
-      source: options.source || "manual_upload",
+      source,
+      source_list: Array.from(new Set([...(existingLead?.source_list || []), source])),
+      canonical_fingerprint: canonicalFingerprint || null,
       lead_period: leadPeriod,
       industry_raw: row.industry || null,
       industry_primary: classification.primary,
@@ -8553,18 +8644,32 @@ export async function ingestPermitLeadRows(
       updated_at: new Date().toISOString()
     };
 
-    if (existingId) updates.push({ id: existingId, payload });
-    else inserts.push(payload);
+    if (existingId) {
+      updates.push({ id: existingId, payload, sourceRecordKey, row });
+    } else {
+      const pendingIndex = pendingInsertByFingerprint.get(canonicalFingerprint);
+      if (pendingIndex !== undefined) {
+        const pending = inserts[pendingIndex];
+        pending.sourceRecords.push({ sourceRecordKey, row });
+        if (!pending.payload.phone && row.phone) pending.payload.phone = row.phone;
+      } else {
+        pendingInsertByFingerprint.set(canonicalFingerprint, inserts.length);
+        inserts.push({ payload, sourceRecords: [{ sourceRecordKey, row }] });
+      }
+    }
   }
 
   if (inserts.length) {
     const insertedRows = await supabaseRequest<Array<{ id: string }>>("business_permit_leads?select=id", {
       method: "POST",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify(inserts)
+      body: JSON.stringify(inserts.map((item) => item.payload))
     });
     result.inserted = inserts.length;
     scheduleIngestKakaoEnrichment(companyId, insertedRows.map((row) => row.id), options.source);
+    await upsertPermitLeadSourceRecords(companyId, source, insertedRows.flatMap((saved, index) =>
+      inserts[index].sourceRecords.map((record) => ({ leadId: saved.id, ...record }))
+    ));
   }
   // 2026-08-26 효율화: 기존 리드 갱신을 한 건씩 순차 PATCH하던 것을 mapWithConcurrency로 묶어
   // 동시에 처리합니다(각 요청 자체는 그대로 개별 PATCH라 동작은 동일, 왕복 대기 시간만 줄어듭니다).
@@ -8577,6 +8682,11 @@ export async function ingestPermitLeadRows(
       })
     );
   }
+  await upsertPermitLeadSourceRecords(companyId, source, updates.map((update) => ({
+    leadId: update.id,
+    sourceRecordKey: update.sourceRecordKey,
+    row: update.row
+  })));
   result.updated = updates.length;
 
   return result;
@@ -8623,6 +8733,18 @@ async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul" |
       [`${prefix}_last_message`]: message ? message.slice(0, 500) : null
     })
   }).catch(() => null);
+}
+
+function summarizeLeadSyncIngest(ingest: PermitLeadIngestResult) {
+  return JSON.stringify({
+    fetched: ingest.total,
+    insideSalesArea: ingest.total - (ingest.excludedOutsideSalesArea || 0),
+    outsideSalesAreaExcluded: ingest.excludedOutsideSalesArea || 0,
+    inserted: ingest.inserted,
+    updated: ingest.updated,
+    inactive: ingest.excludedInactive,
+    nonTarget: ingest.excludedNonTarget
+  });
 }
 
 export type LeadSyncStatus = {
@@ -8679,7 +8801,7 @@ export async function syncGovRestaurantLeads(companyId: string, days = 3, startP
   try {
     const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
-    await recordLeadSyncStatus(companyId, "gov", "success");
+    await recordLeadSyncStatus(companyId, "gov", "success", summarizeLeadSyncIngest(ingest));
     return {
       configured: true,
       fetched: result.rows.length,
@@ -8783,7 +8905,7 @@ export async function syncSeoulRestaurantLeads(companyId: string, days = 3, star
   try {
     const result = await fetchRecentSeoulRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "seoul_opendata_api" });
-    await recordLeadSyncStatus(companyId, "seoul", "success");
+    await recordLeadSyncStatus(companyId, "seoul", "success", summarizeLeadSyncIngest(ingest));
     return {
       configured: true,
       fetched: result.rows.length,
@@ -9226,7 +9348,7 @@ export async function runKakaoKeywordLeadSweep(
       }).catch(() => null);
     }
 
-    await recordLeadSyncStatus(companyId, "kakao_keyword", "success");
+    await recordLeadSyncStatus(companyId, "kakao_keyword", "success", summarizeLeadSyncIngest(ingest));
 
     return {
       configured: true,

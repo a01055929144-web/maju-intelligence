@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPermitLeadIndustry } from "../lib/store";
+import { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
 
 describe("permit lead industry classification", () => {
   it.each([
@@ -11,5 +11,14 @@ describe("permit lead industry classification", () => {
     ["갤러리 타코8", "양식"]
   ])("uses the business name when the government raw category is 기타: %s", (name, expected) => {
     expect(classifyPermitLeadIndustry("기타", name).primary).toBe(expected);
+  });
+
+  it.each(["중국식", "외국음식전문점(인도,태국등)", "횟집", "패밀리레스토랑", "기타"])(
+    "keeps general-restaurant category in the sales target pool: %s",
+    (industry) => expect(classifyPermitLeadIndustry(industry, "표본 매장").isTarget).toBe(true)
+  );
+
+  it("still excludes clearly non-food businesses", () => {
+    expect(classifyPermitLeadIndustry("기타", "테스트 공인중개사").isTarget).toBe(false);
   });
 });

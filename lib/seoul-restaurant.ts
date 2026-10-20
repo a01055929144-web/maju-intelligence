@@ -54,6 +54,7 @@ export type SeoulRestaurantRow = {
   latitude?: number;
   longitude?: number;
   lastModified?: string;
+  sourceRecordKey?: string;
 };
 
 function getSeoulOpenDataApiKey() {
@@ -97,7 +98,8 @@ function mapRow(raw: Record<string, unknown>): SeoulRestaurantRow | null {
     industry: pick(raw, "UPTAENM"),
     latitude: point?.lat,
     longitude: point?.lng,
-    lastModified: pick(raw, "LASTMODTS")
+    lastModified: pick(raw, "LASTMODTS"),
+    sourceRecordKey: pick(raw, "MGTNO") || pick(raw, "MNGNO")
   };
 }
 

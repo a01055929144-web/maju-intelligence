@@ -33,6 +33,7 @@ export type GovRestaurantRow = {
   jurisdiction?: string;
   industry?: string;
   lastModified?: string;
+  sourceRecordKey?: string;
 };
 
 function getGovRestaurantApiKey() {
@@ -73,7 +74,8 @@ function mapRow(raw: Record<string, unknown>): GovRestaurantRow | null {
     phone: pick(raw, ["TELNO"]),
     jurisdiction: pick(raw, ["OPN_ATMY_GRP_CD"]),
     industry: pick(raw, ["BZSTAT_SE_NM", "SNTTN_BZSTAT_NM"]),
-    lastModified: pick(raw, ["LAST_MDFCN_PNT", "DAT_UPDT_PNT"])
+    lastModified: pick(raw, ["LAST_MDFCN_PNT", "DAT_UPDT_PNT"]),
+    sourceRecordKey: pick(raw, ["MGTNO", "MNG_NO"])
   };
 }
 
