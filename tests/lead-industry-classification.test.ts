@@ -18,6 +18,17 @@ describe("permit lead industry classification", () => {
     (industry) => expect(classifyPermitLeadIndustry(industry, "표본 매장").isTarget).toBe(true)
   );
 
+  it.each([
+    ["패밀리레스트랑", "양식"],
+    ["푸드트럭", "프랜차이즈/배달"],
+    ["출장조리", "뷔페/단체급식"]
+  ])("accepts the remaining food-service variants: %s", (industry, expected) => {
+    expect(classifyPermitLeadIndustry(industry, "표본 매장")).toMatchObject({
+      primary: expected,
+      isTarget: true
+    });
+  });
+
   it("still excludes clearly non-food businesses", () => {
     expect(classifyPermitLeadIndustry("기타", "테스트 공인중개사").isTarget).toBe(false);
   });

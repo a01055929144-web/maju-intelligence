@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 적용 전 승인 필요. 동기화 실행별 불변 이력이며 최신 상태 컬럼은 계속 유지합니다.
+-- 운영 적용 완료(2026-10-23). 실행별 불변 이력이며 최신 상태 컬럼은 계속 유지합니다.
 begin;
 create table if not exists public.lead_sync_runs (
   id uuid primary key default gen_random_uuid(),
@@ -32,6 +32,6 @@ revoke all on table public.lead_sync_runs from public,anon,authenticated;
 grant select,insert,update on table public.lead_sync_runs to service_role;
 commit;
 
--- 기본 보관 기간 제안: 1년. 월 1회 아래 조건으로 삭제하되 운영 감사 정책 확정 후 활성화합니다.
+-- 기본 보관 기간 제안: 1년. 운영 감사 정책 확정 전까지 삭제를 활성화하지 않습니다.
 -- delete from public.lead_sync_runs where created_at < now() - interval '1 year';
 

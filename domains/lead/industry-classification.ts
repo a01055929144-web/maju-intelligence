@@ -9,10 +9,10 @@ export const PERMIT_INDUSTRY_RULES: ReadonlyArray<{ primary: string; keywords: s
   { primary: "카페/디저트", keywords: ["카페", "커피", "coffee", "디저트", "도넛", "베이커리", "제과", "빵집", "빠띠시에", "떡집"] },
   { primary: "일식", keywords: ["일식", "이자카야", "스시", "라멘", "돈카츠", "우동"] },
   { primary: "중식", keywords: ["중식", "중국식", "마라탕", "양꼬치", "짬뽕", "짜장"] },
-  { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드"] },
+  { primary: "프랜차이즈/배달", keywords: ["치킨", "피자", "버거", "패스트푸드", "푸드트럭"] },
   { primary: "주점", keywords: ["주점", "포차", "호프", "술집"] },
-  { primary: "양식", keywords: ["양식", "경양식", "외국음식전문점", "패밀리레스토랑", "파스타", "스테이크", "브런치", "타코"] },
-  { primary: "뷔페/단체급식", keywords: ["뷔페", "부페", "단체급식", "구내식당", "케이터링"] }
+  { primary: "양식", keywords: ["양식", "경양식", "외국음식전문점", "패밀리레스토랑", "패밀리레스트랑", "파스타", "스테이크", "브런치", "타코"] },
+  { primary: "뷔페/단체급식", keywords: ["뷔페", "부페", "단체급식", "구내식당", "케이터링", "출장조리"] }
 ];
 
 export function classifyPermitLeadIndustry(rawIndustryText: string, businessName: string) {

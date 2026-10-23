@@ -7963,6 +7963,8 @@ export type PermitLeadIngestRow = {
   longitude?: number;
   sourceRecordKey?: string;
   closeDate?: string;
+  /** 원천의 최종 변경 시각. 출처가 섞인 중복 그룹의 대표 상태 판정에 사용합니다. */
+  lastModified?: string;
 };
 
 export type PermitLeadItem = {
@@ -8305,6 +8307,11 @@ export type PermitLeadIngestResult = {
   skippedNoName: number;
   classifiedAsSalesLead: number;
   excludedOutsideSalesArea?: number;
+  closedApplied: number;
+  closureReview: number;
+  ownershipChange: number;
+  crossSourceLinked: number;
+  batchDuplicates: number;
 };
 
 const PERMIT_LEAD_UPDATE_CONCURRENCY = 8;
@@ -8428,7 +8435,12 @@ export async function ingestPermitLeadRows(
     excludedNonTarget: 0,
     skippedNoName: 0,
     classifiedAsSalesLead: 0,
-    excludedOutsideSalesArea: Math.max(0, rows.length - eligibleRows.length)
+    excludedOutsideSalesArea: Math.max(0, rows.length - eligibleRows.length),
+    closedApplied: 0,
+    closureReview: 0,
+    ownershipChange: 0,
+    crossSourceLinked: 0,
+    batchDuplicates: 0
   };
   if (!eligibleRows.length || !isProductionStoreConfigured()) return result;
 
@@ -8570,6 +8582,7 @@ export async function ingestPermitLeadRows(
     // 상태를 갱신하고, 일치하는 리드가 없으면 새 행을 만들지 않습니다.
     if (isClosedRecord && !existingId) continue;
     if (isClosedRecord && matchReason === "name_address") {
+      result.closureReview += 1;
       updates.push({
         id: existingId!,
         payload: {
@@ -8582,6 +8595,9 @@ export async function ingestPermitLeadRows(
         row
       });
       continue;
+    }
+    if (isClosedRecord && (matchReason === "source_key" || matchReason === "business_number")) {
+      result.closedApplied += 1;
     }
     // isNewLead는 소스와 무관하게 "확인된 최근(90일 내) 개업/인허가일이 있는가"만 봅니다 — 카카오
     // 키워드 탐색(영업리드)은 애초에 날짜가 없어 항상 false이고, gov/seoul 자동 동기화는 날짜가
@@ -8633,6 +8649,11 @@ export async function ingestPermitLeadRows(
       industryPrimary: classification.primary
     });
     const excluded = !isActive || !classification.isTarget || isDuplicate;
+    const isOwnershipChange = Boolean(placeMatchedLead && !safePlaceMatchedLead);
+    if (isOwnershipChange) result.ownershipChange += 1;
+    if (existingLead && !(existingLead.source_list || []).includes(source)) {
+      result.crossSourceLinked += 1;
+    }
 
     const payload = {
       company_id: companyId,
@@ -8670,7 +8691,7 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: excluded ? "제외" : placeMatchedLead && !safePlaceMatchedLead ? "주인 변경" : "신규 수집",
+      status: excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
       next_action: nextAction.action,
       next_action_reasons: nextAction.reasons,
       score_total: scoreTotal,
@@ -8685,6 +8706,7 @@ export async function ingestPermitLeadRows(
     } else {
       const pendingIndex = pendingInsertByFingerprint.get(canonicalFingerprint);
       if (pendingIndex !== undefined) {
+        result.batchDuplicates += 1;
         const pending = inserts[pendingIndex];
         pending.sourceRecords.push({ sourceRecordKey, row });
         if (!pending.payload.phone && row.phone) pending.payload.phone = row.phone;
@@ -8736,7 +8758,12 @@ const EMPTY_PERMIT_INGEST_RESULT: PermitLeadIngestResult = {
   excludedInactive: 0,
   excludedNonTarget: 0,
   skippedNoName: 0,
-  classifiedAsSalesLead: 0
+  classifiedAsSalesLead: 0,
+  closedApplied: 0,
+  closureReview: 0,
+  ownershipChange: 0,
+  crossSourceLinked: 0,
+  batchDuplicates: 0
 };
 
 export type GovRestaurantSyncResult = {
@@ -8757,16 +8784,56 @@ export type GovRestaurantSyncResult = {
 // companies 테이블에 기록해, 신규 리드 화면에서 "마지막 동기화가 언제, 성공했는지"를 보여줄 수
 // 있게 합니다. 기록 자체가 실패해도(컬럼 미존재 등) 조용히 무시해 본 동기화 로직에는 영향을
 // 주지 않습니다.
-async function recordLeadSyncStatus(companyId: string, source: "gov" | "seoul" | "kakao_keyword", status: "success" | "error", message?: string) {
+type LeadSyncTrigger = "cron" | "manual" | "ingest";
+
+async function recordLeadSyncStatus(
+  companyId: string,
+  source: "gov" | "seoul" | "kakao_keyword",
+  status: "success" | "error",
+  options: {
+    message?: string;
+    trigger: LeadSyncTrigger;
+    startedAt: string;
+    fetched?: number;
+    ingest?: PermitLeadIngestResult;
+  }
+) {
   if (!isProductionStoreConfigured()) return;
   const prefix = source === "gov" ? "gov_restaurant_sync" : source === "seoul" ? "seoul_restaurant_sync" : "kakao_keyword_lead_sync";
+  const finishedAt = new Date().toISOString();
+  const ingest = options.ingest || EMPTY_PERMIT_INGEST_RESULT;
+  await supabaseRequest("lead_sync_runs", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      company_id: companyId,
+      source,
+      trigger: options.trigger,
+      started_at: options.startedAt,
+      finished_at: finishedAt,
+      status,
+      fetched_count: options.fetched ?? ingest.total,
+      inside_sales_area_count: Math.max(0, ingest.total - (ingest.excludedOutsideSalesArea || 0)),
+      outside_sales_area_count: ingest.excludedOutsideSalesArea || 0,
+      inserted_count: ingest.inserted,
+      updated_count: ingest.updated,
+      closed_count: ingest.closedApplied,
+      closure_review_count: ingest.closureReview,
+      ownership_change_count: ingest.ownershipChange,
+      non_target_count: ingest.excludedNonTarget,
+      cross_source_link_count: ingest.crossSourceLinked,
+      batch_duplicate_count: ingest.batchDuplicates,
+      error_message: status === "error" ? options.message?.slice(0, 1000) || "동기화 실패" : null,
+      metadata: { message: options.message?.slice(0, 500) || null }
+    })
+  }).catch(() => null);
   await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({
-      [`${prefix}_last_at`]: new Date().toISOString(),
+      [`${prefix}_last_at`]: finishedAt,
       [`${prefix}_last_status`]: status,
-      [`${prefix}_last_message`]: message ? message.slice(0, 500) : null
+      [`${prefix}_last_message`]: options.message ? options.message.slice(0, 500) : null
     })
   }).catch(() => null);
 }
@@ -8779,7 +8846,12 @@ function summarizeLeadSyncIngest(ingest: PermitLeadIngestResult) {
     inserted: ingest.inserted,
     updated: ingest.updated,
     inactive: ingest.excludedInactive,
-    nonTarget: ingest.excludedNonTarget
+    nonTarget: ingest.excludedNonTarget,
+    closed: ingest.closedApplied,
+    closureReview: ingest.closureReview,
+    ownershipChange: ingest.ownershipChange,
+    crossSourceLinked: ingest.crossSourceLinked,
+    batchDuplicates: ingest.batchDuplicates
   });
 }
 
@@ -8829,15 +8901,23 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
 // 2026-09-07 피드백("시간은 넉넉하고 끊어서 진행하면 더 자세한 데이터가 있지 않을까") 대응:
 // startPage를 넘기면 그 구간부터 스캔하고, 결과에 nextStartPage를 함께 돌려줘서 화면이 "계속
 // 가져오기"로 바로 다음 구간을 이어서 요청할 수 있습니다. 안 넘기면 예전처럼 날짜 기반 회전입니다.
-export async function syncGovRestaurantLeads(companyId: string, days = 3, startPage?: number): Promise<GovRestaurantSyncResult> {
+export async function syncGovRestaurantLeads(
+  companyId: string,
+  days = 3,
+  startPage?: number,
+  trigger: LeadSyncTrigger = "manual"
+): Promise<GovRestaurantSyncResult> {
   if (!isGovRestaurantApiConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
+  const startedAt = new Date().toISOString();
   try {
     const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
-    await recordLeadSyncStatus(companyId, "gov", "success", summarizeLeadSyncIngest(ingest));
+    await recordLeadSyncStatus(companyId, "gov", "success", {
+      trigger, startedAt, fetched: result.rows.length, ingest, message: summarizeLeadSyncIngest(ingest)
+    });
     return {
       configured: true,
       fetched: result.rows.length,
@@ -8847,7 +8927,9 @@ export async function syncGovRestaurantLeads(companyId: string, days = 3, startP
       totalPages: result.totalPages
     };
   } catch (error) {
-    await recordLeadSyncStatus(companyId, "gov", "error", error instanceof Error ? error.message : String(error));
+    await recordLeadSyncStatus(companyId, "gov", "error", {
+      trigger, startedAt, message: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 }
@@ -8890,7 +8972,7 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
       const startPage = Number.isFinite(company.gov_restaurant_sync_cursor) && Number(company.gov_restaurant_sync_cursor) > 0
         ? Number(company.gov_restaurant_sync_cursor)
         : undefined;
-      const result = await syncGovRestaurantLeads(company.id, 14, startPage).catch(
+      const result = await syncGovRestaurantLeads(company.id, 14, startPage, "cron").catch(
         (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
       );
       if (result.nextStartPage) {
@@ -8933,15 +9015,23 @@ export type SeoulRestaurantSyncResult = {
  */
 // 2026-09-07 피드백 대응(syncGovRestaurantLeads와 동일한 이유) — startPage로 이어서 스캔하고
 // nextStartPage를 돌려줍니다.
-export async function syncSeoulRestaurantLeads(companyId: string, days = 3, startPage?: number): Promise<SeoulRestaurantSyncResult> {
+export async function syncSeoulRestaurantLeads(
+  companyId: string,
+  days = 3,
+  startPage?: number,
+  trigger: LeadSyncTrigger = "manual"
+): Promise<SeoulRestaurantSyncResult> {
   if (!isSeoulOpenDataConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
   }
 
+  const startedAt = new Date().toISOString();
   try {
     const result = await fetchRecentSeoulRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "seoul_opendata_api" });
-    await recordLeadSyncStatus(companyId, "seoul", "success", summarizeLeadSyncIngest(ingest));
+    await recordLeadSyncStatus(companyId, "seoul", "success", {
+      trigger, startedAt, fetched: result.rows.length, ingest, message: summarizeLeadSyncIngest(ingest)
+    });
     return {
       configured: true,
       fetched: result.rows.length,
@@ -8951,7 +9041,9 @@ export async function syncSeoulRestaurantLeads(companyId: string, days = 3, star
       totalPages: result.totalPages
     };
   } catch (error) {
-    await recordLeadSyncStatus(companyId, "seoul", "error", error instanceof Error ? error.message : String(error));
+    await recordLeadSyncStatus(companyId, "seoul", "error", {
+      trigger, startedAt, message: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 }
@@ -8989,7 +9081,7 @@ export async function syncAllCompaniesSeoulRestaurantLeads(): Promise<SeoulResta
       const startPage = Number.isFinite(company.seoul_restaurant_sync_cursor) && Number(company.seoul_restaurant_sync_cursor) > 0
         ? Number(company.seoul_restaurant_sync_cursor)
         : undefined;
-      const result = await syncSeoulRestaurantLeads(company.id, 14, startPage).catch(
+      const result = await syncSeoulRestaurantLeads(company.id, 14, startPage, "cron").catch(
         (): SeoulRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
       );
       if (result.nextStartPage) {
@@ -9258,7 +9350,12 @@ const EMPTY_KEYWORD_SWEEP_INGEST: PermitLeadIngestResult = {
   excludedInactive: 0,
   excludedNonTarget: 0,
   skippedNoName: 0,
-  classifiedAsSalesLead: 0
+  classifiedAsSalesLead: 0,
+  closedApplied: 0,
+  closureReview: 0,
+  ownershipChange: 0,
+  crossSourceLinked: 0,
+  batchDuplicates: 0
 };
 
 function normalizeLeadNameForDedupe(value: string) {
@@ -9295,6 +9392,7 @@ export async function runKakaoKeywordLeadSweep(
   };
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
+  const startedAt = new Date().toISOString();
   try {
     // 1) 기준점 후보를 모읍니다.
     const savedRegions = await getCompanyLeadSearchRegions(companyId);
@@ -9397,7 +9495,13 @@ export async function runKakaoKeywordLeadSweep(
       }).catch(() => null);
     }
 
-    await recordLeadSyncStatus(companyId, "kakao_keyword", "success", summarizeLeadSyncIngest(ingest));
+    await recordLeadSyncStatus(companyId, "kakao_keyword", "success", {
+      trigger: options.mode === "auto" ? "cron" : "manual",
+      startedAt,
+      fetched: candidateRows.length,
+      ingest,
+      message: summarizeLeadSyncIngest(ingest)
+    });
 
     return {
       configured: true,
@@ -9407,7 +9511,11 @@ export async function runKakaoKeywordLeadSweep(
       ingest
     };
   } catch (error) {
-    await recordLeadSyncStatus(companyId, "kakao_keyword", "error", error instanceof Error ? error.message : String(error));
+    await recordLeadSyncStatus(companyId, "kakao_keyword", "error", {
+      trigger: options.mode === "auto" ? "cron" : "manual",
+      startedAt,
+      message: error instanceof Error ? error.message : String(error)
+    });
     throw error;
   }
 }
