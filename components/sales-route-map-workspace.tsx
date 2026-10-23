@@ -490,6 +490,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mainMapRouteLoading, setMainMapRouteLoading] = useState(false);
   const [mainMapRouteError, setMainMapRouteError] = useState("");
   const [statsExpanded, setStatsExpanded] = useState(false);
+  const [mobileMapControlsOpen, setMobileMapControlsOpen] = useState(false);
+  const [mobileSalesAreaOpen, setMobileSalesAreaOpen] = useState(false);
   // 작업공간 전체를 브라우저 전체 화면으로 확대합니다.
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -2171,6 +2173,41 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         }`}
         ref={mapHeaderRef}
       >
+        {activeView === "map" ? (
+          <div className="flex min-h-11 items-center justify-between gap-2 lg:hidden">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-950">지도 현황 · 거래처 {visibleMapLayerCounts.customers}곳</p>
+              <p className="truncate text-[11px] font-semibold text-slate-500">
+                {mapSalesRegionsConfigured === false
+                  ? "영업 지역 미설정 · 기존 리드 전체 표시"
+                  : showAllLeadsOnMap
+                    ? `리드 ${visibleMapLayerCounts.newLeads + visibleMapLayerCounts.salesLeads}곳 표시`
+                    : "리드 숨김 · 거래처 중심"}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {mapSalesRegionsConfigured === false ? (
+                <button
+                  className="h-9 rounded-lg bg-amber-100 px-3 text-xs font-black text-amber-900"
+                  onClick={() => setMobileSalesAreaOpen(true)}
+                  type="button"
+                >
+                  지역 선택
+                </button>
+              ) : null}
+              <button
+                aria-expanded={mobileMapControlsOpen}
+                className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
+                onClick={() => setMobileMapControlsOpen((open) => !open)}
+                type="button"
+              >
+                필터
+                <ChevronDown className={`h-3.5 w-3.5 transition ${mobileMapControlsOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
         <div className="grid gap-1.5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,auto)] lg:items-center xl:grid-cols-[minmax(320px,1fr)_minmax(0,auto)] xl:gap-2">
           <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -2393,7 +2430,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         ) : null}
         {activeView === "map" && mapSalesRegionsConfigured === false ? (
-          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="hidden space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 lg:block">
             <div>
               <p className="text-sm font-black text-amber-950">영업할 지역을 골라 주세요</p>
               <p className="mt-1 text-xs font-semibold text-amber-800">현재는 기존 리드를 전체 표시합니다. 지역을 고르면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.</p>
@@ -2677,11 +2714,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </span>
           </div>
         ) : null}
+        </div>
       </section>
 
       {activeView === "map" ? (
-        <div className="relative flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-b-xl lg:block lg:min-h-0" ref={mapAreaRef}>
-          <div className={`relative min-h-0 min-w-0 bg-slate-100 lg:absolute lg:inset-0 ${isFullscreen ? "h-full" : "h-[420px] lg:h-full"}`}>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-xl lg:block" ref={mapAreaRef}>
+          <div className={`relative min-h-0 min-w-0 bg-slate-100 lg:absolute lg:inset-0 ${isFullscreen ? "h-full" : "h-[calc(100dvh-10rem)] min-h-[420px] max-h-[720px] lg:h-full lg:min-h-0 lg:max-h-none"}`}>
             {sourceReady ? (
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
@@ -3113,6 +3151,33 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         />
       ) : null}
       </div>
+      {mobileSalesAreaOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end bg-slate-950/45 lg:hidden" role="dialog" aria-modal="true" aria-label="영업 지역 선택">
+          <button className="absolute inset-0" aria-label="영업 지역 선택 닫기" onClick={() => setMobileSalesAreaOpen(false)} type="button" />
+          <section className="relative z-10 max-h-[82dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-2xl">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-base font-black text-slate-950">영업할 지역 선택</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">지역을 저장하면 지도의 리드가 즉시 갱신됩니다.</p>
+              </div>
+              <button className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-600" onClick={() => setMobileSalesAreaOpen(false)} type="button" aria-label="닫기">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <SalesAreaSelector
+              compact
+              mapCenterPoint={mapCenterPoint}
+              onChanged={() => {
+                setShowAllLeadsOnMap(true);
+                setShowOutsideSalesAreaOnMap(false);
+                void loadAllLeadsForMap();
+              }}
+              onSnapshot={handleMapSalesAreaSnapshot}
+            />
+          </section>
+        </div>
+      ) : null}
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}

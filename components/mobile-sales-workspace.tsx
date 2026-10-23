@@ -221,21 +221,21 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
             </div>
           </header>
 
-          <div className="flex-1 space-y-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
-            <section className="mobile-card rounded-xl border p-3" aria-label="영업 KPI 현황">
+          <div className="flex flex-1 flex-col gap-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
+            <section className="mobile-card order-2 rounded-xl border p-3" aria-label="영업 KPI 현황">
               <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">이번 달 영업 KPI</p><p className="mobile-muted mt-0.5 text-xs">회사 설정 목표 대비 내 영업 실적</p></div><Target className="h-5 w-5 text-teal-700" /></div>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                 <Kpi value={salesKpi?.actualContacts ?? contactedCount} target={salesKpi?.targetContacts} label="컨택" />{holdModulesEnabled ? <Kpi value={salesKpi?.actualQuotes ?? quoteCount} target={salesKpi?.targetQuotes} label="견적" /> : null}<Kpi value={salesKpi?.actualConversions || 0} target={salesKpi?.targetConversions} label="전환" /><Kpi value={reminderCount} label="리마인드" />
               </div>
             </section>
 
-            <section className="mobile-card overflow-hidden rounded-xl border" id="lead-map">
+            <section className="mobile-card order-1 overflow-hidden rounded-xl border" id="lead-map">
               <div className="flex items-center justify-between border-b border-[var(--mobile-border)] px-3 py-2.5"><div><p className="text-sm font-semibold">내 주변 영업 지도</p><p className="mobile-muted text-xs">보라색 신규 · 청록색 영업 리드</p></div><button className="mobile-secondary-action inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold" onClick={requestLocation} type="button"><Crosshair className="h-4 w-4" />내 위치</button></div>
-              <KakaoAddressMap focusedMarkerId={selected?.id} mapClassName="h-[260px] w-full" markers={markers} onMarkerClick={(marker) => { const lead = leads.find((item) => item.id === marker.id); if (lead) void openLead(lead); }} showList={false} />
+              <KakaoAddressMap focusedMarkerId={selected?.id} mapClassName="h-[clamp(360px,calc(100dvh-14rem),620px)] w-full" markers={markers} onMarkerClick={(marker) => { const lead = leads.find((item) => item.id === marker.id); if (lead) void openLead(lead); }} showList={false} />
               {locationMessage ? <p className="mobile-muted px-3 py-2 text-xs font-semibold">{locationMessage}</p> : null}
             </section>
 
-            <section className="mobile-card rounded-xl border p-3" id="lead-list">
+            <section className="mobile-card order-3 rounded-xl border p-3" id="lead-list">
               <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input aria-label="리드 검색" className="mobile-input min-h-10 w-full rounded-lg border py-2 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="매장명·주소·업종 검색" value={query} /></div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button className={`min-h-10 rounded-lg text-xs font-semibold ${sort === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setSort("sales")} type="button">세일즈 추천</button>
@@ -250,7 +250,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
               {loadState === "ready" ? <div className="mt-3 space-y-2">{visibleLeads.slice(0, 50).map((lead) => <LeadCard key={lead.id} lead={lead} location={location} onOpen={() => void openLead(lead)} />)}{visibleLeads.length === 0 ? <StateMessage icon={MapPin} text="조건에 맞는 리드가 없습니다." /> : null}</div> : null}
             </section>
 
-            <section className="mobile-card rounded-xl border p-3" id="reminders">
+            <section className="mobile-card order-4 rounded-xl border p-3" id="reminders">
               <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">후속 영업 리마인드</p><p className="mobile-muted text-xs">과거 컨택 후 다시 연락할 매장</p></div><Bell className="h-5 w-5 text-amber-600" /></div>
               <div className="mt-3 space-y-2">{leads.filter((lead) => lead.status === "재연락 예정").slice(0, 10).map((lead) => <button className="mobile-card-raised flex min-h-14 w-full items-center justify-between rounded-lg border px-3 text-left" key={lead.id} onClick={() => void openLead(lead)} type="button"><span><span className="block text-sm font-semibold">{lead.businessName}</span><span className="mobile-muted mt-0.5 block text-xs">{lead.address || "주소 확인 필요"}</span></span><ChevronRight className="h-4 w-4" /></button>)}{reminderCount === 0 ? <p className="mobile-muted rounded-lg border border-dashed border-[var(--mobile-border)] p-3 text-center text-xs font-semibold">등록된 리마인드가 없습니다.</p> : null}</div>
             </section>
