@@ -8789,6 +8789,52 @@ export type GovRestaurantSyncResult = {
 // 주지 않습니다.
 type LeadSyncTrigger = "cron" | "manual" | "ingest";
 
+type DailyLeadTargetSnapshot = {
+  asOfKst: string;
+  definitionVersion: "sales-target-v1";
+  total: number;
+  areas: Array<{ administrativeArea: string; count: number }>;
+};
+
+function kstDateDaysAgo(daysAgo: number) {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+  const date = new Date(`${today}T00:00:00+09:00`);
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(date);
+}
+
+function singleSalesAreaPostgrestFilter(area: string) {
+  if (KOREAN_PROVINCES.includes(area)) {
+    return `administrative_area=like.${encodeURIComponent(`${area} *`)}`;
+  }
+  const column = extractCustomerAdministrativeSubarea(area) ? "administrative_subarea" : "administrative_area";
+  return `${column}=eq.${encodeURIComponent(area)}`;
+}
+
+async function getDailyLeadTargetSnapshot(companyId: string): Promise<DailyLeadTargetSnapshot> {
+  const areas = await getCompanySalesAdministrativeAreas(companyId);
+  const asOfKst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+  if (!areas.length) return { asOfKst, definitionVersion: "sales-target-v1", total: 0, areas: [] };
+  const recentFrom = kstDateDaysAgo(29);
+  const baseFilters = [
+    `company_id=eq.${encodeURIComponent(companyId)}`,
+    "merged_into_lead_id=is.null",
+    "is_active=eq.true",
+    "is_target_industry=eq.true",
+    "is_duplicate=eq.false",
+    "matched_customer_id=is.null",
+    `or=(open_date.gte.${recentFrom},permit_date.gte.${recentFrom})`
+  ];
+  const [total, areaCounts] = await Promise.all([
+    supabasePermitLeadCount([...baseFilters, salesAreaPostgrestFilter(areas)]),
+    Promise.all(areas.map(async (administrativeArea) => ({
+      administrativeArea,
+      count: await supabasePermitLeadCount([...baseFilters, singleSalesAreaPostgrestFilter(administrativeArea)])
+    })))
+  ]);
+  return { asOfKst, definitionVersion: "sales-target-v1", total, areas: areaCounts };
+}
+
 async function recordLeadSyncStatus(
   companyId: string,
   source: "gov" | "seoul" | "kakao_keyword",
@@ -8805,6 +8851,9 @@ async function recordLeadSyncStatus(
   const prefix = source === "gov" ? "gov_restaurant_sync" : source === "seoul" ? "seoul_restaurant_sync" : "kakao_keyword_lead_sync";
   const finishedAt = new Date().toISOString();
   const ingest = options.ingest || EMPTY_PERMIT_INGEST_RESULT;
+  const dailySalesTarget = status === "success" && options.trigger === "cron"
+    ? await getDailyLeadTargetSnapshot(companyId).catch(() => null)
+    : null;
   await supabaseRequest("lead_sync_runs", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
@@ -8827,7 +8876,10 @@ async function recordLeadSyncStatus(
       cross_source_link_count: ingest.crossSourceLinked,
       batch_duplicate_count: ingest.batchDuplicates,
       error_message: status === "error" ? options.message?.slice(0, 1000) || "동기화 실패" : null,
-      metadata: { message: options.message?.slice(0, 500) || null }
+      metadata: {
+        message: options.message?.slice(0, 500) || null,
+        dailySalesTarget
+      }
     })
   }).catch(() => null);
   await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
