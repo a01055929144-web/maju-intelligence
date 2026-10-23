@@ -30,7 +30,9 @@ export function extractLeadAdministrativeAreas(address?: string | null) {
 
 export function isLeadAddressInSalesAreas(address: string | null | undefined, areas: readonly string[]) {
   const { administrativeArea, administrativeSubarea } = extractLeadAdministrativeAreas(address);
+  const province = administrativeArea.split(" ")[0] || "";
   return Boolean(
+    (province && areas.includes(province)) ||
     (administrativeArea && areas.includes(administrativeArea)) ||
     (administrativeSubarea && areas.includes(administrativeSubarea))
   );

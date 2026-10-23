@@ -212,6 +212,7 @@ type KakaoMapsApi = {
   event: {
     addListener(target: KakaoMap, eventName: "click", handler: (event: KakaoMapMouseEvent) => void): void;
     addListener(target: object, eventName: string, handler: (event: KakaoMapMouseEvent) => void): void;
+    preventMap: () => void;
   };
   load: (callback: () => void) => void;
   services: {
@@ -366,6 +367,7 @@ export function KakaoAddressMap({
   const vehicleAnimBootIdRef = useRef(0);
   const salesAreaPolygonsRef = useRef<KakaoPolygon[]>([]);
   const salesAreaInfoOverlayRef = useRef<KakaoCustomOverlay | null>(null);
+  const salesAreaInfoPinnedRef = useRef(false);
   const salesAreaBoundaryRef = useRef(salesAreaBoundary);
   const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
@@ -662,11 +664,13 @@ export function KakaoAddressMap({
     salesAreaPolygonsRef.current = [];
     salesAreaInfoOverlayRef.current?.setMap(null);
     salesAreaInfoOverlayRef.current = null;
+    salesAreaInfoPinnedRef.current = false;
 
     const selectedAreas = new Set(boundary.selectedAreas);
     const stats = new Map(boundary.stats.map((item) => [item.administrativeArea, item]));
     const maximum = Math.max(1, ...boundary.stats.map((item) => boundary.metric === "customers" ? item.customerCount : item.recentLeadCount));
-    const isSelected = (feature: SalesAreaBoundaryFeature) => selectedAreas.has(feature.properties.administrativeArea)
+    const isSelected = (feature: SalesAreaBoundaryFeature) => selectedAreas.has(feature.properties.province)
+      || selectedAreas.has(feature.properties.administrativeArea)
       || selectedAreas.has(feature.properties.parentAdministrativeArea);
     const colorFor = (feature: SalesAreaBoundaryFeature) => {
       const administrativeArea = feature.properties.administrativeArea;
@@ -680,12 +684,21 @@ export function KakaoAddressMap({
     };
     const showInfo = (feature: SalesAreaBoundaryFeature, position: KakaoLatLng, interactive: boolean) => {
       salesAreaInfoOverlayRef.current?.setMap(null);
+      salesAreaInfoPinnedRef.current = interactive;
       const stat = stats.get(feature.properties.administrativeArea);
       const parentStat = stats.get(feature.properties.parentAdministrativeArea);
       const selected = selectedAreas.has(feature.properties.administrativeArea);
       const parentSelected = selectedAreas.has(feature.properties.parentAdministrativeArea);
+      const provinceSelected = selectedAreas.has(feature.properties.province);
       const content = document.createElement("div");
       content.className = "min-w-[220px] rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-xl";
+      const preventOverlayMapEvent = (event: Event) => {
+        event.stopPropagation();
+        kakao.maps.event.preventMap();
+      };
+      content.addEventListener("mousedown", preventOverlayMapEvent);
+      content.addEventListener("touchstart", preventOverlayMapEvent, { passive: true });
+      content.addEventListener("click", preventOverlayMapEvent);
       const title = document.createElement("p");
       title.className = "font-black text-slate-950";
       title.textContent = feature.properties.administrativeArea;
@@ -703,13 +716,16 @@ export function KakaoAddressMap({
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mt-2 h-8 w-full rounded-lg bg-teal-700 px-3 font-black text-white disabled:bg-slate-200 disabled:text-slate-500";
-        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시" || parentSelected;
+        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시" || parentSelected || provinceSelected;
         button.textContent = boundary.province === "세종특별자치시"
           ? "세종은 현재 선택 대상이 아닙니다"
           : !boundary.canManage
             ? "조회 권한만 있습니다"
-            : parentSelected ? "시 전체가 적용 중입니다"
-              : selected ? "이 구 해제" : "이 구 추가";
+            : provinceSelected ? "시·도 전체가 적용 중입니다"
+              : parentSelected ? "시 전체가 적용 중입니다"
+              : selected
+                ? `${feature.properties.administrativeArea.split(" ").length >= 3 ? "이 구" : "이 지역"} 해제`
+                : `${feature.properties.administrativeArea.split(" ").length >= 3 ? "이 구" : "이 지역"} 추가`;
         button.addEventListener("click", (event) => {
           event.stopPropagation();
           salesAreaBoundaryRef.current?.onToggle(feature.properties.administrativeArea);
@@ -719,9 +735,10 @@ export function KakaoAddressMap({
           const parentButton = document.createElement("button");
           parentButton.type = "button";
           parentButton.className = "mt-1.5 h-8 w-full rounded-lg border border-teal-200 bg-white px-3 font-black text-teal-800 disabled:border-slate-200 disabled:text-slate-400";
-          parentButton.disabled = !boundary.canManage;
+          parentButton.disabled = !boundary.canManage || provinceSelected;
           parentButton.textContent = !boundary.canManage
             ? "조회 권한만 있습니다"
+            : provinceSelected ? "시·도 전체가 적용 중입니다"
             : parentSelected ? `${feature.properties.parentAdministrativeArea.split(" ").at(-1)} 전체 해제` : `${feature.properties.parentAdministrativeArea.split(" ").at(-1)} 전체 추가`;
           parentButton.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -764,7 +781,7 @@ export function KakaoAddressMap({
             });
             kakao.maps.event.addListener(polygon, "mouseout", () => {
               polygon.setOptions({ fillOpacity: colors.opacity, strokeWeight: colors.weight });
-              salesAreaInfoOverlayRef.current?.setMap(null);
+              if (!salesAreaInfoPinnedRef.current) salesAreaInfoOverlayRef.current?.setMap(null);
             });
             kakao.maps.event.addListener(polygon, "click", (event) => {
               if (event.latLng) showInfo(feature, event.latLng, true);
@@ -790,6 +807,7 @@ export function KakaoAddressMap({
       salesAreaPolygonsRef.current = [];
       salesAreaInfoOverlayRef.current?.setMap(null);
       salesAreaInfoOverlayRef.current = null;
+      salesAreaInfoPinnedRef.current = false;
     };
   }, [
     mapBootId,

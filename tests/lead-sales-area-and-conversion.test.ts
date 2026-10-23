@@ -38,6 +38,9 @@ describe("lead sales area and conversion state", () => {
     expect(isLeadAddressInSalesAreas("경기도 성남시 수정구 산성대로 1", ["경기도 성남시 분당구"])).toBe(false);
     expect(isLeadAddressInSalesAreas("경기도 성남시 수정구 산성대로 1", ["경기도 성남시"])).toBe(true);
     expect(isLeadAddressInSalesAreas("서울특별시 강남구 테헤란로 1", ["서울특별시 강남구"])).toBe(true);
+    expect(isLeadAddressInSalesAreas("서울특별시 강남구 테헤란로 1", ["서울특별시"])).toBe(true);
+    expect(isLeadAddressInSalesAreas("서울특별시 송파구 올림픽로 300", ["서울특별시", "경기도 성남시 분당구"])).toBe(true);
+    expect(isLeadAddressInSalesAreas("경기도 성남시 분당구 판교로 1", ["서울특별시"])).toBe(false);
   });
 
   it("fills the administrative area when enrichment discovers the first address", () => {

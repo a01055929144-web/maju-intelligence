@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MapPin, Plus, X } from "lucide-react";
+import { MapPin, X } from "lucide-react";
 import { KakaoAddressMap, type KakaoSalesAreaStat } from "@/components/kakao-address-map";
-import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
+import { isSalesAreaCovered, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
 type Region = { id: string; label: string };
 type Recommendation = { administrativeArea: string; customerCount: number; existingLeadCount: number; recentLeadCount: number };
@@ -42,21 +42,12 @@ export function SalesAreaSelector({
 }) {
   const [snapshot, setSnapshot] = useState(EMPTY_STATE);
   const [province, setProvince] = useState("서울특별시");
-  const [district, setDistrict] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [mapMetric, setMapMetric] = useState<"customers" | "recentLeads">("recentLeads");
   const [mapStats, setMapStats] = useState<KakaoSalesAreaStat[]>([]);
   const [mapStatsLoading, setMapStatsLoading] = useState(false);
   const [mapLoadTiming, setMapLoadTiming] = useState<number | null>(null);
-  const districtOptions = useMemo(() => (KOREAN_ADMINISTRATIVE_AREAS[province] || []).flatMap((item) => {
-    const parent = `${province} ${item}`;
-    const generalGus = KOREAN_GENERAL_GU_AREAS[parent] || [];
-    return [
-      { label: generalGus.length ? `${item} 전체` : item, value: item },
-      ...generalGus.map((gu) => ({ label: `${item} · ${gu}`, value: `${item} ${gu}` }))
-    ];
-  }), [province]);
 
   const previewCompanyId = useCallback(() => {
     if (typeof window === "undefined") return "";
@@ -80,7 +71,6 @@ export function SalesAreaSelector({
   }, [onSnapshot, withPreviewCompany]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { setDistrict(""); }, [province]);
   useEffect(() => {
     let active = true;
     setMapStatsLoading(true);
@@ -101,7 +91,7 @@ export function SalesAreaSelector({
   const unrecognizedIds = useMemo(() => new Set(snapshot.salesAreaState.unrecognizedRegions.map((item) => item.id)), [snapshot.salesAreaState.unrecognizedRegions]);
 
   async function addArea(administrativeArea: string) {
-    if (!snapshot.canManage || !administrativeArea) return;
+    if (!snapshot.canManage || !administrativeArea) return false;
     setBusy(true);
     setMessage("");
     try {
@@ -113,11 +103,15 @@ export function SalesAreaSelector({
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
         setMessage(payload?.message || "영업 지역을 저장하지 못했습니다.");
-        return;
+        return false;
       }
       await load();
       onChanged?.();
       setMessage(`저장했습니다. 기존 ${administrativeArea} 리드 ${(payload?.existingLeadCount || 0).toLocaleString()}건을 바로 표시하고, 내일 아침부터 새 매장이 들어옵니다.`);
+      return true;
+    } catch {
+      setMessage("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -126,13 +120,57 @@ export function SalesAreaSelector({
   async function removeArea(id: string) {
     if (!snapshot.canManage) return;
     setBusy(true);
-    const response = await fetch(withPreviewCompany(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(id)}`), { method: "DELETE" });
-    if (response.ok) {
+    setMessage("");
+    try {
+      const response = await fetch(withPreviewCompany(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(id)}`), { method: "DELETE" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage(payload?.message || "영업 지역을 해제하지 못했습니다.");
+        return;
+      }
       await load();
       onChanged?.();
       setMessage("영업 지역을 해제했습니다.");
+    } catch {
+      setMessage("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
+  }
+
+  async function setAreaChecked(administrativeArea: string, checked: boolean) {
+    if (checked) {
+      if (KOREAN_PROVINCES.includes(administrativeArea)) {
+        const recent = mapStats
+          .filter((item) => item.administrativeArea.split(" ").length === 2)
+          .reduce((sum, item) => sum + item.recentLeadCount, 0);
+        const daily = Math.round(recent / 30);
+        const accepted = window.confirm(
+          `${administrativeArea} 전체를 선택하면 최근 30일 신규 약 ${recent.toLocaleString()}건, 하루 평균 약 ${daily.toLocaleString()}건이 들어옵니다. `
+          + "현재 자동 작업 상한 기준 카카오 호출은 키워드 탐색 24회와 연락처 보강 30회, 하루 최대 약 54회입니다. 계속할까요?"
+        );
+        if (!accepted) return;
+      }
+      const saved = await addArea(administrativeArea);
+      if (!saved) return;
+      const redundantRegions = snapshot.regions.filter((region) => region.label.startsWith(`${administrativeArea} `));
+      if (redundantRegions.length) {
+        const results = await Promise.all(redundantRegions.map((region) =>
+          fetch(withPreviewCompany(`/api/leads/permits/keyword-search-regions?id=${encodeURIComponent(region.id)}`), { method: "DELETE" })
+            .then((response) => response.ok)
+            .catch(() => false)
+        ));
+        if (results.some((ok) => !ok)) {
+          setMessage("넓은 지역은 저장했지만 일부 하위 지역 정리에 실패했습니다. 다시 열어 확인해주세요.");
+        } else {
+          await load();
+          onChanged?.();
+        }
+      }
+      return;
+    }
+    const explicitRegion = snapshot.regions.find((region) => region.label === administrativeArea);
+    if (explicitRegion) await removeArea(explicitRegion.id);
   }
 
   async function toggleBoundaryArea(administrativeArea: string) {
@@ -170,6 +208,23 @@ export function SalesAreaSelector({
     : snapshot.salesAreaState.source === "default"
       ? "출발지·배송 권역 기본값"
       : "미설정";
+  const provinceSelected = snapshot.salesAreaState.effectiveAreas.includes(province);
+  const statsByArea = useMemo(() => new Map(mapStats.map((item) => [item.administrativeArea, item])), [mapStats]);
+  const districtRows = useMemo(() => {
+    const selected = snapshot.salesAreaState.effectiveAreas;
+    return (KOREAN_ADMINISTRATIVE_AREAS[province] || [])
+      .map((districtName) => {
+        const parent = `${province} ${districtName}`;
+        const generalGus = KOREAN_GENERAL_GU_AREAS[parent] || [];
+        return {
+          districtName,
+          parent,
+          generalGus,
+          selected: isSalesAreaCovered(parent, selected) || generalGus.some((gu) => selected.includes(`${parent} ${gu}`))
+        };
+      })
+      .sort((left, right) => Number(right.selected) - Number(left.selected) || left.districtName.localeCompare(right.districtName));
+  }, [province, snapshot.salesAreaState.effectiveAreas]);
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
@@ -204,15 +259,51 @@ export function SalesAreaSelector({
         </div>
       ) : null}
 
-      <div className="grid gap-2 sm:grid-cols-[180px_minmax(0,1fr)_auto]">
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold" disabled={!snapshot.canManage || busy} onChange={(event) => setProvince(event.target.value)} value={province}>
           {KOREAN_PROVINCES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold" disabled={!snapshot.canManage || busy} onChange={(event) => setDistrict(event.target.value)} value={district}>
-          <option value="">시·군·구 선택</option>
-          {districtOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-        <button className="maju-button-primary" disabled={!snapshot.canManage || !district || busy} onClick={() => void addArea(`${province} ${district}`)} type="button"><Plus className="h-4 w-4" />추가</button>
+        <div className="max-h-[min(48dvh,440px)] space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-2">
+          <SalesAreaCheckbox
+            checked={provinceSelected}
+            disabled={!snapshot.canManage || busy}
+            label={`${province} 전체`}
+            onChange={(checked) => void setAreaChecked(province, checked)}
+            stat={{
+              customerCount: districtRows.reduce((sum, row) => sum + (statsByArea.get(row.parent)?.customerCount || 0), 0),
+              recentLeadCount: districtRows.reduce((sum, row) => sum + (statsByArea.get(row.parent)?.recentLeadCount || 0), 0)
+            }}
+          />
+          {districtRows.map((row) => {
+            const parentExplicit = snapshot.salesAreaState.effectiveAreas.includes(row.parent);
+            return (
+              <div className="border-t border-slate-100 pt-1" key={row.parent}>
+                <SalesAreaCheckbox
+                  checked={provinceSelected || parentExplicit}
+                  disabled={!snapshot.canManage || busy || provinceSelected}
+                  label={row.generalGus.length ? `${row.districtName} 전체` : row.districtName}
+                  onChange={(checked) => void setAreaChecked(row.parent, checked)}
+                  stat={statsByArea.get(row.parent)}
+                />
+                {row.generalGus.map((gu) => {
+                  const area = `${row.parent} ${gu}`;
+                  return (
+                    <div className="pl-6" key={area}>
+                      <SalesAreaCheckbox
+                        checked={provinceSelected || parentExplicit || snapshot.salesAreaState.effectiveAreas.includes(area)}
+                        disabled={!snapshot.canManage || busy || provinceSelected || parentExplicit}
+                        label={gu}
+                        onChange={(checked) => void setAreaChecked(area, checked)}
+                        stat={statsByArea.get(area)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[11px] font-semibold text-slate-500">체크하면 즉시 저장되고 지도 색칠과 리드 목록에 반영됩니다. 시·도 전체는 키 하나로 저장합니다.</p>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
@@ -249,5 +340,27 @@ export function SalesAreaSelector({
       {!snapshot.canManage ? <p className="text-xs font-semibold text-slate-500">영업 지역은 회사 또는 거래처 관리 권한이 있는 사용자만 변경할 수 있습니다.</p> : null}
       {message ? <p className="text-xs font-bold text-slate-700">{message}</p> : null}
     </div>
+  );
+}
+
+function SalesAreaCheckbox({
+  checked,
+  disabled,
+  label,
+  onChange,
+  stat
+}: {
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly onChange: (checked: boolean) => void;
+  readonly stat?: Pick<KakaoSalesAreaStat, "customerCount" | "recentLeadCount">;
+}) {
+  return (
+    <label className={`flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 ${disabled ? "opacity-60" : "cursor-pointer hover:bg-teal-50"}`}>
+      <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+      <span className="min-w-0 flex-1 text-xs font-black text-slate-800">{label}</span>
+      <span className="shrink-0 text-[10px] font-semibold tabular-nums text-slate-500">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
+    </label>
   );
 }

@@ -20,6 +20,17 @@ export const KOREAN_ADMINISTRATIVE_AREAS: Record<string, readonly string[]> = {
 
 export const KOREAN_PROVINCES = Object.keys(KOREAN_ADMINISTRATIVE_AREAS);
 
+export function isKoreanProvince(value: string) {
+  return Object.prototype.hasOwnProperty.call(KOREAN_ADMINISTRATIVE_AREAS, value);
+}
+
+export function isSalesAreaCovered(area: string, selectedAreas: readonly string[]) {
+  const [province, district] = area.split(" ");
+  return selectedAreas.includes(province)
+    || selectedAreas.includes(area)
+    || Boolean(district && selectedAreas.includes(`${province} ${district}`));
+}
+
 export const KOREAN_GENERAL_GU_AREAS: Record<string, readonly string[]> = {
   "경기도 고양시": ["덕양구", "일산동구", "일산서구"],
   "경기도 부천시": ["원미구", "소사구", "오정구"],

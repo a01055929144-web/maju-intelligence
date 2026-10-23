@@ -37,7 +37,7 @@ import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "./staff-job-titl
 import { maskPhoneNumber } from "./phone";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import { GeoPoint, haversineDistanceKm, resolveAddressPoint, RouteDistanceResult } from "./tmap";
-import { getSelectableSalesAreaKeys, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS } from "./korean-administrative-areas";
+import { getSelectableSalesAreaKeys, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "./korean-administrative-areas";
 import { chargeBilling, generateTossKey, isTossPaymentsConfigured, TossPayment } from "./toss-payments";
 import { CustomerMessageChannel, sendCustomerMessage } from "./customer-messages";
 import type { VehicleMaster, VehicleMasterInput, VehicleMasterRepository, VehicleOperationalStatus } from "../domains/delivery/vehicle-master";
@@ -948,6 +948,8 @@ export function extractCustomerAdministrativeSubarea(address?: string | null) {
 }
 
 function normalizeSelectableSalesArea(value?: string | null) {
+  const trimmed = (value || "").replace(/\s+/g, " ").trim();
+  if (KOREAN_PROVINCES.includes(trimmed)) return trimmed;
   const subarea = extractCustomerAdministrativeSubarea(value);
   if (subarea) {
     const parent = extractCustomerAdministrativeArea(value);
@@ -9086,6 +9088,12 @@ export async function getCompanySalesAreaRecommendations(companyId: string): Pro
 export async function countCompanyLeadsInAdministrativeArea(companyId: string, administrativeArea: string) {
   const normalized = normalizeSelectableSalesArea(administrativeArea);
   if (!normalized || !isProductionStoreConfigured()) return 0;
+  if (KOREAN_PROVINCES.includes(normalized)) {
+    return supabasePermitLeadCount([
+      `company_id=eq.${encodeURIComponent(companyId)}`,
+      `administrative_area=like.${encodeURIComponent(`${normalized} *`)}`
+    ]).catch(() => 0);
+  }
   const isSubarea = Boolean(extractCustomerAdministrativeSubarea(normalized));
   return supabasePermitLeadCount([
     `company_id=eq.${encodeURIComponent(companyId)}`,
@@ -9141,8 +9149,15 @@ export function isAddressInSalesAreas(address: string | null | undefined, areas:
 }
 
 function salesAreaPostgrestFilter(areas: readonly string[]) {
-  const encoded = areas.map(encodeURIComponent).join(",");
-  return `or=(administrative_area.in.(${encoded}),administrative_subarea.in.(${encoded}))`;
+  const provinces = areas.filter((area) => KOREAN_PROVINCES.includes(area));
+  const localAreas = areas.filter((area) => !KOREAN_PROVINCES.includes(area));
+  const filters = [];
+  if (localAreas.length) {
+    const encoded = localAreas.map(encodeURIComponent).join(",");
+    filters.push(`administrative_area.in.(${encoded})`, `administrative_subarea.in.(${encoded})`);
+  }
+  filters.push(...provinces.map((province) => `administrative_area.like.${encodeURIComponent(`${province} *`)}`));
+  return `or=(${filters.join(",")})`;
 }
 
 /**
