@@ -23,6 +23,7 @@ export type KakaoKeywordLeadCandidate = {
   latitude: number;
   longitude: number;
   industry: string;
+  kakaoCategoryName: string;
 };
 
 function getKakaoRestKey() {
@@ -39,6 +40,7 @@ type KakaoKeywordDocument = {
   road_address_name?: string;
   address_name?: string;
   phone?: string;
+  category_name?: string;
   x?: string; // 경도(longitude)
   y?: string; // 위도(latitude)
 };
@@ -86,7 +88,8 @@ export async function searchKakaoKeywordLeads(
         phone: doc.phone || "",
         latitude: Number(doc.y),
         longitude: Number(doc.x),
-        industry: keyword
+        industry: keyword,
+        kakaoCategoryName: doc.category_name?.trim() || ""
       }))
       .filter((candidate) => Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude));
   } catch {

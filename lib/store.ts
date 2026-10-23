@@ -5177,7 +5177,7 @@ export async function getKakaoIndustryBackfillPreview(companyId?: string): Promi
       `normalized_customers?select=id,company_id,customer_name,industry,kakao_place_url,place_links_checked_at${companyFilter}&limit=5000`
     ),
     supabaseRequest<Array<{ business_name: string; company_id: string; id: string; industry_primary: string | null; kakao_place_url: string | null; source: string | null }>>(
-      `business_permit_leads?select=id,company_id,business_name,source,industry_primary,kakao_place_url${companyFilter}&limit=5000`
+      `business_permit_leads?select=id,company_id,business_name,source,industry_primary,kakao_place_url${companyFilter}&merged_into_lead_id=is.null&limit=5000`
     )
   ]);
   const customerCandidates = customers.flatMap((row) => {
@@ -5223,7 +5223,7 @@ async function excludeMatchingLeadsForNewCustomer(
     phone: string | null;
     status: string;
   }>>(
-    `business_permit_leads?select=id,business_name,address,phone,business_number,matched_customer_id,status&company_id=eq.${encodeURIComponent(companyId)}&status=not.in.(${inactiveStatuses})&${lookup}`
+    `business_permit_leads?select=id,business_name,address,phone,business_number,matched_customer_id,status&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&status=not.in.(${inactiveStatuses})&${lookup}`
   ).catch(() => []);
 
   const matches = leads.filter((lead) => lead.id !== skipLeadId && !(lead.status === "거래처 전환" && lead.matched_customer_id)).flatMap((lead) => {
@@ -7965,6 +7965,7 @@ export type PermitLeadIngestRow = {
   closeDate?: string;
   /** 원천의 최종 변경 시각. 출처가 섞인 중복 그룹의 대표 상태 판정에 사용합니다. */
   lastModified?: string;
+  kakaoCategoryName?: string;
 };
 
 export type PermitLeadItem = {
@@ -8065,6 +8066,7 @@ type PermitLeadRow = {
   grade: string | null;
   naver_place_url: string | null;
   kakao_place_url: string | null;
+  kakao_category_name: string | null;
   google_place_url: string | null;
   instagram_url: string | null;
   review_count: number | null;
@@ -8352,7 +8354,7 @@ async function listExistingCanonicalLeadRows(companyId: string, areas: readonly 
   for (let offset = 0; ; offset += pageSize) {
     const areaFilter = areas.length ? `&${salesAreaPostgrestFilter(areas)}` : "";
     const page = await supabaseRequest<ExistingCanonicalLeadRow[]>(
-      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}${areaFilter}&order=id.asc&offset=${offset}&limit=${pageSize}`
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null${areaFilter}&order=id.asc&offset=${offset}&limit=${pageSize}`
     ).catch(() => []);
     rows.push(...page);
     if (page.length < pageSize) break;
@@ -8365,7 +8367,7 @@ async function listExistingLeadsByBusinessNumbers(companyId: string, businessNum
   for (let offset = 0; offset < businessNumbers.length; offset += 100) {
     const batch = businessNumbers.slice(offset, offset + 100).map(encodeURIComponent).join(",");
     rows.push(...await supabaseRequest<ExistingCanonicalLeadRow[]>(
-      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${batch})`
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=in.(${batch})`
     ).catch(() => []));
   }
   return rows;
@@ -8698,6 +8700,7 @@ export async function ingestPermitLeadRows(
       score_breakdown: scoreBreakdown,
       grade,
       raw_payload: row,
+      ...(row.kakaoCategoryName ? { kakao_category_name: row.kakaoCategoryName.slice(0, 500) } : {}),
       updated_at: new Date().toISOString()
     };
 
@@ -9449,7 +9452,7 @@ export async function runKakaoKeywordLeadSweep(
         `normalized_customers?select=customer_name&company_id=eq.${encodeURIComponent(companyId)}`
       ).catch(() => []),
       supabaseRequest<Array<{ business_name: string }>>(
-        `business_permit_leads?select=business_name&company_id=eq.${encodeURIComponent(companyId)}`
+        `business_permit_leads?select=business_name&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null`
       ).catch(() => [])
     ]);
     const knownNames = new Set<string>([
@@ -9477,6 +9480,7 @@ export async function runKakaoKeywordLeadSweep(
             address: candidate.address,
             phone: candidate.phone || undefined,
             industry: rule.primary,
+            kakaoCategoryName: candidate.kakaoCategoryName,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
             jurisdiction: anchor.label
@@ -9603,7 +9607,7 @@ export async function saveLeadBusinessHours(
   actor: { userId?: string; name?: string }
 ) {
   const owned = await supabaseRequest<Array<{ id: string }>>(
-    `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(leadId)}&limit=1`
+    `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(leadId)}&merged_into_lead_id=is.null&limit=1`
   );
   if (!owned.length) throw new Error("리드를 찾을 수 없습니다.");
   await supabaseRequest(`lead_business_hour_intervals?company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&source=eq.manual`, { method: "DELETE" });
@@ -9624,7 +9628,7 @@ export async function saveLeadBusinessHours(
 export async function listPermitLeads(companyId: string, filters: PermitLeadFilters = {}): Promise<{ leads: PermitLeadItem[]; total: number }> {
   if (!isProductionStoreConfigured()) return { leads: [], total: 0 };
 
-  const params = [`company_id=eq.${encodeURIComponent(companyId)}`];
+  const params = [`company_id=eq.${encodeURIComponent(companyId)}`, "merged_into_lead_id=is.null"];
   if (filters.period && filters.period !== "all") params.push(`lead_period=eq.${encodeURIComponent(filters.period)}`);
   if (filters.industry) params.push(`industry_primary=eq.${encodeURIComponent(filters.industry)}`);
   if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
@@ -9818,7 +9822,7 @@ export async function recordPermitLeadAction(
   // 상태 PATCH만 company_id로 제한하고 이력을 먼저 INSERT하면 다른 회사 리드 ID로 고아 이력이
   // 생길 수 있으므로 두 쓰기 모두 같은 테넌트 경계 안에서만 진행합니다.
   const ownedLead = await supabaseRequest<Array<{ id: string }>>(
-    `business_permit_leads?select=id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `business_permit_leads?select=id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
   );
   if (!ownedLead.length) throw new Error("리드를 찾을 수 없습니다.");
 
@@ -10244,7 +10248,7 @@ async function enrichPermitLeadKakaoOnIngest(companyId: string, leadId: string) 
   const restKey = process.env.KAKAO_REST_KEY;
   if (!restKey || restKey === "replace-with-kakao-rest-api-key") return;
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
   ).catch(() => []);
   const row = rows[0];
   if (!row) return;
@@ -10259,6 +10263,7 @@ async function enrichPermitLeadKakaoOnIngest(companyId: string, leadId: string) 
 
   const payload: Record<string, unknown> = {};
   if (match.matched && match.placeUrl) payload.kakao_place_url = match.placeUrl;
+  if (match.matched && match.categoryName) payload.kakao_category_name = match.categoryName.slice(0, 500);
   if (match.matched && shouldAutoApplyKakaoPhone(match.queryVariant) && !row.phone && match.phone) payload.phone = match.phone;
   if (Object.keys(payload).length) {
     payload.updated_at = new Date().toISOString();
@@ -10328,7 +10333,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   }
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
   ).catch(() => []);
   const row = rows[0];
   if (!row) return { ok: false, persisted: false, sources: emptySources, message: "리드를 찾을 수 없습니다." };
@@ -10361,6 +10366,9 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   if (placeLinks) {
     payload.naver_place_url = placeLinks.naverPlaceUrl || row.naver_place_url;
     payload.kakao_place_url = placeLinks.kakaoPlaceUrl || row.kakao_place_url;
+    if (placeLinks.kakaoMatched && placeLinks.kakaoCategoryName) {
+      payload.kakao_category_name = placeLinks.kakaoCategoryName.slice(0, 500);
+    }
     payload.google_place_url = placeLinks.googleMapUrl || row.google_place_url;
     const canApplyKakaoPhone = shouldAutoApplyKakaoPhone(placeLinks.kakaoQueryVariant);
     if (!row.phone && placeLinks.enrichedPhone && canApplyKakaoPhone) payload.phone = placeLinks.enrichedPhone;
@@ -10425,6 +10433,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
   const externalFieldKeys = [
     "naver_place_url",
     "kakao_place_url",
+    "kakao_category_name",
     "google_place_url",
     "review_count",
     "rating",
@@ -10547,7 +10556,7 @@ export async function updatePermitLeadKakaoMatch(
   if (!isProductionStoreConfigured()) return { message: "데이터베이스가 연결되어 있지 않습니다.", ok: false };
   const [leadRows, events] = await Promise.all([
     supabaseRequest<PermitLeadRow[]>(
-      `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+      `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
     ),
     supabaseRequest<LeadEnrichmentMetadataRow[]>(
       `lead_enrichment_events?select=lead_id,attempted_at,metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&order=attempted_at.desc&limit=100`
@@ -10597,6 +10606,7 @@ export async function updatePermitLeadKakaoMatch(
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
+        kakao_category_name: null,
         kakao_place_url: null,
         ...(shouldClearPhone ? { phone: null } : {}),
         updated_at: new Date().toISOString()
@@ -10658,14 +10668,14 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
     if (!dueIds.length) return empty;
     const dueOrder = new Map(dueIds.map((id, index) => [id, index]));
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&${salesAreaPostgrestFilter(salesAreas)}&id=in.(${dueIds.map(encodeURIComponent).join(",")})`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&${salesAreaPostgrestFilter(salesAreas)}&id=in.(${dueIds.map(encodeURIComponent).join(",")})`
     ).catch(() => []);
     rows = rows.sort((left, right) => (dueOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (dueOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)).slice(0, limit);
   } catch (error) {
     if (!isMissingLeadEnrichmentEventStoreError(error)) throw error;
     // 마이그레이션 적용 전/롤백 중에는 기존 후보 조회로 폴백해 보강 자체가 중단되지 않게 합니다.
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&${salesAreaPostgrestFilter(salesAreas)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&${salesAreaPostgrestFilter(salesAreas)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
     ).catch(() => []);
   }
 
@@ -10725,7 +10735,7 @@ export async function convertPermitLeadToCustomer(
   if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
 
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `business_permit_leads?select=*&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
   ).catch(() => []);
   const lead = rows[0];
   if (!lead) return { ok: false, message: "리드를 찾을 수 없습니다." };
@@ -10848,7 +10858,7 @@ export async function convertPermitLeadToCustomer(
 
 export async function getPermitLeadConversionPreview(companyId: string, leadId: string) {
   const leads = await supabaseRequest<Array<{ address: string | null }>>(
-    `business_permit_leads?select=address&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    `business_permit_leads?select=address&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
   );
   if (!leads[0]) throw new Error("리드를 찾을 수 없습니다.");
   const recommendation = await assignCustomerByTerritory(companyId, leads[0].address || "");
@@ -10972,7 +10982,7 @@ export async function findNearbyPermitLeads(companyId: string, input: FindNearby
 
   // 2) 활성·비제외·비중복 리드 중 주소가 있는 것만 대상으로, 좌표가 없으면 지오코딩 후 DB에 백필합니다.
   const rows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?select=*&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&is_duplicate=eq.false&status=neq.제외&address=not.is.null&limit=500`
+    `business_permit_leads?select=*&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&is_active=eq.true&is_duplicate=eq.false&status=neq.제외&address=not.is.null&limit=500`
   ).catch(() => []);
 
   let unresolvedLeadCount = 0;

@@ -16,6 +16,7 @@ export type PlaceLinks = {
   checkedAt: string | null;
   enrichedPhone: string;
   enrichedIndustry: string;
+  kakaoCategoryName: string;
   enrichedAddress: string;
   kakaoMatched: boolean;
   kakaoQueryVariant: KakaoQueryVariant;
@@ -52,6 +53,7 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     checkedAt,
     enrichedPhone: kakaoResult.phone,
     enrichedIndustry: kakaoResult.industry,
+    kakaoCategoryName: kakaoResult.categoryName,
     enrichedAddress: kakaoResult.address,
     kakaoMatched: kakaoResult.matched,
     kakaoQueryVariant: kakaoResult.queryVariant,
@@ -92,6 +94,7 @@ export type KakaoPlaceResult = {
   placeUrl: string;
   phone: string;
   industry: string;
+  categoryName: string;
   address: string;
   distanceM: number | null;
   documentCount: number;
@@ -119,6 +122,7 @@ const emptyKakaoPlaceResult = (documentCount = 0): KakaoPlaceResult => ({
   distanceM: null,
   documentCount,
   industry: "",
+  categoryName: "",
   matched: false,
   matchedAddress: "",
   matchedName: "",
@@ -245,6 +249,7 @@ export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPla
         placeUrl,
         phone: place.phone?.trim() || "",
         industry,
+        categoryName: place.category_name?.trim() || "",
         address: place.road_address_name?.trim() || place.address_name?.trim() || "",
         distanceM: kakaoCandidateDistanceM(input, place),
         documentCount: documents.length,

@@ -80,6 +80,7 @@ describe("selectKakaoPlaceResult", () => {
     address: "서울 강남구 역삼동 1",
     distanceM: 100,
     documentCount: 1,
+    categoryName: "음식점 > 한식",
     industry: "한식",
     matched: true,
     matchedAddress: "서울 강남구 역삼동 1",

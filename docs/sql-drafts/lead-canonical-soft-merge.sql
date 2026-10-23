@@ -1,5 +1,4 @@
--- REVIEW ONLY. 운영 적용·병합 실행 모두 금지.
--- 메타데이터/감사 테이블 적용 → 읽기 필터 배포 → 승인된 계획 병합 순서입니다.
+-- 1단계 스키마 운영 적용 승인(2026-10-23). 실제 병합 실행은 별도 승인 전 금지.
 begin;
 
 alter table public.business_permit_leads
@@ -38,13 +37,14 @@ do $$ begin
     alter table public.business_permit_leads
       add constraint business_permit_leads_merged_into_fk
       foreign key(company_id,merged_into_lead_id)
-      references public.business_permit_leads(company_id,id) on delete restrict;
+      references public.business_permit_leads(company_id,id)
+      on delete no action deferrable initially deferred;
   end if;
 end $$;
 
 create table if not exists public.lead_merge_batches (
   id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references public.companies(id) on delete restrict,
+  company_id uuid not null references public.companies(id) on delete cascade,
   status text not null default 'prepared' check(status in ('prepared','applied','rolled_back','failed')),
   reason text not null,
   prepared_by_name text,
@@ -66,11 +66,13 @@ create table if not exists public.lead_merge_move_logs (
   moved_at timestamptz not null default now(),
   rolled_back_at timestamptz,
   constraint lead_merge_move_logs_batch_fk foreign key(company_id,merge_batch_id)
-    references public.lead_merge_batches(company_id,id) on delete restrict,
+    references public.lead_merge_batches(company_id,id) on delete cascade,
   constraint lead_merge_move_logs_original_fk foreign key(company_id,original_lead_id)
-    references public.business_permit_leads(company_id,id) on delete restrict,
+    references public.business_permit_leads(company_id,id)
+    on delete no action deferrable initially deferred,
   constraint lead_merge_move_logs_representative_fk foreign key(company_id,representative_lead_id)
-    references public.business_permit_leads(company_id,id) on delete restrict,
+    references public.business_permit_leads(company_id,id)
+    on delete no action deferrable initially deferred,
   constraint lead_merge_move_logs_row_uq unique(merge_batch_id,table_name,row_id)
 );
 
