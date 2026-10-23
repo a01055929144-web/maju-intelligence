@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLeadCanonicalFingerprint,
   buildLeadSourceRecordKey,
+  isCanonicalPlaceMatchSafe,
   isClosedPermitRecord
 } from "../domains/lead/canonical-identity";
 
@@ -27,5 +28,35 @@ describe("lead canonical identity", () => {
 
   it.each(["폐업", "영업취소", "직권말소"])("recognizes inactive source event: %s", (status) => {
     expect(isClosedPermitRecord(status)).toBe(true);
+  });
+
+  it("does not merge the same normalized place when floor, opening date, or industry differs", () => {
+    expect(isCanonicalPlaceMatchSafe({
+      existingAddress: "경기도 성남시 분당구 판교로 1 2층",
+      incomingAddress: "경기도 성남시 분당구 판교로 1 3층"
+    })).toBe(false);
+    expect(isCanonicalPlaceMatchSafe({
+      existingAddress: "경기도 성남시 분당구 판교로 1",
+      incomingAddress: "경기도 성남시 분당구 판교로 1",
+      existingOpenDate: "2026-01-01",
+      incomingOpenDate: "2026-10-20"
+    })).toBe(false);
+    expect(isCanonicalPlaceMatchSafe({
+      existingAddress: "경기도 성남시 분당구 판교로 1",
+      incomingAddress: "경기도 성남시 분당구 판교로 1",
+      existingIndustry: "한식",
+      incomingIndustry: "일식"
+    })).toBe(false);
+  });
+
+  it("allows a place match when known identity details agree", () => {
+    expect(isCanonicalPlaceMatchSafe({
+      existingAddress: "서울특별시 강남구 테헤란로 1 2층",
+      incomingAddress: "서울특별시 강남구 테헤란로 1 2층",
+      existingOpenDate: "2026-10-20",
+      incomingOpenDate: "2026-10-20",
+      existingIndustry: "한식",
+      incomingIndustry: "한식"
+    })).toBe(true);
   });
 });

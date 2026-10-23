@@ -22,6 +22,10 @@ export function normalizeLeadIdentityAddress(value: string | undefined) {
   );
 }
 
+export function normalizeLeadDetailedAddress(value: string | undefined) {
+  return normalizeLeadIdentityText(String(value || "").replace(/\s+/g, " ").trim());
+}
+
 export function normalizeLeadBusinessNumber(value: string | undefined) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -42,4 +46,28 @@ export function buildLeadSourceRecordKey(input: CanonicalLeadIdentityInput) {
 
 export function isClosedPermitRecord(status?: string, closeDate?: string) {
   return Boolean(closeDate?.trim()) || /폐업|취소|말소|직권폐업|영업정지/.test(status || "");
+}
+
+export type CanonicalPlaceCompatibilityInput = {
+  existingAddress?: string;
+  incomingAddress?: string;
+  existingOpenDate?: string;
+  incomingOpenDate?: string;
+  existingIndustry?: string;
+  incomingIndustry?: string;
+};
+
+export function isCanonicalPlaceMatchSafe(input: CanonicalPlaceCompatibilityInput) {
+  const existingAddress = normalizeLeadDetailedAddress(input.existingAddress);
+  const incomingAddress = normalizeLeadDetailedAddress(input.incomingAddress);
+  if (existingAddress && incomingAddress && existingAddress !== incomingAddress) return false;
+
+  const existingOpenDate = String(input.existingOpenDate || "").slice(0, 10);
+  const incomingOpenDate = String(input.incomingOpenDate || "").slice(0, 10);
+  if (existingOpenDate && incomingOpenDate && existingOpenDate !== incomingOpenDate) return false;
+
+  const existingIndustry = normalizeLeadIdentityText(input.existingIndustry);
+  const incomingIndustry = normalizeLeadIdentityText(input.incomingIndustry);
+  if (existingIndustry && incomingIndustry && existingIndustry !== incomingIndustry) return false;
+  return true;
 }

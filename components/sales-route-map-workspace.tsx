@@ -2186,15 +2186,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {mapSalesRegionsConfigured === false ? (
-                <button
-                  className="h-9 rounded-lg bg-amber-100 px-3 text-xs font-black text-amber-900"
-                  onClick={() => setMobileSalesAreaOpen(true)}
-                  type="button"
-                >
-                  지역 선택
-                </button>
-              ) : null}
+              <button
+                className="h-9 rounded-lg bg-amber-100 px-3 text-xs font-black text-amber-900"
+                onClick={() => setMobileSalesAreaOpen(true)}
+                type="button"
+              >
+                지역 선택
+              </button>
               <button
                 aria-expanded={mobileMapControlsOpen}
                 className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
@@ -2439,7 +2437,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               compact
               mapCenterPoint={mapCenterPoint}
               onChanged={() => {
-                setShowAllLeadsOnMap(true);
+                setMapLeadsVisible(true);
                 setShowOutsideSalesAreaOnMap(false);
                 void loadAllLeadsForMap();
               }}
@@ -3169,7 +3167,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               compact
               mapCenterPoint={mapCenterPoint}
               onChanged={() => {
-                setShowAllLeadsOnMap(true);
+                setMapLeadsVisible(true);
                 setShowOutsideSalesAreaOnMap(false);
                 void loadAllLeadsForMap();
               }}

@@ -10,7 +10,9 @@ import type { LeadBusinessHourInterval } from "../domains/lead/business-hours";
 import {
   buildLeadCanonicalFingerprint,
   buildLeadSourceRecordKey,
-  isClosedPermitRecord
+  isCanonicalPlaceMatchSafe,
+  isClosedPermitRecord,
+  normalizeLeadIdentityText
 } from "../domains/lead/canonical-identity";
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
@@ -8333,6 +8335,8 @@ type ExistingCanonicalLeadRow = {
   keyword_volume: number | null;
   review_count: number | null;
   rating: number | null;
+  open_date: string | null;
+  industry_raw: string | null;
 };
 
 async function listExistingCanonicalLeadRows(companyId: string, areas: readonly string[]) {
@@ -8341,7 +8345,7 @@ async function listExistingCanonicalLeadRows(companyId: string, areas: readonly 
   for (let offset = 0; ; offset += pageSize) {
     const areaFilter = areas.length ? `&${salesAreaPostgrestFilter(areas)}` : "";
     const page = await supabaseRequest<ExistingCanonicalLeadRow[]>(
-      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}${areaFilter}&order=id.asc&offset=${offset}&limit=${pageSize}`
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}${areaFilter}&order=id.asc&offset=${offset}&limit=${pageSize}`
     ).catch(() => []);
     rows.push(...page);
     if (page.length < pageSize) break;
@@ -8354,7 +8358,7 @@ async function listExistingLeadsByBusinessNumbers(companyId: string, businessNum
   for (let offset = 0; offset < businessNumbers.length; offset += 100) {
     const batch = businessNumbers.slice(offset, offset + 100).map(encodeURIComponent).join(",");
     rows.push(...await supabaseRequest<ExistingCanonicalLeadRow[]>(
-      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${batch})`
+      `business_permit_leads?select=id,business_name,business_number,address,phone,canonical_fingerprint,source_list,keyword_volume,review_count,rating,open_date,industry_raw&company_id=eq.${encodeURIComponent(companyId)}&business_number=in.(${batch})`
     ).catch(() => []));
   }
   return rows;
@@ -8539,16 +8543,46 @@ export async function ingestPermitLeadRows(
       address: row.address,
       sourceRecordKey: row.sourceRecordKey
     });
-    const sourceMatchedLeadId = leadIdBySourceKey.get(`${source}:${sourceRecordKey}`);
-    const existingLead =
-      (sourceMatchedLeadId ? leadById.get(sourceMatchedLeadId) : undefined) ||
-      (businessNumber ? leadByBusinessNumber.get(businessNumber) : undefined) ||
-      leadByFingerprint.get(canonicalFingerprint);
+    const hasExplicitSourceKey = Boolean(normalizeLeadIdentityText(row.sourceRecordKey));
+    const sourceMatchedLeadId = hasExplicitSourceKey ? leadIdBySourceKey.get(`${source}:${sourceRecordKey}`) : undefined;
+    const sourceMatchedLead = sourceMatchedLeadId ? leadById.get(sourceMatchedLeadId) : undefined;
+    const businessNumberMatchedLead = businessNumber ? leadByBusinessNumber.get(businessNumber) : undefined;
+    const placeMatchedLead = leadByFingerprint.get(canonicalFingerprint);
+    const safePlaceMatchedLead = placeMatchedLead && isCanonicalPlaceMatchSafe({
+      existingAddress: placeMatchedLead.address || undefined,
+      incomingAddress: row.address,
+      existingOpenDate: placeMatchedLead.open_date || undefined,
+      incomingOpenDate: row.openDate || row.permitDate,
+      existingIndustry: placeMatchedLead.industry_raw || undefined,
+      incomingIndustry: row.industry
+    }) ? placeMatchedLead : undefined;
+    const matchReason = sourceMatchedLead
+      ? "source_key"
+      : businessNumberMatchedLead
+        ? "business_number"
+        : safePlaceMatchedLead
+          ? "name_address"
+          : null;
+    const existingLead = sourceMatchedLead || businessNumberMatchedLead || safePlaceMatchedLead;
     const existingId = existingLead?.id;
 
     // 폐업·취소·말소 이벤트는 신규 영업 기회가 아닙니다. 원천에서 기존 대표 리드를 찾았을 때만
     // 상태를 갱신하고, 일치하는 리드가 없으면 새 행을 만들지 않습니다.
     if (isClosedRecord && !existingId) continue;
+    if (isClosedRecord && matchReason === "name_address") {
+      updates.push({
+        id: existingId!,
+        payload: {
+          status: "폐업 확인 필요",
+          next_action: "폐업 여부 확인",
+          next_action_reasons: ["상호+주소만 일치", "원천키·사업자번호 불일치"],
+          updated_at: new Date().toISOString()
+        },
+        sourceRecordKey,
+        row
+      });
+      continue;
+    }
     // isNewLead는 소스와 무관하게 "확인된 최근(90일 내) 개업/인허가일이 있는가"만 봅니다 — 카카오
     // 키워드 탐색(영업리드)은 애초에 날짜가 없어 항상 false이고, gov/seoul 자동 동기화는 날짜가
     // 있어야 true입니다. 수동 업로드는 담당자가 직접 고른 리드라 날짜가 없어도 신규로 취급합니다.
@@ -8636,7 +8670,7 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: excluded ? "제외" : "신규 수집",
+      status: excluded ? "제외" : placeMatchedLead && !safePlaceMatchedLead ? "주인 변경" : "신규 수집",
       next_action: nextAction.action,
       next_action_reasons: nextAction.reasons,
       score_total: scoreTotal,
