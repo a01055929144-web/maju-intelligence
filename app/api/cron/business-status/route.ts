@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   chargeDueSubscriptions,
+  recordAllCompaniesDailyLeadTargetSnapshots,
   refreshAllCompaniesBusinessStatuses,
   sendBusinessClosureAlerts,
   sendDailyChurnRiskDigests,
@@ -61,6 +62,7 @@ export const maxDuration = 60;
  * configured, the endpoint refuses all requests rather than running unauthenticated.
  */
 export async function GET(request: NextRequest) {
+  const cronStartedAt = new Date().toISOString();
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json({ message: "CRON_SECRET이 설정되지 않아 실행할 수 없습니다." }, { status: 500 });
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
     syncAllCompaniesKakaoKeywordLeads(),
     chargeDueSubscriptions()
   ]);
+  const dailyLeadTargetSnapshots = await recordAllCompaniesDailyLeadTargetSnapshots(cronStartedAt);
   return NextResponse.json({
     businessStatus,
     closureAlerts,
@@ -85,6 +88,7 @@ export async function GET(request: NextRequest) {
     govRestaurantLeadSync,
     seoulRestaurantLeadSync,
     kakaoKeywordLeadSync,
+    dailyLeadTargetSnapshots,
     subscriptionBilling
   });
 }

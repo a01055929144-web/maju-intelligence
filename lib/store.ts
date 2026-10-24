@@ -8851,9 +8851,6 @@ async function recordLeadSyncStatus(
   const prefix = source === "gov" ? "gov_restaurant_sync" : source === "seoul" ? "seoul_restaurant_sync" : "kakao_keyword_lead_sync";
   const finishedAt = new Date().toISOString();
   const ingest = options.ingest || EMPTY_PERMIT_INGEST_RESULT;
-  const dailySalesTarget = status === "success" && options.trigger === "cron"
-    ? await getDailyLeadTargetSnapshot(companyId).catch(() => null)
-    : null;
   await supabaseRequest("lead_sync_runs", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
@@ -8877,8 +8874,7 @@ async function recordLeadSyncStatus(
       batch_duplicate_count: ingest.batchDuplicates,
       error_message: status === "error" ? options.message?.slice(0, 1000) || "동기화 실패" : null,
       metadata: {
-        message: options.message?.slice(0, 500) || null,
-        dailySalesTarget
+        message: options.message?.slice(0, 500) || null
       }
     })
   }).catch(() => null);
@@ -8891,6 +8887,41 @@ async function recordLeadSyncStatus(
       [`${prefix}_last_message`]: options.message ? options.message.slice(0, 500) : null
     })
   }).catch(() => null);
+}
+
+export type DailyLeadTargetSnapshotRecordResult = {
+  recorded: number;
+  failed: Array<{ companyId: string; message: string }>;
+};
+
+/**
+ * 세 가지 리드 수집이 모두 끝난 뒤 회사별 일일 영업 대상 지표를 정확히 한 번 기록합니다.
+ * 각 출처 실행 중간값이 최종 지표처럼 남지 않도록, 그날의 마지막 성공 cron 실행 행에 붙입니다.
+ */
+export async function recordAllCompaniesDailyLeadTargetSnapshots(
+  cronStartedAt: string
+): Promise<DailyLeadTargetSnapshotRecordResult> {
+  if (!isProductionStoreConfigured()) return { recorded: 0, failed: [] };
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.allSettled(companies.map(async ({ id: companyId }) => {
+    const [snapshot, runs] = await Promise.all([
+      getDailyLeadTargetSnapshot(companyId),
+      supabaseRequest<Array<{ id: string; metadata: Record<string, unknown> | null }>>(
+        `lead_sync_runs?select=id,metadata&company_id=eq.${encodeURIComponent(companyId)}&trigger=eq.cron&status=eq.success&started_at=gte.${encodeURIComponent(cronStartedAt)}&order=finished_at.desc&limit=1`
+      )
+    ]);
+    const run = runs[0];
+    if (!run) throw new Error("오늘 성공한 리드 수집 실행 이력이 없습니다.");
+    await supabaseRequest(`lead_sync_runs?id=eq.${encodeURIComponent(run.id)}&company_id=eq.${encodeURIComponent(companyId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ metadata: { ...(run.metadata || {}), dailySalesTarget: snapshot } })
+    });
+  }));
+  const failed = results.flatMap((result, index) => result.status === "rejected"
+    ? [{ companyId: companies[index].id, message: result.reason instanceof Error ? result.reason.message : String(result.reason) }]
+    : []);
+  return { recorded: results.length - failed.length, failed };
 }
 
 function summarizeLeadSyncIngest(ingest: PermitLeadIngestResult) {
