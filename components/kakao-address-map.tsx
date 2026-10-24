@@ -558,6 +558,7 @@ export function KakaoAddressMap({
             }
 
             geocodeCacheMissCount += 1;
+            let placed = false;
             await withTimeout(
               new Promise<void>((resolve) => {
                 geocoder.addressSearch(marker.address, (result: KakaoGeocodeResult[], geocodeStatus: string) => {
@@ -571,6 +572,7 @@ export function KakaoAddressMap({
                     const lng = Number(result[0].x);
                     geocodeMemoryCache.set(marker.address, { lat, lng });
                     placeMarkerAtPosition(marker, lat, lng);
+                    placed = true;
                   }
 
                   resolve();
@@ -579,6 +581,13 @@ export function KakaoAddressMap({
               kakaoGeocodeTimeoutMs,
               "Kakao address search timed out"
             ).catch(() => undefined);
+            if (!ignore && !placed) {
+              const fallbackPoint = await fetchAddressCoordinate(marker.address);
+              if (fallbackPoint && !ignore) {
+                geocodeMemoryCache.set(marker.address, fallbackPoint);
+                placeMarkerAtPosition(marker, fallbackPoint.lat, fallbackPoint.lng);
+              }
+            }
           });
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
@@ -1349,6 +1358,19 @@ async function mapWithConcurrency<T>(items: readonly T[], concurrency: number, w
     }
   };
   await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, () => run()));
+}
+
+async function fetchAddressCoordinate(address: string) {
+  try {
+    const response = await fetch(`/api/address-search?query=${encodeURIComponent(address)}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    const payload = await response.json() as { results?: Array<{ latitude?: number; longitude?: number }> };
+    const result = payload.results?.[0];
+    if (!Number.isFinite(result?.latitude) || !Number.isFinite(result?.longitude)) return null;
+    return { lat: Number(result?.latitude), lng: Number(result?.longitude) };
+  } catch {
+    return null;
+  }
 }
 
 function waitForVisibleMapContainer(element: HTMLElement, isCancelled: () => boolean) {
