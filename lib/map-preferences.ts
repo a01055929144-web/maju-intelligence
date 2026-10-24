@@ -6,6 +6,3 @@ export function normalizeStoredMapPanelMode(value: string | null): StoredMapPane
   return null;
 }
 
-export function parseStoredLeadVisibility(value: string | null) {
-  return value === "true";
-}

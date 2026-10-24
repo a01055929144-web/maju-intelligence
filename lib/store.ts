@@ -3720,7 +3720,13 @@ function toStaffVehicleLocation(row: {
     lastSeenAt: row.last_seen_at || undefined,
     lat,
     lng,
-    status: isStale ? "stale" : ((row.location_status || "active") as StaffVehicleLocation["status"]),
+    // 명시적으로 운행 종료한 차량은 목록에는 남기되 지도에는 그리지 않도록 offline을 보존합니다.
+    // 그 외 오래된 좌표만 stale로 분류해 마지막 위치를 회색 마커로 계속 표시합니다.
+    status: row.location_status === "offline"
+      ? "offline"
+      : isStale
+        ? "stale"
+        : ((row.location_status || "active") as StaffVehicleLocation["status"]),
     userId: row.user_id
   };
 }

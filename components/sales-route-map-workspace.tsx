@@ -69,7 +69,7 @@ import type { LoadingPositionMediaItem } from "@/components/loading-position-gal
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
-import { normalizeStoredMapPanelMode, parseStoredLeadVisibility } from "@/lib/map-preferences";
+import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -381,7 +381,6 @@ const workspaceViewDescriptions: Record<WorkspaceView, string> = {
 const originMarkerId = "origin-hub";
 export const tmapWaypointLimit = 15;
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v1";
-const MAP_LEADS_VISIBLE_STORAGE_KEY = "maju:map-leads-visible:v1";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
@@ -465,7 +464,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         setRightCollapsed(compatibleMode === "driver" || compatibleMode === "map");
         if (compatibleMode === "customer") setRightPanelTab("stores");
       }
-      setShowAllLeadsOnMap(parseStoredLeadVisibility(window.localStorage.getItem(MAP_LEADS_VISIBLE_STORAGE_KEY)));
+      // 지도는 매번 거래처·오늘 코스·차량 위치 중심으로 시작합니다. 과거 저장값이 true여도
+      // 리드 레이어를 자동으로 켜지 않으며, 현재 화면에서 사용자가 직접 켠 경우에만 유지합니다.
+      window.localStorage.removeItem("maju:map-leads-visible:v1");
     } catch {
       // 브라우저 저장소가 차단돼도 기본값(거래처만 표시)으로 지도를 사용할 수 있어야 합니다.
     }
@@ -680,11 +681,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
   function setMapLeadsVisible(visible: boolean) {
     setShowAllLeadsOnMap(visible);
-    try {
-      window.localStorage.setItem(MAP_LEADS_VISIBLE_STORAGE_KEY, String(visible));
-    } catch {
-      // 저장소 차단 시 현재 탭에서만 상태를 유지합니다.
-    }
   }
   // 카드 안에 줄이 늘거나 줄 때(신규 리드 반경 열기, 리드 전체 필터 표시 등) ResizeObserver가 항상
   // 제때 다시 계산해 주는 건 아니라서(2026-08-24 발견: "내 현재위치 이모티콘 위치가 동떨어져있어") —
@@ -1114,15 +1110,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   );
   const selectedLiveVehicle = liveVehicleLocations.find((location) => location.id === selectedLiveVehicleId);
   const liveVehiclesForMap = useMemo(() => {
-    if (selectedLiveVehicleId) return liveVehicleLocations.filter((location) => location.id === selectedLiveVehicleId);
-    if (vehicleFilterId === "all") return liveVehicleLocations;
+    const mapEligibleLocations = liveVehicleLocations.filter((location) => location.status !== "offline");
+    if (selectedLiveVehicleId) return mapEligibleLocations.filter((location) => location.id === selectedLiveVehicleId);
+    if (vehicleFilterId === "all") return mapEligibleLocations;
     const deliveryVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
-    return deliveryVehicle ? liveVehicleLocations.filter((location) => liveVehicleMatchesDeliveryGroup(location, deliveryVehicle)) : liveVehicleLocations;
+    return deliveryVehicle ? mapEligibleLocations.filter((location) => liveVehicleMatchesDeliveryGroup(location, deliveryVehicle)) : mapEligibleLocations;
   }, [deliveryVehicles, liveVehicleLocations, selectedLiveVehicleId, vehicleFilterId]);
   const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehiclesForMap, storeById), [liveVehiclesForMap, storeById]);
   const liveVehicleSummary = useMemo(() => {
-    const active = liveVehicleLocations.filter((location) => !location.isStale).length;
-    const stale = liveVehicleLocations.filter((location) => location.isStale).length;
+    const active = liveVehicleLocations.filter((location) => !location.isStale && location.status !== "offline").length;
+    const stale = liveVehicleLocations.filter((location) => location.isStale && location.status !== "offline").length;
     const latest = liveVehicleLocations
       .map((location) => (location.lastLocationAt ? new Date(location.lastLocationAt).getTime() : 0))
       .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)

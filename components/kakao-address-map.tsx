@@ -425,6 +425,10 @@ export function KakaoAddressMap({
       try {
         await withTimeout(loadKakaoMapSdk(appKey!), kakaoSdkTimeoutMs, "Kakao map SDK load timed out");
         if (ignore || !mapRef.current || !window.kakao?.maps) return;
+        // 접힌 패널·탭 전환 중에는 컨테이너가 잠시 0×0이 될 수 있습니다. 이때 Kakao Map을
+        // 생성하면 타일 캔버스가 빈 크기로 고정되므로 실제 크기가 생길 때까지 초기화를 미룹니다.
+        await waitForVisibleMapContainer(mapRef.current, () => ignore);
+        if (ignore || !mapRef.current || !window.kakao?.maps) return;
         mapRef.current.innerHTML = "";
 
         const kakao = window.kakao;
@@ -1069,13 +1073,32 @@ export function KakaoAddressMap({
   useEffect(() => {
     const container = mapRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(() => {
-      mapInstanceRef.current?.relayout?.();
-    });
+    let animationFrame = 0;
+    const relayoutPreservingViewport = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const map = mapInstanceRef.current;
+        if (!map || container.clientWidth === 0 || container.clientHeight === 0) return;
+        const center = map.getCenter();
+        const level = map.getLevel();
+        map.relayout?.();
+        map.setCenter(center);
+        map.setLevel(level);
+      });
+    };
+    const observer = new ResizeObserver(relayoutPreservingViewport);
     observer.observe(container);
+    window.addEventListener("resize", relayoutPreservingViewport);
+    document.addEventListener("fullscreenchange", relayoutPreservingViewport);
+    document.addEventListener("visibilitychange", relayoutPreservingViewport);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", relayoutPreservingViewport);
+      document.removeEventListener("fullscreenchange", relayoutPreservingViewport);
+      document.removeEventListener("visibilitychange", relayoutPreservingViewport);
+    };
   }, []);
 
   if (status === "fallback") {
@@ -1315,6 +1338,27 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
         reject(error);
       }
     );
+  });
+}
+
+function waitForVisibleMapContainer(element: HTMLElement, isCancelled: () => boolean) {
+  if (element.clientWidth > 0 && element.clientHeight > 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    if (typeof ResizeObserver === "undefined") {
+      const check = () => {
+        if (isCancelled() || (element.clientWidth > 0 && element.clientHeight > 0)) resolve();
+        else window.requestAnimationFrame(check);
+      };
+      window.requestAnimationFrame(check);
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (isCancelled() || (element.clientWidth > 0 && element.clientHeight > 0)) {
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(element);
   });
 }
 
