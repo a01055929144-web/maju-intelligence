@@ -307,6 +307,7 @@ export function KakaoAddressMap({
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const mapViewportReadyRef = useRef(false);
+  const refitViewportRef = useRef<(() => void) | null>(null);
   const boundsRef = useRef<KakaoLatLngBounds | null>(null);
   // marker.id -> 지오코딩된 LatLng 캐시. 마커를 선택(focusedMarkerId 변경)할 때마다 지도를
   // 통째로 다시 만들고 모든 주소를 재지오코딩하면(과거 버그) 마커가 많을수록 브라우저가 몇 초씩
@@ -414,6 +415,7 @@ export function KakaoAddressMap({
 
     async function bootMap() {
       mapViewportReadyRef.current = false;
+      refitViewportRef.current = null;
       setStatus("loading");
       setFallbackReason("");
 
@@ -610,30 +612,26 @@ export function KakaoAddressMap({
         if (hasRoadPath) {
           drawRoadRoutePolylines(kakao, map, roadPathSegments);
           roadPathSegments.flat().forEach((point) => bounds.extend(point));
-          map.setBounds(bounds);
-        } else if (focusedPosition) {
-          map.setCenter(focusedPosition);
-          map.setLevel(5);
-        } else if (found === 1) {
-          map.setCenter(bounds.getSouthWest());
-          map.setLevel(5);
-        } else {
-          // 2026-09-12 버그 수정("리드 선택하면 지도가 안 보이다가 목록에서 클릭하면 그제서야 보임"):
-          // "전체 리드 보기"를 켜면 리드가 전국에 흩어져 있을 수 있어, bounds(전체) 기준으로 맞추면
-          // 지도가 극단적으로 축소돼 사실상 빈 화면처럼 보입니다. excludeFromAutoBounds가 없는
-          // 마커(거래처, 반경 리드 등)만 담은 primaryBounds가 있으면 그것으로 화면을 맞춥니다.
-          map.setBounds(primaryFound > 0 ? primaryBounds : bounds);
         }
+        const fitViewport = () => {
+          if (hasRoadPath) map.setBounds(bounds);
+          else if (focusedPosition) {
+            map.setCenter(focusedPosition);
+            map.setLevel(5);
+          } else if (found === 1) {
+            map.setCenter(bounds.getSouthWest());
+            map.setLevel(5);
+          } else if (found > 1) {
+            // 전체 리드는 자동 범위에서 제외하고 거래처·반경 리드를 운영 중심으로 맞춥니다.
+            map.setBounds(primaryFound > 0 ? primaryBounds : bounds);
+          }
+        };
+        refitViewportRef.current = fitViewport;
+        fitViewport();
 
         window.setTimeout(() => {
           map.relayout?.();
-          if (hasRoadPath || found > 1) {
-            map.setBounds(hasRoadPath || primaryFound === 0 ? bounds : primaryBounds);
-          }
-          if (!hasRoadPath && focusedPosition) {
-            map.setCenter(focusedPosition);
-            map.setLevel(5);
-          }
+          fitViewport();
           mapViewportReadyRef.current = true;
         }, 120);
       } catch (error) {
@@ -651,6 +649,7 @@ export function KakaoAddressMap({
     return () => {
       ignore = true;
       mapViewportReadyRef.current = false;
+      refitViewportRef.current = null;
     };
     // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도
     // 전체를 재생성하고 모든 주소를 재지오코딩하면(과거 버그, 실제로 몇 초 이상 브라우저가
@@ -1083,11 +1082,8 @@ export function KakaoAddressMap({
       animationFrame = window.requestAnimationFrame(() => {
         const map = mapInstanceRef.current;
         if (!map || !mapViewportReadyRef.current || container.clientWidth === 0 || container.clientHeight === 0) return;
-        const center = map.getCenter();
-        const level = map.getLevel();
         map.relayout?.();
-        map.setCenter(center);
-        map.setLevel(level);
+        refitViewportRef.current?.();
       });
     };
     const observer = new ResizeObserver(relayoutPreservingViewport);
