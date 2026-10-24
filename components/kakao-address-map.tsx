@@ -540,8 +540,7 @@ export function KakaoAddressMap({
           }
         };
 
-        await Promise.all(
-          staticMarkers.map((marker) => {
+        await mapWithConcurrency(staticMarkers, 5, async (marker) => {
             // 2026-09-07 피드백("실시간 라이브 차량의 마커가 안보여") 대응: 아래 지오코딩 경로는
             // marker.address를 실제 도로명 주소로 간주해 카카오 지오코더에 넘깁니다. 라이브 차량은
             // 이제 staticMarkers에서 완전히 빠져 이 경로를 타지 않지만(별도의 차량 effect가 좌표를
@@ -549,17 +548,17 @@ export function KakaoAddressMap({
             // 이미 유효하면 지오코딩을 건너뛰고 그 좌표로 바로 배치하는 이 안전장치는 남겨둡니다.
             if (Number.isFinite(marker.lat) && Number.isFinite(marker.lng)) {
               if (!ignore) placeMarkerAtPosition(marker, marker.lat as number, marker.lng as number);
-              return Promise.resolve();
+              return;
             }
 
             const cachedPoint = geocodeMemoryCache.get(marker.address);
             if (cachedPoint) {
               if (!ignore) placeMarkerAtPosition(marker, cachedPoint.lat, cachedPoint.lng);
-              return Promise.resolve();
+              return;
             }
 
             geocodeCacheMissCount += 1;
-            return withTimeout(
+            await withTimeout(
               new Promise<void>((resolve) => {
                 geocoder.addressSearch(marker.address, (result: KakaoGeocodeResult[], geocodeStatus: string) => {
                   if (ignore) {
@@ -580,8 +579,7 @@ export function KakaoAddressMap({
               kakaoGeocodeTimeoutMs,
               "Kakao address search timed out"
             ).catch(() => undefined);
-          })
-        );
+          });
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
 
@@ -1339,6 +1337,18 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
       }
     );
   });
+}
+
+async function mapWithConcurrency<T>(items: readonly T[], concurrency: number, worker: (item: T) => Promise<void>) {
+  let nextIndex = 0;
+  const run = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      await worker(items[currentIndex]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, () => run()));
 }
 
 function waitForVisibleMapContainer(element: HTMLElement, isCancelled: () => boolean) {
