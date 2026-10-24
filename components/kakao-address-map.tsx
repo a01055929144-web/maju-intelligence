@@ -306,6 +306,7 @@ export function KakaoAddressMap({
 }: KakaoAddressMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
+  const mapViewportReadyRef = useRef(false);
   const boundsRef = useRef<KakaoLatLngBounds | null>(null);
   // marker.id -> 지오코딩된 LatLng 캐시. 마커를 선택(focusedMarkerId 변경)할 때마다 지도를
   // 통째로 다시 만들고 모든 주소를 재지오코딩하면(과거 버그) 마커가 많을수록 브라우저가 몇 초씩
@@ -412,6 +413,7 @@ export function KakaoAddressMap({
     let ignore = false;
 
     async function bootMap() {
+      mapViewportReadyRef.current = false;
       setStatus("loading");
       setFallbackReason("");
 
@@ -632,6 +634,7 @@ export function KakaoAddressMap({
             map.setCenter(focusedPosition);
             map.setLevel(5);
           }
+          mapViewportReadyRef.current = true;
         }, 120);
       } catch (error) {
         if (!ignore) {
@@ -647,6 +650,7 @@ export function KakaoAddressMap({
 
     return () => {
       ignore = true;
+      mapViewportReadyRef.current = false;
     };
     // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도
     // 전체를 재생성하고 모든 주소를 재지오코딩하면(과거 버그, 실제로 몇 초 이상 브라우저가
@@ -1078,7 +1082,7 @@ export function KakaoAddressMap({
       window.cancelAnimationFrame(animationFrame);
       animationFrame = window.requestAnimationFrame(() => {
         const map = mapInstanceRef.current;
-        if (!map || container.clientWidth === 0 || container.clientHeight === 0) return;
+        if (!map || !mapViewportReadyRef.current || container.clientWidth === 0 || container.clientHeight === 0) return;
         const center = map.getCenter();
         const level = map.getLevel();
         map.relayout?.();
