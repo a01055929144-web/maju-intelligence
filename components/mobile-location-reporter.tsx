@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Crosshair, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { evaluateStaffLocation, getStaffLocationPostIntervalMs, type StaffLocationPoint } from "@/lib/staff-location";
 
 type MobileLocationReporterProps = {
   readonly currentCustomerId?: string;
@@ -14,8 +15,9 @@ type LocationState = "idle" | "ready" | "blocked" | "error";
 
 // 2026-09-07 피드백("속도는 빠를수록 좋은 거야"): 대표 화면의 "접속" 표시가 최대한 빨리
 // 갱신되도록, 기사 앱이 위치를 서버에 올리는 최소 간격을 15초에서 8초로 단축했습니다.
-const LOCATION_POST_INTERVAL_MS = 8_000;
 const LOCATION_QUEUE_STORAGE_KEY = "maju:mobile-location-queue:v1";
+const LOCATION_WORK_STORAGE_KEY = "maju:mobile-location-work:v1";
+const MAX_WORK_MS = 12 * 60 * 60 * 1000;
 const MAX_QUEUED_LOCATIONS = 20;
 type LocationPostStatus = "active" | "offline" | "paused";
 
@@ -36,10 +38,12 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const [lastAccuracyMeters, setLastAccuracyMeters] = useState<number | null>(null);
   const [queuedCount, setQueuedCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  const [workStartedAt, setWorkStartedAt] = useState(0);
   const flushPromiseRef = useRef<Promise<void> | null>(null);
   const lastPostAtRef = useRef(0);
   const lastContextPostKeyRef = useRef("");
   const latestPositionRef = useRef<GeolocationPosition | null>(null);
+  const previousPointRef = useRef<StaffLocationPoint | undefined>(undefined);
   const latestContextRef = useRef({ currentCustomerId, currentCustomerName, deliveryVehicle });
 
   useEffect(() => {
@@ -109,8 +113,16 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const postPosition = useCallback(
     (position: GeolocationPosition, force = false, status: LocationPostStatus = "active") => {
       const now = Date.now();
-      if (!force && now - lastPostAtRef.current < LOCATION_POST_INTERVAL_MS) return;
+      const point = { accuracyMeters: position.coords.accuracy, lat: position.coords.latitude, lng: position.coords.longitude, recordedAt: new Date(position.timestamp || now).toISOString() };
+      const decision = evaluateStaffLocation(point, previousPointRef.current);
+      const isMoving = decision.accept && decision.distanceMeters >= 15;
+      if (!force && now - lastPostAtRef.current < getStaffLocationPostIntervalMs(isMoving)) return;
+      if (!force && !decision.accept && decision.reason !== "stationary") {
+        if (decision.reason === "inaccurate" && !previousPointRef.current) setDetail("정확한 위치를 켜 주세요. 현재 위치는 부정확합니다.");
+        return;
+      }
       lastPostAtRef.current = now;
+      if (decision.accept) previousPointRef.current = point;
       latestPositionRef.current = position;
       const accuracyMeters = Math.round(position.coords.accuracy || 0);
       setLastAccuracyMeters(accuracyMeters);
@@ -171,6 +183,13 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   );
 
   useEffect(() => {
+    const saved = Number(window.localStorage.getItem(LOCATION_WORK_STORAGE_KEY) || 0);
+    if (saved > 0 && Date.now() - saved < MAX_WORK_MS) setWorkStartedAt(saved);
+    else window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (!workStartedAt) return;
     if (!("geolocation" in navigator)) {
       setDetail("이 브라우저는 위치 공유를 지원하지 않습니다.");
       setState("blocked");
@@ -208,9 +227,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       setDetail("오프라인입니다. 위치는 대기열에 저장됩니다.");
       setState("error");
     };
-    const handlePageExit = () => {
-      if (latestPositionRef.current) postPosition(latestPositionRef.current, true, "offline");
-    };
+    const handlePageExit = () => { if (latestPositionRef.current) postPosition(latestPositionRef.current, true, "paused"); };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleFocus);
     window.addEventListener("online", handleOnline);
@@ -230,7 +247,17 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       window.removeEventListener("pagehide", handlePageExit);
       window.removeEventListener("beforeunload", handlePageExit);
     };
-  }, [flushQueuedLocations, postPosition, refreshQueuedCount, requestCurrentPosition]);
+  }, [flushQueuedLocations, postPosition, refreshQueuedCount, requestCurrentPosition, workStartedAt]);
+
+  useEffect(() => {
+    if (!workStartedAt) return;
+    const remaining = Math.max(0, MAX_WORK_MS - (Date.now() - workStartedAt));
+    const timer = window.setTimeout(() => {
+      window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
+      setWorkStartedAt(0);
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [workStartedAt]);
 
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
@@ -254,6 +281,19 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
           : "위치 확인 중";
 
   const needsAction = state === "blocked" || state === "error";
+  const workActive = workStartedAt > 0;
+
+  const toggleWork = () => {
+    if (workActive) {
+      if (latestPositionRef.current) postPosition(latestPositionRef.current, true, "offline");
+      window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
+      setWorkStartedAt(0);
+      return;
+    }
+    const startedAt = Date.now();
+    window.localStorage.setItem(LOCATION_WORK_STORAGE_KEY, String(startedAt));
+    setWorkStartedAt(startedAt);
+  };
 
   return (
     <div
@@ -275,6 +315,10 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
           </button>
         ) : null}
       </div>
+      <button className={`mt-2 min-h-11 w-full rounded-lg px-3 text-xs font-black ${workActive ? "bg-slate-900 text-white" : "bg-teal-600 text-white"}`} onClick={toggleWork} type="button">
+        {workActive ? "근무 종료" : "근무 시작"}
+      </button>
+      {!workActive ? <p className="mt-1 text-xs text-slate-600">근무를 시작해야 위치가 공유됩니다. 12시간 뒤 자동 종료됩니다.</p> : null}
       {needsAction ? (
         <p aria-live="polite" className="mt-1 text-xs font-medium leading-5 text-amber-700">
           {detail || "브라우저 위치 권한과 로그인 상태를 확인하세요."}

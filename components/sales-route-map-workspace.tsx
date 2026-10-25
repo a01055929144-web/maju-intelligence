@@ -69,7 +69,7 @@ import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
-import { STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
+import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import type {
   ChurnRiskCustomer,
@@ -1080,16 +1080,20 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       if (document.visibilityState === "visible") void load();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    const timer = window.setInterval(() => {
+    let timer = window.setTimeout(function poll() {
       if (document.visibilityState === "visible") void load();
-    }, 4_000);
+      timer = window.setTimeout(
+        poll,
+        getStaffMapPollIntervalMs(liveVehicleLocations.some((location) => location.displayState === "realtime"))
+      );
+    }, getStaffMapPollIntervalMs(liveVehicleLocations.some((location) => location.displayState === "realtime")));
     return () => {
       cancelled = true;
       if (toastTimer) window.clearTimeout(toastTimer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [churnRiskCompanyId]);
+  }, [churnRiskCompanyId, liveVehicleLocations]);
   const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(

@@ -8,6 +8,7 @@ import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/applicat
 import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
+import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileQuoteBuilder } from "@/components/mobile-quote-builder";
 import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { buildContactMemo, distanceKm, extractReminderDate, getMobileLeadType, isContactedLead, type MobileLeadSort, type MobileLeadType } from "@/domains/lead/mobile-sales";
@@ -267,6 +268,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           </header>
 
           <div className="flex flex-1 flex-col gap-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
+            <MobileLocationReporter />
             <section className="mobile-card order-1 rounded-xl border p-3" aria-label="오늘 할 일">
               <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">오늘 할 일</p><p className="mobile-muted text-xs">카드를 누르면 바로 실행할 매장만 모아봅니다.</p></div>{queuedActionCount ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">전송 대기 {queuedActionCount}</span> : null}</div>
               <div className="mt-3 grid grid-cols-2 gap-2">
