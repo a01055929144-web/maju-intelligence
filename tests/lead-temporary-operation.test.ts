@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTemporaryPermitLead } from "../domains/lead/temporary-operation";
+import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 
 describe("temporary permit lead classification", () => {
   it.each(["뽕스(한시적)", "키노 팝업", "백화점 식품 행사장"])("detects a temporary business name: %s", (businessName) => {
@@ -39,5 +39,20 @@ describe("temporary permit lead classification", () => {
       isTemporary: false,
       reason: "임시 영업 의심: 광장"
     });
+  });
+});
+
+describe("temporary permit lead ingest status priority", () => {
+  it("keeps confirmed temporary operation above exclusion", () => {
+    expect(resolveTemporaryLeadIngestStatus({ excluded: true, isOwnershipChange: false, isSuspected: false, isTemporary: true })).toBe("임시 영업");
+  });
+
+  it("keeps exclusion above suspected temporary operation", () => {
+    expect(resolveTemporaryLeadIngestStatus({ excluded: true, isOwnershipChange: false, isSuspected: true, isTemporary: false })).toBe("제외");
+  });
+
+  it("uses suspected and ownership-change states only after exclusion", () => {
+    expect(resolveTemporaryLeadIngestStatus({ excluded: false, isOwnershipChange: true, isSuspected: true, isTemporary: false })).toBe("임시 영업 의심");
+    expect(resolveTemporaryLeadIngestStatus({ excluded: false, isOwnershipChange: true, isSuspected: false, isTemporary: false })).toBe("주인 변경");
   });
 });

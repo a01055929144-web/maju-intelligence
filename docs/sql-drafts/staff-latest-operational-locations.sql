@@ -1,8 +1,7 @@
--- REVIEW ONLY. 운영 적용 전 별도 승인이 필요합니다.
--- 직원별 N+1 조회를 회사 단위 1회 조회로 바꾸기 위한 함수와 부분 인덱스입니다.
-begin;
+-- 운영 적용 완료(2026-10-25). 재실행 금지.
+-- 직원별 N+1 조회를 회사 단위 1회 조회로 바꾸는 함수와 부분 인덱스입니다.
 
-create index if not exists staff_location_events_company_user_work_recorded_idx
+create index concurrently if not exists staff_location_events_company_user_work_recorded_idx
   on public.staff_location_events(company_id, user_id, recorded_at desc)
   where current_customer_id is not null;
 
@@ -47,8 +46,6 @@ $$;
 
 revoke all on function public.list_latest_operational_staff_locations(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.list_latest_operational_staff_locations(uuid, uuid) to service_role;
-
-commit;
 
 -- 롤백(필요 시 별도 승인 후 실행)
 -- drop function if exists public.list_latest_operational_staff_locations(uuid, uuid);
