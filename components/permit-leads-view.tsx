@@ -37,6 +37,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
 import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lead/business-hours";
+import { formatKoreanPhoneNumber, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
+import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
+import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
@@ -159,6 +162,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const [gradeFilter, setGradeFilter] = useState("");
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [hasInstagramOnly, setHasInstagramOnly] = useState(false);
+  const [hasTalktalkOnly, setHasTalktalkOnly] = useState(false);
+  const [hasEmailOnly, setHasEmailOnly] = useState(false);
+  const [hasFaxOnly, setHasFaxOnly] = useState(false);
+  const [uncontactedOnly, setUncontactedOnly] = useState(false);
   const [kakaoMatchFilter, setKakaoMatchFilter] = useState<"" | "matched_no_phone" | "unregistered" | "needs_confirmation">("");
   const [businessHoursFilter, setBusinessHoursFilter] = useState<"" | "available" | "break">("");
   const [excludeExcluded, setExcludeExcluded] = useState(true);
@@ -303,7 +310,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       setTableSortDirection((current) => (current === "asc" ? "desc" : "asc"));
     } else {
       setTableSortKey(key);
-      setTableSortDirection(key === "priority" || key === "grade" || key === "review" ? "desc" : "asc");
+      setTableSortDirection(key === "grade" || key === "review" ? "desc" : "asc");
     }
   }
 
@@ -319,6 +326,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         gradeFilter?: string;
         hasInstagramOnly?: boolean;
         hasPhoneOnly?: boolean;
+        hasTalktalkOnly?: boolean;
+        hasEmailOnly?: boolean;
+        hasFaxOnly?: boolean;
+        uncontactedOnly?: boolean;
         kakaoMatchFilter?: "" | "matched_no_phone" | "unregistered" | "needs_confirmation";
         industryFilter?: string;
         openDateEnd?: string;
@@ -339,6 +350,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         setGradeFilter(saved.gradeFilter || "");
         setHasInstagramOnly(Boolean(saved.hasInstagramOnly));
         setHasPhoneOnly(Boolean(saved.hasPhoneOnly));
+        setHasTalktalkOnly(Boolean(saved.hasTalktalkOnly));
+        setHasEmailOnly(Boolean(saved.hasEmailOnly));
+        setHasFaxOnly(Boolean(saved.hasFaxOnly));
+        setUncontactedOnly(Boolean(saved.uncontactedOnly));
         setKakaoMatchFilter(saved.kakaoMatchFilter || "");
         setIndustryFilter(saved.industryFilter || "");
         setOpenDateEnd(saved.openDateEnd || "");
@@ -372,6 +387,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         gradeFilter,
         hasInstagramOnly,
         hasPhoneOnly,
+        hasTalktalkOnly,
+        hasEmailOnly,
+        hasFaxOnly,
+        uncontactedOnly,
         kakaoMatchFilter,
         industryFilter,
         openDateEnd,
@@ -387,7 +406,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         tableSearch
       })
     );
-  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, showExistingCustomers, showTemporaryOperations, statusFilter, tableSearch]);
+  }, [actionFilter, excludeExcluded, gradeFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, showExistingCustomers, showTemporaryOperations, statusFilter, tableSearch, uncontactedOnly]);
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
@@ -599,7 +618,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
+      .filter((lead) => !hasPhoneOnly || isMobilePhoneNumber(lead.phone))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
+      .filter((lead) => !hasTalktalkOnly || Boolean(lead.naverTalktalkUrl))
+      .filter((lead) => !hasEmailOnly || Boolean(lead.email))
+      .filter((lead) => !hasFaxOnly || Boolean(lead.fax))
+      .filter((lead) => !uncontactedOnly || isLeadUncontacted(lead))
       .filter((lead) => {
         if (!kakaoMatchFilter) return true;
         if (kakaoMatchFilter === "matched_no_phone") return Boolean(lead.kakaoMatchMethod && !lead.phone);
@@ -615,7 +639,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       .filter(
         (lead) =>
           !keyword ||
-          [lead.businessName, lead.address, lead.phone, lead.representativeName, lead.industryPrimary]
+          [lead.businessName, lead.address, lead.phone, lead.fax, lead.email, lead.naverTalktalkUrl, lead.representativeName, lead.industryPrimary]
             .concat(getLeadInstagramSearchTokens(lead))
             .filter(Boolean)
             .some((value) => {
@@ -623,7 +647,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasInstagramOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
+  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -688,11 +712,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       if (tableSortKey === "businessName") diff = a.lead.businessName.localeCompare(b.lead.businessName, "ko");
       else if (tableSortKey === "industryPrimary") diff = (a.lead.industryPrimary || "").localeCompare(b.lead.industryPrimary || "", "ko");
       else if (tableSortKey === "grade") diff = (PERMIT_GRADE_SORT_WEIGHT[a.lead.grade || ""] || 0) - (PERMIT_GRADE_SORT_WEIGHT[b.lead.grade || ""] || 0);
-      else if (tableSortKey === "priority") diff = (a.lead.scoreTotal || 0) - (b.lead.scoreTotal || 0);
+      else if (tableSortKey === "priority") diff = leadPriorityBadge(a.lead).rank - leadPriorityBadge(b.lead).rank;
       else if (tableSortKey === "instagram") diff = (getLeadInstagramHandle(a.lead) ? 1 : 0) - (getLeadInstagramHandle(b.lead) ? 1 : 0);
-      else if (tableSortKey === "phone") diff = (a.lead.phone ? 1 : 0) - (b.lead.phone ? 1 : 0);
+      else if (tableSortKey === "phone") diff = (isMobilePhoneNumber(a.lead.phone) ? 1 : 0) - (isMobilePhoneNumber(b.lead.phone) ? 1 : 0);
       else if (tableSortKey === "review") diff = (a.lead.rating || 0) - (b.lead.rating || 0) || (a.lead.reviewCount || 0) - (b.lead.reviewCount || 0);
-      else if (tableSortKey === "nextAction") diff = (a.lead.nextAction || "").localeCompare(b.lead.nextAction || "", "ko");
+      else if (tableSortKey === "nextAction") diff = displayLeadNextAction(a.lead).localeCompare(displayLeadNextAction(b.lead), "ko");
       else if (tableSortKey === "openDate") diff = (getPermitLeadOpenDate(a.lead) || "").localeCompare(getPermitLeadOpenDate(b.lead) || "", "ko");
       else if (tableSortKey === "status") diff = (a.lead.status || "").localeCompare(b.lead.status || "", "ko");
       return tableSortDirection === "asc" ? diff : -diff;
@@ -702,10 +726,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
 
   const sortedLeads = useMemo(() => {
     if (tableSortedLeads) return tableSortedLeads;
-    if (leadQualityMode !== "keyword") return filteredLeads;
-    return [...filteredLeads].sort((a, b) => businessAttractivenessOf(b) - businessAttractivenessOf(a));
+    return [...filteredLeads].sort(compareLeadListDefault);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredLeads, leadQualityMode, keywordVolumeScores, tableSortedLeads]);
+  }, [filteredLeads, tableSortedLeads]);
   const leadTotalPages = Math.max(1, Math.ceil(sortedLeads.length / leadPageSize));
   const pagedLeads = useMemo(() => {
     const start = (leadPage - 1) * leadPageSize;
@@ -800,6 +823,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       gradeFilter ||
       hasPhoneOnly ||
       hasInstagramOnly ||
+      hasTalktalkOnly ||
+      hasEmailOnly ||
+      hasFaxOnly ||
+      uncontactedOnly ||
       kakaoMatchFilter ||
       !excludeExcluded ||
       showExistingCustomers ||
@@ -822,6 +849,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     setGradeFilter("");
     setHasPhoneOnly(false);
     setHasInstagramOnly(false);
+    setHasTalktalkOnly(false);
+    setHasEmailOnly(false);
+    setHasFaxOnly(false);
+    setUncontactedOnly(false);
     setKakaoMatchFilter("");
     setExcludeExcluded(true);
     setShowExistingCustomers(false);
@@ -1567,6 +1598,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     Boolean(gradeFilter),
     hasPhoneOnly,
     hasInstagramOnly,
+    hasTalktalkOnly,
+    hasEmailOnly,
+    hasFaxOnly,
+    uncontactedOnly,
     Boolean(kakaoMatchFilter),
     !excludeExcluded,
     showNearbyOnly,
@@ -2304,11 +2339,27 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               </select>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={hasPhoneOnly} onChange={(event) => setHasPhoneOnly(event.target.checked)} type="checkbox" />
-                연락처 있는 곳만
+                휴대폰 있음
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={uncontactedOnly} onChange={(event) => setUncontactedOnly(event.target.checked)} type="checkbox" />
+                연락 안 한 곳
               </label>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={hasInstagramOnly} onChange={(event) => setHasInstagramOnly(event.target.checked)} type="checkbox" />
                 인스타 확인된 곳만
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={hasTalktalkOnly} onChange={(event) => setHasTalktalkOnly(event.target.checked)} type="checkbox" />
+                톡톡 있음
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={hasEmailOnly} onChange={(event) => setHasEmailOnly(event.target.checked)} type="checkbox" />
+                이메일 있음
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={hasFaxOnly} onChange={(event) => setHasFaxOnly(event.target.checked)} type="checkbox" />
+                팩스 있음
               </label>
               <select
                 className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
@@ -2695,13 +2746,13 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                       label="우선순위"
                       sortKeyValue="priority"
                     />
-                    {showMoreLeadColumns ? <LeadSortableHeader className="w-[84px]" label="업종" sortKeyValue="industryPrimary" /> : null}
-                    {showMoreLeadColumns ? <LeadSortableHeader
+                    <LeadSortableHeader className="w-[110px]" label="업종" sortKeyValue="industryPrimary" />
+                    <LeadSortableHeader
                       className="w-[92px]"
                       helpText="공공데이터의 인허가 신청일입니다. 영업 리드는 이미 운영 중인 매장이라 값이 없을 수 있습니다."
                       label="개시일"
                       sortKeyValue="openDate"
-                    /> : null}
+                    />
                     {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[64px]"
                       helpText="신선도·업종 적합도·리뷰·연락처 확보 여부를 합산한 리드 등급입니다(A 85점↑ · B 70점↑ · C 55점↑). 거래처 매출등급과는 별개 기준입니다."
@@ -2793,16 +2844,18 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                         </td>
                         <td className="max-w-[150px] border-r border-slate-100 px-3 py-2">
                           <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">
-                            {isPermitLeadUnscored(lead) ? "채점 전" : `${lead.scoreTotal.toLocaleString()}점`}
+                            {leadPriorityBadge(lead).label}
                           </span>
                           <p className="mt-1 truncate text-[10px] font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
                             {confidence.reasons[0] || "근거 확인 필요"}
                           </p>
                         </td>
-                        {showMoreLeadColumns ? <td className="max-w-[84px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td> : null}
-                        {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                          {getPermitLeadOpenDate(lead) || <span className="text-slate-300">미확인</span>}
-                        </td> : null}
+                        <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
+                        <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+                          {getPermitLeadOpenDate(lead) ? (
+                            <><span>{getPermitLeadOpenDate(lead)}</span><span className="ml-1 text-[10px] text-slate-400">{formatLeadOpenDateAge(getPermitLeadOpenDate(lead))}</span></>
+                          ) : <span className="text-slate-300">미확인</span>}
+                        </td>
                         {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
                           <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
                         </td> : null}
@@ -2824,7 +2877,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 font-bold text-slate-700">
                           {lead.phone ? (
                             <a className="inline-flex rounded-md px-1 py-0.5 transition hover:bg-teal-50 hover:text-teal-700" href={`tel:${lead.phone.replace(/[^0-9+]/g, "")}`} onClick={(event) => event.stopPropagation()}>
-                              {lead.phone}
+                              {formatKoreanPhoneNumber(lead.phone)}
                             </a>
                           ) : (
                             "미확인"
@@ -2845,7 +2898,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                             <span className="font-bold text-slate-400">{leadQualityMode === "keyword" && keywordVolumeLoading ? "조회 중..." : "확인 필요"}</span>
                           )}
                         </td> : null}
-                        {showMoreLeadColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.nextAction || "-"}</td> : null}
+                        {showMoreLeadColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{displayLeadNextAction(lead)}</td> : null}
                         {showNearbyOnly && nearbyResult ? (
                           <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right font-black text-teal-700">
                             {nearbyDistanceById.get(lead.id)?.toLocaleString() ?? "-"}km
