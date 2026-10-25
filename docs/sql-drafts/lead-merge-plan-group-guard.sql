@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 적용 전 별도 승인이 필요합니다.
+-- 운영 적용 완료(2026-10-25). 재실행 금지.
 -- 한 배치에서 같은 대표 리드가 서로 다른 group_key에 속하는 계획 오류를 차단합니다.
 create or replace function public.guard_lead_merge_plan_item()
 returns trigger
@@ -29,3 +29,9 @@ $$;
 
 revoke all on function public.guard_lead_merge_plan_item() from public, anon, authenticated;
 grant execute on function public.guard_lead_merge_plan_item() to service_role;
+
+drop trigger if exists lead_merge_plan_items_guard_trg on public.lead_merge_plan_items;
+create trigger lead_merge_plan_items_guard_trg
+before insert or update of company_id, merge_batch_id, group_key, representative_lead_id, losing_lead_id
+on public.lead_merge_plan_items
+for each row execute function public.guard_lead_merge_plan_item();
