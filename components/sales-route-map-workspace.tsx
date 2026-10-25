@@ -1105,8 +1105,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   }, [deliveryVehicles, liveVehicleLocations, selectedLiveVehicleId, vehicleFilterId]);
   const liveVehicleMarkers = useMemo(() => createLiveVehicleMarkers(liveVehiclesForMap, storeById), [liveVehiclesForMap, storeById]);
   const liveVehicleSummary = useMemo(() => {
-    const active = liveVehicleLocations.filter((location) => !location.isStale && location.status !== "offline").length;
-    const stale = liveVehicleLocations.filter((location) => location.isStale && location.status !== "offline").length;
+    const active = liveVehicleLocations.filter((location) => location.displayState === "realtime").length;
+    const stale = liveVehicleLocations.filter((location) => location.displayState === "delayed").length;
+    const lastOperation = liveVehicleLocations.filter((location) => location.displayState === "last_operation").length;
     const latest = liveVehicleLocations
       .map((location) => (location.lastLocationAt ? new Date(location.lastLocationAt).getTime() : 0))
       .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
@@ -1114,6 +1115,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     return {
       active,
       latestLabel: latest ? new Date(latest).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "수신 전",
+      lastOperation,
       stale,
       total: liveVehicleLocations.length
     };
@@ -1331,8 +1333,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       completedCustomers: markers.filter((marker) => marker.tone === "customer" && marker.id && completedStoreIdsToday.has(marker.id)).length,
       newLeads: leadMarkers.filter((marker) => marker.label?.startsWith("신규")).length,
       salesLeads: leadMarkers.filter((marker) => marker.label?.startsWith("영업")).length,
-      activeVehicles: liveVehicleLocations.filter((location) => !location.isStale).length,
-      staleVehicles: liveVehicleLocations.filter((location) => location.isStale).length
+      activeVehicles: liveVehicleLocations.filter((location) => location.displayState === "realtime").length,
+      staleVehicles: liveVehicleLocations.filter((location) => location.displayState === "delayed").length,
+      lastOperationVehicles: liveVehicleLocations.filter((location) => location.displayState === "last_operation").length
     };
   }, [markers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleLocations, completedStoreIdsToday]);
   const deliveryDefaults = useMemo(() => getDeliveryDefaults(deliveryVehicles), [deliveryVehicles]);
@@ -1929,6 +1932,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <Truck className={`hidden h-4 w-4 shrink-0 sm:block ${liveVehicleSummary.active ? "text-emerald-700" : "text-slate-500"}`} />
             <span className="whitespace-nowrap"><span className="hidden lg:inline">GPS 활성 </span>{liveVehicleSummary.active}건</span>
             {liveVehicleSummary.stale ? <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline">지연 {liveVehicleSummary.stale}</span> : null}
+            {liveVehicleSummary.lastOperation ? <span className="hidden rounded-full bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-500 lg:inline">마지막 운행 {liveVehicleSummary.lastOperation}</span> : null}
           </button>
           {activeView === "map" ? (
             <div
@@ -2405,7 +2409,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   넓은 화면에서만 보조 요약을 추가해 검색·필터 행이 두 줄로 커지는 일을 줄입니다. */}
               <span className="hidden shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 2xl:inline-flex">
                 {sourceReady
-                  ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}`
+                  ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}${visibleMapLayerCounts.lastOperationVehicles ? `(+마지막 운행 ${visibleMapLayerCounts.lastOperationVehicles})` : ""}`
                   : "등록 필요"}
               </span>
             </div>
@@ -3586,7 +3590,7 @@ function DeliveryAssignmentPanel({
   const [deleteError, setDeleteError] = useState<{ vehicleId: string; message: string } | null>(null);
   const [pendingDeleteVehicle, setPendingDeleteVehicle] = useState<DeliveryVehicle | null>(null);
   const [liveSearch, setLiveSearch] = useState("");
-  const [liveStatusFilter, setLiveStatusFilter] = useState<"all" | "active" | "stale" | "offline">("all");
+  const [liveStatusFilter, setLiveStatusFilter] = useState<"all" | "active" | "stale" | "last_operation" | "offline">("all");
   const [assignmentRows, setAssignmentRows] = useState(staffInvitations);
   const [connectionDrafts, setConnectionDrafts] = useState<Record<string, string>>({});
   const [connectingLiveId, setConnectingLiveId] = useState("");
@@ -3615,8 +3619,9 @@ function DeliveryAssignmentPanel({
     const live = liveVehicleByDeliveryGroup.get(vehicle.id);
     const matchesSearch = !normalizedLiveSearch || `${vehicle.name} ${vehicle.driver} ${vehicle.area} ${live?.displayName || ""}`.toLowerCase().includes(normalizedLiveSearch);
     if (!matchesSearch) return false;
-    if (liveStatusFilter === "active") return Boolean(live && !live.isStale);
-    if (liveStatusFilter === "stale") return Boolean(live?.isStale);
+    if (liveStatusFilter === "active") return live?.displayState === "realtime";
+    if (liveStatusFilter === "stale") return live?.displayState === "delayed";
+    if (liveStatusFilter === "last_operation") return live?.displayState === "last_operation";
     if (liveStatusFilter === "offline") return !live;
     return true;
   });
@@ -3734,17 +3739,18 @@ function DeliveryAssignmentPanel({
             value={liveSearch}
           />
         </label>
-        <div className="grid grid-cols-4 gap-1.5" aria-label="담당자·차량 상태 필터">
-          {(["all", "active", "stale", "offline"] as const).map((status) => {
+        <div className="grid grid-cols-5 gap-1.5" aria-label="담당자·차량 상태 필터">
+          {(["all", "active", "stale", "last_operation", "offline"] as const).map((status) => {
             const count = status === "all"
               ? vehicles.length
               : vehicles.filter((vehicle) => {
                   const live = liveVehicleByDeliveryGroup.get(vehicle.id);
-                  if (status === "active") return Boolean(live && !live.isStale);
-                  if (status === "stale") return Boolean(live?.isStale);
+                  if (status === "active") return live?.displayState === "realtime";
+                  if (status === "stale") return live?.displayState === "delayed";
+                  if (status === "last_operation") return live?.displayState === "last_operation";
                   return !live;
                 }).length;
-            const label = status === "all" ? "전체" : status === "active" ? "활성" : status === "stale" ? "지연" : "오프라인";
+            const label = status === "all" ? "전체" : status === "active" ? "실시간" : status === "stale" ? "지연" : status === "last_operation" ? "마지막" : "오프라인";
             return (
               <button
                 aria-label={`${label} ${count}대`}
@@ -3820,8 +3826,8 @@ function DeliveryAssignmentPanel({
                   <div className="flex items-center justify-between gap-2">
                     <p className={`min-w-0 flex-1 truncate text-sm font-bold ${selected ? "text-teal-950" : "text-slate-950"}`}>{vehicle.name}</p>
                     <div className="flex shrink-0 items-center gap-1">
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${liveVehicle ? (liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-teal-100 text-teal-800") : "bg-slate-100 text-slate-500"}`}>
-                        {liveVehicle ? (liveVehicle.isStale ? "지연" : "활성") : "오프라인"}
+                      <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${liveVehicle ? (liveVehicle.displayState === "last_operation" ? "bg-slate-100 text-slate-500" : liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-teal-100 text-teal-800") : "bg-slate-100 text-slate-500"}`}>
+                        {liveVehicle ? getVehicleStatusLabel(liveVehicle) : "오프라인"}
                       </span>
                       {vehicle.isUnassigned ? null : (
                         <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
@@ -5065,6 +5071,7 @@ function MapLayerLegend({
     newLeads: number;
     salesLeads: number;
     staleVehicles: number;
+    lastOperationVehicles: number;
   };
 }) {
   return (
@@ -5083,6 +5090,7 @@ function MapLayerLegend({
         ) : null}
         <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] text-white">🚚</span>실시간 {counts.activeVehicles}</span>
         {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
+        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[9px] text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
         <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
       </div>
     </div>
@@ -9953,13 +9961,13 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
       const currentStoreText = currentStore ? ` · 작업 ${currentStore.name}` : "";
       const driverName = location.driverName || location.deliveryVehicle || "라이브 차량";
       return {
-        address: `${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
+        address: `${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
         id: `vehicle-${location.id}`,
         label,
         lat: location.lat,
         lng: location.lng,
-        markerColor: location.isStale ? "#64748b" : vehicleColorForId(location.id),
-        name: `${driverName} · ${statusText} · ${checkedAt}${currentStoreText}${accuracyText}`,
+        markerColor: location.displayState === "last_operation" ? "#cbd5e1" : location.isStale ? "#64748b" : vehicleColorForId(location.id),
+        name: `${driverName} · ${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
         x: 50,
         y: 50
@@ -10037,6 +10045,7 @@ function summarizeCompletionOrder(completions: DeliveryCompletionEvent[]) {
 }
 
 function getVehicleStatusLabel(vehicle: StaffVehicleLocation) {
+  if (vehicle.displayState === "last_operation") return "마지막 운행";
   if (vehicle.isStale) return "지연";
   if (vehicle.status === "paused") return "대기";
   if (vehicle.status === "offline") return "종료";
@@ -10051,7 +10060,15 @@ function formatVehicleLocationAge(lastLocationAt?: string) {
   return `${Math.floor(minutes / 60)}시간 전`;
 }
 
+function formatLastOperationAt(lastLocationAt?: string) {
+  if (!lastLocationAt) return "마지막 운행 시간 미확인";
+  return `마지막 운행 ${new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit"
+  }).format(new Date(lastLocationAt))}`;
+}
+
 function getVehicleMarkerStatusText(vehicle: StaffVehicleLocation) {
+  if (vehicle.displayState === "last_operation") return formatLastOperationAt(vehicle.lastLocationAt);
   if (vehicle.isStale) return "위치 지연";
   if (vehicle.status === "paused") return "화면 대기";
   if (vehicle.status === "offline") return "위치 종료";

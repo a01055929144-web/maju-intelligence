@@ -162,6 +162,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const [showClosedOrNonTarget, setShowClosedOrNonTarget] = useState(false);
   const [showOutsideSalesArea, setShowOutsideSalesArea] = useState(false);
   const [showExistingCustomers, setShowExistingCustomers] = useState(false);
+  const [showTemporaryOperations, setShowTemporaryOperations] = useState(false);
   const [salesRegionsConfigured, setSalesRegionsConfigured] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
@@ -276,6 +277,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         periodFilter?: "all" | PermitLeadPeriod;
         showAdvancedFilters?: boolean;
         showExistingCustomers?: boolean;
+        showTemporaryOperations?: boolean;
         statusFilter?: string;
         tableSearch?: string;
       };
@@ -295,6 +297,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         setPeriodFilter(saved.periodFilter || "all");
         setShowAdvancedFilters(Boolean(saved.showAdvancedFilters));
         setShowExistingCustomers(Boolean(saved.showExistingCustomers));
+        setShowTemporaryOperations(Boolean(saved.showTemporaryOperations));
         setStatusFilter(saved.statusFilter || "");
         setTableSearch(saved.tableSearch || "");
       }
@@ -327,11 +330,12 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         periodFilter,
         showAdvancedFilters,
         showExistingCustomers,
+        showTemporaryOperations,
         statusFilter,
         tableSearch
       })
     );
-  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, showExistingCustomers, statusFilter, tableSearch]);
+  }, [actionFilter, excludeExcluded, gradeFilter, hasInstagramOnly, hasPhoneOnly, industryFilter, kakaoMatchFilter, leadQualityMode, openDateEnd, openDateFilterMode, openDateMonth, openDateStart, openDateYear, periodFilter, showAdvancedFilters, showExistingCustomers, showTemporaryOperations, statusFilter, tableSearch]);
 
   const geocodableStores = useMemo(() => stores.filter((store) => store.address?.trim()), [stores]);
   // quoteDraftRevision은 localStorage 변경 이벤트를 React 메모 갱신으로 연결하는 의도적인 트리거입니다.
@@ -357,6 +361,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     if (!excludeExcluded) params.set("excludeExcluded", "false");
     if (showOutsideSalesArea) params.set("includeOutsideSalesArea", "true");
     if (showExistingCustomers) params.set("includeExistingCustomers", "true");
+    if (showTemporaryOperations) params.set("includeTemporaryOperations", "true");
 
     fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
@@ -372,7 +377,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showExistingCustomers, showOutsideSalesArea]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations]);
 
   useEffect(() => {
     loadLeads();
@@ -692,6 +697,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     openDateYear,
     periodFilter,
     showExistingCustomers,
+    showTemporaryOperations,
     showNearbyOnly,
     statusFilter,
     tableSearch
@@ -745,6 +751,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       kakaoMatchFilter ||
       !excludeExcluded ||
       showExistingCustomers ||
+      showTemporaryOperations ||
       showNearbyOnly ||
       tableSearch
   );
@@ -766,6 +773,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     setKakaoMatchFilter("");
     setExcludeExcluded(true);
     setShowExistingCustomers(false);
+    setShowTemporaryOperations(false);
     setShowNearbyOnly(false);
     setTableSearch("");
   }
@@ -2267,6 +2275,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={showExistingCustomers} onChange={(event) => setShowExistingCustomers(event.target.checked)} type="checkbox" />
                 기존 거래처도 표시
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                <input checked={showTemporaryOperations} onChange={(event) => setShowTemporaryOperations(event.target.checked)} type="checkbox" />
+                임시 영업도 표시
               </label>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
                 <input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />

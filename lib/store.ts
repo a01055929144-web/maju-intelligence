@@ -15,6 +15,7 @@ import {
   normalizeLeadIdentityText
 } from "../domains/lead/canonical-identity";
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
+import { classifyTemporaryPermitLead } from "../domains/lead/temporary-operation";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
 import {
   extractLeadAdministrativeArea,
@@ -51,7 +52,7 @@ import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pric
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
-import { getStaffLocationVisibilityCutoff, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { getStaffLocationDisplayState, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -581,6 +582,7 @@ export type StaffVehicleLocation = {
   driverName: string;
   id: string;
   isStale: boolean;
+  displayState: "realtime" | "delayed" | "last_operation";
   lastLocationAt?: string;
   lastSeenAt?: string;
   lat: number;
@@ -3686,6 +3688,7 @@ function toStaffVehicleLocation(row: {
   const lng = Number(row.last_lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const lastLocationAt = row.last_location_at || undefined;
+  const displayState = getStaffLocationDisplayState(lastLocationAt);
   const staleMs = lastLocationAt ? Date.now() - new Date(lastLocationAt).getTime() : Number.POSITIVE_INFINITY;
   const isStale = staleMs > STAFF_LOCATION_FRESHNESS_MINUTES * 60 * 1000;
   // 병합 노트(2026-09-12): origin(Codex)에는 이 식별자 우선순위 로직 자체가 없는 옛 버전이 계속
@@ -3716,17 +3719,14 @@ function toStaffVehicleLocation(row: {
     driverName: displayName,
     id: row.id,
     isStale,
+    displayState,
     lastLocationAt,
     lastSeenAt: row.last_seen_at || undefined,
     lat,
     lng,
-    // 명시적으로 운행 종료한 차량은 목록에는 남기되 지도에는 그리지 않도록 offline을 보존합니다.
-    // 그 외 오래된 좌표만 stale로 분류해 마지막 위치를 회색 마커로 계속 표시합니다.
-    status: row.location_status === "offline"
-      ? "offline"
-      : isStale
-        ? "stale"
-        : ((row.location_status || "active") as StaffVehicleLocation["status"]),
+    // 좌표는 current_customer_id가 있던 실제 배송 업무 이벤트에서만 가져옵니다. 따라서 기사가
+    // 앱을 종료했더라도 그 좌표는 사생활 위치가 아니라 마지막 운행 위치이며 지도에 남깁니다.
+    status: isStale ? "stale" : ((row.location_status || "active") as StaffVehicleLocation["status"]),
     userId: row.user_id
   };
 }
@@ -3752,6 +3752,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
         driverName: input.driverName || "배송기사",
         id: input.userId,
         isStale: false,
+        displayState: "realtime",
         lastLocationAt: recordedAt,
         lastSeenAt: receivedAt.toISOString(),
         lat: input.lat,
@@ -3838,58 +3839,69 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
 
 export async function getStaffVehicleLocations(companyId?: string, options: { userId?: string } = {}): Promise<StaffVehicleLocation[]> {
   if (!companyId || !isProductionStoreConfigured()) return [];
-  const userFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
-  const visibilityCutoff = getStaffLocationVisibilityCutoff();
   try {
-    const rows = await supabaseRequest<
-      Array<{
-        current_customer_id: string | null;
-        delivery_vehicle: string | null;
-        driver_name: string | null;
-        id: string;
-        last_accuracy_m: number | string | null;
-        last_lat: number | string | null;
-        last_lng: number | string | null;
-        last_location_at: string | null;
-        last_seen_at: string | null;
-        location_status: string | null;
-        user_id: string;
-      }>
-    >(
-      `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(
-        companyId
-      )}${userFilter}&last_lat=not.is.null&last_lng=not.is.null&last_location_at=gte.${encodeURIComponent(visibilityCutoff)}&order=last_location_at.desc&limit=100`
+    const memberFilter = options.userId ? `&user_id=eq.${encodeURIComponent(options.userId)}` : "";
+    const members = await supabaseRequest<Array<{ user_id: string; app_users: { name: string | null; status: string | null } | null }>>(
+      `company_members?select=user_id,app_users(name,status)&company_id=eq.${encodeURIComponent(companyId)}&status=eq.active${memberFilter}&limit=100`
     );
-    const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
+    const activeMembers = members.filter((member) => member.app_users?.status !== "inactive" && member.app_users?.status !== "deleted");
+    const userIds = Array.from(new Set(activeMembers.map((member) => member.user_id).filter(Boolean)));
+    if (!userIds.length) return [];
     const userIdFilter = userIds.map((id) => encodeURIComponent(id)).join(",");
-    const [userRows, invitationRows] = userIds.length
-      ? await Promise.all([
-          supabaseRequest<Array<{ id: string; name: string | null }>>(`app_users?select=id,name&id=in.(${userIdFilter})`).catch(() => []),
-          supabaseRequest<
-            Array<{
-              accepted_by: string | null;
-              assigned_manager_name: string | null;
-              assigned_vehicle: string | null;
-              employee_name: string | null;
-            }>
-          >(
-            `staff_invitations?select=accepted_by,employee_name,assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=in.(${userIdFilter})&status=eq.accepted&order=accepted_at.desc`
-          ).catch(() => [])
-        ])
-      : [[], []];
-    const userNameById = new Map(userRows.map((row) => [row.id, row.name || undefined]));
+    const [devices, invitationRows, operationalEvents] = await Promise.all([
+      supabaseRequest<Array<{
+        delivery_vehicle: string | null; driver_name: string | null; id: string;
+        last_seen_at: string | null; location_status: string | null; user_id: string;
+      }>>(
+        `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_seen_at,location_status&company_id=eq.${encodeURIComponent(companyId)}&user_id=in.(${userIdFilter})&order=last_seen_at.desc&limit=100`
+      ).catch(() => []),
+      supabaseRequest<Array<{
+        accepted_by: string | null; assigned_manager_name: string | null;
+        assigned_vehicle: string | null; employee_name: string | null;
+      }>>(
+        `staff_invitations?select=accepted_by,employee_name,assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=in.(${userIdFilter})&status=eq.accepted&order=accepted_at.desc`
+      ).catch(() => []),
+      Promise.all(userIds.map(async (userId) => {
+        const events = await supabaseRequest<Array<{
+          accuracy_m: number | string | null; current_customer_id: string | null;
+          delivery_vehicle: string | null; device_id: string | null; driver_name: string | null;
+          id: string; latitude: number | string; longitude: number | string;
+          recorded_at: string; user_id: string;
+        }>>(
+          `staff_location_events?select=id,device_id,user_id,driver_name,delivery_vehicle,latitude,longitude,accuracy_m,recorded_at,current_customer_id&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(userId)}&current_customer_id=not.is.null&order=recorded_at.desc&limit=1`
+        ).catch(() => []);
+        return events[0] || null;
+      }))
+    ]);
+    const userNameById = new Map(activeMembers.map((member) => [member.user_id, member.app_users?.name || undefined]));
+    const deviceByUserId = new Map<string, (typeof devices)[number]>();
+    devices.forEach((row) => { if (!deviceByUserId.has(row.user_id)) deviceByUserId.set(row.user_id, row); });
     const invitationByUserId = new Map<string, (typeof invitationRows)[number]>();
     invitationRows.forEach((row) => {
       if (row.accepted_by && !invitationByUserId.has(row.accepted_by)) invitationByUserId.set(row.accepted_by, row);
     });
-    return rows
-      .map((row) => {
-        const invitation = invitationByUserId.get(row.user_id);
-        return toStaffVehicleLocation(row, {
+    return operationalEvents
+      .filter((event): event is NonNullable<typeof event> => Boolean(event))
+      .map((event) => {
+        const device = deviceByUserId.get(event.user_id);
+        const invitation = invitationByUserId.get(event.user_id);
+        return toStaffVehicleLocation({
+          current_customer_id: event.current_customer_id,
+          delivery_vehicle: event.delivery_vehicle || device?.delivery_vehicle || null,
+          driver_name: event.driver_name || device?.driver_name || null,
+          id: device?.id || event.device_id || event.id,
+          last_accuracy_m: event.accuracy_m,
+          last_lat: event.latitude,
+          last_lng: event.longitude,
+          last_location_at: event.recorded_at,
+          last_seen_at: device?.last_seen_at || event.recorded_at,
+          location_status: device?.location_status || "stale",
+          user_id: event.user_id
+        }, {
           assignedManagerName: invitation?.assigned_manager_name || undefined,
           assignedVehicle: invitation?.assigned_vehicle || undefined,
           employeeName: invitation?.employee_name || undefined,
-          userName: userNameById.get(row.user_id)
+          userName: userNameById.get(event.user_id)
         });
       })
       .filter((location): location is StaffVehicleLocation => Boolean(location));
@@ -7992,6 +8004,7 @@ export type PermitLeadItem = {
   industryPrimary: string;
   industryTags: string[];
   isTargetIndustry: boolean;
+  isTemporaryOperation: boolean;
   isDuplicate: boolean;
   matchedCustomerId?: string;
   status: string;
@@ -8232,6 +8245,7 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     industryPrimary: row.industry_primary || "미분류",
     industryTags: row.industry_tags || [],
     isTargetIndustry: row.is_target_industry,
+    isTemporaryOperation: row.status === "임시 영업" || row.exclude_reason === "임시 영업",
     isDuplicate: row.is_duplicate,
     matchedCustomerId: row.matched_customer_id || undefined,
     status: row.status,
@@ -8531,6 +8545,14 @@ export async function ingestPermitLeadRows(
     if (!isActive) result.excludedInactive += 1;
 
     const classification = classifyPermitLeadIndustry(row.industry || "", businessName);
+    // 기존 운영 리드는 건수 검토 후 별도 승인으로 재분류합니다. 신규 적재분부터만 적용합니다.
+    const temporaryOperation = classifyTemporaryPermitLead({
+      address: row.address,
+      businessName,
+      closeDate: row.closeDate,
+      openDate: row.openDate,
+      permitDate: row.permitDate
+    });
     if (!classification.isTarget) result.excludedNonTarget += 1;
 
     const duplicateMatch = findLeadCustomerDuplicate(
@@ -8656,7 +8678,8 @@ export async function ingestPermitLeadRows(
       hasAddress,
       industryPrimary: classification.primary
     });
-    const excluded = !isActive || !classification.isTarget || isDuplicate;
+    const isNewTemporaryOperation = !existingId && temporaryOperation.isTemporary;
+    const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation;
     const isOwnershipChange = Boolean(placeMatchedLead && !safePlaceMatchedLead);
     if (isOwnershipChange) result.ownershipChange += 1;
     if (existingLead && !(existingLead.source_list || []).includes(source)) {
@@ -8692,16 +8715,18 @@ export async function ingestPermitLeadRows(
       matched_customer_method: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).method : null,
       matched_customer_confidence: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).confidence : null,
       is_duplicate: isDuplicate,
-      exclude_reason: !isActive
+      exclude_reason: isNewTemporaryOperation
+        ? "임시 영업"
+        : !isActive
         ? "폐업·휴업 등 비활성 상태"
         : !classification.isTarget
           ? "영업 대상 업종 아님"
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
-      next_action: nextAction.action,
-      next_action_reasons: nextAction.reasons,
+      status: isNewTemporaryOperation ? "임시 영업" : excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
+      next_action: isNewTemporaryOperation ? "제외 검토" : nextAction.action,
+      next_action_reasons: isNewTemporaryOperation ? [temporaryOperation.reason || "단기 영업 매장"] : nextAction.reasons,
       score_total: scoreTotal,
       score_breakdown: scoreBreakdown,
       grade,
@@ -9661,6 +9686,7 @@ export type PermitLeadFilters = {
   status?: string;
   includeOutsideSalesArea?: boolean;
   includeExistingCustomers?: boolean;
+  includeTemporaryOperations?: boolean;
 };
 
 type LeadBusinessHourRow = {
@@ -9726,6 +9752,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.hasPhone) params.push("phone=not.is.null");
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
+  if (!filters.includeTemporaryOperations && filters.status !== "임시 영업") params.push(`status=neq.${encodeURIComponent("임시 영업")}`);
   if (!filters.includeOutsideSalesArea) {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     if (shouldApplySalesAreaFilter(salesAreas, Boolean(filters.includeOutsideSalesArea))) {
