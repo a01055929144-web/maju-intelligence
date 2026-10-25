@@ -8,7 +8,7 @@ import { useTableSort } from "@/lib/use-table-sort";
 
 // 2026-09-01: "결제프로그램도 추가해서 넣고 싶어" — 고객사가 마주 인텔리전스 이용료를 매달 카드로
 // 자동결제(빌링)하는 화면입니다. 토스페이먼츠 카드 등록 위젯은 클라이언트 SDK가 필요해 이 파일
-// 전체가 클라이언트 컴포넌트입니다(app/revenue/billing/page.tsx가 서버 컴포넌트에서 이 컴포넌트만
+// 전체가 클라이언트 컴포넌트입니다(app/settings/billing/page.tsx가 서버 컴포넌트에서 이 컴포넌트만
 // 렌더링합니다 — pipeline-candidates-table.tsx와 같은 안전한 구조).
 //
 // 사용자 확정: "매달 자동결제는 일시불로만" — 토스 자동결제(빌링) API에는 할부 파라미터가 없어

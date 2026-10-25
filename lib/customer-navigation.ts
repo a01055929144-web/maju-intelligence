@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, Building2, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
+import { BarChart3, Bot, Boxes, Building2, CreditCard, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
 
 export type CustomerWorkspaceKey =
   | "dashboard"
@@ -63,6 +63,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     items: [
       { active: "settings", description: "회사, 출발지와 알림 기준", href: "/dashboard/settings/company", icon: Settings, label: "회사 정보" },
       { active: "settings-staff", description: "직원 이름, 권한과 담당 업무", href: "/dashboard/settings/staff", icon: Users, label: "직원 관리" },
+      { active: "billing", description: "요금제, 등록 카드와 결제 내역", href: "/settings/billing", icon: CreditCard, label: "구독·결제" },
       { active: "data", description: "거래처·매출·매입 데이터 등록", href: "/", icon: FileSpreadsheet, label: "엑셀 업로드" },
       { active: "data-management", description: "업로드, 저장, 누락 확인", href: "/customers/data", icon: Database, label: "업로드 이력" }
     ]

@@ -9,6 +9,12 @@ export function middleware(request: NextRequest) {
   const hasAdminSession = Boolean(request.cookies.get(ADMIN_COOKIE_NAME)?.value);
   const hasCustomerSession = Boolean(request.cookies.get(CUSTOMER_COOKIE_NAME)?.value);
 
+  if (pathname === "/revenue/billing") {
+    const target = new URL("/settings/billing", request.url);
+    searchParams.forEach((value, key) => target.searchParams.append(key, value));
+    return NextResponse.redirect(target);
+  }
+
   if (isHoldModulePath(pathname)) {
     const companyId = hasCustomerSession
       ? readUnsignedSessionCompanyId(request.cookies.get(CUSTOMER_COOKIE_NAME)?.value)

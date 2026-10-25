@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const customerKey = params.get("customerKey");
   const failureCode = params.get("code");
   const failureMessage = params.get("message");
-  const returnTo = "/revenue/billing";
+  const returnTo = "/settings/billing";
 
   if (!customerKey) {
     return NextResponse.redirect(new URL(`${returnTo}?billing=fail&message=${encodeURIComponent("잘못된 콜백 요청입니다.")}`, request.url));
