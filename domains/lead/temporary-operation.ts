@@ -10,6 +10,19 @@ export type TemporaryOperationClassification = {
   reason?: string;
 };
 
+export function resolveTemporaryLeadIngestStatus(input: {
+  excluded: boolean;
+  isOwnershipChange: boolean;
+  isSuspected: boolean;
+  isTemporary: boolean;
+}) {
+  if (input.isTemporary) return "임시 영업";
+  if (input.excluded) return "제외";
+  if (input.isSuspected) return "임시 영업 의심";
+  if (input.isOwnershipChange) return "주인 변경";
+  return "신규 수집";
+}
+
 function parseDate(value?: string) {
   if (!value) return null;
   const parsed = new Date(value);

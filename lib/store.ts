@@ -15,7 +15,7 @@ import {
   normalizeLeadIdentityText
 } from "../domains/lead/canonical-identity";
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
-import { classifyTemporaryPermitLead } from "../domains/lead/temporary-operation";
+import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import {
   isLeadContactActionType,
@@ -3854,6 +3854,7 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
     const activeMembers = members.filter((member) => member.app_users?.status !== "inactive" && member.app_users?.status !== "deleted");
     const userIds = Array.from(new Set(activeMembers.map((member) => member.user_id).filter(Boolean)));
     if (!userIds.length) return [];
+    const activeUserIds = new Set(userIds);
     const userIdFilter = userIds.map((id) => encodeURIComponent(id)).join(",");
     const [devices, invitationRows, operationalEvents] = await Promise.all([
       supabaseRequest<Array<{
@@ -3868,17 +3869,15 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
       }>>(
         `staff_invitations?select=accepted_by,employee_name,assigned_manager_name,assigned_vehicle&company_id=eq.${encodeURIComponent(companyId)}&accepted_by=in.(${userIdFilter})&status=eq.accepted&order=accepted_at.desc`
       ).catch(() => []),
-      Promise.all(userIds.map(async (userId) => {
-        const events = await supabaseRequest<Array<{
-          accuracy_m: number | string | null; current_customer_id: string | null;
-          delivery_vehicle: string | null; device_id: string | null; driver_name: string | null;
-          id: string; latitude: number | string; longitude: number | string;
-          recorded_at: string; user_id: string;
-        }>>(
-          `staff_location_events?select=id,device_id,user_id,driver_name,delivery_vehicle,latitude,longitude,accuracy_m,recorded_at,current_customer_id&company_id=eq.${encodeURIComponent(companyId)}&user_id=eq.${encodeURIComponent(userId)}&current_customer_id=not.is.null&order=recorded_at.desc&limit=1`
-        ).catch(() => []);
-        return events[0] || null;
-      }))
+      supabaseRequest<Array<{
+        accuracy_m: number | string | null; current_customer_id: string | null;
+        delivery_vehicle: string | null; device_id: string | null; driver_name: string | null;
+        id: string; latitude: number | string; longitude: number | string;
+        recorded_at: string; user_id: string;
+      }>>("rpc/list_latest_operational_staff_locations", {
+        method: "POST",
+        body: JSON.stringify({ p_company_id: companyId, p_user_id: options.userId || null })
+      }).catch(() => [])
     ]);
     const userNameById = new Map(activeMembers.map((member) => [member.user_id, member.app_users?.name || undefined]));
     const deviceByUserId = new Map<string, (typeof devices)[number]>();
@@ -3888,7 +3887,7 @@ export async function getStaffVehicleLocations(companyId?: string, options: { us
       if (row.accepted_by && !invitationByUserId.has(row.accepted_by)) invitationByUserId.set(row.accepted_by, row);
     });
     return operationalEvents
-      .filter((event): event is NonNullable<typeof event> => Boolean(event))
+      .filter((event) => activeUserIds.has(event.user_id))
       .map((event) => {
         const device = deviceByUserId.get(event.user_id);
         const invitation = invitationByUserId.get(event.user_id);
@@ -8744,9 +8743,16 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: isNewTemporaryOperation ? "임시 영업" : isNewTemporaryOperationSuspected ? "임시 영업 의심" : excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
-      next_action: isNewTemporaryOperation ? "제외 검토" : isNewTemporaryOperationSuspected ? "확인 필요" : nextAction.action,
-      next_action_reasons: isNewTemporaryOperation || isNewTemporaryOperationSuspected ? [temporaryOperation.reason || "단기 영업 매장"] : nextAction.reasons,
+      status: resolveTemporaryLeadIngestStatus({
+        excluded,
+        isOwnershipChange,
+        isSuspected: isNewTemporaryOperationSuspected,
+        isTemporary: isNewTemporaryOperation
+      }),
+      next_action: isNewTemporaryOperation || excluded ? "제외 검토" : isNewTemporaryOperationSuspected ? "확인 필요" : nextAction.action,
+      next_action_reasons: isNewTemporaryOperation || (isNewTemporaryOperationSuspected && !excluded)
+        ? [temporaryOperation.reason || "단기 영업 매장"]
+        : nextAction.reasons,
       score_total: scoreTotal,
       score_breakdown: scoreBreakdown,
       grade,
@@ -8874,6 +8880,7 @@ async function getDailyLeadTargetSnapshot(companyId: string): Promise<DailyLeadT
     "is_target_industry=eq.true",
     "is_duplicate=eq.false",
     "matched_customer_id=is.null",
+    `status=neq.${encodeURIComponent("임시 영업")}`,
     `or=(open_date.gte.${recentFrom},permit_date.gte.${recentFrom})`
   ];
   const [total, areaCounts] = await Promise.all([

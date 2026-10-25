@@ -38,9 +38,9 @@
 ## WO-0 패치 반영·배포 (단독, 먼저)
 ```
 [WO-0] Claude 패치 반영 — 새로 구현하지 말고 적용·검증만. 명세 §0·§1
-첨부: maju-leads-update-2026-10-25.patch (git apply)
-1) git apply --check 후 적용. 충돌 시 최신 코드 우선 + §1 의도대로 맞춤.
-2) 검증: tsc, lint, vitest(229개), check:auth-boundaries, next build.
+(패치 첨부 불필요 — 브랜치에 모두 있음)
+1) 브랜치 feat/lead-channels-fax-email-dm(main 4c235ae 이미 병합됨)을 main에 병합. 그사이 main이 바뀌었으면 최신 코드 우선 + §1 의도대로 맞춤.
+2) 검증: tsc, lint, vitest(232개, main 4c235ae 병합 후), check:auth-boundaries, next build.
 3) 마이그레이션 20261025190000_lead_contact_channels.sql(칸 4개 추가, 데이터 변경 없음) 적용 → 코드 배포.
    승인: "fcmdvveqmcgtioelzqun에 lead_contact_channels 마이그레이션 적용 승인"
 4) 운영 확인(결과 보고): 리드 상세 영업 채널·상태 선택(상세·목록)·팩스/이메일/톡톡 저장·인스타 후보 찾기 /
