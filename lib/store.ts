@@ -97,6 +97,14 @@ type AdminDashboardPayload = {
     processedRows: number;
     avgHealthScore: number;
   };
+  operations: {
+    activeCompanies: number;
+    activeStaffThisWeek: number;
+    contactsThisWeek: number;
+    quotesAndContractsThisMonth: number;
+    syncFailures: number;
+    inactiveCompanies7d: number;
+  };
   jobs: Array<{
     id: string;
     company: string;
@@ -476,6 +484,11 @@ export type SystemStatus = {
   services: Array<{ name: string; status: "ready" | "fallback" | "missing"; description: string }>;
   databaseChecks: DatabaseCheck[];
   storageChecks: DatabaseCheck[];
+  databaseUsage: null | {
+    databaseBytes: number;
+    measuredAt: string;
+    largestTables: Array<{ schema: string; table: string; bytes: number }>;
+  };
 };
 export type AuthCredentials = {
   adminEmail: string;
@@ -4382,7 +4395,8 @@ export function getSystemStatus(): SystemStatus {
       }
     ],
     databaseChecks: [],
-    storageChecks: []
+    storageChecks: [],
+    databaseUsage: null
   };
 }
 
@@ -4429,11 +4443,12 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
           count: null,
           description: "환경변수가 없어 Storage 버킷 조회를 건너뛰었습니다."
         }
-      ]
+      ],
+      databaseUsage: null
     };
   }
 
-  const [checks, storageChecks] = await Promise.all([
+  const [checks, storageChecks, databaseUsageRows] = await Promise.all([
     Promise.all([
     countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
     countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
@@ -4461,13 +4476,38 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
     ]),
     Promise.all([
       checkStorageBucket(CUSTOMER_ATTACHMENT_BUCKET, "첨부자료 Storage", "사업자등록증, 통장사본, 배송 적재위치 파일이 저장되는 비공개 버킷입니다.")
-    ])
+    ]),
+    supabaseRequest<
+      | {
+        database_bytes?: number;
+        measured_at?: string;
+        largest_tables?: Array<{ schema?: string; table?: string; bytes?: number }>;
+      }
+      | Array<{
+          database_bytes?: number;
+          measured_at?: string;
+          largest_tables?: Array<{ schema?: string; table?: string; bytes?: number }>;
+        }>
+    >("rpc/admin_database_usage", { method: "POST", body: "{}" }).catch(() => [])
   ]);
+
+  const databaseUsageRow = Array.isArray(databaseUsageRows) ? databaseUsageRows[0] : databaseUsageRows;
 
   return {
     ...system,
     databaseChecks: checks,
-    storageChecks
+    storageChecks,
+    databaseUsage: databaseUsageRow
+      ? {
+          databaseBytes: Number(databaseUsageRow.database_bytes || 0),
+          measuredAt: String(databaseUsageRow.measured_at || ""),
+          largestTables: (databaseUsageRow.largest_tables || []).map((item) => ({
+            schema: String(item.schema || "public"),
+            table: String(item.table || ""),
+            bytes: Number(item.bytes || 0)
+          }))
+        }
+      : null
   };
 }
 
@@ -13493,8 +13533,10 @@ export async function deleteCompanyPermanently(
 export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
   if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
 
-  const [companies, imports, reports, leads, uploadHistory] = await Promise.all([
-    supabaseRequest<SupabaseRow[]>("companies?select=id"),
+  const weekStart = new Date(Date.now() - 7 * 86400000).toISOString();
+  const monthStart = new Date(Date.now() - 30 * 86400000).toISOString();
+  const [companies, imports, reports, leads, uploadHistory, recentMembers, contactActions, quotes, syncFailures] = await Promise.all([
+    supabaseRequest<Array<{ id: string; status?: string }>>("companies?select=id,status"),
     supabaseRequest<
       Array<{
         id: string;
@@ -13512,7 +13554,13 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
     supabaseRequest<Array<{ id: string; name: string; region: string; score: number; status: string; company_id: string }>>(
       "lead_recommendations?select=id,name,region,score,status,company_id&order=score.desc&limit=20"
     ),
-    getUploadHistory()
+    getUploadHistory(),
+    supabaseRequest<Array<{ company_id: string; user_id: string; app_users: { last_login_at: string | null } | null }>>(
+      `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}`
+    ).catch(() => []),
+    supabaseRequest<Array<{ id: string }>>(`lead_actions?select=id&action_type=not.eq.hold&created_at=gte.${encodeURIComponent(weekStart)}&limit=10000`).catch(() => []),
+    supabaseRequest<Array<{ status: string }>>(`sales_quotes?select=status&created_at=gte.${encodeURIComponent(monthStart)}&status=in.(sent,accepted)&limit=10000`).catch(() => []),
+    supabaseRequest<Array<{ id: string }>>(`lead_sync_runs?select=id&started_at=gte.${encodeURIComponent(weekStart)}&status=eq.failed&limit=1000`).catch(() => [])
   ]);
 
   const avgHealthScore = reports.length
@@ -13533,6 +13581,18 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       uploadedFiles: imports.length,
       processedRows,
       avgHealthScore
+    },
+    operations: {
+      activeCompanies: companies.filter((company) => company.status !== "inactive" && company.status !== "deleted").length,
+      activeStaffThisWeek: new Set(recentMembers.map((member) => member.user_id)).size,
+      contactsThisWeek: contactActions.length,
+      quotesAndContractsThisMonth: quotes.length,
+      syncFailures: syncFailures.length,
+      inactiveCompanies7d: Math.max(
+        0,
+        companies.filter((company) => company.status !== "inactive" && company.status !== "deleted").length
+          - new Set(recentMembers.map((member) => member.company_id)).size
+      )
     },
     jobs: imports.map((item) => ({
       id: item.id,
@@ -13571,6 +13631,7 @@ function getEmptyAdminDashboardPayload(source: "empty" | "supabase"): AdminDashb
       processedRows: 0,
       avgHealthScore: 0
     },
+    operations: { activeCompanies: 0, activeStaffThisWeek: 0, contactsThisWeek: 0, quotesAndContractsThisMonth: 0, syncFailures: 0, inactiveCompanies7d: 0 },
     jobs: [],
     dataQuality: [
       { label: "주소 인식률", value: 0, description: "거래처를 등록하면 주소/지역 완성도를 계산합니다." },

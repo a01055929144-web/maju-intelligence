@@ -16,6 +16,14 @@ const statusLabels = {
 };
 const AUDIT_PAGE_SIZE = 10;
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const unitIndex = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const value = bytes / 1024 ** unitIndex;
+  return `${value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })} ${units[unitIndex]}`;
+}
+
 function singleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || "" : value || "";
 }
@@ -147,6 +155,11 @@ export default async function AdminSystemPage({
   const unresolvedCount = system.blockingIssues.length + system.warningIssues.length;
   const missingRequiredEnvironment = system.requiredEnvironment.filter((item) => item.required && !item.present).length;
   const missingOptionalEnvironment = system.requiredEnvironment.filter((item) => !item.required && !item.present).length;
+  const databaseLimitBytes = 500 * 1024 * 1024;
+  const databaseWarningBytes = 350 * 1024 * 1024;
+  const databaseUsagePercent = system.databaseUsage
+    ? Math.min(100, Math.round((system.databaseUsage.databaseBytes / databaseLimitBytes) * 1000) / 10)
+    : 0;
   const visibleEnvironment = system.requiredEnvironment.filter((item) => {
     if (environmentStatus === "missing") return item.required && !item.present;
     if (environmentStatus === "optional") return !item.required && !item.present;
@@ -201,7 +214,7 @@ export default async function AdminSystemPage({
 
   return (
     <main className="min-h-screen maju-app-bg">
-      <AdminPageHeader active="system" badge="System Check" session={session} subtitle="실서버 배포 전 DB, 인증, 환경변수 상태를 확인합니다" title="운영 설정 점검" />
+      <AdminPageHeader active="system" badge="System Check" session={session} subtitle="DB 용량, 인증, 환경변수와 운영 증적을 확인합니다" title="시스템 점검" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <Card id="operation-issues" className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
@@ -717,6 +730,47 @@ export default async function AdminSystemPage({
             </CardContent>
           </Card>
         </div>
+
+        <Card id="database-usage">
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle>DB 용량 · Free 한도</CardTitle>
+                <p className="mt-2 text-sm text-muted-foreground">값이나 비밀키는 노출하지 않고 승인된 서버 RPC의 집계 결과만 표시합니다.</p>
+              </div>
+              <Badge className={system.databaseUsage && system.databaseUsage.databaseBytes >= databaseWarningBytes ? "bg-amber-100 text-amber-900" : "bg-primary/10 text-primary"}>
+                {system.databaseUsage ? `${databaseUsagePercent}% 사용` : "RPC 적용 대기"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {system.databaseUsage ? (
+              <>
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                    <span>{formatBytes(system.databaseUsage.databaseBytes)}</span>
+                    <span>500 MB</span>
+                  </div>
+                  <Progress value={databaseUsagePercent} />
+                  <p className="mt-2 text-xs text-muted-foreground">350 MB부터 관리자 경고가 표시됩니다.</p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {system.databaseUsage.largestTables.map((table, index) => (
+                    <div className="flex items-center justify-between rounded-md border border-border p-3 text-sm" key={`${table.schema}.${table.table}`}>
+                      <span className="min-w-0 truncate font-bold">{index + 1}. {table.table}</span>
+                      <span className="shrink-0 text-muted-foreground">{formatBytes(table.bytes)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border border-dashed border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                <p className="font-black">DB 용량 조회는 아직 활성화하지 않았습니다.</p>
+                <p>검토용 SQL <code>docs/sql-drafts/wo-7-admin-database-usage.sql</code> 승인·적용 후 자동 표시됩니다.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card id="database-checks">
           <CardHeader>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, Database, FileSpreadsheet, Gauge, Inbox, Settings, ShieldCheck, Target } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Database, FileSpreadsheet, Inbox, MapPinned, MessageSquareText, Settings, ShieldCheck, Target, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -15,10 +15,10 @@ export default async function AdminPage() {
 
   const dashboard = await getAdminDashboardPayload();
   const overview = [
-    ["고객사", `${dashboard.overview.companies}곳`, Database],
-    ["업로드 파일", `${dashboard.overview.uploadedFiles}개`, FileSpreadsheet],
-    ["처리 행 수", dashboard.overview.processedRows.toLocaleString(), ClipboardList],
-    ["평균 건강도", `${dashboard.overview.avgHealthScore}점`, Gauge]
+    ["사용 중 고객사", `${dashboard.operations.activeCompanies}곳`, Database],
+    ["이번 주 활동 직원", `${dashboard.operations.activeStaffThisWeek}명`, Users],
+    ["이번 주 연락·방문", `${dashboard.operations.contactsThisWeek}건`, MessageSquareText],
+    ["이번 달 견적·계약", `${dashboard.operations.quotesAndContractsThisMonth}건`, MapPinned]
   ];
   const adminSignals = [
     {
@@ -47,33 +47,34 @@ export default async function AdminPage() {
     (item) => item.status === "failed" || item.qualityScore < 80 || item.duplicateCount > 0 || !item.reportId
   );
   const activeJobs = dashboard.jobs.filter((job) => job.status !== "completed");
+  const actionItemCount = dashboard.operations.syncFailures + dashboard.operations.inactiveCompanies7d + uploadIssues.length + activeJobs.length;
   const operations = [
     {
-      count: uploadIssues.length,
-      description: uploadIssues.length ? "실패·품질 저하·중복·리포트 미생성 건을 확인하세요." : "보완이 필요한 업로드가 없습니다.",
-      href: "/admin/uploads",
-      label: "업로드 보완",
-      tone: uploadIssues.length ? "warning" : "normal"
+      count: dashboard.operations.syncFailures,
+      description: dashboard.operations.syncFailures ? "최근 7일 데이터 수집 실패를 시스템 점검에서 확인하세요." : "최근 7일 데이터 수집 실패가 없습니다.",
+      href: "/admin/system#database-checks",
+      label: "수집 실패",
+      tone: dashboard.operations.syncFailures ? "warning" : "normal"
     },
     {
-      count: activeJobs.length,
-      description: activeJobs.length ? "처리 중인 분석의 완료 여부와 품질 점수를 확인하세요." : "대기 중인 분석 작업이 없습니다.",
-      href: "/admin/uploads",
-      label: "분석 진행",
-      tone: activeJobs.length ? "info" : "normal"
+      count: dashboard.operations.inactiveCompanies7d,
+      description: dashboard.operations.inactiveCompanies7d ? "7일 동안 직원 로그인이 없었던 고객사를 확인하세요." : "모든 사용 중 고객사에 최근 활동이 있습니다.",
+      href: "/admin/companies",
+      label: "7일 미사용 고객사",
+      tone: dashboard.operations.inactiveCompanies7d ? "warning" : "normal"
     },
     {
-      count: dashboard.leadQueue.length,
-      description: dashboard.leadQueue.length ? "점수가 높은 추천 리드부터 담당 상태를 정리하세요." : "분석 완료 후 추천 리드가 생성됩니다.",
-      href: "#lead-queue",
-      label: "리드 후속 조치",
-      tone: dashboard.leadQueue.length ? "info" : "normal"
+      count: uploadIssues.length + activeJobs.length,
+      description: uploadIssues.length || activeJobs.length ? "실패·품질 저하 또는 진행 중인 업로드를 확인하세요." : "보완이 필요한 업로드가 없습니다.",
+      href: "/admin/uploads",
+      label: "업로드 점검",
+      tone: uploadIssues.length || activeJobs.length ? "info" : "normal"
     }
   ] as const;
 
   return (
     <main className="min-h-screen maju-app-bg">
-      <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="관리자 전용 운영 콘솔" title="AI Sales Intelligence 운영 콘솔" />
+      <AdminPageHeader active="overview" badge="BIV Admin" session={session} subtitle="고객사 사용과 운영 이상을 한곳에서 확인합니다" title="운영 현황" />
 
       <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-4">
         <Card className="overflow-hidden border-slate-200 shadow-none">
@@ -83,8 +84,8 @@ export default async function AdminPage() {
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-primary">오늘의 운영 큐</p>
                 <CardTitle className="mt-1 text-xl">이상 상태부터 처리하세요</CardTitle>
               </div>
-              <Badge className={uploadIssues.length || activeJobs.length ? "w-fit bg-amber-100 text-amber-800" : "w-fit bg-emerald-100 text-emerald-800"}>
-                {uploadIssues.length || activeJobs.length ? `${uploadIssues.length + activeJobs.length}건 확인 필요` : "운영 정상"}
+              <Badge className={actionItemCount ? "w-fit bg-amber-100 text-amber-800" : "w-fit bg-emerald-100 text-emerald-800"}>
+                {actionItemCount ? `${actionItemCount}건 확인 필요` : "운영 정상"}
               </Badge>
             </div>
           </CardHeader>

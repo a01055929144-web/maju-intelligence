@@ -1037,6 +1037,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 차량(기사)이 새로 나타나면 화면 하단에 "OOO 기사님이 접속했습니다" 배너를 몇 초간 띄워
   // 새로고침 없이도 바로 눈에 띄게 합니다.
   const knownVehicleIdsRef = useRef<Set<string> | null>(null);
+  const hasRealtimeVehicleRef = useRef(staffVehicleLocations.some((location) => location.displayState === "realtime"));
   const [justConnectedVehicle, setJustConnectedVehicle] = useState<{ at: number; label: string } | null>(null);
   useEffect(() => {
     setLiveVehicleLocations(staffVehicleLocations);
@@ -1054,6 +1055,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         if (!cancelled && response.ok && Array.isArray(payload?.locations)) {
           setLiveVehicleConnectionError("");
           setLiveVehicleLocations(payload.locations);
+          hasRealtimeVehicleRef.current = payload.locations.some((location) => location.displayState === "realtime");
           const activeIds = new Set(payload.locations.filter((location) => !location.isStale).map((location) => location.id));
           const previousIds = knownVehicleIdsRef.current;
           // 첫 폴링(previousIds === null)에서는 이미 접속해 있던 차량까지 전부 "새로 접속"으로
@@ -1084,16 +1086,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       if (document.visibilityState === "visible") void load();
       timer = window.setTimeout(
         poll,
-        getStaffMapPollIntervalMs(liveVehicleLocations.some((location) => location.displayState === "realtime"))
+        getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current)
       );
-    }, getStaffMapPollIntervalMs(liveVehicleLocations.some((location) => location.displayState === "realtime")));
+    }, getStaffMapPollIntervalMs(hasRealtimeVehicleRef.current));
     return () => {
       cancelled = true;
       if (toastTimer) window.clearTimeout(toastTimer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearTimeout(timer);
     };
-  }, [churnRiskCompanyId, liveVehicleLocations]);
+  }, [churnRiskCompanyId]);
   const completedStoreIdsToday = useMemo(() => new Set(todayCompletions.map((completion) => completion.customerId)), [todayCompletions]);
   const vehicleMarkerMeta = useMemo(() => createVehicleMarkerMeta(deliveryVehicles), [deliveryVehicles]);
   const markers = useMemo(
