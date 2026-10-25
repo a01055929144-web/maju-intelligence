@@ -8005,6 +8005,7 @@ export type PermitLeadItem = {
   industryTags: string[];
   isTargetIndustry: boolean;
   isTemporaryOperation: boolean;
+  isTemporaryOperationSuspected: boolean;
   isDuplicate: boolean;
   matchedCustomerId?: string;
   status: string;
@@ -8246,6 +8247,7 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     industryTags: row.industry_tags || [],
     isTargetIndustry: row.is_target_industry,
     isTemporaryOperation: row.status === "임시 영업" || row.exclude_reason === "임시 영업",
+    isTemporaryOperationSuspected: row.status === "임시 영업 의심",
     isDuplicate: row.is_duplicate,
     matchedCustomerId: row.matched_customer_id || undefined,
     status: row.status,
@@ -8679,6 +8681,7 @@ export async function ingestPermitLeadRows(
       industryPrimary: classification.primary
     });
     const isNewTemporaryOperation = !existingId && temporaryOperation.isTemporary;
+    const isNewTemporaryOperationSuspected = !existingId && temporaryOperation.isSuspected;
     const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation;
     const isOwnershipChange = Boolean(placeMatchedLead && !safePlaceMatchedLead);
     if (isOwnershipChange) result.ownershipChange += 1;
@@ -8724,9 +8727,9 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: isNewTemporaryOperation ? "임시 영업" : excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
-      next_action: isNewTemporaryOperation ? "제외 검토" : nextAction.action,
-      next_action_reasons: isNewTemporaryOperation ? [temporaryOperation.reason || "단기 영업 매장"] : nextAction.reasons,
+      status: isNewTemporaryOperation ? "임시 영업" : isNewTemporaryOperationSuspected ? "임시 영업 의심" : excluded ? "제외" : isOwnershipChange ? "주인 변경" : "신규 수집",
+      next_action: isNewTemporaryOperation ? "제외 검토" : isNewTemporaryOperationSuspected ? "확인 필요" : nextAction.action,
+      next_action_reasons: isNewTemporaryOperation || isNewTemporaryOperationSuspected ? [temporaryOperation.reason || "단기 영업 매장"] : nextAction.reasons,
       score_total: scoreTotal,
       score_breakdown: scoreBreakdown,
       grade,

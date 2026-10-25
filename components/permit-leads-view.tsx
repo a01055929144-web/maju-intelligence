@@ -2813,7 +2813,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                                     : null;
                             return (
                               <div className="flex flex-nowrap items-center gap-1 overflow-hidden">
-                                <span className="shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.status}</span>
+                                <span className={`shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-black ${lead.isTemporaryOperationSuspected ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{lead.status}</span>
                                 {extraBadge ? (
                                   <span className={`shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-black ${extraBadge.tone}`}>{extraBadge.label}</span>
                                 ) : null}
