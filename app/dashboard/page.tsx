@@ -1,20 +1,22 @@
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { HomeSalesDashboard } from "@/components/home-sales-dashboard";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
+import { buildSalesHomeSummary } from "@/application/analytics/sales-home-summary";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { RequestTiming } from "@/lib/performance-timing";
 import { areHoldModulesEnabled, resolveLegacyDashboardHref } from "@/lib/feature-modules";
-import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
+import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, listPermitLeads, listSalesContactLedger, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
 type OperationsSearchParams = { companyId?: string; leadType?: string; routeMode?: string; type?: string; view?: string };
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<OperationsSearchParams> }) {
-  const params = await searchParams;
-  if (!params?.routeMode) {
+  const params = (await searchParams) || {};
+  if (!params?.routeMode && (params?.view || params?.leadType || params?.type)) {
     redirect(resolveLegacyDashboardHref(params || {}));
   }
   const initialView = params.routeMode === "leads"
@@ -36,11 +38,39 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   }
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
+  if (!companyId) redirect("/admin/companies");
   const showHoldModules = areHoldModulesEnabled(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
+
+  if (!params?.routeMode) {
+    const [homeCompany, leadResult, ledger, homeRoutePlan] = await timing.measure("db_home_parallel_total", () => Promise.all([
+      getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
+      listPermitLeads(companyId, { excludeExcluded: true, limit: 3000 }),
+      listSalesContactLedger(companyId, 5000),
+      getTodayRoutePlan(companyId, { assignmentKeys })
+    ]));
+    const summary = buildSalesHomeSummary(leadResult.leads, ledger);
+    timing.log("/dashboard");
+    return (
+      <CustomerAppShell
+        active="dashboard"
+        companyName={customerSession?.companyName || homeCompany.name}
+        mode={customerSession ? "customer" : "admin-preview"}
+        previewCompanyId={customerSession ? undefined : companyId}
+        showHoldModules={showHoldModules}
+        subtitle="신규 리드, 후속 연락, 방문과 배송 운영을 오늘 기준으로 정리합니다"
+        title="영업 홈"
+        userName={customerSession?.name || adminSession?.email || "관리자"}
+        workspaceRole={customerSession?.workspaceRole}
+      >
+        <HomeSalesDashboard delivery={{ groups: homeRoutePlan.groups.length, stops: homeRoutePlan.totalStops }} summary={summary} />
+      </CustomerAppShell>
+    );
+  }
+
   const [company, routePlan, customerMaster, churnRiskCustomers, vehicleFuelTypes, staffVehicleLocations, staffInvitationResult, vehicleMasterResult] = await timing.measure("db_parallel_total", () => Promise.all([
     timing.measure("db_company", () => getCompanySettings(companyId, customerSession?.companyName || "선택 고객사")),
     timing.measure("db_route_plan", () => getTodayRoutePlan(companyId, { assignmentKeys })),

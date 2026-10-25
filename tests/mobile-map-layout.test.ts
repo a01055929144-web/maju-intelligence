@@ -12,9 +12,10 @@ describe("mobile map layout", () => {
     expect(dashboardSource).toContain("h-[calc(100dvh-10rem)]");
   });
 
-  it("places the mobile sales map before KPI cards and sizes it from the viewport", () => {
-    expect(mobileSalesSource).toContain('order-1 overflow-hidden rounded-xl border" id="lead-map"');
+  it("places today's sales tasks first and keeps the map sized from the viewport", () => {
+    expect(mobileSalesSource).toContain('order-1 rounded-xl border p-3" aria-label="오늘 할 일"');
     expect(mobileSalesSource).toContain('order-2 rounded-xl border p-3" aria-label="영업 KPI 현황"');
+    expect(mobileSalesSource).toContain('order-3 overflow-hidden rounded-xl border" id="lead-map"');
     expect(mobileSalesSource).toContain("h-[clamp(360px,calc(100dvh-14rem),620px)]");
   });
 });

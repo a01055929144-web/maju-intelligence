@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Search, Send, Target } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, Phone, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
+import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/application/mobile-sales/today-tasks";
+import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
 import { MobileQuoteBuilder } from "@/components/mobile-quote-builder";
@@ -16,7 +18,7 @@ import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
-type ViewMode = "all" | MobileLeadType | "contacted" | "reminder";
+type ViewMode = "all" | MobileLeadType | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
 
 const collateralOptions = ["브로슈어", "단가표", "견적서", "명함"] as const;
@@ -50,6 +52,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [conversionFailed, setConversionFailed] = useState(false);
   const [businessHoursDraft, setBusinessHoursDraft] = useState("");
   const [businessHoursSaving, setBusinessHoursSaving] = useState(false);
+  const [queuedActionCount, setQueuedActionCount] = useState(0);
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -67,6 +70,30 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   }, []);
 
   useEffect(() => { void loadLeads(); }, [loadLeads]);
+  useEffect(() => {
+    const flushQueuedActions = () => {
+      const queued = readMobileSalesActionQueue(window.localStorage);
+      setQueuedActionCount(queued.length);
+      if (!queued.length || !navigator.onLine) return;
+      void flushMobileSalesActionQueue(queued, async (item) => {
+        try {
+          const response = await fetch(`/api/leads/permits/${encodeURIComponent(item.leadId)}/action`, {
+            body: JSON.stringify(item.payload), headers: { "Content-Type": "application/json" }, method: "POST"
+          });
+          return response.ok;
+        } catch {
+          return false;
+        }
+      }).then((remaining) => {
+        writeMobileSalesActionQueue(window.localStorage, remaining);
+        setQueuedActionCount(remaining.length);
+        if (remaining.length < queued.length) void loadLeads();
+      });
+    };
+    flushQueuedActions();
+    window.addEventListener("online", flushQueuedActions);
+    return () => window.removeEventListener("online", flushQueuedActions);
+  }, [loadLeads]);
   useEffect(() => {
     void fetch("/api/sales-kpi", { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() : null)
@@ -92,8 +119,12 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   }, []);
 
   const visibleLeads = useMemo(() => {
+    const taskIds = view === "follow_up" || view === "sms" || view === "dm" || view === "visit"
+      ? new Set(buildMobileSalesTaskGroups(leads, leads.length).find((group) => group.kind === view)?.items.map((lead) => lead.id) || [])
+      : null;
     const token = query.trim().toLowerCase();
     const filtered = leads.filter((lead) => {
+      if (taskIds && !taskIds.has(lead.id)) return false;
       if (view === "new" || view === "sales") if (getMobileLeadType(lead) !== view) return false;
       if (view === "contacted" && !isContactedLead(lead.status)) return false;
       if (view === "reminder" && lead.status !== "재연락 예정") return false;
@@ -109,6 +140,8 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       return b.scoreTotal - a.scoreTotal;
     });
   }, [leads, location, query, sort, view]);
+
+  const taskGroups = useMemo(() => buildMobileSalesTaskGroups(leads), [leads]);
 
   const markers = useMemo<KakaoMapMarker[]>(() => visibleLeads.slice(0, 100).map((lead, index) => ({
     address: lead.address || lead.jurisdiction || lead.businessName,
@@ -182,11 +215,12 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setSaving(true);
     setSaveMessage("");
     const actionType = VISIT_RESULT_ACTION_TYPE[contactResult];
+    const actionPayload = { actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: quoteUrl ? `${memo.trim()}\n[고객용 견적: ${quoteUrl}]` : memo, reminderDate }), result: contactResult };
     try {
       const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: quoteUrl ? `${memo.trim()}\n[고객용 견적: ${quoteUrl}]` : memo, reminderDate }), result: contactResult })
+        body: JSON.stringify(actionPayload)
       });
       const payload = (await response.json().catch(() => null)) as { action?: PermitLeadActionItem; message?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "컨택 기록을 저장하지 못했습니다.");
@@ -201,6 +235,17 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         setSaveMessage(quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.");
       }
     } catch (saveError) {
+      if (saveError instanceof TypeError) {
+        const queued: QueuedMobileSalesAction = { createdAt: new Date().toISOString(), id: crypto.randomUUID(), leadId: selected.id, payload: actionPayload };
+        const items = [...readMobileSalesActionQueue(window.localStorage), queued];
+        writeMobileSalesActionQueue(window.localStorage, items);
+        setQueuedActionCount(items.length);
+        setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: reminderDate ? "재연락 예정" : "연락 완료" } : lead));
+        setSelected((current) => current ? { ...current, status: reminderDate ? "재연락 예정" : "연락 완료" } : current);
+        setMemo(""); setCollateral([]); setReminderDate("");
+        setSaveMessage("통신이 불안정해 기기에 저장했습니다. 연결되면 자동으로 다시 전송합니다.");
+        return;
+      }
       if (contactResult === "거래 시작") setConversionFailed(true);
       setSaveMessage(saveError instanceof Error ? saveError.message : "컨택 기록을 저장하지 못했습니다.");
     } finally { setSaving(false); }
@@ -222,6 +267,16 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           </header>
 
           <div className="flex flex-1 flex-col gap-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
+            <section className="mobile-card order-1 rounded-xl border p-3" aria-label="오늘 할 일">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">오늘 할 일</p><p className="mobile-muted text-xs">카드를 누르면 바로 실행할 매장만 모아봅니다.</p></div>{queuedActionCount ? <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">전송 대기 {queuedActionCount}</span> : null}</div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {taskGroups.map((group) => <TaskCard count={group.count} key={group.kind} kind={group.kind} onClick={() => { setView(group.kind); document.getElementById("lead-list")?.scrollIntoView({ behavior: "smooth" }); }} />)}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border text-xs font-semibold" onClick={() => { setView("visit"); document.getElementById("lead-map")?.scrollIntoView({ behavior: "smooth" }); }} type="button"><Route className="h-4 w-4" />방문 동선</button>
+                <Link className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border text-xs font-semibold" href="/mobile/register"><PlusCircle className="h-4 w-4" />매장 직접 등록</Link>
+              </div>
+            </section>
             <section className="mobile-card order-2 rounded-xl border p-3" aria-label="영업 KPI 현황">
               <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">이번 달 영업 KPI</p><p className="mobile-muted mt-0.5 text-xs">회사 설정 목표 대비 내 영업 실적</p></div><Target className="h-5 w-5 text-teal-700" /></div>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center">
@@ -229,13 +284,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
               </div>
             </section>
 
-            <section className="mobile-card order-1 overflow-hidden rounded-xl border" id="lead-map">
+            <section className="mobile-card order-3 overflow-hidden rounded-xl border" id="lead-map">
               <div className="flex items-center justify-between border-b border-[var(--mobile-border)] px-3 py-2.5"><div><p className="text-sm font-semibold">내 주변 영업 지도</p><p className="mobile-muted text-xs">보라색 신규 · 청록색 영업 리드</p></div><button className="mobile-secondary-action inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold" onClick={requestLocation} type="button"><Crosshair className="h-4 w-4" />내 위치</button></div>
               <KakaoAddressMap appKey={kakaoMapAppKey} focusedMarkerId={selected?.id} mapClassName="h-[clamp(360px,calc(100dvh-14rem),620px)] w-full" markers={markers} onMarkerClick={(marker) => { const lead = leads.find((item) => item.id === marker.id); if (lead) void openLead(lead); }} showList={false} />
               {locationMessage ? <p className="mobile-muted px-3 py-2 text-xs font-semibold">{locationMessage}</p> : null}
             </section>
 
-            <section className="mobile-card order-3 rounded-xl border p-3" id="lead-list">
+            <section className="mobile-card order-4 rounded-xl border p-3" id="lead-list">
               <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input aria-label="리드 검색" className="mobile-input min-h-10 w-full rounded-lg border py-2 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="매장명·주소·업종 검색" value={query} /></div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button className={`min-h-10 rounded-lg text-xs font-semibold ${sort === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setSort("sales")} type="button">세일즈 추천</button>
@@ -250,7 +305,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
               {loadState === "ready" ? <div className="mt-3 space-y-2">{visibleLeads.slice(0, 50).map((lead) => <LeadCard key={lead.id} lead={lead} location={location} onOpen={() => void openLead(lead)} />)}{visibleLeads.length === 0 ? <StateMessage icon={MapPin} text="조건에 맞는 리드가 없습니다." /> : null}</div> : null}
             </section>
 
-            <section className="mobile-card order-4 rounded-xl border p-3" id="reminders">
+            <section className="mobile-card order-5 rounded-xl border p-3" id="reminders">
               <div className="flex items-center justify-between"><div><p className="text-sm font-semibold">후속 영업 리마인드</p><p className="mobile-muted text-xs">과거 컨택 후 다시 연락할 매장</p></div><Bell className="h-5 w-5 text-amber-600" /></div>
               <div className="mt-3 space-y-2">{leads.filter((lead) => lead.status === "재연락 예정").slice(0, 10).map((lead) => <button className="mobile-card-raised flex min-h-14 w-full items-center justify-between rounded-lg border px-3 text-left" key={lead.id} onClick={() => void openLead(lead)} type="button"><span><span className="block text-sm font-semibold">{lead.businessName}</span><span className="mobile-muted mt-0.5 block text-xs">{lead.address || "주소 확인 필요"}</span></span><ChevronRight className="h-4 w-4" /></button>)}{reminderCount === 0 ? <p className="mobile-muted rounded-lg border border-dashed border-[var(--mobile-border)] p-3 text-center text-xs font-semibold">등록된 리마인드가 없습니다.</p> : null}</div>
             </section>
@@ -281,6 +336,18 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
 }
 
 function Kpi({ label, target, value }: { label: string; target?: number; value: number }) { return <div className="mobile-card-raised rounded-lg border px-2 py-3"><p className="text-xl font-bold text-teal-700">{value}{target ? <span className="text-[10px] text-slate-400">/{target}</span> : null}</p><p className="mobile-muted mt-1 text-[11px] font-semibold">{label}</p>{target ? <span className="mt-1 block h-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-teal-600" style={{ width: `${Math.min(100, Math.round((value / target) * 100))}%` }} /></span> : null}</div>; }
+
+const taskCardMeta: Record<MobileSalesTaskKind, { label: string; note: string }> = {
+  follow_up: { label: "다시 연락", note: "후속 일정이 잡힌 매장" },
+  sms: { label: "문자·010", note: "휴대폰 번호가 있는 매장" },
+  dm: { label: "DM·톡톡", note: "SNS로 바로 연락 가능" },
+  visit: { label: "방문", note: "주소가 확인된 영업 후보" }
+};
+
+function TaskCard({ count, kind, onClick }: { count: number; kind: MobileSalesTaskKind; onClick: () => void }) {
+  const meta = taskCardMeta[kind];
+  return <button className="mobile-card-raised min-h-24 rounded-lg border p-3 text-left" onClick={onClick} type="button"><span className="text-2xl font-bold text-teal-700">{count}</span><span className="mt-1 block text-sm font-semibold">{meta.label}</span><span className="mobile-muted mt-1 block text-[11px]">{meta.note}</span></button>;
+}
 
 function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin; spin?: boolean; text: string }) { return <div className="mobile-muted mt-3 flex min-h-20 items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--mobile-border)] text-xs font-semibold"><Icon className={`h-4 w-4 ${spin ? "animate-spin" : ""}`} />{text}</div>; }
 
