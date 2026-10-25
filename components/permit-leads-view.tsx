@@ -425,7 +425,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     const params = new URLSearchParams();
     if (periodFilter !== "all") params.set("period", periodFilter);
     if (industryFilter) params.set("industry", industryFilter);
-    if (actionFilter) params.set("action", actionFilter);
+    if (actionFilter && !["오늘 문자", "오늘 DM"].includes(actionFilter)) params.set("action", actionFilter);
     if (statusFilter && statusFilter !== QUOTE_FOLLOW_UP_STATUS_FILTER) params.set("status", statusFilter);
     if (gradeFilter) params.set("grade", gradeFilter);
     if (hasPhoneOnly) params.set("hasPhone", "true");
@@ -618,6 +618,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
+      .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
       .filter((lead) => !hasPhoneOnly || isMobilePhoneNumber(lead.phone))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
       .filter((lead) => !hasTalktalkOnly || Boolean(lead.naverTalktalkUrl))
@@ -647,7 +648,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
+  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -727,7 +728,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const sortedLeads = useMemo(() => {
     if (tableSortedLeads) return tableSortedLeads;
     return [...filteredLeads].sort(compareLeadListDefault);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredLeads, tableSortedLeads]);
   const leadTotalPages = Math.max(1, Math.ceil(sortedLeads.length / leadPageSize));
   const pagedLeads = useMemo(() => {
@@ -799,8 +799,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
 
   const visibleLeadSummary = useMemo(
     () => ({
-      call: filteredLeads.filter((lead) => lead.nextAction === "오늘 바로 전화").length,
-      dm: filteredLeads.filter((lead) => lead.nextAction === "오늘 DM 발송").length,
+      call: filteredLeads.filter((lead) => displayLeadNextAction(lead) === "오늘 문자").length,
+      dm: filteredLeads.filter((lead) => displayLeadNextAction(lead) === "오늘 DM").length,
       phone: filteredLeads.filter((lead) => lead.phone).length,
       instagram: filteredLeads.filter((lead) => getLeadInstagramHandle(lead)).length,
       enrichment: filteredLeads.filter((lead) => lead.nextAction === "정보 보강").length,
@@ -1026,7 +1026,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     setActionFilter(action);
     setStatusFilter("");
     if (queueLeads[0]) {
-      setSelectedLeadIntent(action === "오늘 바로 전화" ? "call" : action === "오늘 DM 발송" ? "dm" : action === "정보 보강" ? "info" : "");
+      setSelectedLeadIntent(action === "오늘 문자" ? "call" : action === "오늘 DM" ? "dm" : action === "정보 보강" ? "info" : "");
       setSelectedLead(queueLeads[0]);
     }
   }
@@ -1735,25 +1735,25 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-              {((queues?.callToday.length || 0) + (queues?.dmCandidates.length || 0) + (queues?.quoteFollowUps.length || 0)).toLocaleString()}건 우선
+              {((queues?.smsToday.length || 0) + (queues?.dmCandidates.length || 0) + (queues?.quoteFollowUps.length || 0)).toLocaleString()}건 우선
             </span>
             <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
           </div>
         </summary>
         <div className="grid gap-2 border-t border-slate-100 p-3 md:grid-cols-2 xl:grid-cols-3">
         <PermitLeadQueueCard
-          description="인허가 신규성과 연락처가 모두 확인된 곳"
+          description="010 휴대폰 번호가 확인된 미연락 매장"
           icon={Phone}
-          leads={queues?.callToday || []}
-          onFocus={() => focusLeadQueue("오늘 바로 전화", queues?.callToday || [])}
+          leads={queues?.smsToday || []}
+          onFocus={() => focusLeadQueue("오늘 문자", queues?.smsToday || [])}
           tone="teal"
-          title="오늘 전화"
+          title="오늘 문자"
         />
         <PermitLeadQueueCard
           description="인스타·플레이스 확인 후 DM 문안 복사"
           icon={Instagram}
           leads={queues?.dmCandidates || []}
-          onFocus={() => focusLeadQueue("오늘 DM 발송", queues?.dmCandidates || [])}
+          onFocus={() => focusLeadQueue("오늘 DM", queues?.dmCandidates || [])}
           tone="pink"
           title="DM 후보"
         />
@@ -2491,11 +2491,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               {visibleLeadSummary.total.toLocaleString()}곳 전체 보기
             </button>
             {isSalesLeadPage ? <LeadQuickFilterChip
-              active={actionFilter === "오늘 바로 전화"}
+              active={actionFilter === "오늘 문자"}
               count={visibleLeadSummary.call}
-              label="전화"
+              label="문자"
               onClick={() => {
-                setActionFilter("오늘 바로 전화");
+                setActionFilter("오늘 문자");
                 setStatusFilter("");
               }}
             /> : null}
@@ -2506,11 +2506,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
               onClick={() => setHasPhoneOnly((value) => !value)}
             /> : null}
             {isSalesLeadPage ? <LeadQuickFilterChip
-              active={actionFilter === "오늘 DM 발송"}
+              active={actionFilter === "오늘 DM"}
               count={visibleLeadSummary.dm}
               label="DM"
               onClick={() => {
-                setActionFilter("오늘 DM 발송");
+                setActionFilter("오늘 DM");
                 setStatusFilter("");
               }}
             /> : null}
@@ -2761,6 +2761,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                     /> : null}
                     {showMoreLeadColumns ? <LeadSortableHeader className="w-[110px]" label="인스타" sortKeyValue="instagram" /> : null}
                     <LeadSortableHeader className="w-[118px]" label="전화" sortKeyValue="phone" />
+                    <th className="w-[160px] border-r border-slate-200 px-3 py-2">최근 연락</th>
                     {showMoreLeadColumns ? <LeadSortableHeader
                       className="w-[110px] text-right"
                       helpText="네이버·카카오·구글에서 확보한 평점과 리뷰 수이며 영업 리드에서는 검색량 기반 매력도도 함께 표시합니다."
@@ -2882,6 +2883,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                           ) : (
                             "미확인"
                           )}
+                        </td>
+                        <td className="max-w-[160px] border-r border-slate-100 px-3 py-2 text-xs text-slate-600">
+                          {lead.lastContactAt ? (
+                            <><p className="font-bold text-slate-800">{new Date(lead.lastContactAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} · {lead.lastContactChannel || "연락"}</p><p className="mt-0.5 truncate text-[11px] text-slate-400" title={lead.lastContactSummary}>{lead.lastContactSummary || "내용 없음"}</p></>
+                          ) : <span className="font-semibold text-slate-300">연락 전</span>}
                         </td>
                         {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-right">
                           {lead.rating || lead.reviewCount ? (

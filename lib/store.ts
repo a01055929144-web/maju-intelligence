@@ -19,10 +19,12 @@ import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from ".
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import {
   isLeadContactActionType,
+  isMobilePhoneNumber,
   normalizeEmailInput,
   normalizeFaxNumberInput,
   normalizeNaverTalktalkInput
 } from "../domains/lead/contact-channels";
+import { displayLeadNextAction, recommendLeadNextAction } from "../domains/lead/next-action";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
 import {
   extractLeadAdministrativeArea,
@@ -8017,6 +8019,10 @@ export type PermitLeadItem = {
   status: string;
   nextAction?: string;
   nextActionReasons: string[];
+  followUpAt?: string;
+  lastContactAt?: string;
+  lastContactChannel?: string;
+  lastContactSummary?: string;
   excludeReason?: string;
   scoreTotal: number;
   scoreBreakdown: Record<string, number>;
@@ -8090,6 +8096,9 @@ type PermitLeadRow = {
   status: string;
   next_action: string | null;
   next_action_reasons: string[] | null;
+  last_contact_at?: string | null;
+  last_contact_channel?: string | null;
+  last_contact_summary?: string | null;
   exclude_reason: string | null;
   score_total: number;
   score_breakdown: Record<string, number> | null;
@@ -8200,6 +8209,7 @@ function computePermitLeadNextAction(input: {
   isNewLead: boolean;
   leadPeriod: PermitLeadPeriod;
   hasPhone: boolean;
+  phone?: string;
   hasAddress: boolean;
   industryPrimary: string;
 }): { action: string; reasons: string[] } {
@@ -8231,13 +8241,11 @@ function computePermitLeadNextAction(input: {
           ? "이번 달 신규 인허가"
           : "최근 90일 신규 인허가";
 
-  if (input.isNewLead && input.leadPeriod === "today" && input.hasPhone) {
-    return { action: "오늘 바로 전화", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 확인됨"] };
-  }
-  if (!input.hasPhone) {
-    return { action: "오늘 DM 발송", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 미확인 · 온라인 채널 확인 필요"] };
-  }
-  return { action: "전화·DM 검토", reasons: [periodLabel, `${input.industryPrimary} 업종`, "전화번호 확인됨"] };
+  const recommendation = recommendLeadNextAction({ phone: input.phone });
+  return {
+    action: recommendation.label,
+    reasons: [periodLabel, `${input.industryPrimary} 업종`, isMobilePhoneNumber(input.phone) ? "010 휴대폰 확인됨" : "유선 콜드콜 제외"]
+  };
 }
 
 function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
@@ -8266,6 +8274,9 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     status: row.status,
     nextAction: row.next_action || undefined,
     nextActionReasons: row.next_action_reasons || [],
+    lastContactAt: row.last_contact_at || undefined,
+    lastContactChannel: row.last_contact_channel || undefined,
+    lastContactSummary: row.last_contact_summary || undefined,
     excludeReason: row.exclude_reason || undefined,
     scoreTotal: row.score_total,
     scoreBreakdown: row.score_breakdown || {},
@@ -8693,6 +8704,7 @@ export async function ingestPermitLeadRows(
       isNewLead,
       leadPeriod,
       hasPhone,
+      phone: row.phone,
       hasAddress,
       industryPrimary: classification.primary
     });
@@ -9834,7 +9846,7 @@ function extractPermitLeadRegionKey(address?: string) {
 }
 
 export type PermitLeadQueues = {
-  callToday: PermitLeadItem[];
+  smsToday: PermitLeadItem[];
   dmCandidates: PermitLeadItem[];
   needsEnrichment: PermitLeadItem[];
   quoteFollowUps: PermitLeadItem[];
@@ -9871,13 +9883,13 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
     if (key) regionCounts.set(key, (regionCounts.get(key) || 0) + 1);
   }
 
-  const callToday = active.filter((lead) => lead.nextAction === "오늘 바로 전화").slice(0, limitPerQueue);
-  const dmCandidates = active.filter((lead) => lead.nextAction === "오늘 DM 발송").slice(0, limitPerQueue);
+  const smsToday = active.filter((lead) => displayLeadNextAction(lead) === "오늘 문자").slice(0, limitPerQueue);
+  const dmCandidates = active.filter((lead) => displayLeadNextAction(lead) === "오늘 DM").slice(0, limitPerQueue);
   const needsEnrichment = active.filter((lead) => lead.nextAction === "정보 보강").slice(0, limitPerQueue);
   const quoteRequests = active.filter((lead) => lead.status === "견적 요청").slice(0, limitPerQueue);
   const quoteFollowUps = active.filter((lead) => lead.status === "견적 발송" || lead.status === "재연락 예정").slice(0, limitPerQueue);
   const visitThisWeek = active
-    .filter((lead) => lead.nextAction !== "오늘 바로 전화" && lead.nextAction !== "오늘 DM 발송" && lead.nextAction !== "정보 보강")
+    .filter((lead) => !["오늘 문자", "오늘 DM", "정보 보강"].includes(displayLeadNextAction(lead)))
     .filter((lead) => lead.status !== "견적 요청" && lead.status !== "견적 발송" && lead.status !== "재연락 예정")
     .filter((lead) => {
       const key = extractPermitLeadRegionKey(lead.address);
@@ -9888,7 +9900,7 @@ export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20)
   const newLeadCount = active.filter((lead) => hasRecentConfirmedPermitDate(lead.openDate || lead.permitDate)).length;
 
   return {
-    callToday,
+    smsToday,
     dmCandidates,
     needsEnrichment,
     quoteFollowUps,

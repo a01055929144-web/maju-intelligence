@@ -31,12 +31,16 @@ describe("mobile sales today tasks", () => {
     const groups = buildMobileSalesTaskGroups([
       lead("follow", { status: "재연락 예정", phone: "010-1111-2222" }),
       lead("sms", { phone: "010-3333-4444" }),
+      lead("sms-dm", { phone: "010-5555-6666", instagramUrl: "https://instagram.com/smswins" }),
       lead("dm", { instagramUrl: "https://instagram.com/store" }),
-      lead("visit", { address: "서울 강남구", scoreTotal: 90 })
+      lead("visit", { address: "서울 강남구", scoreTotal: 90 }),
+      lead("temporary", { address: "서울 강남구", isTemporaryOperation: true }),
+      lead("quoted", { address: "서울 강남구", status: "견적 발송" })
     ]);
     expect(groups.map((group) => [group.kind, group.count])).toEqual([
-      ["follow_up", 1], ["sms", 1], ["dm", 1], ["visit", 1]
+      ["follow_up", 1], ["sms", 2], ["dm", 1], ["visit", 1]
     ]);
+    expect(groups.find((group) => group.kind === "dm")?.items.some((item) => item.id === "sms-dm")).toBe(false);
   });
 });
 

@@ -1,4 +1,6 @@
 import type { PermitLeadItem } from "@/lib/store";
+import { isMobilePhoneNumber } from "../../domains/lead/contact-channels";
+import { toLeadStageValue } from "../../domains/lead/lead-status";
 
 export type MobileSalesTaskKind = "dm" | "follow_up" | "sms" | "visit";
 
@@ -7,10 +9,6 @@ export type MobileSalesTaskGroup = {
   items: PermitLeadItem[];
   kind: MobileSalesTaskKind;
 };
-
-function isMobilePhone(value?: string) {
-  return /^010\D*\d{3,4}\D*\d{4}$/.test(value?.trim() || "");
-}
 
 function hasDmChannel(lead: PermitLeadItem) {
   return Boolean(lead.instagramUrl || lead.naverTalktalkUrl);
@@ -21,10 +19,17 @@ function isContactedStatus(status: string) {
 }
 
 export function buildMobileSalesTaskGroups(leads: PermitLeadItem[], limit = 12): MobileSalesTaskGroup[] {
-  const active = leads.filter((lead) => lead.isActive && lead.status !== "제외" && !lead.matchedCustomerId);
-  const followUp = active.filter((lead) => lead.status === "재연락 예정");
-  const sms = active.filter((lead) => isMobilePhone(lead.phone) && !isContactedStatus(lead.status));
-  const dm = active.filter((lead) => hasDmChannel(lead) && !isContactedStatus(lead.status));
+  const active = leads.filter((lead) =>
+    lead.isActive && !lead.isTemporaryOperation && !lead.isTemporaryOperationSuspected && !lead.matchedCustomerId &&
+    (toLeadStageValue(lead.status) === "신규 수집" || lead.status === "재연락 예정")
+  );
+  const followUp = active
+    .filter((lead) => lead.status === "재연락 예정")
+    .sort((left, right) => String(left.followUpAt || "9999-12-31").localeCompare(String(right.followUpAt || "9999-12-31")));
+  const followUpIds = new Set(followUp.map((lead) => lead.id));
+  const sms = active.filter((lead) => !followUpIds.has(lead.id) && isMobilePhoneNumber(lead.phone) && !isContactedStatus(lead.status));
+  const smsIds = new Set(sms.map((lead) => lead.id));
+  const dm = active.filter((lead) => !followUpIds.has(lead.id) && !smsIds.has(lead.id) && hasDmChannel(lead) && !isContactedStatus(lead.status));
   const used = new Set([...followUp, ...sms, ...dm].map((lead) => lead.id));
   const visit = active
     .filter((lead) => !used.has(lead.id))

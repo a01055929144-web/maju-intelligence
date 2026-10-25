@@ -8,11 +8,13 @@ describe("lead next action", () => {
     expect(recommendLeadNextAction({ instagramUrl: "@maju" })).toEqual({ action: "dm", label: "오늘 DM" });
     expect(recommendLeadNextAction({ email: "owner@example.com" })).toEqual({ action: "email", label: "오늘 이메일" });
     expect(recommendLeadNextAction({ fax: "02-123-4567" })).toEqual({ action: "fax", label: "오늘 팩스" });
+    expect(recommendLeadNextAction({ phone: "02-123-4567" })).toEqual({ action: "visit", label: "방문 검토" });
     expect(recommendLeadNextAction({})).toEqual({ action: "visit", label: "방문 검토" });
   });
 
   it("maps legacy next actions without rewriting saved data", () => {
-    expect(displayLeadNextAction({ nextAction: "전화 대상" })).toBe("오늘 바로 전화");
+    expect(displayLeadNextAction({ nextAction: "오늘 바로 전화", phone: "010-1234-5678" })).toBe("오늘 문자");
+    expect(displayLeadNextAction({ nextAction: "전화 대상", phone: "02-123-4567" })).toBe("방문 검토");
     expect(displayLeadNextAction({ nextAction: "직접 확인" })).toBe("직접 확인");
   });
 
