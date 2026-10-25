@@ -429,7 +429,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
           />
         </section>
 
-        <section className="maju-section-card">
+        {showHoldModules ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">
               <Bell className="mr-1 h-3.5 w-3.5" />
@@ -502,7 +502,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
             onSave={() => void saveSection("telegram")}
             state={saveStates.telegram}
           />
-        </section>
+        </section> : null}
       </div>
 
       <aside className="h-fit maju-section-card xl:sticky xl:top-4">
