@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
-import { deletePermitLead, updatePermitLeadProfile } from "@/lib/store";
+import { deletePermitLead, updatePermitLeadProfile, type PermitLeadProfileInput } from "@/lib/store";
+
+// 요청 본문에 실제로 들어온 칸만 수정합니다(보내지 않은 칸을 null로 지우지 않도록).
+function pickPermitLeadProfileInput(body: Record<string, unknown> | null): PermitLeadProfileInput {
+  const input: PermitLeadProfileInput = {};
+  for (const key of ["instagramUrl", "fax", "email", "naverTalktalkUrl"] as const) {
+    if (!body || !(key in body)) continue;
+    const value = body[key];
+    input[key] = typeof value === "string" ? value.trim() : null;
+  }
+  return input;
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await request.json().catch(() => null)) as { companyId?: string; instagramUrl?: string | null } | null;
+  const body = (await request.json().catch(() => null)) as
+    | { companyId?: string; instagramUrl?: string | null; fax?: string | null; email?: string | null; naverTalktalkUrl?: string | null }
+    | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 
   if (!scope.ok) {
@@ -19,7 +32,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const result = await updatePermitLeadProfile(
       scope.companyId!,
       id,
-      { instagramUrl: typeof body?.instagramUrl === "string" ? body.instagramUrl.trim() : body?.instagramUrl ?? null },
+      pickPermitLeadProfileInput(body),
       {
         actorName: resolveLeadContactActorName([
           getCustomerOperationalName(scope.customerSession),
@@ -30,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         source: "manual"
       }
     );
-    return NextResponse.json(result);
+    return NextResponse.json(result, { status: result.ok ? 200 : result.message === "리드를 찾을 수 없습니다." ? 404 : 400 });
   } catch (error) {
     console.error("permit lead update failed:", error);
     return NextResponse.json({ message: error instanceof Error ? error.message : "수정 중 오류가 발생했습니다." }, { status: 500 });

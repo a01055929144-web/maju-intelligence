@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordLeadContact } from "@/application/lead/manage-lead-actions";
-import { LeadActionType, resolveLeadContactActorName } from "@/domains/lead/lead-action";
+import { LEAD_ACTION_TYPES, LeadActionType, resolveLeadContactActorName } from "@/domains/lead/lead-action";
+import { isSelectableLeadStatus } from "@/domains/lead/lead-status";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { leadActionRepository } from "@/lib/store";
 
-const VALID_ACTION_TYPES: LeadActionType[] = ["call", "dm", "visit", "hold", "exclude", "quote"];
+const VALID_ACTION_TYPES: readonly LeadActionType[] = LEAD_ACTION_TYPES;
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   if (!body?.actionType || !VALID_ACTION_TYPES.includes(body.actionType as LeadActionType)) {
     return NextResponse.json({ message: "올바르지 않은 액션입니다." }, { status: 400 });
+  }
+  if (body.actionType === "status" && !isSelectableLeadStatus(body.result)) {
+    return NextResponse.json({ message: "바꿀 수 없는 상태값입니다." }, { status: 400 });
   }
 
   try {

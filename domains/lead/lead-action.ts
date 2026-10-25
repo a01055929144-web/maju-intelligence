@@ -1,4 +1,6 @@
-export type LeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
+export type LeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
+
+export const LEAD_ACTION_TYPES: readonly LeadActionType[] = ["call", "dm", "visit", "hold", "exclude", "quote", "sms", "talktalk", "email", "fax", "status"];
 
 export type LeadAction = {
   id: string;
