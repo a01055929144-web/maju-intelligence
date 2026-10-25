@@ -7,5 +7,5 @@ export default async function MobileSalesPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/mobile/join");
 
-  return <MobileSalesWorkspace actorName={getCustomerOperationalName(session)} companyName={session.companyName} holdModulesEnabled={areHoldModulesEnabled(session.companyId)} />;
+  return <MobileSalesWorkspace actorName={getCustomerOperationalName(session)} companyName={session.companyName} holdModulesEnabled={areHoldModulesEnabled(session.companyId)} kakaoMapAppKey={process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY} />;
 }

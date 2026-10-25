@@ -25,7 +25,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false }: { actorName: string; companyName: string; holdModulesEnabled?: boolean }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; kakaoMapAppKey?: string }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -231,7 +231,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
 
             <section className="mobile-card order-1 overflow-hidden rounded-xl border" id="lead-map">
               <div className="flex items-center justify-between border-b border-[var(--mobile-border)] px-3 py-2.5"><div><p className="text-sm font-semibold">내 주변 영업 지도</p><p className="mobile-muted text-xs">보라색 신규 · 청록색 영업 리드</p></div><button className="mobile-secondary-action inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold" onClick={requestLocation} type="button"><Crosshair className="h-4 w-4" />내 위치</button></div>
-              <KakaoAddressMap focusedMarkerId={selected?.id} mapClassName="h-[clamp(360px,calc(100dvh-14rem),620px)] w-full" markers={markers} onMarkerClick={(marker) => { const lead = leads.find((item) => item.id === marker.id); if (lead) void openLead(lead); }} showList={false} />
+              <KakaoAddressMap appKey={kakaoMapAppKey} focusedMarkerId={selected?.id} mapClassName="h-[clamp(360px,calc(100dvh-14rem),620px)] w-full" markers={markers} onMarkerClick={(marker) => { const lead = leads.find((item) => item.id === marker.id); if (lead) void openLead(lead); }} showList={false} />
               {locationMessage ? <p className="mobile-muted px-3 py-2 text-xs font-semibold">{locationMessage}</p> : null}
             </section>
 

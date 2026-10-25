@@ -82,6 +82,7 @@ export type KakaoSalesAreaBoundarySelection = {
 };
 
 type KakaoAddressMapProps = {
+  readonly appKey?: string;
   readonly controlsOffsetClassName?: string;
   readonly controlsOffsetPx?: number;
   readonly fallbackReason?: string;
@@ -291,6 +292,7 @@ function saveGeocodeCacheToStorage() {
 }
 
 export function KakaoAddressMap({
+  appKey: appKeyOverride,
   controlsOffsetClassName,
   controlsOffsetPx,
   focusedMarkerId,
@@ -371,7 +373,7 @@ export function KakaoAddressMap({
   const salesAreaInfoOverlayRef = useRef<KakaoCustomOverlay | null>(null);
   const salesAreaInfoPinnedRef = useRef(false);
   const salesAreaBoundaryRef = useRef(salesAreaBoundary);
-  const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
+  const appKey = appKeyOverride || process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   const canUseKakao = useMemo(() => Boolean(appKey && appKey !== "replace-with-kakao-javascript-key"), [appKey]);
   const salesAreaSelectedSignature = salesAreaBoundary?.selectedAreas.join("|") || "";
   const salesAreaStatsSignature = JSON.stringify(salesAreaBoundary?.stats || []);
@@ -609,7 +611,7 @@ export function KakaoAddressMap({
 
         if (ignore) return;
 
-        if (found === 0 && !hasRoadPath && !salesAreaBoundary) {
+        if (found === 0 && staticMarkers.length > 0 && !hasRoadPath && !salesAreaBoundary) {
           console.error(`[KakaoAddressMap] 카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
           setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
           setStatus("fallback");
