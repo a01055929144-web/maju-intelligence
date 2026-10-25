@@ -45,6 +45,9 @@ import { InlineLoading } from "@/components/inline-loading";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesAreaSelector } from "@/components/sales-area-selector";
+import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
+import { LeadStageSelect } from "@/components/lead-stage-select";
+import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
   BulkLeadActionBusy,
@@ -218,6 +221,55 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
 
   const [selectedLead, setSelectedLead] = useState<PermitLeadItem | null>(null);
   const [selectedLeadIntent, setSelectedLeadIntent] = useState<PermitLeadActionIntent>("");
+  // 2026-10-25: 리드 상세를 열면 주소에 ?lead=를 남겨 브라우저·휴대폰 뒤로가기로 목록에 돌아오게 합니다.
+  const selectedLeadId = selectedLead?.id || "";
+  const leadsForHistoryRef = useRef<PermitLeadItem[]>([]);
+  leadsForHistoryRef.current = leads;
+  const leadHistoryReadyRef = useRef(false);
+  const leadHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (!leadHistoryReadyRef.current) {
+      leadHistoryReadyRef.current = true;
+      // 새로고침 직후 남아 있는 ?lead=는 지웁니다(열린 상세가 없는데 주소만 남지 않도록).
+      if (params.has("lead") && !selectedLeadId) {
+        params.delete("lead");
+        window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`);
+      }
+      return;
+    }
+    // 상세를 닫을 때 방금 쌓은 기록이면 한 칸 뒤로(닫은 뒤 뒤로가기로 상세가 다시 열리지 않도록).
+    if (!selectedLeadId && params.has("lead") && leadHistoryPushedRef.current) {
+      leadHistoryPushedRef.current = false;
+      window.history.back();
+      return;
+    }
+    if (selectedLeadId) params.set("lead", selectedLeadId);
+    else params.delete("lead");
+    const next = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      // 상세 → 다른 상세로 바꿀 때는 기록을 늘리지 않고 바꿔치기합니다(뒤로가기 한 번이면 목록).
+      if (selectedLeadId && new URLSearchParams(window.location.search).has("lead")) window.history.replaceState(null, "", next);
+      else window.history.pushState(null, "", next);
+      leadHistoryPushedRef.current = Boolean(selectedLeadId);
+    }
+  }, [selectedLeadId]);
+  useEffect(() => {
+    const onPopState = () => {
+      leadHistoryPushedRef.current = false;
+      const leadId = new URLSearchParams(window.location.search).get("lead");
+      if (!leadId) {
+        setSelectedLead(null);
+        setSelectedLeadIntent("");
+        return;
+      }
+      setSelectedLead((current) => (current?.id === leadId ? current : leadsForHistoryRef.current.find((item) => item.id === leadId) || null));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const [actionMessage, setActionMessage] = useState("");
   const [quoteDraftRevision, setQuoteDraftRevision] = useState(0);
 
@@ -2624,7 +2676,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                 ) : null}
               </div>
               <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
-              <table className={`w-full border-separate border-spacing-0 text-left text-sm ${showMoreLeadColumns ? "min-w-[1220px]" : "min-w-[760px]"}`}>
+              {/* 2026-10-25: 표 글자가 두 줄로 깨지지 않도록 칸은 내용 너비만큼 넓히고(w-max·nowrap) 좌우 스크롤로 봅니다. */}
+              <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
                     {isSalesLeadPage ? <th className="w-[40px] border-r border-slate-200 px-2 py-2">
@@ -2635,7 +2688,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                         type="checkbox"
                       />
                     </th> : null}
-                    <LeadSortableHeader className="w-[24%]" label="거래처" sortKeyValue="businessName" />
+                    <LeadSortableHeader className="min-w-[240px]" label="거래처" sortKeyValue="businessName" />
                     <LeadSortableHeader
                       className="w-[150px]"
                       helpText="개업 신선도·업종 적합도·거리·리뷰·검색량·연락 가능성을 합산한 저장 점수입니다. 처음 누르면 높은 점수부터 정렬합니다."
@@ -2704,7 +2757,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                             type="checkbox"
                           />
                         </td> : null}
-                        <td className="min-w-0 border-r border-slate-100 px-3 py-2">
+                        <td className="min-w-[240px] max-w-[340px] border-r border-slate-100 px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
                             <span
                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPermitLeadType(lead) === "new" ? "bg-emerald-500" : "bg-violet-500"}`}
@@ -2813,7 +2866,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                                     : null;
                             return (
                               <div className="flex flex-nowrap items-center gap-1 overflow-hidden">
-                                <span className={`shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-black ${lead.isTemporaryOperationSuspected ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{lead.status}</span>
+                                {lead.isTemporaryOperationSuspected ? (
+                                  <span className="shrink-0 truncate rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-black text-amber-800">{lead.status}</span>
+                                ) : (
+                                  <LeadStageSelect compact lead={lead} onAction={runLeadAction} />
+                                )}
                                 {extraBadge ? (
                                   <span className={`shrink-0 truncate rounded-full px-2 py-0.5 text-[11px] font-black ${extraBadge.tone}`}>{extraBadge.label}</span>
                                 ) : null}
@@ -2912,6 +2969,17 @@ function PermitLeadDetailPanel({
   readonly onOpenQuote?: (lead: PermitLeadItem) => void;
 }) {
   const confidence = getLeadConfidence(lead);
+  // Esc로 상세를 닫고 목록으로 돌아갑니다(입력칸에서 쓰는 Esc는 각 입력칸이 먼저 처리).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
   const [savedInstagramUrl, setSavedInstagramUrl] = useState(lead.instagramUrl || "");
   const [instagramDraft, setInstagramDraft] = useState(lead.instagramUrl || "");
   const [instagramSaveMessage, setInstagramSaveMessage] = useState("");
@@ -3050,11 +3118,12 @@ function PermitLeadDetailPanel({
     return parts.join("\n");
   }
 
-  async function saveInstagramProfile() {
+  async function saveInstagramProfile(valueOverride?: string) {
     setInstagramSaveMessage("");
-    const normalizedHandle = normalizeInstagramHandleValue(instagramDraft);
-    const normalizedValue = normalizedHandle || instagramDraft.trim();
-    if (instagramDraft.trim() && !normalizedHandle) {
+    const draftValue = valueOverride ?? instagramDraft;
+    const normalizedHandle = normalizeInstagramHandleValue(draftValue);
+    const normalizedValue = normalizedHandle || draftValue.trim();
+    if (draftValue.trim() && !normalizedHandle) {
       setInstagramSaveMessage("인스타 ID는 @아이디, 아이디, 또는 instagram.com/아이디 형태로 입력하세요.");
       return;
     }
@@ -3358,9 +3427,13 @@ function PermitLeadDetailPanel({
               {lead.industryPrimary}
               {lead.permitStatus ? ` · ${lead.permitStatus}` : ""}
             </p>
+            <div className="mt-2">
+              <LeadStageSelect lead={lead} onAction={onAction} />
+            </div>
           </div>
-          <button aria-label="닫기" className="maju-button-secondary h-8 w-8 shrink-0 px-0" onClick={onClose} type="button">
+          <button aria-label="목록으로 돌아가기" className="maju-button-secondary h-8 shrink-0 px-2 text-xs" onClick={onClose} title="목록으로 (Esc · 뒤로가기)" type="button">
             <X className="h-4 w-4" />
+            목록
           </button>
         </div>
 
@@ -3431,6 +3504,8 @@ function PermitLeadDetailPanel({
               {convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처 확인" : "거래처 전환 완료") : converting ? "전환 중..." : conversionFailed ? "거래처 연결 다시 시도" : "거래처로 전환"}
             </button>
           </div>
+
+          <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} />
 
           {convertedCustomerId ? (
             <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3">
@@ -3516,6 +3591,21 @@ function PermitLeadDetailPanel({
                 저장
               </button>
             </div>
+            <InstagramCandidateFinder
+              address={lead.address}
+              businessName={lead.businessName}
+              leadId={lead.id}
+              onPaste={(value) => {
+                const handle = normalizeInstagramHandleValue(value);
+                setInstagramDraft(handle || value);
+                if (!handle) setInstagramSaveMessage("인스타 링크나 @아이디가 아닌 것 같아요. 확인 후 저장하세요.");
+              }}
+              onPick={(handle) => {
+                setInstagramDraft(`@${handle}`);
+                void saveInstagramProfile(`@${handle}`);
+              }}
+              saving={instagramSaving}
+            />
             {instagramHandle ? (
               <div className="mt-2 grid grid-cols-3 gap-2">
                 <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => void copyInstagramHandle()} type="button">

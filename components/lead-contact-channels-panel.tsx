@@ -1,0 +1,316 @@
+"use client";
+
+// 리드 상세의 "영업 채널" 패널(2026-10-25).
+// 순서: 문자(010) → 인스타 DM → 네이버 톡톡 → 이메일 → 팩스 → 방문. 매장 유선 번호는 참고로만 보여 줍니다.
+// 인스타·톡톡은 외부 발송 API가 없어 "열기 + 문구 복사 + 보냈음 기록"으로 처리하고,
+// 팩스는 팩스 서비스 연동 전까지 "문구 복사 + 보냈음 기록"만 합니다(보낸 척하지 않습니다).
+// 채널 순위·형식 검사·링크 생성 규칙은 domains/lead/contact-channels.ts가 가지고, 이 컴포넌트는 화면만 담당합니다.
+
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Check, Copy, ExternalLink, Loader2, Mail, MessageCircle, MessageSquare, Printer, Smartphone } from "lucide-react";
+import {
+  buildInstagramDmUrl,
+  buildMailtoUrl,
+  buildNaverMapSearchUrl,
+  buildSmsUrl,
+  extractInstagramHandle,
+  formatKoreanPhoneNumber,
+  isMobilePhoneNumber,
+  LEAD_CONTACT_CHANNEL_LABELS,
+  type LeadContactChannel,
+  resolvePrimaryLeadContactChannel
+} from "@/domains/lead/contact-channels";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import type { PermitLeadItem } from "@/lib/store";
+import {
+  buildLeadDmScript,
+  type PermitLeadActionKind,
+  type PermitLeadActionResult,
+  withPermitLeadCompanyQuery
+} from "@/components/sales-route-map-workspace";
+
+type EditableChannel = "fax" | "email" | "naverTalktalkUrl";
+
+const CHANNEL_ACTION: Record<Exclude<LeadContactChannel, "visit">, { actionType: PermitLeadActionKind; result: string }> = {
+  sms: { actionType: "sms", result: "문자 발송" },
+  instagram: { actionType: "dm", result: "DM 발송" },
+  talktalk: { actionType: "talktalk", result: "톡톡 발송" },
+  email: { actionType: "email", result: "이메일 발송" },
+  fax: { actionType: "fax", result: "팩스 발송" }
+};
+
+const INPUT_LABEL: Record<EditableChannel, { label: string; placeholder: string }> = {
+  naverTalktalkUrl: { label: "톡톡 주소", placeholder: "talk.naver.com/… (네이버 지도에서 톡톡 누른 뒤 주소 복사)" },
+  email: { label: "이메일", placeholder: "owner@example.com" },
+  fax: { label: "팩스", placeholder: "02-555-1234" }
+};
+
+export function LeadContactChannelsPanel({
+  lead,
+  onAction,
+  onLeadUpdated
+}: {
+  readonly lead: PermitLeadItem;
+  readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string) => Promise<PermitLeadActionResult>;
+  readonly onLeadUpdated: (lead: PermitLeadItem) => void;
+}) {
+  const [message, setMessage] = useState(() => buildLeadDmScript(lead));
+  const [drafts, setDrafts] = useState<Record<EditableChannel, string>>({
+    fax: lead.fax || "",
+    email: lead.email || "",
+    naverTalktalkUrl: lead.naverTalktalkUrl || ""
+  });
+  const [editing, setEditing] = useState<EditableChannel | null>(null);
+  const [saving, setSaving] = useState<EditableChannel | null>(null);
+  const [recording, setRecording] = useState<LeadContactChannel | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    setMessage(buildLeadDmScript(lead));
+    setDrafts({ fax: lead.fax || "", email: lead.email || "", naverTalktalkUrl: lead.naverTalktalkUrl || "" });
+    setEditing(null);
+    setNotice(null);
+    // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
+
+  const mobile = isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : undefined;
+  const storePhone = lead.phone && !mobile ? formatKoreanPhoneNumber(lead.phone) : undefined;
+  const instagramHandle = extractInstagramHandle(lead.instagramUrl);
+  const primary = useMemo(
+    () =>
+      resolvePrimaryLeadContactChannel({
+        phone: lead.phone,
+        instagramUrl: lead.instagramUrl,
+        naverTalktalkUrl: lead.naverTalktalkUrl,
+        email: lead.email,
+        fax: lead.fax
+      }),
+    [lead.email, lead.fax, lead.instagramUrl, lead.naverTalktalkUrl, lead.phone]
+  );
+
+  async function copyMessage(text = message) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice({ tone: "ok", text: "문구를 복사했습니다. 열린 창에 붙여 넣어 보내 주세요." });
+      return true;
+    } catch {
+      setNotice({ tone: "error", text: "복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
+      return false;
+    }
+  }
+
+  async function recordSent(channel: Exclude<LeadContactChannel, "visit">) {
+    const config = CHANNEL_ACTION[channel];
+    setRecording(channel);
+    setNotice(null);
+    try {
+      const saved = await onAction(lead, config.actionType, config.result, message.slice(0, 500));
+      setNotice(saved.ok ? { tone: "ok", text: `${LEAD_CONTACT_CHANNEL_LABELS[channel]} 보낸 기록을 남겼습니다.` } : { tone: "error", text: saved.message || "기록하지 못했습니다." });
+    } finally {
+      setRecording(null);
+    }
+  }
+
+  async function saveChannel(key: EditableChannel) {
+    setSaving(key);
+    setNotice(null);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}`),
+        { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [key]: drafts[key].trim() || null }) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { lead?: PermitLeadItem; message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || "저장하지 못했습니다.");
+      if (payload.lead) {
+        onLeadUpdated(payload.lead);
+        setDrafts((current) => ({ ...current, [key]: (payload.lead?.[key] as string | undefined) || "" }));
+      }
+      setEditing(null);
+      setNotice({ tone: "ok", text: `${INPUT_LABEL[key].label}을(를) 저장했습니다.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "저장하지 못했습니다." });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function renderEditor(key: EditableChannel) {
+    return (
+      <div className="mt-2 grid grid-cols-[1fr_auto_auto] gap-2">
+        <input
+          aria-label={INPUT_LABEL[key].label}
+          autoFocus
+          className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+          inputMode={key === "fax" ? "tel" : key === "email" ? "email" : "url"}
+          onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void saveChannel(key);
+            if (event.key === "Escape") setEditing(null);
+          }}
+          placeholder={INPUT_LABEL[key].placeholder}
+          value={drafts[key]}
+        />
+        <button className="maju-button-primary h-9 px-3 text-xs disabled:opacity-50" disabled={saving === key} onClick={() => void saveChannel(key)} type="button">
+          {saving === key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          저장
+        </button>
+        <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => setEditing(null)} type="button">
+          취소
+        </button>
+      </div>
+    );
+  }
+
+  function sentButton(channel: Exclude<LeadContactChannel, "visit">) {
+    return (
+      <button className="maju-button-secondary h-8 px-2 text-xs disabled:opacity-50" disabled={Boolean(recording)} onClick={() => void recordSent(channel)} type="button">
+        {recording === channel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+        보냈어요
+      </button>
+    );
+  }
+
+  const rowClass = (channel: LeadContactChannel) =>
+    `rounded-lg border p-2.5 ${primary === channel ? "border-teal-300 bg-teal-50/60" : "border-slate-200 bg-white"}`;
+  const rowTitle = (channel: LeadContactChannel, icon: ReactNode, value?: string) => (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="text-slate-500">{icon}</span>
+      <span className="text-xs font-black text-slate-900">{LEAD_CONTACT_CHANNEL_LABELS[channel]}</span>
+      {primary === channel ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-[10px] font-black text-white">먼저</span> : null}
+      <span className={`min-w-0 truncate text-xs font-semibold ${value ? "text-slate-700" : "text-slate-400"}`}>{value || "없음"}</span>
+    </div>
+  );
+
+  return (
+    <section aria-label="영업 채널" className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-black text-slate-950">영업 채널</p>
+        <span className="text-[11px] font-bold text-slate-500">먼저: {LEAD_CONTACT_CHANNEL_LABELS[primary]}</span>
+      </div>
+
+      <label className="mt-2 block text-[11px] font-black text-slate-600">
+        보낼 문구 (이번에만 고쳐도 됨)
+        <textarea
+          className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-800 outline-none focus:border-teal-400 focus:bg-white"
+          onChange={(event) => setMessage(event.target.value)}
+          rows={4}
+          value={message}
+        />
+      </label>
+
+      <div className="mt-2 grid gap-2">
+        <div className={rowClass("sms")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {rowTitle("sms", <Smartphone className="h-3.5 w-3.5" />, mobile)}
+            {mobile ? (
+              <div className="flex gap-1.5">
+                <a className="maju-button-primary h-8 px-2 text-xs" href={buildSmsUrl(mobile, message)}>
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  문자 열기
+                </a>
+                {sentButton("sms")}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className={rowClass("instagram")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {rowTitle("instagram", <MessageCircle className="h-3.5 w-3.5" />, instagramHandle ? `@${instagramHandle}` : undefined)}
+            {instagramHandle ? (
+              <div className="flex gap-1.5">
+                <a
+                  className="maju-button-primary h-8 px-2 text-xs"
+                  href={buildInstagramDmUrl(instagramHandle)}
+                  onClick={() => void copyMessage()}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  DM 열기 · 문구 복사
+                </a>
+                {sentButton("instagram")}
+              </div>
+            ) : (
+              <span className="text-[11px] font-semibold text-slate-500">아래 인스타 칸에서 아이디를 찾아 저장하세요</span>
+            )}
+          </div>
+        </div>
+
+        <div className={rowClass("talktalk")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {rowTitle("talktalk", <MessageCircle className="h-3.5 w-3.5" />, lead.naverTalktalkUrl ? "톡톡 주소 있음" : undefined)}
+            <div className="flex gap-1.5">
+              {lead.naverTalktalkUrl ? (
+                <>
+                  <a className="maju-button-primary h-8 px-2 text-xs" href={lead.naverTalktalkUrl} onClick={() => void copyMessage()} rel="noreferrer" target="_blank">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    톡톡 열기 · 문구 복사
+                  </a>
+                  {sentButton("talktalk")}
+                </>
+              ) : (
+                <a className="maju-button-secondary h-8 px-2 text-xs" href={buildNaverMapSearchUrl(lead.businessName, lead.address)} rel="noreferrer" target="_blank">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  네이버 지도에서 찾기
+                </a>
+              )}
+              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("naverTalktalkUrl")} type="button">
+                {lead.naverTalktalkUrl ? "수정" : "주소 입력"}
+              </button>
+            </div>
+          </div>
+          {editing === "naverTalktalkUrl" ? renderEditor("naverTalktalkUrl") : null}
+        </div>
+
+        <div className={rowClass("email")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {rowTitle("email", <Mail className="h-3.5 w-3.5" />, lead.email)}
+            <div className="flex gap-1.5">
+              {lead.email ? (
+                <>
+                  <a className="maju-button-primary h-8 px-2 text-xs" href={buildMailtoUrl(lead.email, `${lead.businessName} 대표님께 식자재 단가 안내`, message)}>
+                    <Mail className="h-3.5 w-3.5" />
+                    메일 쓰기
+                  </a>
+                  {sentButton("email")}
+                </>
+              ) : null}
+              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("email")} type="button">
+                {lead.email ? "수정" : "입력"}
+              </button>
+            </div>
+          </div>
+          {editing === "email" ? renderEditor("email") : null}
+        </div>
+
+        <div className={rowClass("fax")}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {rowTitle("fax", <Printer className="h-3.5 w-3.5" />, lead.fax)}
+            <div className="flex gap-1.5">
+              {lead.fax ? (
+                <>
+                  <button className="maju-button-primary h-8 px-2 text-xs" onClick={() => void copyMessage(`[팩스] ${lead.businessName} 대표님께\n\n${message}`)} type="button">
+                    <Copy className="h-3.5 w-3.5" />
+                    팩스 문구 복사
+                  </button>
+                  {sentButton("fax")}
+                </>
+              ) : null}
+              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("fax")} type="button">
+                {lead.fax ? "수정" : "입력"}
+              </button>
+            </div>
+          </div>
+          {editing === "fax" ? renderEditor("fax") : null}
+          {lead.fax ? <p className="mt-1 text-[11px] font-semibold text-slate-500">팩스 자동 전송은 팩스 서비스 연결 후 제공됩니다. 지금은 문구를 복사해 사무실 팩스·팩스 앱으로 보내고 기록해 주세요.</p> : null}
+        </div>
+      </div>
+
+      {storePhone ? <p className="mt-2 text-[11px] font-semibold text-slate-500">매장 전화 {storePhone} · 참고용(콜드콜 대상 아님)</p> : null}
+      {notice ? <p className={`mt-2 text-[11px] font-bold ${notice.tone === "ok" ? "text-teal-700" : "text-red-700"}`}>{notice.text}</p> : null}
+    </section>
+  );
+}

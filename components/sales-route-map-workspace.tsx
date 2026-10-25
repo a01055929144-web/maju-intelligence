@@ -54,6 +54,7 @@ import {
   Truck,
   UserRound,
   Warehouse,
+  ArrowLeft,
   X,
   type LucideIcon
 } from "lucide-react";
@@ -143,7 +144,7 @@ type GradeFilter = "all" | RevenueGrade;
 type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
-export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
+export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
 export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
 export type LeadOpenDateFilterMode = "all" | "year" | "month" | "custom" | "missing";
 export type PermitLeadActionResult = { action?: PermitLeadActionItem; message?: string; ok: boolean; status?: string };
@@ -1400,6 +1401,87 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setPreviewStoreId("");
     setSelectedId("");
   };
+  // 2026-10-25: 담당자 선택·거래처 상세를 주소(URL)에 남겨 브라우저/휴대폰 뒤로가기로 이전 화면에 돌아오게 합니다.
+  // 상태 → 주소 동기화는 값이 실제로 달라졌을 때만 pushState하므로, 뒤로가기로 돌아온 직후에는 다시 쌓이지 않습니다.
+  const historySyncMountedRef = useRef(false);
+  const detailHistoryPushedRef = useRef(false);
+  // 패널(3분할·담당자·거래처·신규·영업·지도만)과 지도 위 미리보기 카드도 뒤로가기로 되돌립니다.
+  const panelBaselineRef = useRef<MapPanelMode | null>(null);
+  const lastSyncedPanelRef = useRef<MapPanelMode>(mapPanelMode);
+  useEffect(() => {
+    if (typeof window === "undefined" || initialView === "leads") return;
+    if (!historySyncMountedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    // 상세를 닫을 때, 방금 상세를 열면서 쌓은 기록이면 새 기록을 쌓지 않고 한 칸 뒤로 갑니다.
+    // (닫은 뒤 뒤로가기를 누르면 상세가 다시 열리는 혼란 방지)
+    if (!selectedId && params.has("detail") && detailHistoryPushedRef.current) {
+      detailHistoryPushedRef.current = false;
+      window.history.back();
+      return;
+    }
+    if (vehicleFilterId !== "all") params.set("staff", vehicleFilterId);
+    else params.delete("staff");
+    if (selectedId) params.set("detail", selectedId);
+    else params.delete("detail");
+    if (panelBaselineRef.current === null && mapPanelMode !== lastSyncedPanelRef.current && !params.has("panel")) {
+      panelBaselineRef.current = lastSyncedPanelRef.current;
+    }
+    if (panelBaselineRef.current !== null && mapPanelMode !== panelBaselineRef.current) params.set("panel", mapPanelMode);
+    else params.delete("panel");
+    lastSyncedPanelRef.current = mapPanelMode;
+    const hadPin = params.has("pin");
+    const pin = previewStoreId ? `s:${previewStoreId}` : previewLeadId ? `l:${previewLeadId}` : "";
+    if (pin) params.set("pin", pin);
+    else params.delete("pin");
+    const next = `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      // 미리보기 카드끼리 바꿀 때는 기록을 늘리지 않습니다(뒤로가기 한 번이면 카드가 닫힘).
+      const onlyPinChanged = hadPin && Boolean(pin) && next.replace(/[?&]pin=[^&#]*/, "") === current.replace(/[?&]pin=[^&#]*/, "");
+      if (onlyPinChanged) window.history.replaceState(null, "", next);
+      else window.history.pushState(null, "", next);
+      detailHistoryPushedRef.current = Boolean(selectedId);
+    }
+  }, [initialView, mapPanelMode, previewLeadId, previewStoreId, selectedId, vehicleFilterId]);
+  useEffect(() => {
+    if (typeof window === "undefined" || initialView === "leads") return;
+    const applyFromLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      detailHistoryPushedRef.current = false;
+      const view = params.get("view");
+      setActiveView(view === "customers" || view === "course" || view === "history" ? view : "map");
+      setVehicleFilterId(params.get("staff") || "all");
+      setSelectedId(params.get("detail") || "");
+      setSelectedLiveVehicleId("");
+      const pin = params.get("pin") || "";
+      setPreviewStoreId(pin.startsWith("s:") ? pin.slice(2) : "");
+      setPreviewLeadId(pin.startsWith("l:") ? pin.slice(2) : "");
+      setMapFocusId("");
+      const panel = params.get("panel");
+      const panelModes: MapPanelMode[] = ["split", "driver", "customer", "newLead", "salesLead", "map"];
+      if (panel && panelModes.includes(panel as MapPanelMode)) {
+        lastSyncedPanelRef.current = panel as MapPanelMode;
+        setMapPanelMode(panel as MapPanelMode);
+      } else if (panelBaselineRef.current) {
+        lastSyncedPanelRef.current = panelBaselineRef.current;
+        setMapPanelMode(panelBaselineRef.current);
+      }
+    };
+    // 저장된 패널 모드 복원(위쪽 effect)이 첫 기록으로 쌓이지 않도록 기준값을 맞춥니다.
+    try {
+      const savedMode = normalizeStoredMapPanelMode(window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY));
+      if (savedMode) lastSyncedPanelRef.current = savedMode;
+    } catch {
+      // 저장소 차단 시 기본값 유지
+    }
+    applyFromLocation();
+    historySyncMountedRef.current = true;
+    window.addEventListener("popstate", applyFromLocation);
+    return () => window.removeEventListener("popstate", applyFromLocation);
+    // 최초 1회만 등록합니다. setState 함수는 안정적이라 의존성에서 뺍니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialView]);
+
   const selectLiveVehicle = (location: StaffVehicleLocation) => {
     const matchingGroup = deliveryVehicles.find((vehicle) => liveVehicleMatchesDeliveryGroup(location, vehicle));
     setVehicleFilterId(matchingGroup?.id || "all");
@@ -2401,9 +2483,22 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               >
                 출발지
               </button>
-              <span className={`hidden min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold 2xl:inline ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
-                {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
-              </span>
+              {isVehicleFiltered ? (
+                <button
+                  aria-label={`${selectedVehicleLabel} 선택 해제`}
+                  className="inline-flex h-9 min-w-0 max-w-[220px] items-center gap-1.5 rounded-md border border-teal-300 bg-teal-50 px-3 text-xs font-black text-teal-800 transition hover:bg-teal-100"
+                  onClick={() => selectVehicle("all")}
+                  title="담당자 선택을 풀고 전체 거래처 보기"
+                  type="button"
+                >
+                  <span className="truncate">{selectedVehicleLabel}</span>
+                  <X className="h-3.5 w-3.5 shrink-0" />
+                </button>
+              ) : (
+                <span className={`hidden min-w-0 max-w-[180px] truncate rounded-md px-3 py-2 text-xs font-semibold 2xl:inline ${sourceReady ? "bg-white text-slate-700" : "bg-amber-50 text-amber-800"}`}>
+                  {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
+                </span>
+              )}
               {/* 지도 하단 범례가 레이어별 건수를 계속 보여주므로, 1366px급 작업 화면에서는
                   같은 집계를 한 번 더 길게 노출하지 않습니다. 필터와 선택 차량은 그대로 남기고
                   넓은 화면에서만 보조 요약을 추가해 검색·필터 행이 두 줄로 커지는 일을 줄입니다. */}
@@ -3063,6 +3158,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   setSelectedId("");
                   setPreviewStoreId(storeId);
                 }}
+                onClearFilter={isVehicleFiltered ? () => selectVehicle("all") : undefined}
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? "customer" : "map")}
                 recalculatingDistances={recalculatingDistances}
                 selectedStoreId={previewStoreId || selectedId}
@@ -5491,6 +5587,7 @@ function StoreManagementPanel({
   onEditStore,
   onRecalculateDistances,
   onSelectStore,
+  onClearFilter,
   onToggleCollapsed,
   recalculatingDistances,
   selectedStoreId,
@@ -5504,6 +5601,7 @@ function StoreManagementPanel({
   readonly onEditStore: (storeId: string) => void;
   readonly onRecalculateDistances: (missingStores: StoreRow[]) => Promise<{ ok: boolean; message?: string }>;
   readonly onSelectStore: (storeId: string) => void;
+  readonly onClearFilter?: () => void;
   readonly onToggleCollapsed: () => void;
   readonly recalculatingDistances: boolean;
   readonly selectedStoreId: string;
@@ -5550,6 +5648,12 @@ function StoreManagementPanel({
             <p className="truncate text-sm font-black text-slate-950">{title}</p>
             <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">목록 {stores.length.toLocaleString()}곳</p>
           </div>
+          {onClearFilter ? (
+            <button className="maju-button-secondary ml-auto h-8 shrink-0 px-2 text-xs" onClick={onClearFilter} title="담당자 선택을 풀고 전체 거래처 보기" type="button">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              전체 보기
+            </button>
+          ) : null}
           <button
             aria-label="거래처 목록 패널 접기"
             className="maju-button-secondary h-8 w-8 shrink-0 px-0"
@@ -6571,7 +6675,12 @@ export function getLeadInstagramSearchTokens(lead: PermitLeadItem) {
 
 export function permitLeadActionLabel(actionType: string) {
   if (actionType === "call") return "전화";
-  if (actionType === "dm") return "DM";
+  if (actionType === "dm") return "인스타 DM";
+  if (actionType === "sms") return "문자";
+  if (actionType === "talktalk") return "네이버 톡톡";
+  if (actionType === "email") return "이메일";
+  if (actionType === "fax") return "팩스";
+  if (actionType === "status") return "상태 변경";
   if (actionType === "visit") return "방문";
   if (actionType === "hold") return "보류";
   if (actionType === "exclude") return "제외";

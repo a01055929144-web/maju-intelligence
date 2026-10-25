@@ -16,6 +16,13 @@ import {
 } from "../domains/lead/canonical-identity";
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
 import { classifyTemporaryPermitLead } from "../domains/lead/temporary-operation";
+import { isSelectableLeadStatus } from "../domains/lead/lead-status";
+import {
+  isLeadContactActionType,
+  normalizeEmailInput,
+  normalizeFaxNumberInput,
+  normalizeNaverTalktalkInput
+} from "../domains/lead/contact-channels";
 export { classifyPermitLeadIndustry } from "../domains/lead/industry-classification";
 import {
   extractLeadAdministrativeArea,
@@ -6988,7 +6995,7 @@ export async function getSalesKpiSnapshot(companyId: string, staffUserId?: strin
       `lead_actions?select=action_type,result&company_id=eq.${encodeURIComponent(companyId)}&created_at=gte.${encodeURIComponent(periodStart)}${actorFilter}&limit=5000`
     );
     return {
-      actualContacts: actions.filter((action) => ["call", "dm", "visit", "quote"].includes(action.action_type)).length,
+      actualContacts: actions.filter((action) => isLeadContactActionType(action.action_type)).length,
       actualConversions: actions.filter((action) => action.action_type === "convert" || action.result === "거래처 전환").length,
       actualQuotes: actions.filter((action) => action.action_type === "quote").length,
       periodMonth,
@@ -7047,7 +7054,7 @@ export async function getCompanySalesKpiOverview(companyId: string): Promise<{ m
           const actor = action.actor_name?.trim().toLocaleLowerCase("ko-KR");
           return Boolean(actor && actorKeys.has(actor));
         });
-        const actualContacts = memberActions.filter((action) => ["call", "dm", "visit", "quote"].includes(action.action_type)).length;
+        const actualContacts = memberActions.filter((action) => isLeadContactActionType(action.action_type)).length;
         const actualQuotes = memberActions.filter((action) => action.action_type === "quote").length;
         const actualConversions = memberActions.filter((action) => action.action_type === "convert" || action.result === "거래처 전환").length;
         const targetContacts = Number(target?.target_contacts) || 0;
@@ -8027,6 +8034,10 @@ export type PermitLeadItem = {
   kakaoPlaceId?: string;
   googlePlaceUrl?: string;
   instagramUrl?: string;
+  /** 2026-10-25 영업 채널 확장. 마이그레이션 적용 전에는 항상 비어 있습니다. */
+  fax?: string;
+  email?: string;
+  naverTalktalkUrl?: string;
   reviewCount?: number;
   rating?: number;
   keywordVolume?: number;
@@ -8089,6 +8100,9 @@ type PermitLeadRow = {
   kakao_category_name: string | null;
   google_place_url: string | null;
   instagram_url: string | null;
+  fax?: string | null;
+  email?: string | null;
+  naver_talktalk_url?: string | null;
   review_count: number | null;
   rating: number | null;
   keyword_volume: number | null;
@@ -8261,6 +8275,9 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     googlePlaceUrl: row.google_place_url || undefined,
     instagramUrl: row.instagram_url || undefined,
+    fax: row.fax || undefined,
+    email: row.email || undefined,
+    naverTalktalkUrl: row.naver_talktalk_url || undefined,
     reviewCount: row.review_count ?? undefined,
     rating: row.rating ?? undefined,
     keywordVolume: row.keyword_volume ?? undefined,
@@ -9895,14 +9912,19 @@ function hasRecentConfirmedPermitDate(dateText?: string) {
   return date >= cutoff;
 }
 
-export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote";
+export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
 
 const PERMIT_LEAD_ACTION_TO_STATUS: Record<PermitLeadActionType, string> = {
   call: "전화 대상",
-  dm: "DM 대상",
+  dm: "DM 발송",
+  email: "이메일 발송",
   exclude: "제외",
+  fax: "팩스 발송",
   hold: "검토 필요",
   quote: "견적 요청",
+  sms: "문자 발송",
+  status: "검토 필요",
+  talktalk: "톡톡 발송",
   visit: "방문 대상"
 };
 
@@ -9915,6 +9937,10 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
   "통화 성공": "연락 완료",
   부재중: "전화 대상",
   "DM 발송": "DM 발송",
+  "문자 발송": "문자 발송",
+  "톡톡 발송": "톡톡 발송",
+  "이메일 발송": "이메일 발송",
+  "팩스 발송": "팩스 발송",
   "관심 있음": "미팅 예정",
   "견적 요청": "견적 요청",
   "견적 발송": "견적 발송",
@@ -9926,6 +9952,8 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
 };
 
 export function resolvePermitLeadStatus(actionType: PermitLeadActionType, result?: string) {
+  // 사용자가 상태를 직접 고른 경우(언제든 변경 가능)는 고른 값을 그대로 씁니다. 허용된 단계 값만 받습니다.
+  if (actionType === "status") return isSelectableLeadStatus(result) ? result : "검토 필요";
   return resolveVisitResultStatus(actionType, result) || (result && PERMIT_LEAD_RESULT_TO_STATUS[result]) || PERMIT_LEAD_ACTION_TO_STATUS[actionType] || "검토 필요";
 }
 
@@ -10157,39 +10185,99 @@ async function recordLeadEnrichmentEvent(input: {
   }
 }
 
+/** 인스타 후보 찾기 등 한 리드의 기본 정보만 필요할 때 씁니다. 다른 회사 리드는 돌려주지 않습니다. */
+export async function getPermitLeadIdentityForCompany(
+  companyId: string,
+  leadId: string
+): Promise<{ id: string; businessName: string; address?: string; industry?: string } | null> {
+  if (!isProductionStoreConfigured()) return null;
+  const rows = await supabaseRequest<Array<{ id: string; business_name: string; address: string | null; industry_primary: string | null }>>(
+    `business_permit_leads?select=id,business_name,address,industry_primary&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
+  );
+  const row = rows[0];
+  return row ? { id: row.id, businessName: row.business_name, address: row.address || undefined, industry: row.industry_primary || undefined } : null;
+}
+
+export type PermitLeadProfileInput = {
+  instagramUrl?: string | null;
+  fax?: string | null;
+  email?: string | null;
+  naverTalktalkUrl?: string | null;
+};
+
+const PERMIT_LEAD_CONTACT_CHANNEL_COLUMNS = ["fax", "email", "naver_talktalk_url", "contact_channels_updated_at"];
+
+function isMissingLeadContactChannelColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return PERMIT_LEAD_CONTACT_CHANNEL_COLUMNS.some((column) => message.includes(column));
+}
+
 export async function updatePermitLeadProfile(
   companyId: string,
   leadId: string,
-  input: { instagramUrl?: string | null },
+  input: PermitLeadProfileInput,
   eventContext: LeadEnrichmentEventContext = { source: "manual" }
 ): Promise<{ lead?: PermitLeadItem; ok: boolean; message?: string }> {
   if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
 
-  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if ("instagramUrl" in input) payload.instagram_url = input.instagramUrl || null;
+  const now = new Date().toISOString();
+  const payload: Record<string, unknown> = { updated_at: now };
+  const changed: string[] = [];
+  if ("instagramUrl" in input) {
+    payload.instagram_url = input.instagramUrl || null;
+    changed.push("instagram");
+  }
+  // 팩스·이메일·톡톡은 저장 전에 도메인 규칙으로 형식을 검사합니다. 잘못된 값은 저장하지 않고 이유를 돌려줍니다.
+  const channelChecks: Array<[keyof PermitLeadProfileInput, string, (value: string | null | undefined) => ReturnType<typeof normalizeEmailInput>]> = [
+    ["fax", "fax", normalizeFaxNumberInput],
+    ["email", "email", normalizeEmailInput],
+    ["naverTalktalkUrl", "naver_talktalk_url", normalizeNaverTalktalkInput]
+  ];
+  for (const [key, column, normalize] of channelChecks) {
+    if (!(key in input)) continue;
+    const normalized = normalize(input[key]);
+    if (!normalized.ok) return { ok: false, message: normalized.message };
+    payload[column] = normalized.value;
+    changed.push(column);
+  }
+  if (changed.some((column) => column !== "instagram")) payload.contact_channels_updated_at = now;
+  if (!changed.length) return { ok: false, message: "바꿀 내용이 없습니다." };
 
-  const updatedRows = await supabaseRequest<PermitLeadRow[]>(
-    `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&select=*`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify(payload)
+  let updatedRows: PermitLeadRow[];
+  try {
+    updatedRows = await supabaseRequest<PermitLeadRow[]>(
+      `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&select=*`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(payload)
+      }
+    );
+  } catch (error) {
+    // 배포 순서는 마이그레이션 → 코드입니다. 순서가 어긋나도 오류를 숨기지 않고 원인을 그대로 알립니다.
+    if (isMissingLeadContactChannelColumnError(error)) {
+      return { ok: false, message: "팩스·이메일·톡톡 저장 칸이 아직 DB에 없습니다. 관리자 승인 후 마이그레이션을 적용해야 합니다." };
     }
-  );
+    throw error;
+  }
+  if (!updatedRows?.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
 
   await recordLeadEnrichmentEvent({
     companyId,
     context: eventContext,
     leadId,
-    message: input.instagramUrl ? "인스타그램 정보 수정" : "인스타그램 정보 삭제",
+    message: changed.includes("instagram") && changed.length === 1
+      ? (input.instagramUrl ? "인스타그램 정보 수정" : "인스타그램 정보 삭제")
+      : "영업 채널 정보 수정",
     metadata: {
-      event_type: "instagram_profile_update",
-      instagram_url_present: Boolean(input.instagramUrl)
+      event_type: changed.includes("instagram") && changed.length === 1 ? "instagram_profile_update" : "contact_channels_update",
+      changed_fields: changed,
+      instagram_url_present: "instagramUrl" in input ? Boolean(input.instagramUrl) : undefined
     },
     succeeded: true
   });
 
-  return { lead: updatedRows?.[0] ? toPermitLeadItem(updatedRows[0]) : undefined, ok: true };
+  return { lead: toPermitLeadItem(updatedRows[0]), ok: true };
 }
 
 /**
