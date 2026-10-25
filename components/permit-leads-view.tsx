@@ -142,7 +142,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   // 신규리드인지, 날짜 없이 검색량으로 타겟팅하는 영업리드인지"만 가릅니다.
   const [leadTypeFilter, setLeadTypeFilter] = useState<"all" | PermitLeadType>(() => {
     if (typeof window === "undefined") return "new";
-    return new URLSearchParams(window.location.search).get("leadType") === "keyword" ? "sales" : "new";
+    const params = new URLSearchParams(window.location.search);
+    return (params.get("type") || params.get("leadType")) === "keyword" ? "sales" : "new";
   });
   const [openDateFilterMode, setOpenDateFilterMode] = useState<LeadOpenDateFilterMode>("all");
   const [openDateYear, setOpenDateYear] = useState("");
@@ -233,7 +234,8 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   // 조회해 DB(keyword_volume)에 캐시하고, 화면은 그 값으로 로컬 정렬만 다시 합니다.
   const [leadQualityMode] = useState<"permit" | "keyword">(() => {
     if (typeof window === "undefined") return "permit";
-    return new URLSearchParams(window.location.search).get("leadType") === "keyword" ? "keyword" : "permit";
+    const params = new URLSearchParams(window.location.search);
+    return (params.get("type") || params.get("leadType")) === "keyword" ? "keyword" : "permit";
   });
   const [keywordVolumeScores, setKeywordVolumeScores] = useState<Record<string, number>>({});
   const [keywordVolumeLoading, setKeywordVolumeLoading] = useState(false);
@@ -1573,11 +1575,11 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
             <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">{leadPageCopy.description}</p>
           </div>
           <nav aria-label="리드 업무 화면" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:min-w-[340px]">
-            <a aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/dashboard?view=leads&leadType=permit">
+            <a aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
               <span className="block text-xs font-black">신규 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">발견·검증</span>
             </a>
-            <a aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/dashboard?view=leads&leadType=keyword">
+            <a aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
               <span className="block text-xs font-black">영업 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">접촉·견적·후속</span>
             </a>
@@ -3454,7 +3456,7 @@ function PermitLeadDetailPanel({
                 <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">권역</p><p className="mt-1 text-xs font-bold text-slate-800">주소 기준 추천 후 사용자 확인</p></div>
                 <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">오늘 코스</p><p className="mt-1 text-xs font-bold text-slate-800">미반영 · 지도에서 배정</p></div>
               </div>
-              <a className="maju-button-secondary mt-2 h-9 w-full justify-center text-xs" href={withPermitLeadCompanyQuery(`/dashboard?view=customers&customerId=${encodeURIComponent(convertedCustomerId)}`)}>
+              <a className="maju-button-secondary mt-2 h-9 w-full justify-center text-xs" href={withPermitLeadCompanyQuery(`/map?view=customers&customerId=${encodeURIComponent(convertedCustomerId)}`)}>
                 배송지·권역·코스 바로 확인
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>

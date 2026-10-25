@@ -88,7 +88,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <div className="flex shrink-0 items-center gap-2">
               <Link className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-teal-700 px-3 text-xs font-semibold text-white" href="/mobile/sales"><Target className="h-4 w-4" />영업</Link>
               <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
-              <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/dashboard">PC</Link>
+              <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/map">PC</Link>
             </div>
           </div>
           <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />

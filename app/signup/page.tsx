@@ -70,7 +70,7 @@ export default function CompanySignupPage() {
         return;
       }
 
-      window.location.href = "/dashboard";
+      window.location.href = "/leads?type=permit";
     } catch (error) {
       setError(error instanceof Error ? error.message : "가입 처리 중 오류가 발생했습니다.");
     } finally {

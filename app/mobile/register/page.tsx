@@ -20,7 +20,7 @@ export default async function MobileRegisterPage() {
             </div>
             <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">새 거래처 등록</Badge>
           </div>
-          <Link className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-50 px-3 text-xs font-black text-teal-700 ring-1 ring-inset ring-slate-200" href="/dashboard">
+          <Link className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-50 px-3 text-xs font-black text-teal-700 ring-1 ring-inset ring-slate-200" href="/map">
             <Monitor className="h-3.5 w-3.5" /> PC 운영 화면 <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </header>

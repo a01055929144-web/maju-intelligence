@@ -25,4 +25,15 @@ export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_
   return value !== "false" && value !== "0";
 }
 
-export const CORE_LEADS_HREF = "/dashboard?view=leads&leadType=permit";
+export const CORE_LEADS_HREF = "/leads?type=permit";
+
+export function resolveLegacyDashboardHref(params: { companyId?: string; leadType?: string; view?: string }) {
+  const companyQuery = params.companyId ? `companyId=${encodeURIComponent(params.companyId)}` : "";
+  if (params.view === "leads") {
+    const type = params.leadType === "keyword" ? "keyword" : "permit";
+    return `/leads?type=${type}${companyQuery ? `&${companyQuery}` : ""}`;
+  }
+  const view = params.view === "history" || params.view === "course" || params.view === "customers" ? params.view : "";
+  const query = [view ? `view=${view}` : "", companyQuery].filter(Boolean).join("&");
+  return `/map${query ? `?${query}` : ""}`;
+}

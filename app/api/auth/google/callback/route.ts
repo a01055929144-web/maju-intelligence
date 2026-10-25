@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       invitedEmployeeName: result.invitedEmployeeName
     }, { remember: true });
 
-    return NextResponse.redirect(new URL(isOwner ? "/dashboard" : "/mobile/today", request.url));
+    return NextResponse.redirect(new URL(isOwner ? "/leads?type=permit" : "/mobile/today", request.url));
   } catch (error) {
     console.error("Google staff callback failed:", error);
     return redirectJoin(request.url, inviteCode, error instanceof Error ? error.message : "google_callback_failed");

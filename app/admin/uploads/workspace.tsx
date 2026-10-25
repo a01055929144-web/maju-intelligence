@@ -377,7 +377,7 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
       <div className="mt-2 grid grid-cols-4 gap-2">
         <MobileAction href={`/crm/timeline?${companyQuery}`} label="원장" />
         <MobileAction href={`/revenue/transactions?${companyQuery}`} label="매출" />
-        <MobileAction href={`/dashboard?${companyQuery}`} label="지도" />
+        <MobileAction href={`/map?${companyQuery}`} label="지도" />
         <MobileAction href="/admin/companies" label="고객사" />
       </div>
     </article>
@@ -413,7 +413,7 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
       </div>
       <div className="min-w-0">
         <p className="truncate font-bold">{upload.company}</p>
-        <Link className="mt-1 inline-flex items-center gap-1 text-xs font-black text-primary hover:underline" href={`/dashboard?${companyQuery}`}>
+        <Link className="mt-1 inline-flex items-center gap-1 text-xs font-black text-primary hover:underline" href={`/map?${companyQuery}`}>
           대시보드
           <ExternalLink className="h-3 w-3" />
         </Link>
@@ -453,7 +453,7 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
         <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/revenue/transactions?${companyQuery}`}>
           매출
         </Link>
-        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/dashboard?${companyQuery}`}>
+        <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/map?${companyQuery}`}>
           지도
         </Link>
         <Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-white px-2.5 text-xs font-bold transition hover:bg-muted" href={`/admin/companies`}>

@@ -5,5 +5,5 @@ import { redirect } from "next/navigation";
 export default async function LegacyPermitLeadsRedirectPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const companyId = resolvedSearchParams?.companyId;
-  redirect(companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}&view=leads` : "/dashboard?view=leads");
+  redirect(companyId ? `/leads?type=permit&companyId=${encodeURIComponent(companyId)}` : "/leads?type=permit");
 }

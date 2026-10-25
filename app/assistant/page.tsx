@@ -79,7 +79,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
     },
     {
       description: "오늘 방문 코스 확인",
-      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
+      href: companyId ? `/map?companyId=${encodeURIComponent(companyId)}` : "/map",
       label: "방문 코스 연결",
       value: "코스 확인"
     }

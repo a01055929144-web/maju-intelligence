@@ -427,7 +427,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialView = "map", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -553,20 +553,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [pendingCourseStoreId, setPendingCourseStoreId] = useState("");
   // 서버 렌더와 첫 클라이언트 렌더는 같은 기본 탭을 사용하고, 마운트 뒤 URL 딥링크를 반영합니다.
   // history도 정식 탭이므로 ?view=history를 누락하지 않습니다.
-  const [activeView, setActiveView] = useState<WorkspaceView>("map");
-  useEffect(() => {
-    const applyViewFromUrl = () => {
-      const requested = new URLSearchParams(window.location.search).get("view");
-      setActiveView(
-        requested === "leads" || requested === "customers" || requested === "course" || requested === "history"
-          ? requested
-          : "map"
-      );
-    };
-    applyViewFromUrl();
-    window.addEventListener("popstate", applyViewFromUrl);
-    return () => window.removeEventListener("popstate", applyViewFromUrl);
-  }, []);
+  const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
@@ -1424,6 +1411,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   };
 
   const focusOrigin = () => {
+    if (initialView === "leads") {
+      router.push("/map");
+      return;
+    }
     setActiveView("map");
     setMapFocusId(originMarkerId);
     setPreviewStoreId("");
@@ -1431,6 +1422,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   };
 
   const resetWorkspace = () => {
+    if (initialView === "leads") {
+      router.push("/map");
+      return;
+    }
     setActiveView("map");
     const params = new URLSearchParams(window.location.search);
     params.delete("view");
@@ -1446,6 +1441,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setVehicleFilterId("all");
   };
   const changeWorkspaceView = (nextView: WorkspaceView) => {
+    if (nextView === "leads") {
+      router.push("/leads?type=permit");
+      return;
+    }
+    if (initialView === "leads") {
+      router.push(nextView === "map" ? "/map" : `/map?view=${nextView}`);
+      return;
+    }
     setActiveView(nextView);
     const params = new URLSearchParams(window.location.search);
     if (nextView === "map") params.delete("view");

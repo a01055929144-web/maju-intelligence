@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async rewrites() {
+    return [
+      { source: "/map", destination: "/dashboard?routeMode=map" },
+      { source: "/leads", destination: "/dashboard?routeMode=leads" }
+    ];
+  },
   async headers() {
     return [
       {

@@ -427,7 +427,7 @@ function PipelineBasisPanel({
   const actionLinks = [
     { href: withCompanyQuery("/crm/timeline"), icon: FileText, label: "메모 보완" },
     { href: withCompanyQuery("/revenue/transactions"), icon: ReceiptText, label: "원장 확인" },
-    { href: withCompanyQuery("/dashboard"), icon: Route, label: "지도 홈" }
+    { href: withCompanyQuery("/map"), icon: Route, label: "지도 홈" }
   ];
 
   return (

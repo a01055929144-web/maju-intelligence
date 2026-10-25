@@ -1695,7 +1695,7 @@ export default function CrmTimelinePage() {
                   </button>
                   <Link
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50"
-                    href={withCompanyQuery("/dashboard")}
+                    href={withCompanyQuery("/map")}
                   >
                     <Route className="h-3.5 w-3.5" />
                     코스 보기

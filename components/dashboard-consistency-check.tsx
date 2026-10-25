@@ -113,7 +113,7 @@ export function DashboardConsistencyCheck({ companyId }: { readonly companyId?: 
   const cachedRouteCount = Number(routeProviderCounts.cached || 0);
   const roadPendingRouteCount = Number(routeProviderCounts.estimated || 0) + Number(routeProviderCounts.unknown || 0);
   const timelineHref = buildTimelineHref(companyId, payload?.summary?.missingAddressCustomers || 0);
-  const routeHref = `/dashboard${query}`;
+  const routeHref = `/map${query}`;
   const revenueHref = `/revenue/transactions${query}`;
   const consistencyScore = payload?.summary?.consistencyScore ?? (checks.length ? Math.round((okCount / checks.length) * 100) : 0);
   const routeCoverage = payload?.summary?.routeCalculationCoverage ?? 0;

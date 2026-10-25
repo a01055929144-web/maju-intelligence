@@ -14,7 +14,7 @@ export default function ReportError({ reset }: { error: Error & { digest?: strin
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">저장된 리포트는 유지됩니다. 잠시 후 다시 시도하거나 지도 홈으로 돌아가 주세요.</p>
         <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
           <button className="maju-button-primary justify-center" onClick={reset} type="button"><RotateCcw className="h-4 w-4" aria-hidden="true" />다시 시도</button>
-          <Link className="maju-button-secondary justify-center" href="/dashboard"><ArrowLeft className="h-4 w-4" aria-hidden="true" />지도 홈</Link>
+          <Link className="maju-button-secondary justify-center" href="/map"><ArrowLeft className="h-4 w-4" aria-hidden="true" />지도 홈</Link>
         </div>
       </section>
     </main>

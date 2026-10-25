@@ -166,13 +166,13 @@ export default function Home() {
 
   const analysis = useMemo(() => analyzeCompany(customers), [customers]);
   const currentTemplate = uploadTemplates[uploadType];
-  const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
+  const dashboardHref = adminCompanyId ? `/leads?type=permit&companyId=${encodeURIComponent(adminCompanyId)}` : "/leads?type=permit";
   const reportLedgerHref = adminCompanyId
     ? `${uploadType === "customer-master" ? "/crm/timeline" : "/revenue/transactions"}?companyId=${encodeURIComponent(adminCompanyId)}`
     : uploadType === "customer-master"
       ? "/crm/timeline"
       : "/revenue/transactions";
-  const routeHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
+  const routeHref = adminCompanyId ? `/map?companyId=${encodeURIComponent(adminCompanyId)}` : "/map";
   const mobileTodayHref = adminCompanyId ? `/mobile/today?companyId=${encodeURIComponent(adminCompanyId)}` : "/mobile/today";
 
   useEffect(() => {
@@ -1237,8 +1237,8 @@ function Onboarding({
   const currentLedgerPath = uploadType === "customer-master" ? "/crm/timeline" : "/revenue/transactions";
   const currentLedgerHref = adminCompanyId ? `${currentLedgerPath}?companyId=${encodeURIComponent(adminCompanyId)}` : currentLedgerPath;
   const currentLedgerLabel = uploadType === "customer-master" ? "거래처 히스토리 보기" : "매출 원장 보기";
-  const dashboardHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
-  const routeHref = adminCompanyId ? `/dashboard?companyId=${encodeURIComponent(adminCompanyId)}` : "/dashboard";
+  const dashboardHref = adminCompanyId ? `/leads?type=permit&companyId=${encodeURIComponent(adminCompanyId)}` : "/leads?type=permit";
+  const routeHref = adminCompanyId ? `/map?companyId=${encodeURIComponent(adminCompanyId)}` : "/map";
 
   useEffect(() => {
     if (!hasDataRows) {

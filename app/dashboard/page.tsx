@@ -5,14 +5,25 @@ import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master"
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { RequestTiming } from "@/lib/performance-timing";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { areHoldModulesEnabled, resolveLegacyDashboardHref } from "@/lib/feature-modules";
 import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
-export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+type OperationsSearchParams = { companyId?: string; leadType?: string; routeMode?: string; type?: string; view?: string };
+
+export default async function DashboardPage({ searchParams }: { searchParams?: Promise<OperationsSearchParams> }) {
+  const params = await searchParams;
+  if (!params?.routeMode) {
+    redirect(resolveLegacyDashboardHref(params || {}));
+  }
+  const initialView = params.routeMode === "leads"
+    ? "leads"
+    : params.view === "history" || params.view === "course" || params.view === "customers"
+      ? params.view
+      : "map";
   const timing = new RequestTiming();
-  const resolvedSearchParams = await timing.measure("search_params", async () => searchParams);
+  const resolvedSearchParams = params;
   const [customerSession, adminSession] = await timing.measure("auth", () => Promise.all([getCustomerSession(), getAdminSession()]));
 
   if (!customerSession && !adminSession) {
@@ -76,7 +87,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       previewCompanyId={customerSession ? undefined : companyId}
       showHoldModules={showHoldModules}
       subtitle="거래처 위치, 배송차 배정, 경유 코스 계산을 지도에서 바로 처리합니다"
-      title="지도 홈"
+      title={initialView === "leads" ? "영업 리드" : "지도 홈"}
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
@@ -86,6 +97,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
           holdModulesEnabled={showHoldModules}
+          initialView={initialView}
           canManageStaff={canManageStaff}
           mapMarkers={mapMarkers}
           routePlan={routePlan}

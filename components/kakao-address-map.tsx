@@ -634,12 +634,12 @@ export function KakaoAddressMap({
           }
         };
         refitViewportRef.current = fitViewport;
-        fitViewport();
-
         window.setTimeout(() => {
           map.relayout?.();
-          fitViewport();
-          mapViewportReadyRef.current = true;
+          window.requestAnimationFrame(() => {
+            fitViewport();
+            mapViewportReadyRef.current = true;
+          });
         }, 120);
       } catch (error) {
         if (!ignore) {
@@ -803,7 +803,10 @@ export function KakaoAddressMap({
             salesAreaPolygonsRef.current.push(polygon);
           }
         }
-        map.setBounds(bounds, 48, 48, 48, 48);
+        const fitBoundary = () => map.setBounds(bounds, 48, 48, 48, 48);
+        refitViewportRef.current = fitBoundary;
+        map.relayout?.();
+        window.requestAnimationFrame(fitBoundary);
         const elapsed = performance.now() - startedAt;
         salesAreaBoundaryRef.current?.onLoadTiming?.(elapsed);
         console.info(`[SalesAreaBoundary] ${boundary.province} 경계+렌더 ${Math.round(elapsed)}ms`);

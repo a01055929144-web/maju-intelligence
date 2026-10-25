@@ -23,7 +23,7 @@ export default function NotFound() {
             주소가 변경되었거나 사용할 수 없는 링크입니다. 운영 지도에서 필요한 업무 화면으로 다시 이동해주세요.
           </p>
           <div className="mt-7 flex flex-col justify-center gap-2 sm:flex-row">
-            <Link className="maju-button-primary h-11 px-5" href="/dashboard">
+            <Link className="maju-button-primary h-11 px-5" href="/leads?type=permit">
               <Home className="h-4 w-4" />
               지도 홈으로
             </Link>

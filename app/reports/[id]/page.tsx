@@ -41,7 +41,7 @@ export default async function ReportDetailPage({
             <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-700"><ShieldAlert className="h-6 w-6" aria-hidden="true" /></span>
             <h2 className="mt-3 text-lg font-bold text-slate-950">리포트 조회 권한이 없습니다.</h2>
             <p className="mt-2 text-sm font-semibold text-slate-600">대표 또는 관리자에게 권한을 요청하세요.</p>
-            <Link className="maju-button-primary mt-5" href="/dashboard">
+            <Link className="maju-button-primary mt-5" href="/map">
               지도 홈으로 이동
               <ArrowRight className="h-4 w-4" />
             </Link>
@@ -98,7 +98,7 @@ export default async function ReportDetailPage({
       description: "사업자 상태, 연락처, 배송주소, 적재위치, 메모 이력을 정리합니다."
     },
     {
-      href: companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard",
+      href: companyId ? `/map?companyId=${encodeURIComponent(companyId)}` : "/map",
       label: "배송효율",
       score: report.health.deliveryEfficiency,
       title: "경유 코스 계산",
@@ -152,7 +152,7 @@ export default async function ReportDetailPage({
                   우선 작업 열기
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/dashboard?companyId=${encodeURIComponent(companyId)}` : "/dashboard"}>
+                <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50" href={companyId ? `/map?companyId=${encodeURIComponent(companyId)}` : "/map"}>
                   지도 홈
                 </Link>
               </div>
@@ -386,7 +386,7 @@ function ReportBasisPanel({
   ];
   const actions = [
     { href: withCompanyQuery("/crm/timeline"), label: "거래처 원장 보완" },
-    { href: withCompanyQuery("/dashboard"), label: "지도 홈" },
+    { href: withCompanyQuery("/map"), label: "지도 홈" },
     { href: withCompanyQuery("/revenue/transactions"), label: "매출 원장 확인" }
   ];
 

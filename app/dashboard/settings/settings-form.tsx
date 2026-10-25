@@ -531,7 +531,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
               <span aria-hidden="true" className="text-slate-400 group-open:rotate-90">›</span>
             </summary>
             <div className="grid gap-2 border-t border-slate-200 p-2">
-              <QuickLink href="/dashboard" label="지도 홈 보기" />
+              <QuickLink href="/map" label="지도 홈 보기" />
               {showHoldModules ? <QuickLink href="/crm/timeline" label="거래처 히스토리 보기" /> : null}
               <QuickLink href="/" label="거래처 관리 · 등록으로 이동" />
             </div>

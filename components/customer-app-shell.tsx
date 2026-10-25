@@ -104,7 +104,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
               {collapsed ? (
                 <>
-                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard?view=leads&leadType=permit")} title="MAJU Intelligence">
+                  <Link className="flex items-center justify-center" href={scopedHref("/leads?type=permit")} title="MAJU Intelligence">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                   </Link>
                   <button
@@ -118,7 +118,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 </>
               ) : (
                 <div className="flex w-full items-center justify-between gap-2">
-                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard?view=leads&leadType=permit")}>
+                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/leads?type=permit")}>
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-bold">MAJU Intelligence</span>
@@ -221,7 +221,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                             // 신규 리드와 영업 리드는 같은 지도 작업공간을 공유하지만 초기 데이터 정렬
                             // 모드가 다릅니다. 동일 pathname의 client navigation은 하위 상태를 유지하므로,
                             // 이 두 메뉴 사이에서는 명시적으로 새 문서를 열어 URL 기준 초기화를 보장합니다.
-                            if (itemHref.includes("leadType=")) {
+                            if (itemHref.startsWith("/leads?")) {
                               event.preventDefault();
                               window.location.assign(itemHref);
                             }
@@ -367,9 +367,6 @@ function isCurrentNavItem(pathname: string | null, href: string, currentSearch =
   const [hrefWithoutHash] = href.split("#");
   const [hrefPath = "/", hrefQuery = ""] = hrefWithoutHash.split("?");
   if (hrefPath === "/") return pathname === "/";
-  // 지도 홈은 회사 설정을 포함한 /dashboard 하위 화면의 상위 경로이기도 합니다.
-  // 이 항목만큼은 정확한 경로에서만 활성화해야 설정 화면과 동시에 강조되지 않습니다.
-  if (hrefPath === "/dashboard" && pathname !== hrefPath) return false;
   if (!(pathname === hrefPath || pathname.startsWith(`${hrefPath}/`))) return false;
 
   const expected = new URLSearchParams(hrefQuery);
@@ -377,7 +374,6 @@ function isCurrentNavItem(pathname: string | null, href: string, currentSearch =
   if (expected.size) {
     return Array.from(expected.entries()).every(([key, value]) => current.get(key) === value);
   }
-  if (hrefPath === "/dashboard") return !current.has("view") || current.get("view") === "map";
   return true;
 }
 

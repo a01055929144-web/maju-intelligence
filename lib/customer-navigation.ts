@@ -44,17 +44,17 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
     label: "영업",
     items: [
-      { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/dashboard?view=leads&leadType=permit", icon: Building2, label: "신규 리드" },
-      { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/dashboard?view=leads&leadType=keyword", icon: Sparkles, label: "영업 리드" },
+      { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
+      { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
       { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "연락 기록" }
     ]
   },
   {
     label: "동선",
     items: [
-      { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/dashboard", icon: MapPinned, label: "지도" },
+      { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/map", icon: MapPinned, label: "지도" },
       { active: "routes-today", description: "오늘 배송 순서와 완료 상태", href: "/routes/today", icon: Route, label: "오늘 코스" },
-      { active: "delivery-history", description: "날짜별 운행·배송 완료 기록", href: "/dashboard?view=history", icon: History, label: "배송 이력" },
+      { active: "delivery-history", description: "날짜별 운행·배송 완료 기록", href: "/map?view=history", icon: History, label: "배송 이력" },
       { active: "territory", description: "배송 권역과 호차·차량 관리", href: "/dashboard/settings/routes", icon: Truck, label: "권역·호차" }
     ]
   },
@@ -103,9 +103,9 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 
 export function getCustomerQuickActions() {
   return [
-    { active: "dashboard" as const, helper: "신규 후보", href: "/dashboard?view=leads&leadType=permit", icon: Building2, label: "신규 리드" },
-    { active: "dashboard" as const, helper: "영업 후보", href: "/dashboard?view=leads&leadType=keyword", icon: Sparkles, label: "영업 리드" },
-    { active: "dashboard" as const, helper: "통합 지도", href: "/dashboard", icon: MapPinned, label: "지도" },
+    { active: "dashboard" as const, helper: "신규 후보", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
+    { active: "dashboard" as const, helper: "영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
+    { active: "dashboard" as const, helper: "통합 지도", href: "/map", icon: MapPinned, label: "지도" },
     { active: "routes-today" as const, helper: "배송 순서", href: "/routes/today", icon: Route, label: "오늘 코스" }
   ];
 }

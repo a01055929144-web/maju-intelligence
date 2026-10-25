@@ -759,11 +759,11 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                 <p className="font-black">빠른 운영 작업</p>
                 <p className="mt-1 text-xs font-bold text-muted-foreground">선택 고객사의 다음 작업으로 바로 이동합니다.</p>
                 <div className="mt-4 grid gap-2">
-                  <QuickAction href={`/dashboard?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" primary />
+                  <QuickAction href={`/leads?type=permit&companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" primary />
                   <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
                   <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="거래처 관리 · 등록/업로드" />
                   <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
-                  <QuickAction href={`/dashboard?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="지도 홈" />
+                  <QuickAction href={`/map?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="지도 홈" />
                 </div>
               </div>
             </div>
@@ -1047,7 +1047,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
               </span>
               <Link
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
-                href={`/dashboard?companyId=${encodeURIComponent(form.id)}`}
+                href={`/map?companyId=${encodeURIComponent(form.id)}`}
               >
                 고객사 대시보드
               </Link>

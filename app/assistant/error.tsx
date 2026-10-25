@@ -15,7 +15,7 @@ export default function SalesAssistantError({ reset }: { error: Error & { digest
           <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">저장된 내용은 유지됩니다. 잠시 후 다시 시도해 주세요.</p>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
             <button className="maju-button-primary justify-center" onClick={reset} type="button"><RotateCcw className="h-4 w-4" aria-hidden="true" />다시 시도</button>
-            <Link className="maju-button-secondary justify-center" href="/dashboard"><ArrowLeft className="h-4 w-4" aria-hidden="true" />지도 홈</Link>
+            <Link className="maju-button-secondary justify-center" href="/map"><ArrowLeft className="h-4 w-4" aria-hidden="true" />지도 홈</Link>
           </div>
         </div>
       </section>
