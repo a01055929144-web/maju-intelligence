@@ -53,7 +53,7 @@ export async function GET() {
     const pages = Array.from({ length: Math.min(SAMPLE_PAGES, totalPages) }, (_, index) =>
       1 + Math.floor((index * Math.max(0, totalPages - 1)) / Math.max(1, SAMPLE_PAGES - 1))
     );
-    const uniquePages = [...new Set(pages)];
+    const uniquePages = Array.from(new Set(pages));
     const samples = await Promise.all(uniquePages.map((page) => page === 1 ? first : fetchPage(dataset, page, key)));
     const rows = samples.flatMap((page) => page.rows);
     const active = rows.filter(isActive);
