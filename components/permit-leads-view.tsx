@@ -4210,7 +4210,7 @@ function PermitLeadDetailPanel({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h4 className="font-black text-slate-950">배송 기록</h4>
-                    <p className="mt-1 text-sm text-slate-600">연결된 거래처에 저장된 배송 완료·특이사항을 최신순으로 표시합니다.</p>
+                    <p className="mt-1 text-sm text-slate-600">연결된 거래처의 배송 관련 메모·특이사항을 최신순 최대 50건 표시합니다. 실제 배송 상태·사진 증빙 이력과는 구분됩니다.</p>
                   </div>
                   {linkedCustomerId ? (
                     <button className="maju-button-secondary h-9 px-3 text-xs" disabled={deliveryHistoryState === "loading"} onClick={() => void loadDeliveryHistory()} type="button">
@@ -4236,7 +4236,7 @@ function PermitLeadDetailPanel({
                     {deliveryHistory.map((note) => (
                       <article className="rounded-lg border border-blue-100 bg-blue-50/50 p-3" key={note.id}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="flex items-center gap-1.5 text-sm font-black text-blue-950"><Truck className="h-4 w-4 text-blue-700" />배송 완료</p>
+                          <p className="flex items-center gap-1.5 text-sm font-black text-blue-950"><Truck className="h-4 w-4 text-blue-700" />배송 메모</p>
                           <time className="text-xs font-bold text-slate-500">{note.createdAt}</time>
                         </div>
                         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.memo}</p>
