@@ -74,12 +74,19 @@ create index if not exists company_do_not_contact_company_blocked_idx
 create table if not exists public.sales_outreach_policy_acknowledgements (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
-  user_id uuid not null references public.app_users(id) on delete cascade,
+  user_id uuid references public.app_users(id) on delete cascade,
+  actor_kind text not null check (actor_kind in ('app_user','legacy_owner')),
+  actor_subject text not null,
   policy_version text not null,
   role_at_ack text not null,
   surface text not null check (surface in ('pc','mobile','admin_assisted')),
   acknowledged_at timestamptz not null default now(),
-  unique (company_id, user_id, policy_version)
+  check (
+    (actor_kind = 'app_user' and user_id is not null and actor_subject = 'app_user:' || user_id::text)
+    or
+    (actor_kind = 'legacy_owner' and user_id is null and actor_subject = 'legacy_owner:' || company_id::text)
+  ),
+  unique (company_id, actor_subject, policy_version)
 );
 
 create index if not exists sales_outreach_policy_ack_company_idx
@@ -102,6 +109,11 @@ grant select, insert, update, delete on public.sales_outreach_policy_acknowledge
 -- 3. 해제 API는 고객사 owner/manager 및 MAJU 관리자만 허용하고 변경 이력을 남긴다.
 -- 4. 첫 사용 화면은 sales_outreach_policy_acknowledgements의 현재 policy_version 부재 시 표시한다.
 -- 5. 고객사별 조회 API는 반드시 company_id 범위를 강제한다.
+-- 6. 서버는 app_users.id가 있는 세션은 actor_kind='app_user', actor_subject='app_user:<uuid>'로 저장한다.
+--    기존 대표 세션처럼 user_id가 없는 owner는 actor_kind='legacy_owner',
+--    actor_subject='legacy_owner:<company_id>'로 저장해 확인 기록을 묵음 누락하지 않는다.
+--    C6 전환으로 대표에게 app_users.id가 생기면 같은 policy_version의 legacy_owner 확인을
+--    새 app_user 주체로 이관하거나 다시 확인받는 정책을 전환 배포 전에 명시해야 한다.
 
 commit;
 

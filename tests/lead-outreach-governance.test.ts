@@ -48,6 +48,10 @@ describe("lead outreach governance", () => {
     expect(sql.match(/from public, anon, authenticated/g)).toHaveLength(3);
     expect(sql.indexOf("begin;")).toBeLessThan(sql.indexOf("create table"));
     expect(sql.lastIndexOf("commit;")).toBeGreaterThan(sql.lastIndexOf("grant select"));
+    expect(sql).toContain("user_id uuid references public.app_users(id) on delete cascade");
+    expect(sql).toContain("actor_kind in ('app_user','legacy_owner')");
+    expect(sql).toContain("actor_subject = 'legacy_owner:' || company_id::text");
+    expect(sql).toContain("unique (company_id, actor_subject, policy_version)");
   });
 
   it("records source disclosure before writing to the clipboard", () => {
