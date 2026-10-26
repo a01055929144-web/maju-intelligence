@@ -44,7 +44,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
   const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings/company";
-  const settingsLabel = mode === "admin-preview" ? "고객사" : "출발지";
+  const settingsLabel = mode === "admin-preview" ? "고객사" : "회사 설정";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
   const compactMapHome = fullBleed && hidePageTitle;
   const scopedHref = (href: string) => {
@@ -148,7 +148,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             <nav
               aria-label="주요 작업공간"
-              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-3 lg:block`}
+              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 max-h-[min(60dvh,32rem)] flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-3 lg:block lg:max-h-none`}
             >
               {visibleNavigationGroups.map((group, groupIndex) => (
                 <div
