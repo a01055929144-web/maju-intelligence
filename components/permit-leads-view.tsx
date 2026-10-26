@@ -1677,7 +1677,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   }
 
   return (
-    <section className="flex min-h-[480px] flex-1 flex-col gap-2 overflow-visible rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6">
+    <section className="flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6">
       <div className={`overflow-hidden rounded-xl border px-3 py-3 shadow-sm sm:px-4 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-r from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-r from-white via-white to-teal-50"}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
@@ -2547,7 +2547,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               <KakaoAddressMap mapClassName="h-full w-full rounded-none border-0" markers={mapLeadMarkers} onMarkerClick={(marker) => setSelectedLead(filteredLeads.find((lead) => lead.id === marker.id) || null)} showList={false} />
             </div>
           ) : (
-            <div className="flex min-h-[420px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="flex min-h-[420px] min-w-0 max-w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="shrink-0 divide-y divide-slate-100 border-b border-slate-200 bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                   {isSalesLeadPage ? <div className="flex flex-wrap items-center gap-2">
@@ -2692,7 +2692,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                   />
                 ) : null}
               </div>
-              <div className="h-[calc(100dvh-300px)] min-h-[60vh] max-w-full overflow-x-auto overflow-y-auto overscroll-contain">
+              <div className="h-[calc(100dvh-300px)] min-h-[60vh] min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain">
               {/* 2026-10-25: 표 글자가 두 줄로 깨지지 않도록 칸은 내용 너비만큼 넓히고(w-max·nowrap) 좌우 스크롤로 봅니다. */}
               <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm [&_tbody_td]:py-1.5 ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
