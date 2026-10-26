@@ -9016,6 +9016,7 @@ export type GovRestaurantSyncResult = {
   nextStartPage?: number;
   scannedPages?: number;
   totalPages?: number;
+  skippedPages?: number[];
 };
 
 /**
@@ -9086,6 +9087,7 @@ async function recordLeadSyncStatus(
     startedAt: string;
     fetched?: number;
     ingest?: PermitLeadIngestResult;
+    metadata?: Record<string, unknown>;
   }
 ) {
   if (!isProductionStoreConfigured()) return;
@@ -9115,7 +9117,8 @@ async function recordLeadSyncStatus(
       batch_duplicate_count: ingest.batchDuplicates,
       error_message: status === "error" ? options.message?.slice(0, 1000) || "동기화 실패" : null,
       metadata: {
-        message: options.message?.slice(0, 500) || null
+        message: options.message?.slice(0, 500) || null,
+        ...(options.metadata || {})
       }
     })
   }).catch(() => null);
@@ -9243,7 +9246,7 @@ export async function syncGovRestaurantLeads(
     const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
     let status: "success" | "error" = "success";
-    let message = summarizeLeadSyncIngest(ingest);
+    let message = `${summarizeLeadSyncIngest(ingest)} · 건너뛴 페이지 ${result.skippedPages.length}개`;
     if (trigger === "cron" && result.rows.length === 0) {
       const previousRuns = await supabaseRequest<Array<{
         started_at: string;
@@ -9265,7 +9268,16 @@ export async function syncGovRestaurantLeads(
       }
     }
     await recordLeadSyncStatus(companyId, "gov", status, {
-      trigger, startedAt, fetched: result.rows.length, ingest, message
+      trigger,
+      startedAt,
+      fetched: result.rows.length,
+      ingest,
+      message,
+      metadata: {
+        scannedPages: result.scannedPages,
+        skippedPageCount: result.skippedPages.length,
+        skippedPages: result.skippedPages
+      }
     });
     return {
       configured: true,
@@ -9273,7 +9285,8 @@ export async function syncGovRestaurantLeads(
       ingest,
       nextStartPage: result.nextStartPage,
       scannedPages: result.scannedPages,
-      totalPages: result.totalPages
+      totalPages: result.totalPages,
+      skippedPages: result.skippedPages
     };
   } catch (error) {
     await recordLeadSyncStatus(companyId, "gov", "error", {
