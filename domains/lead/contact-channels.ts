@@ -142,6 +142,9 @@ export function fillLeadMessageTemplate(template: string, variables: LeadMessage
   };
   const missingKeys = Object.entries(map).filter(([, value]) => !value).map(([key]) => key);
   let prepared = template;
+  if (!variables.companyName && !variables.staffName) {
+    prepared = prepared.replace(/\{회사명\}\s*\{담당자명\}\s*(?:입니다|드립니다)(?:[.!?])?/g, "");
+  }
   for (const key of missingKeys) {
     const token = `\\{${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\}`;
     prepared = prepared
@@ -154,6 +157,7 @@ export function fillLeadMessageTemplate(template: string, variables: LeadMessage
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/([,.;:!?]){2,}/g, "$1")
+    .replace(/[,;:]\s*([.!?])/g, "$1")
     .replace(/\s+(입니다|드립니다|입니다만)/g, "$1")
     .replace(/([.!?])\s+(?=\S)/g, "$1\n")
     .split("\n")
