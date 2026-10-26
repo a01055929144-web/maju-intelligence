@@ -390,4 +390,3 @@ export async function consumeOAuthState(state: string): Promise<{ ok: boolean; p
 
   return { ok: true, payload };
 }
-
