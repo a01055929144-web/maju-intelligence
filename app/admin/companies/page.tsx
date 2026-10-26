@@ -6,11 +6,15 @@ import { getManagedCompanyAccounts } from "@/lib/store";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminCompaniesWorkspace } from "./workspace";
 
-export default async function AdminCompaniesPage() {
+export default async function AdminCompaniesPage({
+  searchParams
+}: {
+  searchParams: Promise<{ companyId?: string }>;
+}) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const payload = await getManagedCompanyAccounts();
+  const [{ companyId }, payload] = await Promise.all([searchParams, getManagedCompanyAccounts()]);
 
   return (
     <main className="min-h-screen maju-app-bg">
@@ -30,6 +34,7 @@ export default async function AdminCompaniesPage() {
         <AdminCompaniesWorkspace
           defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
           initialCompanies={payload.companies}
+          initialSelectedCompanyId={companyId}
           source={payload.source}
         />
       </section>

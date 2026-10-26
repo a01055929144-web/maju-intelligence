@@ -14,6 +14,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 type Props = {
   defaultCompanyId: string;
   initialCompanies: ManagedCompanyAccount[];
+  initialSelectedCompanyId?: string;
   source: "empty" | "supabase";
 };
 
@@ -50,18 +51,20 @@ const emptyCompany: ManagedCompanyAccountInput = {
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
-export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, source }: Props) {
+export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, initialSelectedCompanyId, source }: Props) {
+  const initialCompany = initialCompanies.find((company) => company.id === initialSelectedCompanyId) || initialCompanies[0];
+  const initialForm = initialCompany ? { ...initialCompany, customerPassword: "" } : emptyCompany;
   const [companies, setCompanies] = useState(initialCompanies);
-  const [selectedId, setSelectedId] = useState(initialCompanies[0]?.id || "new");
+  const [selectedId, setSelectedId] = useState(initialCompany?.id || "new");
   const [query, setQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState<"all" | "active" | "needs-setup" | "paused">("all");
   const [companyPage, setCompanyPage] = useState(1);
   const [companyPageSize, setCompanyPageSize] = useState<ListPageSize>(30);
-  const [form, setForm] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  const [form, setForm] = useState<ManagedCompanyAccountInput>(initialForm);
   // 2026-08-27 에러 처리/복원력 감사 후속: 고객사 생성/수정 폼은 로그인 이메일·비밀번호까지 포함해
   // 필드가 많고, 저장 전까지는 서버에 반영되지 않습니다. 마지막으로 불러온(또는 저장된) 값과 현재
   // 값을 비교해 실제로 뭔가 고쳤을 때만 이탈 경고를 띄웁니다.
-  const [formBaseline, setFormBaseline] = useState<ManagedCompanyAccountInput>(initialCompanies[0] || emptyCompany);
+  const [formBaseline, setFormBaseline] = useState<ManagedCompanyAccountInput>(initialForm);
   useUnsavedChangesWarning(JSON.stringify(form) !== JSON.stringify(formBaseline));
   const [showPassword, setShowPassword] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -539,7 +542,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
       <aside className="rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -759,7 +762,8 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                 <p className="font-black">빠른 운영 작업</p>
                 <p className="mt-1 text-xs font-bold text-muted-foreground">선택 고객사의 다음 작업으로 바로 이동합니다.</p>
                 <div className="mt-4 grid gap-2">
-                  <QuickAction href={`/leads?type=permit&companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" primary />
+                  <QuickAction href={`/admin/companies/${encodeURIComponent(selectedCompany.id)}/setup`} icon={ClipboardList} label="초기 설정 도우미" primary />
+                  <QuickAction href={`/leads?type=permit&companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" />
                   <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
                   <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="거래처 관리 · 등록/업로드" />
                   <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
@@ -783,9 +787,15 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                 </div>
                 <Badge className="bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">즉시 발급</Badge>
               </div>
-              <div className="grid gap-3 p-4 md:grid-cols-[1fr_1fr_140px_150px_auto] md:items-end">
+              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.2fr)_minmax(150px,0.8fr)_150px_auto] xl:items-end">
                 <Field label="직원명" required value={directForm.employeeName} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeName: value }))} />
-                <Field label="로그인 이메일 (미입력 시 자동 생성)" type="email" value={directForm.employeeEmail} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeEmail: value }))} />
+                <Field
+                  help="비워 두면 로그인용 이메일을 자동으로 만듭니다."
+                  label="로그인 이메일"
+                  type="email"
+                  value={directForm.employeeEmail}
+                  onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeEmail: value }))}
+                />
                 <Field label="연락처" value={directForm.employeePhone} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeePhone: value }))} />
                 <label className="block space-y-1.5">
                   <span className="text-xs font-bold text-muted-foreground">역할</span>
@@ -800,7 +810,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                     <option value="member">일반직원</option>
                   </select>
                 </label>
-                <Button className="h-11" disabled={creatingDirect} onClick={createDirectAccount} type="button">
+                <Button className="h-11 w-full sm:col-span-2 xl:col-span-1" disabled={creatingDirect} onClick={createDirectAccount} type="button">
                   <UserPlus className="h-4 w-4" />
                   {creatingDirect ? "생성 중" : "계정 생성"}
                 </Button>
@@ -853,7 +863,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                   </div>
                   <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">모바일 준비</Badge>
                 </div>
-                <div className="grid gap-3 p-4 md:grid-cols-[1fr_160px_150px_auto] md:items-end">
+                <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_minmax(160px,0.8fr)_150px_auto] xl:items-end">
                   <Field label="직원명" value={inviteForm.employeeName} onChange={(value) => setInviteForm((prev) => ({ ...prev, employeeName: value }))} />
                   <Field label="연락처" value={inviteForm.employeePhone} onChange={(value) => setInviteForm((prev) => ({ ...prev, employeePhone: value }))} />
                   <label className="block space-y-1.5">
@@ -869,7 +879,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                       <option value="member">일반직원</option>
                     </select>
                   </label>
-                  <Button className="h-11" disabled={creatingInvite} onClick={createInvite} type="button">
+                  <Button className="h-11 w-full sm:col-span-2 xl:col-span-1" disabled={creatingInvite} onClick={createInvite} type="button">
                     <Send className="h-4 w-4" />
                     {creatingInvite ? "생성 중" : "초대 생성"}
                   </Button>
@@ -1112,7 +1122,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
             </div>
           ) : null}
 
-          <div className="sticky bottom-3 z-10 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className={`text-sm font-black ${hasUnsavedChanges ? "text-amber-800" : "text-slate-700"}`}>
@@ -1488,12 +1498,14 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
 }
 
 function Field({
+  help,
   label,
   onChange,
   required,
   type = "text",
   value
 }: {
+  help?: string;
   label: string;
   onChange: (value: string) => void;
   required?: boolean;
@@ -1513,6 +1525,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
+      {help ? <span className="block text-[11px] font-medium leading-4 text-muted-foreground">{help}</span> : null}
     </label>
   );
 }
