@@ -21,7 +21,7 @@
 | 게이트 | 승인·증거 | 승인 전 허용 | 승인 전 금지 |
 |---|---|---|---|
 | G0 설계 | PR #43 및 이 문서 병합 | 문서·순수 정책 테스트 | 운영 SQL·런타임 조회 |
-| G1 상품 | 대표가 요금제 코드·이름·월 리드 상한·금액·직원 상한·체험 일수 확정 | 관리자 폼 시안 | 금액 seed·자동 추천 노출 |
+| G1 상품 | 대표가 요금제 코드·이름·월 리드 상한·금액·직원 상한·체험 일수·추천 산정 개월 수를 입력·승인 | 관리자 폼 시안 | 금액 seed·고정 추천 기준·자동 추천 노출 |
 | G2 스키마 | SQL 최종 리뷰, 기존 불일치 dry-run 0건, Supabase advisors 확인, 대표 실행 승인 | migration 파일 확정 | 코드 선배포·직접 DB 수정 |
 | G3 테스트 결제 | 환경별 Toss 키 설정 여부 확인, 테스트 키·테스트 고객 승인 | 테스트 결제·실패 시뮬레이션 | 라이브 키·실청구 |
 | G4 크론 | 중복 청구·재시도·타임아웃 테스트, 전용 경로와 일정 승인 | preview dry-run | `vercel.json` 수정·운영 스케줄 |
@@ -32,6 +32,11 @@
 ### 데이터와 Supabase
 
 - PR #43 SQL 초안: `plans`, `subscriptions.plan_code/scheduled_plan_code/trial_ends_at/grace_until/retry_attempt/next_retry_at`, `subscription_monthly_usage`, 결제 주기 키와 복합 FK.
+- SQL 승인 전 보완 제안:
+  - `plans.trial_days`: 요금제별 체험 일수. 0 이상 정수이며 대표가 관리자 화면에서 입력한다.
+  - `billing_policy_settings.usage_window_months`: 추천 계산에 사용할 완료 월 개수. 양의 정수이며 대표가 입력한다.
+  - 설정 행은 단일 활성 정책 또는 `effective_from` 이력형으로 관리한다. 코드 상수나 seed 금액을 두지 않는다.
+  - 구독 생성 시점의 `trial_ends_at`은 선택된 요금제의 당시 `trial_days`로 계산해 스냅샷으로 저장한다. 이후 요금제 설정 변경이 기존 체험 종료일을 소급 변경하지 않는다.
 - 적용 전 dry-run:
   - `subscription_payments.company_id`와 연결 구독의 회사 불일치 0건.
   - 기존 구독의 같은 청구월 성공 결제 중복 0건.
@@ -41,6 +46,7 @@
   - `plans`와 사용량 테이블 RLS 활성화, `PUBLIC/anon/authenticated` 권한 없음, `service_role`만 접근.
   - Data API 노출 설정과 무관하게 브라우저가 새 테이블을 직접 조회하지 않음.
 - 집계 원천: 영업 지역 안 `business_permit_leads` 중 임시 영업·제외 상태를 뺀 월 신규 매장, 활성 직원 수.
+- 추천 기간: “최근 3개월”을 코드에 고정하지 않고 `billing_policy_settings.usage_window_months`를 조회한다. 값이 없거나 스키마가 준비되지 않으면 추천을 계산하지 않고 “정책 승인 대기”로 표시한다.
 - 월 경계: Asia/Seoul 기준 매월 1일 00:00. 저장 키는 `YYYY-MM-01`.
 
 ### 인증과 권한
@@ -91,21 +97,30 @@ Owner Domain: `billing`. Related Domain: `lead`, `organization`.
 - 대상: `/admin/billing`, `/api/admin/billing`의 기존 인증 경계를 확장한다.
 - 별도 Use Case:
   - 활성 요금제 목록 조회.
-  - 코드 생성 후 코드 변경 금지, 이름·상한·금액·직원 상한·활성 여부 수정.
+  - 코드 생성 후 코드 변경 금지, 이름·상한·금액·직원 상한·체험 일수·활성 여부 수정.
+  - 추천 산정 개월 수 등 전역 결제 정책 설정 수정.
   - 고객사 현재 요금제와 다음 청구일 예약 요금제 지정.
 - 금액은 0 이상 정수만, 월 리드/직원 상한은 0 이상 또는 무제한만 허용한다.
+- 체험 일수는 0 이상 정수, 추천 산정 개월 수는 1 이상 정수만 허용한다. 대표가 값을 확정하기 전에는 빈 값으로 유지하고 저장하지 않는다.
 - 사용 중 요금제는 삭제하지 않고 비활성화한다.
 - 모든 변경에 변경 전·후 값, 수행자, 회사, 이유를 감사 로그로 남긴다. secret은 기록하지 않는다.
 - 대표 승인 전에는 저장 버튼 대신 “상품·금액 승인 대기” 상태를 표시한다.
+- 관리자 UI의 안전 모드:
+  - 서버가 `WO8_BILLING_V2_ENABLED`와 스키마 준비 상태를 먼저 판정해 `legacy | approval_pending | v2`만 브라우저에 반환한다.
+  - `legacy`와 `approval_pending`에서는 신규 plans/policy 테이블을 조회하지 않는다.
+  - `approval_pending`에서는 입력 폼을 비활성화하고 필요한 SQL·대표 승인 항목만 안내한다. 브라우저 임시값을 저장한 것처럼 표시하지 않는다.
+  - `v2`에서만 GET/POST/PATCH API를 열며, 모든 쓰기는 관리자 세션·feature flag·스키마 상태를 다시 검증한다.
+  - API는 스키마 누락을 빈 요금제 목록으로 삼지 않고 `409 BILLING_SCHEMA_NOT_READY`처럼 구분 가능한 오류로 반환한다.
+- 저장 API 순서: admin 인증 → flag 확인 → schema readiness → 입력 검증 → transaction/repository → 감사 로그 → 비밀값을 제외한 응답.
 - 완료 조건: 관리자 권한 401/403, 입력 검증, 감사 로그, 동시 수정 충돌, 모바일·768·1920px 회귀 테스트.
 
 ### 3단계 — 월 사용량과 추천
 
-- KST 월별 신규 리드를 회사별로 집계한다. 최근 3개월 평균은 완료된 월을 우선하며 현재 월은 별도 표시한다.
+- KST 월별 신규 리드를 회사별로 집계한다. 평균 기간은 `usage_window_months`개의 완료 월을 사용하며 현재 월은 별도 표시한다.
 - 집계는 멱등 upsert이며 `(company_id, usage_month)` 1행만 유지한다.
 - 추천은 가장 작은 활성 상한 요금제를 반환한다. 초과 사용은 숨김·추가 청구·즉시 제한 없이 다음 달 변경 권장만 표시한다.
 - 원천 행과 집계 숫자를 비교하는 회사별 샘플 검증을 수행한다.
-- 완료 조건: KST 월 경계, 제외/임시 영업 제외, 재실행 동일 결과, 3개월 미만 신규 회사 처리 테스트.
+- 완료 조건: KST 월 경계, 제외/임시 영업 제외, 재실행 동일 결과, 설정 기간보다 이력이 짧은 신규 회사와 `usage_window_months` 변경 테스트.
 
 ### 4단계 — 고객 구독 화면
 
@@ -141,7 +156,7 @@ Owner Domain: `billing`. Related Domain: `lead`, `organization`.
 
 ## PR 분할과 충돌 회피
 
-1. `08-WO-8-schema`: 최종 migration과 검증 체크리스트. 운영 실행은 별도 승인.
+1. `08-WO-8-schema`: `trial_days`·정책 설정 출처를 포함한 최종 migration과 검증 체크리스트. 운영 실행은 별도 승인.
 2. `08-WO-8-admin`: 관리자 CRUD·감사 로그. 메뉴 수정 없음.
 3. `08-WO-8-usage`: 월 사용량 집계·추천 repository와 테스트.
 4. `08-WO-8-customer`: 기존 고객 결제 화면 확장. 기존 callback 변경 금지.
@@ -151,7 +166,7 @@ Owner Domain: `billing`. Related Domain: `lead`, `organization`.
 
 ## 검증 매트릭스
 
-- Unit: 요금제 추천, 금액 정수 검증, KST 월 경계, 월말/윤년, 예약 변경, 재시도일, 유예 종료.
+- Unit: 요금제 추천, 금액·체험 일수·추천 개월 수 검증, 설정 기간 변경, KST 월 경계, 월말/윤년, 예약 변경, 재시도일, 유예 종료.
 - Repository: RLS·권한 회수, 회사-구독 복합 FK, 집계 upsert, 부분 unique index, 감사 로그.
 - API: admin/customer/preview 401·403, company scope, 중복 요청, 잘못된 plan code.
 - Toss sandbox: 동일 orderId 재호출, timeout 후 조회, 성공 후 DB 기록 재개, 영수증 URL.
@@ -161,7 +176,7 @@ Owner Domain: `billing`. Related Domain: `lead`, `organization`.
 
 ## 대표 확인 항목
 
-- 요금제별 이름, 월 리드 상한, 월 금액, 직원 상한, 체험 기간.
+- 요금제별 이름, 월 리드 상한, 월 금액, 직원 상한, 체험 기간과 추천 산정 개월 수.
 - 테스트/라이브 Toss 키 전환 시점과 첫 실결제 회사·금액·날짜.
 - 결제 3일 전·실패·유예 종료 고지 문구와 이메일 수신자.
 - 유예 종료 후 읽기 전용 범위와 해지 효력일.
