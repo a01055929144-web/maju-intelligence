@@ -9,7 +9,7 @@ afterEach(() => {
 describe("government API failures", () => {
   it("reports an upstream 403 result without exposing the service key", async () => {
     vi.stubEnv("GOV_RESTAURANT_API_KEY", "private-key");
-    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const request = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       response: { header: { resultCode: "SERVICE_ACCESS_DENIED_ERROR", resultMsg: "serviceKey=private-key denied" } }
     }), { status: 403 }));
     vi.stubGlobal("fetch", request);
