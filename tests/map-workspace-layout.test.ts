@@ -21,4 +21,13 @@ describe("PC map workspace layout", () => {
     expect(workspaceSource).toContain('leftCollapsed ? "lg:w-14"');
     expect(workspaceSource).not.toContain('onToggleCollapsed={() => setMapPanelMode(leftCollapsed ? "driver" : "map")}');
   });
+
+  it("keeps lead card controls fixed-width and exposes guarded bulk stage changes", () => {
+    expect(workspaceSource).toContain('aria-label={`${lead.businessName} 선택`}');
+    expect(workspaceSource).toContain('className="h-8 w-[92px] shrink-0');
+    expect(workspaceSource).toContain('aria-label="바꿀 단계"');
+    expect(workspaceSource).toContain("runMapLeadStageBulk(");
+    expect(workspaceSource).toContain("setSelectedLeadIds(new Set(failed.map");
+    expect(workspaceSource).toContain('body: JSON.stringify({ actionType: "status", memo, result: status })');
+  });
 });
