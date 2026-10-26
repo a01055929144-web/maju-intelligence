@@ -71,6 +71,7 @@ export function LeadContactChannelsPanel({
   const [recording, setRecording] = useState<LeadContactChannel | null>(null);
   const [recordingSourceDisclosure, setRecordingSourceDisclosure] = useState(false);
   const [policyState, setPolicyState] = useState<"loading" | "required" | "saving" | "acknowledged">("loading");
+  const [fieldSources, setFieldSources] = useState<Array<{ collectedAt: string; fieldName: string; sourceType: string }>>([]);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -92,6 +93,17 @@ export function LeadContactChannelsPanel({
       .catch(() => { if (active) setPolicyState("required"); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { sources?: Array<{ collectedAt: string; fieldName: string; sourceType: string }> } | null;
+        if (active && response.ok) setFieldSources(payload?.sources || []);
+      })
+      .catch(() => { if (active) setFieldSources([]); });
+    return () => { active = false; };
+  }, [lead.id]);
 
   async function acknowledgePolicy() {
     setPolicyState("saving");
@@ -295,6 +307,7 @@ export function LeadContactChannelsPanel({
           <div>
             <p className="text-xs font-black text-blue-950">연락처·매장 정보 출처</p>
             <p className="mt-0.5 text-[11px] font-semibold text-blue-800">{leadSourceLabel(lead.source)} · {new Date(lead.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 확인</p>
+            {fieldSources.length ? <p className="mt-1 text-[10px] font-bold text-blue-700">칸별 출처 {Array.from(new Set(fieldSources.map((item) => item.fieldName))).join(" · ")}</p> : null}
           </div>
           <button
             aria-busy={recordingSourceDisclosure}

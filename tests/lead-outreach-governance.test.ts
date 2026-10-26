@@ -88,4 +88,22 @@ describe("lead outreach governance", () => {
     expect(panel).toContain('aria-modal="true"');
     expect(panel).toContain("확인하고 영업 시작");
   });
+
+  it("keeps DNC writes disabled until the atomic RPC is approved", () => {
+    const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/store.ts"), "utf8");
+    const route = fs.readFileSync(path.join(process.cwd(), "app/api/leads/permits/[id]/do-not-contact/route.ts"), "utf8");
+    const sql = fs.readFileSync(path.join(process.cwd(), "docs/sql-drafts/lead-do-not-contact-rpc.sql"), "utf8");
+    expect(storeSource).toContain('process.env.LEAD_DNC_WRITE_ENABLED === "true"');
+    expect(route).toContain("if (!LEAD_DNC_WRITE_ENABLED)");
+    expect(sql).toContain("security invoker");
+    expect(sql).toContain("revoke all on function public.register_lead_do_not_contact");
+    expect(sql).toContain("grant execute on function public.register_lead_do_not_contact");
+  });
+
+  it("reads field-level sources through a company-scoped server boundary", () => {
+    const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/store.ts"), "utf8");
+    expect(storeSource).toContain("lead_contact_field_sources?select=field_name,source_type,collected_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}");
+    expect(storeSource).toContain('process.env.LEAD_FIELD_SOURCE_WRITE_ENABLED === "true"');
+    expect(storeSource).toContain("const lead = await getPermitLeadIdentityForCompany(input.companyId, input.leadId)");
+  });
 });

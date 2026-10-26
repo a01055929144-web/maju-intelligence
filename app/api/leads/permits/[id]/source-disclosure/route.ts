@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { recordLeadSourceDisclosureAudit } from "@/lib/store";
+import { listLeadContactFieldSources, recordLeadSourceDisclosureAudit } from "@/lib/store";
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const scope = await getRequestAuthScope(request);
+  if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "출처를 조회할 권한이 없습니다." }, { status: 403 });
+  const rows = await listLeadContactFieldSources(scope.companyId!, (await params).id);
+  return NextResponse.json({ sources: rows.map((row) => ({ collectedAt: row.collected_at, fieldName: row.field_name, sourceType: row.source_type })) });
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
