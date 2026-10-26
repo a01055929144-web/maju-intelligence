@@ -23,7 +23,7 @@ import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
-type ViewMode = "all" | MobileLeadType | "contacted" | "reminder" | MobileSalesTaskKind;
+type ViewMode = "all" | MobileLeadType | "route" | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
 
 const collateralOptions = ["명함", "견적서", "단가표", "카탈로그", "샘플"] as const;
@@ -33,7 +33,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType; kakaoMapAppKey?: string }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -148,6 +148,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     const filtered = leads.filter((lead) => {
       if (taskIds && !taskIds.has(lead.id)) return false;
       if (view === "new" || view === "sales") if (getMobileLeadType(lead) !== view) return false;
+      if (view === "route" && (!lead.address || (distanceKm(location, lead) ?? Number.POSITIVE_INFINITY) > 0.5)) return false;
       if (view === "contacted" && !isContactedLead(lead.status)) return false;
       if (view === "reminder" && lead.status !== "재연락 예정") return false;
       if (!token) return true;
@@ -350,10 +351,11 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
               <div className="min-w-0"><p className="text-sm font-semibold">MAJU 모바일 영업</p><p className="mobile-muted truncate text-xs font-semibold">{actorName} · {companyName}</p><p className="mt-1 text-[11px] font-black text-emerald-700">● 근무 중</p></div>
               <Link className="mobile-secondary-action inline-flex min-h-10 items-center rounded-lg border px-3 text-xs font-semibold" href="/mobile/today">배송 화면</Link>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="업무 모드">
+            <div className="mt-3 grid grid-cols-4 gap-2" aria-label="업무 모드">
               <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/today">배송</Link>
               <button className={`min-h-10 rounded-full text-xs font-bold ${view === "new" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("new")} type="button">신규</button>
               <button className={`min-h-10 rounded-full text-xs font-bold ${view === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("sales")} type="button">영업</button>
+              <button className={`min-h-10 rounded-full text-xs font-bold ${view === "route" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => { setView("route"); requestLocation(); document.getElementById("lead-map")?.scrollIntoView({ behavior: "smooth" }); }} type="button">가는 길</button>
             </div>
           </header>
 
