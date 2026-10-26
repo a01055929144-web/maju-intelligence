@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 실행 전 대표의 별도 승인이 필요합니다.
+-- 운영 적용 완료(2026-10-27 00:45 KST). 재실행 금지.\n-- 승인된 실행 결과: company_members 5행, 수락된 staff_invitations 3행 변환.
 -- 2026-10-27 읽기 전용 드라이런: company_members 5행, 수락된 staff_invitations 3행.
 -- 기존 role/status/차량/만료일은 변경하지 않고 C6의 permission_role/duties만 채웁니다.
 -- C6 스키마 적용 후, STAFF_ACCESS_V2_ENABLED를 켜기 전에 실행하는 별도 데이터 변환입니다.
