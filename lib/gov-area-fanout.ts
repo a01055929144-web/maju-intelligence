@@ -43,6 +43,17 @@ export function dedupeGovRows<T extends { sourceRecordKey?: string }>(rows: read
   });
 }
 
+/** 공유 시간 예산에서 같은 회사가 매일 뒤로 밀리지 않도록 실행 시작점을 일자별로 회전한다. */
+export function rotateGovSyncUnits<T>(units: readonly T[], dayNumber: number): T[] {
+  if (!units.length) return [];
+  const offset = ((dayNumber % units.length) + units.length) % units.length;
+  return [...units.slice(offset), ...units.slice(0, offset)];
+}
+
+export function getGovSyncRunStatus(results: readonly Pick<GovAreaTaskResult<unknown>, "status">[]): "success" | "error" {
+  return results.length > 0 && results.every((result) => result.status !== "success") ? "error" : "success";
+}
+
 /** 최신 1페이지를 우선하며, 시작하지 못한 작업도 결과에 남겨 다음 실행에서 이어갈 수 있게 한다. */
 export async function runGovAreaTasks<T>(options: {
   tasks: readonly GovAreaTask[];

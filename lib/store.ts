@@ -4,7 +4,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, dedupeGovRows, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_REQUEST_TIMEOUT_MS, runGovAreaTasks } from "./gov-area-fanout";
+import { buildGovAreaTasks, dedupeGovRows, getGovSyncRunStatus, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_REQUEST_TIMEOUT_MS, rotateGovSyncUnits, runGovAreaTasks } from "./gov-area-fanout";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9334,9 +9334,13 @@ export async function syncGovRestaurantLeads(
     const scannedPages = taskResults.filter((result) => result.status === "success").length;
     const totalPages = taskResults.reduce((sum, result) => sum + (result.value?.totalPages || 0), 0);
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
-    let status: "success" | "error" = "success";
+    let status: "success" | "error" = getGovSyncRunStatus(taskResults);
     let message = `${summarizeLeadSyncIngest(ingest)} · ${dataset} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
-    if (trigger === "cron" && codes.length && rows.length === 0 && !Object.keys(nextCursors).length &&
+    if (status === "error") {
+      const errorCount = taskResults.filter((result) => result.status === "error").length;
+      const deferredCount = taskResults.filter((result) => result.status === "deferred").length;
+      message = `${dataset} 지역 요청이 모두 완료되지 않았습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳`;
+    } else if (trigger === "cron" && codes.length && rows.length === 0 && !Object.keys(nextCursors).length &&
         isConsecutiveDailyZeroFetch({
           currentStartedAt: startedAt,
           currentFetched: 0,
@@ -9418,13 +9422,15 @@ export async function syncAllCompaniesGovRestaurantLeads(
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
   const deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS;
+  const units = rotateGovSyncUnits(
+    datasets.flatMap((dataset) => companies.map(({ id }) => ({ companyId: id, dataset }))),
+    Math.floor(Date.now() / 86_400_000)
+  );
   const results: GovRestaurantSyncResult[] = [];
-  for (const { id } of companies) {
-    for (const dataset of datasets) {
-      results.push(await syncGovRestaurantLeads(id, 14, undefined, "cron", dataset, deadlineAt).catch(
+  for (const unit of units) {
+      results.push(await syncGovRestaurantLeads(unit.companyId, 14, undefined, "cron", unit.dataset, deadlineAt).catch(
         (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
       ));
-    }
   }
   const totals = results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({

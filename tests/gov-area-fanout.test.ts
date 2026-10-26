@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import {
   buildGovAreaTasks,
   dedupeGovRows,
+  getGovSyncRunStatus,
   GOV_COLLECTION_BUDGET_MS,
   GOV_FANOUT_CONCURRENCY,
   GOV_REQUEST_TIMEOUT_MS,
+  rotateGovSyncUnits,
   runGovAreaTasks
 } from "../lib/gov-area-fanout";
 
@@ -73,5 +75,17 @@ describe("정부 데이터 지역 fan-out", () => {
     const recommend = readFileSync("app/api/cron/recommend-refresh/route.ts", "utf8");
     expect(business).toContain("syncAllCompaniesGovRestaurantLeads()");
     expect(recommend).toContain('syncAllCompaniesGovRestaurantLeads(["rest_cafes", "bakeries"])');
+  });
+
+  it("공유 예산 실행 순서를 날짜별로 회전해 같은 회사가 계속 후순위가 되지 않게 한다", () => {
+    const units = ["회사A-휴게", "회사B-휴게", "회사A-제과", "회사B-제과"];
+    expect(rotateGovSyncUnits(units, 0)).toEqual(units);
+    expect(rotateGovSyncUnits(units, 1)).toEqual(["회사B-휴게", "회사A-제과", "회사B-제과", "회사A-휴게"]);
+    expect(rotateGovSyncUnits(units, 2)[0]).toBe("회사A-제과");
+  });
+
+  it("모든 지역이 error 또는 deferred이면 성공 상태를 남기지 않는다", () => {
+    expect(getGovSyncRunStatus([{ status: "error" }, { status: "deferred" }])).toBe("error");
+    expect(getGovSyncRunStatus([{ status: "error" }, { status: "success" }])).toBe("success");
   });
 });
