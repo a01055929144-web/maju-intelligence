@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { customerHasCapability, getCustomerSession } from "@/lib/auth";
 import { supabaseRequest } from "@/lib/store";
 import {
-  canGrantStaffPermission,
+  canChangeStaffPermission,
   normalizeStaffDuties,
   normalizeStaffPermissionRole,
   validateStaffAccess
@@ -59,17 +59,31 @@ export async function PATCH(request: NextRequest) {
 
   const duties = normalizeStaffDuties(body.duties);
   const permissionRole = normalizeStaffPermissionRole(body.permissionRole);
-  const error = validateStaffAccess({ duties, expiresOn: body.expiresOn, permissionRole, vehicleId: body.vehicleName });
+  const error = validateStaffAccess({ duties, expiresOn: body.expiresOn, permissionRole });
   if (error) return NextResponse.json({ message: error }, { status: 400 });
-  if (!canGrantStaffPermission(session.workspaceRole === "owner" ? "owner" : "manager", permissionRole)) {
-    return NextResponse.json({ message: "대표 권한은 기존 대표만 부여할 수 있습니다." }, { status: 403 });
-  }
 
-  const rows = await supabaseRequest<Array<{ accepted_by: string | null; id: string }>>(
-    `staff_invitations?select=id,accepted_by&id=eq.${encodeURIComponent(body.invitationId)}&company_id=eq.${encodeURIComponent(session.companyId)}&limit=1`
+  const rows = await supabaseRequest<Array<{ accepted_by: string | null; id: string; permission_role: string | null; role: string }>>(
+    `staff_invitations?select=id,accepted_by,permission_role,role&id=eq.${encodeURIComponent(body.invitationId)}&company_id=eq.${encodeURIComponent(session.companyId)}&limit=1`
   );
   const invitation = rows[0];
   if (!invitation) return NextResponse.json({ message: "직원 초대 정보를 찾을 수 없습니다." }, { status: 404 });
+  const memberRows = invitation.accepted_by
+    ? await supabaseRequest<Array<{ permission_role: string | null; role: string }>>(
+        `company_members?select=permission_role,role&company_id=eq.${encodeURIComponent(session.companyId)}&user_id=eq.${encodeURIComponent(invitation.accepted_by)}&limit=1`
+      )
+    : [];
+  const memberRole = memberRows[0]?.permission_role === "owner" || memberRows[0]?.role === "owner"
+    ? "owner"
+    : normalizeStaffPermissionRole(memberRows[0]?.permission_role || memberRows[0]?.role);
+  const invitationRole = invitation.permission_role === "owner" || invitation.role === "owner"
+    ? "owner"
+    : normalizeStaffPermissionRole(invitation.permission_role || invitation.role);
+  const currentRole = memberRole === "owner" || invitationRole === "owner"
+    ? "owner"
+    : memberRows[0] ? memberRole : invitationRole;
+  if (!canChangeStaffPermission(session.workspaceRole === "owner" ? "owner" : "manager", currentRole, permissionRole)) {
+    return NextResponse.json({ message: "대표 계정과 대표 권한은 대표만 변경할 수 있습니다." }, { status: 403 });
+  }
 
   const expiresAt = permissionRole === "temporary" && body.expiresOn ? `${body.expiresOn}T14:59:59.999Z` : null;
   await supabaseRequest("rpc/update_staff_access_v2", {

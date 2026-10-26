@@ -47,10 +47,8 @@ export function validateStaffAccess(input: {
   duties: StaffDuty[];
   permissionRole: StaffPermissionRole;
   expiresOn?: string | null;
-  vehicleId?: string | null;
 }) {
   if (!input.duties.length) return "영업 또는 배송 업무를 하나 이상 선택해주세요.";
-  if (input.duties.includes("delivery") && !input.vehicleId?.trim()) return "배송 업무 직원은 배정 차량을 선택해주세요.";
   if (input.permissionRole === "temporary" && !input.expiresOn) return "알바(임시)는 만료일이 필요합니다.";
   return null;
 }
@@ -64,4 +62,13 @@ export function resolveMobileStaffLanding(input: { duties: StaffDuty[]; hasToday
 export function canGrantStaffPermission(actor: "maju_admin" | StaffPermissionRole, nextRole: StaffPermissionRole) {
   if (nextRole !== "owner") return actor === "maju_admin" || actor === "owner" || actor === "manager";
   return actor === "maju_admin" || actor === "owner";
+}
+
+export function canChangeStaffPermission(
+  actor: "maju_admin" | StaffPermissionRole,
+  currentRole: StaffPermissionRole,
+  nextRole: StaffPermissionRole
+) {
+  if (currentRole === "owner" && actor !== "owner" && actor !== "maju_admin") return false;
+  return canGrantStaffPermission(actor, nextRole);
 }

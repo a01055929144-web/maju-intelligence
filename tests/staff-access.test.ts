@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canChangeStaffPermission,
   canGrantStaffPermission,
   getDefaultTemporaryExpiry,
   legacyRoleToStaffAccess,
@@ -15,10 +16,10 @@ describe("staff access", () => {
     expect(legacyRoleToStaffAccess("냉동창고 관리")).toEqual({ duties: [], permissionRole: "staff" });
   });
 
-  it("requires a vehicle for delivery and expiry for temporary workers", () => {
-    expect(validateStaffAccess({ duties: ["delivery"], permissionRole: "staff" })).toContain("배정 차량");
+  it("allows delivery without a vehicle and requires expiry for temporary workers", () => {
+    expect(validateStaffAccess({ duties: ["delivery"], permissionRole: "staff" })).toBeNull();
     expect(validateStaffAccess({ duties: ["sales"], permissionRole: "temporary" })).toContain("만료일");
-    expect(validateStaffAccess({ duties: ["sales", "delivery"], permissionRole: "temporary", expiresOn: "2026-11-25", vehicleId: "vehicle-1" })).toBeNull();
+    expect(validateStaffAccess({ duties: ["sales", "delivery"], permissionRole: "temporary", expiresOn: "2026-11-25" })).toBeNull();
   });
 
   it("defaults temporary access to 30 days", () => {
@@ -36,5 +37,9 @@ describe("staff access", () => {
     expect(canGrantStaffPermission("manager", "owner")).toBe(false);
     expect(canGrantStaffPermission("owner", "owner")).toBe(true);
     expect(canGrantStaffPermission("maju_admin", "owner")).toBe(true);
+    expect(canChangeStaffPermission("manager", "owner", "manager")).toBe(false);
+    expect(canChangeStaffPermission("manager", "owner", "owner")).toBe(false);
+    expect(canChangeStaffPermission("manager", "staff", "manager")).toBe(true);
+    expect(canChangeStaffPermission("owner", "owner", "manager")).toBe(true);
   });
 });

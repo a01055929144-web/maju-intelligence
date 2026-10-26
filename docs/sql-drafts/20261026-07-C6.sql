@@ -1,6 +1,26 @@
 -- REVIEW ONLY. 운영 적용 전 대표 승인 필요.
 -- C6 권한/업무 분리 + 알바(임시) 계정 기반 스키마. 기존 데이터 UPDATE는 포함하지 않는다.
+-- 운영 스키마 확인(2026-10-26): company_members/staff_invitations에는 role CHECK가 없다.
+-- 다른 환경에 역할 제한 CHECK가 추가됐다면 아래 사전 점검에서 중단한다.
+-- 사용자 정의 직책 문자열을 허용하는 기존 제약을 임의로 재작성하지 않는다.
 begin;
+
+do $$
+declare v_check record;
+begin
+  for v_check in
+    select c.conrelid::regclass::text as table_name, c.conname, pg_get_constraintdef(c.oid) as definition
+      from pg_constraint c
+     where c.conrelid in ('public.company_members'::regclass, 'public.staff_invitations'::regclass)
+       and c.contype = 'c'
+       and pg_get_constraintdef(c.oid) ~* '\mrole\M'
+       and pg_get_constraintdef(c.oid) !~* '\mpermission_role\M'
+  loop
+    if v_check.definition !~* 'temporary' then
+      raise exception 'legacy_role_check_needs_review: %.%: %', v_check.table_name, v_check.conname, v_check.definition;
+    end if;
+  end loop;
+end $$;
 
 alter table public.company_members
   add column if not exists permission_role text,
@@ -95,12 +115,12 @@ declare
   v_actor_role text;
   v_target_user_id uuid;
   v_target_current_role text;
+  v_invitation_current_role text;
 begin
   if p_permission_role not in ('owner','manager','staff','temporary') then raise exception 'invalid_permission_role'; end if;
   if not (coalesce(p_duties, '{}'::text[]) <@ array['sales','delivery']::text[]) or cardinality(coalesce(p_duties, '{}'::text[])) = 0 then
     raise exception 'invalid_duties';
   end if;
-  if 'delivery' = any(p_duties) and nullif(btrim(p_assigned_vehicle), '') is null then raise exception 'delivery_vehicle_required'; end if;
   if p_permission_role = 'temporary' and p_membership_expires_at is null then raise exception 'temporary_expiry_required'; end if;
 
   select coalesce(permission_role, case when role in ('owner','manager') then role else 'staff' end)
@@ -109,13 +129,22 @@ begin
   if not p_actor_is_maju_admin and v_actor_role not in ('owner','manager') then raise exception 'forbidden'; end if;
   if p_permission_role = 'owner' and not p_actor_is_maju_admin and v_actor_role <> 'owner' then raise exception 'owner_grant_forbidden'; end if;
 
-  select accepted_by into v_target_user_id from public.staff_invitations
+  select accepted_by, case when role = 'owner' or permission_role = 'owner' then 'owner'
+                           else coalesce(permission_role, case when role = 'manager' then 'manager' else 'staff' end) end
+    into v_target_user_id, v_invitation_current_role from public.staff_invitations
    where id = p_invitation_id and company_id = p_company_id for update;
   if not found then raise exception 'staff_invitation_not_found'; end if;
+  if v_invitation_current_role = 'owner' and not p_actor_is_maju_admin and v_actor_role <> 'owner' then
+    raise exception 'owner_target_forbidden';
+  end if;
   if v_target_user_id is not null then
-    select coalesce(permission_role, case when role = 'owner' then 'owner' when role = 'manager' then 'manager' else 'staff' end)
+    select case when role = 'owner' or permission_role = 'owner' then 'owner'
+                else coalesce(permission_role, case when role = 'manager' then 'manager' else 'staff' end) end
       into v_target_current_role from public.company_members
      where company_id = p_company_id and user_id = v_target_user_id for update;
+    if v_target_current_role = 'owner' and not p_actor_is_maju_admin and v_actor_role <> 'owner' then
+      raise exception 'owner_target_forbidden';
+    end if;
     if v_target_current_role = 'owner' and p_permission_role <> 'owner' and
        (select count(*) from public.company_members where company_id = p_company_id and status = 'active' and coalesce(permission_role, case when role = 'owner' then 'owner' else 'staff' end) = 'owner') <= 1
     then raise exception 'minimum_owner_required'; end if;
@@ -167,20 +196,7 @@ create trigger staff_invitations_sync_access_v2 after insert or update of status
 on public.staff_invitations for each row execute function public.sync_accepted_staff_access_v2();
 revoke all on function public.sync_accepted_staff_access_v2() from public, anon, authenticated;
 
--- 기존 역할 변환은 승인 후 별도 실행한다. 먼저 아래 SELECT로 회사별 결과를 확인한다.
-select company_id, role,
-  case when role = 'driver' then array['delivery']::text[]
-       when role = 'sales' then array['sales']::text[]
-       when role in ('owner','manager') then array['sales','delivery']::text[]
-       else '{}'::text[] end as proposed_duties,
-  case when role = 'owner' then 'owner' when role = 'manager' then 'manager' else 'staff' end as proposed_permission_role,
-  count(*) as member_count
-from public.company_members
-group by company_id, role
-order by company_id, role;
-
 commit;
 
--- 승인 후 백필(이번 초안 적용 범위 밖): 위 CASE 결과를 company_members와 accepted staff_invitations에 반영.
--- 최소 owner 1명 보장, owner 부여 권한, 배송 차량 필수 검증은 서버 트랜잭션/RPC 초안에서 함께 강제해야 한다.
+-- 역할 변환은 docs/sql-drafts/20261026-07-C6-legacy-dry-run.sql의 읽기 전용 결과를 확인한 뒤 별도 승인.
 -- 롤백(데이터 백필 전에만): 위 인덱스·제약을 제거한 뒤 추가 컬럼 3개씩 DROP.

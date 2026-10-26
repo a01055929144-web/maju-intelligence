@@ -179,8 +179,7 @@ export function StaffManagementPanel({
       const validationMessage = validateStaffAccess({
         duties: inviteDuties,
         expiresOn: invitePermissionRole === "temporary" ? inviteExpiresOn : null,
-        permissionRole: invitePermissionRole,
-        vehicleId: inviteVehicle
+        permissionRole: invitePermissionRole
       });
       if (validationMessage) {
         setMessage(validationMessage);
@@ -841,9 +840,9 @@ export function StaffManagementPanel({
                   </fieldset>
                   {inviteDuties.includes("delivery") ? (
                     <label className="grid gap-1 text-xs font-black text-slate-700">
-                      배정 차량
+                      배정 차량 · 선택
                       <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" onChange={(event) => setInviteVehicle(event.target.value)} value={inviteVehicle}>
-                        <option value="">차량 선택</option>
+                        <option value="">차량 미배정</option>
                         {vehicleChoices.map((vehicle) => <option key={vehicle} value={vehicle}>{vehicle}</option>)}
                       </select>
                     </label>
@@ -948,7 +947,7 @@ function StaffAccessEditor({
   }, [initialAccess]);
 
   async function save() {
-    const validationMessage = validateStaffAccess({ duties, expiresOn: permissionRole === "temporary" ? expiresOn : null, permissionRole, vehicleId: vehicleName });
+    const validationMessage = validateStaffAccess({ duties, expiresOn: permissionRole === "temporary" ? expiresOn : null, permissionRole });
     if (validationMessage) return onMessage(validationMessage);
     setSaving(true);
     const { payload, response } = await requestStaffJson("/api/customer/staff-access", {
@@ -982,9 +981,9 @@ function StaffAccessEditor({
         </fieldset>
       </div>
       {duties.includes("delivery") ? (
-        <label className="grid gap-1 text-xs font-black text-slate-700">배정 차량
+        <label className="grid gap-1 text-xs font-black text-slate-700">배정 차량 · 선택
           <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" disabled={!canEdit} onChange={(event) => setVehicleName(event.target.value)} value={vehicleName}>
-            <option value="">차량 선택</option>
+            <option value="">차량 미배정</option>
             {vehicleOptions.map((vehicle) => <option key={vehicle} value={vehicle}>{vehicle}</option>)}
           </select>
         </label>
