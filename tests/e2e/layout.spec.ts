@@ -29,14 +29,7 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/mobile/today", slug: "mobile-today" }
 ];
 
-// Existing responsive debt is kept visible in CI output without preventing the
-// first automated guard from landing. Any new route/viewport/problem still
-// fails the build. Remove entries as the owning UI project fixes each screen.
-const knownLayoutDebt: Record<string, string[]> = {
-  "/admin/billing@768": ["clipped-control:최근 결제:"],
-  "/dashboard/settings/company@390": ["horizontal-overflow:", "clipped-control:"],
-  "/dashboard/settings/advanced@390": ["clipped-control:"]
-};
+const knownLayoutDebt: Record<string, string[]> = {};
 
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
   const allowedPrefixes = knownLayoutDebt[`${path}@${width}`] ?? [];
