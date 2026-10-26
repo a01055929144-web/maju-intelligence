@@ -73,6 +73,7 @@ import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
+import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -89,6 +90,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import {
   QUOTE_MARGIN_PRESETS,
   calculateQuoteLine,
@@ -618,6 +620,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
+  const [mapLeadStageFilter, setMapLeadStageFilter] = useState("");
+  const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
   const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
@@ -920,6 +924,25 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "검토 필요" } : item)));
     } catch {
       // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다.
+    }
+  }
+
+  async function updateMapLeadStage(leadId: string, status: string, memo?: string): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${leadId}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "status", memo, result: status })
+      });
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) return { ok: false, message: payload?.message || "단계 변경에 실패했습니다." };
+      setAllLeadsForMap((current) => current.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)));
+      setLeadRadiusResult((current) => current
+        ? { ...current, leads: current.leads.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)) }
+        : current);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "네트워크 상태를 확인한 뒤 다시 시도해 주세요." };
     }
   }
 
@@ -1269,10 +1292,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setMapLeadRegionDong("");
   }
   const filteredAllLeadsForMap = useMemo(() => {
-    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
       if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
       if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
+      if (mapLeadStageFilter && toLeadStageValue(lead.status) !== mapLeadStageFilter) return false;
+      if (mapLeadReminderOnly && !getMapLeadReminderLabel(lead)) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
       }
@@ -1283,7 +1308,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -1407,6 +1432,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setVehicleFilterId(vehicleId);
     setSelectedLiveVehicleId("");
     setGradeFilter("all");
+    setMapLeadIndustryFilter("");
+    setMapLeadStageFilter("");
+    setMapLeadReminderOnly(false);
     setMapFocusId("");
     setPreviewStoreId("");
     setSelectedId("");
@@ -2459,6 +2487,40 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="지도 업종 필터"
+                className={`h-9 max-w-[150px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadIndustryFilter ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
+                value={mapLeadIndustryFilter}
+              >
+                <option value="">업종 전체</option>
+                {mapLeadIndustryOptions.map(([industry, count]) => (
+                  <option key={industry} value={industry}>{industry} ({count.toLocaleString()})</option>
+                ))}
+              </select>
+              <select
+                aria-label="지도 단계 필터"
+                className={`h-9 max-w-[130px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadStageFilter ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onChange={(event) => setMapLeadStageFilter(event.target.value)}
+                value={mapLeadStageFilter}
+              >
+                <option value="">단계 전체</option>
+                {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <button
+                aria-pressed={mapLeadReminderOnly}
+                className={`h-9 shrink-0 rounded-md border px-3 text-xs font-black transition ${
+                  mapLeadReminderOnly ? "border-amber-500 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onClick={() => setMapLeadReminderOnly((value) => !value)}
+                type="button"
+              >
+                리마인드 {statusScopedLeadsForMap.filter((lead) => Boolean(getMapLeadReminderLabel(lead))).length}
+              </button>
               <button
                 aria-pressed={excludeClosedStores}
                 className={`h-9 rounded-md border px-3 text-xs font-black transition ${
@@ -2702,18 +2764,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 숨김 리드
               </button>
             </div>
-            <select
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
-              value={mapLeadIndustryFilter}
-            >
-              <option value="">업종 전체</option>
-              {mapLeadIndustryOptions.map(([industry, count]) => (
-                <option key={industry} value={industry}>
-                  {industry} ({count.toLocaleString()})
-                </option>
-              ))}
-            </select>
             {/* 지역 필터는 업종과 같은 리드 필터 그룹 안에서 시군구→동 순서로 좁힙니다. */}
             {mapLeadRegionOptions.length ? (
               <>
@@ -2775,12 +2825,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             >
               조회
             </button>
-            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
+            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadStageFilter || mapLeadReminderOnly || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
                 onClick={() => {
                   setMapLeadTypeFilter("all");
                   setMapLeadIndustryFilter("");
+                  setMapLeadStageFilter("");
+                  setMapLeadReminderOnly(false);
                   setMapLeadRegionSigungu("");
                   setMapLeadRegionDong("");
                   setMapLeadOpenDateStart("");
@@ -3156,6 +3208,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
                 }}
                 onRetry={() => void loadAllLeadsForMap()}
+                onUpdateStage={updateMapLeadStage}
                 onOpenTable={() => {
                   const params = new URLSearchParams(window.location.search);
                   params.delete("view");
@@ -5851,6 +5904,7 @@ function LeadListPanel({
   onRetry,
   onOpenTable,
   onToggleCollapsed,
+  onUpdateStage,
   selectedLeadId,
   title
 }: {
@@ -5861,9 +5915,16 @@ function LeadListPanel({
   readonly onRetry: () => void;
   readonly onOpenTable: () => void;
   readonly onToggleCollapsed: () => void;
+  readonly onUpdateStage: (leadId: string, status: string, memo?: string) => Promise<{ ok: boolean; message?: string }>;
   readonly selectedLeadId: string;
   readonly title: string;
 }) {
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
   // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -5871,6 +5932,36 @@ function LeadListPanel({
     if (!selectedLeadId) return;
     itemRefs.current[selectedLeadId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [selectedLeadId]);
+  useEffect(() => {
+    const visibleIds = new Set(leads.map((lead) => lead.id));
+    setSelectedLeadIds((current) => new Set(Array.from(current).filter((id) => visibleIds.has(id))));
+  }, [leads]);
+
+  const allSelected = leads.length > 0 && selectedLeadIds.size === leads.length;
+  const toggleLeadSelection = (leadId: string) => {
+    setSelectedLeadIds((current) => {
+      const next = new Set(current);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+  const applyBulkStage = async () => {
+    if (!bulkStage || !selectedLeadIds.size) return;
+    setBulkBusy(true);
+    setBulkMessage("");
+    const results = await runMapLeadStageBulk(
+      Array.from(selectedLeadIds),
+      (leadId) => onUpdateStage(leadId, bulkStage, bulkReason || undefined),
+      4
+    );
+    const failed = results.filter((result) => !result.ok);
+    const succeeded = results.length - failed.length;
+    setBulkMessage(failed.length ? `${succeeded}곳 변경 · ${failed.length}곳 실패` : `${succeeded}곳 단계를 변경했습니다.`);
+    setSelectedLeadIds(new Set(failed.map((result) => result.leadId)));
+    setRowErrors(Object.fromEntries(failed.map((result) => [result.leadId, result.message || "단계 변경에 실패했습니다."])));
+    setBulkBusy(false);
+  };
   if (collapsed) {
     return (
       <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
@@ -5909,6 +6000,36 @@ function LeadListPanel({
             <PanelRightClose className="h-4 w-4" />
           </button>
         </div>
+        <div className="shrink-0 space-y-2 border-b border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+            <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+              <input
+                checked={allSelected}
+                className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                onChange={() => setSelectedLeadIds(allSelected ? new Set() : new Set(leads.map((lead) => lead.id)))}
+                type="checkbox"
+              />
+              전체
+            </label>
+            <span className="min-w-0 truncate">선택 {selectedLeadIds.size.toLocaleString()}곳</span>
+          </div>
+          {selectedLeadIds.size ? (
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
+              <select aria-label="바꿀 단계" className="h-8 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold" onChange={(event) => setBulkStage(event.target.value)} value={bulkStage}>
+                <option value="">단계 바꾸기</option>
+                {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <select aria-label="변경 사유" className="h-8 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold" onChange={(event) => setBulkReason(event.target.value)} value={bulkReason}>
+                <option value="">사유</option>
+                {["단가 안 맞음", "기존 거래처 유지", "폐업", "이전", "미수", "결제 문제", "기타"].map((reason) => <option key={reason}>{reason}</option>)}
+              </select>
+              <button className="h-8 shrink-0 rounded-md bg-teal-700 px-3 text-xs font-black text-white disabled:opacity-50" disabled={!bulkStage || bulkBusy} onClick={() => void applyBulkStage()} type="button">
+                {bulkBusy ? "변경 중" : "적용"}
+              </button>
+            </div>
+          ) : null}
+          {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
+        </div>
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {leads.length ? (
             leads.map((lead) => {
@@ -5920,6 +6041,7 @@ function LeadListPanel({
               const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
               const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
               const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
+              const reminder = getMapLeadReminderLabel(lead);
               return (
                 <div
                   className={`block w-full border-b border-slate-100 px-3 py-2.5 text-left transition hover:bg-teal-50 ${
@@ -5930,13 +6052,33 @@ function LeadListPanel({
                     itemRefs.current[lead.id] = el;
                   }}
                 >
-                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
-                    <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <input aria-label={`${lead.businessName} 선택`} checked={selectedLeadIds.has(lead.id)} className="h-4 w-4 shrink-0 rounded border-slate-300 text-teal-700" onChange={() => toggleLeadSelection(lead.id)} type="checkbox" />
+                    <button className="min-w-0 flex-1 truncate text-left text-sm font-black text-slate-950" onClick={() => onSelectLead(lead.id)} title={lead.businessName} type="button">
+                      {lead.businessName}
+                    </button>
                       <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
                         {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
                       </Badge>
-                    </div>
+                    <select
+                      aria-label={`${lead.businessName} 단계`}
+                      className="h-8 w-[92px] shrink-0 rounded-md border border-slate-200 bg-white px-1 text-[11px] font-black text-slate-700"
+                      onChange={async (event) => {
+                        const result = await onUpdateStage(lead.id, event.target.value);
+                        setRowErrors((current) => {
+                          const next = { ...current };
+                          if (result.ok) delete next[lead.id];
+                          else next[lead.id] = result.message || "단계 변경에 실패했습니다.";
+                          return next;
+                        });
+                      }}
+                      value={toLeadStageValue(lead.status)}
+                    >
+                      {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                  {rowErrors[lead.id] ? <p className="mt-1 text-[11px] font-bold text-rose-700" role="alert">{rowErrors[lead.id]}</p> : null}
+                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                     <div className="mt-1.5 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
                       <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
@@ -5944,6 +6086,12 @@ function LeadListPanel({
                       <span className="truncate">{lead.phone || "전화 미확인"}</span>
                       <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
                     </div>
+                    {reminder ? (
+                      <p className="mt-1.5 flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-800">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{reminder}</span>
+                      </p>
+                    ) : null}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-100">
