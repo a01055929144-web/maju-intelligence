@@ -27,13 +27,13 @@ export function getKstUsageMonth(referenceDate: Date) {
   return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
-export function buildBillingAttemptKey(subscriptionId: string, billingMonth: string, retryAttempt: number) {
-  return `${subscriptionId}:${billingMonth}:${Math.max(0, Math.trunc(retryAttempt))}`;
+export function buildBillingCycleKey(subscriptionId: string, billingMonth: string) {
+  return `${subscriptionId}:${billingMonth.slice(0, 7)}`;
 }
 
 export function getBillingRecoveryState(dueDate: string, failedAttempts: number, referenceDate: Date) {
   const due = parseDateOnly(dueDate);
-  const today = startOfUtcDay(referenceDate);
+  const today = startOfKstDay(referenceDate);
   const daysPastDue = Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86_400_000));
   const nextRetryDay = BILLING_RETRY_DAYS.find((day, index) => index >= failedAttempts && day >= daysPastDue) ?? null;
   return {
@@ -49,8 +49,9 @@ function parseDateOnly(value: string) {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
-function startOfUtcDay(value: Date) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+function startOfKstDay(value: Date) {
+  const kst = new Date(value.getTime() + 9 * 60 * 60 * 1000);
+  return new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
 }
 
 function addUtcDays(value: Date, days: number) {

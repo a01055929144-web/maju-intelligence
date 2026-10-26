@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBillingAttemptKey, getBillingRecoveryState, getKstUsageMonth, recommendBillingPlan, resolvePlanCodeForBilling, type BillingPlan } from "../domains/billing/subscription-plan";
+import { buildBillingCycleKey, getBillingRecoveryState, getKstUsageMonth, recommendBillingPlan, resolvePlanCodeForBilling, type BillingPlan } from "../domains/billing/subscription-plan";
 
 const plans: BillingPlan[] = [
   { active: true, code: "starter", monthlyAmountWon: 30000, monthlyLeadLimit: 100, name: "시작", staffLimit: 3 },
@@ -20,9 +20,9 @@ describe("WO-8 billing plan policy", () => {
     expect(getKstUsageMonth(new Date("2026-10-31T15:00:00Z"))).toBe("2026-11-01");
   });
 
-  it("builds a stable key for one subscription, billing month, and retry attempt", () => {
-    expect(buildBillingAttemptKey("sub-1", "2026-11-01", 0)).toBe(buildBillingAttemptKey("sub-1", "2026-11-01", 0));
-    expect(buildBillingAttemptKey("sub-1", "2026-11-01", 1)).not.toBe(buildBillingAttemptKey("sub-1", "2026-11-01", 0));
+  it("uses one stable payment cycle key across every retry in the same month", () => {
+    expect(buildBillingCycleKey("sub-1", "2026-11-01")).toBe("sub-1:2026-11");
+    expect(buildBillingCycleKey("sub-1", "2026-11-30")).toBe("sub-1:2026-11");
   });
 
   it("applies a scheduled plan only at the next billing boundary", () => {
@@ -34,5 +34,10 @@ describe("WO-8 billing plan policy", () => {
     expect(getBillingRecoveryState("2026-10-01", 0, new Date("2026-10-01T12:00:00Z"))).toMatchObject({ nextRetryDate: "2026-10-02", graceUntil: "2026-10-08", readOnly: false });
     expect(getBillingRecoveryState("2026-10-01", 1, new Date("2026-10-03T12:00:00Z"))).toMatchObject({ nextRetryDate: "2026-10-04", readOnly: false });
     expect(getBillingRecoveryState("2026-10-01", 3, new Date("2026-10-09T12:00:00Z"))).toMatchObject({ nextRetryDate: null, readOnly: true });
+  });
+
+  it("advances recovery days at KST midnight instead of UTC midnight", () => {
+    expect(getBillingRecoveryState("2026-10-01", 0, new Date("2026-10-01T14:59:59Z")).daysPastDue).toBe(0);
+    expect(getBillingRecoveryState("2026-10-01", 0, new Date("2026-10-01T15:00:00Z")).daysPastDue).toBe(1);
   });
 });
