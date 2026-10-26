@@ -46,6 +46,8 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("foreign key (company_id, source_lead_id)");
     expect(sql.match(/enable row level security/g)).toHaveLength(3);
     expect(sql.match(/from public, anon, authenticated/g)).toHaveLength(3);
+    expect(sql.indexOf("begin;")).toBeLessThan(sql.indexOf("create table"));
+    expect(sql.lastIndexOf("commit;")).toBeGreaterThan(sql.lastIndexOf("grant select"));
   });
 
   it("records source disclosure before writing to the clipboard", () => {

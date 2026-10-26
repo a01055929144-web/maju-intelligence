@@ -1,6 +1,8 @@
 -- P1-4 B4·C7 설계 초안. 운영 DB에 자동 적용하지 않는다.
 -- 승인 후 정식 migration으로 옮기고, 회사 격리·권한 API와 함께 배포해야 한다.
 
+begin;
+
 -- 복합 FK가 리드와 회사의 소유권을 DB에서도 함께 검증하도록 후보 키를 둔다.
 do $$
 declare has_company_lead_unique boolean;
@@ -100,6 +102,8 @@ grant select, insert, update, delete on public.sales_outreach_policy_acknowledge
 -- 3. 해제 API는 고객사 owner/manager 및 MAJU 관리자만 허용하고 변경 이력을 남긴다.
 -- 4. 첫 사용 화면은 sales_outreach_policy_acknowledgements의 현재 policy_version 부재 시 표시한다.
 -- 5. 고객사별 조회 API는 반드시 company_id 범위를 강제한다.
+
+commit;
 
 -- 롤백 초안(운영 데이터 확인 후 별도 승인):
 -- drop table if exists public.sales_outreach_policy_acknowledgements;
