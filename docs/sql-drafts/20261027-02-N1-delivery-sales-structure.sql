@@ -5,13 +5,52 @@
 begin;
 
 -- 복합 FK가 회사 경계를 검증할 수 있도록 기존 원장에 후보 키를 보강한다.
+-- 제약 이름이 아니라 실제 컬럼 순서를 검사하여 기존 ERP 제약과 중복 인덱스를 만들지 않는다.
 -- business_permit_leads(company_id, id)는 20261019143000에서 이미 UNIQUE다.
-alter table public.normalized_customers
-  add constraint normalized_customers_company_id_id_uq unique (company_id, id);
-alter table public.customer_notes
-  add constraint customer_notes_company_customer_id_uq unique (company_id, customer_id, id);
-alter table public.lead_actions
-  add constraint lead_actions_company_lead_id_uq unique (company_id, lead_id, id);
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint c
+     where c.conrelid = 'public.normalized_customers'::regclass
+       and c.contype in ('p', 'u')
+       and (select array_agg(a.attname order by k.ordinality)
+              from unnest(c.conkey) with ordinality as k(attnum, ordinality)
+              join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum)
+           = array['company_id', 'id']::name[]
+  ) then
+    alter table public.normalized_customers
+      add constraint normalized_customers_company_id_id_uq unique (company_id, id);
+  end if;
+
+  if not exists (
+    select 1
+      from pg_constraint c
+     where c.conrelid = 'public.customer_notes'::regclass
+       and c.contype in ('p', 'u')
+       and (select array_agg(a.attname order by k.ordinality)
+              from unnest(c.conkey) with ordinality as k(attnum, ordinality)
+              join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum)
+           = array['company_id', 'customer_id', 'id']::name[]
+  ) then
+    alter table public.customer_notes
+      add constraint customer_notes_company_customer_id_uq unique (company_id, customer_id, id);
+  end if;
+
+  if not exists (
+    select 1
+      from pg_constraint c
+     where c.conrelid = 'public.lead_actions'::regclass
+       and c.contype in ('p', 'u')
+       and (select array_agg(a.attname order by k.ordinality)
+              from unnest(c.conkey) with ordinality as k(attnum, ordinality)
+              join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum)
+           = array['company_id', 'lead_id', 'id']::name[]
+  ) then
+    alter table public.lead_actions
+      add constraint lead_actions_company_lead_id_uq unique (company_id, lead_id, id);
+  end if;
+end $$;
 
 create table if not exists public.delivery_events (
   id uuid primary key default gen_random_uuid(),
