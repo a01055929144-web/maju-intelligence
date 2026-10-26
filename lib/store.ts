@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
@@ -523,6 +524,8 @@ export type ManagedCompanyAccount = {
   leadCount: number;
   mobileLocationCount: number;
   quoteActionCount: number;
+  leadImportCount: number;
+  subscriptionStatus: string;
   updatedAt?: string;
 };
 export type ManagedCompanyAccountInput = {
@@ -2008,7 +2011,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   }
 
   try {
-    const [companies, credentialRows, customerRows, salesRows, importRows, invitationRows] = await Promise.all([
+    const [companies, credentialRows, customerRows, salesRows, importRows, invitationRows, leadImportRows, subscriptionRows] = await Promise.all([
       supabaseRequest<
         Array<{
           id: string;
@@ -2056,7 +2059,9 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           expires_at: string | null;
           created_at: string;
         }>
-      >("staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&order=created_at.desc").catch(() => [])
+      >("staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&order=created_at.desc").catch(() => []),
+      supabaseRequest<Array<{ company_id: string }>>("lead_import_batches?select=company_id").catch(() => []),
+      supabaseRequest<Array<{ company_id: string; status: string }>>("subscriptions?select=company_id,status").catch(() => [])
     ]);
 
     const credentialsByCompany = new Map(
@@ -2068,6 +2073,11 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
       return map;
     }, new Map());
+    const leadImportCountByCompany = leadImportRows.reduce<Map<string, number>>((map, row) => {
+      map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
+      return map;
+    }, new Map());
+    const subscriptionStatusByCompany = new Map(subscriptionRows.map((row) => [row.company_id, row.status]));
     const salesCountByCompany = salesRows.reduce<Map<string, number>>((map, row) => {
       map.set(row.company_id, (map.get(row.company_id) || 0) + 1);
       return map;
@@ -2146,6 +2156,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           recentUploads: recentUploadsByCompany.get(company.id) || [],
           staffInvitationCount: invitationsByCompany.get(company.id)?.length || 0,
           staffInvitations: invitationsByCompany.get(company.id) || [],
+          leadImportCount: leadImportCountByCompany.get(company.id) || 0,
+          subscriptionStatus: subscriptionStatusByCompany.get(company.id) || "",
           ...readiness,
           updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
         };
@@ -2199,6 +2211,8 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         leadCount: 0,
         mobileLocationCount: 0,
         quoteActionCount: 0,
+        leadImportCount: 0,
+        subscriptionStatus: "",
         updatedAt: "서버 저장 미확인"
       }
     };
@@ -2208,10 +2222,12 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   const now = new Date().toISOString();
 
   if (businessRegistrationNumber) {
-    const duplicates = await supabaseRequest<Array<{ id: string }>>(
-      `companies?select=id&business_registration_number=eq.${encodeURIComponent(businessRegistrationNumber)}&id=neq.${encodeURIComponent(companyId)}&limit=1`
-    ).catch(() => []);
-    if (duplicates.length) throw new Error("이미 등록된 사업자등록번호입니다.");
+    const duplicate = await findDuplicateCompanyByBusinessNumber(
+      (path) => supabaseRequest<Array<{ id: string }>>(path),
+      businessRegistrationNumber,
+      companyId
+    );
+    if (duplicate) throw new Error("이미 등록된 사업자등록번호입니다.");
   }
 
   const duplicateCredentialRows = await supabaseRequest<Array<{ customer_company_id: string | null }>>(
@@ -2387,6 +2403,8 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       leadCount: 0,
       mobileLocationCount: 0,
       quoteActionCount: 0,
+      leadImportCount: 0,
+      subscriptionStatus: "",
       updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
@@ -14097,7 +14115,9 @@ async function upsertCompany(companyId: string, name: string) {
   await supabaseRequest<Array<{ id: string }>>("companies?on_conflict=id", {
     method: "POST",
     headers: {
-      Prefer: "resolution=merge-duplicates,return=representation"
+      // 호출부의 기본 이름은 새 회사 생성용 폴백일 뿐입니다. 기존 회사와 충돌할 때
+      // merge하면 고객이 설정한 회사명이 "마주식자재"로 되돌아가므로 기존 행은 보존합니다.
+      Prefer: "resolution=ignore-duplicates,return=representation"
     },
     body: JSON.stringify([
       {

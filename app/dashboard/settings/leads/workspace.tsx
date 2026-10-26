@@ -10,15 +10,15 @@ type ParsedSheet = { name: string; rows: unknown[][] };
 const FIELD_TYPES: Array<[FieldType, string]> = [["text", "글자"], ["number", "숫자"], ["date", "날짜"], ["select", "하나 선택"], ["multi_select", "여러 개 선택"], ["checkbox", "체크"]];
 const COMMON_HEADERS: Record<string, string> = { 상호: "businessName", 상호명: "businessName", 업체명: "businessName", 주소: "address", 전화: "phone", 전화번호: "phone", 휴대폰: "phone", 이메일: "email", 팩스: "fax", 상태: "status", 단계: "status", 메모: "memo" };
 
-export function LeadWorkspaceSettings() {
-  const [tab, setTab] = useState<"fields" | "import" | "distributors">("fields");
+export function LeadWorkspaceSettings({ companyId, initialTab = "fields" }: { companyId?: string; initialTab?: "fields" | "import" | "distributors" } = {}) {
+  const [tab, setTab] = useState<"fields" | "import" | "distributors">(initialTab);
   return <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div className="flex gap-1 overflow-x-auto border-b border-slate-200 p-2">
       <Tab active={tab === "fields"} icon={<TableProperties className="h-4 w-4" />} label="리드 칸" onClick={() => setTab("fields")} />
       <Tab active={tab === "import"} icon={<FileSpreadsheet className="h-4 w-4" />} label="엑셀 가져오기" onClick={() => setTab("import")} />
       <Tab active={tab === "distributors"} icon={<Store className="h-4 w-4" />} label="유통사" onClick={() => setTab("distributors")} />
     </div>
-    <div className="p-4 sm:p-5">{tab === "fields" ? <LeadFieldsPanel /> : tab === "import" ? <LeadImportPanel /> : <DistributorPanel />}</div>
+    <div className="p-4 sm:p-5">{tab === "fields" ? <LeadFieldsPanel companyId={companyId} /> : tab === "import" ? <LeadImportPanel /> : <DistributorPanel />}</div>
   </section>;
 }
 
@@ -26,7 +26,7 @@ function Tab({ active, icon, label, onClick }: { active: boolean; icon: React.Re
   return <button className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-bold ${active ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`} onClick={onClick} type="button">{icon}{label}</button>;
 }
 
-function LeadFieldsPanel() {
+function LeadFieldsPanel({ companyId }: { companyId?: string }) {
   const [fields, setFields] = useState<LeadField[]>([]);
   const [label, setLabel] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
@@ -35,7 +35,8 @@ function LeadFieldsPanel() {
   const [message, setMessage] = useState("");
   useEffect(() => {
     let active = true;
-    void fetch("/api/leads/fields", { cache: "no-store" })
+    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    void fetch(`/api/leads/fields${query}`, { cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
         if (!response.ok) throw new Error(payload?.message || "리드 칸을 불러오지 못했습니다.");
@@ -45,10 +46,10 @@ function LeadFieldsPanel() {
         if (active) setMessage(error instanceof Error ? error.message : "리드 칸을 불러오지 못했습니다.");
       });
     return () => { active = false; };
-  }, []);
+  }, [companyId]);
   async function addField() {
     if (!label.trim()) return setMessage("칸 이름을 입력해 주세요.");
-    const response = await fetch("/api/leads/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), fieldType, showInList, filterable }) });
+    const response = await fetch("/api/leads/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, label: label.trim(), fieldType, showInList, filterable }) });
     const payload = await response.json().catch(() => null);
     if (!response.ok) return setMessage(payload?.message || "칸을 저장하지 못했습니다.");
     setFields((current) => [...current, payload.field]); setLabel(""); setMessage("리드 칸을 저장했습니다.");
