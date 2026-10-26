@@ -25,18 +25,19 @@ type LocationPoint = { latitude: number; longitude: number };
 type ViewMode = "all" | MobileLeadType | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
 
-const collateralOptions = ["브로슈어", "단가표", "견적서", "명함"] as const;
+const collateralOptions = ["명함", "견적서", "단가표", "카탈로그", "샘플"] as const;
+const COLLATERAL_STORAGE_KEY = "maju:mobile-sales:last-collateral:v1";
 const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").then((module) => module.KakaoAddressMap), {
   loading: () => <div className="mobile-muted grid h-[260px] place-items-center text-xs font-semibold">지도를 불러오는 중입니다.</div>,
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; kakaoMapAppKey?: string }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType; kakaoMapAppKey?: string }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<ViewMode>("all");
+  const [view, setView] = useState<ViewMode>(initialMode);
   const [sort, setSort] = useState<MobileLeadSort>("sales");
   const [location, setLocation] = useState<LocationPoint | null>(null);
   const [locationMessage, setLocationMessage] = useState("");
@@ -57,6 +58,12 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [businessHoursDraft, setBusinessHoursDraft] = useState("");
   const [businessHoursSaving, setBusinessHoursSaving] = useState(false);
   const [queuedActionCount, setQueuedActionCount] = useState(0);
+  const [sampleItem, setSampleItem] = useState("");
+  const [sampleQuantity, setSampleQuantity] = useState("");
+  const [salesPriceItem, setSalesPriceItem] = useState("");
+  const [salesPrice, setSalesPrice] = useState("");
+  const [salesPriceValidUntil, setSalesPriceValidUntil] = useState("");
+  const [importantNote, setImportantNote] = useState("");
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -74,6 +81,12 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   }, []);
 
   useEffect(() => { void loadLeads(); }, [loadLeads]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(COLLATERAL_STORAGE_KEY) || "[]");
+      if (Array.isArray(saved)) setCollateral(saved.filter((item): item is string => typeof item === "string" && (collateralOptions as readonly string[]).includes(item)));
+    } catch { /* 저장값 손상은 기본 선택으로 복구합니다. */ }
+  }, []);
   useEffect(() => {
     const flushQueuedActions = () => {
       const queued = readMobileSalesActionQueue(window.localStorage);
@@ -250,7 +263,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setSaving(true);
     setSaveMessage("");
     const actionType = VISIT_RESULT_ACTION_TYPE[contactResult];
-    const actionPayload = { actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: quoteUrl ? `${memo.trim()}\n[고객용 견적: ${quoteUrl}]` : memo, reminderDate }), result: contactResult };
+    const detailLines = [
+      sampleItem.trim() ? `[샘플 제공] ${sampleItem.trim()} · ${sampleQuantity.trim() || "수량 확인"}` : "",
+      salesPriceItem.trim() ? `[영업 단가] ${salesPriceItem.trim()} · ${salesPrice.trim() || "단가 확인"}${salesPriceValidUntil ? ` · ${salesPriceValidUntil}까지` : ""}` : "",
+      importantNote.trim() ? `[중요 특이사항] ${importantNote.trim()}` : ""
+    ].filter(Boolean);
+    const detailedMemo = [memo.trim(), ...detailLines, quoteUrl ? `[고객용 견적: ${quoteUrl}]` : ""].filter(Boolean).join("\n");
+    const actionPayload = { actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: detailedMemo, reminderDate }), result: contactResult };
     try {
       const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
@@ -262,7 +281,8 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       if (payload?.action) setHistory((current) => [payload.action!, ...current]);
       setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: payload?.status || lead.status } : lead));
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
-      setMemo(""); setCollateral([]); setReminderDate("");
+      try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 브라우저 저장 실패는 기록 저장을 막지 않습니다. */ }
+      setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
       if (contactResult === "거래 시작") {
         await convertSelectedLead();
         setSaveMessage("거래 시작을 기록하고 거래처·배송지로 연결했습니다. 주소와 배송 설정을 확인하세요.");
@@ -277,7 +297,8 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         setQueuedActionCount(items.length);
         setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: reminderDate ? "재연락 예정" : "연락 완료" } : lead));
         setSelected((current) => current ? { ...current, status: reminderDate ? "재연락 예정" : "연락 완료" } : current);
-        setMemo(""); setCollateral([]); setReminderDate("");
+        try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 오프라인 큐 저장은 계속 진행합니다. */ }
+        setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
         setSaveMessage("통신이 불안정해 기기에 저장했습니다. 연결되면 자동으로 다시 전송합니다.");
         return;
       }
@@ -296,8 +317,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         <section className="mobile-app-frame mx-auto flex min-h-screen w-full max-w-[480px] flex-col shadow-[0_20px_80px_rgba(0,0,0,0.24)]">
           <header className="mobile-card sticky top-0 z-20 border-b px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0"><p className="text-sm font-semibold">MAJU 모바일 영업</p><p className="mobile-muted truncate text-xs font-semibold">{actorName} · {companyName}</p></div>
+              <div className="min-w-0"><p className="text-sm font-semibold">MAJU 모바일 영업</p><p className="mobile-muted truncate text-xs font-semibold">{actorName} · {companyName}</p><p className="mt-1 text-[11px] font-black text-emerald-700">● 근무 중</p></div>
               <Link className="mobile-secondary-action inline-flex min-h-10 items-center rounded-lg border px-3 text-xs font-semibold" href="/mobile/today">배송 화면</Link>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="업무 모드">
+              <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/today">배송</Link>
+              <button className={`min-h-10 rounded-full text-xs font-bold ${view === "new" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("new")} type="button">신규</button>
+              <button className={`min-h-10 rounded-full text-xs font-bold ${view === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("sales")} type="button">영업</button>
             </div>
           </header>
 
@@ -347,7 +373,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
             </section>
           </div>
 
-          <MobileSalesBottomNavigation />
+          <MobileSalesBottomNavigation onQuickRecord={() => { const nearest = visibleLeads[0]; if (nearest) void openLead(nearest); else setLocationMessage("기록할 주변 매장이 없습니다."); }} />
         </section>
 
         {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`${selected.businessName} 컨택 기록`}><div className="mobile-card max-h-[92dvh] w-full max-w-[480px] overflow-y-auto rounded-t-2xl border p-4 sm:rounded-2xl">
@@ -355,9 +381,21 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[var(--mobile-border)] p-2"><span className="text-xs font-semibold">영업 상태</span><LeadStageSelect compact lead={selected} onAction={saveLeadAction} /></div>
           <div className="mt-3"><LeadContactChannelsPanel lead={selected} onAction={saveLeadAction} onLeadUpdated={(lead) => { setSelected(lead); setLeads((items) => items.map((item) => item.id === lead.id ? lead : item)); }} /></div>
           <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => document.getElementById("contact-result")?.scrollIntoView({ behavior: "smooth", block: "center" })} type="button"><MapPin className="h-4 w-4" />방문 결과</button><a className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" href={selected.kakaoPlaceUrl || `https://map.kakao.com/?q=${encodeURIComponent(selected.address || selected.businessName)}`} rel="noreferrer" target="_blank"><MapPin className="h-4 w-4" />지도</a></div>
+          <div className="mt-4 grid gap-2" aria-label="영업 기록 빠른 묶음">
+            <button className="mobile-card-raised min-h-11 rounded-lg border px-3 text-left text-xs font-bold" onClick={() => { setResult("관심"); setCollateral(["명함", "단가표"]); setMemo((value) => value || "방문 상담 완료"); }} type="button">방문 · 명함 · 단가표</button>
+            <button className="mobile-card-raised min-h-11 rounded-lg border px-3 text-left text-xs font-bold" onClick={() => { setResult("부재"); setCollateral(["명함"]); setMemo((value) => value || "부재 · 명함 남김"); }} type="button">부재 · 명함 남김</button>
+            {holdModulesEnabled ? <button className="mobile-card-raised min-h-11 rounded-lg border px-3 text-left text-xs font-bold" onClick={() => { setResult("단가표 전달"); setCollateral(["견적서"]); setMemo((value) => value || "견적서 전달"); }} type="button">견적서 전달</button> : null}
+          </div>
           {isLeadBusinessHoursDraftEnabled() ? <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-950">영업시간·브레이크타임 빠른 입력</p><p className="mt-1 text-[11px] text-amber-800">현재 · {formatLeadBusinessHours(selected.businessHourIntervals || [])}</p><input className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setBusinessHoursDraft(event.target.value)} placeholder="예: 매일 15:00~17:00 브레이크 · 월 휴무" value={businessHoursDraft} /><button className="mt-2 min-h-10 w-full rounded-lg border bg-white text-xs font-semibold text-amber-800 disabled:opacity-50" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button></section> : null}
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-result">방문 결과</label><select className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="contact-result" onChange={(event) => { const value = event.target.value as StandardVisitResult; setResult(value); if (needsVisitFollowUp(value) && !reminderDate) setReminderDate(getDefaultVisitFollowUpDate()); }} value={result}>{STANDARD_VISIT_RESULTS.map((option) => <option key={option}>{option}</option>)}</select></div>
-          <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-2 gap-2">{collateralOptions.filter((item) => holdModulesEnabled || item !== "견적서").map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "브로슈어" || item === "단가표" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
+          <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-2 gap-2">{collateralOptions.filter((item) => holdModulesEnabled || item !== "견적서").map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "카탈로그" || item === "단가표" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
+          <details className="mobile-card-raised mt-4 rounded-xl border p-3">
+            <summary className="cursor-pointer text-xs font-bold">샘플 · 영업 단가 · 중요 특이사항</summary>
+            <div className="mt-3 grid grid-cols-[1fr_92px] gap-2"><input aria-label="샘플 품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleItem(event.target.value)} placeholder="샘플 품목" value={sampleItem} /><input aria-label="샘플 수량" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleQuantity(event.target.value)} placeholder="수량" value={sampleQuantity} /></div>
+            <div className="mt-2 grid grid-cols-2 gap-2"><input aria-label="영업 단가 품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSalesPriceItem(event.target.value)} placeholder="단가 품목" value={salesPriceItem} /><input aria-label="영업 단가" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSalesPrice(event.target.value)} placeholder="제시 단가" value={salesPrice} /></div>
+            <label className="mt-2 block text-[11px] font-bold">단가 유효 기간<input className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setSalesPriceValidUntil(event.target.value)} type="date" value={salesPriceValidUntil} /></label>
+            <textarea aria-label="중요 특이사항" className="mobile-input mt-2 min-h-20 w-full rounded-lg border p-3 text-sm" onChange={(event) => setImportantNote(event.target.value)} placeholder="상세 맨 위에 고정할 중요 특이사항" value={importantNote} />
+          </details>
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-memo">컨택 메모 <span className="text-rose-600">필수</span></label><textarea className="mobile-input mt-1 min-h-24 w-full rounded-lg border p-3 text-sm" id="contact-memo" onChange={(event) => setMemo(event.target.value)} placeholder="반응, 필요한 품목, 다음 행동을 기록하세요." value={memo} /></div>
           {holdModulesEnabled ? <button className="mobile-secondary-action mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => { setQuoteOpen((current) => !current); setCollateral((current) => current.includes("견적서") ? current : [...current, "견적서"]); }} type="button"><FileText className="h-4 w-4" />{quoteOpen ? "견적 작성 닫기" : "품목 선택·견적 작성"}</button> : null}
           {holdModulesEnabled && quoteOpen ? <MobileQuoteBuilder contactMemo={memo} leadId={selected.id} onIssued={({ publicUrl }) => { setIssuedQuoteUrl(publicUrl); setCollateral((current) => current.includes("견적서") ? current : [...current, "견적서"]); setSaveMessage("견적 링크가 생성되었습니다. 방문 결과를 선택해 기록하세요."); }} recipientName={selected.businessName} recipientPhone={selected.phone} /> : null}
