@@ -20,7 +20,20 @@ alter table public.subscriptions add column if not exists trial_ends_at timestam
 alter table public.subscriptions add column if not exists grace_until timestamptz;
 alter table public.subscriptions add column if not exists retry_attempt integer not null default 0 check (retry_attempt >= 0);
 alter table public.subscriptions add column if not exists next_retry_at timestamptz;
-alter table public.subscriptions add constraint subscriptions_company_id_id_uq unique (company_id, id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint constraint_row
+    where constraint_row.conrelid = 'public.subscriptions'::regclass
+      and constraint_row.contype in ('p', 'u')
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.conrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'id']::text[]
+  ) then
+    alter table public.subscriptions add constraint subscriptions_company_id_id_uq unique (company_id, id);
+  end if;
+end $$;
 
 create table if not exists public.subscription_monthly_usage (
   id uuid primary key default gen_random_uuid(),
@@ -29,13 +42,40 @@ create table if not exists public.subscription_monthly_usage (
   usage_month date not null check (usage_month = date_trunc('month', usage_month)::date),
   new_lead_count integer not null default 0 check (new_lead_count >= 0),
   staff_count integer not null default 0 check (staff_count >= 0),
-  measured_at timestamptz not null default now(),
-  unique (company_id, usage_month),
-  constraint subscription_monthly_usage_company_subscription_fk
-    foreign key (company_id, subscription_id)
-    references public.subscriptions(company_id, id)
-    on delete cascade
+  measured_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint constraint_row
+    where constraint_row.conrelid = 'public.subscription_monthly_usage'::regclass
+      and constraint_row.contype = 'u'
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.conrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'usage_month']::text[]
+  ) then
+    alter table public.subscription_monthly_usage add constraint subscription_monthly_usage_company_month_uq unique (company_id, usage_month);
+  end if;
+  if not exists (
+    select 1 from pg_constraint constraint_row
+    where constraint_row.conrelid = 'public.subscription_monthly_usage'::regclass
+      and constraint_row.confrelid = 'public.subscriptions'::regclass
+      and constraint_row.contype = 'f'
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.conrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'subscription_id']::text[]
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.confkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.confrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'id']::text[]
+  ) then
+    alter table public.subscription_monthly_usage add constraint subscription_monthly_usage_company_subscription_fk
+      foreign key (company_id, subscription_id) references public.subscriptions(company_id, id) on delete cascade;
+  end if;
+end $$;
 
 alter table public.subscription_payments add column if not exists billing_month date;
 alter table public.subscription_payments add column if not exists retry_attempt integer not null default 0 check (retry_attempt >= 0);
@@ -51,11 +91,26 @@ begin
     raise exception 'subscription_payments에 회사와 구독이 일치하지 않는 기존 행이 있습니다. 적용을 중단합니다.';
   end if;
 end $$;
-alter table public.subscription_payments
-  add constraint subscription_payments_company_subscription_fk
-  foreign key (company_id, subscription_id)
-  references public.subscriptions(company_id, id)
-  on delete cascade;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint constraint_row
+    where constraint_row.conrelid = 'public.subscription_payments'::regclass
+      and constraint_row.confrelid = 'public.subscriptions'::regclass
+      and constraint_row.contype = 'f'
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.conrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'subscription_id']::text[]
+      and (select array_agg(attribute_row.attname order by key_row.ordinality)
+           from unnest(constraint_row.confkey) with ordinality key_row(attnum, ordinality)
+           join pg_attribute attribute_row on attribute_row.attrelid = constraint_row.confrelid and attribute_row.attnum = key_row.attnum)
+          = array['company_id', 'id']::text[]
+  ) then
+    alter table public.subscription_payments add constraint subscription_payments_company_subscription_fk
+      foreign key (company_id, subscription_id) references public.subscriptions(company_id, id) on delete cascade;
+  end if;
+end $$;
 create unique index if not exists subscription_payments_billing_attempt_uq
   on public.subscription_payments (subscription_id, billing_month, retry_attempt)
   where billing_month is not null;
@@ -87,3 +142,5 @@ commit;
 -- 3. billing_cycle_key를 subscription_id + KST 청구월로 고정하고 같은 키를 Toss orderId에도 사용합니다.
 --    재시도 차수가 달라도 orderId를 바꾸지 않으며, 성공 월 1건 제약을 함께 유지합니다.
 -- 4. service role 외 접근 정책은 추가하지 않았습니다.
+-- 5. CREATE TABLE IF NOT EXISTS는 기존 테이블의 누락 칼럼·제약을 복구하지 않습니다.
+--    적용 전 스키마 diff를 확인하고, 이 초안의 ALTER/pg_constraint 보강 절차가 모두 포함됐는지 검토합니다.
