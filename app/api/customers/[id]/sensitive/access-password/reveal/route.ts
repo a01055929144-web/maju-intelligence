@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (result.status === "unauthorized") return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
     if (result.status === "forbidden") return NextResponse.json({ message: "이 거래처의 출입 비밀번호를 볼 권한이 없습니다." }, { headers: noStoreHeaders, status: 403 });
     if (result.status === "not_found") return NextResponse.json({ message: "거래처를 찾을 수 없습니다." }, { headers: noStoreHeaders, status: 404 });
+    if (result.status !== "allowed") return NextResponse.json({ message: "민감정보를 표시하지 않았습니다." }, { headers: noStoreHeaders, status: 503 });
     return NextResponse.json({ accessPassword: result.value }, { headers: noStoreHeaders });
   } catch {
     return NextResponse.json({ message: "감사 기록을 저장하지 못해 민감정보를 표시하지 않았습니다." }, { headers: noStoreHeaders, status: 503 });
