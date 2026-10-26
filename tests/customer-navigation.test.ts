@@ -23,6 +23,15 @@ describe("customer navigation", () => {
     expect(getCustomerNavigationGroups(true)).toEqual([...customerNavigationGroups, ...holdNavigationGroups]);
   });
 
+  it("shows management insights only to owners and managers", () => {
+    const labelsFor = (role: string) => flattenCustomerNavigationItems(getCustomerNavigationGroups(false, role)).map((item) => item.label);
+
+    expect(labelsFor("owner")).toContain("성과");
+    expect(labelsFor("manager")).toContain("성과");
+    expect(labelsFor("sales")).not.toContain("성과");
+    expect(labelsFor("driver")).not.toContain("성과");
+  });
+
   it("does not duplicate an exact navigation destination", () => {
     const identities = flattenCustomerNavigationItems().map((item) => `${item.active}:${item.href}`);
     expect(new Set(identities).size).toBe(identities.length);

@@ -59,7 +59,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
     return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
   };
-  const visibleNavigationGroups = getCustomerNavigationGroups(showHoldModules);
+  const visibleNavigationGroups = getCustomerNavigationGroups(showHoldModules, normalizedRole);
 
   useEffect(() => {
     const syncSearch = () => setCurrentSearch(window.location.search);
