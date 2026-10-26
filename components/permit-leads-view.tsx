@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   CalendarDays,
@@ -40,6 +43,7 @@ import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lea
 import { formatKoreanPhoneNumber, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
 import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
+import { getAdjacentLeadIds } from "@/domains/lead/detail-navigation";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
@@ -135,7 +139,12 @@ function getLeadInstagramWebSearchUrl(lead: PermitLeadItem): string {
 // 탭만 보는 사용자도 이 코드를 전부 내려받고 있었습니다. next/dynamic으로 별도 청크로 분리해,
 // "리드" 탭을 실제로 열 때만 이 파일의 JS를 내려받도록 합니다.
 
-export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?: (lead: PermitLeadItem) => void; readonly stores: StoreRow[] }) {
+export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQuote, stores }: {
+  readonly detailMode?: "drawer" | "page";
+  readonly initialLeadId?: string;
+  readonly onOpenQuote?: (lead: PermitLeadItem) => void;
+  readonly stores: StoreRow[];
+}) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [queues, setQueues] = useState<PermitLeadQueues | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
@@ -236,14 +245,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
   const leadHistoryPushedRef = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (detailMode === "page") return;
     const params = new URLSearchParams(window.location.search);
     if (!leadHistoryReadyRef.current) {
       leadHistoryReadyRef.current = true;
-      // 새로고침 직후 남아 있는 ?lead=는 지웁니다(열린 상세가 없는데 주소만 남지 않도록).
-      if (params.has("lead") && !selectedLeadId) {
-        params.delete("lead");
-        window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`);
-      }
       return;
     }
     // 상세를 닫을 때 방금 쌓은 기록이면 한 칸 뒤로(닫은 뒤 뒤로가기로 상세가 다시 열리지 않도록).
@@ -262,8 +267,9 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
       else window.history.pushState(null, "", next);
       leadHistoryPushedRef.current = Boolean(selectedLeadId);
     }
-  }, [selectedLeadId]);
+  }, [detailMode, selectedLeadId]);
   useEffect(() => {
+    if (detailMode === "page") return;
     const onPopState = () => {
       leadHistoryPushedRef.current = false;
       const leadId = new URLSearchParams(window.location.search).get("lead");
@@ -276,7 +282,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [detailMode]);
   const [actionMessage, setActionMessage] = useState("");
   const [quoteDraftRevision, setQuoteDraftRevision] = useState(0);
 
@@ -433,6 +439,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     if (showOutsideSalesArea) params.set("includeOutsideSalesArea", "true");
     if (showExistingCustomers) params.set("includeExistingCustomers", "true");
     if (showTemporaryOperations) params.set("includeTemporaryOperations", "true");
+    if (initialLeadId) params.set("leadId", initialLeadId);
 
     fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
@@ -441,18 +448,28 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
           setLoadState("error");
           return;
         }
-        setLeads(Array.isArray(payload.leads) ? payload.leads : []);
+        const nextLeads = Array.isArray(payload.leads) ? payload.leads : [];
+        setLeads(nextLeads);
+        if (initialLeadId) setSelectedLead(nextLeads.find((lead: PermitLeadItem) => lead.id === initialLeadId) || null);
         setQueues(payload.queues || null);
         setSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
         setLoadState("ready");
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations]);
 
   useEffect(() => {
     loadLeads();
   }, [loadLeads]);
+
+  useEffect(() => {
+    if (detailMode === "page" || selectedLead || typeof window === "undefined") return;
+    const leadId = new URLSearchParams(window.location.search).get("lead");
+    if (!leadId) return;
+    const restoredLead = leads.find((lead) => lead.id === leadId);
+    if (restoredLead) setSelectedLead(restoredLead);
+  }, [detailMode, leads, selectedLead]);
 
   useEffect(() => {
     if (loadState !== "ready") return;
@@ -749,6 +766,10 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
     [selectedLeads]
   );
   const allVisibleSelected = Boolean(pagedLeads.length && pagedLeads.every((lead) => selectedLeadIds.includes(lead.id)));
+  const selectedLeadNavigation = useMemo(
+    () => getAdjacentLeadIds(sortedLeads.map((lead) => lead.id), selectedLead?.id || ""),
+    [selectedLead?.id, sortedLeads]
+  );
 
   useEffect(() => {
     setLeadPage((current) => Math.min(Math.max(current, 1), leadTotalPages));
@@ -1670,14 +1691,14 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
             <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">{leadPageCopy.description}</p>
           </div>
           <nav aria-label="리드 업무 화면" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:min-w-[340px]">
-            <a aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
+            <Link aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
               <span className="block text-xs font-black">신규 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">발견·검증</span>
-            </a>
-            <a aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
+            </Link>
+            <Link aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
               <span className="block text-xs font-black">영업 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">접촉·견적·후속</span>
-            </a>
+            </Link>
           </nav>
         </div>
       </div>
@@ -2926,13 +2947,28 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
 
       {selectedLead ? (
         <PermitLeadDetailPanel
+          detailMode={detailMode}
           lead={selectedLead}
           intent={selectedLeadIntent}
           onAction={runLeadAction}
           onClose={() => {
+            if (detailMode === "page") {
+              window.location.assign(withPermitLeadCompanyQuery("/leads?type=permit"));
+              return;
+            }
             setSelectedLead(null);
             setSelectedLeadIntent("");
           }}
+          onNext={() => {
+            const next = sortedLeads.find((item) => item.id === selectedLeadNavigation.nextId);
+            if (next) setSelectedLead(next);
+          }}
+          onPrevious={() => {
+            const previous = sortedLeads.find((item) => item.id === selectedLeadNavigation.previousId);
+            if (previous) setSelectedLead(previous);
+          }}
+          hasNext={Boolean(selectedLeadNavigation.nextId)}
+          hasPrevious={Boolean(selectedLeadNavigation.previousId)}
           onConvert={convertToCustomer}
           onLeadUpdated={(updatedLead) => {
             setLeads((current) => current.map((item) => (item.id === updatedLead.id ? updatedLead : item)));
@@ -2946,14 +2982,22 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
 }
 
 function PermitLeadDetailPanel({
+  detailMode = "drawer",
+  hasNext = false,
+  hasPrevious = false,
   intent,
   lead,
   onAction,
   onClose,
   onConvert,
+  onNext,
+  onPrevious,
   onLeadUpdated,
   onOpenQuote
 }: {
+  readonly detailMode?: "drawer" | "page";
+  readonly hasNext?: boolean;
+  readonly hasPrevious?: boolean;
   readonly intent?: PermitLeadActionIntent;
   readonly lead: PermitLeadItem;
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string) => Promise<PermitLeadActionResult>;
@@ -2966,6 +3010,8 @@ function PermitLeadDetailPanel({
     pricingAppliedCount?: number;
     pricingFailedCount?: number;
   }>;
+  readonly onNext?: () => void;
+  readonly onPrevious?: () => void;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
   readonly onOpenQuote?: (lead: PermitLeadItem) => void;
 }) {
@@ -3390,15 +3436,18 @@ function PermitLeadDetailPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/45" onClick={onClose}>
+    <div
+      className={detailMode === "page" ? "fixed inset-0 z-40 flex bg-slate-50" : "fixed inset-0 z-40 flex justify-end bg-slate-950/45"}
+      onClick={detailMode === "page" ? undefined : onClose}
+    >
       <div
         aria-label={`${lead.businessName} 리드 상세`}
-        aria-modal="true"
-        className="relative h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl"
+        aria-modal={detailMode === "drawer" ? "true" : undefined}
+        className={`relative h-full w-full overflow-y-auto bg-white ${detailMode === "page" ? "mx-auto max-w-[1440px]" : "lg:w-[60vw] lg:max-w-[1080px] shadow-2xl"}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
-        <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
+        <div className="sticky top-0 z-20 flex items-start justify-between gap-2 border-b border-slate-200 bg-white/95 p-4 backdrop-blur">
           <div className="min-w-0">
             <span className="flex flex-wrap items-center gap-1.5">
               <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade ? `${lead.grade}등급` : isPermitLeadUnscored(lead) ? "채점 전" : "등급 미달"}</Badge>
@@ -3411,6 +3460,8 @@ function PermitLeadDetailPanel({
                 {PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]}
               </span>
               <span className="text-xs font-semibold text-slate-500">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
+              <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-xs font-black text-blue-700">{leadPriorityBadge(lead).label}</span>
+              {getPermitLeadOpenDate(lead) ? <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-bold text-slate-600">{formatLeadOpenDateAge(getPermitLeadOpenDate(lead))}</span> : null}
               {lead.kakaoMatchMethod ? (
                 <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${
                   lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
@@ -3427,15 +3478,25 @@ function PermitLeadDetailPanel({
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
               {lead.industryPrimary}
               {lead.permitStatus ? ` · ${lead.permitStatus}` : ""}
+              {getPermitLeadOpenDate(lead) ? ` · 개업 ${getPermitLeadOpenDate(lead)}` : ""}
             </p>
             <div className="mt-2">
               <LeadStageSelect lead={lead} onAction={onAction} />
             </div>
           </div>
-          <button aria-label="목록으로 돌아가기" className="maju-button-secondary h-8 shrink-0 px-2 text-xs" onClick={onClose} title="목록으로 (Esc · 뒤로가기)" type="button">
-            <X className="h-4 w-4" />
-            목록
-          </button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            <button aria-label="이전 매장" className="maju-button-secondary h-8 px-2 text-xs" disabled={!hasPrevious} onClick={onPrevious} type="button"><ArrowLeft className="h-4 w-4" /></button>
+            <button aria-label="다음 매장" className="maju-button-secondary h-8 px-2 text-xs" disabled={!hasNext} onClick={onNext} type="button"><ArrowRight className="h-4 w-4" /></button>
+            {detailMode === "drawer" ? (
+              <a aria-label="새 페이지에서 열기" className="maju-button-secondary h-8 px-2 text-xs" href={withPermitLeadCompanyQuery(`/leads/${encodeURIComponent(lead.id)}`)} title="새 페이지에서 열기">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            ) : null}
+            <button aria-label="목록으로 돌아가기" className="maju-button-secondary h-8 px-2 text-xs" onClick={onClose} title="목록으로 (Esc · 뒤로가기)" type="button">
+              <X className="h-4 w-4" />
+              목록
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3 p-4 pb-24 sm:pb-4">
@@ -3920,6 +3981,12 @@ function PermitLeadDetailPanel({
                 ) : null}
               </div>
             ) : null}
+          </div>
+
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+            <p className="text-sm font-black text-slate-800">수정 기록</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">공통 수정 기록 테이블 승인 후 이 탭에 변경 이력을 연결합니다.</p>
+            <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">승인 대기</span>
           </div>
 
           {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">현재 · {formatLeadBusinessHours(lead.businessHourIntervals || [])}</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><button className="maju-button-secondary mt-2 h-8 text-xs" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button>{businessHoursMessage ? <p className="mt-2 text-[11px] font-bold text-amber-900">{businessHoursMessage}</p> : null}</div> : null}

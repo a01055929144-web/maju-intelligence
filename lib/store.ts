@@ -9950,6 +9950,7 @@ export type PermitLeadFilters = {
   includeOutsideSalesArea?: boolean;
   includeExistingCustomers?: boolean;
   includeTemporaryOperations?: boolean;
+  leadId?: string;
 };
 
 type LeadBusinessHourRow = {
@@ -10007,6 +10008,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (!isProductionStoreConfigured()) return { leads: [], total: 0 };
 
   const params = [`company_id=eq.${encodeURIComponent(companyId)}`, "merged_into_lead_id=is.null"];
+  if (filters.leadId) params.push(`id=eq.${encodeURIComponent(filters.leadId)}`);
   if (filters.period && filters.period !== "all") params.push(`lead_period=eq.${encodeURIComponent(filters.period)}`);
   if (filters.industry) params.push(`industry_primary=eq.${encodeURIComponent(filters.industry)}`);
   if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
