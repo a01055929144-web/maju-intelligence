@@ -72,3 +72,20 @@ export function getSafeRowBudget(options: {
   const availableBytes = Math.max(0, options.stopAtMb - options.currentDatabaseMb) * 1_000_000;
   return Math.floor(availableBytes / estimatedRowBytes);
 }
+
+export function assessGangnamPrewrite(measurements: readonly GovFoodDryRunMeasurement[], safeRowBudget: number) {
+  const measured = new Map(measurements.map((item) => [item.dataset, item.activeTotalCount]));
+  const missingDatasets = A2_GANGNAM_DRY_RUN_DATASETS.filter((dataset) => !measured.has(dataset));
+  const estimate = estimateGovFoodDryRun(measurements);
+  return {
+    ...estimate,
+    missingDatasets,
+    writeEnabled: false as const,
+    readyForApproval: missingDatasets.length === 0 && estimate.rows <= safeRowBudget,
+    reason: missingDatasets.length
+      ? `영업 중 totalCount 미측정: ${missingDatasets.join(", ")}`
+      : estimate.rows > safeRowBudget
+        ? `예상 ${estimate.rows.toLocaleString()}행이 안전 예산 ${safeRowBudget.toLocaleString()}행을 초과합니다.`
+        : `예상 ${estimate.rows.toLocaleString()}행 · 승인 전 쓰기 0건`
+  };
+}

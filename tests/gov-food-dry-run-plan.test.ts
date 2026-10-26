@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   A2_GANGNAM_DRY_RUN_DATASETS,
+  assessGangnamPrewrite,
   buildGangnamDryRunRequest,
   estimateGovFoodDryRun,
   getSafeRowBudget,
@@ -53,5 +54,22 @@ describe("A2 강남구 전체 매장 DB 드라이런 계획", () => {
 
   it("104MB에서 400MB 중단선까지 870바이트 행 예산을 계산한다", () => {
     expect(getSafeRowBudget({ currentDatabaseMb: 104, stopAtMb: 400 })).toBe(340_229);
+  });
+
+  it("4종 예상 건수가 모두 보고되기 전에는 운영 쓰기 승인을 막는다", () => {
+    const result = assessGangnamPrewrite([{ dataset: "rest_cafes", activeTotalCount: 3_200 }], 340_229);
+    expect(result.writeEnabled).toBe(false);
+    expect(result.readyForApproval).toBe(false);
+    expect(result.missingDatasets).toEqual(["bakeries", "group_meal_facilities", "contract_catering"]);
+  });
+
+  it("4종 측정 완료 후에도 쓰기는 비활성이고 예상 건수만 승인 자료로 만든다", () => {
+    const result = assessGangnamPrewrite([
+      { dataset: "rest_cafes", activeTotalCount: 3_200 },
+      { dataset: "bakeries", activeTotalCount: 650 },
+      { dataset: "group_meal_facilities", activeTotalCount: 1_100 },
+      { dataset: "contract_catering", activeTotalCount: 430 }
+    ], 340_229);
+    expect(result).toMatchObject({ rows: 5_380, calls: 54, missingDatasets: [], writeEnabled: false, readyForApproval: true });
   });
 });
