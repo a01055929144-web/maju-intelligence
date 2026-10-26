@@ -40,31 +40,36 @@
 | **P2-3** | J 정리(J8 텔레그램 → J4 디버그 경로 → J5 크론 → J6 키 → J1~J3) | 비용·혼선 감소 |
 | 나중 | WO-10 앱, WO-12 ERP(⏸ ERP 이름·샘플 대기), WO-4 유통사 탭, WO-6, WO-3 | |
 
-## ★ 병렬 작업 방 (대표 결정 20:46: Codex 채팅방별로 나눠 동시에 진행)
-각 방은 **자기 방 줄만** 우선순위 순서대로 진행. 방마다 브랜치 `codex/<방>-<ID>`(예 codex/sec-P0-1) → PR → CI 초록 → main 병합(병합 직전 main으로 rebase). main 직접 푸시 금지.
+## ★ 병렬 작업 방 (대표 결정 20:46 — Codex 좌측 프로젝트별로 동시에 진행)
+각 프로젝트는 **자기 줄만** 순서대로. 브랜치 `codex/<번호>-<ID>`(예 codex/07-P0-1) → PR → CI 초록 → main 병합(병합 직전 main으로 rebase). main 직접 푸시 금지(컨트롤타워 포함).
 
-| 방 | 맡는 항목 (순서대로) | 주로 만지는 곳 |
+| Codex 프로젝트 | 맡는 항목 (순서대로) | 주로 만지는 곳 |
 |---|---|---|
-| **① 보안·관리자** sec | P0-1 C1 → P1-1 C4·C5(결제 목록 제외) → P1-2 C6(+알바) → P1-2b N3 | app/admin/**, 인증·세션, company_members |
-| **② 데이터·정리** data | P0-2 A1 → P2-2 A2·A3·A4 → P2-3 J(J8 텔레그램 → J4 → J5 → J6 → J1~J3) | lib/gov-restaurant, lib/place-links, app/api/cron/**, vercel.json |
-| **③ PC 화면** pc | P0-4 C2·B1 → P0-5 B5·B2 → P0-6 C3 → P1-4 B3·B4·C7 → P1-5 K(⑫) | components/sales-route-map*, app/leads/**, app/map/**, 사이드바·메뉴 |
-| **④ 휴대폰·배송** mob | P1-3 ⑬ → P1-3b N1 → P2-2b N2 | app/mobile/**, components/mobile-*, domains/delivery |
-| **⑤ 품질·결제·성과** qa | P0-3 C8 (가장 먼저) → P2-1 WO-8 + C5 결제 목록 → P2-1b N4-1 → P2-1c N4-2 | tests/e2e, .github/workflows, app/settings/billing, app/insights |
+| **MAJU 컨트롤타워** ctl | 지금 진행 중인 항목 마무리·보고 → 이 문서 main 병합 → P0-3 C8(CI·자동 점검) → 병합 순서 관리·충돌 해결 | .github/workflows, tests/e2e, package.json·lockfile |
+| **07 회사·직원·로그인 권한** | P0-1 C1 → P1-2 C6(+알바) → P1-2b N3 | 인증·세션, company_members, /settings/security |
+| **04 데이터 등록·저장 이력** | P0-2 A1 → P2-2 A2·A3·A4 → K 공통 수정 기록 테이블(SQL 초안) | lib/gov-restaurant, lib/place-links, app/api/cron/leads*, 변경 기록 |
+| **01 지도 홈 OS** | P0-4 C2·B1 → P0-6 C3(메뉴·오늘 현황) → P1-5 K(⑫) | components/sales-route-map*, app/map/**, 사이드바·메뉴, /dashboard |
+| **05 신규리드·아웃바운드 영업** | P0-5 B5·B2 → P1-4 B4·C7 | app/leads/** 표·문구, 출처·연락 거부, 영업 수칙 |
+| **03 거래처 관리·원장** | P1-4 B3(⑭ 매장 상세·옆 창) → K 블랙리스트(회사 안) → P2-1c N4-2 품목·가격·주문 표 | /leads/[id]·매장 상세, items·item_prices·orders |
+| **02 영업·배송 코스** | P1-3 ⑬ 휴대폰 → P1-3b N1 → P2-2b N2 | app/mobile/**, components/mobile-*, domains/delivery, 코스 |
+| **08 플랫폼 관리자 운영** | P1-1 C4·C5(남은 것) → P2-1 WO-8 → P2-3 J(J8→J4→J5→J6→J1~J3) | app/admin/**, billing, vercel.json 크론 |
+| **06 AI 영업·리포트** | P2-1b N4-1 성과 대시보드(지금은 화면·집계 함수만, CS 카드는 N1 뒤) → N4-2 화면 | /insights, daily_metrics |
 
 **겹침 규칙**
-- 메뉴·사이드바는 ③만 수정. 다른 방은 새 화면 경로만 만들고 "메뉴 추가 요청: 이름·경로·권한" 1줄을 보고에 적음 → ③이 반영.
-- lib/store.ts: 기존 함수 수정은 그 영역 방만. 새 함수는 `lib/store/<방>-*.ts` 새 파일에 추가하고 store.ts에는 export 1줄만.
-- SQL: 파일명 `docs/sql-drafts/YYYYMMDD-<방>-<ID>.sql`. 승인 요청은 대표에게 한 번에 1개씩, 같은 표를 두 방이 바꾸면 먼저 승인된 쪽 기준으로 rebase.
-- package.json·lockfile·CI 설정은 ⑤만. 의존성이 필요하면 ⑤에 요청.
-- 공용 타입·상수(원인 코드, 역할·업무 이름)는 처음 만든 방이 domains/에 정의, 다른 방은 import만.
+- 메뉴·사이드바는 01만 수정. 다른 프로젝트는 새 경로만 만들고 보고에 "메뉴 추가 요청: 이름·경로·권한" 1줄 → 01이 반영.
+- package.json·lockfile·CI 설정은 컨트롤타워만. 의존성이 필요하면 컨트롤타워에 요청.
+- lib/store.ts: 기존 함수 수정은 그 영역 프로젝트만. 새 함수는 `lib/store/<번호>-*.ts` 새 파일, store.ts에는 export 1줄만.
+- SQL: `docs/sql-drafts/YYYYMMDD-<번호>-<ID>.sql`. 대표 승인 요청은 한 번에 1개(컨트롤타워가 순서 정리). 같은 표를 두 곳이 바꾸면 먼저 승인된 쪽 기준 rebase.
+- 공용 타입·상수(원인 코드, 역할·업무 이름)는 처음 만든 프로젝트가 domains/에 정의, 나머지는 import만.
 
-**방 사이 순서 (기다릴 것)**
-- ④의 출입 비밀번호 표시 켜기 → ①의 N3 병합 후. 그 전에는 화면만 만들고 기능 플래그 off.
-- ④의 배송·영업 업무 구분 → ①의 C6 병합 전에는 기존 역할로 동작, 병합 후 duties로 교체.
-- 완료 기준 ④(C8 점검) → ⑤의 P0-3 병합 전이면 "C8 대기"로 보고, 병합 후 다시 확인.
-- ⑤의 N4-1 CS 카드 → ④의 N1 병합 후 연결(그 전엔 숨김).
-- ②의 J5·J8에서 이탈 요약 **발송만** 제거하고 이탈 계산 함수는 남김(⑤ N4-1이 재사용).
-- 보고 맨 앞에 방 이름 표시: 예 "[① sec] P0-1 완료 …"
+**프로젝트 사이 순서 (기다릴 것)**
+- 02의 출입 비밀번호 표시 켜기 → 07 N3 병합 후(그 전엔 기능 플래그 off).
+- 02의 배송·영업 업무 구분 → 07 C6 병합 전엔 기존 역할로 동작.
+- 03 매장 상세의 수정 기록 탭 → 04 공통 수정 기록 테이블 승인 후 연결.
+- 06 CS 카드 → 02 N1 병합 후. 06 마진·품목 이탈 → 03 N4-2 표 승인 후.
+- 08 J5·J8은 이탈 요약 **발송만** 제거, 이탈 계산 함수는 남김(06 재사용).
+- 완료 기준 ④(C8) → 컨트롤타워 P0-3 병합 전이면 "C8 대기"로 보고.
+- 보고 맨 앞에 프로젝트 번호: 예 "[07] P0-1 완료 …"
 
 **완료 기준(모든 항목 공통)**: ① 원인·수정 한 줄 ② 회귀 테스트 추가 ③ CI 전체 초록 ④ C8 점검 통과(CI 결과 링크만, 이미지 붙이지 않음) ⑤ 운영 배포 후 curl로 해당 경로 상태 코드 확인(브라우저 자동화 아님) ⑥ 대표 확인용 "어디서 무엇을 눌러 보면 되는지" 한 줄. 하나라도 못 하면 "미완료"로 보고.
 **판매 전 체크(대표·Claude)**: 약관·개인정보·위치정보·ERP 계정 보관 전문가 검토, 첫 결제 전 Vercel Pro, 주 1회 백업 내보내기, 영업 수칙 확정, 요금제 금액 입력.
