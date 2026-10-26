@@ -15,7 +15,7 @@
 create table public.lead_attachments (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
-  lead_id uuid not null references public.business_permit_leads(id) on delete cascade,
+  lead_id uuid not null,
   attachment_type text not null,
   title text not null,
   storage_path text not null,
@@ -24,14 +24,33 @@ create table public.lead_attachments (
   created_by uuid,
   created_by_name text,
   created_at timestamptz not null default now(),
-  migrated_customer_attachment_id uuid references public.customer_attachments(id) on delete set null,
-  deleted_at timestamptz
+  migrated_customer_attachment_id uuid,
+  deleted_at timestamptz,
+  constraint lead_attachments_lead_company_fk
+    foreign key (company_id, lead_id)
+    references public.business_permit_leads(company_id, id)
+    on delete cascade,
+  constraint lead_attachments_migrated_customer_company_fk
+    foreign key (company_id, migrated_customer_attachment_id)
+    references public.customer_attachments(company_id, id)
+    on delete set null (migrated_customer_attachment_id)
 );
 
 create index idx_lead_attachments_lead_created
   on public.lead_attachments(company_id, lead_id, created_at desc)
   where deleted_at is null;
 ```
+
+복합 FK의 선행 조건을 확인한 결과 `business_permit_leads(company_id, id)`에는 이미 `business_permit_leads_company_id_id_uq` UNIQUE 제약이 있다. 반면 `customer_attachments(company_id, id)`에는 현재 복합 UNIQUE가 없으므로, 실제 마이그레이션 승인 시 아래 제약을 먼저 추가해야 한다.
+
+```sql
+-- 검토용 선행 조건. 승인 전 실행 금지.
+alter table public.customer_attachments
+  add constraint customer_attachments_company_id_id_uq
+  unique (company_id, id);
+```
+
+이 복합 FK들은 `company_id`와 대상 ID를 함께 검증하므로, 한 회사의 첨부 행이 다른 회사의 리드나 거래처 첨부를 참조하는 상태를 DB 수준에서 차단한다. 실제 마이그레이션에서는 동일 이름 제약의 존재 여부를 확인하는 재실행 안전 구문을 사용한다.
 
 ## 권한 원칙
 
