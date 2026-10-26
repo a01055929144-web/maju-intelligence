@@ -69,6 +69,7 @@ export function LeadContactChannelsPanel({
   const [editing, setEditing] = useState<EditableChannel | null>(null);
   const [saving, setSaving] = useState<EditableChannel | null>(null);
   const [recording, setRecording] = useState<LeadContactChannel | null>(null);
+  const [recordingSourceDisclosure, setRecordingSourceDisclosure] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -119,7 +120,10 @@ export function LeadContactChannelsPanel({
   }
 
   async function copySourceDisclosure() {
+    if (recordingSourceDisclosure) return;
     const disclosure = buildLeadSourceDisclosure({ businessName: lead.businessName, collectedAt: lead.createdAt, source: lead.source });
+    setRecordingSourceDisclosure(true);
+    setNotice(null);
     try {
       const response = await fetchWithTimeout(
         withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`),
@@ -137,6 +141,8 @@ export function LeadContactChannelsPanel({
       setNotice({ tone: "ok", text: "출처 답변을 복사하고 안내 기록을 남겼습니다." });
     } catch (error) {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : "출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다." });
+    } finally {
+      setRecordingSourceDisclosure(false);
     }
   }
 
@@ -244,9 +250,15 @@ export function LeadContactChannelsPanel({
             <p className="text-xs font-black text-blue-950">연락처·매장 정보 출처</p>
             <p className="mt-0.5 text-[11px] font-semibold text-blue-800">{leadSourceLabel(lead.source)} · {new Date(lead.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 확인</p>
           </div>
-          <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => void copySourceDisclosure()} type="button">
-            <Copy className="h-3.5 w-3.5" />
-            출처 답변 복사·기록
+          <button
+            aria-busy={recordingSourceDisclosure}
+            className="maju-button-secondary min-h-11 px-3 text-xs disabled:cursor-wait disabled:opacity-50"
+            disabled={recordingSourceDisclosure}
+            onClick={() => void copySourceDisclosure()}
+            type="button"
+          >
+            {recordingSourceDisclosure ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+            {recordingSourceDisclosure ? "기록 중" : "출처 답변 복사·기록"}
           </button>
         </div>
       </div>

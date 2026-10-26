@@ -53,5 +53,7 @@ describe("lead outreach governance", () => {
     const disclosureHandler = panel.slice(panel.indexOf("async function copySourceDisclosure"), panel.indexOf("function confirmAfterHoursSms"));
     expect(disclosureHandler.indexOf("fetchWithTimeout")).toBeLessThan(disclosureHandler.indexOf("navigator.clipboard.writeText"));
     expect(disclosureHandler).toContain("출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다.");
+    expect(disclosureHandler).toContain("if (recordingSourceDisclosure) return");
+    expect(disclosureHandler).toContain("setRecordingSourceDisclosure(false)");
   });
 });
