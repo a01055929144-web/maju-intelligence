@@ -49,6 +49,7 @@
 - 한 회사에는 같은 번호의 활성 행을 하나만 허용한다. 다른 회사에는 같은 번호를 독립적으로 등록할 수 있다.
 - 해제는 삭제가 아니라 `revoked_at/by` 기록으로 남긴다.
 - 고객/리드 FK를 두지 않는다. 원본 고객이 삭제·병합돼도 회사 내부 거래 금지 결정이 사라지지 않아야 한다.
+- 등록·해제 회원은 기존 `company_members(company_id, id)` 복합 키로 참조해 다른 회사 회원 ID가 감사 정보에 들어오는 것도 DB에서 막는다.
 - `reason_code`는 제한된 코드로 저장하고, 자유 입력은 `memo`에 둔다.
 - 공개 스키마 테이블은 RLS를 켜고 `anon`, `authenticated` 직접 권한을 회수한다. 서버의 검증된 경로만 사용한다.
 
@@ -60,7 +61,7 @@
 
 - `listCompanyTradeBlocks(companyId)` — 대표·관리자용 목록
 - `getActiveCompanyTradeBlock(companyId, businessNumber)` — 서버 내부 단건 판정
-- `activateCompanyTradeBlock(companyId, input, actor)` — 정규화·체크섬·역할 검증 후 등록
+- `activateCompanyTradeBlock(companyId, input, actor)` — 정규화·체크섬·회사 회원·역할 검증 후 등록
 - `revokeCompanyTradeBlock(companyId, id, actor)` — 물리 삭제 없이 해제
 
 후속 연결은 별도 승인·PR로 진행한다.

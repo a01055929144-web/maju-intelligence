@@ -8,12 +8,12 @@ create table if not exists public.company_trade_blocks (
   business_number text not null,
   reason_code text not null,
   memo text,
-  created_by_user_id uuid references public.app_users(id) on delete set null,
+  created_by_member_id uuid,
   created_by_name text not null,
   created_by_role text not null,
   created_at timestamptz not null default now(),
   revoked_at timestamptz,
-  revoked_by_user_id uuid references public.app_users(id) on delete set null,
+  revoked_by_member_id uuid,
   revoked_by_name text,
   revoked_by_role text,
   revoke_memo text,
@@ -27,11 +27,23 @@ create table if not exists public.company_trade_blocks (
     check (revoked_by_role is null or revoked_by_role in ('owner', 'manager')),
   constraint company_trade_blocks_revoke_fields_check
     check (
-      (revoked_at is null and revoked_by_user_id is null and revoked_by_name is null and revoked_by_role is null)
+      (revoked_at is null and revoked_by_member_id is null and revoked_by_name is null and revoked_by_role is null)
       or
       (revoked_at is not null and revoked_by_name is not null and revoked_by_role is not null)
-    )
+    ),
+  constraint company_trade_blocks_created_member_company_fk
+    foreign key (company_id, created_by_member_id)
+    references public.company_members(company_id, id)
+    on delete set null (created_by_member_id),
+  constraint company_trade_blocks_revoked_member_company_fk
+    foreign key (company_id, revoked_by_member_id)
+    references public.company_members(company_id, id)
+    on delete set null (revoked_by_member_id)
 );
+
+-- 위 복합 FK는 20261014084917_phase1_customer_assignment_ids.sql에서 추가된
+-- company_members_company_id_id_unique 제약을 전제로 한다. 실제 적용 전 운영 DB에
+-- 해당 제약이 있는지 확인하고, 없으면 같은 이름의 UNIQUE(company_id, id)를 먼저 적용한다.
 
 -- 회사별로 같은 사업자번호의 활성 거래 금지는 한 건만 허용한다.
 -- 다른 회사의 동일 번호 등록은 허용되며 회사 간 정보는 결합하지 않는다.
