@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   buildGovAreaTasks,
+  createGovRequestLimiter,
   dedupeGovRows,
   getGovSyncRunStatus,
   GOV_COLLECTION_BUDGET_MS,
   GOV_FANOUT_CONCURRENCY,
+  GOV_POSTPROCESS_RESERVE_MS,
   GOV_REQUEST_TIMEOUT_MS,
+  GovBudgetDeferredError,
   rotateGovSyncUnits,
   runGovAreaTasks
 } from "../lib/gov-area-fanout";
@@ -16,6 +19,7 @@ describe("정부 데이터 지역 fan-out", () => {
     expect(GOV_FANOUT_CONCURRENCY).toBe(3);
     expect(GOV_REQUEST_TIMEOUT_MS).toBe(12_000);
     expect(GOV_COLLECTION_BUDGET_MS).toBe(40_000);
+    expect(GOV_POSTPROCESS_RESERVE_MS).toBe(10_000);
   });
 
   it("모든 지역 최신 1페이지를 먼저 배치하고 미완료 지역만 커서를 이어간다", () => {
@@ -59,6 +63,15 @@ describe("정부 데이터 지역 fan-out", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it("공통 큐 대기 중 요청 예산이 소진돼도 error가 아니라 deferred로 이월한다", async () => {
+    const [result] = await runGovAreaTasks({
+      tasks: buildGovAreaTasks(["1"], {}, "cutoff", "scan"),
+      deadlineAt: Date.now() + GOV_REQUEST_TIMEOUT_MS + 100,
+      load: async () => { throw new GovBudgetDeferredError(); }
+    });
+    expect(result.status).toBe("deferred");
+  });
+
   it("같은 최신 1페이지를 재처리해도 source key별 한 행만 ingest 대상으로 남긴다", () => {
     expect(dedupeGovRows([
       { sourceRecordKey: "same", value: 1 },
@@ -87,5 +100,26 @@ describe("정부 데이터 지역 fan-out", () => {
   it("모든 지역이 error 또는 deferred이면 성공 상태를 남기지 않는다", () => {
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "deferred" }])).toBe("error");
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "success" }])).toBe("success");
+  });
+
+  it("여러 회사 큐가 동시에 제출해도 전체 외부 요청은 3개를 넘지 않는다", async () => {
+    const limit = createGovRequestLimiter(3);
+    let active = 0;
+    let maxActive = 0;
+    const started: string[] = [];
+    let releaseFirstWave = () => {};
+    const firstWave = new Promise<void>((resolve) => { releaseFirstWave = resolve; });
+    const jobs = ["회사A", "회사B", "회사C", "회사D"].map((company) => limit(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      started.push(company);
+      if (started.length <= 3) await firstWave;
+      active -= 1;
+    }));
+    await vi.waitFor(() => expect(started).toHaveLength(3));
+    releaseFirstWave();
+    await Promise.all(jobs);
+    expect(maxActive).toBe(3);
+    expect(started).toEqual(["회사A", "회사B", "회사C", "회사D"]);
   });
 });

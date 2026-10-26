@@ -4,7 +4,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, dedupeGovRows, getGovSyncRunStatus, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_REQUEST_TIMEOUT_MS, rotateGovSyncUnits, runGovAreaTasks } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncRunStatus, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9260,7 +9260,9 @@ export async function syncGovRestaurantLeads(
   startPage?: number,
   trigger: LeadSyncTrigger = "manual",
   dataset: GovDataset = "general_restaurants",
-  deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS
+  deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS,
+  requestLimiter?: GovRequestLimiter,
+  fanoutConcurrency = GOV_FANOUT_CONCURRENCY
 ): Promise<GovRestaurantSyncResult> {
   if (!isGovRestaurantApiConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
@@ -9306,12 +9308,17 @@ export async function syncGovRestaurantLeads(
     }
     const cutoff = getGovChangeCutoff(new Date(startedAt), previous?.finished_at, days).toISOString();
     const tasks = buildGovAreaTasks(codes, savedCursors, cutoff, startedAt);
+    // 40초는 API만의 예산이 아니라 이 함수의 수집+ingest+상태 기록 전체 목표 예산이다.
+    // 마지막 10초는 DB 후처리용으로 남기고, 공통 큐에서 기다린 작업도 실제 요청 직전에 다시 확인한다.
+    const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
     const taskResults = await runGovAreaTasks({
       tasks,
-      deadlineAt,
-      concurrency: GOV_FANOUT_CONCURRENCY,
+      deadlineAt: requestDeadlineAt,
+      concurrency: fanoutConcurrency,
       requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS,
-      load: (task) => fetchGovAreaRows({
+      load: (task) => (requestLimiter || (async (load) => load()))(() => {
+        if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
+        return fetchGovAreaRows({
         dataset,
         areaCode: task.areaCode,
         startPage: task.page,
@@ -9319,6 +9326,7 @@ export async function syncGovRestaurantLeads(
         cutoff: new Date(task.cutoff),
         timeoutMs: GOV_REQUEST_TIMEOUT_MS,
         retry: false
+        });
       })
     });
     const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
@@ -9365,6 +9373,8 @@ export async function syncGovRestaurantLeads(
         areaCursors: nextCursors,
         requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS,
         collectionBudgetMs: GOV_COLLECTION_BUDGET_MS,
+        postprocessReserveMs: GOV_POSTPROCESS_RESERVE_MS,
+        budgetScope: "request-ingest-status",
         areas: taskResults.map((result) => ({
           areaCode: result.areaCode,
           page: result.page,
@@ -9422,16 +9432,15 @@ export async function syncAllCompaniesGovRestaurantLeads(
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
   const deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS;
-  const units = rotateGovSyncUnits(
-    datasets.flatMap((dataset) => companies.map(({ id }) => ({ companyId: id, dataset }))),
-    Math.floor(Date.now() / 86_400_000)
-  );
-  const results: GovRestaurantSyncResult[] = [];
-  for (const unit of units) {
-      results.push(await syncGovRestaurantLeads(unit.companyId, 14, undefined, "cron", unit.dataset, deadlineAt).catch(
+  // 데이터셋→회사 순으로 교차한 모든 단위를 동시에 시작하되, 각 단위는 한 요청씩만 공통 큐에
+  // 제출한다. 따라서 첫 회사가 슬롯 3개를 독점하지 않고 전체 외부 요청 동시성도 정확히 3이다.
+  const units = datasets.flatMap((dataset) => companies.map(({ id }) => ({ companyId: id, dataset })));
+  const requestLimiter = createGovRequestLimiter(GOV_FANOUT_CONCURRENCY);
+  const results = await Promise.all(units.map((unit) =>
+    syncGovRestaurantLeads(unit.companyId, 14, undefined, "cron", unit.dataset, deadlineAt, requestLimiter, 1).catch(
         (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
-      ));
-  }
+    )
+  ));
   const totals = results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
       configured: true,

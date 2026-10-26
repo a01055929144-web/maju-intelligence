@@ -3,6 +3,14 @@ import type { GovAreaCursor } from "./gov-area-scan";
 export const GOV_FANOUT_CONCURRENCY = 3;
 export const GOV_REQUEST_TIMEOUT_MS = 12_000;
 export const GOV_COLLECTION_BUDGET_MS = 40_000;
+export const GOV_POSTPROCESS_RESERVE_MS = 10_000;
+
+export class GovBudgetDeferredError extends Error {
+  constructor() {
+    super("정부 API 요청 시간 예산이 부족해 다음 실행으로 이월합니다.");
+    this.name = "GovBudgetDeferredError";
+  }
+}
 
 export type GovAreaTask = {
   areaCode: string;
@@ -54,6 +62,38 @@ export function getGovSyncRunStatus(results: readonly Pick<GovAreaTaskResult<unk
   return results.length > 0 && results.every((result) => result.status !== "success") ? "error" : "success";
 }
 
+export type GovRequestLimiter = <T>(load: () => Promise<T>) => Promise<T>;
+
+/** 여러 회사·데이터셋이 함께 실행돼도 실제 외부 요청은 전체 합계 max개만 진행한다. */
+export function createGovRequestLimiter(max: number): GovRequestLimiter {
+  const concurrency = Math.max(1, max);
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  const acquire = () => new Promise<void>((resolve) => {
+    if (active < concurrency) {
+      active += 1;
+      resolve();
+      return;
+    }
+    waiting.push(() => {
+      active += 1;
+      resolve();
+    });
+  });
+  const release = () => {
+    active -= 1;
+    waiting.shift()?.();
+  };
+  return async <T>(load: () => Promise<T>) => {
+    await acquire();
+    try {
+      return await load();
+    } finally {
+      release();
+    }
+  };
+}
+
 /** 최신 1페이지를 우선하며, 시작하지 못한 작업도 결과에 남겨 다음 실행에서 이어갈 수 있게 한다. */
 export async function runGovAreaTasks<T>(options: {
   tasks: readonly GovAreaTask[];
@@ -85,7 +125,7 @@ export async function runGovAreaTasks<T>(options: {
       } catch (error) {
         results[index] = {
           ...task,
-          status: "error",
+          status: error instanceof GovBudgetDeferredError ? "deferred" : "error",
           elapsedMs: Math.max(0, now() - started),
           error: error instanceof Error ? error.message : String(error)
         };
