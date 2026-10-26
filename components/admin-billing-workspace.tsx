@@ -18,13 +18,14 @@ export type AdminSubscriptionRow = {
   billingKey: string | null;
   cardNumberMasked: string | null;
   planAmountWon: number;
-  status: "pending_card" | "active" | "paused" | "canceled";
+  status: "none" | "pending_card" | "active" | "paused" | "canceled";
   nextBillingDate: string | null;
   lastPaymentStatus: string | null;
   lastPaymentAt: string | null;
 };
 
 const statusLabels: Record<AdminSubscriptionRow["status"], string> = {
+  none: "구독 없음",
   pending_card: "카드 미등록",
   active: "정상 청구중",
   paused: "일시중지",
@@ -32,6 +33,7 @@ const statusLabels: Record<AdminSubscriptionRow["status"], string> = {
 };
 
 const statusTone: Record<AdminSubscriptionRow["status"], string> = {
+  none: "bg-violet-50 text-violet-800",
   pending_card: "bg-amber-50 text-amber-800",
   active: "bg-emerald-50 text-emerald-800",
   paused: "bg-slate-100 text-slate-700",
@@ -80,7 +82,8 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
     active: rows.filter((row) => row.status === "active").length,
     pending_card: rows.filter((row) => row.status === "pending_card").length,
     paused: rows.filter((row) => row.status === "paused").length,
-    canceled: rows.filter((row) => row.status === "canceled").length
+    canceled: rows.filter((row) => row.status === "canceled").length,
+    none: rows.filter((row) => row.status === "none").length
   }), [rows]);
 
   const { sortDirection, sortKey, sortedRows, toggleSort } = useTableSort<AdminSubscriptionRow, SortKey>(filteredRows, {
@@ -117,7 +120,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body?.message || "저장하지 못했습니다.");
-      setRows((current) => current.map((row) => (row.companyId === companyId ? { ...row, planAmountWon: body.subscription.planAmountWon } : row)));
+      setRows((current) => current.map((row) => (row.companyId === companyId ? { ...row, planAmountWon: body.subscription.planAmountWon, status: body.subscription.status } : row)));
       setDrafts((current) => {
         const next = { ...current };
         delete next[companyId];
@@ -136,16 +139,16 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
       {loadError ? <div role="alert" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{loadError}</div> : null}
       {error ? <div aria-live="assertive" className="maju-filter-box border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-900">{error}</div> : null}
 
-      {statusCounts.pending_card || statusCounts.paused ? (
+      {statusCounts.none || statusCounts.pending_card || statusCounts.paused ? (
         <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             <div>
-              <p className="font-black text-amber-950">청구 전 확인이 필요한 고객사가 {statusCounts.pending_card + statusCounts.paused}곳 있습니다.</p>
-              <p className="mt-1 text-sm font-semibold text-amber-800">카드 미등록 고객사를 먼저 확인하고, 일시중지 고객사는 이용료와 재개 여부를 점검하세요.</p>
+              <p className="font-black text-amber-950">청구 전 확인이 필요한 고객사가 {statusCounts.none + statusCounts.pending_card + statusCounts.paused}곳 있습니다.</p>
+              <p className="mt-1 text-sm font-semibold text-amber-800">구독이 없는 고객사는 이용료 저장으로 체험을 시작하고, 카드 미등록·일시중지 상태도 함께 점검하세요.</p>
             </div>
           </div>
-          <button className="h-10 shrink-0 rounded-md bg-amber-900 px-4 text-sm font-black text-white hover:bg-amber-950" onClick={() => { setStatusFilter("pending_card"); setPage(1); }} type="button">카드 미등록 보기</button>
+          <button className="h-10 shrink-0 rounded-md bg-amber-900 px-4 text-sm font-black text-white hover:bg-amber-950" onClick={() => { setStatusFilter(statusCounts.none ? "none" : "pending_card"); setPage(1); }} type="button">{statusCounts.none ? "구독 없음 보기" : "카드 미등록 보기"}</button>
         </section>
       ) : (
         <section className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
@@ -154,7 +157,8 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
         </section>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <BillingMetric active={statusFilter === "none"} label="구독 없음" onClick={() => { setStatusFilter("none"); setPage(1); }} value={statusCounts.none} />
         <BillingMetric active={statusFilter === "active"} label="정상 청구중" onClick={() => { setStatusFilter("active"); setPage(1); }} value={statusCounts.active} tone="success" />
         <BillingMetric active={statusFilter === "pending_card"} label="카드 미등록" onClick={() => { setStatusFilter("pending_card"); setPage(1); }} value={statusCounts.pending_card} tone="warning" />
         <BillingMetric active={statusFilter === "paused"} label="일시중지" onClick={() => { setStatusFilter("paused"); setPage(1); }} value={statusCounts.paused} />
@@ -202,7 +206,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
           {!sortedRows.length ? (
             <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
               <p className="font-black text-slate-800">{rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "아직 결제 관리 대상 고객사가 없습니다."}</p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{rows.length ? "검색어 또는 결제 상태를 변경해보세요." : "고객사가 결제 관리 화면을 한 번 열면 여기에 표시됩니다."}</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{rows.length ? "검색어 또는 결제 상태를 변경해보세요." : "고객사를 먼저 등록하면 이곳에 표시됩니다."}</p>
             </div>
           ) : null}
         </div>
@@ -277,7 +281,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
               {!sortedRows.length ? (
                 <tr>
                   <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={6}>
-                    {rows.length ? "검색 조건에 맞는 고객사가 없습니다. 검색어 또는 결제 상태를 변경해보세요." : "아직 결제 관리 대상 고객사가 없습니다. 고객사가 결제 관리 화면을 한 번 열면 여기에 표시됩니다."}
+                    {rows.length ? "검색 조건에 맞는 고객사가 없습니다. 검색어 또는 결제 상태를 변경해보세요." : "등록된 고객사가 없습니다."}
                   </td>
                 </tr>
               ) : null}

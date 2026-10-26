@@ -14820,21 +14820,40 @@ export async function listSubscriptionPayments(companyId: string, limit = 100): 
 }
 
 /** 관리자용 — 전체 고객사의 구독 상태를 한 번에 조회합니다(고객사명 포함). */
-export async function listSubscriptionsForAdmin(): Promise<Array<Subscription & { companyName: string }>> {
+export async function listSubscriptionsForAdmin(): Promise<
+  Array<Omit<Subscription, "status"> & { companyName: string; status: SubscriptionStatus | "none" }>
+> {
   if (!isProductionStoreConfigured()) return [];
-  const subscriptionRows = await supabaseRequest<SubscriptionRow[]>("subscriptions?select=*&order=updated_at.desc").catch((error) => {
-    if (isMissingSubscriptionsTableError(error)) return [];
-    throw error;
+  const [subscriptionRows, companies] = await Promise.all([
+    supabaseRequest<SubscriptionRow[]>("subscriptions?select=*&order=updated_at.desc").catch((error) => {
+      if (isMissingSubscriptionsTableError(error)) return [];
+      throw error;
+    }),
+    supabaseRequest<Array<{ id: string; name: string }>>("companies?select=id,name&order=created_at.desc").catch(() => [])
+  ]);
+  const subscriptionByCompany = new Map(subscriptionRows.map((row) => [row.company_id, row]));
+
+  return companies.map((company) => {
+    const row = subscriptionByCompany.get(company.id);
+    if (row) return { ...mapSubscriptionRow(row), companyName: company.name };
+    return {
+      id: `none-${company.id}`,
+      companyId: company.id,
+      companyName: company.name,
+      tossCustomerKey: "",
+      billingKey: null,
+      cardIssuerCode: null,
+      cardNumberMasked: null,
+      planAmountWon: 0,
+      status: "none" as const,
+      nextBillingDate: null,
+      lastPaymentStatus: null,
+      lastPaymentAt: null,
+      lastPaymentMessage: null,
+      createdAt: "",
+      updatedAt: ""
+    };
   });
-  if (!subscriptionRows.length) return [];
-
-  const companyIds = subscriptionRows.map((row) => row.company_id);
-  const companies = await supabaseRequest<Array<{ id: string; name: string }>>(
-    `companies?select=id,name&id=in.(${companyIds.map(encodeURIComponent).join(",")})`
-  ).catch(() => []);
-  const nameById = new Map(companies.map((company) => [company.id, company.name]));
-
-  return subscriptionRows.map((row) => ({ ...mapSubscriptionRow(row), companyName: nameById.get(row.company_id) || "(알 수 없는 고객사)" }));
 }
 
 async function chargeSubscriptionOnce(subscription: Subscription): Promise<{ success: boolean; message: string }> {
