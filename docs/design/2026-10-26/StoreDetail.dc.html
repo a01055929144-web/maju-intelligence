@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>매장 상세 페이지</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{margin:0}button{font-family:inherit;cursor:pointer}</style>
+</helmet>
+<div style="width: 100%; min-height: 960px; box-sizing: border-box; background: #F5F7F9; font-family: 'Noto Sans KR', system-ui, sans-serif; color: #17202A; font-size: 14px">
+  <!-- 머리: 뒤로·이름·종류·단계·우선순위 -->
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E3E8ED; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+    <button type="button" style="height: 36px; padding: 0 12px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">← 목록</button>
+    <div style="display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden">
+      <sc-for list="{{ kinds }}" as="k" hint-placeholder-count="2"><button type="button" onClick="{{ k.pick }}" style="{{ k.style }}">{{ k.label }}</button></sc-for>
+    </div>
+    <h1 style="margin: 0; font-size: 22px">99숯불집</h1>
+    <span style="font-size: 12px; padding: 3px 10px; border-radius: 10px; background: #0F766E; color: #FFFFFF">1순위 · 문자</span>
+    <span style="font-size: 12px; padding: 3px 10px; border-radius: 10px; background: #E6F4F1; color: #0F5F58">개업 D+12</span>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+      <label style="font-size: 12px; color: #5B6673">단계</label>
+      <div style="display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden">
+        <sc-for list="{{ stages }}" as="g" hint-placeholder-count="5"><button type="button" onClick="{{ g.pick }}" style="{{ g.style }}">{{ g.label }}</button></sc-for>
+      </div>
+      <span style="font-size: 12px; color: #5B6673">담당 김영업 ✎</span>
+    </div>
+  </header>
+
+  <!-- 연락 버튼: 우선순위 순서, 있는 채널만 -->
+  <section aria-label="연락하기" style="background: #FFFFFF; border-bottom: 1px solid #E3E8ED; padding: 12px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+    <button type="button" onClick="{{ sendSms }}" style="height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: #0F766E; color: #FFFFFF; font-weight: 700">문자 보내기 · 휴대폰</button>
+    <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 10px; background: #FFFFFF">인스타 DM</button>
+    <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 10px; background: #FFFFFF">이메일</button>
+    <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 10px; background: #FFFFFF">방문 길안내</button>
+    <button type="button" style="height: 36px; padding: 0 10px; border: 0; background: transparent; color: #5B6673; font-size: 13px">매장전화 보기</button>
+    <span style="margin-left: auto; font-size: 12px; color: #5B6673">추천: <b style="color: #0F5F58">오늘 문자로 단가표 보내기</b> (휴대폰 있음 · 개업 2주 안)</span>
+  </section>
+
+  <!-- 매장 하나 = 하나의 ID. 탭으로 정보가 늘어나도 같은 화면 -->
+  <nav aria-label="매장 정보 탭" style="background: #FFFFFF; border-bottom: 1px solid #E3E8ED; padding: 0 24px; display: flex; gap: 4px">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6"><button type="button" onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+  </nav>
+
+  <sc-if value="{{ tabDelivery }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width: 1360px; margin: 0 auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5B6673">기간 <b style="color: #17202A">최근 30일 ▾</b> · 배송 12회 · 사진 31장 · 공유 12회<span style="margin-left: auto; color: #0F766E">사진 모아서 내려받기</span></div>
+      <sc-for list="{{ deliveries }}" as="d" hint-placeholder-count="3">
+        <article style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: grid; grid-template-columns: 200px 1fr; gap: 14px">
+          <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+            <span style="display: flex; align-items: center; gap: 6px"><b style="font-size: 15px">{{ d.date }}</b><span style="{{ d.typeStyle }}">{{ d.type }}</span></span>
+            <span>완료 {{ d.time }} · {{ d.driver }}</span>
+            <span style="color: #5B6673">{{ d.loc }}</span>
+            <span style="{{ d.shareStyle }}">{{ d.share }}</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; gap: 6px"><sc-for list="{{ d.photos }}" as="ph" hint-placeholder-count="3"><div style="width: 110px; height: 82px; border-radius: 8px; background: #CBD5E1; display: flex; align-items: flex-end; padding: 4px; font-size: 11px; color: #1E293B">{{ ph }}</div></sc-for></div>
+            <div style="font-size: 13px; color: #4A5663">{{ d.msg }}</div>
+          </div>
+        </article>
+      </sc-for>
+      <div style="font-size: 12px; color: #5B6673">사진은 찍은 시각·위치(GPS)와 함께 원본 보관 — "배송 안 됐다"는 문의에 날짜로 바로 확인</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tabLater }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width: 1360px; margin: 0 auto; padding: 40px 24px; color: #5B6673; font-size: 14px">준비 중 — 같은 매장 ID에 주문·매출 원장이 연결되도록 설계만 해 둠(지금은 숨김)</div>
+  </sc-if>
+
+  <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
+  <div style="max-width: 1360px; margin: 0 auto; padding: 16px 24px; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr) minmax(0, 320px); gap: 16px">
+    <!-- 왼쪽: 매장 정보 -->
+    <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 15px">매장 정보</h2>
+      <sc-for list="{{ info }}" as="i" hint-placeholder-count="6">
+        <div style="display: grid; grid-template-columns: 76px 1fr; gap: 8px; font-size: 13px"><span style="color: #5B6673">{{ i.k }}</span><span>{{ i.v }}</span></div>
+      </sc-for>
+      <h2 style="margin: 6px 0 0; font-size: 15px">연락처</h2>
+      <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="5">
+        <div style="display: grid; grid-template-columns: 76px 1fr auto; gap: 8px; align-items: center; font-size: 13px"><span style="color: #5B6673">{{ c.k }}</span><span>{{ c.v }}<span style="display: block; font-size: 11px; color: #8A949E">출처 {{ c.src }}</span></span><button type="button" aria-label="수정" style="width: 28px; height: 28px; border: 1px solid #E3E8ED; border-radius: 6px; background: #FFFFFF">✎</button></div>
+      </sc-for>
+      <button type="button" style="height: 36px; border: 1px dashed #94A3B8; border-radius: 8px; background: #FFFFFF; font-size: 13px">＋ 연락처 추가 (팩스·톡톡·이메일)</button>
+      <h2 style="margin: 6px 0 0; font-size: 15px">사업자</h2>
+      <div style="display: grid; grid-template-columns: 76px 1fr auto; gap: 8px; align-items: center; font-size: 13px"><span style="color: #5B6673">사업자번호</span><span>123-45-67890<span style="display: block; font-size: 11px; color: #15803D">● 계속사업자 · 국세청 10/20</span></span><button type="button" aria-label="수정" style="width: 28px; height: 28px; border: 1px solid #E3E8ED; border-radius: 6px; background: #FFFFFF">✎</button></div>
+      <h2 style="margin: 6px 0 0; font-size: 15px">파일·사진</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px">
+        <sc-for list="{{ files }}" as="f" hint-placeholder-count="4"><div style="aspect-ratio: 1; border-radius: 8px; background: #E2E8F0; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; font-size: 11px; color: #334155">{{ f }}</div></sc-for>
+        <button type="button" style="aspect-ratio: 1; border-radius: 8px; border: 1px dashed #94A3B8; background: #FFFFFF; font-size: 12px; color: #334155">＋ 올리기</button>
+      </div>
+      <div style="font-size: 11px; color: #5B6673">사업자등록증을 올리면 상호·사업자번호·대표자를 자동으로 채웁니다(글자 인식)</div>
+      <sc-if value="{{ isCust }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin: 6px 0 0; font-size: 15px">배송</h2>
+        <div style="display: grid; grid-template-columns: 76px 1fr; gap: 8px; font-size: 13px"><span style="color: #5B6673">호차·요일</span><span>1호차 · 월수금</span><span style="color: #5B6673">적재 위치</span><span>주방 뒷문 냉장고 옆 (사진 2)</span><span style="color: #5B6673">최근 배송</span><span>10/26 07:42 완료 · 사진 공유됨</span></div>
+      </sc-if>
+      <h2 style="margin: 6px 0 0; font-size: 15px">우리 회사 칸</h2>
+      <div style="display: grid; grid-template-columns: 76px 1fr; gap: 8px; font-size: 13px"><span style="color: #5B6673">주요 품목</span><span>육류 · 채소</span><span style="color: #5B6673">현재 매입처</span><span style="color: #8A949E">입력 전</span></div>
+    </section>
+
+    <!-- 가운데: 연락 기록 + 결과 남기기 -->
+    <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 15px">결과 남기기</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{ results }}" as="r" hint-placeholder-count="7"><button type="button" onClick="{{ r.pick }}" style="{{ r.style }}">{{ r.label }}</button></sc-for>
+      </div>
+      <div style="display: flex; gap: 8px"><div style="flex: 1; height: 40px; border: 1px solid #CBD3DB; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; color: #8A949E; font-size: 13px">메모 (예: 사장님 오후 3시 이후 통화 가능)</div><div style="width: 150px; height: 40px; border: 1px solid #CBD3DB; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; font-size: 13px">다음 연락 10/29 ▾</div></div>
+      <h2 style="margin: 8px 0 0; font-size: 15px">연락 기록</h2>
+      <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="4">
+        <div style="display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid #EEF1F4; font-size: 13px">
+          <span style="color: #5B6673">{{ t.when }}</span>
+          <div><b>{{ t.what }}</b> <span style="font-size: 12px; color: #5B6673">· {{ t.who }}</span><div style="color: #4A5663">{{ t.note }}</div></div>
+        </div>
+      </sc-for>
+    </section>
+
+    <!-- 수정 기록: 누가(권한) · 언제 · 무엇을 이전→이후 -->
+    <section style="grid-column: 1 / -1; background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; order: 9">
+      <h2 style="margin: 0 0 4px; font-size: 15px">수정 기록</h2>
+      <div style="display: grid; grid-template-columns: 120px 140px 1fr; gap: 6px 12px; font-size: 13px">
+        <span style="color: #5B6673">오늘 14:02</span><span><b>김알바</b> <span style="font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #FEF3C7; color: #92400E">알바</span></span><span>적재 위치: "홀 입구" → "주방 뒷문 냉장고 옆"</span>
+        <span style="color: #5B6673">10/25 09:10</span><span><b>이준형</b> <span style="font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #F1F5F9; color: #334155">직원</span></span><span>휴대폰 추가 · 출처 "사장님께 직접"</span>
+        <span style="color: #5B6673">10/20 18:30</span><span><b>정두영</b> <span style="font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #E0E7FF; color: #3730A3">대표</span></span><span>단계: 신규 → 연락함</span>
+      </div>
+    </section>
+
+    <!-- 오른쪽: 지도·주의 -->
+    <aside style="display: flex; flex-direction: column; gap: 12px">
+      <div style="background: #E4EBF0; border-radius: 12px; height: 200px; display: grid; place-items: center; color: #5B6673; font-size: 13px">[작은 지도 · 가까운 거래처 3곳]</div>
+      <div style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px">
+        <b>근처 우리 거래처</b>
+        <span>대우부대찌개 · 0.6km · 1호차</span><span>새벽집 청담점 · 1.1km</span>
+        <span style="color: #5B6673; font-size: 12px">→ 방문하면 1호차 동선에 끼워 넣기</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px">
+        <b>출처를 물으면</b>
+        <span style="color: #4A5663">"카카오맵에 매장 대표번호로 등록된 번호로 연락드렸습니다. 불편하시면 바로 빼 드리겠습니다."</span>
+        <button type="button" style="height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">답변 복사</button>
+        <button type="button" style="height: 34px; border: 1px solid #FCA5A5; border-radius: 8px; background: #FFFFFF; color: #B91C1C">연락 거부로 표시</button>
+      </div>
+    </aside>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { stage: '신규', result: '', sent: false, kind: 'cust', tab: 'overview' }; }
+  renderVals() {
+    const st = this.state;
+    const on = 'height: 32px; padding: 0 12px; border: 0; background: #0F766E; color: #FFFFFF; font-size: 13px; font-weight: 700';
+    const off = 'height: 32px; padding: 0 12px; border: 0; background: #FFFFFF; color: #334155; font-size: 13px';
+    const stages = ['신규', '연락함', '견적 전달', '재연락', '계약', '제외'].map((label) => ({ label, pick: () => this.setState({ stage: label }), style: st.stage === label ? on : off }));
+    const rOn = 'height: 40px; padding: 0 14px; border: 2px solid #0F766E; border-radius: 20px; background: #E6F4F1; color: #0F5F58; font-weight: 700';
+    const rOff = 'height: 40px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 20px; background: #FFFFFF';
+    const results = ['부재', '관심', '견적(단가표) 전달', '재연락 예정', '계약', '거절', '연락 거부'].map((label) => ({ label, pick: () => this.setState({ result: label }), style: st.result === label ? rOn : rOff }));
+    const base = [
+      { when: '10/24 14:10', what: '문자 보냄', who: '김영업', note: '개업 축하 + 단가표 링크' },
+      { when: '10/22 11:30', what: '인스타 후보 확인', who: '김영업', note: '@99sootbul (네이버 등록 홈페이지)' },
+      { when: '10/14', what: '신규 리드 수집', who: '자동', note: '행안부 인허가 · 개업 10/14' }
+    ];
+    const timeline = st.result ? [{ when: '방금', what: st.result, who: '김영업', note: '결과 저장됨 → 단계 자동 반영' }, ...base] : base;
+    const kOn = 'height: 30px; padding: 0 12px; border: 0; background: #5B21B6; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const kOff = 'height: 30px; padding: 0 12px; border: 0; background: #FFFFFF; color: #334155; font-size: 12px';
+    const kinds = [['lead', '신규 리드'], ['cust', '거래처']].map(([k, label]) => ({ label, pick: () => this.setState({ kind: k }), style: st.kind === k ? kOn : kOff }));
+    const isCust = st.kind === 'cust';
+    const tOn = 'height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid #0F766E; background: #FFFFFF; color: #0F5F58; font-weight: 700';
+    const tOff = 'height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid transparent; background: #FFFFFF; color: #5B6673';
+    const tabDefs = [['overview', '개요'], ['delivery', '배송·반품 기록 12'], ['sales', '영업 기록'], ['order', '주문 (준비 중)'], ['ledger', '매출 원장 (준비 중)']];
+    const tabs = tabDefs.map(([k, label]) => ({ label, pick: () => this.setState({ tab: k }), style: st.tab === k ? tOn : tOff }));
+    const evS = (t) => 'font-size: 11px; padding: 2px 8px; border-radius: 10px; ' + ({ 완료: 'background: #DCFCE7; color: #166534', 반품: 'background: #FEE2E2; color: #991B1B', 파손: 'background: #FEE2E2; color: #991B1B', 보충: 'background: #DBEAFE; color: #1E40AF', 누락: 'background: #FEF3C7; color: #92400E' }[t] || 'background: #F1F5F9; color: #334155');
+    const deliveries = [
+      { type: '완료', date: '10/26 (월)', time: '07:42', driver: '김알바 · 1호차', loc: 'GPS: 매장 앞 12m', share: '카톡 공유 07:43', photos: ['적재 1', '적재 2', '안내 카드'], msg: '물품 배송 완료했습니다. 적재 위치: 주방 뒷문 냉장고 옆' },
+      { type: '파손', date: '10/24 (금)', time: '07:55', driver: '이준형 · 1호차', loc: 'GPS: 매장 앞 8m', share: '카톡 공유 07:56', photos: ['파손 사진', '안내 카드'], msg: '계란 1판 파손 → 10/26 교체 예정' },
+      { type: '반품', date: '10/23 (목)', time: '15:10', driver: '이준형 · 1호차', loc: 'GPS: 매장 앞 10m', share: '카톡 공유 15:11', photos: ['회수 사진'], msg: '대파 1단 ×2 반품 회수 · 정산 반영' },
+      { type: '완료', date: '10/22 (수)', time: '08:10', driver: '이준형 · 1호차', loc: 'GPS: 매장 앞 15m', share: '공유 안 함', photos: ['적재 1'], msg: '사장님 부재 · 뒷문 비밀번호로 입고' }
+    ].map((d) => ({ ...d, typeStyle: evS(d.type), shareStyle: 'font-size: 12px; ' + (d.share.indexOf('공유 안 함') >= 0 ? 'color: #B91C1C' : 'color: #15803D') }));
+    return {
+      tabs, deliveries, tabOverview: st.tab === 'overview' || st.tab === 'sales', tabDelivery: st.tab === 'delivery', tabLater: st.tab === 'order' || st.tab === 'ledger',
+      stages, results, timeline, kinds, isCust,
+      files: isCust ? ['사업자등록증', '적재 위치 1', '적재 위치 2', '계약서'] : ['사업자등록증', '간판 사진'],
+      sendSms: () => this.setState({ stage: '연락함' }),
+      info: [
+        { k: '주소', v: '인천 부평구 대정로 66 (1층)' }, { k: '업종', v: '한식 · 숯불구이' }, { k: '개업', v: '2026-10-14 (인허가)' },
+        { k: '면적', v: '82㎡' }, { k: '영업시간', v: '11:00~22:00 · 브레이크 15~17' }, { k: '사업자', v: '정상 (국세청 10/20 확인)' }
+      ],
+      contacts: [
+        { k: '휴대폰', v: '010-9092-2013', src: '카카오맵 · 10/20' }, { k: '매장전화', v: '032-***-****', src: '인허가' },
+        { k: '인스타', v: '@99sootbul', src: '네이버 등록 홈페이지' }, { k: '이메일', v: '—', src: '없음' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
