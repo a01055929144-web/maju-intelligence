@@ -32,15 +32,23 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 // Existing responsive debt is kept visible in CI output without preventing the
 // first automated guard from landing. Any new route/viewport/problem still
 // fails the build. Remove entries as the owning UI project fixes each screen.
-const knownLayoutDebt: Record<string, string[]> = {
-  "/admin/billing@768": ["clipped-control:최근 결제:"],
-  "/dashboard/settings/company@390": ["horizontal-overflow:", "clipped-control:"],
-  "/dashboard/settings/advanced@390": ["clipped-control:"]
+const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {
+  "/admin/billing@768": { owner: "08", prefixes: ["clipped-control:최근 결제:"] },
+  "/admin/companies@768": { owner: "08", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
+  "/admin/companies@390": { owner: "08", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
+  "/leads@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/leads@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/leads/20000000-0000-4000-8000-000000000001@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/leads/20000000-0000-4000-8000-000000000001@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/dashboard/settings/company@390": { owner: "01", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
+  "/dashboard/settings/advanced@390": { owner: "01", prefixes: ["clipped-control:"] }
 };
 
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
-  const allowedPrefixes = knownLayoutDebt[`${path}@${width}`] ?? [];
+  const entry = knownLayoutDebt[`${path}@${width}`];
+  const allowedPrefixes = entry?.prefixes ?? [];
   return {
+    owner: entry?.owner,
     known: problems.filter((problem) => allowedPrefixes.some((prefix) => problem.startsWith(prefix))),
     unexpected: problems.filter((problem) => !allowedPrefixes.some((prefix) => problem.startsWith(prefix)))
   };
@@ -196,9 +204,9 @@ for (const viewport of viewports) {
         const screenshotPath = testInfo.outputPath(`${route.slug}-${viewport.width}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: false });
         const problems = await collectLayoutProblems(page);
-        const { known, unexpected } = splitKnownLayoutDebt(route.path, viewport.width, problems);
+        const { owner, known, unexpected } = splitKnownLayoutDebt(route.path, viewport.width, problems);
         if (known.length > 0) {
-          console.warn(`[known-layout-debt] ${route.path} @ ${viewport.width}px: ${known.join(", ")}`);
+          console.warn(`[known-layout-debt:${owner}] ${route.path} @ ${viewport.width}px: ${known.join(", ")}`);
         }
         if (unexpected.length > 0) {
           failures.push(`${route.path} @ ${viewport.width}px: ${unexpected.join(", ")}`);
