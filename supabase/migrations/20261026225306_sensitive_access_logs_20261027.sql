@@ -1,4 +1,4 @@
--- OPERATIONS RECORD ONLY: 2026-10-27 운영 DB에 수동 적용·검증된 N3 SQL과 동일한 본문이다.
+-- OPERATIONS RECORD ONLY: schema_migrations 20261026225306 / sensitive_access_logs_20261027로 운영 적용·검증된 SQL과 동일한 본문이다.
 -- 재실행 금지. 배포 전에 Supabase migration history를 applied 상태로 repair하고 이 파일을 다시 실행하지 않는다.
 -- reveal/server 경로 검증 전까지 SENSITIVE_ACCESS_LOGS_ENABLED=false를 유지한다.
 begin;

@@ -45,4 +45,16 @@ describe("sensitive access log authorization", () => {
     expect(store.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(store.indexOf('return { status: "allowed", value: customer.access_password }'));
     expect(store).toContain('actor_kind: "app_user"');
   });
+
+  it("records business-license and export access before returning a URL or file", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const attachmentRoute = await readFile("app/api/customer-attachments/file/route.ts", "utf8");
+    const exportRoute = await readFile("app/api/customer/security/sensitive-access-logs/export/route.ts", "utf8");
+    expect(attachmentRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(attachmentRoute.indexOf("createCustomerAttachmentSignedUrl(path)"));
+    expect(attachmentRoute).toContain('item: "business_registration"');
+    expect(attachmentRoute).toContain("!scope.customerSession?.userId");
+    expect(exportRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(exportRoute.indexOf("return new NextResponse(csv"));
+    expect(exportRoute).toContain('warningCodes: ["export"]');
+    expect(exportRoute).toContain('status: 403');
+  });
 });

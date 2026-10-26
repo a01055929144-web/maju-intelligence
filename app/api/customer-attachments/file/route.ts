@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
 import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl, getCustomerAttachmentOwnerByStoragePath } from "@/lib/store";
+import { recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
 export const dynamic = "force-dynamic";
+const noStoreHeaders = { "Cache-Control": "no-store, private, max-age=0" };
 
 export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request);
@@ -26,18 +28,42 @@ export async function GET(request: NextRequest) {
   if (scope.companyId && pathSegments[0] !== scope.companyId) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
-  const attachmentCustomerId = await getCustomerAttachmentOwnerByStoragePath(scope.companyId, path);
-  if (!attachmentCustomerId) {
+  const attachment = await getCustomerAttachmentOwnerByStoragePath(scope.companyId, path);
+  if (!attachment) {
     return NextResponse.json({ message: "첨부자료 정보를 찾을 수 없습니다." }, { status: 404 });
   }
 
   // 병합된 첨부는 Storage 경로에 과거 거래처 ID가 남을 수 있습니다. 경로 문자열이 아니라
   // customer_attachments의 현재 customer_id를 기준으로 권한을 검사해야 병합 후에도 열람할 수 있습니다.
-  const canAccess = await canAccessAssignedCustomer(scope.companyId, attachmentCustomerId, getCustomerAssignmentKeys(scope.customerSession));
+  const canAccess = await canAccessAssignedCustomer(scope.companyId, attachment.customerId, getCustomerAssignmentKeys(scope.customerSession));
   if (!canAccess) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
+  if (attachment.attachmentType === "business_license") {
+    if (!sensitiveAccessLogsEnabled()) {
+      return NextResponse.json({ message: "사업자등록증 서버 열람 기능이 아직 승인되지 않았습니다." }, { headers: noStoreHeaders, status: 503 });
+    }
+    if (!scope.customerSession?.userId) {
+      return NextResponse.json({ message: "Forbidden" }, { headers: noStoreHeaders, status: 403 });
+    }
+    try {
+      const recorded = await recordSensitiveAccessLog({
+        actorName: scope.customerSession.operationalDisplayName || scope.customerSession.name,
+        actorRole: scope.customerSession.workspaceRole,
+        actorUserId: scope.customerSession.userId,
+        companyId: scope.companyId,
+        deviceLabel: (request.headers.get("user-agent") || "알 수 없는 기기").replace(/[\r\n]/g, " ").slice(0, 160),
+        item: "business_registration",
+        pagePath: "/api/customer-attachments/file",
+        storeId: attachment.customerId
+      });
+      if (!recorded) return NextResponse.json({ message: "사업자등록증 서버 열람 기능이 비활성화됐습니다." }, { headers: noStoreHeaders, status: 503 });
+    } catch {
+      return NextResponse.json({ message: "감사 기록을 저장하지 못해 사업자등록증을 표시하지 않았습니다." }, { headers: noStoreHeaders, status: 503 });
+    }
+  }
+
   const signedUrl = await createCustomerAttachmentSignedUrl(path);
-  return NextResponse.redirect(signedUrl);
+  return NextResponse.redirect(signedUrl, { headers: noStoreHeaders });
 }
