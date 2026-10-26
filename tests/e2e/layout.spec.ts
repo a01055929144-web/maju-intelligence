@@ -29,20 +29,7 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/mobile/today", slug: "mobile-today" }
 ];
 
-// Existing responsive debt is kept visible in CI output without preventing the
-// first automated guard from landing. Any new route/viewport/problem still
-// fails the build. Remove entries as the owning UI project fixes each screen.
-const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {
-  "/admin/billing@768": { owner: "08", prefixes: ["clipped-control:최근 결제:"] },
-  "/admin/companies@768": { owner: "08", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
-  "/admin/companies@390": { owner: "08", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
-  "/leads@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/leads@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/leads/20000000-0000-4000-8000-000000000001@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/leads/20000000-0000-4000-8000-000000000001@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/dashboard/settings/company@390": { owner: "01", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
-  "/dashboard/settings/advanced@390": { owner: "01", prefixes: ["clipped-control:"] }
-};
+// Add only documented route and viewport debt here with its owning project number.\n// The current populated CI layout has no known exceptions.\nconst knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
   const entry = knownLayoutDebt[`${path}@${width}`];
