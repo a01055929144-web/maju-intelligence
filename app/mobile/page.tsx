@@ -24,4 +24,3 @@ export default async function MobileEntryPage() {
   });
   redirect(role === "driver" || deliveryOwner ? "/mobile/today" : "/mobile/sales");
 }
-
