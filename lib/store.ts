@@ -3,7 +3,7 @@ import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEn
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
-import { canScanNextGovArea, getGovAreaCodes, getGovChangeCutoff, govLastSuccessRunQuery } from "./gov-area-scan";
+import { canScanNextGovArea, getGovAreaCodes, getGovAreaCoverageStatus, GOV_SYNC_MAX_PAGES_PER_RUN, govLastSuccessRunQuery, resolveGovAreaScanWindow, type GovAreaCursor } from "./gov-area-scan";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9253,8 +9253,6 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
 // 2026-09-07 피드백("시간은 넉넉하고 끊어서 진행하면 더 자세한 데이터가 있지 않을까") 대응:
 // startPage를 넘기면 그 구간부터 스캔하고, 결과에 nextStartPage를 함께 돌려줘서 화면이 "계속
 // 가져오기"로 바로 다음 구간을 이어서 요청할 수 있습니다. 안 넘기면 예전처럼 날짜 기반 회전입니다.
-type GovAreaCursor = { areaCode: string; page: number; cutoff: string; scanStartedAt: string };
-
 export async function syncGovRestaurantLeads(
   companyId: string,
   days = 3,
@@ -9269,6 +9267,25 @@ export async function syncGovRestaurantLeads(
   try {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     const { codes, missing } = getGovAreaCodes(salesAreas);
+    if (getGovAreaCoverageStatus(missing) === "error") {
+      const message = `미확인 영업 지역 코드가 있어 수집을 시작하지 않습니다: ${missing.join(", ")}`;
+      await recordLeadSyncStatus(companyId, "gov", "error", {
+        trigger,
+        startedAt,
+        fetched: 0,
+        ingest: EMPTY_PERMIT_INGEST_RESULT,
+        message,
+        metadata: { scannedPages: 0, areaCodes: codes.length, missingAreas: missing, areaCursor: null }
+      });
+      return {
+        configured: true,
+        fetched: 0,
+        ingest: EMPTY_PERMIT_INGEST_RESULT,
+        scannedPages: 0,
+        totalPages: 0,
+        skippedPages: []
+      };
+    }
     const previousRuns = await supabaseRequest<Array<{
       started_at: string;
       finished_at: string | null;
@@ -9279,19 +9296,21 @@ export async function syncGovRestaurantLeads(
       govLastSuccessRunQuery(companyId)
     ).catch(() => []);
     const previous = previousRuns.find((run) => run.status === "success");
-    const savedCursor = previous?.metadata?.areaCursor;
-    const scanStartedAt = savedCursor?.scanStartedAt || startedAt;
-    const cutoff = savedCursor?.cutoff
-      ? new Date(savedCursor.cutoff)
-      : getGovChangeCutoff(new Date(startedAt), previous?.metadata?.scanStartedAt || previous?.finished_at, days);
+    const scanWindow = resolveGovAreaScanWindow({
+      codes,
+      savedCursor: previous?.metadata?.areaCursor,
+      startedAt,
+      previousFinishedAt: previous?.finished_at,
+      lookbackDays: days
+    });
+    const { cursor: savedCursor, scanStartedAt, cutoff, startIndex } = scanWindow;
     const deadline = Date.now() + 32_000;
     const rows: Awaited<ReturnType<typeof fetchGovAreaRows>>["rows"] = [];
     let scannedPages = 0;
     let totalPages = 0;
     let nextCursor: GovAreaCursor | null = null;
-    const startIndex = savedCursor ? Math.max(0, codes.indexOf(savedCursor.areaCode)) : 0;
     for (let index = startIndex; index < codes.length; index += 1) {
-      if (!canScanNextGovArea(scannedPages, 14)) {
+      if (!canScanNextGovArea(scannedPages, GOV_SYNC_MAX_PAGES_PER_RUN)) {
         nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
@@ -9304,7 +9323,7 @@ export async function syncGovRestaurantLeads(
         dataset: "general_restaurants",
         areaCode,
         startPage: savedCursor?.areaCode === areaCode ? savedCursor.page : index === 0 ? startPage : undefined,
-        maxPages: Math.min(2, 14 - scannedPages),
+        maxPages: GOV_SYNC_MAX_PAGES_PER_RUN - scannedPages,
         cutoff,
         shouldStop: () => Date.now() >= deadline
       });
@@ -9315,7 +9334,7 @@ export async function syncGovRestaurantLeads(
         nextCursor = { areaCode, page: result.nextPage, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
-      if ((scannedPages >= 14 || rows.length >= 2_000) && index + 1 < codes.length) {
+      if ((scannedPages >= GOV_SYNC_MAX_PAGES_PER_RUN || rows.length >= 2_000) && index + 1 < codes.length) {
         nextCursor = { areaCode: codes[index + 1], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
