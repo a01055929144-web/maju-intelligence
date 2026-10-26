@@ -53,8 +53,8 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
 
       {!enabled ? (
         <div className="m-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
-          <p className="font-black">승인 대기</p>
-          <p className="mt-1">N3 SQL을 별도 승인·적용하고 대표 계정 검증을 마치기 전까지 조회와 기록 기능은 꺼져 있습니다.</p>
+          <p className="font-black">1차 화면 골격 · 기능 미완료</p>
+          <p className="mt-1">현재는 대표 전용 기록 화면과 API 경계만 준비됐습니다. 서버 원문 차단 → 최신 권한 재검증 → 감사 선기록 → 값 반환 흐름과 N3 SQL을 별도 검증하기 전까지 조회·기록·민감값 열람 기능은 모두 꺼져 있습니다.</p>
         </div>
       ) : (
         <>
