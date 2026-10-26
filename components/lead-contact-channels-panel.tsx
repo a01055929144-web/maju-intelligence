@@ -6,7 +6,7 @@
 // 팩스는 팩스 서비스 연동 전까지 "문구 복사 + 보냈음 기록"만 합니다(보낸 척하지 않습니다).
 // 채널 순위·형식 검사·링크 생성 규칙은 domains/lead/contact-channels.ts가 가지고, 이 컴포넌트는 화면만 담당합니다.
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2, Mail, MessageCircle, MessageSquare, Printer, Smartphone } from "lucide-react";
 import {
   buildInstagramDmUrl,
@@ -20,6 +20,12 @@ import {
   type LeadContactChannel,
   resolvePrimaryLeadContactChannel
 } from "@/domains/lead/contact-channels";
+import {
+  buildLeadSourceDisclosure,
+  leadSourceLabel,
+  requiresAfterHoursConfirmation,
+  SALES_OUTREACH_RULES
+} from "@/domains/lead/outreach-governance";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { PermitLeadItem } from "@/lib/store";
 import {
@@ -110,6 +116,29 @@ export function LeadContactChannelsPanel({
     } finally {
       setRecording(null);
     }
+  }
+
+  async function copySourceDisclosure() {
+    const disclosure = buildLeadSourceDisclosure({ businessName: lead.businessName, collectedAt: lead.createdAt, source: lead.source });
+    const copied = await copyMessage(disclosure);
+    if (!copied) return;
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || "출처 안내 기록을 남기지 못했습니다.");
+      setNotice({ tone: "ok", text: "출처 답변을 복사하고 안내 기록을 남겼습니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? `문구는 복사했지만 ${error.message}` : "문구는 복사했지만 출처 안내 기록을 남기지 못했습니다." });
+    }
+  }
+
+  function confirmAfterHoursSms(event: MouseEvent<HTMLAnchorElement>) {
+    if (!requiresAfterHoursConfirmation()) return;
+    if (!window.confirm("현재는 문자 발송을 피해야 하는 시간(21:00~08:00)입니다. 그래도 문자 앱을 여시겠습니까?")) event.preventDefault();
   }
 
   async function saveChannel(key: EditableChannel) {
@@ -205,13 +234,33 @@ export function LeadContactChannelsPanel({
         </div>
       </div>
 
+      <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-black text-blue-950">연락처·매장 정보 출처</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-blue-800">{leadSourceLabel(lead.source)} · {new Date(lead.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 확인</p>
+          </div>
+          <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => void copySourceDisclosure()} type="button">
+            <Copy className="h-3.5 w-3.5" />
+            출처 답변 복사·기록
+          </button>
+        </div>
+      </div>
+
+      <details className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <summary className="min-h-11 cursor-pointer py-3 text-xs font-black text-amber-950">영업 수칙 다시 보기</summary>
+        <ul className="list-disc space-y-1 pb-2 pl-5 text-[11px] font-semibold leading-5 text-amber-900">
+          {SALES_OUTREACH_RULES.map((rule) => <li key={rule}>{rule}</li>)}
+        </ul>
+      </details>
+
       <div className="mt-2 grid gap-2">
         <div className={rowClass("sms")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             {rowTitle("sms", <Smartphone className="h-3.5 w-3.5" />, mobile)}
             {mobile ? (
               <div className="flex gap-1.5">
-                <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "sms" ? "text-sm" : ""}`} href={buildSmsUrl(mobile, message)}>
+                <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "sms" ? "text-sm" : ""}`} href={buildSmsUrl(mobile, message)} onClick={confirmAfterHoursSms}>
                   <MessageSquare className="h-3.5 w-3.5" />
                   문자 열기
                 </a>

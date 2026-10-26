@@ -10510,6 +10510,24 @@ async function recordLeadEnrichmentEvent(input: {
   }
 }
 
+export async function recordLeadSourceDisclosureAudit(
+  companyId: string,
+  leadId: string,
+  context: { actorName?: string; actorUserId?: string }
+): Promise<boolean> {
+  const lead = await getPermitLeadIdentityForCompany(companyId, leadId);
+  if (!lead) return false;
+  await recordLeadEnrichmentEvent({
+    companyId,
+    context: { actorName: context.actorName, actorUserId: context.actorUserId, source: "manual", trigger: "manual" },
+    leadId,
+    message: "리드 정보 출처 안내 문구 복사",
+    metadata: { event_type: "source_disclosure", business_name: lead.businessName },
+    succeeded: true
+  });
+  return true;
+}
+
 /** 인스타 후보 찾기 등 한 리드의 기본 정보만 필요할 때 씁니다. 다른 회사 리드는 돌려주지 않습니다. */
 export async function getPermitLeadIdentityForCompany(
   companyId: string,
