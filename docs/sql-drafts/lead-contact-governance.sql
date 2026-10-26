@@ -3,14 +3,25 @@
 
 -- 복합 FK가 리드와 회사의 소유권을 DB에서도 함께 검증하도록 후보 키를 둔다.
 do $$
+declare has_company_lead_unique boolean;
 begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.business_permit_leads'::regclass
-      and conname = 'business_permit_leads_company_id_id_unique'
-  ) then
+  select exists (
+    select 1
+    from pg_constraint constraint_row
+    join lateral (
+      select array_agg(attribute_row.attname order by key_row.ordinality) as columns
+      from unnest(constraint_row.conkey) with ordinality key_row(attnum, ordinality)
+      join pg_attribute attribute_row
+        on attribute_row.attrelid = constraint_row.conrelid
+       and attribute_row.attnum = key_row.attnum
+    ) key_columns on true
+    where constraint_row.conrelid = 'public.business_permit_leads'::regclass
+      and constraint_row.contype in ('p', 'u')
+      and key_columns.columns = array['company_id', 'id']::name[]
+  ) into has_company_lead_unique;
+  if not has_company_lead_unique then
     alter table public.business_permit_leads
-      add constraint business_permit_leads_company_id_id_unique unique (company_id, id);
+      add constraint business_permit_leads_company_id_id_uq unique (company_id, id);
   end if;
 end $$;
 

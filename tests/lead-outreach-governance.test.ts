@@ -40,9 +40,18 @@ describe("lead outreach governance", () => {
 
   it("keeps tenant ownership and direct client access controls in the SQL draft", () => {
     const sql = fs.readFileSync(path.join(process.cwd(), "docs/sql-drafts/lead-contact-governance.sql"), "utf8");
+    expect(sql).toContain("key_columns.columns = array['company_id', 'id']::name[]");
+    expect(sql).not.toContain("business_permit_leads_company_id_id_unique");
     expect(sql).toContain("foreign key (company_id, lead_id)");
     expect(sql).toContain("foreign key (company_id, source_lead_id)");
     expect(sql.match(/enable row level security/g)).toHaveLength(3);
     expect(sql.match(/from public, anon, authenticated/g)).toHaveLength(3);
+  });
+
+  it("records source disclosure before writing to the clipboard", () => {
+    const panel = fs.readFileSync(path.join(process.cwd(), "components/lead-contact-channels-panel.tsx"), "utf8");
+    const disclosureHandler = panel.slice(panel.indexOf("async function copySourceDisclosure"), panel.indexOf("function confirmAfterHoursSms"));
+    expect(disclosureHandler.indexOf("fetchWithTimeout")).toBeLessThan(disclosureHandler.indexOf("navigator.clipboard.writeText"));
+    expect(disclosureHandler).toContain("출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다.");
   });
 });

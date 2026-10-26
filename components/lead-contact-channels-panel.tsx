@@ -120,8 +120,6 @@ export function LeadContactChannelsPanel({
 
   async function copySourceDisclosure() {
     const disclosure = buildLeadSourceDisclosure({ businessName: lead.businessName, collectedAt: lead.createdAt, source: lead.source });
-    const copied = await copyMessage(disclosure);
-    if (!copied) return;
     try {
       const response = await fetchWithTimeout(
         withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`),
@@ -130,9 +128,15 @@ export function LeadContactChannelsPanel({
       );
       const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
       if (!response.ok || !payload?.ok) throw new Error(payload?.message || "출처 안내 기록을 남기지 못했습니다.");
+      try {
+        await navigator.clipboard.writeText(disclosure);
+      } catch {
+        setNotice({ tone: "error", text: "안내 기록은 저장했지만 복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
+        return;
+      }
       setNotice({ tone: "ok", text: "출처 답변을 복사하고 안내 기록을 남겼습니다." });
     } catch (error) {
-      setNotice({ tone: "error", text: error instanceof Error ? `문구는 복사했지만 ${error.message}` : "문구는 복사했지만 출처 안내 기록을 남기지 못했습니다." });
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다." });
     }
   }
 
