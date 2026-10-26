@@ -91,9 +91,9 @@ type GovRestaurantApiResponse = {
   };
 };
 
-async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown>[]; totalCount: number } | null> {
+async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown>[]; totalCount: number }> {
   const key = getGovRestaurantApiKey();
-  if (!key) return null;
+  if (!key) throw new Error("정부 일반음식점 API 키가 없습니다.");
 
   const url = new URL(GOV_RESTAURANT_URL);
   url.searchParams.set("serviceKey", key);
@@ -101,16 +101,15 @@ async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown
   url.searchParams.set("numOfRows", String(PAGE_SIZE));
   url.searchParams.set("type", "json");
 
-  try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) return null;
-    const data = (await response.json()) as GovRestaurantApiResponse;
-    const body = data.response?.body;
-    if (!body) return null;
-    return { rows: body.items?.item || [], totalCount: body.totalCount || 0 };
-  } catch {
-    return null;
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`정부 일반음식점 API가 HTTP ${response.status}로 응답했습니다.`);
+  const data = (await response.json()) as GovRestaurantApiResponse;
+  const body = data.response?.body;
+  const resultCode = data.response?.header?.resultCode;
+  if (!body) {
+    throw new Error(`정부 일반음식점 API 응답 본문이 없습니다${resultCode ? ` (${resultCode})` : ""}.`);
   }
+  return { rows: body.items?.item || [], totalCount: Number(body.totalCount || 0) };
 }
 
 // 날짜 기반으로 시작 페이지를 회전시켜, 매일 다른 구간을 훑도록 합니다. pagesPerRun만큼 진행하면
@@ -176,7 +175,6 @@ export async function fetchRecentGovRestaurantRows(
   cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
 
   const first = await fetchPage(1);
-  if (!first) return empty;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   const startPage =
     startPageOverride && startPageOverride >= 1 && startPageOverride <= totalPages
@@ -193,7 +191,7 @@ export async function fetchRecentGovRestaurantRows(
     const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
     scannedPages += batch.length;
     for (const page of pages) {
-      if (!page?.rows?.length) continue;
+      if (!page.rows.length) continue;
       for (const raw of page.rows) {
         const mapped = mapRow(raw);
         if (!mapped) continue;

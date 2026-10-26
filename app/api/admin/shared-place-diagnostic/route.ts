@@ -11,7 +11,7 @@ const DEFAULT_SAMPLE_PAGES = 30;
 const GENERAL_RESTAURANT_PAGE_SIZE = 200;
 const GENERAL_RESTAURANT_SAMPLE_PAGES = 10;
 
-type ApiPage = { total: number; rows: Array<Record<string, unknown>> };
+type ApiPage = { total: number; rows: Array<Record<string, unknown>>; responseCode: number; elapsedMs: number };
 
 function textOf(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -27,10 +27,17 @@ async function fetchPage(dataset: string, pageNo: number, pageSize: number, key:
   url.searchParams.set("pageNo", String(pageNo));
   url.searchParams.set("numOfRows", String(pageSize));
   url.searchParams.set("type", "json");
+  const startedAt = performance.now();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
+  const elapsedMs = Math.round(performance.now() - startedAt);
   if (!response.ok) throw new Error(`${dataset}: HTTP ${response.status}`);
   const data = (await response.json()) as { response?: { body?: { totalCount?: number; items?: { item?: Array<Record<string, unknown>> } } } };
-  return { total: Number(data.response?.body?.totalCount || 0), rows: data.response?.body?.items?.item || [] };
+  return {
+    total: Number(data.response?.body?.totalCount || 0),
+    rows: data.response?.body?.items?.item || [],
+    responseCode: response.status,
+    elapsedMs
+  };
 }
 
 function isActive(row: Record<string, unknown>) {
@@ -59,16 +66,30 @@ export async function GET(request: Request) {
   if (!(await getAdminSession())) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const key = (process.env.GOV_RESTAURANT_API_KEY || "").trim();
   if (!key) return NextResponse.json({ message: "API key is not configured" }, { status: 503 });
-  const requestedDataset = new URL(request.url).searchParams.get("dataset");
+  const requestUrl = new URL(request.url);
+  const requestedDataset = requestUrl.searchParams.get("dataset");
   if (!requestedDataset || !DATASETS.includes(requestedDataset as (typeof DATASETS)[number])) {
     return NextResponse.json({ message: "dataset 쿼리가 필요합니다.", datasets: DATASETS }, { status: 400 });
   }
   const dataset = requestedDataset as (typeof DATASETS)[number];
+  const probeOnly = requestUrl.searchParams.get("mode") === "probe";
   const pageSize = dataset === "general_restaurants" ? GENERAL_RESTAURANT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
   const samplePageCount = dataset === "general_restaurants" ? GENERAL_RESTAURANT_SAMPLE_PAGES : DEFAULT_SAMPLE_PAGES;
   const targetProvinces = await getTargetProvinces();
   try {
-    const first = await fetchPage(dataset, 1, pageSize, key);
+    const first = await fetchPage(dataset, 1, probeOnly ? 10 : pageSize, key);
+    if (probeOnly) {
+      return NextResponse.json({
+        measuredAt: new Date().toISOString(),
+        dataset,
+        pageNo: 1,
+        pageSize: 10,
+        responseCode: first.responseCode,
+        elapsedMs: first.elapsedMs,
+        returnedRows: first.rows.length,
+        totalCount: first.total
+      });
+    }
     const totalPages = Math.max(1, Math.ceil(first.total / pageSize));
     const pages = Array.from({ length: Math.min(samplePageCount, totalPages) }, (_, index) =>
       1 + Math.floor((index * Math.max(0, totalPages - 1)) / Math.max(1, samplePageCount - 1))

@@ -1,6 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
+import { isConsecutiveDailyZeroFetch } from "@/domains/lead/sync-health";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
@@ -9188,8 +9189,30 @@ export async function syncGovRestaurantLeads(
   try {
     const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
     const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
-    await recordLeadSyncStatus(companyId, "gov", "success", {
-      trigger, startedAt, fetched: result.rows.length, ingest, message: summarizeLeadSyncIngest(ingest)
+    let status: "success" | "error" = "success";
+    let message = summarizeLeadSyncIngest(ingest);
+    if (trigger === "cron" && result.rows.length === 0) {
+      const previousRuns = await supabaseRequest<Array<{
+        started_at: string;
+        fetched_count: number;
+        status: string;
+      }>>(
+        `lead_sync_runs?select=started_at,fetched_count,status&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&trigger=eq.cron&started_at=lt.${encodeURIComponent(startedAt)}&order=started_at.desc&limit=1`
+      ).catch(() => []);
+      const previous = previousRuns[0];
+      if (isConsecutiveDailyZeroFetch({
+        currentStartedAt: startedAt,
+        currentFetched: result.rows.length,
+        previousStartedAt: previous?.started_at,
+        previousFetched: previous?.fetched_count,
+        previousStatus: previous?.status
+      })) {
+        status = "error";
+        message = "정부 일반음식점 API에서 이틀 연속 수집 행이 0건입니다. API 상태를 확인해 주세요.";
+      }
+    }
+    await recordLeadSyncStatus(companyId, "gov", status, {
+      trigger, startedAt, fetched: result.rows.length, ingest, message
     });
     return {
       configured: true,
