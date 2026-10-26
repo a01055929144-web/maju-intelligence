@@ -1162,13 +1162,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     }
   }
 
-  // 전국 공공데이터(행정안전부_식품_일반음식점) 자동 수집: GOV_RESTAURANT_API_KEY 필요.
-  // days=14(이 소스의 최대 조회 범위) — 이 API는 "최근 변경분만" 걸러주는 파라미터가 없어 매일
-  // 전체 스냅샷의 한 구간(약 15만 행)만 훑고 그 안에서 최근 변경분을 골라냅니다. days를 크게
-  // 잡을수록 같은 구간 안에서 더 많은 변경분이 걸립니다(2026-08-23, "DB가 적다" 피드백 대응).
-  // startPage를 넘기면(=계속 이어서 훑기) 그 구간부터, 안 넘기면 예전처럼 날짜 기반 회전
-  // 구간부터 스캔합니다. loadLeads 새로고침은 체인 호출 쪽에서 마지막에 한 번만 하도록 옵션으로
-  // 뺐습니다(라운드마다 목록을 새로고침하면 느려집니다).
+  // 행정안전부 음식점 자동 수집: 회사 영업 지역의 시군구별 최신 1페이지를 먼저 확인하고, 시간
+  // 예산 안에 끝나지 않은 지역만 저장된 커서부터 다음 실행에서 이어갑니다.
   async function runGovAutoSync(startPage?: number): Promise<GovSyncResult | null> {
     setGovSyncBusy(true);
     setGovSyncWarning("");
@@ -1210,9 +1205,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     if (payload) loadLeads();
   }
 
-  // "계속 이어서 훑기" — 안전 상한(최대 25라운드) 또는 전국 데이터를 한 바퀴 다 훑을 때까지
-  // (스캔한 페이지 누적이 totalPages 이상) 자동으로 다음 구간을 이어서 호출합니다. 이미 실행
-  // 중이면 다시 누르는 것은 "중단" 역할을 합니다.
+  // "계속 이어서 훑기" — 안전 상한 안에서 미완료 시군구 커서를 이어서 호출합니다. 이미 실행
+  // 중이면 다시 누르는 것은 중단 역할을 합니다.
   async function handleGovAutoSyncChain() {
     if (govChainRunning) {
       govChainStopRef.current = true;
@@ -1238,7 +1232,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       if (!payload.nextStartPage || !payload.totalPages) break;
       totalPages = payload.totalPages;
       scannedSoFar += payload.scannedPages || 0;
-      if (scannedSoFar >= totalPages) break; // 전국을 한 바퀴 다 훑었습니다.
+      if (scannedSoFar >= totalPages) break;
       startPage = payload.nextStartPage;
     }
     setGovChainRunning(false);
@@ -1977,7 +1971,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 }`}
                 disabled={(govSyncBusy || seoulSyncBusy) && !govChainRunning && !seoulChainRunning}
                 onClick={() => void handleAllSourcesSyncChain()}
-                title="시간이 걸려도 되니 한 번 누르면 전국 데이터를 끝까지(또는 중단할 때까지) 구간을 이어서 계속 훑어 더 넓고 자세한 데이터를 모읍니다."
+                title="회사 영업 지역의 시군구별 최신 데이터를 먼저 확인하고, 미완료 지역은 저장된 커서부터 이어서 수집합니다."
                 type="button"
               >
                 <Radar className="h-3.5 w-3.5" />
@@ -1993,7 +1987,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </div>
             {govChainRunning || seoulChainRunning || govChainRounds > 0 || seoulChainRounds > 0 ? (
               <p className="text-[11px] font-bold text-teal-700">
-                전국 공공데이터 {govChainRounds}회 구간 진행(수집 {govChainTotals.fetched.toLocaleString()}·신규 {govChainTotals.inserted.toLocaleString()})
+                영업 지역 공공데이터 {govChainRounds}회 커서 진행(수집 {govChainTotals.fetched.toLocaleString()}·신규 {govChainTotals.inserted.toLocaleString()})
                 {" · "}
                 서울시 공공데이터 {seoulChainRounds}회 구간 진행(수집 {seoulChainTotals.fetched.toLocaleString()}·신규 {seoulChainTotals.inserted.toLocaleString()})
                 {govChainRunning || seoulChainRunning ? " — 계속 진행 중입니다, 창을 닫지 말고 기다려주세요." : " — 완료"}
@@ -2001,10 +1995,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             ) : null}
             {showSourceDetails ? (
               <p className="text-[11px] font-semibold leading-4 text-slate-400">
-                &quot;전국 공공데이터&quot;는 행정안전부_식품_일반음식점 조회서비스(전국 약 229만 건, GOV_RESTAURANT_API_KEY 필요)에서, &quot;서울시 공공데이터&quot;는
-                서울 열린데이터광장(서울시만 약 53만 건, SEOUL_OPENDATA_API_KEY 필요)에서 가져오며 좌표를 직접 변환해 채워 더 빠릅니다. 미설정된
-                소스는 건너뛰고 설정된 소스만 수집합니다 — 두 API 모두 최근 변경분만 걸러주지 않아 한 번에 전체를 다 훑을 수 없어, 매일 다른
-                구간을 훑도록 되어 있고 완전 커버리지까지 시간이 걸릴 수 있습니다.
+                &quot;영업 지역 공공데이터&quot;는 행정안전부 음식점 조회서비스에서 회사 영업 지역에 해당하는 시군구의 최신 100행을 먼저 확인하고,
+                미완료 지역은 저장된 커서부터 다음 실행에 이어갑니다(GOV_RESTAURANT_API_KEY 필요). &quot;서울시 공공데이터&quot;는 서울 열린데이터광장에서
+                가져오며 좌표를 직접 변환합니다(SEOUL_OPENDATA_API_KEY 필요). 미설정된 소스는 건너뜁니다.
               </p>
             ) : null}
             {uploadWarning ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{uploadWarning}</p> : null}
