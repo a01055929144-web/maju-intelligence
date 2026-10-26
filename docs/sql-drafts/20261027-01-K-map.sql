@@ -1,6 +1,7 @@
 -- P1-5 K 지도 필터 저장 + 영업 필요 지역 구분 대표 승인 후보
 -- 승인 전 실행 금지. 이 파일은 migration이 아니며 운영 DB에 적용하지 않는다.
 -- MAP_FILTER_PERSISTENCE_ENABLED는 기본 OFF이며, API·크론·운영 migration을 함께 승인하기 전까지 켜지 않는다.
+-- 5건 SQL 초안 일괄 승인 뒤에는 이 DDL을 먼저 migration으로 적용할 수 있다. 적용 후에도 저장/API/크론 기능은 OFF다.
 
 begin;
 
@@ -72,11 +73,14 @@ commit;
 --    명시적 이관 작업으로 app_user:<uuid>에 옮기며, 조회 시 두 actor를 암묵적으로 합치거나 조용히 누락하지 않는다.
 -- 7. 고객사 사용자는 자기 actor_key의 preset만 CRUD한다.
 -- 8. anon/authenticated 직접 접근은 계속 금지하고 service_role 서버 경로만 사용한다.
--- 9. 위 DDL을 timestamp migration으로 옮기고 MAP_FILTER_PERSISTENCE_ENABLED는 명시적 승인 뒤에만 활성화한다.
--- 10. 기존 company_lead_search_regions 행은 assigned로 유지하는 드라이런 건수 보고
--- 11. area_kind 저장/조회 API와 크론 제외 로직을 함께 승인하기 전에는 칼럼 DDL도 migration으로 옮기지 않음
--- 12. 승인 후 API는 expansion_candidate를 매일 수집 대상에서 제외하고 지도 점선 경계/별도 목록에만 제공
--- 13. 적용 전 staging에서 이 파일을 연속 2회 실행하고 아래 권한/제약 확인 쿼리 결과를 승인 기록에 첨부
+-- 9. 5건 SQL 초안 일괄 승인 후 이 DDL을 timestamp migration으로 옮겨 staging → production 순서로 적용한다.
+-- 10. DDL 단독 적용은 기존 company_lead_search_regions 행을 기본값 assigned로 유지하며, 현재 코드가 area_kind를
+--     읽거나 expansion_candidate를 쓰지 않으므로 기존 수집 동작을 바꾸지 않는다.
+-- 11. DDL 적용 직후 기존 행 assigned 건수, map_filter_presets RLS/권한/제약을 확인하되
+--     MAP_FILTER_PERSISTENCE_ENABLED=false와 확장 후보 저장 경로 OFF를 유지한다.
+-- 12. 별도 기능 승인에서 actor resolver/API, expansion_candidate 저장·조회, 크론 제외 로직, 지도 점선 표시를 함께 검증한다.
+-- 13. 그 승인 후에만 expansion_candidate를 매일 수집 대상에서 제외하고 기능 플래그를 활성화한다.
+-- 14. 적용 전 staging에서 이 파일을 연속 2회 실행하고 아래 권한/제약 확인 쿼리 결과를 승인 기록에 첨부한다.
 
 -- 재실행·권한 경계 확인 쿼리 (운영 적용 명령이 아님)
 -- select relrowsecurity

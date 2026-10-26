@@ -14,6 +14,9 @@ describe("map filter SQL approval candidate", () => {
     expect(sql).toContain("commit;");
     expect(sql).not.toContain("rollback;");
     expect(sql).toContain("MAP_FILTER_PERSISTENCE_ENABLED");
+    expect(sql).toContain("5건 SQL 초안 일괄 승인 후 이 DDL을 timestamp migration으로 옮겨 staging → production 순서로 적용한다");
+    expect(sql).toContain("MAP_FILTER_PERSISTENCE_ENABLED=false와 확장 후보 저장 경로 OFF를 유지한다");
+    expect(sql).not.toContain("칼럼 DDL도 migration으로 옮기지 않음");
   });
 
   it("supports legacy owner sessions without pretending every actor has an app_users row", () => {
