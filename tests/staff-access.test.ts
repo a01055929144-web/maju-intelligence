@@ -3,6 +3,7 @@ import {
   canChangeStaffPermission,
   canGrantStaffPermission,
   getDefaultTemporaryExpiry,
+  isLegacyDeliveryOwner,
   legacyRoleToStaffAccess,
   resolveMobileStaffLanding,
   validateStaffAccess
@@ -33,6 +34,13 @@ describe("staff access", () => {
     expect(resolveMobileStaffLanding({ duties: ["sales", "delivery"], hasTodayRoute: false })).toBe("/mobile/sales");
   });
 
+  it("keeps a legacy delivery assignee on the delivery entry after promotion to owner", () => {
+    expect(isLegacyDeliveryOwner({ workspaceRole: "owner", assignedVehicle: "의정부", staffAccessV2Enabled: false })).toBe(true);
+    expect(isLegacyDeliveryOwner({ workspaceRole: "owner", assignedVehicle: "", staffAccessV2Enabled: false })).toBe(false);
+    expect(isLegacyDeliveryOwner({ workspaceRole: "manager", assignedVehicle: "의정부", staffAccessV2Enabled: false })).toBe(false);
+    expect(isLegacyDeliveryOwner({ workspaceRole: "owner", assignedVehicle: "의정부", staffAccessV2Enabled: true })).toBe(false);
+  });
+
   it("allows owner grants only from an owner or MAJU admin", () => {
     expect(canGrantStaffPermission("manager", "owner")).toBe(false);
     expect(canGrantStaffPermission("owner", "owner")).toBe(true);
@@ -43,3 +51,4 @@ describe("staff access", () => {
     expect(canChangeStaffPermission("owner", "owner", "manager")).toBe(true);
   });
 });
+
