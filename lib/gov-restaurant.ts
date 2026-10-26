@@ -160,14 +160,36 @@ export type GovRestaurantFetchResult = {
   scannedPages: number;
   startPage: number;
   totalPages: number;
+  skippedPages: number[];
 };
+
+export async function fetchGovPagesWithRetry<T>(
+  pageNumbers: number[],
+  load: (pageNo: number) => Promise<T>
+): Promise<{ pages: Array<{ pageNo: number; value: Awaited<T> }>; skippedPages: number[] }> {
+  const settled = await Promise.all(pageNumbers.map(async (pageNo) => {
+    try {
+      return { pageNo, value: await load(pageNo) };
+    } catch {
+      try {
+        return { pageNo, value: await load(pageNo) };
+      } catch {
+        return null;
+      }
+    }
+  }));
+  return {
+    pages: settled.filter((item): item is { pageNo: number; value: Awaited<T> } => item !== null),
+    skippedPages: pageNumbers.filter((pageNo) => !settled.some((item) => item?.pageNo === pageNo))
+  };
+}
 
 export async function fetchRecentGovRestaurantRows(
   days = 3,
   pagesPerRun = 150,
   startPageOverride?: number
 ): Promise<GovRestaurantFetchResult> {
-  const empty = { rows: [] as GovRestaurantRow[], nextStartPage: 1, scannedPages: 0, startPage: 1, totalPages: 1 };
+  const empty = { rows: [] as GovRestaurantRow[], nextStartPage: 1, scannedPages: 0, startPage: 1, totalPages: 1, skippedPages: [] as number[] };
   if (!isGovRestaurantApiConfigured()) return empty;
 
   const startedAt = Date.now();
@@ -184,13 +206,17 @@ export async function fetchRecentGovRestaurantRows(
 
   const rows: GovRestaurantRow[] = [];
   let scannedPages = 0;
+  let processedPages = 0;
+  const skippedPages: number[] = [];
   for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
     if (Date.now() - startedAt > TIME_BUDGET_MS) break;
     if (rows.length >= MAX_ROWS_PER_RUN) break;
     const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
-    const pages = await Promise.all(batch.map((pageNo) => (pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo))));
-    scannedPages += batch.length;
-    for (const page of pages) {
+    const batchResult = await fetchGovPagesWithRetry(batch, (pageNo) => pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo));
+    processedPages += batch.length;
+    scannedPages += batchResult.pages.length;
+    skippedPages.push(...batchResult.skippedPages);
+    for (const { value: page } of batchResult.pages) {
       if (!page.rows.length) continue;
       for (const raw of page.rows) {
         const mapped = mapRow(raw);
@@ -204,12 +230,13 @@ export async function fetchRecentGovRestaurantRows(
     }
   }
 
-  const nextStartPage = ((startPage - 1 + scannedPages) % totalPages) + 1;
+  const nextStartPage = ((startPage - 1 + processedPages) % totalPages) + 1;
   return {
     rows: rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows,
     nextStartPage,
     scannedPages,
     startPage,
-    totalPages
+    totalPages,
+    skippedPages
   };
 }
