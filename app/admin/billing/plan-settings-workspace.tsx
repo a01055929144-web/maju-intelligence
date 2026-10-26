@@ -104,7 +104,8 @@ function PlanInput({ label, min, onChange, placeholder, type = "text", value }: 
 function validateDraft(usageWindowMonths: string, plans: PlanDraft[]) {
   if (!isPositiveInteger(usageWindowMonths)) return "추천 산정 기간은 1개월 이상의 정수로 입력해주세요.";
   if (!plans.length) return "요금제를 한 개 이상 입력해주세요.";
-  for (const [index, plan] of plans.entries()) {
+  for (let index = 0; index < plans.length; index += 1) {
+    const plan = plans[index];
     const label = `요금제 ${index + 1}`;
     if (!plan.code.trim() || !plan.name.trim()) return `${label}의 코드와 이름을 입력해주세요.`;
     if (![plan.monthlyAmountWon, plan.monthlyLeadLimit, plan.staffLimit, plan.trialDays].every(isNonNegativeInteger)) return `${label}의 금액·리드·직원·체험 기준은 0 이상의 정수로 입력해주세요.`;
