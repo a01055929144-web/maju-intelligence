@@ -3,8 +3,8 @@ import { GOV_OPEN_AUTHORITY_CODES } from "./gov-area-codes";
 export type GovDataset = "general_restaurants" | "rest_cafes" | "bakeries" | "group_meal_facilities" | "contract_catering";
 export type GovUpdateKind = "insert" | "update" | "delete" | "unknown";
 export type GovAreaCursor = { areaCode: string; page: number; cutoff: string; scanStartedAt: string };
-// 지역 API 요청 제한(25초) 뒤 ingest와 상태 기록이 Hobby 60초 안에 끝나도록 한 번에 한 페이지만 읽는다.
-export const GOV_SYNC_PAGES_PER_REQUEST = 1;
+// API 요청 제한(25초) 뒤 ingest와 상태 기록이 Hobby 60초 안에 끝나도록 전체 실행을 한 페이지로 제한한다.
+export const GOV_SYNC_MAX_PAGES_PER_RUN = 1;
 
 export function govLastSuccessRunQuery(companyId: string) {
   return `lead_sync_runs?select=started_at,finished_at,fetched_count,status,metadata&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&status=eq.success&order=started_at.desc&limit=1`;

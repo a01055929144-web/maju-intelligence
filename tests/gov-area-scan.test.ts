@@ -5,7 +5,7 @@ import {
   getGovAreaCoverageStatus,
   getGovChangeCutoff,
   getGovUpdateKind,
-  GOV_SYNC_PAGES_PER_REQUEST,
+  GOV_SYNC_MAX_PAGES_PER_RUN,
   govLastSuccessRunQuery,
   resolveGovAreaScanWindow,
   scanGovArea
@@ -108,7 +108,7 @@ describe("지역 조건 정부 수집", () => {
   it("함수 시간 예산을 위해 한 번에 한 페이지만 읽고 다음 페이지 커서를 남긴다", async () => {
     const pages: number[] = [];
     const result = await scanGovArea({
-      maxPages: GOV_SYNC_PAGES_PER_REQUEST,
+      maxPages: GOV_SYNC_MAX_PAGES_PER_RUN,
       pageSize: 1,
       modifiedAt: () => "2026-10-27 00:00",
       load: async (page) => {
@@ -119,6 +119,7 @@ describe("지역 조건 정부 수집", () => {
 
     expect(pages).toEqual([1]);
     expect(result.nextPage).toBe(2);
+    expect(canScanNextGovArea(result.scannedPages, GOV_SYNC_MAX_PAGES_PER_RUN)).toBe(false);
   });
 
   it("I/U/D 변경 유형을 구별한다", () => {

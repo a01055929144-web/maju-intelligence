@@ -3,7 +3,7 @@ import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEn
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
-import { canScanNextGovArea, getGovAreaCodes, getGovAreaCoverageStatus, GOV_SYNC_PAGES_PER_REQUEST, govLastSuccessRunQuery, resolveGovAreaScanWindow, type GovAreaCursor } from "./gov-area-scan";
+import { canScanNextGovArea, getGovAreaCodes, getGovAreaCoverageStatus, GOV_SYNC_MAX_PAGES_PER_RUN, govLastSuccessRunQuery, resolveGovAreaScanWindow, type GovAreaCursor } from "./gov-area-scan";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9310,7 +9310,7 @@ export async function syncGovRestaurantLeads(
     let totalPages = 0;
     let nextCursor: GovAreaCursor | null = null;
     for (let index = startIndex; index < codes.length; index += 1) {
-      if (!canScanNextGovArea(scannedPages, 14)) {
+      if (!canScanNextGovArea(scannedPages, GOV_SYNC_MAX_PAGES_PER_RUN)) {
         nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
@@ -9323,7 +9323,7 @@ export async function syncGovRestaurantLeads(
         dataset: "general_restaurants",
         areaCode,
         startPage: savedCursor?.areaCode === areaCode ? savedCursor.page : index === 0 ? startPage : undefined,
-        maxPages: Math.min(GOV_SYNC_PAGES_PER_REQUEST, 14 - scannedPages),
+        maxPages: GOV_SYNC_MAX_PAGES_PER_RUN - scannedPages,
         cutoff,
         shouldStop: () => Date.now() >= deadline
       });
@@ -9334,7 +9334,7 @@ export async function syncGovRestaurantLeads(
         nextCursor = { areaCode, page: result.nextPage, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
-      if ((scannedPages >= 14 || rows.length >= 2_000) && index + 1 < codes.length) {
+      if ((scannedPages >= GOV_SYNC_MAX_PAGES_PER_RUN || rows.length >= 2_000) && index + 1 < codes.length) {
         nextCursor = { areaCode: codes[index + 1], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
         break;
       }
