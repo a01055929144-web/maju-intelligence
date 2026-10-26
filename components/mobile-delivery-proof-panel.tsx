@@ -9,8 +9,9 @@ import { MessageTemplateManager } from "@/components/message-template-manager";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import { DELIVERY_ISSUE_CAUSES, DELIVERY_RECORD_TYPES, requiresDeliveryIssueCause, requiresDeliveryItems, type DeliveryIssueCause, type DeliveryRecordType } from "@/domains/delivery/issue-causes";
 
-type DeliveryStatus = "arrived" | "partial" | "issue";
+type DeliveryStatus = DeliveryRecordType;
 type MessageChannel = "kakao" | "sms";
 type Attachment = {
   id: string;
@@ -41,11 +42,7 @@ type MessageLog = {
   status: "failed" | "queued" | "sent";
 };
 
-const deliveryStatuses: Array<{ label: string; value: DeliveryStatus }> = [
-  { label: "도착완료", value: "arrived" },
-  { label: "부분배송", value: "partial" },
-  { label: "이슈발생", value: "issue" }
-];
+const deliveryStatuses = DELIVERY_RECORD_TYPES;
 
 const messageChannels: Array<{ label: string; value: MessageChannel }> = [
   { label: "카카오로 보내기", value: "kakao" },
@@ -85,6 +82,9 @@ export function MobileDeliveryProofPanel({
   const [copyMessage, setCopyMessage] = useState("");
   const [contactMode, setContactMode] = useState<"company" | "driver">("company");
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("arrived");
+  const [issueCause, setIssueCause] = useState<DeliveryIssueCause | "">("");
+  const [itemName, setItemName] = useState("");
+  const [itemQuantity, setItemQuantity] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState("");
@@ -115,11 +115,16 @@ export function MobileDeliveryProofPanel({
     notificationSenderName: contactMode === "driver" ? driverName : notificationSenderName,
     templates: {
       arrived: deliveryCompleteMessage,
-      issue: deliveryIssueMessage,
-      partial: deliveryPartialMessage
+      partial: deliveryPartialMessage,
+      return: deliveryIssueMessage,
+      replenishment: deliveryIssueMessage,
+      exchange: deliveryIssueMessage,
+      damage: deliveryIssueMessage,
+      missing: deliveryIssueMessage,
+      other: deliveryIssueMessage
     }
   });
-  useUnsavedChangesWarning(Boolean(files.length || memo.trim() || manualRecipientPhone.trim() || deliveryStatus !== "arrived"));
+  useUnsavedChangesWarning(Boolean(files.length || memo.trim() || manualRecipientPhone.trim() || deliveryStatus !== "arrived" || itemName.trim() || itemQuantity.trim() || issueCause));
 
   function handleFileSelect(selected: File[]) {
     const oversized = selected.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
@@ -183,10 +188,18 @@ export function MobileDeliveryProofPanel({
       setFileError("배송완료된 적재 위치와 상품 사진을 1장 이상 촬영해주세요.");
       return;
     }
+    if (requiresDeliveryItems(deliveryStatus) && (!itemName.trim() || !itemQuantity.trim())) {
+      setFileError("품목과 수량을 입력해 주세요.");
+      return;
+    }
+    if (requiresDeliveryIssueCause(deliveryStatus) && !issueCause) {
+      setFileError("원인 코드를 한 번 선택해 주세요.");
+      return;
+    }
     const locationText = location
       ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
       : "";
-    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}\n알림 방식: ${messageChannel === "kakao" ? "카카오 공유" : "SMS 자동/무료 수동"}${files.length ? `\n증빙 파일: ${files.map((file) => file.name).join(", ")}` : ""}${locationText}`;
+    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}${itemName.trim() ? `\n품목·수량: ${itemName.trim()} · ${itemQuantity.trim()}` : ""}${issueCause ? `\n원인 코드: ${issueCause}` : ""}\n알림 방식: ${messageChannel === "kakao" ? "카카오 공유" : "SMS 자동/무료 수동"}${files.length ? `\n증빙 파일: ${files.map((file) => file.name).join(", ")}` : ""}${locationText}`;
     const attemptKey = JSON.stringify([
       customerId,
       deliveryStatus,
@@ -273,7 +286,7 @@ export function MobileDeliveryProofPanel({
         idempotencyKey: `${progress.attemptId}:message`,
         message: ownerMessage,
         noteId,
-        triggerType: deliveryStatus === "issue" ? "delivery_issue" : "delivery_complete"
+        triggerType: deliveryStatus === "arrived" ? "delivery_complete" : "delivery_issue"
       })
     }, 12000).catch(() => null);
     const messagePayload = (await messageResponse?.json().catch(() => null)) as
@@ -299,6 +312,9 @@ export function MobileDeliveryProofPanel({
     setFiles([]);
     setMemo("");
     setDeliveryStatus("arrived");
+    setIssueCause("");
+    setItemName("");
+    setItemQuantity("");
     setManualRecipientPhone("");
     saveProgressRef.current = null;
     setSaving(false);
@@ -441,7 +457,7 @@ export function MobileDeliveryProofPanel({
           <span className="mobile-accent hidden group-open:inline">닫기</span>
         </summary>
         <div className="border-t border-[var(--mobile-border)] p-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {deliveryStatuses.map((item) => (
               <button
                 className={`min-h-12 rounded-lg border px-2 text-xs font-black transition ${
@@ -455,6 +471,18 @@ export function MobileDeliveryProofPanel({
               </button>
             ))}
           </div>
+
+          {requiresDeliveryItems(deliveryStatus) ? <div className="mt-3 grid grid-cols-[1fr_96px] gap-2">
+            <input aria-label="품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setItemName(event.target.value)} placeholder="품목" value={itemName} />
+            <input aria-label="수량" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setItemQuantity(event.target.value)} placeholder="수량" value={itemQuantity} />
+          </div> : null}
+
+          {requiresDeliveryIssueCause(deliveryStatus) ? <fieldset className="mt-3">
+            <legend className="text-xs font-black">원인 코드 · 한 번 탭</legend>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {DELIVERY_ISSUE_CAUSES.map((cause) => <button className={`min-h-10 shrink-0 rounded-full border px-3 text-xs font-bold ${issueCause === cause ? "mobile-primary-action border-teal-700" : "mobile-card border-slate-200"}`} key={cause} onClick={() => setIssueCause(cause)} type="button">{cause}</button>)}
+            </div>
+          </fieldset> : null}
 
       <MessageTemplateManager compact mode="driver" onSelect={(body) => setMemo(body.replaceAll("{매장명}", customerName))} />
       <textarea
@@ -785,9 +813,7 @@ function createOwnerMessage(
 }
 
 function deliveryStatusLabel(status: DeliveryStatus) {
-  if (status === "partial") return "부분배송";
-  if (status === "issue") return "이슈발생";
-  return "도착완료";
+  return DELIVERY_RECORD_TYPES.find((item) => item.value === status)?.label || "기타";
 }
 
 function createSmsHref(phone: string, message: string) {
