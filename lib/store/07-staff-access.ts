@@ -1,5 +1,5 @@
-import { supabaseRequest } from "@/lib/store";
-import { normalizeStaffDuties, type StaffDuty } from "@/domains/organization/staff-access";
+import { supabaseRequest } from "../store";
+import { normalizeStaffDuties, type StaffDuty } from "../../domains/organization/staff-access";
 
 export async function getStaffAccessState(input: { companyId: string; userId: string }): Promise<{
   active: boolean;
