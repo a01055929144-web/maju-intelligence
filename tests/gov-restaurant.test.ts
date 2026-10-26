@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchGovPageWithRetry, fetchGovPagesWithRetry, fetchRecentGovRestaurantRows } from "../lib/gov-restaurant";
+import { fetchGovAreaRows, fetchGovPageWithRetry, fetchGovPagesWithRetry } from "../lib/gov-restaurant";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -14,11 +14,30 @@ describe("government API failures", () => {
     }), { status: 403 }));
     vi.stubGlobal("fetch", request);
 
-    const error = await fetchRecentGovRestaurantRows().catch((failure: Error) => failure);
+    const error = await fetchGovAreaRows({
+      dataset: "general_restaurants",
+      areaCode: "3220000",
+      maxPages: 1
+    }).catch((failure: Error) => failure);
     expect(error).toBeInstanceOf(Error);
     expect(String(error)).toContain("SERVICE_ACCESS_DENIED_ERROR");
     expect(String(error)).not.toContain("private-key");
     expect(request).toHaveBeenCalledTimes(2);
+    expect(String(request.mock.calls[0][0])).toContain("OPN_ATMY_GRP_CD");
+  });
+
+  it("첫 적재는 시군구와 영업 중 조건을 함께 보낸다", async () => {
+    vi.stubEnv("GOV_RESTAURANT_API_KEY", "private-key");
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      response: { header: { resultCode: "00" }, body: { totalCount: 0, items: { item: [] } } }
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", request);
+
+    await fetchGovAreaRows({ dataset: "rest_cafes", areaCode: "3220000", maxPages: 1, activeOnly: true });
+
+    const url = request.mock.calls[0][0] as URL;
+    expect(url.searchParams.get("cond[OPN_ATMY_GRP_CD::EQ]")).toBe("3220000");
+    expect(url.searchParams.get("cond[SALS_STTS_CD::EQ]")).toBe("01");
   });
 });
 
