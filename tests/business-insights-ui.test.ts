@@ -43,6 +43,7 @@ describe("N4-1 insights UI data", () => {
 
   it("keeps SQL-dependent N4 sections visibly off without adding restricted reads", () => {
     expect(insightsPageSource).toContain("deliveryIssues: false");
+    expect(insightsPageSource).toContain("INSIGHTS_DATA_FEATURES.deliveryIssues ? <RiskCard");
     expect(insightsPageSource).toContain("itemProfitability: false");
     expect(insightsPageSource).toContain("receivables: false");
     expect(insightsPageSource).toContain("shareLinks: false");
