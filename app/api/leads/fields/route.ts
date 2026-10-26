@@ -7,15 +7,16 @@ export const dynamic = "force-dynamic";
 const TYPES = new Set(["text", "number", "date", "select", "multi_select", "checkbox"]);
 
 export async function GET(request: NextRequest) {
-  const scope = await getRequestAuthScope(request); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+  const scope = await getRequestAuthScope(request, requestedCompanyId); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!isLeadWorkspaceV2Enabled(scope.companyId)) return NextResponse.json({ message: "준비 중인 기능입니다." }, { status: 404 });
   const rows = await supabaseRequest<Array<Record<string, unknown>>>(`company_lead_fields?select=*&company_id=eq.${encodeURIComponent(scope.companyId!)}&archived_at=is.null&order=sort_order,id`).catch(() => []);
   return NextResponse.json({ fields: rows.map(toField) });
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { label?: string; fieldType?: string; showInList?: boolean; filterable?: boolean } | null;
-  const scope = await getRequestAuthScope(request); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const body = await request.json().catch(() => null) as { companyId?: string; label?: string; fieldType?: string; showInList?: boolean; filterable?: boolean } | null;
+  const scope = await getRequestAuthScope(request, body?.companyId); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_customers")) return NextResponse.json({ message: "리드 칸을 관리할 권한이 없습니다." }, { status: 403 });
   if (!isLeadWorkspaceV2Enabled(scope.companyId)) return NextResponse.json({ message: "준비 중인 기능입니다." }, { status: 404 });
   const label = body?.label?.trim() || ""; if (!label || label.length > 60 || !TYPES.has(body?.fieldType || "")) return NextResponse.json({ message: "칸 이름과 형식을 확인해 주세요." }, { status: 400 });
