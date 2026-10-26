@@ -15,7 +15,14 @@ export default async function StaffSettingsPage() {
   ]);
   return (
     <SettingsShell activePath="/dashboard/settings/staff" session={session} showHoldModules={areHoldModulesEnabled(session.companyId)} subtitle="직원 이름, 권한과 담당 업무를 관리합니다." title="직원 관리">
-      <StaffManagementPanel canManageMembers={customerHasCapability(session, "manage_members")} initialInvitations={staff.invitations} initialJobTitles={jobTitles.jobTitles} managerOptions={assignmentOptions.managers} vehicleOptions={assignmentOptions.vehicles} />
+      <StaffManagementPanel
+        canManageMembers={customerHasCapability(session, "manage_members")}
+        initialInvitations={staff.invitations}
+        initialJobTitles={jobTitles.jobTitles}
+        managerOptions={assignmentOptions.managers}
+        staffAccessV2Enabled={process.env.STAFF_ACCESS_V2_ENABLED === "true"}
+        vehicleOptions={assignmentOptions.vehicles}
+      />
     </SettingsShell>
   );
 }

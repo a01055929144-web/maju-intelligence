@@ -4,6 +4,8 @@ import { NextRequest } from "next/server";
 import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
+import { getStaffAccessState } from "./store/07-staff-access";
+import type { StaffDuty } from "@/domains/organization/staff-access";
 
 export type AdminSession = {
   email: string;
@@ -23,6 +25,7 @@ export type CustomerSession = {
   userId?: string;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
+  duties?: StaffDuty[];
   // 2026-09-07: 카카오 로그인 이름이 거래처의 배송담당자 표기와 달라 자동 매칭이 안 되는
   // 직원을 위해, 관리자가 직원 초대 화면에서 수동으로 지정한 담당자명/차량 값입니다.
   // getCustomerAssignmentKeys가 이 값도 매칭 후보로 함께 사용합니다.
@@ -107,10 +110,13 @@ export async function getCustomerSession() {
   try {
     const membership = await getActiveCustomerMembership({ companyId: session.companyId, userId: session.userId });
     if (!membership.active) return null;
+    const staffAccess = await getStaffAccessState({ companyId: session.companyId, userId: session.userId });
+    if (!staffAccess.active) return null;
     const workspaceRole = normalizeWorkspaceRole(membership.role || session.workspaceRole);
     const role: CustomerSession["role"] = workspaceRole === "owner" ? "owner" : "member";
     return {
       ...session,
+      duties: staffAccess.duties.length ? staffAccess.duties : session.duties,
       companyMemberId: membership.companyMemberId,
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,

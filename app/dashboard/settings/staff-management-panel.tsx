@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Pencil, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,27 @@ import { formatPhoneNumber } from "@/lib/phone";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
 import type { StaffInvitation } from "@/lib/store";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
+import {
+  getDefaultTemporaryExpiry,
+  legacyRoleToStaffAccess,
+  STAFF_DUTIES,
+  STAFF_DUTY_LABELS,
+  STAFF_PERMISSION_LABELS,
+  type StaffDuty,
+  type StaffPermissionRole,
+  validateStaffAccess
+} from "@/domains/organization/staff-access";
 
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 type StaffListFilter = "all" | "accepted" | "needs-link" | "pending";
+type StaffAccessRecord = {
+  duties: StaffDuty[];
+  expiresOn: string | null;
+  invitationId: string;
+  permissionRole: StaffPermissionRole;
+  vehicleName: string;
+};
 
 function isErrorMessage(message: string) {
   return ["실패", "오류", "않", "필요", "맞지", "준비"].some((keyword) => message.includes(keyword));
@@ -48,17 +65,24 @@ export function StaffManagementPanel({
   initialInvitations,
   initialJobTitles,
   managerOptions,
+  staffAccessV2Enabled,
   vehicleOptions
 }: {
   canManageMembers: boolean;
   initialInvitations: StaffInvitation[];
   initialJobTitles: CompanyJobTitle[];
   managerOptions: string[];
+  staffAccessV2Enabled?: boolean;
   vehicleOptions: string[];
 }) {
   const [invitations, setInvitations] = useState(initialInvitations);
   const [inviteRows, setInviteRows] = useState<InviteRow[]>([makeEmptyInviteRow()]);
   const [inviteRole, setInviteRole] = useState<string>("driver");
+  const [inviteDuties, setInviteDuties] = useState<StaffDuty[]>(["delivery"]);
+  const [invitePermissionRole, setInvitePermissionRole] = useState<StaffPermissionRole>("staff");
+  const [inviteExpiresOn, setInviteExpiresOn] = useState(getDefaultTemporaryExpiry());
+  const [inviteVehicle, setInviteVehicle] = useState("");
+  const [staffAccessByInvitationId, setStaffAccessByInvitationId] = useState<Record<string, StaffAccessRecord>>({});
   const [expandedId, setExpandedId] = useState("");
   // 거래처에 실제 등록된 담당자명/배송차량 목록입니다. 화면에서 "+ 새 담당자/배송차 추가"로 입력한
   // 이름은 거래처에 저장되는 값이 아니라 이 직원의 배정 기준(override)으로만 쓰이므로 서버에 다시
@@ -116,6 +140,22 @@ export function StaffManagementPanel({
   const pageEnd = Math.min(filteredInvitations.length, currentPage * pageSize);
   const pagedInvitations = filteredInvitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  useEffect(() => {
+    if (!staffAccessV2Enabled) return;
+    let active = true;
+    requestStaffJson("/api/customer/staff-access").then(({ payload, response }) => {
+      if (!active || !response?.ok || !Array.isArray(payload?.records)) return;
+      const records = (payload.records as StaffAccessRecord[]).reduce<Record<string, StaffAccessRecord>>((result, record) => {
+        result[record.invitationId] = record;
+        return result;
+      }, {});
+      setStaffAccessByInvitationId(records);
+    });
+    return () => {
+      active = false;
+    };
+  }, [staffAccessV2Enabled]);
+
   function addInviteRow() {
     setInviteRows((current) => [...current, makeEmptyInviteRow()]);
   }
@@ -135,6 +175,18 @@ export function StaffManagementPanel({
   async function createStaff() {
     const targetRows = inviteRows.filter((row) => row.employeeName.trim());
     if (!targetRows.length || creating) return;
+    if (staffAccessV2Enabled) {
+      const validationMessage = validateStaffAccess({
+        duties: inviteDuties,
+        expiresOn: invitePermissionRole === "temporary" ? inviteExpiresOn : null,
+        permissionRole: invitePermissionRole,
+        vehicleId: inviteVehicle
+      });
+      if (validationMessage) {
+        setMessage(validationMessage);
+        return;
+      }
+    }
     setCreating(true);
     setMessage("");
 
@@ -148,7 +200,25 @@ export function StaffManagementPanel({
         body: JSON.stringify({ employeeName: row.employeeName, employeePhone: row.employeePhone, role: inviteRole })
       });
       if (response?.ok) {
-        created.push(payload.invitation as StaffInvitation);
+        const invitation = payload.invitation as StaffInvitation;
+        if (staffAccessV2Enabled) {
+          const accessResult = await requestStaffJson("/api/customer/staff-access", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              duties: inviteDuties,
+              expiresOn: invitePermissionRole === "temporary" ? inviteExpiresOn : null,
+              invitationId: invitation.id,
+              permissionRole: invitePermissionRole,
+              vehicleName: inviteVehicle
+            })
+          });
+          if (!accessResult.response?.ok) {
+            failed.push(`${row.employeeName}(${accessResult.payload?.message || "권한 저장 실패"})`);
+            continue;
+          }
+        }
+        created.push(invitation);
       } else {
         failed.push(`${row.employeeName}(${payload?.message || "실패"})`);
       }
@@ -640,6 +710,15 @@ export function StaffManagementPanel({
                                 saving={savingId === invitation.id}
                                 vehicleOptions={vehicleChoices}
                               />
+                              {staffAccessV2Enabled ? (
+                                <StaffAccessEditor
+                                  canEdit={canManageMembers}
+                                  initialAccess={staffAccessByInvitationId[invitation.id]}
+                                  invitation={invitation}
+                                  onMessage={setMessage}
+                                  vehicleOptions={vehicleChoices}
+                                />
+                              ) : null}
                             </td>
                           </tr>
                         ) : null}
@@ -732,6 +811,51 @@ export function StaffManagementPanel({
                   </option>
                 ))}
               </select>
+              {staffAccessV2Enabled ? (
+                <div className="grid gap-3 rounded-lg border border-teal-200 bg-white p-3">
+                  <fieldset>
+                    <legend className="text-xs font-black text-slate-700">권한</legend>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {(["manager", "staff", "temporary"] as StaffPermissionRole[]).map((role) => (
+                        <label className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 px-2 text-xs font-bold" key={role}>
+                          <input checked={invitePermissionRole === role} name="invite-permission" onChange={() => setInvitePermissionRole(role)} type="radio" />
+                          {STAFF_PERMISSION_LABELS[role]}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend className="text-xs font-black text-slate-700">담당 업무 · 복수 선택 가능</legend>
+                    <div className="mt-2 flex gap-2">
+                      {STAFF_DUTIES.map((duty) => (
+                        <label className="flex min-h-10 flex-1 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold" key={duty}>
+                          <input
+                            checked={inviteDuties.includes(duty)}
+                            onChange={(event) => setInviteDuties((current) => event.target.checked ? (current.includes(duty) ? current : [...current, duty]) : current.filter((item) => item !== duty))}
+                            type="checkbox"
+                          />
+                          {STAFF_DUTY_LABELS[duty]}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  {inviteDuties.includes("delivery") ? (
+                    <label className="grid gap-1 text-xs font-black text-slate-700">
+                      배정 차량
+                      <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" onChange={(event) => setInviteVehicle(event.target.value)} value={inviteVehicle}>
+                        <option value="">차량 선택</option>
+                        {vehicleChoices.map((vehicle) => <option key={vehicle} value={vehicle}>{vehicle}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                  {invitePermissionRole === "temporary" ? (
+                    <label className="grid gap-1 text-xs font-black text-slate-700">
+                      근무 만료일 · 기본 30일
+                      <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" min={new Date().toISOString().slice(0, 10)} onChange={(event) => setInviteExpiresOn(event.target.value)} type="date" value={inviteExpiresOn} />
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="-mt-1 text-xs font-bold text-blue-800">선택한 업무가 입력한 모든 직원에게 적용됩니다.</p>
               <Button
                 className="h-12 bg-teal-700 font-black hover:bg-teal-800"
@@ -792,6 +916,86 @@ export function StaffManagementPanel({
         </aside>
       </div>
     </section>
+  );
+}
+
+function StaffAccessEditor({
+  canEdit,
+  initialAccess,
+  invitation,
+  onMessage,
+  vehicleOptions
+}: {
+  canEdit: boolean;
+  initialAccess?: StaffAccessRecord;
+  invitation: StaffInvitation;
+  onMessage: (message: string) => void;
+  vehicleOptions: string[];
+}) {
+  const legacy = legacyRoleToStaffAccess(invitation.role);
+  const [duties, setDuties] = useState<StaffDuty[]>(initialAccess?.duties || legacy.duties);
+  const [permissionRole, setPermissionRole] = useState<StaffPermissionRole>(initialAccess?.permissionRole || legacy.permissionRole);
+  const [expiresOn, setExpiresOn] = useState(initialAccess?.expiresOn || getDefaultTemporaryExpiry());
+  const [vehicleName, setVehicleName] = useState(initialAccess?.vehicleName || invitation.assignedVehicle || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!initialAccess) return;
+    setDuties(initialAccess.duties);
+    setPermissionRole(initialAccess.permissionRole);
+    setExpiresOn(initialAccess.expiresOn || getDefaultTemporaryExpiry());
+    setVehicleName(initialAccess.vehicleName);
+  }, [initialAccess]);
+
+  async function save() {
+    const validationMessage = validateStaffAccess({ duties, expiresOn: permissionRole === "temporary" ? expiresOn : null, permissionRole, vehicleId: vehicleName });
+    if (validationMessage) return onMessage(validationMessage);
+    setSaving(true);
+    const { payload, response } = await requestStaffJson("/api/customer/staff-access", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duties, expiresOn: permissionRole === "temporary" ? expiresOn : null, invitationId: invitation.id, permissionRole, vehicleName })
+    });
+    setSaving(false);
+    onMessage(response?.ok ? "권한과 담당 업무를 저장했습니다." : payload?.message || "권한과 담당 업무 저장에 실패했습니다.");
+  }
+
+  return (
+    <div className="mt-4 grid gap-3 rounded-lg border border-teal-200 bg-white p-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="grid gap-1 text-xs font-black text-slate-700">
+          권한
+          <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" disabled={!canEdit} onChange={(event) => setPermissionRole(event.target.value as StaffPermissionRole)} value={permissionRole}>
+            {(["owner", "manager", "staff", "temporary"] as StaffPermissionRole[]).map((role) => <option key={role} value={role}>{STAFF_PERMISSION_LABELS[role]}</option>)}
+          </select>
+        </label>
+        <fieldset>
+          <legend className="text-xs font-black text-slate-700">담당 업무 · 복수 선택 가능</legend>
+          <div className="mt-1 flex gap-2">
+            {STAFF_DUTIES.map((duty) => (
+              <label className="flex h-10 flex-1 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-bold" key={duty}>
+                <input checked={duties.includes(duty)} disabled={!canEdit} onChange={(event) => setDuties((current) => event.target.checked ? (current.includes(duty) ? current : [...current, duty]) : current.filter((item) => item !== duty))} type="checkbox" />
+                {STAFF_DUTY_LABELS[duty]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+      {duties.includes("delivery") ? (
+        <label className="grid gap-1 text-xs font-black text-slate-700">배정 차량
+          <select className="h-10 rounded-md border border-slate-200 bg-white px-2 text-sm" disabled={!canEdit} onChange={(event) => setVehicleName(event.target.value)} value={vehicleName}>
+            <option value="">차량 선택</option>
+            {vehicleOptions.map((vehicle) => <option key={vehicle} value={vehicle}>{vehicle}</option>)}
+          </select>
+        </label>
+      ) : null}
+      {permissionRole === "temporary" ? (
+        <label className="grid gap-1 text-xs font-black text-slate-700">근무 만료일
+          <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" disabled={!canEdit} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiresOn(event.target.value)} type="date" value={expiresOn} />
+        </label>
+      ) : null}
+      <Button className="h-10 w-fit bg-teal-700" disabled={!canEdit || saving} onClick={save} type="button">{saving ? "저장 중" : "권한·업무 저장"}</Button>
+    </div>
   );
 }
 

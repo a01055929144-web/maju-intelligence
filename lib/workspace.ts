@@ -1,6 +1,6 @@
 export type AppUserRole = "maju_super_admin" | "maju_operator" | "customer_user";
 export type WorkspaceType = "personal" | "company";
-export type WorkspaceRole = "owner" | "manager" | "sales" | "driver" | "member";
+export type WorkspaceRole = "owner" | "manager" | "sales" | "driver" | "member" | "temporary";
 
 export type WorkspaceCapability =
   | "manage_company"
@@ -18,7 +18,8 @@ export const workspaceRoleLabels: Record<WorkspaceRole, string> = {
   manager: "관리자",
   member: "직원",
   owner: "대표/소유자",
-  sales: "영업직원"
+  sales: "영업직원",
+  temporary: "알바(임시)"
 };
 
 export const workspaceTypeLabels: Record<WorkspaceType, string> = {
@@ -43,11 +44,14 @@ const roleCapabilities: Record<WorkspaceRole, WorkspaceCapability[]> = {
   ),
   member: allWorkspaceCapabilities().filter(
     (capability) => capability !== "manage_members" && capability !== "manage_billing" && capability !== "view_company_operations"
+  ),
+  temporary: allWorkspaceCapabilities().filter(
+    (capability) => !["manage_company", "manage_members", "manage_billing", "view_reports", "view_company_operations"].includes(capability)
   )
 };
 
 export function normalizeWorkspaceRole(role?: string | null): WorkspaceRole {
-  if (role === "owner" || role === "manager" || role === "sales" || role === "driver" || role === "member") return role;
+  if (role === "owner" || role === "manager" || role === "sales" || role === "driver" || role === "member" || role === "temporary") return role;
   return "member";
 }
 
