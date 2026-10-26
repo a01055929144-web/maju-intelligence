@@ -29,7 +29,9 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/mobile/today", slug: "mobile-today" }
 ];
 
-// Add only documented route and viewport debt here with its owning project number.\n// The current populated CI layout has no known exceptions.\nconst knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
+// Add only documented route and viewport debt here with its owning project number.
+// The current populated CI layout has no known exceptions.
+const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
   const entry = knownLayoutDebt[`${path}@${width}`];
