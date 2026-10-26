@@ -201,7 +201,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
           <button className="maju-button-secondary !h-9" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} type="button">다음</button>
         </div>
 
-        <div className="grid gap-3 p-4 md:hidden">
+        <div className="grid gap-3 p-4 lg:hidden">
           {pagedRows.map((row) => <BillingMobileCard drafts={drafts} key={row.id} row={row} saved={savedCompanyId === row.companyId} saving={savingCompanyId === row.companyId} setDrafts={setDrafts} onSave={savePlanAmount} />)}
           {!sortedRows.length ? (
             <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
@@ -211,7 +211,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
           ) : null}
         </div>
 
-        <div className="hidden overflow-x-auto md:block">
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[960px] border-separate border-spacing-0 text-sm">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="text-left text-xs font-black text-slate-500">
