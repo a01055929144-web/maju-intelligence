@@ -10507,11 +10507,17 @@ export async function updatePermitLeadProfile(
     if (businessNumber && !isValidBusinessRegistrationNumber(businessNumber)) {
       return { ok: false, message: "사업자등록번호 10자리를 확인해주세요." };
     }
+    const currentRows = await supabaseRequest<Array<{
+      address: string | null;
+      business_name: string;
+      matched_customer_id: string | null;
+    }>>(
+      `business_permit_leads?select=business_name,address,matched_customer_id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
+    );
+    if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    const currentLead = currentRows[0];
     if (businessNumber) {
-      const [currentRows, duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
-        supabaseRequest<Array<{ matched_customer_id: string | null }>>(
-          `business_permit_leads?select=matched_customer_id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
-        ),
+      const [duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
         supabaseRequest<Array<{ id: string }>>(
           `business_permit_leads?select=id&id=neq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=eq.${encodeURIComponent(businessNumber)}&limit=1`
         ),
@@ -10519,14 +10525,17 @@ export async function updatePermitLeadProfile(
           `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=2`
         )
       ]);
-      if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
-      const matchedCustomerId = currentRows[0].matched_customer_id;
-      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== matchedCustomerId);
+      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== currentLead.matched_customer_id);
       if (duplicateLeadRows.length || hasOtherCustomer) {
         return { ok: false, message: "같은 회사에 이미 등록된 사업자등록번호입니다." };
       }
     }
     payload.business_number = businessNumber || null;
+    payload.canonical_fingerprint = buildLeadCanonicalFingerprint({
+      address: currentLead.address || undefined,
+      businessName: currentLead.business_name,
+      businessNumber: businessNumber || undefined
+    }) || null;
     changed.push("business_number");
   }
   if ("instagramUrl" in input) {
