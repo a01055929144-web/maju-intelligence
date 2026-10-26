@@ -13,8 +13,11 @@ const viewports = [
 const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "admin", path: "/admin", slug: "admin" },
   { auth: "admin", path: "/admin/companies", slug: "admin-companies" },
+  { auth: "admin", path: "/admin/companies/00000000-0000-4000-8000-000000000001/setup", slug: "admin-company-setup" },
   { auth: "admin", path: "/admin/billing", slug: "admin-billing" },
   { auth: "customer", path: "/leads", slug: "leads" },
+  { auth: "customer", path: "/leads/20000000-0000-4000-8000-000000000001", slug: "lead-detail" },
+  { auth: "customer", path: "/insights", slug: "insights" },
   { auth: "customer", path: "/map", slug: "map" },
   { auth: "customer", path: "/dashboard", slug: "dashboard" },
   { auth: "customer", path: "/settings/billing", slug: "settings-billing" },
@@ -78,6 +81,25 @@ async function collectLayoutProblems(page: Page) {
     for (const element of interactive) {
       const rect = element.getBoundingClientRect();
       if (rect.left < -tolerance || rect.right > innerWidth + tolerance) {
+        // Tabs outside the visible part of an intentionally scrollable row are
+        // reachable by scrolling that row; the row itself must still fit.
+        let ancestor = element.parentElement;
+        let insideScrollableRow = false;
+        while (ancestor && ancestor !== root) {
+          const style = getComputedStyle(ancestor);
+          const ancestorRect = ancestor.getBoundingClientRect();
+          if (
+            (style.overflowX === "auto" || style.overflowX === "scroll") &&
+            ancestor.scrollWidth > ancestor.clientWidth + tolerance &&
+            ancestorRect.left >= -tolerance &&
+            ancestorRect.right <= innerWidth + tolerance
+          ) {
+            insideScrollableRow = true;
+            break;
+          }
+          ancestor = ancestor.parentElement;
+        }
+        if (insideScrollableRow) continue;
         const label = (element.getAttribute("aria-label") || element.textContent || element.tagName).trim().slice(0, 40);
         problems.push(`clipped-control:${label}:${Math.round(rect.left)}..${Math.round(rect.right)}`);
       }
@@ -141,6 +163,22 @@ for (const viewport of viewports) {
         if (!response || response.status() >= 400) {
           failures.push(`${route.path} @ ${viewport.width}px: HTTP ${response?.status() ?? "no response"}`);
           continue;
+        }
+        if (new URL(page.url()).pathname !== route.path) {
+          failures.push(`${route.path} @ ${viewport.width}px: redirected to ${new URL(page.url()).pathname}`);
+          continue;
+        }
+        if (route.path === "/leads") {
+          await expect(page.getByText("테스트 매장 01").first()).toBeVisible();
+        }
+        if (route.path === "/map") {
+          await expect(page.getByText(/거래처 20곳/).first()).toBeVisible();
+        }
+        if (route.slug === "lead-detail") {
+          await expect(page.getByText("테스트 매장 01").first()).toBeVisible();
+        }
+        if (route.slug === "admin-company-setup") {
+          await expect(page.getByText("CI 화면 점검 회사 초기 설정")).toBeVisible();
         }
         await page.waitForTimeout(500);
 

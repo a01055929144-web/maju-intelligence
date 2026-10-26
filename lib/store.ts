@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
@@ -2003,6 +2004,7 @@ export async function consumePasswordReset(token: string, newPassword: string): 
 }
 
 export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedCompanyAccount[]; source: "empty" | "supabase" }> {
+  if (isCiLayoutFixturesEnabled()) return { companies: [ciLayoutCompany], source: "supabase" };
   if (!isProductionStoreConfigured()) {
     return {
       source: "empty",
@@ -4870,6 +4872,7 @@ export async function getCustomerMapSummaries(
   companyId?: string,
   options?: { assignmentKeys?: CustomerAssignmentScope }
 ): Promise<{ customers: CustomerMapSummaryItem[]; source: "empty" | "supabase"; truncated: boolean }> {
+  if (isCiLayoutFixturesEnabled()) return { customers: ciLayoutCustomers, source: "supabase", truncated: false };
   if (!isProductionStoreConfigured()) return { customers: [], source: "empty", truncated: false };
 
   const id = companyId || getDefaultCompanyId();
@@ -10005,6 +10008,10 @@ export async function saveLeadBusinessHours(
 }
 
 export async function listPermitLeads(companyId: string, filters: PermitLeadFilters = {}): Promise<{ leads: PermitLeadItem[]; total: number }> {
+  if (isCiLayoutFixturesEnabled()) {
+    const leads = filters.leadId ? ciLayoutLeads.filter((lead) => lead.id === filters.leadId) : ciLayoutLeads;
+    return { leads, total: leads.length };
+  }
   if (!isProductionStoreConfigured()) return { leads: [], total: 0 };
 
   const params = [`company_id=eq.${encodeURIComponent(companyId)}`, "merged_into_lead_id=is.null"];

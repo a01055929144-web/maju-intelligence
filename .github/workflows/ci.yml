@@ -37,6 +37,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          CI_LAYOUT_FIXTURES: enabled
 
       - name: Install Playwright browser
         # GitHub's Ubuntu image already contains Chromium's system libraries.
@@ -45,6 +47,8 @@ jobs:
 
       - name: Responsive layout and route smoke checks
         run: npm run test:e2e:layout
+        env:
+          CI_LAYOUT_FIXTURES: enabled
 
       - name: Upload responsive layout report
         if: always()
