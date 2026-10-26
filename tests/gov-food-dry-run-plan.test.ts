@@ -33,11 +33,11 @@ describe("A2 강남구 전체 매장 DB 드라이런 계획", () => {
     ]);
     expect(result).toEqual({
       datasets: [
-        { dataset: "rest_cafes", rows: 201, pages: 2, estimatedBytes: 174_870 },
+        { dataset: "rest_cafes", rows: 201, pages: 3, estimatedBytes: 174_870 },
         { dataset: "bakeries", rows: 0, pages: 1, estimatedBytes: 0 }
       ],
       rows: 201,
-      calls: 3,
+      calls: 4,
       estimatedBytes: 174_870
     });
   });
@@ -70,6 +70,6 @@ describe("A2 강남구 전체 매장 DB 드라이런 계획", () => {
       { dataset: "group_meal_facilities", activeTotalCount: 1_100 },
       { dataset: "contract_catering", activeTotalCount: 430 }
     ], 340_229);
-    expect(result).toMatchObject({ rows: 5_380, calls: 54, missingDatasets: [], writeEnabled: false, readyForApproval: true });
+    expect(result).toMatchObject({ rows: 5_380, calls: 55, missingDatasets: [], writeEnabled: false, readyForApproval: true });
   });
 });
