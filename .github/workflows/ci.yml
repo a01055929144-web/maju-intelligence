@@ -37,3 +37,20 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Responsive layout and route smoke checks
+        run: npm run test:e2e:layout
+
+      - name: Upload responsive layout report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-layout-report
+          path: |
+            playwright-report
+            test-results/layout
+          if-no-files-found: ignore
+          retention-days: 14
