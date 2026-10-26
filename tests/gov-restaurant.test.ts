@@ -89,3 +89,18 @@ describe("fetchGovPagesWithRetry", () => {
     expect(result.skippedPages).toEqual([4]);
   });
 });
+
+describe("isGovSuccessResultCode", () => {
+  it("treats the 1741000 API normal code \"0\" and legacy \"00\" as success", async () => {
+    const { isGovSuccessResultCode } = await import("../lib/gov-restaurant");
+    expect(isGovSuccessResultCode("0")).toBe(true);
+    expect(isGovSuccessResultCode("00")).toBe(true);
+    expect(isGovSuccessResultCode(undefined)).toBe(true);
+  });
+  it("treats error codes as failure", async () => {
+    const { isGovSuccessResultCode } = await import("../lib/gov-restaurant");
+    expect(isGovSuccessResultCode("30")).toBe(false);
+    expect(isGovSuccessResultCode("22")).toBe(false);
+    expect(isGovSuccessResultCode("INFO-200")).toBe(false);
+  });
+});

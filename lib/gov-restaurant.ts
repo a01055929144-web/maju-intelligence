@@ -16,6 +16,16 @@
 import { getGovUpdateKind, scanGovArea, type GovDataset } from "./gov-area-scan";
 import { GovApiResponseError, parseGovApiFailure } from "./gov-api-response";
 
+
+/**
+ * 행정안전부 1741000 API는 정상 응답의 resultCode가 "0"이다(구형 공공데이터 API는 "00").
+ * 둘 다 정상으로 본다. 코드가 없으면 본문 검사에 맡긴다.
+ */
+export function isGovSuccessResultCode(code?: string | null) {
+  if (code === undefined || code === null || code === "") return true;
+  return /^0+$/.test(String(code).trim());
+}
+
 export const GOV_DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
 const PAGE_SIZE = 200; // 느린 데이터셋도 함수 제한 안에 끝나도록 작은 페이지를 사용한다.
 
@@ -146,7 +156,7 @@ export async function fetchGovAreaRows(input: {
       }
       const data = (await response.json()) as GovRestaurantApiResponse;
       const code = data.response?.header?.resultCode;
-      if (code && code !== "00") {
+      if (!isGovSuccessResultCode(code)) {
         throw new GovApiResponseError(
           response.status,
           parseGovApiFailure(JSON.stringify({ response: { header: data.response?.header } }), key),
