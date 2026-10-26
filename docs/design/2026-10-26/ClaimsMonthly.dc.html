@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>배송 CS 이슈 관리</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{margin:0}button,select{font-family:inherit}button{cursor:pointer}</style>
+</helmet>
+<div style="width: 100%; min-height: 940px; box-sizing: border-box; background: #F5F7F9; font-family: 'Noto Sans KR', system-ui, sans-serif; color: #17202A; font-size: 14px; padding: 24px">
+  <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 20px">배송 CS · 이슈 관리</h1>
+      <span style="font-size: 12px; color: #5B6673">누구 잘못인지보다 원인과 조치를 빨리 찾는 화면</span>
+      <div style="margin-left: auto; display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden"><sc-for list="{{ periods }}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div>
+      <button type="button" style="height: 36px; padding: 0 12px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">엑셀</button>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+        <div style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 12px"><div style="font-size: 12px; color: #5B6673">{{ k.label }}</div><div style="font-size: 24px; font-weight: 700">{{ k.n }}</div><div style="{{ k.diffStyle }}">{{ k.diff }}</div></div>
+      </sc-for>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 14px">
+      <!-- 원인 분석 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 6px"><b style="font-size: 15px">어디서 생기나</b>
+          <select aria-label="묶어 보기" onChange="{{ pickGroup }}" style="margin-left: auto; height: 32px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 6px; font-size: 12px"><sc-for list="{{ groupOpts }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+        </div>
+        <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7">
+          <button type="button" onClick="{{ b.pick }}" style="{{ b.row }}">
+            <span style="width: 96px; flex-shrink: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ b.label }}</span>
+            <span style="flex: 1; height: 12px; background: #F1F5F9; border-radius: 6px; overflow: hidden"><span style="{{ b.bar }}"></span></span>
+            <b style="width: 24px; text-align: right">{{ b.n }}</b>
+          </button>
+        </sc-for>
+        <div style="margin-top: 4px; padding: 10px; border-radius: 10px; background: #EFF6FF; color: #1E3A8A; font-size: 12px; line-height: 1.7">
+          <b>개선 제안</b><br>{{ tip }}
+        </div>
+      </section>
+
+      <!-- 이슈 목록 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+          <b style="font-size: 15px">이슈 {{ issueN }}건</b>
+          <sc-if value="{{ hasCause }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ clearCause }}" style="height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: #1E293B; color: #FFFFFF; font-size: 12px">{{ causeLabel }} ✕</button></sc-if>
+          <div style="margin-left: auto; display: flex; gap: 4px"><sc-for list="{{ sts }}" as="s" hint-placeholder-count="4"><button type="button" onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button></sc-for></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 70px 92px minmax(0, 1.3fr) minmax(0, 1fr) 96px 120px 84px; font-size: 13px">
+          <sc-for list="{{ head }}" as="h" hint-placeholder-count="7"><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED; white-space: nowrap">{{ h }}</span></sc-for>
+          <sc-for list="{{ issues }}" as="r" hint-placeholder-count="7">
+            <span style="{{ r.cell }}">{{ r.d }}</span>
+            <span style="{{ r.cell }}"><span style="{{ r.causeStyle }}">{{ r.cause }}</span></span>
+            <span style="{{ r.cell }}"><b>{{ r.item }}</b><span style="font-size: 11px; color: #5B6673">{{ r.store }}</span></span>
+            <span style="{{ r.cell }}"><span>{{ r.memo }}</span><span style="font-size: 11px; color: #5B6673">사진 {{ r.photos }} · {{ r.stage }}</span></span>
+            <span style="{{ r.cell }}">{{ r.supplier }}</span>
+            <span style="{{ r.cell }}">{{ r.action }}</span>
+            <span style="{{ r.cell }}"><span style="{{ r.stStyle }}">{{ r.st }}</span></span>
+          </sc-for>
+        </div>
+        <div style="font-size: 11px; color: #8A949E">기록한 사람은 상세에서만 보입니다 · 공급처 클레임은 사진과 함께 바로 보낼 수 있음</div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":940}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { period: '월', group: '원인별', cause: '', st: '전체' }; }
+  renderVals() {
+    const st = this.state;
+    const pOn = 'height: 36px; padding: 0 14px; border: 0; background: #0F766E; color: #FFFFFF; font-weight: 700';
+    const pOff = 'height: 36px; padding: 0 14px; border: 0; background: #FFFFFF';
+    const periods = ['일', '주', '월', '분기'].map((label) => ({ label, pick: () => this.setState({ period: label }), style: st.period === label ? pOn : pOff }));
+    // [날짜, 원인, 품목, 매장, 메모, 공급처, 구간, 조치, 상태, 사진]
+    const I = [
+      ['10/24', '냉동 해동', '냉동 새우 2kg', '밍글스', '도착 시 표면 녹음 · 재냉동 의심', '바다수산', '운송', '교환 · 공급처 클레임', '조치 중', 2],
+      ['10/23', '냉동 해동', '냉동 만두 1.4kg', '하나참치', '봉지 안 물기', '바다수산', '운송', '교환', '완료', 1],
+      ['10/22', '신선도·품질', '대파 1단', '대우부대찌개', '잎 무름 · 2단', '가락 청과', '입고', '차감 5,800원', '완료', 2],
+      ['10/21', '누락', '양파 15kg', '구구오리 부평본점', '출고표엔 있음', '-', '적재', '당일 재배송', '완료', 1],
+      ['10/20', '파손', '계란 30구', '새벽집 청담점', '1판 깨짐 · 하차 중', '한빛농장', '하차', '교체', '완료', 3],
+      ['10/19', '오배송', '돼지 앞다리 5kg', '99숯불집', '목살로 감', '-', '적재', '교환', '완료', 1],
+      ['10/18', '유통기한', '두부 3kg', '우부래도', '기한 D-1 상품', '한빛농장', '보관', '확인 중', '접수', 1],
+      ['10/17', '냉동 해동', '냉동 새우 2kg', '밍글스', '같은 품목 재발', '바다수산', '운송', '공급처 클레임', '완료', 2]
+    ];
+    const groupIdx = { '원인별': 1, '품목별': 2, '공급처별': 5, '구간별': 6, '매장별': 3 };
+    const gi = groupIdx[st.group];
+    const cnt = {};
+    I.forEach((r) => { cnt[r[gi]] = (cnt[r[gi]] || 0) + 1; });
+    const keys = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
+    const max = Math.max(...keys.map((k) => cnt[k]));
+    const bars = keys.map((k) => ({ label: k, n: cnt[k], pick: () => this.setState({ cause: st.cause === k ? '' : k }),
+      row: 'display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 6px; border: 0; border-radius: 8px; font-size: 13px; background: ' + (st.cause === k ? '#E6F4F1' : '#FFFFFF'),
+      bar: 'display: block; height: 100%; border-radius: 6px; background: ' + (cnt[k] >= 3 ? '#DC2626' : '#0F766E') + '; width: ' + Math.round((cnt[k] / max) * 100) + '%' }));
+    const cColor = { '냉동 해동': ['#DBEAFE', '#1E40AF'], '신선도·품질': ['#DCFCE7', '#166534'], '파손': ['#FEE2E2', '#991B1B'], '누락': ['#FEF3C7', '#92400E'], '오배송': ['#FCE7F3', '#9D174D'], '유통기한': ['#EDE9FE', '#5B21B6'] };
+    const stC = { '접수': ['#FEE2E2', '#991B1B'], '조치 중': ['#FEF3C7', '#92400E'], '완료': ['#DCFCE7', '#166534'] };
+    const rows = I.filter((r) => (!st.cause || r[gi] === st.cause) && (st.st === '전체' || r[8] === st.st));
+    const issues = rows.map(([d, cause, item, store, memo, supplier, stage, action, s, photos]) => ({ d, cause, item, store, memo, supplier, stage: stage + ' 구간', action, st: s, photos,
+      cell: 'padding: 8px 6px; border-bottom: 1px solid #EEF1F4; display: flex; flex-direction: column; justify-content: center; min-width: 0',
+      causeStyle: 'font-size: 11px; padding: 2px 6px; border-radius: 6px; white-space: nowrap; background: ' + (cColor[cause] || ['#F1F5F9'])[0] + '; color: ' + (cColor[cause] || ['', '#334155'])[1],
+      stStyle: 'font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; background: ' + stC[s][0] + '; color: ' + stC[s][1] }));
+    const sOn = 'height: 30px; padding: 0 10px; border: 0; border-radius: 15px; background: #1E293B; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const sOff = 'height: 30px; padding: 0 10px; border: 1px solid #CBD3DB; border-radius: 15px; background: #FFFFFF; font-size: 12px';
+    const sts = ['전체', '접수', '조치 중', '완료'].map((label) => ({ label, pick: () => this.setState({ st: label }), style: st.st === label ? sOn : sOff }));
+    const kpis = [['이슈', '8건', '지난달 +3', true], ['미처리', '2건', '접수 1 · 조치 중 1', true], ['평균 처리', '5.2시간', '-1.4시간', false], ['재발 품목', '1개', '냉동 새우 2kg', true], ['차감·교환 금액', '84,300원', '배송 매출의 0.4%', false]].map(([label, n, diff, bad]) => ({ label, n, diff, diffStyle: 'font-size: 12px; color: ' + (bad ? '#B91C1C' : '#15803D') }));
+    const tips = { '원인별': '냉동 해동 3건이 모두 운송 구간 · 같은 공급처(바다수산) · 오후 배송. 보냉 박스·아이스팩 기준을 정하고, 공급처 입고 온도 확인을 추가해 보세요.', '품목별': '냉동 새우 2kg가 2주 안에 2번. 다음 입고 때 입고 검수 체크를 켜 두면 좋습니다.', '공급처별': '바다수산 3건 · 공급처 클레임 기록을 묶어서 월말 정산 때 함께 전달할 수 있습니다.', '구간별': '운송 3 · 적재 2. 적재 단계는 출고표 대조(바코드·사진)로 줄일 수 있습니다.', '매장별': '밍글스 2건 모두 냉동 품목. 이 매장은 냉동 우선 하차로 코스 순서를 바꿔 보세요.' };
+    return { periods, bars, issues, sts, kpis, issueN: rows.length, tip: tips[st.group],
+      groupOpts: Object.keys(groupIdx), pickGroup: (e) => this.setState({ group: e.target.value, cause: '' }),
+      hasCause: Boolean(st.cause), causeLabel: st.cause, clearCause: () => this.setState({ cause: '' }),
+      head: ['날짜', '원인', '품목 · 매장', '내용', '공급처', '조치', '상태'] };
+  }
+}
+</script>
+</body>
+</html>

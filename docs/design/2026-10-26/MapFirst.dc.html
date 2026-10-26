@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>지도 화면 버튼 정리 PC</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{margin:0}button{font-family:inherit;cursor:pointer}</style>
+</helmet>
+<div style="width: 100%; height: 900px; box-sizing: border-box; background: #F5F7F9; font-family: 'Noto Sans KR', system-ui, sans-serif; color: #17202A; font-size: 14px; display: flex">
+
+  <!-- 왼쪽 메뉴 -->
+  <nav aria-label="주 메뉴" style="{{ navStyle }}">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; border-bottom: 1px solid #22303C">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: #0F766E; color: #FFFFFF; display: grid; place-items: center; font-weight: 700">M</div>
+      <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><div><b style="color: #FFFFFF; font-size: 14px">MAJU</b><div style="font-size: 12px; color: #9FB1BF">마주식자재</div></div></sc-if>
+      <button type="button" onClick="{{ toggleNav }}" aria-label="메뉴 접기" title="메뉴 접기" style="margin-left: auto; width: 26px; height: 26px; border: 1px solid #2B3A48; border-radius: 6px; background: transparent; color: #9FB1BF">{{ navArrow }}</button>
+    </div>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <div style="padding: 8px 0 2px">
+        <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><div style="padding: 0 16px 4px; font-size: 11px; color: #8FA0AE">{{ g.title }}</div></sc-if>
+        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+          <div style="{{ it.style }}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ it.d }}"/></svg><sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><span>{{ it.label }}</span><span style="margin-left: auto; font-size: 11px; color: #9FB1BF">{{ it.badge }}</span></sc-if></div>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="margin-top: auto; border-top: 1px solid #22303C; padding: 12px 14px; display: flex; align-items: center; gap: 10px">
+      <div style="width: 30px; height: 30px; border-radius: 50%; background: #2B3A48; color: #DDE6EC; display: grid; place-items: center; font-size: 12px">정</div>
+      <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ true }}"><div style="flex: 1"><div style="color: #FFFFFF; font-size: 13px">정두영</div><div style="font-size: 11px; color: #9FB1BF">대표</div></div></sc-if>
+      <button type="button" aria-label="내 설정" style="width: 28px; height: 28px; border: 1px solid #2B3A48; border-radius: 6px; background: transparent; color: #9FB1BF">⋯</button>
+    </div>
+  </nav>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative">
+    <!-- 1줄: 화면 전환(아이콘+짧은 이름) | 근무 중 · 보기 방식 -->
+    <header style="height: 52px; flex: none; background: #FFFFFF; border-bottom: 1px solid #E3E8ED; display: flex; align-items: center; gap: 12px; padding: 0 16px">
+      <div style="display: flex; gap: 4px; background: #F1F5F9; padding: 4px; border-radius: 10px">
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="4"><button type="button" onClick="{{ v.pick }}" style="{{ v.style }}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ v.d }}"/></svg>{{ v.label }}</button></sc-for>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+        <span title="근무 중 직원" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid #E3E8ED; border-radius: 8px; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #16A34A"></span>2</span>
+        <div style="display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden">
+          <sc-for list="{{ layouts }}" as="o" hint-placeholder-count="3"><button type="button" onClick="{{ o.pick }}" aria-label="{{ o.label }}" title="{{ o.label }}" style="{{ o.style }}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ o.d }}"/></svg></button></sc-for>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2줄(한 줄 고정): 검색 · 지역 · 업종 · 규모 · 개업일 · 단계 · 리마인드 · 더보기 -->
+    <div style="height: 52px; flex: none; background: #FFFFFF; border-bottom: 1px solid #E3E8ED; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 0 16px; position: relative">
+      <div style="flex: 1 1 180px; min-width: 140px; max-width: 280px; height: 36px; border: 1px solid #CBD3DB; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 10px; color: #8A949E; white-space: nowrap; overflow: hidden">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6673" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>상호·주소·전화</div>
+      <sc-for list="{{ fchips }}" as="c" hint-placeholder-count="5"><button type="button" onClick="{{ c.pick }}" title="{{ c.title }}" style="{{ c.style }}"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.d }}"/></svg>{{ c.label }}</button></sc-for>
+      <button type="button" onClick="{{ toggleRemind }}" style="{{ remindStyle }}">리마인드 3</button>
+      <button type="button" onClick="{{ openMore }}" aria-label="필터 더보기" title="이탈 제외 · 출발지 · 저장한 필터" style="margin-left: auto; height: 36px; padding: 0 10px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF; white-space: nowrap; font-size: 13px">⋯</button>
+
+      <sc-if value="{{ popOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ popStyle }}">
+          <div style="display: flex; align-items: center; margin-bottom: 8px"><b>{{ popTitle }}</b><button type="button" onClick="{{ closePop }}" aria-label="닫기" style="margin-left: auto; width: 28px; height: 28px; border: 0; background: transparent">✕</button></div>
+          <sc-if value="{{ popList }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ popRegion }}" hint-placeholder-val="{{ false }}"><div style="display: flex; gap: 6px; margin-bottom: 6px"><select aria-label="시·도" style="flex: 1; height: 34px; border: 1px solid #CBD3DB; border-radius: 6px"><option>서울특별시</option><option>경기도</option><option>인천광역시</option></select><input aria-label="구 검색" placeholder="구·시 검색" style="flex: 1; height: 34px; border: 1px solid #CBD3DB; border-radius: 6px; padding: 0 8px"></div></sc-if>
+            <div style="max-height: 300px; overflow: auto"><sc-for list="{{ popItems }}" as="i" hint-placeholder-count="6"><div style="{{ i.rowStyle }}"><sc-if value="{{ i.head }}" hint-placeholder-val="{{ false }}"><b style="font-size: 12px">{{ i.label }}</b><span style="margin-left: auto; font-size: 11px; color: #5B6673">{{ i.n }}</span></sc-if><sc-if value="{{ i.item }}" hint-placeholder-val="{{ true }}"><label style="display: flex; align-items: center; gap: 8px; width: 100%; font-size: 13px"><input type="checkbox" checked="{{ i.on }}"> {{ i.label }}<span style="margin-left: auto; color: #5B6673; font-size: 12px">{{ i.n }}</span></label></sc-if></div></sc-for></div>
+          </sc-if>
+          <sc-if value="{{ popSize }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px"><sc-for list="{{ sizeQuick }}" as="q" hint-placeholder-count="4"><button type="button" onClick="{{ q.pick }}" style="{{ q.style }}">{{ q.label }}</button></sc-for></div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px">
+              <label style="display: flex; flex-direction: column; gap: 2px">최소(평)<input type="number" value="{{ sizeMin }}" style="width: 70px; height: 34px; border: 1px solid #CBD3DB; border-radius: 6px; padding: 0 6px"></label>
+              <span style="margin-top: 16px">~</span>
+              <label style="display: flex; flex-direction: column; gap: 2px">최대(평)<input type="number" value="{{ sizeMax }}" style="width: 70px; height: 34px; border: 1px solid #CBD3DB; border-radius: 6px; padding: 0 6px"></label>
+            </div>
+            <div style="font-size: 12px; color: #5B6673; margin-top: 6px">{{ sizeM2 }} · 1평 = 3.3058㎡ · 면적 없는 매장 포함 ☑</div>
+          </sc-if>
+          <sc-if value="{{ popMore }}" hint-placeholder-val="{{ false }}">
+            <label style="display: flex; align-items: center; gap: 8px; height: 34px; font-size: 13px"><input type="checkbox"> 이탈 거래처 제외</label>
+            <label style="display: flex; align-items: center; gap: 8px; height: 34px; font-size: 13px"><input type="checkbox" checked> 출발지 표시</label>
+            <div style="border-top: 1px solid #EEF1F4; margin-top: 6px; padding-top: 8px; font-size: 12px; color: #5B6673">저장한 필터</div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px"><span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #F1F5F9">강남 한식 20평↓</span><span style="font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #F1F5F9">부평 신규 30일</span></div>
+          </sc-if>
+          <div style="display: flex; gap: 6px; margin-top: 12px"><button type="button" style="flex: 1; height: 36px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">이 조건 저장</button><button type="button" onClick="{{ closePop }}" style="flex: 1; height: 36px; border: 0; border-radius: 8px; background: #0F766E; color: #FFFFFF; font-weight: 700">적용</button></div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- 3분할 -->
+    <div style="{{ gridStyle }}">
+      <sc-if value="{{ leftMini }}" hint-placeholder-val="{{ false }}">
+        <aside aria-label="담당자 접힘" style="background: #FFFFFF; border-right: 1px solid #E3E8ED; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 8px">
+          <button type="button" onClick="{{ toggleLeft }}" aria-label="담당자 펼치기" title="펼치기" style="width: 40px; height: 32px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">›</button>
+          <sc-for list="{{ staff }}" as="s" hint-placeholder-count="4"><button type="button" onClick="{{ s.pick }}" title="{{ s.name }}" aria-label="{{ s.name }}" style="{{ s.mini }}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ s.d }}"/></svg><span style="font-size: 10px">{{ s.short }}</span></button></sc-for>
+        </aside>
+      </sc-if>
+      <sc-if value="{{ showLeft }}" hint-placeholder-val="{{ true }}">
+        <aside style="background: #FFFFFF; border-right: 1px solid #E3E8ED; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+          <div style="display: flex; align-items: center; gap: 6px"><button type="button" onClick="{{ toggleLeft }}" aria-label="담당자 접기" title="접기" style="width: 28px; height: 28px; border: 1px solid #CBD3DB; border-radius: 6px; background: #FFFFFF">‹</button><b style="font-size: 13px">담당자 · 차량</b>
+            <button type="button" aria-label="담당자 추가" title="담당자 추가" style="margin-left: auto; width: 30px; height: 30px; border: 1px solid #CBD3DB; border-radius: 6px; background: #FFFFFF; display: grid; place-items: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6"/></svg></button>
+            <button type="button" aria-label="차량 추가" title="차량 추가" style="width: 30px; height: 30px; border: 1px solid #CBD3DB; border-radius: 6px; background: #FFFFFF; display: grid; place-items: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2"><path d="M2 7h11v9H2zM13 10h5l3 3v3h-8z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>
+          </div>
+          <sc-for list="{{ staff }}" as="s" hint-placeholder-count="4">
+            <div style="{{ s.box }}">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" style="flex: none; margin-top: 2px"><path d="{{ s.d }}"/></svg><button type="button" onClick="{{ s.pick }}" style="flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 0"><b>{{ s.name }}</b> <span style="font-size: 12px; color: #5B6673">{{ s.who }}</span><div style="{{ s.stateStyle }}">{{ s.state }}</div></button>
+              <button type="button" aria-label="편집" title="편집" style="width: 28px; height: 28px; border: 1px solid #E3E8ED; border-radius: 6px; background: #FFFFFF; display: grid; place-items: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+            </div>
+          </sc-for>
+        </aside>
+      </sc-if>
+
+      <div style="position: relative; background: #E4EBF0; overflow: hidden">
+        <div style="position: absolute; inset: 0; background-image: linear-gradient(#D6DEE5 1px, transparent 1px), linear-gradient(90deg, #D6DEE5 1px, transparent 1px); background-size: 64px 64px"></div>
+        <sc-for list="{{ pins }}" as="p" hint-placeholder-count="8"><div style="{{ p.style }}"></div></sc-for>
+        <div style="position: absolute; left: 12px; top: 12px; display: flex; gap: 4px; background: #FFFFFF; border-radius: 10px; padding: 4px; box-shadow: 0 2px 8px rgba(15,23,42,0.12)">
+          <sc-for list="{{ layers }}" as="l" hint-placeholder-count="4"><button type="button" onClick="{{ l.toggle }}" title="{{ l.label }}" style="{{ l.style }}"><span style="{{ l.dot }}"></span>{{ l.label }} {{ l.count }}</button></sc-for>
+        </div>
+        <div style="position: absolute; left: 12px; bottom: 12px; background: #FFFFFF; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #4A5663; box-shadow: 0 2px 8px rgba(15,23,42,0.12)">{{ filterText }}</div>
+        <div style="position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,0.15)">
+          <button type="button" aria-label="현재 위치" style="width: 36px; height: 36px; border: 0; border-bottom: 1px solid #E3E8ED; background: #FFFFFF">◎</button>
+          <button type="button" aria-label="확대" style="width: 36px; height: 36px; border: 0; border-bottom: 1px solid #E3E8ED; background: #FFFFFF">＋</button>
+          <button type="button" aria-label="축소" style="width: 36px; height: 36px; border: 0; background: #FFFFFF">－</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ showRight }}" hint-placeholder-val="{{ true }}">
+        <aside style="background: #FFFFFF; border-left: 1px solid #E3E8ED; display: flex; flex-direction: column; overflow: hidden">
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #EEF1F4; background: #F8FAFB; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap">
+              <label style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap"><input type="checkbox" onClick="{{ toggleAll }}" checked="{{ allOn }}" style="width: 18px; height: 18px; margin: 0"> 전체</label>
+              <span style="color: #5B6673; white-space: nowrap">{{ selText }}</span>
+            </div>
+            <sc-if value="{{ anySel }}" hint-placeholder-val="{{ true }}">
+              <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px">
+                <select aria-label="바꿀 단계" style="min-width: 0; height: 32px; border: 1px solid #CBD3DB; border-radius: 6px; font-size: 12px"><option>단계 바꾸기</option><option>연락함</option><option>견적 전달</option><option>계약(거래 시작)</option><option>거래 종료</option><option>제외</option></select>
+                <select aria-label="사유" style="min-width: 0; height: 32px; border: 1px solid #CBD3DB; border-radius: 6px; font-size: 12px"><option>사유</option><option>단가 안 맞음</option><option>기존 거래처 유지</option><option>폐업·이전</option><option>미수·결제 문제</option><option>기타</option></select>
+                <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: #0F766E; color: #FFFFFF; font-size: 12px; font-weight: 700; white-space: nowrap">적용</button>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display: flex; gap: 4px; padding: 10px 12px; border-bottom: 1px solid #E3E8ED">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+          </div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow: hidden">
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+              <div style="border: 1px solid #E3E8ED; border-radius: 10px; padding: 10px; background: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+                <div style="display: flex; align-items: center; gap: 6px"><input type="checkbox" aria-label="선택" onClick="{{ r.toggle }}" checked="{{ r.sel }}" style="width: 18px; height: 18px; margin: 0; flex-shrink: 0"><span style="{{ r.typeStyle }}">{{ r.type }}</span><button type="button" onClick="{{ r.open }}" title="{{ r.name }}" style="flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ r.name }}</button>
+                  <label style="position: absolute; width: 1px; height: 1px; overflow: hidden">단계</label>
+                  <select aria-label="단계" style="flex-shrink: 0; max-width: 96px; height: 30px; border: 1px solid #CBD3DB; border-radius: 6px; background: #FFFFFF; font-size: 12px; padding: 0 4px"><option>{{ r.stage }}</option><option>신규</option><option>연락함</option><option>견적 전달</option><option>재연락</option><option>계약</option><option>제외</option></select></div>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5B6673; min-width: 0"><span style="{{ r.prioStyle }}">{{ r.prio }}</span><span style="min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ r.sub }}</span></div>
+                <sc-if value="{{ r.remind }}" hint-placeholder-val="{{ false }}"><div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #B45309; background: #FFFBEB; border-radius: 6px; padding: 4px 8px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg>{{ r.remindText }}</div></sc-if>
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <sc-for list="{{ r.ch }}" as="c" hint-placeholder-count="3"><span title="{{ c.t }}" style="width: 26px; height: 26px; border: 1px solid #CBD3DB; border-radius: 6px; display: grid; place-items: center; color: #334155"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.d }}"/></svg></span></sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </aside>
+      </sc-if>
+    </div>
+
+    <!-- 매장 상세: 옆에서 열리는 창(드로어) — 지도·목록 맥락 유지 -->
+    <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; inset: 0; background: rgba(15,23,42,0.25)"></div>
+      <section aria-label="매장 상세" style="position: absolute; top: 0; right: 0; bottom: 0; width: 62%; background: #FFFFFF; box-shadow: -8px 0 24px rgba(15,23,42,0.18); display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #E3E8ED">
+          <span style="{{ sel.typeStyle }}">{{ sel.type }}</span><b style="font-size: 18px">{{ sel.name }}</b><span style="{{ sel.prioStyle }}">{{ sel.prio }}</span><span style="font-size: 12px; color: #5B6673">{{ sel.sub }}</span>
+          <button type="button" title="새 창으로 열기" aria-label="새 창으로 열기" style="margin-left: auto; width: 34px; height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">↗</button>
+          <button type="button" onClick="{{ closeDrawer }}" aria-label="닫기" style="width: 34px; height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">✕</button>
+        </div>
+        <div style="padding: 12px 16px; display: flex; gap: 8px; border-bottom: 1px solid #EEF1F4">
+          <button type="button" style="height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #0F766E; color: #FFFFFF; font-weight: 700">문자</button>
+          <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 10px; background: #FFFFFF">DM</button>
+          <button type="button" style="height: 44px; padding: 0 14px; border: 1px solid #CBD3DB; border-radius: 10px; background: #FFFFFF">길안내</button>
+          <span style="margin-left: auto; align-self: center; font-size: 12px; color: #5B6673">단계 · {{ sel.stage }} ▾</span>
+        </div>
+        <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 16px; font-size: 13px; color: #4A5663">
+          <div style="border: 1px solid #E3E8ED; border-radius: 10px; padding: 12px">매장 정보 · 연락처(출처) · 우리 회사 칸</div>
+          <div style="border: 1px solid #E3E8ED; border-radius: 10px; padding: 12px">결과 버튼 · 메모 · 연락 기록</div>
+        </div>
+        <div style="padding: 10px 16px; font-size: 12px; color: #5B6673; border-top: 1px solid #EEF1F4">Esc·뒤로가기 = 닫기 · ↑↓ = 이전/다음 매장 · ↗ = 전체 페이지(⑭)</div>
+      </section>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: {}, pop: '', size: [0, 20], remindOnly: false, nav: true, view: 'map', layout: 'three', tab: 'new', date: '30', staff: 'all', drawer: '', left: true, sf: '전체', layers: { cust: true, new: true, sales: true, car: true } };
+  }
+  renderVals() {
+    const st = this.state;
+    const P = {
+      home: 'M3 11l9-7 9 7v9H3z', lead: 'M4 21V5h11l-1 4 6 0v9H9', star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
+      note: 'M5 3h14v18H5zM9 8h6M9 12h6M9 16h4', map: 'M9 4l6 2 6-2v14l-6 2-6-2-6 2V6z', route: 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6 15V9a4 4 0 0 1 4-4h6M18 9v6a4 4 0 0 1-4 4H8',
+      clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', truck: 'M2 7h11v9H2zM13 10h5l3 3v3h-8z', gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3',
+      users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6', card: 'M3 6h18v12H3zM3 10h18', store: 'M4 9l1-5h14l1 5zM5 9v11h14V9M10 20v-6h4v6',
+      mobile: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2', insta: 'M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z',
+      chat: 'M4 5h16v11H9l-5 4z', mail: 'M3 6h18v12H3zM3 6l9 7 9-7', fax: 'M7 3h10v5H7zM5 8h14v8H5zM8 13h8v8H8z', tel: 'M6 3h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 4 5a2 2 0 0 1 2-2z',
+      three: 'M3 4h18v16H3zM9 4v16M15 4v16', two: 'M3 4h18v16H3zM15 4v16', full: 'M3 4h18v16H3z'
+    };
+    const on = 'display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 16px 0 13px; color: #FFFFFF; background: #1E2B37; border-left: 3px solid #2DD4BF; font-size: 13px';
+    const off = 'display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 16px; color: #C9D4DC; font-size: 13px';
+    const groups = [
+      { title: '영업', items: [['오늘 현황', '', 'home'], ['신규 리드', '416', 'lead'], ['영업 리드', '717', 'star'], ['영업 기록', '', 'note']] },
+      { title: '동선', items: [['지도', '', 'map', true], ['오늘 코스', '27', 'route'], ['배송 이력', '', 'clock'], ['권역·호차', '', 'truck']] },
+      { title: '설정', items: [['회사 정보', '', 'store'], ['직원 관리', '', 'users'], ['구독·결제', '', 'card']] }
+    ].map((g) => ({ title: g.title, items: g.items.map(([label, badge, ic, a]) => ({ label, badge, d: P[ic], style: a ? on : off })) }));
+    const segOn = 'height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: #FFFFFF; color: #0F5F58; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.08)';
+    const segOff = 'height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #4A5663; font-size: 13px; display: flex; align-items: center; gap: 6px';
+    const views = [['map', '지도', 'map'], ['cust', '거래처', 'store'], ['course', '코스', 'route'], ['hist', '배송 이력', 'clock']].map(([k, label, ic]) => ({ label, d: P[ic], pick: () => this.setState({ view: k }), style: st.view === k ? segOn : segOff }));
+    const lOn = 'width: 40px; height: 32px; border: 0; background: #0F766E; color: #FFFFFF; display: grid; place-items: center';
+    const lOff = 'width: 40px; height: 32px; border: 0; background: #FFFFFF; color: #334155; display: grid; place-items: center';
+    const layouts = [['three', '3분할', 'three'], ['two', '지도+목록', 'two'], ['map', '지도만', 'full']].map(([k, label, ic]) => ({ label, d: P[ic], pick: () => this.setState({ layout: k }), style: st.layout === k ? lOn : lOff }));
+    const dOn = 'height: 34px; padding: 0 10px; border: 0; background: #0F766E; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const dOff = 'height: 34px; padding: 0 10px; border: 0; background: #FFFFFF; color: #334155; font-size: 12px';
+    const dates = [['7', '7일'], ['30', '30일'], ['90', '90일'], ['set', '직접']].map(([k, label]) => ({ label, pick: () => this.setState({ date: k }), style: st.date === k ? dOn : dOff }));
+    const colors = { cust: '#2563EB', new: '#7C3AED', sales: '#0EA5E9', car: '#16A34A' };
+    const layers = [['cust', '거래처', 12], ['new', '신규', 42], ['sales', '영업', 18], ['car', '차량', 2]].map(([k, label, count]) => ({ label, count, dot: 'width: 8px; height: 8px; border-radius: 50%; background: ' + colors[k], toggle: () => this.setState({ layers: { ...st.layers, [k]: !st.layers[k] } }), style: 'display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 16px; font-size: 12px; ' + (st.layers[k] ? 'border: 1px solid #94A3B8; background: #FFFFFF; color: #17202A' : 'border: 1px dashed #CBD3DB; background: #F8FAFB; color: #94A3B8') }));
+    const S = [['all', '전체', '', '거래처 27 · 신규 42 · 영업 18', '#5B6673'], ['v1', '1호차', '이준형 · 배송·영업', '실시간 · 거래처 10', '#16A34A'], ['v2', '2호차', '정두영 · 배송', '마지막 운행 10/26 · 거래처 10', '#5B6673'], ['s1', '영업 1', '김영업 · 영업', '근무 중 · 리드 24', '#16A34A']];
+    const icS = { all: P.users, v1: P.truck, v2: P.truck, s1: P.star };
+    const staff = S.map(([id, name, who, state, c]) => ({ name, who, state, d: icS[id], short: name.replace('호차', '') , mini: 'width: 44px; height: 44px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; ' + (st.staff === id ? 'border: 2px solid #0F766E; background: #F1FAF8; color: #0F5F58' : 'border: 1px solid #E3E8ED; background: #FFFFFF; color: #334155'), stateStyle: 'font-size: 12px; color: ' + c, pick: () => this.setState({ staff: id }), box: 'display: flex; align-items: flex-start; gap: 6px; padding: 10px; border-radius: 10px; ' + (st.staff === id ? 'border: 2px solid #0F766E; background: #F1FAF8' : 'border: 1px solid #E3E8ED; background: #FFFFFF') }));
+    const owner = { all: null, v1: '1호차', v2: '2호차', s1: '영업 1' }[st.staff];
+    const pinList = [['new', 30, 30, 's1'], ['new', 42, 52, 'v1'], ['sales', 55, 40, 's1'], ['cust', 38, 66, 'v1'], ['sales', 63, 58, 'v1'], ['new', 48, 24, 's1'], ['cust', 26, 56, 'v2'], ['car', 58, 70, 'v1'], ['new', 70, 34, 'v2'], ['cust', 34, 42, 'v2']];
+    const pins = pinList.filter(([k, , , o]) => st.layers[k] && (st.staff === 'all' || o === st.staff)).map(([k, x, y]) => ({ style: 'position: absolute; left: ' + x + '%; top: ' + y + '%; width: 14px; height: 14px; border-radius: ' + (k === 'car' ? '4px' : '50%') + '; background: ' + colors[k] + '; border: 2px solid #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.3)' }));
+    const tOn = 'height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: #0F766E; color: #FFFFFF; font-size: 13px; font-weight: 700';
+    const tOff = 'height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: #F1F5F9; color: #334155; font-size: 13px';
+    const sg = (bg, fg) => 'font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; background: ' + bg + '; color: ' + fg;
+    const typeS = (k) => k === '신규' ? sg('#EDE9FE', '#5B21B6') : k === '영업' ? sg('#E0F2FE', '#075985') : sg('#DBEAFE', '#1E40AF');
+    const stages = { 신규: ['#EEF2F6', '#334155'], 연락함: ['#FEF3C7', '#92400E'], '견적 전달': ['#CCFBF1', '#115E59'], 재연락: ['#E0E7FF', '#3730A3'], 거래중: ['#DCFCE7', '#166534'] };
+    const D = {
+      new: [['s1', '신규', '99숯불집', '신규', '1순위', '개업 10/14 · D+12', ['mobile', 'insta']], ['v1', '신규', '기화', '신규', '1순위', '개업 10/23 · D+3', ['mobile', 'mail']], ['v2', '신규', '구구오리 부평본점', '견적 전달', '2순위', '개업 10/06 · D+20', ['chat', 'fax', 'tel']]],
+      sales: [['s1', '영업', '한솥역삼점', '신규', '1순위', '리뷰 많음', ['mobile']], ['v1', '영업', '노블', '재연락', '2순위', '오늘 재연락', ['insta', 'tel']], ['s1', '영업', '새로이', '연락함', '3순위', '0.8km', ['mail', 'tel']]],
+      cust: [['v1', '거래처', '대우부대찌개', '거래중', '1호차', '오늘 배송', ['mobile']], ['v1', '거래처', '새벽집 청담점', '거래중', '1호차', '도산대로101길', ['tel']], ['v2', '거래처', '밍글스', '거래중', '2호차', '도산대로67길', ['mobile']]]
+    };
+    const names = { mobile: '휴대폰', insta: '인스타', chat: '톡톡', mail: '이메일', fax: '팩스', tel: '매장전화' };
+    const all = Object.values(D).flat();
+    const mk = ([o, type, name, stage, prio, sub, ch]) => ({ type, name, stage, prio, sub, typeStyle: typeS(type), stageStyle: sg(stages[stage][0], stages[stage][1]), prioStyle: 'font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #0F766E; color: #FFFFFF; white-space: nowrap', ch: ch.map((k) => ({ t: names[k], d: P[k] })), sel: Boolean(st.sel[name]), toggle: () => this.setState({ sel: { ...st.sel, [name]: !st.sel[name] } }), open: () => this.setState({ drawer: name }), remind: Boolean(RM[name]), remindText: RM[name] || '', steps: (type === '거래처' ? [] : ['신규', '연락', '견적', '재연락', '계약'].map((label, i) => { const cur = Math.max(0, ['신규', '연락함', '견적 전달', '재연락', '계약'].indexOf(stage)); return { label, style: 'flex: 1; text-align: center; font-size: 10px; padding: 3px 0; border-radius: 4px; ' + (i === cur ? 'background: #0F766E; color: #FFFFFF; font-weight: 700' : i < cur ? 'background: #CCFBF1; color: #115E59' : 'background: #F1F5F9; color: #94A3B8') }; })) });
+    const RM = { '구구오리 부평본점': '견적 보낸 지 6일 · 답 없음', '노블': '재연락 예정일 지남(10/24)', '새로이': '문자 후 5일 · 결과 없음' };
+    const rows = D[st.tab].filter(([o]) => st.staff === 'all' || o === st.staff).filter((r) => st.sf === '전체' || r[3] === st.sf || (st.sf.indexOf('리마인드') >= 0 && Boolean(RM[r[2]]))).map(mk);
+    const count = (k) => D[k].filter(([o]) => st.staff === 'all' || o === st.staff).length;
+    const tabs = [['new', '신규'], ['sales', '영업'], ['cust', '거래처']].map(([k, label]) => ({ label: label + ' ' + count(k), pick: () => this.setState({ tab: k }), style: st.tab === k ? tOn : tOff }));
+    const selRow = all.find((r) => r[2] === st.drawer) || all[0];
+    const cols = st.layout === 'three' ? (st.left ? '250px' : '56px') + ' minmax(0,1fr) 340px' : st.layout === 'two' ? 'minmax(0,1fr) 340px' : 'minmax(0,1fr)';
+    const fOn = 'height: 34px; padding: 0 8px; border: 0; background: #0F766E; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const fOff = 'height: 34px; padding: 0 8px; border: 0; background: #FFFFFF; color: #334155; font-size: 12px';
+    const stageF = ['전체', '리마인드 3', '신규', '연락함', '견적 전달', '재연락', '계약'].map((label) => ({ label, pick: () => this.setState({ sf: label }), style: st.sf === label ? fOn : fOff }));
+    const chipBase = 'height: 36px; padding: 0 10px; border-radius: 8px; font-size: 13px; white-space: nowrap; display: flex; align-items: center; gap: 5px; ';
+    const chipOn = chipBase + 'border: 1px solid #0F766E; background: #E6F4F1; color: #0F5F58; font-weight: 700';
+    const chipOff = chipBase + 'border: 1px solid #CBD3DB; background: #FFFFFF; color: #17202A';
+    const sizeLabel = st.size[1] >= 999 ? st.size[0] + '평 이상' : (st.size[0] ? st.size[0] + '~' : '') + st.size[1] + '평' + (st.size[0] ? '' : ' 이하');
+    const fdefs = [['region', '강남구 +2 · 필요 1', 'M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z', '영업 지역', true], ['type', '한식 +3', 'M4 9l1-5h14l1 5zM5 9v11h14V9', '업종', true], ['size', sizeLabel, 'M3 3h18v18H3zM3 9h18M9 3v18', '매장 규모(평)', true], ['date', '개업 ' + (st.date === 'set' ? '직접' : st.date + '일'), 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4', '개업일', true], ['stage', '단계 ' + st.sf, 'M4 6h16M4 12h10M4 18h6', '단계', st.sf !== '전체']];
+    const fchips = fdefs.map(([k, label, d, title, on]) => ({ label, d, title, pick: () => this.setState({ pop: st.pop === k ? '' : k }), style: on ? chipOn : chipOff }));
+    const popData = {
+      region: ['지역 (시·도 → 시·군·구)', [['#내 영업 지역', '담당 · 매일 수집'], ['강남구', 416, true], ['서초구', 210, true], ['송파구', 188, true], ['#영업 필요 지역', '확장 후보 · 지도에 점선'], ['부평구', 95, true], ['의정부시', 61, false], ['성남시 분당구', 140, false]]],
+      type: ['업종 (지역 선택과 같은 방식)', [['한식', 354, true], ['일식', 145, true], ['중식', 129, true], ['주점', 107, true], ['카페·디저트', 44, false], ['프랜차이즈', 70, false]]],
+      date: ['개업일', [['최근 7일', 38, st.date === '7'], ['최근 30일', 179, st.date === '30'], ['최근 90일', 290, st.date === '90'], ['기간 직접', '', st.date === 'set']]],
+      stage: ['단계', [['신규', 42, true], ['연락함', 12, true], ['견적 전달', 6, true], ['재연락', 5, true], ['계약', 2, false], ['제외', 9, false]]]
+    };
+    const qOn = 'height: 32px; padding: 0 12px; border: 0; border-radius: 16px; background: #0F766E; color: #FFFFFF; font-size: 13px; font-weight: 700';
+    const qOff = 'height: 32px; padding: 0 12px; border: 1px solid #CBD3DB; border-radius: 16px; background: #FFFFFF; font-size: 13px';
+    const sizeQuick = [[[0, 10], '10평 이하'], [[0, 20], '20평 이하'], [[0, 30], '30평 이하'], [[30, 999], '30평 이상'], [[10, 100], '10~100평']].map(([v, label]) => ({ label, pick: () => this.setState({ size: v }), style: st.size[0] === v[0] && st.size[1] === v[1] ? qOn : qOff }));
+    const pd = popData[st.pop];
+    const popLeft = { region: 300, type: 400, size: 500, date: 600, stage: 700, more: 860 }[st.pop] || 300;
+    const selN = rows.filter((r) => r.sel).length;
+    return {
+      allOn: rows.length > 0 && selN === rows.length, anySel: selN > 0, selText: selN ? selN + '곳 선택' : '선택 없음',
+      toggleAll: () => { const all = selN !== rows.length; const next = { ...st.sel }; rows.forEach((r) => { next[r.name] = all; }); this.setState({ sel: next }); },
+      fchips, sizeQuick, popOpen: Boolean(st.pop), closePop: () => this.setState({ pop: '' }), openMore: () => this.setState({ pop: st.pop === 'more' ? '' : 'more' }),
+      popTitle: st.pop === 'size' ? '매장 규모 (평 · 구간)' : st.pop === 'more' ? '더보기' : pd ? pd[0] : '', popList: Boolean(pd), popSize: st.pop === 'size', popMore: st.pop === 'more',
+      popRegion: st.pop === 'region',
+      popItems: pd ? pd[1].map(([label, n, on]) => { const head = String(label).charAt(0) === '#'; return { head, item: !head, label: head ? label.slice(1) : label, n, on, rowStyle: head ? 'display: flex; align-items: center; margin-top: 8px; padding: 4px 0; border-bottom: 1px solid #EEF1F4' : 'display: flex; align-items: center; height: 34px' }; }) : [],
+      sizeMin: st.size[0], sizeMax: st.size[1] >= 999 ? '' : st.size[1], sizeM2: '약 ' + Math.round(st.size[0] * 3.3058) + '㎡ ~ ' + (st.size[1] >= 999 ? '' : Math.round(st.size[1] * 3.3058) + '㎡'),
+      popStyle: 'position: absolute; top: 48px; left: ' + popLeft + 'px; width: 300px; background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,0.18); padding: 12px; z-index: 20',
+      toggleRemind: () => this.setState({ remindOnly: !st.remindOnly, sf: st.remindOnly ? '전체' : '리마인드 3' }),
+      remindStyle: 'height: 36px; padding: 0 10px; border-radius: 8px; font-size: 13px; white-space: nowrap; ' + (st.remindOnly ? 'border: 1px solid #B45309; background: #FFFBEB; color: #92400E; font-weight: 700' : 'border: 1px solid #FCD34D; background: #FFFFFF; color: #92400E'),
+      navOpen: st.nav, navArrow: st.nav ? '‹' : '›', toggleNav: () => this.setState({ nav: !st.nav }),
+      navStyle: 'width: ' + (st.nav ? 210 : 60) + 'px; flex: none; background: #121C25; display: flex; flex-direction: column; overflow: hidden',
+      stageF, toggleLeft: () => this.setState({ left: !st.left }), leftMini: st.layout === 'three' && !st.left,
+      groups, views, layouts, dates, layers, pins, tabs, rows, staff,
+      sel: mk(selRow),
+      filterText: (owner ? owner + ' 담당만 · ' : '') + '개업 ' + (st.date === 'set' ? '기간 직접' : '최근 ' + st.date + '일') + ' · ' + sizeLabel,
+      drawerOpen: Boolean(st.drawer),
+      closeDrawer: () => this.setState({ drawer: '' }),
+      showLeft: st.layout === 'three' && st.left,
+      showRight: st.layout !== 'map',
+      gridStyle: 'flex: 1; min-height: 0; display: grid; grid-template-columns: ' + cols
+    };
+  }
+}
+</script>
+</body>
+</html>

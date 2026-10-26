@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>성과 대시보드</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{margin:0}button{font-family:inherit;cursor:pointer}</style>
+</helmet>
+<div style="width: 100%; min-height: 1240px; box-sizing: border-box; background: #F5F7F9; font-family: 'Noto Sans KR', system-ui, sans-serif; color: #17202A; font-size: 14px; padding: 24px">
+  <div style="max-width: 1392px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 20px">성과 대시보드</h1>
+      <span style="font-size: 12px; color: #5B6673">{{ rangeText }} · 직전 기간과 비교</span>
+      <div style="margin-left: auto; display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden"><sc-for list="{{ periods }}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div>
+      <button type="button" onClick="{{ toggleShare }}" style="height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: #0F766E; color: #FFFFFF; font-weight: 700">공유</button>
+    </header>
+
+    <sc-if value="{{ shareOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="align-self: flex-end; width: 380px; background: #FFFFFF; border: 1px solid #CBD3DB; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 20px rgba(15,23,42,0.12); font-size: 13px">
+        <b>공유</b>
+        <div style="display: flex; gap: 6px"><span style="flex: 1; height: 36px; line-height: 36px; padding: 0 10px; border: 1px solid #CBD3DB; border-radius: 8px; color: #5B6673; overflow: hidden; white-space: nowrap">보기 전용 링크 · 7일 뒤 만료</span><button type="button" style="height: 36px; padding: 0 12px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF">복사</button></div>
+        <div style="font-size: 12px; color: #5B6673">메일·정기 발송 없음 · 이 화면에서 바로 확인</div>
+        <div style="font-size: 11px; color: #8A949E">매입가·마진은 대표만 · 공유 링크에서는 숨김 선택 가능</div>
+      </div>
+    </sc-if>
+
+    <!-- KPI -->
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6">
+        <div style="{{ k.box }}"><div style="font-size: 12px; color: #5B6673">{{ k.label }}</div><div style="font-size: 22px; font-weight: 700">{{ k.n }}</div><div style="{{ k.dStyle }}">{{ k.d }}</div></div>
+      </sc-for>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px">
+      <!-- 매출·매입·마진 추이 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px">
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 12px"><b style="font-size: 15px">매출 · 매입 · 마진율</b>
+          <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #0F766E"></span>매출</span>
+          <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #94A3B8"></span>매입</span>
+          <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 0; border-top: 2px dashed #D97706"></span>마진율</span>
+        </div>
+        <svg viewBox="0 0 760 240" width="100%" height="240" role="img" aria-label="매출 매입 마진율 추이">
+          <line x1="40" y1="20" x2="740" y2="20" stroke="#EEF1F4"/><line x1="40" y1="80" x2="740" y2="80" stroke="#EEF1F4"/><line x1="40" y1="140" x2="740" y2="140" stroke="#EEF1F4"/><line x1="40" y1="200" x2="740" y2="200" stroke="#CBD3DB"/>
+          <polyline points="{{ buyPts }}" fill="none" stroke="#94A3B8" stroke-width="2.5"/>
+          <polyline points="{{ salePts }}" fill="none" stroke="#0F766E" stroke-width="3"/>
+          <polyline points="{{ marginPts }}" fill="none" stroke="#D97706" stroke-width="2" stroke-dasharray="5 4"/>
+          <sc-for list="{{ xLabels }}" as="x" hint-placeholder-count="12"><text x="{{ x.x }}" y="222" font-size="11" fill="#5B6673" text-anchor="middle">{{ x.t }}</text></sc-for>
+          <text x="36" y="24" font-size="10" fill="#5B6673" text-anchor="end">{{ yTop }}</text>
+          <text x="744" y="24" font-size="10" fill="#D97706">30%</text><text x="744" y="204" font-size="10" fill="#D97706">0%</text>
+        </svg>
+      </section>
+      <!-- 영업 퍼널 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <b style="font-size: 15px">영업 단계 · 나아지는지</b>
+        <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="5">
+          <div style="display: grid; grid-template-columns: 72px minmax(0, 1fr) 44px 64px; gap: 8px; align-items: center; font-size: 12px">
+            <span style="color: #5B6673; white-space: nowrap">{{ f.l }}</span>
+            <span style="height: 18px; background: #F1F5F9; border-radius: 4px; overflow: hidden; position: relative"><span style="{{ f.prevBar }}"></span><span style="{{ f.bar }}"></span></span>
+            <b style="text-align: right">{{ f.n }}</b><span style="{{ f.dStyle }}">{{ f.d }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size: 11px; color: #5B6673">진한 막대 = 이번 기간 · 연한 막대 = 직전 기간 · 오른쪽 = 다음 단계로 넘어간 비율</div>
+        <div style="margin-top: auto; padding: 10px; border-radius: 10px; background: #FEF2F2; color: #7F1D1D; font-size: 12px; line-height: 1.6"><b>막힌 곳</b> 견적 → 계약 전환 10.5% (직전 14.0%) · 답 없는 견적 7곳</div>
+      </section>
+    </div>
+
+    <!-- 위험 관리 -->
+    <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 15px">놓치면 큰일 나는 것</b><span style="font-size: 12px; color: #5B6673">기준을 넘으면 빨간색 · 매일 아침 알림</span></div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+        <sc-for list="{{ risks }}" as="r" hint-placeholder-count="5">
+          <button type="button" onClick="{{ r.pick }}" style="{{ r.box }}">
+            <span style="font-size: 12px; color: #5B6673">{{ r.l }}</span>
+            <b style="font-size: 22px">{{ r.n }}</b>
+            <svg viewBox="0 0 120 30" width="100%" height="30" aria-hidden="true"><polyline points="{{ r.spark }}" fill="none" stroke="{{ r.color }}" stroke-width="2"/></svg>
+            <span style="{{ r.dStyle }}">{{ r.d }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px">
+      <!-- 이탈 상세 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 15px">{{ churnTitle }}</b>
+          <div style="margin-left: auto; display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden"><sc-for list="{{ churnTabs }}" as="t" hint-placeholder-count="3"><button type="button" onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+        </div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 90px 90px 100px; font-size: 13px">
+          <sc-for list="{{ churnHead }}" as="h" hint-placeholder-count="5"><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED; white-space: nowrap">{{ h }}</span></sc-for>
+          <sc-for list="{{ churnRows }}" as="r" hint-placeholder-count="5">
+            <span style="{{ r.cell }}"><b>{{ r.a }}</b></span><span style="{{ r.cell }}">{{ r.b }}</span><span style="{{ r.cell }}">{{ r.c }}</span><span style="{{ r.cell }}">{{ r.d }}</span><span style="{{ r.cellR }}">{{ r.e }}</span>
+          </sc-for>
+        </div>
+        <div style="font-size: 11px; color: #5B6673">평소 주문 주기의 2배가 지나도 주문이 없으면 이탈 위험으로 표시 · 영업 담당에게 리마인드</div>
+      </section>
+      <!-- 품목 마진 -->
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <b style="font-size: 15px">품목별 매출 · 마진율</b>
+        <sc-for list="{{ items }}" as="i" hint-placeholder-count="6">
+          <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr) 70px 52px; gap: 8px; align-items: center; font-size: 12px">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ i.name }}</span>
+            <span style="height: 14px; background: #F1F5F9; border-radius: 4px; overflow: hidden"><span style="{{ i.bar }}"></span></span>
+            <span style="text-align: right">{{ i.sale }}</span><b style="{{ i.mStyle }}">{{ i.m }}</b>
+          </div>
+        </sc-for>
+        <div style="font-size: 11px; color: #5B6673">매입가 바뀐 품목 2개 · 판매가 그대로면 마진 하락 (대파 · 계란)</div>
+      </section>
+    </div>
+
+    <footer style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5B6673; flex-wrap: wrap">
+      <span>데이터 출처</span>
+      <span style="padding: 3px 8px; border-radius: 10px; background: #DCFCE7; color: #166534">MAJU 배송·영업 기록</span>
+      <span style="padding: 3px 8px; border-radius: 10px; background: #DCFCE7; color: #166534">엑셀 올리기 (매입가·판매가·주문)</span>
+      <span style="padding: 3px 8px; border-radius: 10px; border: 1px dashed #94A3B8">ERP 연동 · 준비 중</span>
+      <span style="margin-left: auto">마지막 갱신 오늘 07:40</span>
+    </footer>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { period: '월', share: false, churn: 'item' }; }
+  renderVals() {
+    const st = this.state;
+    const pOn = 'height: 36px; padding: 0 14px; border: 0; background: #0F766E; color: #FFFFFF; font-weight: 700';
+    const pOff = 'height: 36px; padding: 0 14px; border: 0; background: #FFFFFF';
+    const periods = ['일', '주', '월', '분기'].map((label) => ({ label, pick: () => this.setState({ period: label }), style: st.period === label ? pOn : pOff }));
+    const cfg = {
+      '일': { range: '10/26 (월)', x: ['10/15', '', '10/17', '', '10/19', '', '10/21', '', '10/23', '', '10/25', '10/26'], scale: 1, top: '400만' },
+      '주': { range: '10/20 ~ 10/26', x: ['8/10', '', '8/24', '', '9/7', '', '9/21', '', '10/5', '', '10/19', '이번 주'], scale: 6, top: '2,400만' },
+      '월': { range: '2026년 10월', x: ['11월', '12월', '1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월'], scale: 26, top: '1.0억' },
+      '분기': { range: '2026년 4분기 (진행 중)', x: ['24 1Q', '2Q', '3Q', '4Q', '25 1Q', '2Q', '3Q', '4Q', '26 1Q', '2Q', '3Q', '4Q'], scale: 78, top: '3.1억' }
+    }[st.period];
+    const sale = [52, 55, 54, 58, 60, 59, 63, 66, 64, 69, 72, 76];
+    const buy = [41, 43, 43, 46, 47, 47, 50, 52, 52, 56, 59, 63];
+    const X = (i) => 40 + i * (700 / 11);
+    const Y = (v) => 200 - (v / 100) * 180;
+    const pts = (arr, f) => arr.map((v, i) => X(i).toFixed(1) + ',' + f(v).toFixed(1)).join(' ');
+    const margin = sale.map((s, i) => ((s - buy[i]) / s) * 100);
+    const kp = (label, n, d, bad, warn) => ({ label, n, d, box: 'background: #FFFFFF; border-radius: 12px; padding: 12px; border: 1px solid ' + (warn ? '#FCA5A5' : '#E3E8ED'), dStyle: 'font-size: 12px; color: ' + (bad ? '#B91C1C' : '#15803D') });
+    const mul = (n) => Math.round(n * cfg.scale / 26 * 10) / 10;
+    const kpis = [
+      kp('매출', mul(7600) >= 10000 ? (mul(7600) / 10000).toFixed(1) + '억' : mul(7600).toLocaleString() + '만', '+5.6%', false),
+      kp('매입', mul(6300).toLocaleString() + '만', '+6.8%', true),
+      kp('마진율', '17.1%', '-0.9%p', true, true),
+      kp('주문하는 거래처', '62곳', '+4곳', false),
+      kp('신규 계약', '4곳', '+2곳', false),
+      kp('이탈 위험', '5곳', '+2곳', true, true)
+    ];
+    const F = [['새 리드', 205, 178, 47], ['연락', 96, 81, 40], ['견적 전달', 38, 30, 10.5], ['계약', 4, 2, null]];
+    const funnel = F.map(([l, n, p, conv], i) => ({ l, n,
+      bar: 'position: absolute; left: 0; top: 4px; height: 10px; border-radius: 3px; background: #0F766E; width: ' + Math.max(2, n / 205 * 100) + '%',
+      prevBar: 'position: absolute; left: 0; top: 0; height: 18px; border-radius: 3px; background: #CCFBF1; width: ' + Math.max(2, p / 205 * 100) + '%',
+      d: conv === null ? '' : conv + '% →', dStyle: 'font-size: 11px; color: ' + (i === 2 ? '#B91C1C; font-weight: 700' : '#15803D') }));
+    const sp = (arr) => arr.map((v, i) => (i * 120 / (arr.length - 1)).toFixed(0) + ',' + (28 - v * 2.6).toFixed(0)).join(' ');
+    const R = [
+      ['반품·파손·CS', '8건', '+3 · 냉동 해동 3', [3, 4, 3, 5, 4, 5, 8], true, 'cs'],
+      ['거래처 이탈 위험', '5곳', '주문 끊김 · 월 420만', [1, 2, 2, 3, 3, 3, 5], true, 'store'],
+      ['품목 이탈', '9건', '평소 품목 안 시킴', [4, 5, 6, 6, 7, 8, 9], true, 'item'],
+      ['미수금', '1,240만', '30일 넘은 2곳', [6, 5, 5, 4, 5, 4, 4], false, 'ar'],
+      ['단가 만료 제안', '3건', '이번 주 만료', [2, 1, 3, 2, 2, 4, 3], false, 'price']
+    ];
+    const risks = R.map(([l, n, d, arr, bad, k]) => ({ l, n, d, spark: sp(arr), color: bad ? '#DC2626' : '#0F766E',
+      pick: () => (k === 'item' || k === 'store') ? this.setState({ churn: k }) : null,
+      box: 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; border-radius: 12px; text-align: left; background: ' + (bad ? '#FEF2F2' : '#FFFFFF') + '; border: 1px solid ' + ((k === st.churn) ? '#0F766E' : bad ? '#FCA5A5' : '#E3E8ED'),
+      dStyle: 'font-size: 11px; color: ' + (bad ? '#B91C1C' : '#5B6673') }));
+    const tOn = 'height: 30px; padding: 0 10px; border: 0; background: #1E293B; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const tOff = 'height: 30px; padding: 0 10px; border: 0; background: #FFFFFF; font-size: 12px';
+    const churnTabs = [['item', '품목 이탈'], ['store', '거래처 이탈'], ['never', '안 시키는 품목']].map(([k, label]) => ({ label, pick: () => this.setState({ churn: k }), style: st.churn === k ? tOn : tOff }));
+    const C = {
+      item: { t: '품목 이탈 · 평소 시키던 품목을 안 시킴', h: ['거래처', '품목', '평소 주기', '마지막 주문', '월 매출 영향'], r: [['대우부대찌개', '돼지 앞다리 5kg', '3일', '14일 전', '-62만'], ['밍글스', '냉동 새우 2kg', '7일', '21일 전', '-38만'], ['하나참치', '대파 1단', '2일', '9일 전', '-12만'], ['새벽집 청담점', '양파 15kg', '7일', '18일 전', '-15만']] },
+      store: { t: '거래처 이탈 위험 · 주문이 끊김', h: ['거래처', '담당', '평소 주기', '마지막 주문', '월 매출'], r: [['우부래도', '김영업', '2일', '11일 전', '180만'], ['노블', '이준형', '3일', '9일 전', '96만'], ['츠야카츠', '김영업', '4일', '10일 전', '74만'], ['일모', '이준형', '7일', '16일 전', '40만'], ['유키오', '김영업', '5일', '11일 전', '30만']] },
+      never: { t: '안 시키는 품목 · 비슷한 업종은 시키는데 이 거래처는 없음', h: ['거래처', '추천 품목', '같은 업종 주문률', '우리 단가', '예상 월 매출'], r: [['99숯불집', '숯 10kg', '82%', '18,000원', '+36만'], ['구구오리 부평본점', '깐마늘 1kg', '75%', '7,900원', '+16만'], ['기화', '냉동 감자 2.5kg', '64%', '9,400원', '+19만']] }
+    }[st.churn];
+    const churnRows = C.r.map(([a, b, c, d, e]) => ({ a, b, c, d, e, cell: 'padding: 8px 6px; border-bottom: 1px solid #EEF1F4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis', cellR: 'padding: 8px 6px; border-bottom: 1px solid #EEF1F4; text-align: right; font-weight: 700; color: ' + (String(e).charAt(0) === '-' ? '#B91C1C' : String(e).charAt(0) === '+' ? '#15803D' : '#17202A') }));
+    const IT = [['돼지 앞다리 5kg', 1240, 14.2], ['대파 1단', 860, 8.1], ['계란 30구', 720, 6.4], ['냉동 새우 2kg', 610, 22.5], ['양파 15kg', 540, 18.0], ['깐마늘 1kg', 380, 24.3]];
+    const items = IT.map(([name, s, m]) => ({ name, sale: s + '만', m: m + '%', bar: 'display: block; height: 100%; border-radius: 4px; background: #0F766E; width: ' + (s / 1240 * 100) + '%', mStyle: 'text-align: right; color: ' + (m < 10 ? '#B91C1C' : '#17202A') }));
+    return {
+      periods, kpis, funnel, risks, churnTabs, items, churnRows, churnTitle: C.t, churnHead: C.h,
+      rangeText: cfg.range, yTop: cfg.top,
+      salePts: pts(sale, Y), buyPts: pts(buy, Y), marginPts: pts(margin, (m) => 200 - (m / 30) * 180),
+      xLabels: cfg.x.map((t, i) => ({ t, x: X(i).toFixed(1) })),
+      shareOpen: st.share, toggleShare: () => this.setState({ share: !st.share })
+    };
+  }
+}
+</script>
+</body>
+</html>
