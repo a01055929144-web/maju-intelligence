@@ -33,6 +33,10 @@ export function isLeadWorkspaceV2Enabled(companyId?: string | null, value?: stri
   return Boolean(companyId && getLeadWorkspaceV2EnabledCompanyIds(value).has(companyId));
 }
 
+export function isMapFilterPersistenceEnabled(value = process.env.MAP_FILTER_PERSISTENCE_ENABLED || "") {
+  return value === "true" || value === "1";
+}
+
 export const CORE_LEADS_HREF = "/leads?type=permit";
 
 export function resolveLegacyDashboardHref(params: { companyId?: string; leadType?: string; view?: string }) {
