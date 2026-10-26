@@ -1199,7 +1199,7 @@ function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
       ok: Boolean(company.businessRegistrationNumber)
     },
     {
-      description: company.salesAreaCount > 0 ? `영업 지역 ${company.salesAreaCount.toLocaleString()}곳이 설정되어 있습니다.` : "영업 지역을 먼저 선택해주세요.",
+      description: company.salesAreaCount > 0 ? `직접 선택한 유효 영업 지역 ${company.salesAreaCount.toLocaleString()}곳이 설정되어 있습니다.` : "리드 수집 기준 영업 지역을 직접 선택해주세요.",
       label: "영업 지역",
       ok: company.salesAreaCount > 0
     },

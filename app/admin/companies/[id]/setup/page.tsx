@@ -17,7 +17,7 @@ type SetupStep = {
 };
 
 const SETUP_STEPS: SetupStep[] = [
-  { label: "영업 지역", description: "리드 수집을 시작할 시·도와 시·군·구를 먼저 선택합니다.", href: "#sales-area-step", ready: (company) => company.salesAreaCount > 0 },
+  { label: "영업 지역", description: "리드 수집 기준이 될 시·도와 시·군·구를 관리자가 직접 선택합니다.", href: "#sales-area-step", ready: (company) => company.salesAreaCount > 0 },
   { label: "회사 정보", description: "회사명·대표자·출발지를 확인합니다.", href: "/admin/companies", ready: (company) => Boolean(company.name && company.ownerName) },
   { label: "대표 로그인", description: "로그인 이메일과 임시 비밀번호를 발급합니다.", href: "/admin/companies", ready: (company) => Boolean(company.customerEmail && company.hasPassword) },
   { label: "출발지·차량", description: "배송 출발지와 차량 정보를 확인합니다.", href: "/dashboard/settings/routes", ready: (company) => Boolean(company.originAddress) },

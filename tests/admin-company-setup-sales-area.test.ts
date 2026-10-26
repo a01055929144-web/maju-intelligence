@@ -35,6 +35,12 @@ describe("admin assisted setup sales-area gate", () => {
     expect(resolveEffectiveSalesAreas(["강남구"], [])).toEqual([]);
   });
 
+  it("keeps onboarding locked when only automatic fallback areas exist", () => {
+    expect(resolveEffectiveSalesAreas([], [])).toEqual([]);
+    expect(pageSource).toContain("관리자가 직접 선택합니다");
+    expect(workspaceSource).toContain("자동 기본값과 별도로");
+  });
+
   it("unlocks setup when one recognized explicit area exists", () => {
     expect(resolveEffectiveSalesAreas(["서울특별시"], [])).toEqual(["서울특별시"]);
     expect(resolveEffectiveSalesAreas(["경기도 성남시"], [])).toEqual(["경기도 성남시"]);

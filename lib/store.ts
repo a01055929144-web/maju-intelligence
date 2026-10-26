@@ -2141,6 +2141,8 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           ]);
           const salesAreaCount = resolveEffectiveSalesAreas(
             salesAreaRows.map((row) => row.label),
+            // 온보딩 1단계는 관리자가 직접 선택한 유효 지역이 있어야 완료됩니다.
+            // 출발지·배송 권역 fallback은 실제 수집 안전망이며 준비율에는 포함하지 않습니다.
             []
           ).length;
           return [company.id, { salesAreaCount, vehicleCount, leadCount, mobileLocationCount, quoteActionCount }] as const;
