@@ -37,6 +37,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
     getChurnRiskCustomers(companyId).catch(() => [])
   ]);
   const insights = buildBusinessInsights({ churnRisks, deliveries, leads: leadResult.leads, ledger, quotes }, range);
+  const churnRevenue = insights.risks.churnCustomers.reduce((total, customer) => total + customer.monthlyRevenue, 0);
   const preview = Boolean(adminSession && !customerSession);
   const scoped = (periodValue: InsightsPeriod) => {
     const query = new URLSearchParams({ period: periodValue });
@@ -61,7 +62,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
             <div className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-teal-700" /><h1 className="text-xl font-black text-slate-950">성과 대시보드</h1></div>
             <p className="mt-1 text-sm font-semibold text-slate-500">{range.current.label} · 직전 {range.previous.label}과 비교</p>
           </div>
-          <nav aria-label="성과 조회 기간" className="ml-auto grid grid-cols-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+          <nav aria-label="성과 조회 기간" className="grid w-full grid-cols-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:ml-auto sm:w-auto">
             {PERIODS.map((item) => <Link className={`px-4 py-2 text-center text-sm font-black ${period === item.value ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white"}`} href={scoped(item.value)} key={item.value}>{item.label}</Link>)}
           </nav>
         </header>
@@ -75,41 +76,32 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <MetricCard change={insights.current.shareRate - insights.previous.shareRate} label="배송 공유율" suffix="%p" value={`${insights.current.shareRate}%`} />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-black text-slate-950">기간별 영업 추이</h2>
-          <p className="mt-1 text-xs font-semibold text-slate-500">기록이 있는 리드·연락·견적·계약만 집계합니다.</p>
-          <InsightTrendChart trend={insights.trend} />
-        </section>
-
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]">
           <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-base font-black text-slate-950">리드·연락·견적·계약 추이</h2>
-            <p className="mt-1 text-xs font-semibold text-slate-500">진한 막대는 이번 기간, 연한 막대는 직전 기간입니다.</p>
-            <div className="mt-5 space-y-4">
-              {insights.funnel.map((stage) => {
-                const maximum = Math.max(1, ...insights.funnel.flatMap((item) => [item.value, item.previousValue]));
-                return <div className="grid grid-cols-[82px_minmax(0,1fr)_52px_70px] items-center gap-3" key={stage.key}>
-                  <span className="text-sm font-bold text-slate-600">{stage.label}</span>
-                  <span className="relative h-6 overflow-hidden rounded-md bg-slate-100">
-                    <span className="absolute inset-y-0 left-0 rounded-md bg-teal-100" style={{ width: `${Math.max(2, stage.previousValue / maximum * 100)}%` }} />
-                    <span className="absolute inset-y-1 left-0 rounded bg-teal-700" style={{ width: `${Math.max(2, stage.value / maximum * 100)}%` }} />
-                  </span>
-                  <strong className="text-right text-sm text-slate-950">{stage.value}</strong>
-                  <span className={`text-right text-xs font-black ${stage.change < 0 ? "text-rose-700" : "text-teal-700"}`}>{signed(stage.change)}%</span>
-                </div>;
-              })}
-            </div>
+            <h2 className="text-base font-black text-slate-950">기간별 영업 추이</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">기록이 있는 리드·연락·견적·계약을 같은 구간으로 나눠 직전 기간과 비교합니다.</p>
+            <InsightTrendChart trend={insights.trend} />
           </article>
 
           <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-base font-black text-slate-950">영업 단계 전환율</h2>
-            <div className="mt-4 space-y-3">
-              {insights.funnel.slice(0, -1).map((stage, index) => <div className={`rounded-xl border p-3 ${stage.key === insights.blocked?.key ? "border-rose-200 bg-rose-50" : "border-slate-100 bg-slate-50"}`} key={stage.key}>
-                <div className="flex items-center justify-between gap-3"><span className="text-sm font-bold text-slate-700">{stage.label} → {insights.funnel[index + 1].label}</span><strong className={stage.key === insights.blocked?.key ? "text-rose-700" : "text-teal-700"}>{stage.conversionRate ?? 0}%</strong></div>
-                <p className="mt-1 text-xs font-semibold text-slate-500">직전 {stage.previousConversionRate ?? 0}%</p>
-              </div>)}
+            <h2 className="text-base font-black text-slate-950">영업 단계 · 나아지는지</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">진한 막대는 이번 기간, 연한 막대는 직전 기간입니다.</p>
+            <div className="mt-5 space-y-4">
+              {insights.funnel.map((stage, index) => {
+                const maximum = Math.max(1, ...insights.funnel.flatMap((item) => [item.value, item.previousValue]));
+                const next = insights.funnel[index + 1];
+                return <div className="grid grid-cols-[72px_minmax(0,1fr)_40px_58px] items-center gap-2" key={stage.key}>
+                  <span className="truncate text-xs font-bold text-slate-600">{stage.label}</span>
+                  <span aria-label={`${stage.label} 이번 ${stage.value}, 직전 ${stage.previousValue}`} className="relative h-5 overflow-hidden rounded bg-slate-100">
+                    <span className="absolute inset-y-0 left-0 rounded bg-teal-100" style={{ width: `${stage.previousValue ? Math.max(2, stage.previousValue / maximum * 100) : 0}%` }} />
+                    <span className="absolute inset-y-1 left-0 rounded bg-teal-700" style={{ width: `${stage.value ? Math.max(2, stage.value / maximum * 100) : 0}%` }} />
+                  </span>
+                  <strong className="text-right text-sm text-slate-950">{stage.value}</strong>
+                  <span className={`text-right text-xs font-black ${stage.key === insights.blocked?.key ? "text-rose-700" : "text-teal-700"}`}>{next ? `${stage.conversionRate ?? 0}% →` : ""}</span>
+                </div>;
+              })}
             </div>
-            {insights.blocked ? <p className="mt-auto rounded-xl bg-rose-100 px-3 py-2 text-sm font-bold text-rose-900"><AlertTriangle className="mr-1 inline h-4 w-4" />막힌 단계 · {insights.blocked.label} 다음 전환 {insights.blocked.conversionRate ?? 0}%</p> : null}
+            {insights.blocked ? <p className="mt-5 rounded-xl bg-rose-100 px-3 py-2 text-sm font-bold leading-6 text-rose-900"><AlertTriangle className="mr-1 inline h-4 w-4" />막힌 곳 · {insights.blocked.label} 다음 전환 {insights.blocked.conversionRate ?? 0}% <span className="font-semibold text-rose-700">(직전 {insights.blocked.previousConversionRate ?? 0}%)</span></p> : null}
           </article>
         </section>
 
@@ -117,7 +109,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-black text-slate-950">놓치면 큰일 나는 것</h2><span className="text-xs font-semibold text-slate-500">현재 저장된 기록으로 확인 가능한 위험만 표시합니다.</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <RiskCard description="배송 이슈 기록 연결 후 표시합니다." icon={AlertTriangle} label="반품·파손·CS" value="—" warning={false} />
-            <RiskCard description="기존 거래 이탈 판정 로직(마지막 주문 21일 경과)을 그대로 사용합니다." icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
+            <RiskCard description={insights.risks.churnCustomers.length ? `기존 이탈 판정 · 월 매출 ${formatWon(churnRevenue)} 영향` : "기존 거래 이탈 판정 기준을 넘은 거래처가 없습니다."} icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
             <RiskCard description="품목별 주문 기록 연결 후 표시합니다." icon={Clock3} label="품목 이탈" value="—" warning={false} />
             <RiskCard description="미수 원장 연결 후 표시합니다." icon={AlertTriangle} label="미수금" value="—" warning={false} />
             <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다. 계약 단가 만료는 추후 연결합니다." icon={AlertTriangle} label="견적 만료 임박" value={`${insights.risks.expiringQuotes.toLocaleString()}건`} warning={insights.risks.expiringQuotes > 0} />
@@ -137,6 +129,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
 
 function change(current: number, previous: number) { return previous ? Math.round((current - previous) / previous * 100) : current ? 100 : 0; }
 function signed(value: number) { return value > 0 ? `+${value}` : String(value); }
+function formatWon(value: number) { return `${Math.round(value).toLocaleString()}원`; }
 
 function MetricCard({ change, label, suffix = "%", value }: { change: number; label: string; suffix?: string; value: string }) {
   const positive = change >= 0;
