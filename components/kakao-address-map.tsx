@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Crosshair, ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 
 export type KakaoMapMarker = {
   readonly address: string;
@@ -438,7 +439,9 @@ export function KakaoAddressMap({
         mapRef.current.innerHTML = "";
 
         const kakao = window.kakao;
-        const initialCenter = new kakao.maps.LatLng(37.5388, 127.2124);
+        // 출발지·영업 지역·거래처가 모두 없는 첫 고객사도 빈 지도를 정상적으로 볼 수 있게
+        // 최종 기본 중심은 서울시청으로 둡니다. 출발지나 경계가 있으면 아래 fitViewport가 덮어씁니다.
+        const initialCenter = new kakao.maps.LatLng(37.5665, 126.9780);
         const map = new kakao.maps.Map(mapRef.current, {
           center: initialCenter,
           level: 8
@@ -611,7 +614,12 @@ export function KakaoAddressMap({
 
         if (ignore) return;
 
-        if (found === 0 && staticMarkers.length > 0 && !hasRoadPath && !salesAreaBoundary) {
+        if (shouldShowMarkerGeocodingFailure({
+          found,
+          hasRoadPath,
+          hasSalesAreaBoundary: Boolean(salesAreaBoundary),
+          markers: staticMarkers
+        })) {
           console.error(`[KakaoAddressMap] 카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
           setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
           setStatus("fallback");
@@ -1675,11 +1683,11 @@ function FallbackAddressMap({
             </p>
           </div>
         ) : null}
-        {!displayMarkers.length ? (
-          <div className="absolute inset-0 grid place-items-center p-4 text-center">
-            <div className="rounded-md border border-slate-200 bg-white/95 p-4 shadow-sm">
-              <p className="font-black text-slate-900">표시할 지도 데이터가 없습니다.</p>
-              <p className="mt-2 text-sm font-bold leading-6 text-slate-500">거래처 주소를 먼저 등록하거나 고객사 데이터 기준 진단을 확인하세요.</p>
+        {!displayMarkers.length && status === "ready" ? (
+          <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[min(360px,calc(100%-24px))] text-left">
+            <div className="rounded-md border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
+              <p className="text-sm font-black text-slate-900">아직 표시할 매장이 없습니다.</p>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">영업 지역을 고르면 리드가 지도에 표시됩니다.</p>
             </div>
           </div>
         ) : null}
