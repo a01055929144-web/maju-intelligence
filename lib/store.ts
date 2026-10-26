@@ -3,7 +3,8 @@ import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEn
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
-import { canScanNextGovArea, getGovAreaCodes, getGovAreaCoverageStatus, GOV_SYNC_MAX_PAGES_PER_RUN, govLastSuccessRunQuery, resolveGovAreaScanWindow, type GovAreaCursor } from "./gov-area-scan";
+import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncRunStatus, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9257,7 +9258,11 @@ export async function syncGovRestaurantLeads(
   companyId: string,
   days = 3,
   startPage?: number,
-  trigger: LeadSyncTrigger = "manual"
+  trigger: LeadSyncTrigger = "manual",
+  dataset: GovDataset = "general_restaurants",
+  deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS,
+  requestLimiter?: GovRequestLimiter,
+  fanoutConcurrency = GOV_FANOUT_CONCURRENCY
 ): Promise<GovRestaurantSyncResult> {
   if (!isGovRestaurantApiConfigured()) {
     return { configured: false, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT };
@@ -9291,58 +9296,59 @@ export async function syncGovRestaurantLeads(
       finished_at: string | null;
       fetched_count: number;
       status: string;
-      metadata: { areaCursor?: GovAreaCursor | null; scanStartedAt?: string } | null;
+      metadata: { dataset?: GovDataset; areaCursors?: Record<string, GovAreaCursor> } | null;
     }>>(
-      govLastSuccessRunQuery(companyId)
+      `lead_sync_runs?select=started_at,finished_at,fetched_count,status,metadata&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&status=eq.success&order=started_at.desc&limit=20`
     ).catch(() => []);
-    const previous = previousRuns.find((run) => run.status === "success");
-    const scanWindow = resolveGovAreaScanWindow({
-      codes,
-      savedCursor: previous?.metadata?.areaCursor,
-      startedAt,
-      previousFinishedAt: previous?.finished_at,
-      lookbackDays: days
-    });
-    const { cursor: savedCursor, scanStartedAt, cutoff, startIndex } = scanWindow;
-    const deadline = Date.now() + 32_000;
-    const rows: Awaited<ReturnType<typeof fetchGovAreaRows>>["rows"] = [];
-    let scannedPages = 0;
-    let totalPages = 0;
-    let nextCursor: GovAreaCursor | null = null;
-    for (let index = startIndex; index < codes.length; index += 1) {
-      if (!canScanNextGovArea(scannedPages, GOV_SYNC_MAX_PAGES_PER_RUN)) {
-        nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
-        break;
-      }
-      if (Date.now() >= deadline && scannedPages) {
-        nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
-        break;
-      }
-      const areaCode = codes[index];
-      const result = await fetchGovAreaRows({
-        dataset: "general_restaurants",
-        areaCode,
-        startPage: savedCursor?.areaCode === areaCode ? savedCursor.page : index === 0 ? startPage : undefined,
-        maxPages: GOV_SYNC_MAX_PAGES_PER_RUN - scannedPages,
-        cutoff,
-        shouldStop: () => Date.now() >= deadline
-      });
-      rows.push(...result.rows);
-      scannedPages += result.scannedPages;
-      totalPages += result.totalPages;
-      if (result.nextPage) {
-        nextCursor = { areaCode, page: result.nextPage, cutoff: cutoff.toISOString(), scanStartedAt };
-        break;
-      }
-      if ((scannedPages >= GOV_SYNC_MAX_PAGES_PER_RUN || rows.length >= 2_000) && index + 1 < codes.length) {
-        nextCursor = { areaCode: codes[index + 1], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
-        break;
-      }
+    const previous = previousRuns.find((run) => run.metadata?.dataset === dataset);
+    const savedCursors = Object.fromEntries(Object.entries(previous?.metadata?.areaCursors || {})
+      .filter(([areaCode]) => codes.includes(areaCode)));
+    if (startPage && startPage > 1 && codes[0] && !savedCursors[codes[0]]) {
+      savedCursors[codes[0]] = { areaCode: codes[0], page: startPage, cutoff: startedAt, scanStartedAt: startedAt };
     }
+    const cutoff = getGovChangeCutoff(new Date(startedAt), previous?.finished_at, days).toISOString();
+    const tasks = buildGovAreaTasks(codes, savedCursors, cutoff, startedAt);
+    // 40초는 API만의 예산이 아니라 이 함수의 수집+ingest+상태 기록 전체 목표 예산이다.
+    // 마지막 10초는 DB 후처리용으로 남기고, 공통 큐에서 기다린 작업도 실제 요청 직전에 다시 확인한다.
+    const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
+    const taskResults = await runGovAreaTasks({
+      tasks,
+      deadlineAt: requestDeadlineAt,
+      concurrency: fanoutConcurrency,
+      requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS,
+      load: (task) => (requestLimiter || (async (load) => load()))(() => {
+        if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
+        return fetchGovAreaRows({
+        dataset,
+        areaCode: task.areaCode,
+        startPage: task.page,
+        maxPages: 1,
+        cutoff: new Date(task.cutoff),
+        timeoutMs: GOV_REQUEST_TIMEOUT_MS,
+        retry: false
+        });
+      })
+    });
+    const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
+    const nextCursors: Record<string, GovAreaCursor> = { ...savedCursors };
+    for (const result of taskResults) {
+      if (result.status !== "success") continue;
+      const nextPage = result.value?.nextPage;
+      if (nextPage && !(result.kind === "latest" && savedCursors[result.areaCode])) nextCursors[result.areaCode] = {
+        areaCode: result.areaCode, page: nextPage, cutoff: result.cutoff, scanStartedAt: result.scanStartedAt
+      };
+      else if (result.kind === "cursor") delete nextCursors[result.areaCode];
+    }
+    const scannedPages = taskResults.filter((result) => result.status === "success").length;
+    const totalPages = taskResults.reduce((sum, result) => sum + (result.value?.totalPages || 0), 0);
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
-    let status: "success" | "error" = "success";
-    let message = `${summarizeLeadSyncIngest(ingest)} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
-    if (trigger === "cron" && codes.length && rows.length === 0 && !nextCursor &&
+    let status: "success" | "error" = getGovSyncRunStatus(taskResults);
+    let message = `${summarizeLeadSyncIngest(ingest)} · ${dataset} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
+    if (status === "error") {
+      const errorCount = taskResults.filter((result) => result.status === "error").length;
+      const deferredCount = taskResults.filter((result) => result.status === "deferred").length;
+      message = `${dataset} 지역 요청이 모두 완료되지 않았습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳`;
+    } else if (trigger === "cron" && codes.length && rows.length === 0 && !Object.keys(nextCursors).length &&
         isConsecutiveDailyZeroFetch({
           currentStartedAt: startedAt,
           currentFetched: 0,
@@ -9360,11 +9366,25 @@ export async function syncGovRestaurantLeads(
       ingest,
       message,
       metadata: {
+        dataset,
         scannedPages,
         areaCodes: codes.length,
         missingAreas: missing,
-        areaCursor: nextCursor,
-        scanStartedAt,
+        areaCursors: nextCursors,
+        requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS,
+        collectionBudgetMs: GOV_COLLECTION_BUDGET_MS,
+        postprocessReserveMs: GOV_POSTPROCESS_RESERVE_MS,
+        budgetScope: "request-ingest-status",
+        areas: taskResults.map((result) => ({
+          areaCode: result.areaCode,
+          page: result.page,
+          kind: result.kind,
+          status: result.status,
+          requests: result.status === "deferred" ? 0 : 1,
+          elapsedMs: result.elapsedMs,
+          newRows: result.value?.rows.length || 0,
+          error: result.error
+        })),
         updateKinds: rows.reduce<Record<string, number>>((counts, row) => {
           const kind = row.updateKind || "unknown";
           counts[kind] = (counts[kind] || 0) + 1;
@@ -9376,7 +9396,7 @@ export async function syncGovRestaurantLeads(
       configured: true,
       fetched: rows.length,
       ingest,
-      nextStartPage: nextCursor?.page,
+      nextStartPage: Object.values(nextCursors)[0]?.page,
       scannedPages,
       totalPages,
       skippedPages: []
@@ -9398,7 +9418,9 @@ export type GovRestaurantDailySyncResult = {
 };
 
 /** 일일 cron에서 모든 회사에 대해 전국 음식점 공공데이터 자동 수집을 실행합니다. */
-export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestaurantDailySyncResult> {
+export async function syncAllCompaniesGovRestaurantLeads(
+  datasets: readonly GovDataset[] = ["general_restaurants"]
+): Promise<GovRestaurantDailySyncResult> {
   const empty: GovRestaurantDailySyncResult = {
     configured: isGovRestaurantApiConfigured(),
     companiesProcessed: 0,
@@ -9409,12 +9431,17 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
-  const results = await Promise.all(companies.map(async ({ id }) =>
-    syncGovRestaurantLeads(id, 14, undefined, "cron").catch(
-      (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
+  const deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS;
+  // 데이터셋→회사 순으로 교차한 모든 단위를 동시에 시작하되, 각 단위는 한 요청씩만 공통 큐에
+  // 제출한다. 따라서 첫 회사가 슬롯 3개를 독점하지 않고 전체 외부 요청 동시성도 정확히 3이다.
+  const units = datasets.flatMap((dataset) => companies.map(({ id }) => ({ companyId: id, dataset })));
+  const requestLimiter = createGovRequestLimiter(GOV_FANOUT_CONCURRENCY);
+  const results = await Promise.all(units.map((unit) =>
+    syncGovRestaurantLeads(unit.companyId, 14, undefined, "cron", unit.dataset, deadlineAt, requestLimiter, 1).catch(
+        (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
     )
   ));
-  return results.reduce<GovRestaurantDailySyncResult>(
+  const totals = results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
       configured: true,
       companiesProcessed: total.companiesProcessed + 1,
@@ -9424,6 +9451,7 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
     }),
     { ...empty, configured: true }
   );
+  return { ...totals, companiesProcessed: companies.length };
 }
 
 export type SeoulRestaurantSyncResult = {
