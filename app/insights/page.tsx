@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, Clock3, Truck } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { buildBusinessInsights, resolveInsightsDateRange, type InsightsPeriod } from "@/application/analytics/business-insights";
+import { InsightTrendChart } from "@/components/insight-trend-chart";
+import { buildBusinessInsights, insightsRoleRedirect, resolveInsightsDateRange, type InsightsPeriod } from "@/application/analytics/business-insights";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getChurnRiskCustomers, getCompanySettings, listInsightsDeliveryRecords, listPermitLeads, listSalesContactLedger, listSalesQuotes } from "@/lib/store";
 
@@ -17,7 +18,10 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
   const params = await searchParams;
   const [customerSession, adminSession] = await Promise.all([getCustomerSession(), getAdminSession()]);
   if (!customerSession && !adminSession) redirect("/dashboard/login");
-  if (customerSession && customerSession.workspaceRole !== "owner" && customerSession.workspaceRole !== "manager") redirect("/leads?type=permit");
+  if (customerSession) {
+    const roleRedirect = insightsRoleRedirect(customerSession.workspaceRole);
+    if (roleRedirect) redirect(roleRedirect);
+  }
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId);
   if (!companyId) redirect("/admin/companies");
@@ -71,6 +75,12 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <MetricCard change={insights.current.shareRate - insights.previous.shareRate} label="배송 공유율" suffix="%p" value={`${insights.current.shareRate}%`} />
         </section>
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-base font-black text-slate-950">기간별 영업 추이</h2>
+          <p className="mt-1 text-xs font-semibold text-slate-500">기록이 있는 리드·연락·견적·계약만 집계합니다.</p>
+          <InsightTrendChart trend={insights.trend} />
+        </section>
+
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]">
           <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-base font-black text-slate-950">리드·연락·견적·계약 추이</h2>
@@ -105,9 +115,12 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-black text-slate-950">놓치면 큰일 나는 것</h2><span className="text-xs font-semibold text-slate-500">현재 저장된 기록으로 확인 가능한 위험만 표시합니다.</span></div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <RiskCard description="배송 이슈 기록 연결 후 표시합니다." icon={AlertTriangle} label="반품·파손·CS" value="—" warning={false} />
             <RiskCard description="기존 거래 이탈 판정 로직(마지막 주문 21일 경과)을 그대로 사용합니다." icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
-            <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다." icon={AlertTriangle} label="단가·견적 만료 임박" value={`${insights.risks.expiringQuotes.toLocaleString()}건`} warning={insights.risks.expiringQuotes > 0} />
+            <RiskCard description="품목별 주문 기록 연결 후 표시합니다." icon={Clock3} label="품목 이탈" value="—" warning={false} />
+            <RiskCard description="미수 원장 연결 후 표시합니다." icon={AlertTriangle} label="미수금" value="—" warning={false} />
+            <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다. 계약 단가 만료는 추후 연결합니다." icon={AlertTriangle} label="견적 만료 임박" value={`${insights.risks.expiringQuotes.toLocaleString()}건`} warning={insights.risks.expiringQuotes > 0} />
           </div>
         </section>
 

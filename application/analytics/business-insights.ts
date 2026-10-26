@@ -3,6 +3,10 @@ import type { InsightsDeliveryRecord } from "../../lib/store/06-insights";
 
 export type InsightsPeriod = "day" | "week" | "month" | "quarter";
 
+export function insightsRoleRedirect(workspaceRole: string | null | undefined) {
+  return workspaceRole === "owner" || workspaceRole === "manager" ? null : "/leads?type=permit";
+}
+
 export type InsightsDateRange = {
   current: { from: Date; label: string; to: Date };
   previous: { from: Date; label: string; to: Date };
@@ -84,6 +88,51 @@ function percentChange(current: number, previous: number) {
   return Math.round(((current - previous) / previous) * 100);
 }
 
+type TrendMetric = "leads" | "contacts" | "quotes" | "contracts";
+type TrendCounts = Record<TrendMetric, number>;
+
+function trendCounts(input: MetricInput, range: { from: Date; to: Date }, count: number): TrendCounts[] {
+  const buckets = Array.from({ length: count }, () => ({ leads: 0, contacts: 0, quotes: 0, contracts: 0 }));
+  const contacted = Array.from({ length: count }, () => new Set<string>());
+  const duration = range.to.getTime() - range.from.getTime();
+  const indexFor = (value: string) => {
+    if (!inRange(value, range)) return -1;
+    return Math.min(count - 1, Math.floor(((new Date(value).getTime() - range.from.getTime()) / duration) * count));
+  };
+  for (const lead of input.leads) {
+    const index = indexFor(lead.createdAt);
+    if (index >= 0) buckets[index].leads += 1;
+  }
+  for (const action of input.ledger) {
+    const index = indexFor(action.createdAt);
+    if (index >= 0) contacted[index].add(action.leadId);
+  }
+  for (const quote of input.quotes) {
+    const index = indexFor(quote.createdAt);
+    if (index < 0 || quote.status === "draft" || quote.status === "cancelled") continue;
+    buckets[index].quotes += 1;
+    if (quote.status === "accepted") buckets[index].contracts += 1;
+  }
+  for (let index = 0; index < count; index += 1) buckets[index].contacts = contacted[index].size;
+  return buckets;
+}
+
+function buildTrend(input: MetricInput, dateRange: InsightsDateRange) {
+  const days = (dateRange.current.to.getTime() - dateRange.current.from.getTime()) / 86_400_000;
+  const count = days <= 1 ? 6 : days <= 7 ? 7 : 6;
+  const current = trendCounts(input, dateRange.current, count);
+  const previous = trendCounts(input, dateRange.previous, count);
+  const duration = dateRange.current.to.getTime() - dateRange.current.from.getTime();
+  const formatter = days <= 1
+    ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric" })
+    : new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric" });
+  return Array.from({ length: count }, (_, index) => {
+    const midpoint = new Date(dateRange.current.from.getTime() + ((index + 0.5) / count) * duration);
+    const label = formatter.format(midpoint);
+    return { label, current: current[index], previous: previous[index] };
+  });
+}
+
 export function buildBusinessInsights(input: MetricInput, dateRange: InsightsDateRange, now = new Date()) {
   const summarize = (range: { from: Date; to: Date }) => {
     const leads = input.leads.filter((lead) => inRange(lead.createdAt, range));
@@ -131,6 +180,7 @@ export function buildBusinessInsights(input: MetricInput, dateRange: InsightsDat
     current,
     funnel,
     previous,
+    trend: buildTrend(input, dateRange),
     risks: {
       churnCustomers: input.churnRisks,
       expiringQuotes

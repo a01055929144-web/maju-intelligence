@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBusinessInsights, resolveInsightsDateRange } from "../application/analytics/business-insights";
+import { buildBusinessInsights, insightsRoleRedirect, resolveInsightsDateRange } from "../application/analytics/business-insights";
 import type { PermitLeadItem, SalesContactLedgerItem, SalesQuoteListItem } from "../lib/store";
 
 describe("resolveInsightsDateRange", () => {
@@ -40,5 +40,36 @@ describe("buildBusinessInsights", () => {
     expect(result.current).toMatchObject({ contracts: 1, contacts: 1, deliveries: 2, leads: 1, quotes: 1, shareRate: 50 });
     expect(result.previous).toMatchObject({ contracts: 0, contacts: 1, deliveries: 0, leads: 1, quotes: 1, shareRate: 0 });
     expect(result.risks.churnCustomers).toHaveLength(1);
+    expect(result.funnel[0]).toMatchObject({ value: 1, previousValue: 1 });
+    expect(result.trend).toHaveLength(6);
+    expect(result.trend.reduce((total, bucket) => total + bucket.current.leads, 0)).toBe(1);
+    expect(result.trend.reduce((total, bucket) => total + bucket.previous.leads, 0)).toBe(1);
+  });
+
+  it("counts a contacted store once per time bucket and keeps prior period aligned", () => {
+    const range = resolveInsightsDateRange("week", new Date("2026-10-26T12:00:00+09:00"));
+    const result = buildBusinessInsights({
+      churnRisks: [],
+      deliveries: [],
+      leads: [],
+      ledger: [
+        { createdAt: "2026-10-26T01:00:00Z", leadId: "l1" },
+        { createdAt: "2026-10-26T02:00:00Z", leadId: "l1" },
+        { createdAt: "2026-10-19T01:00:00Z", leadId: "l2" }
+      ] as SalesContactLedgerItem[],
+      quotes: []
+    }, range);
+    expect(result.trend).toHaveLength(7);
+    expect(result.trend[0].current.contacts).toBe(1);
+    expect(result.trend[0].previous.contacts).toBe(1);
+  });
+});
+
+describe("insightsRoleRedirect", () => {
+  it("redirects staff and delivery users before querying company insights", () => {
+    expect(insightsRoleRedirect("staff")).toBe("/leads?type=permit");
+    expect(insightsRoleRedirect("driver")).toBe("/leads?type=permit");
+    expect(insightsRoleRedirect("owner")).toBeNull();
+    expect(insightsRoleRedirect("manager")).toBeNull();
   });
 });
