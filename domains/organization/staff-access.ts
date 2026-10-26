@@ -81,4 +81,3 @@ export function canChangeStaffPermission(
   if (currentRole === "owner" && actor !== "owner" && actor !== "maju_admin") return false;
   return canGrantStaffPermission(actor, nextRole);
 }
-
