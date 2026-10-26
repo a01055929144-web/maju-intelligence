@@ -52,6 +52,8 @@
 - 등록·해제 회원은 기존 `company_members(company_id, id)` 복합 키로 참조해 다른 회사 회원 ID가 감사 정보에 들어오는 것도 DB에서 막는다.
 - `reason_code`는 제한된 코드로 저장하고, 자유 입력은 `memo`에 둔다.
 - 공개 스키마 테이블은 RLS를 켜고 `anon`, `authenticated` 직접 권한을 회수한다. 서버의 검증된 경로만 사용한다.
+- SQL 초안은 `PUBLIC` 권한도 함께 회수하고 `service_role`에는 물리 삭제를 제외한 최소 테이블 권한만 명시한다.
+- PostgreSQL 15 미만이면 `ON DELETE SET NULL(column)`을 사용하기 전에 중단하며, 회원 복합 UNIQUE도 `DO` 블록에서 존재를 확인한다.
 
 검토용 SQL은 `docs/sql-drafts/20261027-K-company-trade-blocks.sql`에 분리한다.
 
