@@ -27,26 +27,36 @@ stable
 security invoker
 set search_path = public
 as $$
-  select distinct on (event.user_id)
-    event.id, event.device_id, event.user_id, event.driver_name, event.delivery_vehicle,
-    event.latitude, event.longitude, event.accuracy_m, event.recorded_at, event.current_customer_id
-  from public.staff_location_events event
-  where event.company_id = p_company_id
-    and (p_user_id is null or event.user_id = p_user_id)
+  select
+    device.id,
+    device.id as device_id,
+    device.user_id,
+    device.driver_name,
+    device.delivery_vehicle,
+    device.last_lat as latitude,
+    device.last_lng as longitude,
+    device.last_accuracy_m as accuracy_m,
+    device.last_location_at as recorded_at,
+    device.current_customer_id
+  from public.staff_mobile_devices device
+  where device.company_id = p_company_id
+    and (p_user_id is null or device.user_id = p_user_id)
+    and device.last_lat is not null
+    and device.last_lng is not null
+    and device.last_location_at >= now() - interval '24 hours'
     and (
-      event.current_customer_id is not null
-      or exists (
-        select 1
-        from public.staff_mobile_devices device
-        where device.company_id = event.company_id
-          and device.user_id = event.user_id
-          and device.work_started_at is not null
-          and device.work_ended_at is null
-          and device.work_auto_ends_at > now()
-          and event.recorded_at >= device.work_started_at
+      (
+        device.work_started_at is not null
+        and device.work_ended_at is null
+        and device.work_auto_ends_at > now()
+        and device.last_location_at >= device.work_started_at
+      )
+      or (
+        device.current_customer_id is not null
+        and coalesce(device.location_status, 'active') <> 'offline'
       )
     )
-  order by event.user_id, event.recorded_at desc;
+  order by device.user_id;
 $$;
 revoke all on function public.list_latest_operational_staff_locations(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.list_latest_operational_staff_locations(uuid, uuid) to service_role;

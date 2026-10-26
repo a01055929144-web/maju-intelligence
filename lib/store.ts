@@ -62,7 +62,7 @@ import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pric
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
-import { evaluateStaffLocation, getStaffLocationDisplayState, shouldStoreStaffLocationHistory, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { evaluateStaffLocation, getStaffLocationDisplayState, resolveStaffLocationPersistence, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -3811,10 +3811,8 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
     if (!isTerminalStatus && !decision.accept && decision.reason !== "stationary" && decision.reason !== "older") {
       return { location: existing ? toStaffVehicleLocation(existing) : null, persisted: false };
     }
-    const shouldUpdateLatest = decision.accept && decision.reason !== "older";
     const elapsedMs = previousPoint ? Math.max(0, new Date(recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime()) : Number.POSITIVE_INFINITY;
-    const shouldStoreHistory = decision.reason !== "older"
-      && (!previousPoint || shouldStoreStaffLocationHistory({ distanceMeters: decision.distanceMeters, elapsedMs }));
+    const persistence = resolveStaffLocationPersistence(decision, Boolean(previousPoint), elapsedMs);
     const workFields = input.workActive === undefined
       ? {}
       : input.workActive
@@ -3830,10 +3828,10 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
       delivery_vehicle: input.deliveryVehicle || existing?.delivery_vehicle || null,
       device_label: input.driverName || "모바일 웹",
       driver_name: input.driverName || existing?.driver_name || null,
-      last_accuracy_m: shouldUpdateLatest && Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : existing?.last_accuracy_m ?? null,
-      last_lat: shouldUpdateLatest ? input.lat : existing?.last_lat ?? input.lat,
-      last_lng: shouldUpdateLatest ? input.lng : existing?.last_lng ?? input.lng,
-      last_location_at: shouldUpdateLatest ? recordedAt : existing?.last_location_at || recordedAt,
+      last_accuracy_m: persistence.updateTimestamp && Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : existing?.last_accuracy_m ?? null,
+      last_lat: persistence.updateCoordinates ? input.lat : existing?.last_lat ?? input.lat,
+      last_lng: persistence.updateCoordinates ? input.lng : existing?.last_lng ?? input.lng,
+      last_location_at: persistence.updateTimestamp ? recordedAt : existing?.last_location_at || recordedAt,
       last_seen_at: now,
       location_status: input.status || "active",
       platform: "mobile_web",
@@ -3890,7 +3888,7 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
       });
     });
     const location = toStaffVehicleLocation(rows[0]) || null;
-    if (location && shouldStoreHistory) {
+    if (location && persistence.storeHistory) {
       await supabaseRequest("staff_location_events", {
         method: "POST",
         headers: { Prefer: "return=minimal" },

@@ -22,6 +22,14 @@ export function evaluateStaffLocation(next: StaffLocationPoint, previous?: Staff
 }
 
 export const shouldStoreStaffLocationHistory = (input: { distanceMeters: number; elapsedMs: number }) => input.distanceMeters >= 25 || input.elapsedMs >= 120_000;
+
+export function resolveStaffLocationPersistence(decision: StaffLocationDecision, hasPrevious: boolean, elapsedMs: number) {
+  const updateCoordinates = decision.accept && decision.reason !== "older";
+  const updateTimestamp = updateCoordinates || decision.reason === "stationary";
+  const storeHistory = updateCoordinates
+    && (!hasPrevious || shouldStoreStaffLocationHistory({ distanceMeters: decision.distanceMeters, elapsedMs }));
+  return { storeHistory, updateCoordinates, updateTimestamp };
+}
 export const getStaffLocationPostIntervalMs = (isMoving: boolean) => isMoving ? 10_000 : 60_000;
 export const getStaffMapPollIntervalMs = (hasRealtimeVehicle: boolean) => hasRealtimeVehicle ? 10_000 : 30_000;
 

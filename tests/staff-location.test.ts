@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateStaffLocation, getStaffLocationDisplayState, getStaffLocationPostIntervalMs, getStaffLocationVisibilityCutoff, shouldExposeOperationalLocation, shouldStoreStaffLocationHistory, STAFF_LOCATION_VISIBILITY_HOURS } from "../lib/staff-location";
+import { evaluateStaffLocation, getStaffLocationDisplayState, getStaffLocationPostIntervalMs, getStaffLocationVisibilityCutoff, resolveStaffLocationPersistence, shouldExposeOperationalLocation, shouldStoreStaffLocationHistory, STAFF_LOCATION_VISIBILITY_HOURS } from "../lib/staff-location";
 
 describe("staff live-location visibility", () => {
   it("keeps the live snapshot window separate from long-term GPS history", () => {
@@ -30,8 +30,20 @@ describe("staff location quality", () => {
     expect(evaluateStaffLocation({ ...base, recordedAt: "2026-10-25T23:59:00.000Z" }, base)).toMatchObject({ accept: false, reason: "older" });
   });
   it("keeps stationary markers and rejects impossible jumps", () => {
-    expect(evaluateStaffLocation({ ...base, lng: 127.00001, recordedAt: "2026-10-26T00:01:00.000Z" }, base)).toMatchObject({ accept: false, reason: "stationary" });
+    const stationary = evaluateStaffLocation({ ...base, lng: 127.00001, recordedAt: "2026-10-26T00:10:00.000Z" }, base);
+    expect(stationary).toMatchObject({ accept: false, reason: "stationary" });
+    expect(resolveStaffLocationPersistence(stationary, true, 600_000)).toEqual({
+      storeHistory: false,
+      updateCoordinates: false,
+      updateTimestamp: true
+    });
     expect(evaluateStaffLocation({ ...base, lat: 38.5, recordedAt: "2026-10-26T00:01:00.000Z" }, base)).toMatchObject({ accept: false, reason: "too_fast" });
+  });
+  it("persists moving coordinates for the next 10-second map poll", () => {
+    const moving = evaluateStaffLocation({ ...base, lng: 127.0002, recordedAt: "2026-10-26T00:00:10.000Z" }, base);
+    expect(moving.accept).toBe(true);
+    expect(resolveStaffLocationPersistence(moving, true, 10_000)).toMatchObject({ updateCoordinates: true, updateTimestamp: true });
+    expect(getStaffLocationPostIntervalMs(true)).toBe(10_000);
   });
   it("uses adaptive intervals and work sessions", () => {
     expect(getStaffLocationPostIntervalMs(true)).toBe(10_000);
