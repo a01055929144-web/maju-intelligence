@@ -33,7 +33,7 @@ type CustomerAppShellProps = {
   readonly workspaceRole?: string;
 };
 
-export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, workspaceRole }: CustomerAppShellProps) {
+export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
@@ -104,7 +104,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
             <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
               {collapsed ? (
                 <>
-                  <Link className="flex items-center justify-center" href={scopedHref("/leads?type=permit")} title="MAJU Intelligence">
+                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                   </Link>
                   <button
@@ -118,7 +118,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                 </>
               ) : (
                 <div className="flex w-full items-center justify-between gap-2">
-                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/leads?type=permit")}>
+                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-bold">MAJU Intelligence</span>
@@ -148,7 +148,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             <nav
               aria-label="주요 작업공간"
-              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 lg:block`}
+              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-3 lg:block`}
             >
               {visibleNavigationGroups.map((group, groupIndex) => (
                 <div
@@ -250,11 +250,13 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                   <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
                     <Settings className="h-4 w-4" />
                   </Link>
+                  {mode === "customer" ? <CustomerAccountActions compact sidebar /> : null}
                 </>
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-white">{companyName}</p>
+                    <p className="truncate text-sm font-bold text-white">{userName || "로그인 사용자"}</p>
+                    <p className="truncate text-[11px] font-semibold text-slate-400">{roleLabel}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {mode === "customer" ? (
@@ -269,6 +271,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                     <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
                       <Settings className="h-4 w-4" />
                     </Link>
+                    {mode === "customer" ? <CustomerAccountActions sidebar /> : null}
                   </div>
                 </div>
               )}
@@ -343,7 +346,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   );
 }
 
-function CustomerAccountActions({ compact = false }: { readonly compact?: boolean }) {
+function CustomerAccountActions({ compact = false, sidebar = false }: { readonly compact?: boolean; readonly sidebar?: boolean }) {
   async function logout() {
     await fetch("/api/customer/logout", { method: "POST" });
     window.location.href = "/dashboard/login";
@@ -351,13 +354,14 @@ function CustomerAccountActions({ compact = false }: { readonly compact?: boolea
 
   return (
     <button
-      className={`maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 ${compact ? "justify-center" : ""}`}
+      aria-label="로그아웃"
+      className={`${sidebar ? "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-white/15 px-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white" : "maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"} ${compact ? "w-9 px-0" : ""}`}
       onClick={logout}
       title="로그아웃"
       type="button"
     >
       <LogOut className="h-4 w-4" />
-      <span className={compact ? "" : "hidden 2xl:inline"}>로그아웃</span>
+      <span className={compact ? "sr-only" : sidebar ? "" : "hidden 2xl:inline"}>로그아웃</span>
     </button>
   );
 }

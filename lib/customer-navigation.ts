@@ -44,6 +44,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
     label: "영업",
     items: [
+      { active: "dashboard", description: "오늘 확인할 영업·배송 업무", href: "/dashboard", icon: LayoutDashboard, label: "오늘 현황" },
       { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
       { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
       { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "연락 기록" }
@@ -104,6 +105,7 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 
 export function getCustomerQuickActions() {
   return [
+    { active: "dashboard" as const, helper: "오늘 할 일", href: "/dashboard", icon: LayoutDashboard, label: "오늘 현황" },
     { active: "dashboard" as const, helper: "신규 후보", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
     { active: "dashboard" as const, helper: "영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
     { active: "dashboard" as const, helper: "통합 지도", href: "/map", icon: MapPinned, label: "지도" },

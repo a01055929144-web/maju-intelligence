@@ -1503,7 +1503,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
   const focusOrigin = () => {
     if (initialView === "leads") {
-      router.push("/map");
+      const params = new URLSearchParams(window.location.search);
+      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1514,7 +1515,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
   const resetWorkspace = () => {
     if (initialView === "leads") {
-      router.push("/map");
+      const params = new URLSearchParams(window.location.search);
+      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1533,11 +1535,23 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   };
   const changeWorkspaceView = (nextView: WorkspaceView) => {
     if (nextView === "leads") {
-      router.push("/leads?type=permit");
+      if (initialView === "leads") return;
+      setActiveView("map");
+      setMapLeadsVisible(true);
+      setRightPanelTab("leads");
+      setLeftCollapsed(true);
+      setRightCollapsed(false);
+      setMapPanelMode(mapLeadTypeFilter === "sales" ? "salesLead" : "newLead");
+      const params = new URLSearchParams(window.location.search);
+      params.delete("view");
+      window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}${window.location.hash}`);
       return;
     }
     if (initialView === "leads") {
-      router.push(nextView === "map" ? "/map" : `/map?view=${nextView}`);
+      const params = new URLSearchParams(window.location.search);
+      if (nextView === "map") params.delete("view");
+      else params.set("view", nextView);
+      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView(nextView);
@@ -1985,7 +1999,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
             {workspaceViews.map((item) => {
               const Icon = item.icon;
-              const selected = activeView === item.value;
+              const mapLeadPanelOpen = activeView === "map" && (mapPanelMode === "newLead" || mapPanelMode === "salesLead");
+              const selected = item.value === "leads"
+                ? initialView === "leads" || mapLeadPanelOpen
+                : activeView === item.value && !(item.value === "map" && mapLeadPanelOpen);
               return (
                 <button
                   className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition sm:px-2.5 2xl:px-3 ${
@@ -3112,6 +3129,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
                 }}
                 onRetry={() => void loadAllLeadsForMap()}
+                onOpenTable={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.delete("view");
+                  params.delete("panel");
+                  params.delete("pin");
+                  params.delete("detail");
+                  params.set("type", mapLeadTypeFilter === "sales" ? "keyword" : "permit");
+                  router.push(`/leads?${params.toString()}`);
+                }}
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? (mapLeadTypeFilter === "new" ? "newLead" : "salesLead") : "map")}
                 selectedLeadId={previewLeadId}
                 title={showDismissedLeadsOnMap ? "숨김 리드" : mapLeadTypeFilter === "all" ? "전체 리드" : PERMIT_LEAD_TYPE_LABEL[mapLeadTypeFilter]}
@@ -5338,7 +5364,7 @@ function LiveVehicleStatusPanel({
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
-                  현재 {vehicle.lat.toFixed(5)}, {vehicle.lng.toFixed(5)} · {Number.isFinite(vehicle.accuracyMeters) ? `GPS 오차 ${Math.round(vehicle.accuracyMeters || 0)}m` : "GPS 오차 미수신"}
+                  {checkedAt} · 가까운 장소 {currentStore?.name || "확인 중"} · {getVehicleStatusLabel(vehicle)}
                   {completedCount ? <span className="font-black text-emerald-600"> · 완료 {completedCount}곳</span> : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
@@ -5537,8 +5563,7 @@ function VehicleAnalysisModal({
                 <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
                   <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
                   <p className="mt-1 text-[10px] font-bold text-slate-500">
-                    {event.lat.toFixed(5)}, {event.lng.toFixed(5)}
-                    {Number.isFinite(event.accuracyMeters) ? ` · 오차 ${Math.round(event.accuracyMeters || 0)}m` : ""}
+                    가까운 장소 {event.currentCustomerId && event.currentCustomerId === currentStore?.id ? currentStore.name : "운행 경로"} · 위치 기록
                   </p>
                 </div>
               ))}
@@ -5717,6 +5742,7 @@ function LeadListPanel({
   loadState,
   onSelectLead,
   onRetry,
+  onOpenTable,
   onToggleCollapsed,
   selectedLeadId,
   title
@@ -5726,6 +5752,7 @@ function LeadListPanel({
   readonly loadState: "idle" | "loading" | "ready" | "error";
   readonly onSelectLead: (leadId: string) => void;
   readonly onRetry: () => void;
+  readonly onOpenTable: () => void;
   readonly onToggleCollapsed: () => void;
   readonly selectedLeadId: string;
   readonly title: string;
@@ -5877,6 +5904,9 @@ function LeadListPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button className="maju-button-secondary mb-2 h-8 w-full justify-center text-xs" onClick={onOpenTable} type="button">
+            표로 보기
+          </button>
           <p className="text-xs font-bold leading-5 text-slate-500">우선순위는 사업자 상태·연락처·주소·등급·신선도·리뷰를 합산합니다.</p>
         </div>
       </div>

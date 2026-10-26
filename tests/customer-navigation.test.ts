@@ -11,6 +11,7 @@ describe("customer navigation", () => {
     const flattened = flattenCustomerNavigationItems();
 
     expect(flattened.map((item) => item.href)).toEqual(expect.arrayContaining([
+      "/dashboard",
       "/leads?type=permit", "/leads?type=keyword", "/revenue/contacts",
       "/map", "/routes/today", "/map?view=history", "/dashboard/settings/routes",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
