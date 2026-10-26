@@ -8561,48 +8561,8 @@ function StoreDetail({
           </div>
         </header>
 
-        {/* docs/design/2026-10-26/StoreDetail.dc.html: 연락 수단과 정보 영역을 상세 상단에서 바로 찾는다. */}
-        <section aria-label="거래처 연락하기" className="border-b border-slate-200 bg-white px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {draftPhone ? (
-              <a className="maju-button-primary inline-flex h-10 items-center gap-2 px-4 text-sm" href={`sms:${draftPhone.replace(/[^0-9+]/g, "")}`}>
-                <MessageCircle className="h-4 w-4" /> 문자 보내기
-              </a>
-            ) : null}
-            {draftPhone ? (
-              <a className="maju-button-secondary inline-flex h-10 items-center gap-2 px-3 text-sm" href={`tel:${draftPhone.replace(/[^0-9+]/g, "")}`}>
-                <Phone className="h-4 w-4" /> 전화하기
-              </a>
-            ) : null}
-            {draftEmail ? (
-              <a className="maju-button-secondary inline-flex h-10 items-center gap-2 px-3 text-sm" href={`mailto:${draftEmail}`}>
-                이메일
-              </a>
-            ) : null}
-            <a
-              className="maju-button-secondary inline-flex h-10 items-center gap-2 px-3 text-sm"
-              href={`https://map.kakao.com/link/search/${encodeURIComponent(draftAddress || draftName)}`}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <Navigation className="h-4 w-4" /> 방문 길안내
-            </a>
-            <p className="ml-auto text-xs font-bold text-slate-500">
-              추천 · {draftPhone ? "오늘 문자로 단가표 보내기" : "연락처를 먼저 보강하세요"}
-            </p>
-          </div>
-        </section>
-
-        <nav aria-label="거래처 정보 탭" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
-          <a className="h-11 shrink-0 border-b-2 border-teal-700 px-3 py-3 text-sm font-black text-teal-800" href="#store-overview">개요</a>
-          <a className="h-11 shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-bold text-slate-500 hover:text-slate-900" href="#store-delivery">배송·방문 정보</a>
-          <a className="h-11 shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-bold text-slate-500 hover:text-slate-900" href="#store-history">영업 기록</a>
-          <span className="h-11 shrink-0 px-3 py-3 text-sm font-bold text-slate-400">주문 · 준비 중</span>
-          <span className="h-11 shrink-0 px-3 py-3 text-sm font-bold text-slate-400">매출 원장 · 준비 중</span>
-        </nav>
-
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
-          <div className="space-y-5" id="store-overview">
+          <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
@@ -8859,7 +8819,7 @@ function StoreDetail({
                 </div>
               </CollapsibleSection>
 
-              <div id="store-history"><CollapsibleSection title="메모 히스토리">
+              <CollapsibleSection title="메모 히스토리">
                 <div className="maju-filter-box mt-4 border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800">
                   메모는 상담·배송 이력이라 운영에서는 삭제 로그를 남기는 방식이 안전합니다. 개별 삭제와 전체 삭제는 확인 후 실행됩니다.
                 </div>
@@ -8911,8 +8871,8 @@ function StoreDetail({
                     <p className="maju-empty-state p-3 text-sm font-bold text-slate-400">아직 기록된 메모가 없습니다.</p>
                   )}
                 </div>
-              </CollapsibleSection></div>
-              <div id="store-delivery"><CollapsibleSection defaultOpen title="배송·방문 정보">
+              </CollapsibleSection>
+              <CollapsibleSection defaultOpen title="배송·방문 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={formatDistanceKmLabel(store.distanceKm)} />
                   <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
@@ -8942,7 +8902,7 @@ function StoreDetail({
                     </div>
                   );
                 })()}
-              </CollapsibleSection></div>
+              </CollapsibleSection>
 
               <CollapsibleSection title="AI 추천 근거">
                 <div className="mt-4 grid gap-2 sm:grid-cols-3">
