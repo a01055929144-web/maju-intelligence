@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   canScanNextGovArea,
   getGovAreaCodes,
+  getGovAreaCoverageStatus,
   getGovChangeCutoff,
   getGovUpdateKind,
+  GOV_SYNC_PAGES_PER_REQUEST,
   govLastSuccessRunQuery,
+  resolveGovAreaScanWindow,
   scanGovArea
 } from "../lib/gov-area-scan";
 
@@ -12,7 +15,38 @@ describe("지역 조건 정부 수집", () => {
   it("기존 리드의 시군구 코드와 일반구·시 전체 선택을 같은 코드로 연결한다", () => {
     expect(getGovAreaCodes(["서울특별시 강남구"]).codes).toEqual(["3220000"]);
     expect(getGovAreaCodes(["경기도 성남시 분당구", "경기도 성남시"]).codes).toEqual(["3780000"]);
-    expect(getGovAreaCodes(["인천광역시 중구"]).missing).toEqual(["인천광역시 중구"]);
+    expect(getGovAreaCodes(["인천광역시 중구"])).toEqual({
+      codes: ["3490000"],
+      missing: [],
+    });
+  });
+
+  it("완전성을 검증하지 못한 시·도 전체 선택은 부분 코드 목록 대신 미확인으로 돌린다", () => {
+    expect(getGovAreaCodes(["인천광역시"])).toEqual({
+      codes: [],
+      missing: ["인천광역시"],
+    });
+    expect(getGovAreaCoverageStatus(["인천광역시"])).toBe("error");
+  });
+
+  it("저장 커서 지역이 현재 영업 지역에서 빠졌으면 새 스캔 시각과 cutoff로 초기화한다", () => {
+    const result = resolveGovAreaScanWindow({
+      codes: ["3490000"],
+      savedCursor: {
+        areaCode: "3220000",
+        page: 7,
+        cutoff: "2026-10-01T00:00:00.000Z",
+        scanStartedAt: "2026-10-02T00:00:00.000Z",
+      },
+      startedAt: "2026-10-27T00:00:00.000Z",
+      previousFinishedAt: "2026-10-26T00:00:00.000Z",
+      lookbackDays: 14,
+    });
+
+    expect(result.cursor).toBeUndefined();
+    expect(result.startIndex).toBe(0);
+    expect(result.scanStartedAt).toBe("2026-10-27T00:00:00.000Z");
+    expect(result.cutoff.toISOString()).toBe("2026-10-25T00:00:00.000Z");
   });
 
   it("마지막 성공 시각 하루 전부터 보되 14일보다 과거로 가지 않는다", () => {
@@ -68,6 +102,22 @@ describe("지역 조건 정부 수집", () => {
     expect(first.nextPage).toBe(3);
     expect(second.nextPage).toBeNull();
     expect(pages).toEqual([1, 2, 3, 4]);
+  });
+
+  it("함수 시간 예산을 위해 한 번에 한 페이지만 읽고 다음 페이지 커서를 남긴다", async () => {
+    const pages: number[] = [];
+    const result = await scanGovArea({
+      maxPages: GOV_SYNC_PAGES_PER_REQUEST,
+      pageSize: 1,
+      modifiedAt: () => "2026-10-27 00:00",
+      load: async (page) => {
+        pages.push(page);
+        return { totalCount: 3, rows: [{ id: page }] };
+      },
+    });
+
+    expect(pages).toEqual([1]);
+    expect(result.nextPage).toBe(2);
   });
 
   it("I/U/D 변경 유형을 구별한다", () => {
