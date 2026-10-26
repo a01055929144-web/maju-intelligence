@@ -2,8 +2,26 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
+const deliveryProofSource = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
 
 describe("PC map workspace layout", () => {
+  it("uses the finalized C3 labels without a duplicate map title", () => {
+    expect(workspaceSource).toContain('label: "배송 이력"');
+    expect(workspaceSource).not.toContain("오늘의 운영 지도");
+  });
+
+  it("keeps settings at the bottom of the sidebar instead of duplicating a footer shortcut", () => {
+    expect(shellSource).toContain('group.label === "설정" ? "mt-auto');
+    expect(shellSource).not.toContain("const settingsHref");
+  });
+
+  it("records location confirmation without exposing raw GPS coordinates", () => {
+    expect(deliveryProofSource).toContain("위치 확인: 배송 완료 시점에 확인됨");
+    expect(deliveryProofSource).not.toContain("www.google.com/maps?q=");
+    expect(deliveryProofSource).not.toContain("위치 태그:");
+  });
+
   it("keeps the primary filter bar on one desktop row", () => {
     expect(workspaceSource).toContain("lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)]");
     expect(workspaceSource).toContain("maju-toolbar-scroll flex min-w-0 flex-nowrap");

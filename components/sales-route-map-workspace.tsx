@@ -376,7 +376,7 @@ const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; s
   { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
   // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
   // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.
-  { helper: "달력·방문순서·경로", icon: CalendarDays, label: "히스토리", shortLabel: "기록", value: "history" }
+  { helper: "달력·방문순서·경로", icon: CalendarDays, label: "배송 이력", shortLabel: "배송", value: "history" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 거래처를 선택해 티맵 도로 기준 방문 순서를 계산합니다.",
@@ -2020,12 +2020,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       ) : null}
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div>
-            <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em] lg:whitespace-nowrap">오늘의 운영 지도</h2>
-            <p className="mt-0.5 text-xs font-medium text-slate-500 lg:whitespace-nowrap">
-              {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
-            </p>
-          </div>
+          <p className="text-xs font-medium text-slate-500 lg:whitespace-nowrap">
+            {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
+          </p>
         </div>
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 lg:w-auto lg:flex-1 lg:justify-end xl:gap-2">
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
@@ -4450,7 +4447,7 @@ function RouteWorkspaceGuide({
         : activeView === "leads"
           ? "신규리드"
           : activeView === "history"
-            ? "히스토리"
+            ? "배송 이력"
             : "방문 코스";
   const markerLabel = markerViewMode === "grade" ? "등급별 보기" : "차량별 보기";
   const guide =

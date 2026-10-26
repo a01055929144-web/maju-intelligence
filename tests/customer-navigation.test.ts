@@ -16,6 +16,8 @@ describe("customer navigation", () => {
       "/map", "/routes/today", "/map?view=history", "/dashboard/settings/routes",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
     ]));
+    expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 기록", "배송 이력"]));
+    expect(flattened.map((item) => item.label)).not.toContain("연락 기록");
   });
 
   it("exposes held destinations only through the explicit module switch", () => {

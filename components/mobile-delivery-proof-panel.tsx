@@ -196,9 +196,7 @@ export function MobileDeliveryProofPanel({
       setFileError("원인 코드를 한 번 선택해 주세요.");
       return;
     }
-    const locationText = location
-      ? `\n위치 태그: https://www.google.com/maps?q=${location.lat},${location.lng} (정확도 약 ${location.accuracy}m)`
-      : "";
+    const locationText = location ? "\n위치 확인: 배송 완료 시점에 확인됨" : "";
     const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}${itemName.trim() ? `\n품목·수량: ${itemName.trim()} · ${itemQuantity.trim()}` : ""}${issueCause ? `\n원인 코드: ${issueCause}` : ""}\n알림 방식: ${messageChannel === "kakao" ? "카카오 공유" : "SMS 자동/무료 수동"}${files.length ? `\n증빙 파일: ${files.map((file) => file.name).join(", ")}` : ""}${locationText}`;
     const attemptKey = JSON.stringify([
       customerId,

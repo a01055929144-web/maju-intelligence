@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const sql = readFileSync(resolve(process.cwd(), "docs/sql-drafts/20261027-01-K-map.sql"), "utf8");
 const appliedMigration = readFileSync(
-  resolve(process.cwd(), "supabase/migrations/20261026225502_map_filter_presets_and_area_kind_record.sql"),
+  resolve(process.cwd(), "supabase/migrations/20261026223457_map_filter_presets_area_kind_20261027.sql"),
   "utf8"
 );
 
