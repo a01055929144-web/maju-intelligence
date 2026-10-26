@@ -20,7 +20,7 @@ customer (리드→거래처 전환, 교차 중복)
 - `components/sales-route-map-workspace.tsx` (지도 탭 안 리드 오버레이 — map-and-route.md와 공유, 마커 렌더링 자체는 그쪽 소관)
 - `app/api/leads/**`
 - `lib/gov-restaurant.ts`, `lib/seoul-restaurant.ts`, `lib/kakao-keyword-leads.ts`, `lib/leads.ts`
-- `domains/lead/**`, `application/lead/**`, lead 관련 테스트와 SQL 초안
+- `domains/lead/**`, `application/lead/**`, lead 관련 테스트·SQL 초안·승인된 lead migration 기록
 
 ## Data Flow
 

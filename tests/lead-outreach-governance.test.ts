@@ -54,6 +54,14 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("unique (company_id, actor_subject, policy_version)");
   });
 
+  it("records the applied SQL as a non-rerunnable migration without enabling features", () => {
+    const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261027073000_lead_contact_governance.sql"), "utf8");
+    expect(migration).toContain("운영 적용 완료(2026-10-27). 재실행 금지.");
+    expect(migration).toContain("기능 활성화와 신규 테이블 쓰기 경로 배포는 별도 승인 전 금지한다.");
+    expect(migration.match(/enable row level security/g)).toHaveLength(3);
+    expect(migration.match(/from public, anon, authenticated/g)).toHaveLength(3);
+  });
+
   it("records source disclosure before writing to the clipboard", () => {
     const panel = fs.readFileSync(path.join(process.cwd(), "components/lead-contact-channels-panel.tsx"), "utf8");
     const disclosureHandler = panel.slice(panel.indexOf("async function copySourceDisclosure"), panel.indexOf("function confirmAfterHoursSms"));
