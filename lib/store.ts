@@ -990,7 +990,7 @@ export function extractCustomerAdministrativeSubarea(address?: string | null) {
   return extractLeadAdministrativeSubarea(address);
 }
 
-function normalizeSelectableSalesArea(value?: string | null) {
+export function normalizeSelectableSalesArea(value?: string | null) {
   const trimmed = (value || "").replace(/\s+/g, " ").trim();
   if (KOREAN_PROVINCES.includes(trimmed)) return trimmed;
   const subarea = extractCustomerAdministrativeSubarea(value);
@@ -999,6 +999,12 @@ function normalizeSelectableSalesArea(value?: string | null) {
     if ((KOREAN_GENERAL_GU_AREAS[parent] || []).some((gu) => subarea === `${parent} ${gu}`)) return subarea;
   }
   return extractCustomerAdministrativeArea(value);
+}
+
+export function resolveEffectiveSalesAreas(explicitLabels: Array<string | null | undefined>, defaultLabels: Array<string | null | undefined>) {
+  const explicitAreas = Array.from(new Set(explicitLabels.map((label) => normalizeSelectableSalesArea(label)).filter(Boolean)));
+  if (explicitAreas.length) return explicitAreas;
+  return Array.from(new Set(defaultLabels.map((label) => normalizeSelectableSalesArea(label)).filter(Boolean)));
 }
 
 function normalizeAdministrativeArea(value?: string | null) {
@@ -2126,13 +2132,17 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       await Promise.all(
         companies.map(async (company) => {
           const companyFilter = `company_id=eq.${encodeURIComponent(company.id)}`;
-          const [salesAreaCount, vehicleCount, leadCount, mobileLocationCount, quoteActionCount] = await Promise.all([
-            supabaseExactCount(`company_lead_search_regions?select=id&${companyFilter}`).catch(() => 0),
+          const [salesAreaRows, vehicleCount, leadCount, mobileLocationCount, quoteActionCount] = await Promise.all([
+            supabaseRequest<Array<{ label: string | null }>>(`company_lead_search_regions?select=label&${companyFilter}`).catch(() => []),
             supabaseExactCount(`delivery_vehicle_master?select=id&${companyFilter}&operational_status=eq.active`).catch(() => 0),
             supabaseExactCount(`business_permit_leads?select=id&${companyFilter}&merged_into_lead_id=is.null`).catch(() => 0),
             supabaseExactCount(`staff_location_events?select=id&${companyFilter}`).catch(() => 0),
             supabaseExactCount(`lead_actions?select=id&${companyFilter}&action_type=eq.quote`).catch(() => 0)
           ]);
+          const salesAreaCount = resolveEffectiveSalesAreas(
+            salesAreaRows.map((row) => row.label),
+            []
+          ).length;
           return [company.id, { salesAreaCount, vehicleCount, leadCount, mobileLocationCount, quoteActionCount }] as const;
         })
       )
@@ -9608,7 +9618,6 @@ export async function getCompanySalesAreaState(companyId: string): Promise<Compa
     return { defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none", unrecognizedRegions: [] };
   }
   const explicit = await getCompanyLeadSearchRegions(companyId);
-  const explicitAreas = explicit.map((item) => normalizeSelectableSalesArea(item.label)).filter(Boolean);
   const [companies, areas] = await Promise.all([
     supabaseRequest<Array<{ origin_address: string | null }>>(`companies?select=origin_address&id=eq.${encodeURIComponent(companyId)}&limit=1`).catch(() => []),
     supabaseRequest<Array<{ administrative_area: string }>>(`delivery_territory_areas?select=administrative_area&company_id=eq.${encodeURIComponent(companyId)}`).catch(() => [])
@@ -9617,8 +9626,8 @@ export async function getCompanySalesAreaState(companyId: string): Promise<Compa
     extractCustomerAdministrativeArea(companies[0]?.origin_address),
     ...areas.map((item) => normalizeAdministrativeArea(item.administrative_area))
   ].filter(Boolean)));
-  const recognizedExplicitAreas = Array.from(new Set(explicitAreas));
-  const effectiveAreas = recognizedExplicitAreas.length ? recognizedExplicitAreas : defaultAreas;
+  const recognizedExplicitAreas = Array.from(new Set(explicit.map((item) => normalizeSelectableSalesArea(item.label)).filter(Boolean)));
+  const effectiveAreas = resolveEffectiveSalesAreas(explicit.map((item) => item.label), defaultAreas);
   return {
     defaultAreas,
     effectiveAreas,
