@@ -72,6 +72,7 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
+import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -2287,7 +2288,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         ) : null}
         <div className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
-        <div className="grid gap-1.5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,auto)] lg:items-center xl:grid-cols-[minmax(320px,1fr)_minmax(0,auto)] xl:gap-2">
+        <div className="grid gap-1.5 lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)] lg:items-center xl:gap-2">
           <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -2881,6 +2882,27 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     showList={false}
                   />
                 </div>
+                <MapLayerControl
+                  className={
+                    mapPanelMode === "driver" || mapPanelMode === "split"
+                      ? leftCollapsed
+                        ? "lg:left-[68px]"
+                        : "lg:left-[344px] xl:left-[384px] 2xl:left-[424px]"
+                      : "lg:left-3"
+                  }
+                  counts={visibleMapLayerCounts}
+                  headerOffsetPx={mapHeaderHeightPx}
+                  markerViewMode={markerViewMode}
+                  onSelectLeadLayer={(type) => {
+                    const next = nextLeadLayerSelection(showAllLeadsOnMap, mapLeadTypeFilter, type);
+                    setMapLeadsVisible(next.visible);
+                    setMapLeadTypeFilter(next.type);
+                    setShowDismissedLeadsOnMap(false);
+                  }}
+                  onSelectMarkerMode={() => setMarkerViewMode((mode) => (mode === "vehicle" ? "grade" : "vehicle"))}
+                  showAllLeadsOnMap={showAllLeadsOnMap}
+                  typeFilter={mapLeadTypeFilter}
+                />
                 <MapLayerLegend counts={visibleMapLayerCounts} />
                 {/* 2026-09-07 피드백("분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도
                     구현할 수 있도록해줘"): 라이브 차량 패널에서 "경로" 버튼을 누르면 그 차량의 최근
@@ -3027,7 +3049,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              mapPanelMode !== "driver" && mapPanelMode !== "split" ? "hidden" : "flex lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"
+              mapPanelMode !== "driver" && mapPanelMode !== "split"
+                ? "hidden"
+                : `flex lg:bottom-3 ${leftCollapsed ? "lg:w-14" : "lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"}`
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -3086,7 +3110,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 if (liveVehicle) selectLiveVehicle(liveVehicle);
                 else selectVehicle(vehicleId);
               }}
-              onToggleCollapsed={() => setMapPanelMode(leftCollapsed ? "driver" : "map")}
+              onToggleCollapsed={() => setLeftCollapsed((collapsed) => !collapsed)}
               onUpdateVehicle={updateVehicle}
               selectedVehicleId={vehicleFilterId}
               totalStores={allStores.length}
@@ -5157,6 +5181,83 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
 // DriverSelectField는 components/driver-select-field.tsx로 옮겨서 app/dashboard/settings의
 // 직원 배정 기준 화면에서도 같이 씁니다(무거운 지도 워크스페이스 모듈 전체를 끌어오지 않도록
 // 이 파일이 그 작은 컴포넌트를 import합니다 — 아래 import 문 참고).
+
+function MapLayerControl({
+  className,
+  counts,
+  headerOffsetPx,
+  markerViewMode,
+  onSelectLeadLayer,
+  onSelectMarkerMode,
+  showAllLeadsOnMap,
+  typeFilter
+}: {
+  readonly className: string;
+  readonly counts: {
+    activeVehicles: number;
+    customers: number;
+    newLeads: number;
+    salesLeads: number;
+  };
+  readonly headerOffsetPx: number;
+  readonly markerViewMode: MarkerViewMode;
+  readonly onSelectLeadLayer: (type: PermitLeadType) => void;
+  readonly onSelectMarkerMode: () => void;
+  readonly showAllLeadsOnMap: boolean;
+  readonly typeFilter: "all" | PermitLeadType;
+}) {
+  const leadButtonClass = (active: boolean) =>
+    `flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition ${
+      active ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+    }`;
+
+  return (
+    <div
+      aria-label="지도 레이어"
+      className={`pointer-events-auto absolute left-3 z-10 hidden max-w-[calc(100%-1.5rem)] items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-1 shadow-[0_8px_24px_rgba(15,23,42,.14)] backdrop-blur lg:flex ${className}`}
+      style={{ top: headerOffsetPx ? `${headerOffsetPx + 12}px` : "4.5rem" }}
+    >
+      <span className="flex h-8 shrink-0 items-center gap-1 px-2 text-[11px] font-black text-slate-500">
+        <Layers className="h-3.5 w-3.5" />
+        레이어
+      </span>
+      <span className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-blue-50 px-2.5 text-[11px] font-black text-blue-800">
+        <Store className="h-3.5 w-3.5" />
+        거래처 {counts.customers}
+      </span>
+      <button
+        aria-pressed={showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new")}
+        className={leadButtonClass(showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new"))}
+        onClick={() => onSelectLeadLayer("new")}
+        title="신규 리드 레이어 켜기 또는 끄기"
+        type="button"
+      >
+        <Radar className="h-3.5 w-3.5" />
+        신규 {counts.newLeads}
+      </button>
+      <button
+        aria-pressed={showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales")}
+        className={leadButtonClass(showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales"))}
+        onClick={() => onSelectLeadLayer("sales")}
+        title="영업 리드 레이어 켜기 또는 끄기"
+        type="button"
+      >
+        <Target className="h-3.5 w-3.5" />
+        영업 {counts.salesLeads}
+      </button>
+      <button
+        aria-pressed={markerViewMode === "vehicle"}
+        className={leadButtonClass(markerViewMode === "vehicle")}
+        onClick={onSelectMarkerMode}
+        title="거래처 마커를 차량별 또는 등급별로 표시"
+        type="button"
+      >
+        <Truck className="h-3.5 w-3.5" />
+        차량 {counts.activeVehicles}
+      </button>
+    </div>
+  );
+}
 
 function MapLayerLegend({
   counts
