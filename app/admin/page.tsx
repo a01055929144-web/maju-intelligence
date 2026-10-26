@@ -9,6 +9,8 @@ import { getAdminSession } from "@/lib/auth";
 import { getAdminDashboardPayload } from "@/lib/store";
 import { AdminPageHeader } from "./admin-page-header";
 
+const SHOW_LEGACY_ADMIN_ANALYTICS = false;
+
 export default async function AdminPage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
@@ -135,6 +137,7 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
 
+        {SHOW_LEGACY_ADMIN_ANALYTICS ? <>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card>
             <CardHeader>
@@ -285,6 +288,7 @@ export default async function AdminPage() {
             ))}
           </CardContent>
         </Card>
+        </> : null}
 
       </section>
     </main>
