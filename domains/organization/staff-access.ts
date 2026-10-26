@@ -59,6 +59,15 @@ export function resolveMobileStaffLanding(input: { duties: StaffDuty[]; hasToday
   return "/mobile/sales";
 }
 
+/** Preserve a delivery assignee's legacy mobile workflow while staff access v2 is off. */
+export function isLegacyDeliveryOwner(input: {
+  assignedVehicle?: string | null;
+  staffAccessV2Enabled: boolean;
+  workspaceRole?: string | null;
+}) {
+  return !input.staffAccessV2Enabled && input.workspaceRole === "owner" && Boolean(input.assignedVehicle?.trim());
+}
+
 export function canGrantStaffPermission(actor: "maju_admin" | StaffPermissionRole, nextRole: StaffPermissionRole) {
   if (nextRole !== "owner") return actor === "maju_admin" || actor === "owner" || actor === "manager";
   return actor === "maju_admin" || actor === "owner";
@@ -72,3 +81,4 @@ export function canChangeStaffPermission(
   if (currentRole === "owner" && actor !== "owner" && actor !== "maju_admin") return false;
   return canGrantStaffPermission(actor, nextRole);
 }
+
