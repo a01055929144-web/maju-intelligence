@@ -1,5 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchGovPagesWithRetry } from "../lib/gov-restaurant";
+import { fetchGovPageWithRetry, fetchGovPagesWithRetry } from "../lib/gov-restaurant";
+
+describe("fetchGovPageWithRetry", () => {
+  it("retries the required first page exactly once", async () => {
+    const loader = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce("page-1");
+
+    await expect(fetchGovPageWithRetry(1, loader)).resolves.toBe("page-1");
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(loader).toHaveBeenNthCalledWith(1, 1);
+    expect(loader).toHaveBeenNthCalledWith(2, 1);
+  });
+
+  it("fails the run after the required first page fails twice", async () => {
+    const loader = vi.fn().mockRejectedValue(new Error("persistent failure"));
+
+    await expect(fetchGovPageWithRetry(1, loader)).rejects.toThrow("persistent failure");
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("fetchGovPagesWithRetry", () => {
   it("retries a failed page once and keeps the recovered page", async () => {

@@ -163,6 +163,14 @@ export type GovRestaurantFetchResult = {
   skippedPages: number[];
 };
 
+export async function fetchGovPageWithRetry<T>(pageNo: number, load: (pageNo: number) => Promise<T>): Promise<T> {
+  try {
+    return await load(pageNo);
+  } catch {
+    return load(pageNo);
+  }
+}
+
 export async function fetchGovPagesWithRetry<T>(
   pageNumbers: number[],
   load: (pageNo: number) => Promise<T>
@@ -196,7 +204,9 @@ export async function fetchRecentGovRestaurantRows(
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
 
-  const first = await fetchPage(1);
+  // 첫 페이지는 totalCount를 얻는 필수 요청입니다. 다른 페이지와 마찬가지로 일시 장애를 한 번
+  // 복구하되, 두 번째 시도까지 실패하면 전체 수집을 실패시켜 잘못된 페이지 범위를 만들지 않습니다.
+  const first = await fetchGovPageWithRetry(1, fetchPage);
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   const startPage =
     startPageOverride && startPageOverride >= 1 && startPageOverride <= totalPages
