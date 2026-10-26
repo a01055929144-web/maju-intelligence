@@ -9,6 +9,7 @@ const trendChartSource = readFileSync("components/insight-trend-chart.tsx", "utf
 describe("N4-1 insights UI data", () => {
   it("shows an explicit empty state while keeping the mobile chart scrollable", () => {
     expect(trendChartSource).toContain('className="min-w-[640px] w-full"');
+    expect(trendChartSource).toContain('className="mt-4 min-w-0 max-w-full"');
     expect(trendChartSource).toContain("선택한 이번·직전 기간에 기록이 없습니다.");
   });
 

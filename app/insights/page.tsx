@@ -77,13 +77,13 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]">
-          <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-base font-black text-slate-950">기간별 영업 추이</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">기록이 있는 리드·연락·견적·계약을 같은 구간으로 나눠 직전 기간과 비교합니다.</p>
             <InsightTrendChart trend={insights.trend} />
           </article>
 
-          <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article className="min-w-0 flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-base font-black text-slate-950">영업 단계 · 나아지는지</h2>
             <p className="mt-1 text-xs font-semibold text-slate-500">진한 막대는 이번 기간, 연한 막대는 직전 기간입니다.</p>
             <div className="mt-5 space-y-4">

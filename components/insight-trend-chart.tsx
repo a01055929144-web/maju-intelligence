@@ -26,10 +26,10 @@ export function InsightTrendChart({ trend }: { trend: Trend }) {
   }).join(" ");
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 min-w-0 max-w-full">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold text-slate-600">
         {metrics.map((metric) => <span className="inline-flex items-center gap-1.5" key={metric.key}><span className="h-2.5 w-2.5 rounded-full" style={{ background: metric.color }} />{metric.label}</span>)}
-        <span className="ml-auto text-slate-500">실선 이번 기간 · 점선 직전 기간</span>
+        <span className="w-full text-slate-500 sm:ml-auto sm:w-auto">실선 이번 기간 · 점선 직전 기간</span>
       </div>
       <div className="mt-3 overflow-x-auto">
         <svg aria-label="새 리드, 연락, 견적 전달, 계약의 이번 기간과 직전 기간 추이" className="min-w-[640px] w-full" role="img" viewBox={`0 0 ${width} ${height}`}>
