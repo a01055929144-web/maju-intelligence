@@ -3,14 +3,15 @@
 보고(짧게): 변경 파일 / SQL 승인 필요 / 실측·추정 숫자 / CI 결과 / 남은 이슈. 브라우저 자동화로 운영 화면 확인 시도 금지(대표가 확인).
 비즈니스 규칙은 domains·application에만, 고객 화면·관리자 화면은 같은 함수 사용.
 
-## 순서 (트랙별 병렬, 위에서부터)
+## 순서 (트랙별 병렬, 위에서부터) — 대표 결정 10-26: **영업 먼저 활성화**. B·C를 우선, E(앱)·WO-12(ERP)는 뒤로
 | 트랙 | 순서 |
 |---|---|
 | A 데이터 | A1 → A2 → A3 → A4 |
 | B 리드 화면 | B1 → B5 → B2 → B3 → B4 → (WO-4 화면 계속) |
 | C 관리자·휴대폰 | C1 → C2 → C3 → C4 → C5 → C6 → C7 → C8 |
 | D 결제 | WO-8 1~5 계속 |
-| E 앱 | WO-10 계속(시작 주소 /mobile) |
+| E 앱 | WO-10은 B·C 끝난 뒤(시작 주소 /mobile) |
+| 정리 | J (아무 트랙이나 여유 있을 때, 작은 단위 커밋) |
 
 ## A 데이터
 - **A1 일반음식점 timeout(9aaf325 후에도 실패)**: 최근 7일 lead_sync_runs(gov) status·fetched·inserted·소요 시간 보고. fetched 0 + success면 0건 2일 연속 시 error 기록. numOfRows 10 1페이지 응답 시간(일반 vs 휴게) 보고, 장애면 CSV 대체안.
@@ -36,7 +37,7 @@
 - **C7 영업 수칙**: 첫 사용(대표·관리자, 직원은 첫 휴대폰 로그인) 수칙 화면+확인 기록, 설정에서 다시 보기, 관리자에 확인 여부. 21:00~08:00 문자 버튼 확인창. 문구(초안, 대표 법률 검토 후 확정): 1:1 개별 제안 / 야간 금지 / 출처 사실대로 / 거부 즉시 중단 / 다수 광고 시 (광고)·수신거부 / 영업 목적 외 사용 금지. 약관에 "연락 주체·책임=고객사" 조항 초안.
 - **C8 레이아웃 자동 점검**: Playwright로 /admin, /admin/companies, /admin/billing, /leads, /map, /dashboard, /settings/billing, /dashboard/settings/*, /mobile/sales, /mobile/today를 1920·1440·1280·768·390 캡처 + 가로 넘침·잘림·겹침 검사(테스트 계정만). 배포 후 주요 경로 응답 200 확인 스크립트.
 
-## WO-12 오늘 배송지 자동 가져오기 (대표 결정 10-26: 크롬 확장 방식) — 설계만, 대표가 ERP 이름·엑셀 샘플 주면 착수
+## WO-12 오늘 배송지 자동 가져오기 — ⏸ 대표가 ERP 이름·엑셀 샘플 줄 때까지 착수 금지 (대표 결정 10-26: 크롬 확장 방식) — 설계만, 대표가 ERP 이름·엑셀 샘플 주면 착수
 - 목표: 주문 → 오늘 배송 코스 자동. 순서: ① 출고/주문 엑셀 업로드+칸 맞춤 기억(WO-4 가져오기 엔진 재사용) → ② 크롬 확장이 ERP에서 "오늘 주문 엑셀"을 받아 자동 업로드 → ③ ERP 공식 API가 있으면 API 우선.
 - 크롬 확장 원칙: 이미 로그인된 ERP 세션만 사용(ERP 비밀번호 저장 금지), 캡차·2단계 인증 자동 통과 금지(사람에게 알림), 업로드는 회사별 업로드 토큰(폐기 가능), 같은 파일 중복 업로드 방지(해시), 실패·세션 만료·화면 변경 감지 시 대표·관리자 알림 + 수동 업로드 안내.
 - 실행 조건: 크롬이 켜진 PC에서 동작(크롬 "백그라운드 앱 계속 실행" 켬, 절전 해제). 주문 시간대 30분마다 + 마감 시각 1회, 마지막 성공 시각을 관리자 화면에 표시.
@@ -48,3 +49,12 @@
   - 사용 위치 결정(설계 문서에서 비교 후 대표 선택): (a) 크롬 확장이 로그인 풀렸을 때 자동 재로그인 — PC 필요, 비밀번호가 PC에 전달됨 (b) 서버 작업기(Playwright, Vercel 밖의 별도 실행 환경)가 직접 로그인·다운로드 — PC 불필요·진짜 24시간, 운영비 추가. 
   - 캡차·2단계 인증은 자동 통과 금지 → 알림. ERP 이용약관의 자동 로그인 허용 여부 확인. 실패 3회 연속이면 자동 중지(계정 잠김 방지).
   - SQL(ERP 연결 테이블: 회사·ERP 종류·암호문·상태·마지막 성공·동의) 초안 → 승인.
+
+## J. 불필요한 것 정리 (삭제보다 숨김·보관 우선, 운영 DB 데이터 삭제 금지)
+- **J1 루트 문서 정리**: 루트의 DEPLOYMENT*, FINAL_QA, FLOW_VALIDATION, GITHUB_PAT_PERMISSION_GUIDE, GUIDE, RELEASE_NOTES, ROADMAP*, STAFF_MOBILE_AUTH, SUPABASE_STAFF_SETUP, WORKSPACE_FLOW, qa-report-*, 한글 md 4개, claude/ 폴더 → docs/archive/로 이동(README·AGENTS·CLAUDE만 루트). docs/pages/08_ADMIN_OPERATIONS.md(폐기 표시됨) 삭제. 적용 끝난 docs/sql-drafts → docs/sql-drafts/applied/.
+- **J2 메뉴 정리**: 설정 그룹의 "엑셀 업로드"(/ = 예전 거래처·매출 업로드, 5천 줄)·"업로드 이력"은 보류 회사만 표시 — 거래처 가져오기는 WO-4 가져오기로 통일. 지도 상단 탭·보기 버튼 중복은 B1 시안에서 정리.
+- **J3 중복·옛 경로**: /routes/today(PC) vs /mobile/today, /map/fullscreen, /workspaces, /mobile/register vs /mobile/join, /signup(자가 가입) vs C4 대행 설정 — 사용 여부(링크 참조·최근 접속) 조사 후 남길 것/리다이렉트할 것 표로 보고 → 승인 후 정리.
+- **J4 디버그·임시 경로 제거**: app/api/leads/permits/keyword-volume/debug, app/api/admin/shared-place-diagnostic(A2 끝나면), app/api/map-diagnostics(관리자 시스템 점검으로 흡수 가능하면).
+- **J5 크론 정리**(Hobby 60초 예산): business-status의 sendBusinessClosureAlerts·sendDailyChurnRiskDigests가 어디로 보내는지(텔레그램 숨김 상태면 실제로 안 감) 확인 → 보류 회사만 실행. recommend-refresh의 "추천 점수" 계산이 현재 리드 정렬(domains/lead/lead-list)에 쓰이지 않으면 중지(보강·GPS 정리는 유지). syncAllCompaniesSeoulRestaurantLeads는 행안부 수집과 중복이면 중지 제안. 크론별 소요 시간 보고.
+- **J6 외부 API 키 점검**(비용·사용처 표): OPENAI(AI비서 보류), TELEGRAM(보류), NCP_DATALAB(디버그 경로만?), GOOGLE_PLACES(리뷰·유료), CLOVA/UPSTAGE OCR, OPINET, SEOUL_OPENDATA — 실제 호출 위치·최근 30일 호출 수·월 비용 → 안 쓰는 것은 호출 차단(키는 대표가 Vercel에서 정리).
+- **J7 브랜치**: 병합 끝난 feat/lead-channels-fax-email-dm 원격 브랜치 삭제는 대표 확인 후.
