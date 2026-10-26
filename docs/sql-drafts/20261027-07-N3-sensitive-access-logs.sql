@@ -62,19 +62,25 @@ begin
     return new;
   end if;
 
-  if row(old.company_id, old.actor_kind, old.actor_name, old.actor_role, old.store_id, old.store_name, old.lead_id, old.lead_name, old.item_type, old.device_label, old.page_path, old.warning_codes, old.target_log_id, old.accessed_at)
-     is distinct from row(new.company_id, new.actor_kind, new.actor_name, new.actor_role, new.store_id, new.store_name, new.lead_id, new.lead_name, new.item_type, new.device_label, new.page_path, new.warning_codes, new.target_log_id, new.accessed_at)
+  if row(old.company_id, old.actor_kind, old.actor_name, old.actor_role, old.store_name, old.lead_name, old.item_type, old.device_label, old.page_path, old.warning_codes, old.target_log_id, old.accessed_at)
+     is distinct from row(new.company_id, new.actor_kind, new.actor_name, new.actor_role, new.store_name, new.lead_name, new.item_type, new.device_label, new.page_path, new.warning_codes, new.target_log_id, new.accessed_at)
   then raise exception 'sensitive_access_logs_immutable'; end if;
 
-  -- app_users 삭제 시 FK의 SET NULL만 허용한다. 이름/역할 스냅샷은 그대로 남는다.
+  -- 참조 대상 삭제가 중첩 실행한 FK SET NULL만 허용한다. 일반 UPDATE로 ID를 지우는 우회는 막는다.
   if old.actor_user_id is distinct from new.actor_user_id
-     and not (old.actor_user_id is not null and new.actor_user_id is null)
+     and not (pg_trigger_depth() > 1 and old.actor_user_id is not null and new.actor_user_id is null)
   then raise exception 'sensitive_access_logs_immutable'; end if;
   if old.hidden_by is distinct from new.hidden_by
-     and not (old.hidden_by is not null and new.hidden_by is null)
+     and not (pg_trigger_depth() > 1 and old.hidden_by is not null and new.hidden_by is null)
+  then raise exception 'sensitive_access_logs_immutable'; end if;
+  if old.store_id is distinct from new.store_id
+     and not (pg_trigger_depth() > 1 and old.store_id is not null and new.store_id is null)
+  then raise exception 'sensitive_access_logs_immutable'; end if;
+  if old.lead_id is distinct from new.lead_id
+     and not (pg_trigger_depth() > 1 and old.lead_id is not null and new.lead_id is null)
   then raise exception 'sensitive_access_logs_immutable'; end if;
 
-  -- 이미 숨김 처리된 행에서 FK SET NULL만 일어난 경우에는 새 숨김 감사 행을 만들지 않는다.
+  -- FK SET NULL만 일어난 경우에는 새 숨김 감사 행을 만들지 않는다.
   if row(old.hidden_at, old.hidden_by_actor_kind, old.hidden_by_name)
      is not distinct from row(new.hidden_at, new.hidden_by_actor_kind, new.hidden_by_name)
   then return new; end if;
@@ -102,4 +108,5 @@ commit;
 -- 열람 값, 마스킹 값, 토큰, 비밀번호를 저장할 자유형 metadata/payload 컬럼은 의도적으로 두지 않는다.
 -- actor_user_id가 없는 기존 대표 로그인은 actor_kind='legacy_owner', actor_user_id=null로 기록한다.
 -- app_users 삭제 시 actor_user_id/hidden_by만 null이 되고 이름·역할·행위 스냅샷은 유지된다.
+-- 거래처/리드 삭제 시 store_id/lead_id만 null이 되고 store_name/lead_name 스냅샷은 유지된다.
 -- 사장님 휴대폰이 기존 거래처가 아닌 리드에서 열렸다면 lead_id를 사용하고 store_id는 비워 둔다.
