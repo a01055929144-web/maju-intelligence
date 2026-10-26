@@ -41,7 +41,7 @@ export async function PATCH(request: NextRequest) {
   if (!sensitiveAccessLogsEnabled()) return NextResponse.json({ message: "N3 SQL 승인·적용 전에는 기록을 변경할 수 없습니다." }, { status: 503 });
   const body = await request.json().catch(() => null) as { logId?: string } | null;
   if (!body?.logId) return NextResponse.json({ message: "숨길 기록 ID가 필요합니다." }, { status: 400 });
-  const hiddenAt = await hideSensitiveAccessLog({ actorUserId: session.userId, companyId: session.companyId, logId: body.logId });
+  const hiddenAt = await hideSensitiveAccessLog({ actorName: session.operationalDisplayName || session.name, actorUserId: session.userId, companyId: session.companyId, logId: body.logId });
   if (!hiddenAt) return NextResponse.json({ message: "숨길 기록을 찾을 수 없거나 이미 숨김 처리됐습니다." }, { status: 404 });
   return NextResponse.json({ hiddenAt });
 }

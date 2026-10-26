@@ -34,4 +34,15 @@ describe("sensitive access log authorization", () => {
     expect(normalizeSensitiveAccessWarning("daily_20_plus")).toBe("daily_20_plus");
     expect(normalizeSensitiveAccessWarning("masked-secret")).toBeUndefined();
   });
+
+  it("keeps access-password reveal server-only, fail-closed, and non-cacheable", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const route = await readFile("app/api/customers/[id]/sensitive/access-password/reveal/route.ts", "utf8");
+    const store = await readFile("lib/store/07-sensitive-access-logs.ts", "utf8");
+    expect(route.indexOf("if (!sensitiveAccessLogsEnabled())")).toBeLessThan(route.indexOf("getCustomerSession()"));
+    expect(route).toContain('"Cache-Control": "no-store, private, max-age=0"');
+    expect(route).not.toContain("getAdminSession");
+    expect(store.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(store.indexOf('return { status: "allowed", value: customer.access_password }'));
+    expect(store).toContain('actor_kind: "app_user"');
+  });
 });
