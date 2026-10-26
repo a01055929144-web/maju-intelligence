@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>민감 정보 열람 기록</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>body{margin:0}button,select,input{font-family:inherit}button{cursor:pointer}</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; box-sizing: border-box; background: #F5F7F9; font-family: 'Noto Sans KR', system-ui, sans-serif; color: #17202A; font-size: 14px; padding: 24px">
+  <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: center; gap: 10px">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
+      <h1 style="margin: 0; font-size: 20px">보안 · 민감 정보 열람 기록</h1>
+      <span style="font-size: 12px; padding: 3px 8px; border-radius: 10px; background: #E0E7FF; color: #3730A3; font-weight: 700">대표만 볼 수 있음</span>
+      <span style="margin-left: auto; font-size: 12px; color: #5B6673">기록은 지울 수 없고 숨김만 가능 · 숨김도 기록에 남음</span>
+    </header>
+
+    <!-- 필터 한 줄 -->
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 10px 12px">
+      <div style="display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden"><sc-for list="{{ periods }}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div>
+      <select aria-label="직원" onChange="{{ pickWho }}" style="height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 8px"><sc-for list="{{ whoOpts }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+      <select aria-label="역할" style="height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 8px"><option>역할 전체</option><option>대표</option><option>직원</option><option>알바</option><option>퇴사·차단</option></select>
+      <select aria-label="항목" onChange="{{ pickField }}" style="height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 8px"><sc-for list="{{ fieldOpts }}" as="o" hint-placeholder-count="5"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+      <select aria-label="기기" style="height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 8px"><option>기기 전체</option><option>휴대폰</option><option>PC</option><option>내보내기·인쇄</option></select>
+      <input aria-label="매장 검색" placeholder="매장 검색" style="width: 140px; height: 34px; border: 1px solid #CBD3DB; border-radius: 8px; padding: 0 8px">
+      <div style="display: flex; gap: 6px"><sc-for list="{{ warns }}" as="w" hint-placeholder-count="4"><button type="button" onClick="{{ w.pick }}" style="{{ w.style }}">{{ w.label }}</button></sc-for></div>
+      <label style="margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap"><input type="checkbox" onClick="{{ toggleHidden }}" checked="{{ showHidden }}" style="width: 18px; height: 18px; margin: 0"> 숨긴 기록 보기</label>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px">
+      <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+          <b style="font-size: 15px">열람 {{ shown }}건</b><span style="color: #5B6673">주의 {{ warnN }} · 숨김 {{ hiddenN }}</span>
+          <sc-if value="{{ anySel }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ hideSel }}" style="margin-left: auto; height: 32px; padding: 0 12px; border: 1px solid #CBD3DB; border-radius: 8px; background: #FFFFFF; font-size: 12px; font-weight: 700">선택 {{ selN }}건 숨기기</button></sc-if>
+        </div>
+        <div style="display: grid; grid-template-columns: 34px 104px 130px minmax(0, 1fr) 110px 110px 70px; font-size: 13px">
+          <span style="padding: 8px 6px; border-bottom: 1px solid #E3E8ED"></span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED">언제</span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED">누가</span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED">매장 · 항목</span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED">어디서</span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED">구분</span><span style="padding: 8px 6px; color: #5B6673; border-bottom: 1px solid #E3E8ED"></span>
+          <sc-for list="{{ logs }}" as="l" hint-placeholder-count="8">
+            <span style="{{ l.cell }}"><input type="checkbox" aria-label="선택" onClick="{{ l.toggle }}" checked="{{ l.sel }}" style="width: 16px; height: 16px; margin: 0"></span>
+            <span style="{{ l.cell }}">{{ l.when }}</span>
+            <span style="{{ l.cell }}"><b>{{ l.who }}</b> <span style="font-size: 11px; color: #5B6673">{{ l.role }}</span></span>
+            <span style="{{ l.cell }}">{{ l.what }}<sc-if value="{{ l.hidden }}" hint-placeholder-val="{{ false }}"><div style="font-size: 11px; color: #8A949E">숨김 · 정두영 10/26 20:40</div></sc-if></span>
+            <span style="{{ l.cell }}">{{ l.where }}</span>
+            <span style="{{ l.cell }}"><span style="{{ l.flagStyle }}">{{ l.flag }}</span></span>
+            <span style="{{ l.cell }}"><button type="button" onClick="{{ l.hide }}" style="height: 28px; padding: 0 8px; border: 1px solid #CBD3DB; border-radius: 6px; background: #FFFFFF; font-size: 11px; white-space: nowrap">{{ l.hideText }}</button></span>
+          </sc-for>
+        </div>
+      </section>
+
+      <aside style="display: flex; flex-direction: column; gap: 14px">
+        <section style="background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+          <b style="font-size: 15px">직원 · 접근 상태</b>
+          <sc-for list="{{ staff }}" as="s" hint-placeholder-count="5">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid #E3E8ED; border-radius: 10px">
+              <div style="flex: 1; min-width: 0"><b>{{ s.name }}</b> <span style="{{ s.roleStyle }}">{{ s.role }}</span><div style="font-size: 11px; color: #5B6673; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ s.meta }}</div></div>
+              <button type="button" onClick="{{ s.toggle }}" style="{{ s.btnStyle }}">{{ s.btn }}</button>
+            </div>
+          </sc-for>
+          <div style="font-size: 11px; color: #5B6673; line-height: 1.6">차단하면 PC·휴대폰·앱 로그인이 바로 끊깁니다. 알바는 만료일에 자동 차단.</div>
+        </section>
+        <section style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 12px; padding: 12px; font-size: 12px; line-height: 1.7; color: #78350F">
+          <b>주의로 표시하는 경우</b><br>담당 매장이 아님 · 근무 시간 밖 · 하루 20회 이상 · 퇴사 예정자 열람 · 내보내기·인쇄
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { blocked: { c: true }, period: '7일', who: '직원 전체', field: '항목 전체', warn: '', showHidden: false, hidden: { 5: true }, sel: {} }; }
+  renderVals() {
+    const st = this.state;
+    const pOn = 'height: 34px; padding: 0 12px; border: 0; background: #0F766E; color: #FFFFFF; font-size: 12px; font-weight: 700';
+    const pOff = 'height: 34px; padding: 0 12px; border: 0; background: #FFFFFF; font-size: 12px';
+    const periods = ['오늘', '7일', '30일', '직접'].map((label) => ({ label, pick: () => this.setState({ period: label }), style: st.period === label ? pOn : pOff }));
+    const wOn = 'height: 34px; padding: 0 10px; border: 0; border-radius: 17px; background: #B45309; color: #FFFFFF; font-size: 12px; font-weight: 700; white-space: nowrap';
+    const wOff = 'height: 34px; padding: 0 10px; border: 1px solid #FCD34D; border-radius: 17px; background: #FFFBEB; color: #92400E; font-size: 12px; white-space: nowrap';
+    const warns = ['주의만', '담당 아님', '근무 외', '내보내기'].map((label) => ({ label, pick: () => this.setState({ warn: st.warn === label ? '' : label }), style: st.warn === label ? wOn : wOff }));
+    const L = [
+      ['오늘 07:41', '김알바', '알바', '대우부대찌개 · 출입 비밀번호', '휴대폰 · 배송', '정상'],
+      ['오늘 07:12', '김알바', '알바', '새벽집 청담점 · 출입 비밀번호', '휴대폰 · 배송', '정상'],
+      ['어제 23:48', '박알바', '알바', '밍글스 · 출입 비밀번호', '휴대폰', '근무 외'],
+      ['어제 14:20', '김영업', '직원', '하나참치 · 출입 비밀번호', 'PC', '담당 아님'],
+      ['어제 11:02', '김영업', '직원', '거래처 32곳 · 사장님 휴대폰', 'PC · 엑셀', '내보내기'],
+      ['10/24 10:05', '이준형', '직원', '99숯불집 · 사장님 휴대폰', 'PC', '정상'],
+      ['10/23 16:30', '정두영', '대표', '구구오리 · 사업자등록증', 'PC', '정상'],
+      ['10/22 06:58', '박알바', '알바', '우부래도 · 출입 비밀번호', '휴대폰 · 배송', '정상']
+    ];
+    const fieldOf = (w) => w.indexOf('비밀번호') >= 0 ? '출입 비밀번호' : w.indexOf('휴대폰') >= 0 ? '사장님 휴대폰' : '사업자등록증';
+    const all = L.map((r, i) => ({ r, i, hidden: Boolean(st.hidden[i]) }));
+    const vis = all.filter(({ r, hidden }) => (st.showHidden || !hidden)
+      && (st.who === '직원 전체' || r[1] === st.who)
+      && (st.field === '항목 전체' || fieldOf(r[3]) === st.field)
+      && (!st.warn || (st.warn === '주의만' ? r[5] !== '정상' : r[5] === st.warn)));
+    const logs = vis.map(({ r, i, hidden }) => {
+      const [when, who, role, what, where, flag] = r;
+      const bg = hidden ? '#F8FAFB' : flag !== '정상' ? '#FFFBEB' : '#FFFFFF';
+      return { when, who, role, what, where, flag, hidden,
+        sel: Boolean(st.sel[i]), toggle: () => this.setState({ sel: { ...st.sel, [i]: !st.sel[i] } }),
+        hideText: hidden ? '다시 보이기' : '숨김',
+        hide: () => this.setState({ hidden: { ...st.hidden, [i]: !hidden } }),
+        cell: 'padding: 8px 6px; border-bottom: 1px solid #EEF1F4; display: flex; flex-direction: column; justify-content: center; background: ' + bg + (hidden ? '; color: #8A949E' : ''),
+        flagStyle: 'font-size: 11px; padding: 2px 6px; border-radius: 6px; white-space: nowrap; ' + (flag === '정상' ? 'background: #F1F5F9; color: #334155' : 'background: #FEF3C7; color: #92400E; font-weight: 700') };
+    });
+    const selIds = Object.keys(st.sel).filter((k) => st.sel[k]);
+    const roleS = (r) => 'font-size: 11px; padding: 1px 6px; border-radius: 6px; ' + (r === '알바' ? 'background: #FEF3C7; color: #92400E' : r === '대표' ? 'background: #E0E7FF; color: #3730A3' : 'background: #F1F5F9; color: #334155');
+    const S = [['a', '정두영', '대표', '오늘 19:40 접속'], ['b', '이준형', '직원', '1호차 · 배송·영업'], ['c', '박알바', '알바', '만료 10/31 · 2호차'], ['d', '김알바', '알바', '만료 11/20 · 1호차'], ['e', '김영업', '직원', '영업']];
+    const staff = S.map(([id, name, role, meta]) => {
+      const b = Boolean(st.blocked[id]);
+      return { name, role, meta: b ? '차단됨 · ' + meta : meta, roleStyle: roleS(role),
+        btn: id === 'a' ? '본인' : b ? '다시 허용' : '즉시 차단',
+        btnStyle: 'height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; ' + (id === 'a' ? 'border: 0; background: transparent; color: #8A949E' : b ? 'border: 1px solid #CBD3DB; background: #FEE2E2; color: #991B1B' : 'border: 1px solid #FCA5A5; background: #FFFFFF; color: #B91C1C; font-weight: 700'),
+        toggle: () => id === 'a' ? null : this.setState({ blocked: { ...st.blocked, [id]: !b } }) };
+    });
+    return {
+      periods, warns, logs, staff,
+      whoOpts: ['직원 전체', '김알바', '박알바', '김영업', '이준형', '정두영'],
+      fieldOpts: ['항목 전체', '출입 비밀번호', '사장님 휴대폰', '사업자등록증'],
+      pickWho: (e) => this.setState({ who: e.target.value }),
+      pickField: (e) => this.setState({ field: e.target.value }),
+      showHidden: st.showHidden, toggleHidden: () => this.setState({ showHidden: !st.showHidden }),
+      shown: logs.length, warnN: logs.filter((l) => l.flag !== '정상').length, hiddenN: all.filter((x) => x.hidden).length,
+      anySel: selIds.length > 0, selN: selIds.length,
+      hideSel: () => { const h = { ...st.hidden }; selIds.forEach((k) => { h[k] = true; }); this.setState({ hidden: h, sel: {} }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
