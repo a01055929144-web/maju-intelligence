@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
+import { getHoldModulesEnabledCompanyIds } from "@/lib/feature-modules";
 import { getManagedCompanyAccounts } from "@/lib/store";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminCompaniesWorkspace } from "./workspace";
@@ -33,6 +34,7 @@ export default async function AdminCompaniesPage({
 
         <AdminCompaniesWorkspace
           defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
+          holdModuleCompanyIds={Array.from(getHoldModulesEnabledCompanyIds())}
           initialCompanies={payload.companies}
           initialSelectedCompanyId={companyId}
           source={payload.source}

@@ -15,6 +15,7 @@ type Props = {
   defaultCompanyId: string;
   initialCompanies: ManagedCompanyAccount[];
   initialSelectedCompanyId?: string;
+  holdModuleCompanyIds: string[];
   source: "empty" | "supabase";
 };
 
@@ -52,7 +53,7 @@ const emptyCompany: ManagedCompanyAccountInput = {
 const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
 type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
 
-export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, initialSelectedCompanyId, source }: Props) {
+export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds, initialCompanies, initialSelectedCompanyId, source }: Props) {
   const initialCompany = initialCompanies.find((company) => company.id === initialSelectedCompanyId) || initialCompanies[0];
   const initialForm = initialCompany ? { ...initialCompany, customerPassword: "" } : emptyCompany;
   const [companies, setCompanies] = useState(initialCompanies);
@@ -453,6 +454,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
   }
 
   const selectedCompany = companies.find((company) => company.id === selectedId);
+  const selectedHoldModulesEnabled = Boolean(selectedCompany && holdModuleCompanyIds.includes(selectedCompany.id));
   const selectedReadiness = selectedCompany ? getCompanyReadiness(selectedCompany) : null;
   const selectedMissingChecks = selectedReadiness?.checks.filter((check) => !check.ok) || [];
   const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(formBaseline);
@@ -784,10 +786,10 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
                 <div className="mt-4 grid gap-2">
                   <QuickAction href={`/admin/companies/${encodeURIComponent(selectedCompany.id)}/setup`} icon={ClipboardList} label="초기 설정 도우미" primary />
                   <QuickAction href={`/leads?type=permit&companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" />
-                  <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" />
                   <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="거래처 관리 · 등록/업로드" />
-                  <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" />
                   <QuickAction href={`/map?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="지도 홈" />
+                  {selectedHoldModulesEnabled ? <QuickAction href={`/crm/timeline?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={Users} label="거래처 히스토리" /> : null}
+                  {selectedHoldModulesEnabled ? <QuickAction href={`/revenue/transactions?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={ReceiptText} label="매출 원장 분석" /> : null}
                 </div>
               </div>
             </div>
@@ -1192,24 +1194,39 @@ function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
       ok: Boolean(company.customerEmail && company.hasPassword)
     },
     {
-      description: company.originAddress ? "물류 출발지 주소가 있어 배송/영업 코스 계산에 사용할 수 있습니다." : "회사 출발지 주소를 입력해야 경로 계산이 가능합니다.",
-      label: "출발지 주소",
-      ok: Boolean(company.originAddress)
+      description: company.businessRegistrationNumber ? "사업자등록번호가 등록되어 있습니다." : "사업자등록번호를 등록해주세요.",
+      label: "사업자번호",
+      ok: Boolean(company.businessRegistrationNumber)
     },
     {
-      description: company.customerCount > 0 ? `거래처 ${company.customerCount.toLocaleString()}곳이 연결되어 있습니다.` : "거래처 마스터를 등록해야 합니다.",
-      label: "거래처 데이터",
-      ok: company.customerCount > 0
+      description: company.salesAreaCount > 0 ? `영업 지역 ${company.salesAreaCount.toLocaleString()}곳이 설정되어 있습니다.` : "영업 지역을 먼저 선택해주세요.",
+      label: "영업 지역",
+      ok: company.salesAreaCount > 0
     },
     {
-      description: company.salesTransactionCount > 0 ? `매출 거래 ${company.salesTransactionCount.toLocaleString()}건이 연결되어 있습니다.` : "매출 거래원장을 업로드해야 분석이 가능합니다.",
-      label: "매출 원장",
-      ok: company.salesTransactionCount > 0
+      description: company.staffInvitationCount ? `직원 초대·가입 ${company.staffInvitationCount.toLocaleString()}건이 있습니다.` : "직원 초대 또는 가입이 필요합니다.",
+      label: "직원 초대",
+      ok: Boolean(company.staffInvitationCount)
     },
     {
-      description: company.uploadCount > 0 ? `업로드 이력 ${company.uploadCount.toLocaleString()}회가 기록되어 있습니다.` : "최초 데이터 등록 이력이 필요합니다.",
-      label: "업로드 이력",
-      ok: company.uploadCount > 0
+      description: company.originAddress && company.vehicleCount > 0 ? "출발지와 운행 차량이 준비되어 있습니다." : "출발지와 차량을 등록해주세요.",
+      label: "차량·출발지",
+      ok: Boolean(company.originAddress && company.vehicleCount > 0)
+    },
+    {
+      description: company.leadCount > 0 ? `첫 리드 ${company.leadCount.toLocaleString()}건이 수집되었습니다.` : "영업 지역 설정 후 첫 리드 수집을 기다려주세요.",
+      label: "첫 리드 수집",
+      ok: company.leadCount > 0
+    },
+    {
+      description: company.mobileLocationCount > 0 ? "휴대폰 업무 위치가 처음 기록되었습니다." : "기사·영업 직원이 휴대폰에서 근무를 시작해야 합니다.",
+      label: "휴대폰 첫 기록",
+      ok: company.mobileLocationCount > 0
+    },
+    {
+      description: company.quoteActionCount > 0 ? "첫 견적 전달 기록이 있습니다." : "첫 견적 전달 기록이 아직 없습니다.",
+      label: "첫 견적",
+      ok: company.quoteActionCount > 0
     }
   ];
   const complete = checks.filter((check) => check.ok).length;

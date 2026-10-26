@@ -518,6 +518,11 @@ export type ManagedCompanyAccount = {
   recentUploads: UploadHistoryItem[];
   staffInvitations?: StaffInvitation[];
   staffInvitationCount?: number;
+  salesAreaCount: number;
+  vehicleCount: number;
+  leadCount: number;
+  mobileLocationCount: number;
+  quoteActionCount: number;
   updatedAt?: string;
 };
 export type ManagedCompanyAccountInput = {
@@ -2103,12 +2108,28 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       map.set(row.company_id, invitations);
       return map;
     }, new Map());
+    const readinessCounts = new Map(
+      await Promise.all(
+        companies.map(async (company) => {
+          const companyFilter = `company_id=eq.${encodeURIComponent(company.id)}`;
+          const [salesAreaCount, vehicleCount, leadCount, mobileLocationCount, quoteActionCount] = await Promise.all([
+            supabaseExactCount(`company_lead_search_regions?select=id&${companyFilter}`).catch(() => 0),
+            supabaseExactCount(`delivery_vehicle_master?select=id&${companyFilter}&operational_status=eq.active`).catch(() => 0),
+            supabaseExactCount(`business_permit_leads?select=id&${companyFilter}&merged_into_lead_id=is.null`).catch(() => 0),
+            supabaseExactCount(`staff_location_events?select=id&${companyFilter}`).catch(() => 0),
+            supabaseExactCount(`lead_actions?select=id&${companyFilter}&action_type=eq.quote`).catch(() => 0)
+          ]);
+          return [company.id, { salesAreaCount, vehicleCount, leadCount, mobileLocationCount, quoteActionCount }] as const;
+        })
+      )
+    );
 
     return {
       source: "supabase",
       companies: companies.map((company) => {
         const credentials = credentialsByCompany.get(company.id);
         const uploadStats = uploadStatsByCompany.get(company.id);
+        const readiness = readinessCounts.get(company.id) || { salesAreaCount: 0, vehicleCount: 0, leadCount: 0, mobileLocationCount: 0, quoteActionCount: 0 };
         return {
           id: company.id,
           name: company.name,
@@ -2125,6 +2146,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           recentUploads: recentUploadsByCompany.get(company.id) || [],
           staffInvitationCount: invitationsByCompany.get(company.id)?.length || 0,
           staffInvitations: invitationsByCompany.get(company.id) || [],
+          ...readiness,
           updatedAt: new Date(credentials?.updated_at || company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
         };
       })
@@ -2172,6 +2194,11 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         recentUploads: [],
         staffInvitationCount: 0,
         staffInvitations: [],
+        salesAreaCount: 0,
+        vehicleCount: 0,
+        leadCount: 0,
+        mobileLocationCount: 0,
+        quoteActionCount: 0,
         updatedAt: "서버 저장 미확인"
       }
     };
@@ -2355,6 +2382,11 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       recentUploads: [],
       staffInvitationCount: 0,
       staffInvitations: [],
+      salesAreaCount: 0,
+      vehicleCount: 0,
+      leadCount: 0,
+      mobileLocationCount: 0,
+      quoteActionCount: 0,
       updatedAt: new Date(company.updated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
     }
   };
