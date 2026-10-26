@@ -6,8 +6,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
-const PAGE_SIZE = 1000;
-const SAMPLE_PAGES = 30;
+const DEFAULT_PAGE_SIZE = 1000;
+const DEFAULT_SAMPLE_PAGES = 30;
+const GENERAL_RESTAURANT_PAGE_SIZE = 200;
+const GENERAL_RESTAURANT_SAMPLE_PAGES = 10;
 
 type ApiPage = { total: number; rows: Array<Record<string, unknown>> };
 
@@ -19,13 +21,13 @@ function textOf(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
-async function fetchPage(dataset: string, pageNo: number, key: string): Promise<ApiPage> {
+async function fetchPage(dataset: string, pageNo: number, pageSize: number, key: string): Promise<ApiPage> {
   const url = new URL(`https://apis.data.go.kr/1741000/${dataset}/info`);
   url.searchParams.set("serviceKey", key);
   url.searchParams.set("pageNo", String(pageNo));
-  url.searchParams.set("numOfRows", String(PAGE_SIZE));
+  url.searchParams.set("numOfRows", String(pageSize));
   url.searchParams.set("type", "json");
-  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(25_000) });
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
   if (!response.ok) throw new Error(`${dataset}: HTTP ${response.status}`);
   const data = (await response.json()) as { response?: { body?: { totalCount?: number; items?: { item?: Array<Record<string, unknown>> } } } };
   return { total: Number(data.response?.body?.totalCount || 0), rows: data.response?.body?.items?.item || [] };
@@ -62,15 +64,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "dataset 쿼리가 필요합니다.", datasets: DATASETS }, { status: 400 });
   }
   const dataset = requestedDataset as (typeof DATASETS)[number];
+  const pageSize = dataset === "general_restaurants" ? GENERAL_RESTAURANT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
+  const samplePageCount = dataset === "general_restaurants" ? GENERAL_RESTAURANT_SAMPLE_PAGES : DEFAULT_SAMPLE_PAGES;
   const targetProvinces = await getTargetProvinces();
   try {
-    const first = await fetchPage(dataset, 1, key);
-    const totalPages = Math.max(1, Math.ceil(first.total / PAGE_SIZE));
-    const pages = Array.from({ length: Math.min(SAMPLE_PAGES, totalPages) }, (_, index) =>
-      1 + Math.floor((index * Math.max(0, totalPages - 1)) / Math.max(1, SAMPLE_PAGES - 1))
+    const first = await fetchPage(dataset, 1, pageSize, key);
+    const totalPages = Math.max(1, Math.ceil(first.total / pageSize));
+    const pages = Array.from({ length: Math.min(samplePageCount, totalPages) }, (_, index) =>
+      1 + Math.floor((index * Math.max(0, totalPages - 1)) / Math.max(1, samplePageCount - 1))
     );
     const uniquePages = Array.from(new Set(pages));
-    const samples = await Promise.all(uniquePages.map((page) => page === 1 ? first : fetchPage(dataset, page, key)));
+    const samples = await Promise.all(uniquePages.map((page) => page === 1 ? first : fetchPage(dataset, page, pageSize, key)));
     const rows = samples.flatMap((page) => page.rows);
     const active = rows.filter(isActive);
     const target = active.filter((row) => isTargetProvince(row, targetProvinces));
@@ -83,9 +87,16 @@ export async function GET(request: Request) {
       estimatedActive: Math.round(first.total * active.length / Math.max(1, rows.length)),
       estimatedTargetProvinceActive: Math.round(first.total * target.length / Math.max(1, rows.length)),
       sampledPages: uniquePages.length,
+      pageSize,
       calls: uniquePages.length
     };
-    return NextResponse.json({ measuredAt: new Date().toISOString(), targetProvinces, method: "30-page stratified sample (estimate)", calls: result.calls, result });
+    return NextResponse.json({
+      measuredAt: new Date().toISOString(),
+      targetProvinces,
+      method: `${uniquePages.length}-page stratified sample (estimate)`,
+      calls: result.calls,
+      result
+    });
   } catch (error) {
     return NextResponse.json({ dataset, message: error instanceof Error ? error.message : "측정 실패", targetProvinces }, { status: 502 });
   }
