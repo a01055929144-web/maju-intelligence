@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const sql = readFileSync(resolve(process.cwd(), "docs/sql-drafts/20261027-01-K-map.sql"), "utf8");
+const appliedMigration = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20261026225502_map_filter_presets_and_area_kind_record.sql"),
+  "utf8"
+);
 
 describe("map filter SQL approval candidate", () => {
   it("commits an idempotent schema candidate without enabling production use", () => {
@@ -33,5 +37,15 @@ describe("map filter SQL approval candidate", () => {
     expect(sql).toContain("alter table public.map_filter_presets enable row level security");
     expect(sql).toContain("revoke all on table public.map_filter_presets from public, anon, authenticated");
     expect(sql).toContain("grant select, insert, update, delete on table public.map_filter_presets to service_role");
+  });
+
+  it("records the production-applied DDL without re-enabling or rerunning production", () => {
+    expect(appliedMigration).toContain("DO NOT RUN THIS MIGRATION AGAIN AGAINST THE CURRENT PRODUCTION DATABASE");
+    expect(appliedMigration).toContain("MAP_FILTER_PERSISTENCE_ENABLED remains false");
+    expect(appliedMigration).toContain("create table if not exists public.map_filter_presets");
+    expect(appliedMigration).toContain("actor_key = 'legacy_owner:' || company_id::text");
+    expect(appliedMigration).toContain("alter table public.map_filter_presets enable row level security");
+    expect(appliedMigration).toContain("revoke all on table public.map_filter_presets from public, anon, authenticated");
+    expect(appliedMigration).toContain("add column if not exists area_kind text not null default 'assigned'");
   });
 });
