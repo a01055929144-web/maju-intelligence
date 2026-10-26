@@ -38,8 +38,8 @@ const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {
   "/admin/companies@390": { owner: "08", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
   "/leads@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
   "/leads@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/leads/20000000-0000-4000-8000-000000000001@768": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
-  "/leads/20000000-0000-4000-8000-000000000001@390": { owner: "05", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/leads/20000000-0000-4000-8000-000000000001@768": { owner: "03", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
+  "/leads/20000000-0000-4000-8000-000000000001@390": { owner: "03", prefixes: ["horizontal-overflow:", "overflow-elements:"] },
   "/dashboard/settings/company@390": { owner: "01", prefixes: ["horizontal-overflow:", "overflow-elements:", "clipped-control:"] },
   "/dashboard/settings/advanced@390": { owner: "01", prefixes: ["clipped-control:"] }
 };
