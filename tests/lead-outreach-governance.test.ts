@@ -55,9 +55,9 @@ describe("lead outreach governance", () => {
   });
 
   it("records the applied SQL as a non-rerunnable migration without enabling features", () => {
-    const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261027073000_lead_contact_governance.sql"), "utf8");
-    expect(migration).toContain("운영 적용 완료(2026-10-27). 재실행 금지.");
-    expect(migration).toContain("기능 활성화와 신규 테이블 쓰기 경로 배포는 별도 승인 전 금지한다.");
+    const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261026223510_lead_contact_governance_20261027.sql"), "utf8");
+    expect(migration).toContain("schema_migrations version=20261026223510, name=lead_contact_governance_20261027. 재실행 금지.");
+    expect(migration).toContain("연락 거부 등록·칸별 출처 쓰기는 전용 원자 처리 승인 전 금지한다.");
     expect(migration.match(/enable row level security/g)).toHaveLength(3);
     expect(migration.match(/from public, anon, authenticated/g)).toHaveLength(3);
   });
@@ -69,5 +69,23 @@ describe("lead outreach governance", () => {
     expect(disclosureHandler).toContain("출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다.");
     expect(disclosureHandler).toContain("if (recordingSourceDisclosure) return");
     expect(disclosureHandler).toContain("setRecordingSourceDisclosure(false)");
+  });
+
+  it("keeps active contact refusals excluded when leads are reingested", () => {
+    const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/store.ts"), "utf8");
+    expect(storeSource).toContain("company_do_not_contact?select=channel,normalized_value,source_lead_id");
+    expect(storeSource).toContain("const isContactBlocked = Boolean");
+    expect(storeSource).toContain('status: isContactBlocked ? "제외"');
+    expect(storeSource).toContain('exclude_reason: isContactBlocked');
+  });
+
+  it("supports first-use policy acknowledgement for app users and legacy owners", () => {
+    const route = fs.readFileSync(path.join(process.cwd(), "app/api/leads/outreach-policy/route.ts"), "utf8");
+    const panel = fs.readFileSync(path.join(process.cwd(), "components/lead-contact-channels-panel.tsx"), "utf8");
+    expect(route).toContain('actorKind: "legacy_owner"');
+    expect(route).toContain('actorSubject: `legacy_owner:${scope.companyId}`');
+    expect(route).toContain("acknowledgeSalesOutreachPolicy");
+    expect(panel).toContain('aria-modal="true"');
+    expect(panel).toContain("확인하고 영업 시작");
   });
 });

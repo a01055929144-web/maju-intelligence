@@ -70,6 +70,7 @@ export function LeadContactChannelsPanel({
   const [saving, setSaving] = useState<EditableChannel | null>(null);
   const [recording, setRecording] = useState<LeadContactChannel | null>(null);
   const [recordingSourceDisclosure, setRecordingSourceDisclosure] = useState(false);
+  const [policyState, setPolicyState] = useState<"loading" | "required" | "saving" | "acknowledged">("loading");
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -80,6 +81,35 @@ export function LeadContactChannelsPanel({
     // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/outreach-policy"), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { acknowledged?: boolean } | null;
+        if (active) setPolicyState(response.ok && payload?.acknowledged ? "acknowledged" : "required");
+      })
+      .catch(() => { if (active) setPolicyState("required"); });
+    return () => { active = false; };
+  }, []);
+
+  async function acknowledgePolicy() {
+    setPolicyState("saving");
+    try {
+      const mobileSurface = typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/outreach-policy"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-maju-surface": mobileSurface ? "mobile" : "pc" },
+        body: JSON.stringify({})
+      }, 12000);
+      const payload = (await response.json().catch(() => null)) as { acknowledged?: boolean; message?: string } | null;
+      if (!response.ok || !payload?.acknowledged) throw new Error(payload?.message || "영업 수칙 확인을 저장하지 못했습니다.");
+      setPolicyState("acknowledged");
+    } catch (error) {
+      setPolicyState("required");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "영업 수칙 확인을 저장하지 못했습니다." });
+    }
+  }
 
   const mobile = isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : undefined;
   const storePhone = lead.phone && !mobile ? formatKoreanPhoneNumber(lead.phone) : undefined;
@@ -224,6 +254,22 @@ export function LeadContactChannelsPanel({
 
   return (
     <section aria-label="영업 채널" className="rounded-xl border border-slate-200 bg-white p-3">
+      {policyState !== "acknowledged" ? (
+        <div aria-labelledby="sales-outreach-policy-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-3 sm:items-center" role="dialog">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <p className="text-xs font-black text-teal-700">처음 한 번만 확인</p>
+            <h2 className="mt-1 text-lg font-black text-slate-950" id="sales-outreach-policy-title">영업 연락 수칙</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">상대방의 의사와 공개 정보의 출처를 존중하며 영업합니다.</p>
+            <ul className="mt-4 list-disc space-y-2 rounded-xl bg-amber-50 px-5 py-4 text-sm font-semibold leading-6 text-amber-950">
+              {SALES_OUTREACH_RULES.map((rule) => <li key={rule}>{rule}</li>)}
+            </ul>
+            <button className="maju-button-primary mt-4 min-h-12 w-full justify-center disabled:cursor-wait disabled:opacity-60" disabled={policyState !== "required"} onClick={() => void acknowledgePolicy()} type="button">
+              {policyState === "loading" || policyState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {policyState === "loading" ? "확인 기록 불러오는 중" : policyState === "saving" ? "확인 기록 저장 중" : "확인하고 영업 시작"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-black text-slate-950">영업 채널</p>
         <span className="text-[11px] font-bold text-slate-500">먼저: {LEAD_CONTACT_CHANNEL_LABELS[primary]}</span>

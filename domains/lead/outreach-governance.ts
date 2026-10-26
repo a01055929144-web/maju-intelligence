@@ -1,6 +1,6 @@
 import { digitsOnly, extractInstagramHandle, type LeadContactChannel } from "./contact-channels";
 
-export const SALES_OUTREACH_POLICY_VERSION = "2026-10-27-draft";
+export const SALES_OUTREACH_POLICY_VERSION = "2026-10-27-v1";
 
 export const SALES_OUTREACH_RULES = [
   "매장별 상황에 맞는 1:1 제안만 보냅니다.",
