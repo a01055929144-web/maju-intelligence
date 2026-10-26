@@ -2234,9 +2234,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="maju-search-field relative h-9 min-w-[200px] flex-1">
+        <div className="flex min-w-0 flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
+            <label className="maju-search-field relative h-9 w-full min-w-0 basis-full sm:w-auto sm:min-w-[200px] sm:flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-xs font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
@@ -2245,21 +2245,24 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 value={tableSearch}
               />
             </label>
-            <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖 보기</label>
-            <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "available" ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} type="button">지금 방문 가능</button>
-            <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "break" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} type="button">오늘 브레이크 있음</button>
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap sm:flex-none">
+              <button className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${businessHoursFilter === "available" ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} type="button">지금 방문 가능</button>
+              <button className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${businessHoursFilter === "break" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} type="button">오늘 브레이크 있음</button>
+            </div>
             <button
-              className="flex items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
+              aria-expanded={showAdvancedFilters}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
               onClick={() => setShowAdvancedFilters((value) => !value)}
               type="button"
             >
               <ListFilter className="h-3.5 w-3.5" />
-              상세 필터{activeFilterCount ? ` · ${activeFilterCount}` : ""}
+              필터{activeFilterCount ? ` · ${activeFilterCount}` : ""}
               <ChevronDown className={`h-3.5 w-3.5 transition ${showAdvancedFilters ? "rotate-180" : ""}`} />
             </button>
           </div>
           {showAdvancedFilters ? (
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-2">
+              <label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-600"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖 보기</label>
               {leadQualityMode === "permit" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setPeriodFilter(event.target.value as "all" | PermitLeadPeriod); if (event.target.value !== "all") setOpenDateFilterMode("all"); }} value={periodFilter}>
                 {PERMIT_PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select> : null}
@@ -2691,7 +2694,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               </div>
               <div className="h-[calc(100dvh-300px)] min-h-[60vh] max-w-full overflow-x-auto overflow-y-auto overscroll-contain">
               {/* 2026-10-25: 표 글자가 두 줄로 깨지지 않도록 칸은 내용 너비만큼 넓히고(w-max·nowrap) 좌우 스크롤로 봅니다. */}
-              <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
+              <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm [&_tbody_td]:py-1.5 ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
                   <tr>
                     {isSalesLeadPage ? <th className="w-[40px] border-r border-slate-200 px-2 py-2">
@@ -2793,7 +2796,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                             ) : null}
                           </div>
                           <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
-                          {(() => {
+                          {showMoreLeadColumns ? (() => {
                             const tags = getPermitLeadRecommendationTags(lead, recommendTopIndustries).slice(0, 2);
                             return tags.length ? (
                               <div className="mt-0.5 flex flex-nowrap items-center gap-1 overflow-hidden">
@@ -2804,15 +2807,15 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                                 ))}
                               </div>
                             ) : null;
-                          })()}
+                          })() : null}
                         </td>
                         <td className="max-w-[150px] border-r border-slate-100 px-3 py-2">
-                          <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">
+                          <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
                             {leadPriorityBadge(lead).label}
                           </span>
-                          <p className="mt-1 truncate text-[10px] font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
+                          {showMoreLeadColumns ? <p className="mt-1 truncate text-[10px] font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
                             {confidence.reasons[0] || "근거 확인 필요"}
-                          </p>
+                          </p> : null}
                         </td>
                         <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
