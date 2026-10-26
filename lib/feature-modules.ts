@@ -25,6 +25,14 @@ export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_
   return value !== "false" && value !== "0";
 }
 
+export function getLeadWorkspaceV2EnabledCompanyIds(value = process.env.LEAD_WORKSPACE_V2_ENABLED_COMPANY_IDS || "") {
+  return new Set(value.split(",").map((item) => item.trim()).filter(Boolean));
+}
+
+export function isLeadWorkspaceV2Enabled(companyId?: string | null, value?: string) {
+  return Boolean(companyId && getLeadWorkspaceV2EnabledCompanyIds(value).has(companyId));
+}
+
 export const CORE_LEADS_HREF = "/leads?type=permit";
 
 export function resolveLegacyDashboardHref(params: { companyId?: string; leadType?: string; view?: string }) {
