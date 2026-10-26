@@ -140,10 +140,26 @@ export function fillLeadMessageTemplate(template: string, variables: LeadMessage
     "담당자 연락처": variables.staffPhone || "",
     "단가표 링크": variables.priceSheetUrl || ""
   };
-  return template
+  const missingKeys = Object.entries(map).filter(([, value]) => !value).map(([key]) => key);
+  let prepared = template;
+  for (const key of missingKeys) {
+    const token = `\\{${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\}`;
+    prepared = prepared
+      .replace(new RegExp(`\\([^()]*${token}[^()]*\\)`, "g"), "")
+      .replace(new RegExp(`(?:담당자\\s*연락처|연락처|전화번호|단가표\\s*링크|링크)\\s*[:：-]?\\s*${token}`, "g"), "");
+  }
+  return prepared
     .replace(/\{([^{}]+)\}/g, (match, key: string) => (key in map ? map[key] : match))
     .replace(/[ \t]+\n/g, "\n")
     .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:!?]){2,}/g, "$1")
+    .replace(/\s+(입니다|드립니다|입니다만)/g, "$1")
+    .replace(/([.!?])\s+(?=\S)/g, "$1\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^(?:[-–—,:;.!?]|단가표 링크|연락처)+$/.test(line))
+    .join("\n")
     .trim();
 }
 

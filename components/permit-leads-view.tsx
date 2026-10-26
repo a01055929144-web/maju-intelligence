@@ -2157,7 +2157,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
         ) : null}
       </div>
 
-      <div className="maju-section-card !overflow-visible">
+      <div className="maju-section-card min-w-0 max-w-full !overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-slate-200 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -2227,75 +2227,6 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
             <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖 보기</label>
             <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "available" ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} type="button">지금 방문 가능</button>
             <button className={`h-9 rounded-md border px-3 text-xs font-bold ${businessHoursFilter === "break" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} type="button">오늘 브레이크 있음</button>
-            {leadQualityMode === "permit" ? <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => {
-                setPeriodFilter(event.target.value as "all" | PermitLeadPeriod);
-                if (event.target.value !== "all") setOpenDateFilterMode("all");
-              }}
-              value={periodFilter}
-            >
-              {PERMIT_PERIOD_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select> : null}
-            {leadQualityMode === "permit" ? <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => {
-                const mode = event.target.value as LeadOpenDateFilterMode;
-                setOpenDateFilterMode(mode);
-                if (mode !== "all") setPeriodFilter("all");
-                if (mode === "custom") setShowAdvancedFilters(true);
-              }}
-              value={openDateFilterMode}
-            >
-              <option value="all">개시일 전체</option>
-              <option value="year">연도별</option>
-              <option value="month">월별</option>
-              <option value="custom">직접 기간</option>
-              <option value="missing">개시일 미확인</option>
-            </select> : null}
-            {openDateFilterMode === "year" ? (
-              <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setOpenDateYear(event.target.value)} value={openDateYear}>
-                <option value="">연도 선택</option>
-                {openDateOptions.years.map((year) => (
-                  <option key={year.value} value={year.value}>
-                    {year.value}년 · {year.count.toLocaleString()}곳
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {openDateFilterMode === "month" ? (
-              <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setOpenDateMonth(event.target.value)} value={openDateMonth}>
-                <option value="">월 선택</option>
-                {openDateOptions.months.map((month) => (
-                  <option key={month.value} value={month.value}>
-                    {month.value} · {month.count.toLocaleString()}곳
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {isSalesLeadPage ? <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => {
-                setStatusFilter(event.target.value);
-                if (event.target.value) setActionFilter("");
-              }}
-              value={statusFilter}
-            >
-              <option value="">상태 전체</option>
-              <option value="견적 요청">견적 요청</option>
-              <option value="견적 발송">견적 발송</option>
-              <option value="재연락 예정">재연락 예정</option>
-              <option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option>
-              <option value="미팅 예정">미팅 예정</option>
-              <option value="연락 완료">연락 완료</option>
-              <option value="DM 발송">DM 발송</option>
-              <option value="방문 대상">방문 대상</option>
-              <option value="검토 필요">검토 필요</option>
-            </select> : null}
             <button
               className="flex items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
               onClick={() => setShowAdvancedFilters((value) => !value)}
@@ -2308,6 +2239,17 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
           </div>
           {showAdvancedFilters ? (
             <div className="flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-2">
+              {leadQualityMode === "permit" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setPeriodFilter(event.target.value as "all" | PermitLeadPeriod); if (event.target.value !== "all") setOpenDateFilterMode("all"); }} value={periodFilter}>
+                {PERMIT_PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select> : null}
+              {leadQualityMode === "permit" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { const mode = event.target.value as LeadOpenDateFilterMode; setOpenDateFilterMode(mode); if (mode !== "all") setPeriodFilter("all"); }} value={openDateFilterMode}>
+                <option value="all">개시일 전체</option><option value="year">연도별</option><option value="month">월별</option><option value="custom">직접 기간</option><option value="missing">개시일 미확인</option>
+              </select> : null}
+              {openDateFilterMode === "year" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateYear(event.target.value)} value={openDateYear}><option value="">연도 선택</option>{openDateOptions.years.map((year) => <option key={year.value} value={year.value}>{year.value}년 · {year.count.toLocaleString()}곳</option>)}</select> : null}
+              {openDateFilterMode === "month" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateMonth(event.target.value)} value={openDateMonth}><option value="">월 선택</option>{openDateOptions.months.map((month) => <option key={month.value} value={month.value}>{month.value} · {month.count.toLocaleString()}곳</option>)}</select> : null}
+              {isSalesLeadPage ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setStatusFilter(event.target.value); if (event.target.value) setActionFilter(""); }} value={statusFilter}>
+                <option value="">상태 전체</option><option value="견적 요청">견적 요청</option><option value="견적 발송">견적 발송</option><option value="재연락 예정">재연락 예정</option><option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option><option value="미팅 예정">미팅 예정</option><option value="연락 완료">연락 완료</option><option value="DM 발송">DM 발송</option><option value="방문 대상">방문 대상</option><option value="검토 필요">검토 필요</option>
+              </select> : null}
               <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
                 <option value="">업종 전체(상세)</option>
                 {industryOptions.map((industry) => (
@@ -2641,7 +2583,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                     </button>
                   </div>
                 </div>
-                {isSalesLeadPage ? <div className="flex flex-wrap items-center gap-2 bg-slate-50/70 px-3 py-2">
+                {isSalesLeadPage && selectedLeads.length ? <div className="flex flex-wrap items-center gap-2 bg-slate-50/70 px-3 py-2">
                   <button
                     className="maju-button-secondary h-8 text-xs disabled:opacity-50"
                     disabled={!selectedLeads.length || Boolean(bulkActionBusy)}
@@ -2726,7 +2668,7 @@ export function PermitLeadsView({ onOpenQuote, stores }: { readonly onOpenQuote?
                   />
                 ) : null}
               </div>
-              <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
+              <div className="h-[calc(100dvh-300px)] min-h-[60vh] max-w-full overflow-x-auto overflow-y-auto overscroll-contain">
               {/* 2026-10-25: 표 글자가 두 줄로 깨지지 않도록 칸은 내용 너비만큼 넓히고(w-max·nowrap) 좌우 스크롤로 봅니다. */}
               <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
