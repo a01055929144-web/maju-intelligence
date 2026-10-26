@@ -82,7 +82,7 @@ create table if not exists public.delivery_events (
   constraint delivery_events_customer_note_fk foreign key (company_id, customer_id, customer_note_id)
     references public.customer_notes(company_id, customer_id, id) on delete cascade,
   constraint delivery_events_supplier_fk foreign key (company_id, supplier_id)
-    references public.product_suppliers(company_id, id) on delete restrict,
+    references public.product_suppliers(company_id, id) on delete set null (supplier_id),
   constraint delivery_events_type_check check (
     event_type in ('arrived', 'partial', 'return', 'replenishment', 'exchange', 'damage', 'missing', 'other')
   ),
