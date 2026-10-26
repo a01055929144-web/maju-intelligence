@@ -7,12 +7,18 @@ begin;
 create table if not exists public.map_filter_presets (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
-  user_id uuid not null references public.app_users(id) on delete cascade,
+  actor_key text not null,
+  app_user_id uuid references public.app_users(id) on delete cascade,
   name text not null check (char_length(trim(name)) between 1 and 40),
   filters jsonb not null default '{}'::jsonb check (jsonb_typeof(filters) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (company_id, user_id, name)
+  constraint map_filter_presets_actor_key_check check (
+    (app_user_id is not null and actor_key = 'app_user:' || app_user_id::text)
+    or
+    (app_user_id is null and actor_key = 'legacy_owner:' || company_id::text)
+  ),
+  unique (company_id, actor_key, name)
 );
 
 alter table public.map_filter_presets enable row level security;
@@ -21,7 +27,13 @@ revoke all on table public.map_filter_presets from public, anon, authenticated;
 grant select, insert, update, delete on table public.map_filter_presets to service_role;
 
 comment on table public.map_filter_presets is
-  'service_role 전용. 서버 API가 커스텀 세션과 활성 company_members를 검증하고 company_id/user_id를 주입한다.';
+  'service_role 전용. 서버 API가 고객 세션을 검증하고 company_id/actor_key/app_user_id를 주입한다. MAJU 관리자 미리보기는 저장하지 않는다.';
+
+comment on column public.map_filter_presets.actor_key is
+  '서버 파생 저장 주체. app_users 세션은 app_user:<uuid>, userId 없는 기존 대표 세션은 legacy_owner:<company_uuid>. 요청 body 값은 받지 않는다.';
+
+comment on column public.map_filter_presets.app_user_id is
+  'app_users 기반 고객 세션이면 필수. 기존 auth_credentials/환경변수 대표 세션만 null을 허용하며 회사 단위 legacy_owner actor를 공유한다.';
 
 alter table public.company_lead_search_regions
   add column if not exists area_kind text not null default 'assigned';
@@ -50,15 +62,21 @@ comment on column public.company_lead_search_regions.area_kind is
 commit;
 
 -- 승인 후 작업
--- 1. 필터 API는 getRequestAuthScope 계열의 커스텀 세션 검증 후 company_members.status='active'를 매 요청 확인
--- 2. company_id/user_id는 요청 body를 신뢰하지 않고 검증된 세션의 회사와 app_users.id에서 서버가 주입
--- 3. 고객사 사용자는 자기 user_id의 preset만 CRUD, MAJU 관리자 대행 범위는 별도 승인 전 허용하지 않음
--- 4. anon/authenticated 직접 접근은 계속 금지하고 service_role 서버 경로만 사용
--- 5. 위 DDL을 timestamp migration으로 옮기고 MAP_FILTER_PERSISTENCE_ENABLED는 명시적 승인 뒤에만 활성화
--- 6. 기존 company_lead_search_regions 행은 assigned로 유지하는 드라이런 건수 보고
--- 7. area_kind 저장/조회 API와 크론 제외 로직을 함께 승인하기 전에는 칼럼 DDL도 migration으로 옮기지 않음
--- 8. 승인 후 API는 expansion_candidate를 매일 수집 대상에서 제외하고 지도 점선 경계/별도 목록에만 제공
--- 9. 적용 전 staging에서 이 파일을 연속 2회 실행하고 아래 권한/제약 확인 쿼리 결과를 승인 기록에 첨부
+-- 1. 필터 API는 getRequestAuthScope 계열로 customerSession만 허용한다. MAJU 관리자 미리보기/대행 저장은 허용하지 않는다.
+-- 2. company_id/actor_key/app_user_id는 요청 body를 신뢰하지 않고 검증된 고객 세션에서 서버가 주입한다.
+-- 3. session.userId가 있으면 app_user:<userId>를 사용하고 company_members.status='active'를 매 요청 확인한다.
+-- 4. session.userId가 없고 workspaceRole='owner'인 기존 auth_credentials/환경변수 대표만 legacy_owner:<companyId>를 사용한다.
+-- 5. userId 없는 manager/staff/temporary 또는 위 두 규칙에 맞지 않는 세션은 저장 성공처럼 처리하지 말고
+--    actor_identity_required(409)로 실패시킨다. app_users/company_members 전환 후에만 개인 preset을 허용한다.
+-- 6. legacy_owner preset은 기존 회사 대표 자격 증명의 회사 단위 저장 공간이다. 대표 계정을 app_users로 전환할 때
+--    명시적 이관 작업으로 app_user:<uuid>에 옮기며, 조회 시 두 actor를 암묵적으로 합치거나 조용히 누락하지 않는다.
+-- 7. 고객사 사용자는 자기 actor_key의 preset만 CRUD한다.
+-- 8. anon/authenticated 직접 접근은 계속 금지하고 service_role 서버 경로만 사용한다.
+-- 9. 위 DDL을 timestamp migration으로 옮기고 MAP_FILTER_PERSISTENCE_ENABLED는 명시적 승인 뒤에만 활성화한다.
+-- 10. 기존 company_lead_search_regions 행은 assigned로 유지하는 드라이런 건수 보고
+-- 11. area_kind 저장/조회 API와 크론 제외 로직을 함께 승인하기 전에는 칼럼 DDL도 migration으로 옮기지 않음
+-- 12. 승인 후 API는 expansion_candidate를 매일 수집 대상에서 제외하고 지도 점선 경계/별도 목록에만 제공
+-- 13. 적용 전 staging에서 이 파일을 연속 2회 실행하고 아래 권한/제약 확인 쿼리 결과를 승인 기록에 첨부
 
 -- 재실행·권한 경계 확인 쿼리 (운영 적용 명령이 아님)
 -- select relrowsecurity

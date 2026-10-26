@@ -16,6 +16,16 @@ describe("map filter SQL approval candidate", () => {
     expect(sql).toContain("MAP_FILTER_PERSISTENCE_ENABLED");
   });
 
+  it("supports legacy owner sessions without pretending every actor has an app_users row", () => {
+    expect(sql).toContain("actor_key text not null");
+    expect(sql).toContain("app_user_id uuid references public.app_users(id) on delete cascade");
+    expect(sql).toContain("actor_key = 'app_user:' || app_user_id::text");
+    expect(sql).toContain("actor_key = 'legacy_owner:' || company_id::text");
+    expect(sql).toContain("actor_identity_required(409)");
+    expect(sql).toContain("MAJU 관리자 미리보기/대행 저장은 허용하지 않는다");
+    expect(sql).not.toContain("user_id uuid not null references public.app_users");
+  });
+
   it("keeps direct Data API roles blocked and server access explicit", () => {
     expect(sql).toContain("alter table public.map_filter_presets enable row level security");
     expect(sql).toContain("revoke all on table public.map_filter_presets from public, anon, authenticated");
