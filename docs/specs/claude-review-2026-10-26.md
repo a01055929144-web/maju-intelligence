@@ -58,3 +58,5 @@
 - **J5 크론 정리**(Hobby 60초 예산): business-status의 sendBusinessClosureAlerts·sendDailyChurnRiskDigests가 어디로 보내는지(텔레그램 숨김 상태면 실제로 안 감) 확인 → 보류 회사만 실행. recommend-refresh의 "추천 점수" 계산이 현재 리드 정렬(domains/lead/lead-list)에 쓰이지 않으면 중지(보강·GPS 정리는 유지). syncAllCompaniesSeoulRestaurantLeads는 행안부 수집과 중복이면 중지 제안. 크론별 소요 시간 보고.
 - **J6 외부 API 키 점검**(비용·사용처 표): OPENAI(AI비서 보류), TELEGRAM(보류), NCP_DATALAB(디버그 경로만?), GOOGLE_PLACES(리뷰·유료), CLOVA/UPSTAGE OCR, OPINET, SEOUL_OPENDATA — 실제 호출 위치·최근 30일 호출 수·월 비용 → 안 쓰는 것은 호출 차단(키는 대표가 Vercel에서 정리).
 - **J7 브랜치**: 병합 끝난 feat/lead-channels-fax-email-dm 원격 브랜치 삭제는 대표 확인 후.
+- **J8 텔레그램 걷어내기(대표 결정 10-26)**: lib/telegram.ts, app/api/customer/telegram-discover, 설정·관리자 화면의 텔레그램 칸, 크론의 텔레그램 발송(폐업 알림·이탈 요약은 관리자 화면 알림으로 대체 또는 중지) 코드 제거. DB 칸은 이번에 지우지 말고 "사용 안 함" 표시 → 칸 삭제 SQL은 초안만(승인 후). TELEGRAM_BOT_TOKEN은 대표가 Vercel에서 삭제.
+- **(나중, 시안만) 지도 중심 레이아웃**: 디자인 캔버스 ⑫(PC)·⑬(휴대폰) 참고 — 대표 확정 전 구현 금지.
