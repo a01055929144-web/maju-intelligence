@@ -1,5 +1,5 @@
--- N3 민감정보 열람 로그 SQL 초안. 운영 적용 전 대표 별도 승인 필요.
--- 이 파일은 저장소 초안일 뿐 마이그레이션으로 자동 적용되지 않는다.
+-- N3 민감정보 열람 로그 검토 초안. 2026-10-27 운영 적용본은
+-- supabase/migrations/20261027073000_sensitive_access_logs.sql에 별도 기록했으며 재실행하지 않는다.
 begin;
 
 create table if not exists public.sensitive_access_logs (
