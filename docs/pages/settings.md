@@ -18,9 +18,11 @@ delivery (GPS 보관정책), customer (이탈위험 알림)
 - `app/dashboard/settings/staff-management-panel.tsx`
 - `app/dashboard/settings/business-number-exceptions-panel.tsx`
 - `app/dashboard/settings/company-closure-panel.tsx`
+- `app/dashboard/settings/security/**`, `app/api/customer/security/**`
 - `app/api/customer/settings/route.ts`, `app/api/customer/staff-invitations/route.ts`, `app/api/customer/company/close/route.ts`
 - `app/api/company-job-titles/route.ts`
 - `lib/workspace.ts` (역할별 기능 권한)
+- `lib/store/07-sensitive-access-logs.ts`, `domains/organization/sensitive-access-log.ts`
 
 ## Data Flow
 
@@ -66,6 +68,8 @@ ACTIVE
 PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## COMPLETED
+
+- [x] 2026-10-27 N3 민감정보 열람 기록의 대표 전용 화면/API와 운영 미적용 SQL 초안을 분리하고, 승인 전 기능 플래그 OFF 경계를 추가했다.
 
 - [x] 2026-10-19 회사 설정을 회사 정보·직원 관리·권역/호차·고급 설정 4개 실제 페이지로 분리했다. 직원 페이지는 거래처 원장 전체를 읽지 않고 배정 선택 문자열만 경량 조회하며, 회사별 직원 표시 이름은 관리자 입력 초대명을 소셜 닉네임보다 우선한다.
 

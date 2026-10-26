@@ -1,0 +1,58 @@
+-- N3 민감정보 열람 로그 SQL 초안. 운영 적용 전 대표 별도 승인 필요.
+-- 이 파일은 저장소 초안일 뿐 마이그레이션으로 자동 적용되지 않는다.
+begin;
+
+create table if not exists public.sensitive_access_logs (
+  id bigint generated always as identity primary key,
+  company_id uuid not null references public.companies(id) on delete cascade,
+  actor_user_id uuid not null references public.app_users(id) on delete restrict,
+  actor_name text not null,
+  actor_role text not null,
+  store_id uuid references public.customers(id) on delete set null,
+  store_name text,
+  item_type text not null check (item_type in ('access_password','owner_phone','business_registration','export','log_hidden')),
+  device_label text,
+  page_path text not null,
+  warning_codes text[] not null default '{}'::text[] check (warning_codes <@ array['unassigned','outside_work_session','daily_20_plus','export']::text[]),
+  target_log_id bigint references public.sensitive_access_logs(id) on delete restrict,
+  accessed_at timestamptz not null default now(),
+  hidden_at timestamptz,
+  hidden_by uuid references public.app_users(id) on delete restrict,
+  check ((hidden_at is null) = (hidden_by is null))
+);
+
+alter table public.sensitive_access_logs enable row level security;
+revoke all on table public.sensitive_access_logs from public, anon, authenticated;
+revoke all on sequence public.sensitive_access_logs_id_seq from public, anon, authenticated;
+grant select, insert, update on table public.sensitive_access_logs to service_role;
+grant usage, select on sequence public.sensitive_access_logs_id_seq to service_role;
+
+create index if not exists sensitive_access_logs_company_time_idx on public.sensitive_access_logs(company_id, accessed_at desc);
+create index if not exists sensitive_access_logs_company_actor_time_idx on public.sensitive_access_logs(company_id, actor_user_id, accessed_at desc);
+create index if not exists sensitive_access_logs_company_item_time_idx on public.sensitive_access_logs(company_id, item_type, accessed_at desc);
+create index if not exists sensitive_access_logs_warning_codes_idx on public.sensitive_access_logs using gin(warning_codes);
+
+create or replace function public.guard_sensitive_access_logs()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  if tg_op = 'DELETE' then raise exception 'sensitive_access_logs_delete_forbidden'; end if;
+  if row(old.company_id, old.actor_user_id, old.actor_name, old.actor_role, old.store_id, old.store_name, old.item_type, old.device_label, old.page_path, old.warning_codes, old.target_log_id, old.accessed_at)
+     is distinct from row(new.company_id, new.actor_user_id, new.actor_name, new.actor_role, new.store_id, new.store_name, new.item_type, new.device_label, new.page_path, new.warning_codes, new.target_log_id, new.accessed_at)
+  then raise exception 'sensitive_access_logs_immutable'; end if;
+  if old.hidden_at is not null or new.hidden_at is null or new.hidden_by is null then raise exception 'sensitive_access_logs_invalid_hide'; end if;
+  insert into public.sensitive_access_logs(company_id, actor_user_id, actor_name, actor_role, item_type, page_path, target_log_id)
+  select new.company_id, new.hidden_by, coalesce(u.name, '대표'), 'owner', 'log_hidden', '/dashboard/settings/security', new.id
+    from public.app_users u where u.id = new.hidden_by;
+  return new;
+end;
+$$;
+
+drop trigger if exists sensitive_access_logs_guard on public.sensitive_access_logs;
+create trigger sensitive_access_logs_guard before update or delete on public.sensitive_access_logs for each row execute function public.guard_sensitive_access_logs();
+revoke all on function public.guard_sensitive_access_logs() from public, anon, authenticated, service_role;
+
+commit;
+
+-- 승인·적용 후에만 SENSITIVE_ACCESS_LOGS_ENABLED=true로 전환한다.
+-- 1년 보관 삭제는 삭제 금지 정책과 분리된 postgres 전용 유지관리 함수/스케줄을 별도 승인한다.
+-- 열람 값, 마스킹 값, 토큰, 비밀번호를 저장할 자유형 metadata/payload 컬럼은 의도적으로 두지 않는다.
