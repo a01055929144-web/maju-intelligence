@@ -5,17 +5,17 @@ import { Camera, House, Map, Route, Target } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const items = [
-  { href: "#route-list", icon: House, label: "오늘" },
+  { href: "#selected-customer", icon: House, label: "오늘" },
   { href: "/map", icon: Map, label: "지도" },
   { href: "/mobile/sales#lead-list", icon: Target, label: "리드" },
   { href: "#route-list", icon: Route, label: "코스" }
 ] as const;
 
 export function MobileBottomNavigation() {
-  const [activeHref, setActiveHref] = useState("#route-list");
+  const [activeHref, setActiveHref] = useState("#selected-customer");
 
   useEffect(() => {
-    const syncHash = () => setActiveHref(window.location.hash || "#route-list");
+    const syncHash = () => setActiveHref(window.location.hash || "#selected-customer");
     syncHash();
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
