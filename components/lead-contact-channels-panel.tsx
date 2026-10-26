@@ -199,6 +199,11 @@ export function LeadContactChannelsPanel({
           value={message}
         />
       </label>
+      <div aria-label="보낼 문구 미리보기" className="mt-2 flex justify-end rounded-xl bg-slate-100 p-3">
+        <div className="max-w-[88%] whitespace-pre-line rounded-2xl rounded-br-sm bg-teal-700 px-3 py-2 text-xs font-semibold leading-5 text-white shadow-sm">
+          {message || "보낼 문구를 입력하면 여기에 표시됩니다."}
+        </div>
+      </div>
 
       <div className="mt-2 grid gap-2">
         <div className={rowClass("sms")}>
