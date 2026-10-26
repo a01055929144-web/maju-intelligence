@@ -1,6 +1,8 @@
 {
   "framework": "nextjs",
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "crons": [
     {
       "path": "/api/cron/business-status",
@@ -10,5 +12,13 @@
       "path": "/api/cron/recommend-refresh",
       "schedule": "0 22 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "codex/**": false,
+      "claude/**": false
+    }
+  }
 }
