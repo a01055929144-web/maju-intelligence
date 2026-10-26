@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MAJU 관리자 · 요금제 설정 시안</title>
+  <style>
+    :root{font-family:Inter,"Noto Sans KR",system-ui,sans-serif;color:#17202a;background:#f4f7f9}*{box-sizing:border-box}body{margin:0}.shell{display:grid;grid-template-columns:224px 1fr;min-height:100vh}.side{background:#17242d;color:#dfe8ed;padding:24px 16px}.brand{font-weight:800;font-size:20px;margin-bottom:32px}.nav{display:grid;gap:6px}.nav a{color:#aebdc7;text-decoration:none;padding:11px 12px;border-radius:9px}.nav a.active{background:#0f766e;color:white}.main{padding:28px;max-width:1440px;width:100%}.head{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;margin-bottom:22px}.head h1{margin:0 0 7px;font-size:26px}.muted{color:#667681}.badge{background:#fff4d8;color:#8a5a00;border:1px solid #f4d58a;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700}.notice{border:1px solid #bad9d5;background:#eef9f7;padding:14px 16px;border-radius:10px;margin-bottom:18px;color:#275c57}.grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:18px}.card{background:white;border:1px solid #dce4e9;border-radius:13px;box-shadow:0 3px 12px #1730420b;padding:20px}.card h2{font-size:17px;margin:0 0 4px}.sub{font-size:13px;color:#687985;margin-bottom:18px}.policy{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:grid;gap:6px}.field label{font-size:12px;font-weight:700;color:#52626d}.field input{width:100%;height:40px;border:1px solid #c7d2d9;border-radius:8px;padding:0 11px;font:inherit}.suffix{position:relative}.suffix input{padding-right:50px}.suffix span{position:absolute;right:12px;top:11px;color:#6f7f89;font-size:13px}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px 8px;border-bottom:1px solid #edf1f3;text-align:left;font-size:13px}.table th{color:#657580;font-size:12px}.pill{background:#e8f7f4;color:#08766c;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}.btn{height:40px;border-radius:8px;border:1px solid #bbc8cf;background:white;padding:0 15px;font-weight:700;cursor:pointer}.btn.primary{border-color:#0f766e;background:#0f766e;color:white}.btn:disabled{opacity:.45;cursor:not-allowed}.guard{display:grid;gap:12px}.guard-row{padding:12px;border-radius:9px;background:#f7f9fa;border:1px solid #e4e9ec}.guard-row b{display:block;font-size:13px;margin-bottom:4px}.guard-row span{font-size:12px;color:#6b7b85}.check{color:#13805f}.footer-note{font-size:12px;color:#788791;margin-top:14px}.toast{position:fixed;right:24px;bottom:24px;background:#17242d;color:white;padding:13px 16px;border-radius:9px;display:none}@media(max-width:900px){.shell{grid-template-columns:1fr}.side{display:none}.main{padding:18px}.grid{grid-template-columns:1fr}.policy{grid-template-columns:1fr}.head{display:block}.badge{display:inline-block;margin-top:12px}.table-wrap{overflow:auto}.table{min-width:670px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side"><div class="brand">MAJU ADMIN</div><nav class="nav"><a href="#">운영 현황</a><a href="#">고객사</a><a class="active" href="#">요금제·결제</a><a href="#">감사 로그</a><a href="#">시스템</a></nav></aside>
+    <main class="main">
+      <header class="head"><div><h1>요금제·결제 설정</h1><div class="muted">대표가 승인한 상업 조건만 입력합니다. 저장 전에는 고객 화면과 결제에 반영되지 않습니다.</div></div><span class="badge">설계 시안 · 실제 저장/결제 OFF</span></header>
+      <div class="notice"><b>안전 상태:</b> SQL 승인·적용 및 기능 플래그 활성화 전까지 런타임 조회·쓰기와 실결제를 수행하지 않습니다.</div>
+      <div class="grid">
+        <section class="card">
+          <h2>요금제 편집</h2><div class="sub">금액·체험 기간·리드 기준은 코드 기본값 없이 관리자 입력값으로만 저장합니다.</div>
+          <div class="policy">
+            <div class="field"><label for="window">추천 산정 기간</label><div class="suffix"><input id="window" type="number" min="1" placeholder="대표 승인 후 입력"><span>개월</span></div></div>
+            <div class="field"><label for="trial">체험 기간</label><div class="suffix"><input id="trial" type="number" min="0" placeholder="대표 승인 후 입력"><span>일</span></div></div>
+          </div>
+          <div class="table-wrap" style="margin-top:18px"><table class="table"><thead><tr><th>상태</th><th>요금제 이름</th><th>월 신규 리드 상한</th><th>월 금액</th><th>직원 상한</th></tr></thead><tbody><tr><td><span class="pill">활성</span></td><td><input aria-label="요금제 이름" placeholder="입력"></td><td><input aria-label="월 신규 리드 상한" type="number" min="0" placeholder="입력"></td><td><input aria-label="월 금액" type="number" min="0" placeholder="원"></td><td><input aria-label="직원 상한" type="number" min="0" placeholder="입력"></td></tr><tr><td><span class="pill">활성</span></td><td><input aria-label="두 번째 요금제 이름" placeholder="입력"></td><td><input aria-label="두 번째 월 신규 리드 상한" type="number" min="0" placeholder="입력"></td><td><input aria-label="두 번째 월 금액" type="number" min="0" placeholder="원"></td><td><input aria-label="두 번째 직원 상한" type="number" min="0" placeholder="입력"></td></tr></tbody></table></div>
+          <div class="actions"><button class="btn" id="add">+ 요금제 추가</button><button class="btn primary" id="save" disabled>승인값 저장</button></div>
+          <div class="footer-note">무제한 항목은 실제 구현에서 “제한 없음” 선택으로 명시하며, 빈 값과 구분합니다.</div>
+        </section>
+        <aside class="card">
+          <h2>적용 전 확인</h2><div class="sub">운영 반영은 아래 게이트를 모두 통과한 뒤 별도 승인으로 진행합니다.</div>
+          <div class="guard"><div class="guard-row"><b class="check">✓ 설계값 분리</b><span>SQL seed/default에 상업 조건 없음</span></div><div class="guard-row"><b>○ 대표 조건 승인</b><span>요금제·금액·체험·리드·직원 기준</span></div><div class="guard-row"><b>○ SQL 승인 및 적용</b><span>RLS·제약·권한 검증 포함</span></div><div class="guard-row"><b>○ 테스트 결제 승인</b><span>Toss 테스트 키와 단일 고객사 dry-run</span></div><div class="guard-row"><b>○ 기능 플래그 활성화</b><span>승인 전에는 legacy 경로 유지</span></div></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <div class="toast" role="status" id="toast">시안에서는 저장하지 않습니다.</div>
+  <script>
+    const fields=[...document.querySelectorAll('input')],save=document.querySelector('#save'),toast=document.querySelector('#toast');
+    const refresh=()=>{save.disabled=fields.some((field)=>!field.value)};
+    fields.forEach((field)=>field.addEventListener('input',refresh));
+    save.addEventListener('click',()=>{toast.style.display='block';setTimeout(()=>toast.style.display='none',1800)});
+    document.querySelector('#add').addEventListener('click',()=>{toast.textContent='추가 행은 구현 단계에서 제공합니다.';toast.style.display='block';setTimeout(()=>toast.style.display='none',1800)});
+  </script>
+</body>
+</html>
