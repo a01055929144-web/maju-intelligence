@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 적용 금지. WO-4 사용자 정의 리드 칸 1단계.
+-- 운영 적용 완료(2026-10-26). 재실행 금지. WO-4 사용자 정의 리드 칸 1단계.
 begin;
 
 create table if not exists public.company_lead_fields (

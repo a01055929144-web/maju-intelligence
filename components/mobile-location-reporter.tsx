@@ -6,12 +6,19 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { evaluateStaffLocation, getStaffLocationPostIntervalMs, type StaffLocationPoint } from "@/lib/staff-location";
 
 type MobileLocationReporterProps = {
+  readonly autoStart?: boolean;
   readonly currentCustomerId?: string;
   readonly currentCustomerName?: string;
   readonly deliveryVehicle?: string;
 };
 
 type LocationState = "idle" | "ready" | "blocked" | "error";
+type NativeLocationBridge = {
+  startWork(input: { consentVersion: string; deviceToken: string; startedAt: string }): Promise<{ started: true }>;
+  stopWork(reason: "manual" | "logout" | "auto_12h"): Promise<{ stopped: true }>;
+};
+
+declare global { interface Window { MAJUNativeLocation?: NativeLocationBridge } }
 
 // 2026-09-07 피드백("속도는 빠를수록 좋은 거야"): 대표 화면의 "접속" 표시가 최대한 빨리
 // 갱신되도록, 기사 앱이 위치를 서버에 올리는 최소 간격을 15초에서 8초로 단축했습니다.
@@ -29,9 +36,10 @@ type LocationPayload = {
   lng: number;
   recordedAt: string;
   status: LocationPostStatus;
+  workActive: boolean;
 };
 
-export function MobileLocationReporter({ currentCustomerId, currentCustomerName, deliveryVehicle }: MobileLocationReporterProps) {
+export function MobileLocationReporter({ autoStart = false, currentCustomerId, currentCustomerName, deliveryVehicle }: MobileLocationReporterProps) {
   const [state, setState] = useState<LocationState>("idle");
   const [detail, setDetail] = useState("");
   const [lastSentAt, setLastSentAt] = useState("");
@@ -45,6 +53,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   const latestPositionRef = useRef<GeolocationPosition | null>(null);
   const previousPointRef = useRef<StaffLocationPoint | undefined>(undefined);
   const latestContextRef = useRef({ currentCustomerId, currentCustomerName, deliveryVehicle });
+  const nativeStartedRef = useRef(false);
 
   useEffect(() => {
     latestContextRef.current = { currentCustomerId, currentCustomerName, deliveryVehicle };
@@ -117,7 +126,8 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
       const decision = evaluateStaffLocation(point, previousPointRef.current);
       const isMoving = decision.accept && decision.distanceMeters >= 15;
       if (!force && now - lastPostAtRef.current < getStaffLocationPostIntervalMs(isMoving)) return;
-      if (!force && !decision.accept && decision.reason !== "stationary") {
+      const mayBypassFilter = status === "paused" || status === "offline";
+      if (!mayBypassFilter && !decision.accept && decision.reason !== "stationary") {
         if (decision.reason === "inaccurate" && !previousPointRef.current) setDetail("정확한 위치를 켜 주세요. 현재 위치는 부정확합니다.");
         return;
       }
@@ -134,7 +144,8 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         lat: position.coords.latitude,
         lng: position.coords.longitude,
         recordedAt: new Date().toISOString(),
-        status
+        status,
+        workActive: status !== "offline"
       };
 
       const sendCurrentPosition = async () => {
@@ -185,11 +196,30 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(LOCATION_WORK_STORAGE_KEY) || 0);
     if (saved > 0 && Date.now() - saved < MAX_WORK_MS) setWorkStartedAt(saved);
-    else window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
-  }, []);
+    else if (autoStart) {
+      const startedAt = Date.now();
+      window.localStorage.setItem(LOCATION_WORK_STORAGE_KEY, String(startedAt));
+      setWorkStartedAt(startedAt);
+    } else window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
+  }, [autoStart]);
 
   useEffect(() => {
     if (!workStartedAt) return;
+    if (window.MAJUNativeLocation) {
+      if (!nativeStartedRef.current) {
+        nativeStartedRef.current = true;
+        void fetch("/api/staff/location/device-token", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ consentVersion: "location-work-v1", deviceLabel: navigator.userAgent })
+        }).then(async (response) => {
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.token) throw new Error(payload?.error || "앱 위치 인증에 실패했습니다.");
+          await window.MAJUNativeLocation?.startWork({ consentVersion: "location-work-v1", deviceToken: payload.token, startedAt: new Date(workStartedAt).toISOString() });
+          setState("ready"); setDetail("");
+        }).catch((error) => { nativeStartedRef.current = false; setState("error"); setDetail(error instanceof Error ? error.message : "앱 위치 시작에 실패했습니다."); });
+      }
+      return;
+    }
     if (!("geolocation" in navigator)) {
       setDetail("이 브라우저는 위치 공유를 지원하지 않습니다.");
       setState("blocked");
@@ -253,6 +283,10 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
     if (!workStartedAt) return;
     const remaining = Math.max(0, MAX_WORK_MS - (Date.now() - workStartedAt));
     const timer = window.setTimeout(() => {
+      if (window.MAJUNativeLocation) {
+        void window.MAJUNativeLocation.stopWork("auto_12h");
+        nativeStartedRef.current = false;
+      }
       window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
       setWorkStartedAt(0);
     }, remaining);
@@ -285,6 +319,12 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
 
   const toggleWork = () => {
     if (workActive) {
+      if (window.MAJUNativeLocation) {
+        void window.MAJUNativeLocation.stopWork("manual").finally(() => {
+          nativeStartedRef.current = false;
+          void fetch("/api/staff/location/device-token", { method: "DELETE" });
+        });
+      }
       if (latestPositionRef.current) postPosition(latestPositionRef.current, true, "offline");
       window.localStorage.removeItem(LOCATION_WORK_STORAGE_KEY);
       setWorkStartedAt(0);
@@ -316,7 +356,7 @@ export function MobileLocationReporter({ currentCustomerId, currentCustomerName,
         ) : null}
       </div>
       <button className={`mt-2 min-h-11 w-full rounded-lg px-3 text-xs font-black ${workActive ? "bg-slate-900 text-white" : "bg-teal-600 text-white"}`} onClick={toggleWork} type="button">
-        {workActive ? "근무 종료" : "근무 시작"}
+        {workActive ? "근무 중 · 종료" : "근무 시작"}
       </button>
       {!workActive ? <p className="mt-1 text-xs text-slate-600">근무를 시작해야 위치가 공유됩니다. 12시간 뒤 자동 종료됩니다.</p> : null}
       {needsAction ? (

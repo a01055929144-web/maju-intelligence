@@ -1,4 +1,4 @@
--- REVIEW ONLY. 운영 적용 금지. WO-7 시스템 관리자 DB 용량 조회.
+-- 운영 적용 완료(2026-10-26). 재실행 금지. WO-7 시스템 관리자 DB 용량 조회.
 begin;
 create or replace function public.admin_database_usage()
 returns jsonb

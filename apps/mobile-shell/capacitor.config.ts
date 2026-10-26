@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "MAJU",
   webDir: "www",
   server: {
-    url: "https://maju-intelligence.vercel.app/mobile/today",
+    url: "https://maju-intelligence.vercel.app/mobile",
     cleartext: false,
     allowNavigation: ["maju-intelligence.vercel.app"]
   },

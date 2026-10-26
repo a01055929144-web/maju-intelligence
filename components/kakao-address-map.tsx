@@ -357,7 +357,7 @@ export function KakaoAddressMap({
   const vehicleMarkers = useMemo(() => markers.filter((marker) => marker.tone === "vehicle"), [markers]);
   // 차량마다: 지금 지도에 붙어 있는 CustomOverlay와, 그 오버레이가 마지막으로 가 있던 좌표를
   // 함께 들고 있어야 "이전 위치 -> 새 위치"를 보간할 기준점이 생깁니다.
-  const vehicleOverlaysRef = useRef<Map<string, { overlay: KakaoCustomOverlay; lat: number; lng: number }>>(new Map());
+  const vehicleOverlaysRef = useRef<Map<string, { contentSignature: string; overlay: KakaoCustomOverlay; lat: number; lng: number }>>(new Map());
   // 차량마다 진행 중인 requestAnimationFrame id — 다음 GPS 갱신이 이전 애니메이션이 끝나기 전에
   // 도착하면(폴링 주기가 애니메이션 시간보다 짧으면) 이전 애니메이션을 취소하고 "지금 위치"에서
   // 새 목표로 다시 보간을 시작합니다.
@@ -884,7 +884,7 @@ export function KakaoAddressMap({
         content.addEventListener("click", () => onMarkerClickRef.current?.(marker));
         const position = new kakao.maps.LatLng(targetLat, targetLng);
         const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.75 });
-        vehicleOverlaysRef.current.set(marker.id, { lat: targetLat, lng: targetLng, overlay });
+        vehicleOverlaysRef.current.set(marker.id, { contentSignature: vehicleMarkerContentSignature(marker), lat: targetLat, lng: targetLng, overlay });
         markerPositionsRef.current.set(marker.id, position);
         markerElementsRef.current.set(marker.id, content);
         return;
@@ -893,10 +893,14 @@ export function KakaoAddressMap({
       // 이미 떠 있는 차량입니다 — 상태 텍스트·색상이 바뀔 수 있으니 내용만 setContent로 갱신하고
       // (선택 하이라이트가 지워지지 않도록 focusedMarkerId 재적용은 아래 focus effect가 맡습니다),
       // 오버레이 객체 자체와 지도 위 DOM은 그대로 유지합니다.
-      const nextContent = createMarkerOverlay(marker);
-      nextContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
-      existing.overlay.setContent(nextContent);
-      markerElementsRef.current.set(marker.id, nextContent);
+      const nextContentSignature = vehicleMarkerContentSignature(marker);
+      if (existing.contentSignature !== nextContentSignature) {
+        const nextContent = createMarkerOverlay(marker);
+        nextContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
+        existing.overlay.setContent(nextContent);
+        existing.contentSignature = nextContentSignature;
+        markerElementsRef.current.set(marker.id, nextContent);
+      }
 
       const samePosition = Math.abs(existing.lat - targetLat) < 1e-9 && Math.abs(existing.lng - targetLng) < 1e-9;
       if (samePosition) return;
@@ -907,8 +911,9 @@ export function KakaoAddressMap({
       if (previousFrameId) cancelAnimationFrame(previousFrameId);
 
       const vehicleId = marker.id;
-      const fromLat = existing.lat;
-      const fromLng = existing.lng;
+      const visiblePosition = markerPositionsRef.current.get(marker.id);
+      const fromLat = visiblePosition?.getLat() ?? existing.lat;
+      const fromLng = visiblePosition?.getLng() ?? existing.lng;
       const startedAt = performance.now();
       const durationMs = 900;
 
@@ -1453,6 +1458,17 @@ function waitForKakaoServices(resolve: () => void, reject: (error: Error) => voi
       return;
     }
     resolve();
+  });
+}
+
+function vehicleMarkerContentSignature(marker: KakaoMapMarker) {
+  return JSON.stringify({
+    completed: marker.completed,
+    grade: marker.grade,
+    label: marker.label,
+    markerColor: marker.markerColor,
+    name: marker.name,
+    tone: marker.tone
   });
 }
 

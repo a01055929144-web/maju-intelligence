@@ -50,6 +50,12 @@ function hasCronSecretGuard(source) {
   return /process\.env\.CRON_SECRET/.test(source) && /headers\.get\(["']authorization["']\)/.test(source);
 }
 
+function hasDeviceTokenGuard(source) {
+  return /headers\.get\(["']authorization["']\)/.test(source)
+    && /startsWith\(["']Device ["']\)/.test(source)
+    && /saveStaffLocationBatch\s*\(/.test(source);
+}
+
 const routeFiles = listRouteFiles(apiRoot);
 const failures = [];
 
@@ -57,7 +63,7 @@ for (const filePath of routeFiles) {
   const route = relativeRoute(filePath);
   const source = fs.readFileSync(filePath, "utf8");
   if (publicRoutes.has(route)) continue;
-  if (sessionGuardPatterns.some((pattern) => pattern.test(source)) || hasCronSecretGuard(source)) continue;
+  if (sessionGuardPatterns.some((pattern) => pattern.test(source)) || hasCronSecretGuard(source) || hasDeviceTokenGuard(source)) continue;
   failures.push(route);
 }
 

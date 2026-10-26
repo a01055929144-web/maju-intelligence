@@ -142,7 +142,7 @@ export function LeadContactChannelsPanel({
         <input
           aria-label={INPUT_LABEL[key].label}
           autoFocus
-          className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+          className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
           inputMode={key === "fax" ? "tel" : key === "email" ? "email" : "url"}
           onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
           onKeyDown={(event) => {
@@ -152,11 +152,11 @@ export function LeadContactChannelsPanel({
           placeholder={INPUT_LABEL[key].placeholder}
           value={drafts[key]}
         />
-        <button className="maju-button-primary h-9 px-3 text-xs disabled:opacity-50" disabled={saving === key} onClick={() => void saveChannel(key)} type="button">
+        <button className="maju-button-primary min-h-11 px-3 text-xs disabled:opacity-50" disabled={saving === key} onClick={() => void saveChannel(key)} type="button">
           {saving === key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           저장
         </button>
-        <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => setEditing(null)} type="button">
+        <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => setEditing(null)} type="button">
           취소
         </button>
       </div>
@@ -165,7 +165,7 @@ export function LeadContactChannelsPanel({
 
   function sentButton(channel: Exclude<LeadContactChannel, "visit">) {
     return (
-      <button className="maju-button-secondary h-8 px-2 text-xs disabled:opacity-50" disabled={Boolean(recording)} onClick={() => void recordSent(channel)} type="button">
+      <button className="maju-button-secondary min-h-11 px-3 text-xs disabled:opacity-50" disabled={Boolean(recording)} onClick={() => void recordSent(channel)} type="button">
         {recording === channel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
         보냈어요
       </button>
@@ -173,7 +173,7 @@ export function LeadContactChannelsPanel({
   }
 
   const rowClass = (channel: LeadContactChannel) =>
-    `rounded-lg border p-2.5 ${primary === channel ? "border-teal-300 bg-teal-50/60" : "border-slate-200 bg-white"}`;
+    `rounded-lg border p-2.5 ${primary === channel ? "border-2 border-teal-500 bg-teal-50 shadow-sm" : "border-slate-200 bg-white"}`;
   const rowTitle = (channel: LeadContactChannel, icon: ReactNode, value?: string) => (
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-slate-500">{icon}</span>
@@ -206,7 +206,7 @@ export function LeadContactChannelsPanel({
             {rowTitle("sms", <Smartphone className="h-3.5 w-3.5" />, mobile)}
             {mobile ? (
               <div className="flex gap-1.5">
-                <a className="maju-button-primary h-8 px-2 text-xs" href={buildSmsUrl(mobile, message)}>
+                <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "sms" ? "text-sm" : ""}`} href={buildSmsUrl(mobile, message)}>
                   <MessageSquare className="h-3.5 w-3.5" />
                   문자 열기
                 </a>
@@ -222,7 +222,7 @@ export function LeadContactChannelsPanel({
             {instagramHandle ? (
               <div className="flex gap-1.5">
                 <a
-                  className="maju-button-primary h-8 px-2 text-xs"
+                  className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "instagram" ? "text-sm" : ""}`}
                   href={buildInstagramDmUrl(instagramHandle)}
                   onClick={() => void copyMessage()}
                   rel="noreferrer"
@@ -245,19 +245,19 @@ export function LeadContactChannelsPanel({
             <div className="flex gap-1.5">
               {lead.naverTalktalkUrl ? (
                 <>
-                  <a className="maju-button-primary h-8 px-2 text-xs" href={lead.naverTalktalkUrl} onClick={() => void copyMessage()} rel="noreferrer" target="_blank">
+                  <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "talktalk" ? "text-sm" : ""}`} href={lead.naverTalktalkUrl} onClick={() => void copyMessage()} rel="noreferrer" target="_blank">
                     <ExternalLink className="h-3.5 w-3.5" />
                     톡톡 열기 · 문구 복사
                   </a>
                   {sentButton("talktalk")}
                 </>
               ) : (
-                <a className="maju-button-secondary h-8 px-2 text-xs" href={buildNaverMapSearchUrl(lead.businessName, lead.address)} rel="noreferrer" target="_blank">
+                <a className="maju-button-secondary min-h-11 px-3 text-xs" href={buildNaverMapSearchUrl(lead.businessName, lead.address)} rel="noreferrer" target="_blank">
                   <ExternalLink className="h-3.5 w-3.5" />
                   네이버 지도에서 찾기
                 </a>
               )}
-              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("naverTalktalkUrl")} type="button">
+              <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => setEditing("naverTalktalkUrl")} type="button">
                 {lead.naverTalktalkUrl ? "수정" : "주소 입력"}
               </button>
             </div>
@@ -271,14 +271,14 @@ export function LeadContactChannelsPanel({
             <div className="flex gap-1.5">
               {lead.email ? (
                 <>
-                  <a className="maju-button-primary h-8 px-2 text-xs" href={buildMailtoUrl(lead.email, `${lead.businessName} 대표님께 식자재 단가 안내`, message)}>
+                  <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "email" ? "text-sm" : ""}`} href={buildMailtoUrl(lead.email, `${lead.businessName} 대표님께 식자재 단가 안내`, message)}>
                     <Mail className="h-3.5 w-3.5" />
                     메일 쓰기
                   </a>
                   {sentButton("email")}
                 </>
               ) : null}
-              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("email")} type="button">
+              <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => setEditing("email")} type="button">
                 {lead.email ? "수정" : "입력"}
               </button>
             </div>
@@ -292,14 +292,14 @@ export function LeadContactChannelsPanel({
             <div className="flex gap-1.5">
               {lead.fax ? (
                 <>
-                  <button className="maju-button-primary h-8 px-2 text-xs" onClick={() => void copyMessage(`[팩스] ${lead.businessName} 대표님께\n\n${message}`)} type="button">
+                  <button className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "fax" ? "text-sm" : ""}`} onClick={() => void copyMessage(`[팩스] ${lead.businessName} 대표님께\n\n${message}`)} type="button">
                     <Copy className="h-3.5 w-3.5" />
                     팩스 문구 복사
                   </button>
                   {sentButton("fax")}
                 </>
               ) : null}
-              <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => setEditing("fax")} type="button">
+              <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => setEditing("fax")} type="button">
                 {lead.fax ? "수정" : "입력"}
               </button>
             </div>
@@ -309,7 +309,7 @@ export function LeadContactChannelsPanel({
         </div>
       </div>
 
-      {storePhone ? <p className="mt-2 text-[11px] font-semibold text-slate-500">매장 전화 {storePhone} · 참고용(콜드콜 대상 아님)</p> : null}
+      {storePhone ? <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-slate-600">전화번호 보기</summary><p className="pb-2 text-xs font-semibold text-slate-700">매장 유선 {storePhone} · 참고용(콜드콜 대상 아님)</p></details> : null}
       {notice ? <p className={`mt-2 text-[11px] font-bold ${notice.tone === "ok" ? "text-teal-700" : "text-red-700"}`}>{notice.text}</p> : null}
     </section>
   );

@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, Phone, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
 import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/application/mobile-sales/today-tasks";
 import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
+import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
+import { LeadStageSelect } from "@/components/lead-stage-select";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileQuoteBuilder } from "@/components/mobile-quote-builder";
 import { MobileThemeShell } from "@/components/mobile-theme-shell";
@@ -15,6 +17,7 @@ import { buildContactMemo, distanceKm, extractReminderDate, getMobileLeadType, i
 import { getDefaultVisitFollowUpDate, getVisitResultDisplayLabel, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE, type StandardVisitResult } from "@/domains/lead/visit-results";
 import { formatLeadBusinessHours } from "@/domains/lead/business-hours";
 import type { PermitLeadActionItem, PermitLeadItem } from "@/lib/store";
+import type { PermitLeadActionKind, PermitLeadActionResult } from "@/components/sales-route-map-workspace";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
@@ -203,6 +206,37 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setConvertedCustomerId(payload.customerId); setConversionFailed(false);
   }
 
+  const saveLeadAction = useCallback(async (
+    lead: PermitLeadItem,
+    actionType: PermitLeadActionKind,
+    actionResult?: string,
+    actionMemo?: string,
+    followUpAt?: string
+  ): Promise<PermitLeadActionResult> => {
+    try {
+      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/action`, {
+        body: JSON.stringify({ actionType, followUpAt, memo: actionMemo, result: actionResult }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        action?: PermitLeadActionItem;
+        lead?: PermitLeadItem;
+        message?: string;
+        status?: string;
+      } | null;
+      if (!response.ok) return { message: payload?.message || "연락 기록을 저장하지 못했습니다.", ok: false };
+      const updated = payload?.lead || { ...lead, status: payload?.status || lead.status };
+      setLeads((items) => items.map((item) => item.id === lead.id ? updated : item));
+      setSelected((current) => current?.id === lead.id ? updated : current);
+      if (payload?.action) setHistory((items) => [payload.action!, ...items]);
+      setSaveMessage(`${actionResult || "연락"} 기록을 남겼습니다. 결과를 선택해 이어서 기록하세요.`);
+      return { ok: true };
+    } catch (actionError) {
+      return { message: actionError instanceof Error ? actionError.message : "연락 기록을 저장하지 못했습니다.", ok: false };
+    }
+  }, []);
+
   async function saveContact(quoteUrl = issuedQuoteUrl, resultOverride?: StandardVisitResult) {
     if (!selected || !memo.trim()) {
       setSaveMessage("컨택 메모를 입력해야 저장할 수 있습니다.");
@@ -317,8 +351,10 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         </section>
 
         {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`${selected.businessName} 컨택 기록`}><div className="mobile-card max-h-[92dvh] w-full max-w-[480px] overflow-y-auto rounded-t-2xl border p-4 sm:rounded-2xl">
-          <div className="flex items-start justify-between gap-3"><div><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getMobileLeadType(selected) === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{getMobileLeadType(selected) === "new" ? "신규 리드" : "영업 리드"}</span><h2 className="mt-2 text-xl font-bold">{selected.businessName}</h2><p className="mobile-muted mt-1 text-xs font-semibold">{selected.address || "주소 확인 필요"}</p></div><button className="min-h-10 rounded-lg border border-[var(--mobile-border)] px-3 text-xs font-semibold" onClick={() => setSelected(null)} type="button">닫기</button></div>
-          <div className="mt-3 grid grid-cols-2 gap-2">{selected.phone ? <a className="mobile-primary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold" href={`tel:${selected.phone}`}><Phone className="h-4 w-4" />전화</a> : <span className="mobile-muted grid min-h-11 place-items-center rounded-lg border text-xs">전화번호 없음</span>}<a className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" href={selected.kakaoPlaceUrl || `https://map.kakao.com/?q=${encodeURIComponent(selected.address || selected.businessName)}`} rel="noreferrer" target="_blank"><MapPin className="h-4 w-4" />지도</a></div>
+          <div className="flex items-start justify-between gap-3"><div><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getMobileLeadType(selected) === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{getMobileLeadType(selected) === "new" ? "신규 리드" : "영업 리드"}</span><h2 className="mt-2 text-xl font-bold">{selected.businessName}</h2><p className="mobile-muted mt-1 text-xs font-semibold">{selected.address || "주소 확인 필요"}</p></div><button className="min-h-11 rounded-lg border border-[var(--mobile-border)] px-3 text-xs font-semibold" onClick={() => setSelected(null)} type="button">닫기</button></div>
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[var(--mobile-border)] p-2"><span className="text-xs font-semibold">영업 상태</span><LeadStageSelect compact lead={selected} onAction={saveLeadAction} /></div>
+          <div className="mt-3"><LeadContactChannelsPanel lead={selected} onAction={saveLeadAction} onLeadUpdated={(lead) => { setSelected(lead); setLeads((items) => items.map((item) => item.id === lead.id ? lead : item)); }} /></div>
+          <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => document.getElementById("contact-result")?.scrollIntoView({ behavior: "smooth", block: "center" })} type="button"><MapPin className="h-4 w-4" />방문 결과</button><a className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" href={selected.kakaoPlaceUrl || `https://map.kakao.com/?q=${encodeURIComponent(selected.address || selected.businessName)}`} rel="noreferrer" target="_blank"><MapPin className="h-4 w-4" />지도</a></div>
           {isLeadBusinessHoursDraftEnabled() ? <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-950">영업시간·브레이크타임 빠른 입력</p><p className="mt-1 text-[11px] text-amber-800">현재 · {formatLeadBusinessHours(selected.businessHourIntervals || [])}</p><input className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setBusinessHoursDraft(event.target.value)} placeholder="예: 매일 15:00~17:00 브레이크 · 월 휴무" value={businessHoursDraft} /><button className="mt-2 min-h-10 w-full rounded-lg border bg-white text-xs font-semibold text-amber-800 disabled:opacity-50" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button></section> : null}
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-result">방문 결과</label><select className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="contact-result" onChange={(event) => { const value = event.target.value as StandardVisitResult; setResult(value); if (needsVisitFollowUp(value) && !reminderDate) setReminderDate(getDefaultVisitFollowUpDate()); }} value={result}>{STANDARD_VISIT_RESULTS.map((option) => <option key={option}>{option}</option>)}</select></div>
           <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-2 gap-2">{collateralOptions.filter((item) => holdModulesEnabled || item !== "견적서").map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "브로슈어" || item === "단가표" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>

@@ -41,7 +41,7 @@ export function LeadStageSelect({
       {compact ? <span className="sr-only">상태</span> : "상태"}
       <select
         aria-label="리드 상태 바꾸기"
-        className={`${compact ? "h-7 max-w-[120px] rounded-full bg-slate-100 px-2 text-[11px]" : "h-8 rounded-lg bg-white px-2 text-xs"} border border-slate-200 font-bold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:opacity-60`}
+        className={`${compact ? "min-h-11 max-w-[140px] rounded-lg bg-slate-100 px-3 text-xs" : "min-h-11 rounded-lg bg-white px-3 text-xs"} border border-slate-200 font-bold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:opacity-60`}
         title="상태 바꾸기"
         disabled={saving}
         onChange={(event) => void change(event.target.value)}

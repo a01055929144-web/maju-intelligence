@@ -91,7 +91,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/map">PC</Link>
             </div>
           </div>
-          <MobileLocationReporter currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
+          <MobileLocationReporter autoStart={todayStops.length > 0} currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>
 
         <div className="flex-1 space-y-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">

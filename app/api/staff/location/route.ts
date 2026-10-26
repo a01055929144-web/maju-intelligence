@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       lng,
       recordedAt: typeof body?.recordedAt === "string" ? body.recordedAt : undefined,
       status,
+      workActive: body?.workActive === true,
       userAgent: request.headers.get("user-agent") || undefined,
       userId: session.userId
     });

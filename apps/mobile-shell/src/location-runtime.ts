@@ -23,6 +23,7 @@ type BackgroundGeolocationPlugin = {
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 const SESSION_KEY = "maju-work-session-v1";
+const LOCATION_QUEUE_KEY = "maju-location-queue-v1";
 const MAX_SESSION_MS = 12 * 60 * 60 * 1000;
 
 type StoredSession = Omit<StartWorkInput, "deviceToken"> & { watcherId: string };
@@ -45,6 +46,20 @@ async function readSession(): Promise<StoredSession | null> {
   try { return JSON.parse(stored.value) as StoredSession; } catch { return null; }
 }
 
+async function readQueue(): Promise<NativeLocationSample[]> {
+  const stored = await Preferences.get({ key: LOCATION_QUEUE_KEY });
+  if (!stored.value) return [];
+  try {
+    const parsed = JSON.parse(stored.value) as NativeLocationSample[];
+    return Array.isArray(parsed) ? parsed.filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)).slice(-1000) : [];
+  } catch { return []; }
+}
+
+async function writeQueue(samples: NativeLocationSample[]) {
+  if (!samples.length) return Preferences.remove({ key: LOCATION_QUEUE_KEY });
+  return Preferences.set({ key: LOCATION_QUEUE_KEY, value: JSON.stringify(samples.slice(-1000)) });
+}
+
 async function postBatch(token: string, samples: NativeLocationSample[]) {
   return CapacitorHttp.post({
     url: "https://maju-intelligence.vercel.app/api/staff/location/batch",
@@ -63,6 +78,7 @@ export function createNativeLocationBridge(): NativeLocationBridge {
       const previous = await readSession();
       if (previous) await bridge.stopWork("manual");
       activeDeviceToken = input.deviceToken;
+      queuedSamples = await readQueue();
       const watcherId = await BackgroundGeolocation.addWatcher({
         backgroundTitle: "MAJU 근무 중",
         backgroundMessage: "위치 공유가 켜져 있습니다.",
@@ -72,6 +88,7 @@ export function createNativeLocationBridge(): NativeLocationBridge {
       }, async (location, error) => {
         if (error || !location) return;
         queuedSamples = [...queuedSamples, toSample(location)].slice(-1000);
+        await writeQueue(queuedSamples);
         await bridge.flush().catch(() => ({ sent: 0, remaining: queuedSamples.length }));
       });
       const { deviceToken: _deviceToken, ...sessionInput } = input;
@@ -85,9 +102,8 @@ export function createNativeLocationBridge(): NativeLocationBridge {
       if (session) await BackgroundGeolocation.removeWatcher({ id: session.watcherId }).catch(() => undefined);
       if (stopTimer) clearTimeout(stopTimer);
       stopTimer = null;
-      await bridge.flush().catch(() => ({ sent: 0, remaining: 0 }));
+      await bridge.flush().catch(() => ({ sent: 0, remaining: queuedSamples.length }));
       activeDeviceToken = null;
-      queuedSamples = [];
       await Preferences.remove({ key: SESSION_KEY });
       return { stopped: true };
     },
@@ -103,6 +119,7 @@ export function createNativeLocationBridge(): NativeLocationBridge {
       const response = await postBatch(activeDeviceToken, batch);
       if (response.status < 200 || response.status >= 300) throw new Error(`location batch failed: ${response.status}`);
       queuedSamples = queuedSamples.slice(batch.length);
+      await writeQueue(queuedSamples);
       return { sent: batch.length, remaining: queuedSamples.length };
     }
   };

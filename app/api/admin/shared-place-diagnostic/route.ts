@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
+import { supabaseRequest } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
-const TARGET_PROVINCES = ["서울", "경기", "인천"] as const;
 const PAGE_SIZE = 1000;
 const SAMPLE_PAGES = 30;
 
@@ -37,17 +37,33 @@ function isActive(row: Record<string, unknown>) {
   return !closeDate && /영업|정상/.test(status);
 }
 
-function isTargetProvince(row: Record<string, unknown>) {
+function isTargetProvince(row: Record<string, unknown>, targetProvinces: string[]) {
   const address = textOf(row, ["ROAD_NM_ADDR", "LOTNO_ADDR"]);
-  return TARGET_PROVINCES.some((province) => address.startsWith(province));
+  return targetProvinces.some((province) => address.startsWith(province));
 }
 
-export async function GET() {
+async function getTargetProvinces() {
+  const [regions, territories, companies] = await Promise.all([
+    supabaseRequest<Array<{ label: string | null }>>("company_lead_search_regions?select=label&limit=5000").catch(() => []),
+    supabaseRequest<Array<{ administrative_area: string | null }>>("delivery_territory_areas?select=administrative_area&limit=5000").catch(() => []),
+    supabaseRequest<Array<{ origin_address: string | null }>>("companies?select=origin_address&status=neq.closed&limit=1000").catch(() => [])
+  ]);
+  const aliases: Record<string, string> = { 서울: "서울특별시", 경기: "경기도", 인천: "인천광역시" };
+  const values = [...regions.map((row) => row.label), ...territories.map((row) => row.administrative_area), ...companies.map((row) => row.origin_address)];
+  return Array.from(new Set(values.map((value) => String(value || "").trim().split(/\s+/)[0]).filter(Boolean).map((value) => aliases[value] || value)));
+}
+
+export async function GET(request: Request) {
   if (!(await getAdminSession())) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   const key = (process.env.GOV_RESTAURANT_API_KEY || "").trim();
   if (!key) return NextResponse.json({ message: "API key is not configured" }, { status: 503 });
-
-  const results = await Promise.all(DATASETS.map(async (dataset) => {
+  const requestedDataset = new URL(request.url).searchParams.get("dataset");
+  if (!requestedDataset || !DATASETS.includes(requestedDataset as (typeof DATASETS)[number])) {
+    return NextResponse.json({ message: "dataset 쿼리가 필요합니다.", datasets: DATASETS }, { status: 400 });
+  }
+  const dataset = requestedDataset as (typeof DATASETS)[number];
+  const targetProvinces = await getTargetProvinces();
+  try {
     const first = await fetchPage(dataset, 1, key);
     const totalPages = Math.max(1, Math.ceil(first.total / PAGE_SIZE));
     const pages = Array.from({ length: Math.min(SAMPLE_PAGES, totalPages) }, (_, index) =>
@@ -57,8 +73,8 @@ export async function GET() {
     const samples = await Promise.all(uniquePages.map((page) => page === 1 ? first : fetchPage(dataset, page, key)));
     const rows = samples.flatMap((page) => page.rows);
     const active = rows.filter(isActive);
-    const target = active.filter(isTargetProvince);
-    return {
+    const target = active.filter((row) => isTargetProvince(row, targetProvinces));
+    const result = {
       dataset,
       totalCount: first.total,
       sampleRows: rows.length,
@@ -69,6 +85,8 @@ export async function GET() {
       sampledPages: uniquePages.length,
       calls: uniquePages.length
     };
-  }));
-  return NextResponse.json({ measuredAt: new Date().toISOString(), targetProvinces: TARGET_PROVINCES, method: "30-page stratified sample", calls: results.reduce((sum, item) => sum + item.calls, 0), results });
+    return NextResponse.json({ measuredAt: new Date().toISOString(), targetProvinces, method: "30-page stratified sample (estimate)", calls: result.calls, result });
+  } catch (error) {
+    return NextResponse.json({ dataset, message: error instanceof Error ? error.message : "측정 실패", targetProvinces }, { status: 502 });
+  }
 }

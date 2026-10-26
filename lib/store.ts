@@ -18,6 +18,7 @@ import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/le
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import {
+  LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
   isMobilePhoneNumber,
   normalizeEmailInput,
@@ -61,7 +62,7 @@ import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pric
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
-import { getStaffLocationDisplayState, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import { evaluateStaffLocation, getStaffLocationDisplayState, shouldStoreStaffLocationHistory, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -590,6 +591,7 @@ export type StaffMobileLocationInput = {
   status?: "active" | "paused" | "offline";
   userAgent?: string;
   userId: string;
+  workActive?: boolean;
 };
 // 병합 노트(2026-09-12): origin b083f38(Codex)이 이 상수를 lib/staff-location.ts로 추출하고
 // 파일 위쪽에서 `export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location"`로 재노출하도록
@@ -3788,6 +3790,68 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
 
   const now = receivedAt.toISOString();
   try {
+    const existingRows = await supabaseRequest<Array<{
+      current_customer_id: string | null; delivery_vehicle: string | null; driver_name: string | null; id: string;
+      last_accuracy_m: number | string | null; last_lat: number | string | null; last_lng: number | string | null;
+      last_location_at: string | null; last_seen_at: string | null; location_status: string | null; user_id: string;
+    }>>(
+      `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&platform=eq.mobile_web&limit=1`
+    ).catch(() => []);
+    const existing = existingRows[0];
+    const previousPoint = existing?.last_location_at && existing.last_lat !== null && existing.last_lng !== null
+      ? {
+          accuracyMeters: existing.last_accuracy_m === null ? undefined : Number(existing.last_accuracy_m),
+          lat: Number(existing.last_lat),
+          lng: Number(existing.last_lng),
+          recordedAt: existing.last_location_at
+        }
+      : undefined;
+    const decision = evaluateStaffLocation({ accuracyMeters: input.accuracyMeters, lat: input.lat, lng: input.lng, recordedAt }, previousPoint);
+    const isTerminalStatus = input.status === "paused" || input.status === "offline";
+    if (!isTerminalStatus && !decision.accept && decision.reason !== "stationary" && decision.reason !== "older") {
+      return { location: existing ? toStaffVehicleLocation(existing) : null, persisted: false };
+    }
+    const shouldUpdateLatest = decision.accept && decision.reason !== "older";
+    const elapsedMs = previousPoint ? Math.max(0, new Date(recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime()) : Number.POSITIVE_INFINITY;
+    const shouldStoreHistory = decision.reason !== "older"
+      && (!previousPoint || shouldStoreStaffLocationHistory({ distanceMeters: decision.distanceMeters, elapsedMs }));
+    const workFields = input.workActive === undefined
+      ? {}
+      : input.workActive
+        ? {
+            work_started_at: existing?.last_seen_at && existing.location_status === "active" ? undefined : now,
+            work_ended_at: null,
+            work_auto_ends_at: new Date(receivedAt.getTime() + 12 * 60 * 60 * 1000).toISOString()
+          }
+        : { work_ended_at: now, work_auto_ends_at: null };
+    const rowPayload = {
+      company_id: input.companyId,
+      current_customer_id: input.currentCustomerId || existing?.current_customer_id || null,
+      delivery_vehicle: input.deliveryVehicle || existing?.delivery_vehicle || null,
+      device_label: input.driverName || "모바일 웹",
+      driver_name: input.driverName || existing?.driver_name || null,
+      last_accuracy_m: shouldUpdateLatest && Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : existing?.last_accuracy_m ?? null,
+      last_lat: shouldUpdateLatest ? input.lat : existing?.last_lat ?? input.lat,
+      last_lng: shouldUpdateLatest ? input.lng : existing?.last_lng ?? input.lng,
+      last_location_at: shouldUpdateLatest ? recordedAt : existing?.last_location_at || recordedAt,
+      last_seen_at: now,
+      location_status: input.status || "active",
+      platform: "mobile_web",
+      user_agent: input.userAgent || null,
+      user_id: input.userId,
+      ...workFields
+    };
+    const saveDevice = (payload: Record<string, unknown>) => supabaseRequest<
+      Array<{
+        current_customer_id: string | null; delivery_vehicle: string | null; driver_name: string | null; id: string;
+        last_accuracy_m: number | string | null; last_lat: number | string | null; last_lng: number | string | null;
+        last_location_at: string | null; last_seen_at: string | null; location_status: string | null; user_id: string;
+      }>
+    >("staff_mobile_devices?on_conflict=company_id,user_id,platform", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([payload])
+    });
     const rows = await supabaseRequest<
       Array<{
         current_customer_id: string | null;
@@ -3804,30 +3868,29 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
       }>
     >("staff_mobile_devices?on_conflict=company_id,user_id,platform", {
       method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates,return=representation"
-      },
-      body: JSON.stringify([
-        {
-          company_id: input.companyId,
-          current_customer_id: input.currentCustomerId || null,
-          delivery_vehicle: input.deliveryVehicle || null,
-          device_label: input.driverName || "모바일 웹",
-          driver_name: input.driverName || null,
-          last_accuracy_m: Number.isFinite(input.accuracyMeters) ? input.accuracyMeters : null,
-          last_lat: input.lat,
-          last_lng: input.lng,
-          last_location_at: recordedAt,
-          last_seen_at: now,
-          location_status: input.status || "active",
-          platform: "mobile_web",
-          user_agent: input.userAgent || null,
-          user_id: input.userId
-        }
-      ])
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([rowPayload])
+    }).catch(async (error) => {
+      if (input.workActive === undefined || !/work_started_at|work_ended_at|work_auto_ends_at|schema cache/i.test(getErrorMessage(error))) throw error;
+      return saveDevice({
+        company_id: rowPayload.company_id,
+        current_customer_id: rowPayload.current_customer_id,
+        delivery_vehicle: rowPayload.delivery_vehicle,
+        device_label: rowPayload.device_label,
+        driver_name: rowPayload.driver_name,
+        last_accuracy_m: rowPayload.last_accuracy_m,
+        last_lat: rowPayload.last_lat,
+        last_lng: rowPayload.last_lng,
+        last_location_at: rowPayload.last_location_at,
+        last_seen_at: rowPayload.last_seen_at,
+        location_status: rowPayload.location_status,
+        platform: rowPayload.platform,
+        user_agent: rowPayload.user_agent,
+        user_id: rowPayload.user_id
+      });
     });
     const location = toStaffVehicleLocation(rows[0]) || null;
-    if (location) {
+    if (location && shouldStoreHistory) {
       await supabaseRequest("staff_location_events", {
         method: "POST",
         headers: { Prefer: "return=minimal" },
@@ -7481,6 +7544,22 @@ async function supabaseCount(table: string, countColumn = "id") {
 
   const contentRange = response.headers.get("content-range");
   const count = Number(contentRange?.split("/")[1]);
+  return Number.isFinite(count) ? count : 0;
+}
+
+async function supabaseExactCount(path: string) {
+  const config = getSupabaseConfig();
+  if (!config) return 0;
+  const response = await fetch(`${config.url}/rest/v1/${path}${path.includes("?") ? "&" : "?"}limit=1`, {
+    headers: {
+      apikey: config.serviceRoleKey,
+      Authorization: `Bearer ${config.serviceRoleKey}`,
+      Prefer: "count=exact"
+    },
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(`정확한 건수 조회 실패: ${response.status}`);
+  const count = Number(response.headers.get("content-range")?.split("/")[1]);
   return Number.isFinite(count) ? count : 0;
 }
 
@@ -13534,8 +13613,16 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
   if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
 
   const weekStart = new Date(Date.now() - 7 * 86400000).toISOString();
-  const monthStart = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [companies, imports, reports, leads, uploadHistory, recentMembers, contactActions, quotes, syncFailures] = await Promise.all([
+  const kstNow = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+  const kstYear = kstNow.find((part) => part.type === "year")?.value || new Date().getUTCFullYear().toString();
+  const kstMonth = kstNow.find((part) => part.type === "month")?.value || String(new Date().getUTCMonth() + 1).padStart(2, "0");
+  const monthStart = new Date(`${kstYear}-${kstMonth}-01T00:00:00+09:00`).toISOString();
+  const contactTypes = LEAD_CONTACT_ACTION_TYPES.join(",");
+  const syncRunningCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const [
+    companies, imports, reports, leads, uploadHistory, recentMembers, activeCompanyActions, contactCount,
+    quoteCount, conversionCount, statusQuoteContractCount, syncErrorCount, staleSyncCount
+  ] = await Promise.all([
     supabaseRequest<Array<{ id: string; status?: string }>>("companies?select=id,status"),
     supabaseRequest<
       Array<{
@@ -13558,9 +13645,13 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
     supabaseRequest<Array<{ company_id: string; user_id: string; app_users: { last_login_at: string | null } | null }>>(
       `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}`
     ).catch(() => []),
-    supabaseRequest<Array<{ id: string }>>(`lead_actions?select=id&action_type=not.eq.hold&created_at=gte.${encodeURIComponent(weekStart)}&limit=10000`).catch(() => []),
-    supabaseRequest<Array<{ status: string }>>(`sales_quotes?select=status&created_at=gte.${encodeURIComponent(monthStart)}&status=in.(sent,accepted)&limit=10000`).catch(() => []),
-    supabaseRequest<Array<{ id: string }>>(`lead_sync_runs?select=id&started_at=gte.${encodeURIComponent(weekStart)}&status=eq.failed&limit=1000`).catch(() => [])
+    supabaseRequest<Array<{ company_id: string }>>(`lead_actions?select=company_id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}&limit=10000`).catch(() => []),
+    supabaseExactCount(`lead_actions?select=id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.quote&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.convert&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.status&result=in.(%EA%B2%AC%EC%A0%81%20%EC%A0%84%EB%8B%AC,%EA%B3%84%EC%95%BD)&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
+    supabaseExactCount("lead_sync_runs?select=id&status=eq.error").catch(() => 0),
+    supabaseExactCount(`lead_sync_runs?select=id&status=eq.running&started_at=lt.${encodeURIComponent(syncRunningCutoff)}`).catch(() => 0)
   ]);
 
   const avgHealthScore = reports.length
@@ -13583,11 +13674,11 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       avgHealthScore
     },
     operations: {
-      activeCompanies: companies.filter((company) => company.status !== "inactive" && company.status !== "deleted").length,
+      activeCompanies: new Set(activeCompanyActions.map((action) => action.company_id)).size,
       activeStaffThisWeek: new Set(recentMembers.map((member) => member.user_id)).size,
-      contactsThisWeek: contactActions.length,
-      quotesAndContractsThisMonth: quotes.length,
-      syncFailures: syncFailures.length,
+      contactsThisWeek: contactCount,
+      quotesAndContractsThisMonth: quoteCount + conversionCount + statusQuoteContractCount,
+      syncFailures: syncErrorCount + staleSyncCount,
       inactiveCompanies7d: Math.max(
         0,
         companies.filter((company) => company.status !== "inactive" && company.status !== "deleted").length
