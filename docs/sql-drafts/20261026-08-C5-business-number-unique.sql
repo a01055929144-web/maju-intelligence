@@ -8,7 +8,7 @@ begin
   if exists (
     select 1
     from public.companies
-    where nullif(btrim(business_registration_number), '') is not null
+    where nullif(regexp_replace(coalesce(business_registration_number, ''), '[^0-9]', '', 'g'), '') is not null
     group by regexp_replace(business_registration_number, '[^0-9]', '', 'g')
     having count(*) > 1
   ) then
@@ -18,7 +18,7 @@ end $$;
 
 create unique index if not exists companies_business_registration_number_nonblank_uq
   on public.companies ((regexp_replace(business_registration_number, '[^0-9]', '', 'g')))
-  where nullif(btrim(business_registration_number), '') is not null;
+  where nullif(regexp_replace(coalesce(business_registration_number, ''), '[^0-9]', '', 'g'), '') is not null;
 
 commit;
 
@@ -27,7 +27,7 @@ commit;
 --        array_agg(id order by created_at) as company_ids,
 --        array_agg(name order by created_at) as company_names
 -- from public.companies
--- where nullif(btrim(business_registration_number), '') is not null
+-- where nullif(regexp_replace(coalesce(business_registration_number, ''), '[^0-9]', '', 'g'), '') is not null
 -- group by 1 having count(*) > 1;
 
 -- 롤백(별도 승인 후):
