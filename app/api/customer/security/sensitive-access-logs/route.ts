@@ -42,5 +42,6 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null) as { logId?: string } | null;
   if (!body?.logId) return NextResponse.json({ message: "숨길 기록 ID가 필요합니다." }, { status: 400 });
   const hiddenAt = await hideSensitiveAccessLog({ actorUserId: session.userId, companyId: session.companyId, logId: body.logId });
+  if (!hiddenAt) return NextResponse.json({ message: "숨길 기록을 찾을 수 없거나 이미 숨김 처리됐습니다." }, { status: 404 });
   return NextResponse.json({ hiddenAt });
 }

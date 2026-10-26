@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { authorizeSensitiveAccessLogRead, normalizeSensitiveAccessItem, normalizeSensitiveAccessWarning } from "../domains/organization/sensitive-access-log";
+import { authorizeSensitiveAccessLogRead, isOwnerMembershipRole, normalizeSensitiveAccessItem, normalizeSensitiveAccessWarning } from "../domains/organization/sensitive-access-log";
 
 describe("sensitive access log authorization", () => {
   it("allows only an active company owner", () => {
     expect(authorizeSensitiveAccessLogRead({ hasActiveCustomerSession: true, isActiveCompanyOwner: true })).toBe("allowed");
     expect(authorizeSensitiveAccessLogRead({ hasActiveCustomerSession: true, isActiveCompanyOwner: false })).toBe("forbidden");
+  });
+
+  it("uses permission_role before the legacy role during C6 transition", () => {
+    expect(isOwnerMembershipRole({ legacyRole: "owner", permissionRole: "manager" })).toBe(false);
+    expect(isOwnerMembershipRole({ legacyRole: "manager", permissionRole: "owner" })).toBe(true);
+    expect(isOwnerMembershipRole({ legacyRole: "owner", permissionRole: null })).toBe(true);
   });
 
   it("rejects an admin-only session and a deactivated member as unauthorized", () => {

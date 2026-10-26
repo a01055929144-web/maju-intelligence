@@ -1,6 +1,7 @@
 import {
   normalizeSensitiveAccessItem,
   normalizeSensitiveAccessWarning,
+  isOwnerMembershipRole,
   type SensitiveAccessItem,
   type SensitiveAccessLog,
   type SensitiveAccessLogFilters,
@@ -30,7 +31,7 @@ export async function isActiveCompanyOwner(input: { companyId: string; userId: s
     `company_members?select=permission_role,role&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&status=eq.active&limit=1`
   );
   const member = rows[0];
-  return member?.permission_role === "owner" || member?.role === "owner";
+  return Boolean(member && isOwnerMembershipRole({ legacyRole: member.role, permissionRole: member.permission_role }));
 }
 
 function mapLog(row: SensitiveAccessLogRow): SensitiveAccessLog {
@@ -92,10 +93,10 @@ export async function recordSensitiveAccessLog(input: {
 
 export async function hideSensitiveAccessLog(input: { actorUserId: string; companyId: string; logId: string }) {
   const now = new Date().toISOString();
-  await supabaseRequest(`sensitive_access_logs?id=eq.${encodeURIComponent(input.logId)}&company_id=eq.${encodeURIComponent(input.companyId)}&hidden_at=is.null`, {
+  const rows = await supabaseRequest<Array<{ id: string }>>(`sensitive_access_logs?select=id&id=eq.${encodeURIComponent(input.logId)}&company_id=eq.${encodeURIComponent(input.companyId)}&hidden_at=is.null`, {
     method: "PATCH",
-    headers: { Prefer: "return=minimal" },
+    headers: { Prefer: "return=representation" },
     body: JSON.stringify({ hidden_at: now, hidden_by: input.actorUserId })
   });
-  return now;
+  return rows[0] ? now : null;
 }

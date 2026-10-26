@@ -34,6 +34,10 @@ export function authorizeSensitiveAccessLogRead(input: { hasActiveCustomerSessio
   return "allowed" as const;
 }
 
+export function isOwnerMembershipRole(input: { legacyRole?: string | null; permissionRole?: string | null }) {
+  return input.permissionRole != null ? input.permissionRole === "owner" : input.legacyRole === "owner";
+}
+
 export function normalizeSensitiveAccessItem(value: unknown): SensitiveAccessItem | undefined {
   return SENSITIVE_ACCESS_ITEMS.find((item) => item === value);
 }

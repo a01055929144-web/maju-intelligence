@@ -8,16 +8,21 @@ create table if not exists public.sensitive_access_logs (
   actor_user_id uuid not null references public.app_users(id) on delete restrict,
   actor_name text not null,
   actor_role text not null,
-  store_id uuid references public.customers(id) on delete set null,
+  store_id uuid,
   store_name text,
   item_type text not null check (item_type in ('access_password','owner_phone','business_registration','export','log_hidden')),
   device_label text,
   page_path text not null,
   warning_codes text[] not null default '{}'::text[] check (warning_codes <@ array['unassigned','outside_work_session','daily_20_plus','export']::text[]),
-  target_log_id bigint references public.sensitive_access_logs(id) on delete restrict,
+  target_log_id bigint,
   accessed_at timestamptz not null default now(),
   hidden_at timestamptz,
   hidden_by uuid references public.app_users(id) on delete restrict,
+  constraint sensitive_access_logs_company_id_id_uq unique(company_id, id),
+  constraint sensitive_access_logs_store_fk foreign key(company_id, store_id)
+    references public.normalized_customers(company_id, id) on delete set null (store_id),
+  constraint sensitive_access_logs_target_fk foreign key(company_id, target_log_id)
+    references public.sensitive_access_logs(company_id, id) on delete restrict,
   check ((hidden_at is null) = (hidden_by is null))
 );
 
