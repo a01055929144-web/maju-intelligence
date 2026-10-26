@@ -39,7 +39,9 @@ jobs:
         run: npm run build
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        # GitHub's Ubuntu image already contains Chromium's system libraries.
+        # Avoid apt in PR jobs: an apt mirror stall otherwise blocks every check.
+        run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
         run: npm run test:e2e:layout
