@@ -98,6 +98,10 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("security invoker");
     expect(sql).toContain("revoke all on function public.register_lead_do_not_contact");
     expect(sql).toContain("grant execute on function public.register_lead_do_not_contact");
+    expect(sql).toContain("action_type, result, memo, actor_name, metadata");
+    expect(sql).not.toContain("actor_name, actor_user_id)");
+    expect(sql).toContain("'exclude',\n    '제외'");
+    expect(sql).toContain("'actor_user_id', p_actor_user_id");
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {

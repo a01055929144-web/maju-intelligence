@@ -41,8 +41,21 @@ begin
   set status = '제외', exclude_reason = '연락 거부 등록', next_action = '연락 금지', updated_at = now()
   where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null;
 
-  insert into public.lead_actions (company_id, lead_id, action_type, result, memo, actor_name, actor_user_id)
-  values (p_company_id, p_lead_id, 'exclude', '연락 거부', p_reason, p_actor_name, p_actor_user_id);
+  insert into public.lead_actions (company_id, lead_id, action_type, result, memo, actor_name, metadata)
+  values (
+    p_company_id,
+    p_lead_id,
+    'exclude',
+    '제외',
+    coalesce(nullif(btrim(p_reason), ''), '연락 거부'),
+    p_actor_name,
+    jsonb_strip_nulls(jsonb_build_object(
+      'event_type', 'do_not_contact',
+      'actor_user_id', p_actor_user_id,
+      'channel', p_channel,
+      'normalized_value', p_normalized_value
+    ))
+  );
   return true;
 end;
 $$;
