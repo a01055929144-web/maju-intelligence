@@ -218,9 +218,12 @@ export function shouldScopeCustomerData(session: CustomerSession | null) {
   return role !== "owner" && role !== "manager";
 }
 
-export function getCustomerAssignmentKeys(session: CustomerSession | null): CustomerAssignmentScope | undefined {
+export function getCustomerAssignmentKeys(
+  session: CustomerSession | null,
+  options: { forceScope?: boolean } = {}
+): CustomerAssignmentScope | undefined {
   if (!session) return undefined;
-  if (!shouldScopeCustomerData(session)) return undefined;
+  if (!options.forceScope && !shouldScopeCustomerData(session)) return undefined;
   return {
     staffMemberId: session.companyMemberId,
     legacyManagerKeys: [session.userId, session.name, session.email, session.assignedManagerName, session.invitedEmployeeName]
@@ -387,3 +390,4 @@ export async function consumeOAuthState(state: string): Promise<{ ok: boolean; p
 
   return { ok: true, payload };
 }
+
