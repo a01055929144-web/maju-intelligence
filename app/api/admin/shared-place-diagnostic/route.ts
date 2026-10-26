@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
 import { supabaseRequest } from "@/lib/store";
+import { GovApiResponseError, parseGovApiFailure } from "@/lib/gov-api-response";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,8 +31,20 @@ async function fetchPage(dataset: string, pageNo: number, pageSize: number, key:
   const startedAt = performance.now();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
   const elapsedMs = Math.round(performance.now() - startedAt);
-  if (!response.ok) throw new Error(`${dataset}: HTTP ${response.status}`);
-  const data = (await response.json()) as { response?: { body?: { totalCount?: number; items?: { item?: Array<Record<string, unknown>> } } } };
+  if (!response.ok) {
+    const failure = parseGovApiFailure(await response.text(), key);
+    throw new GovApiResponseError(response.status, failure, elapsedMs);
+  }
+  const data = (await response.json()) as {
+    response?: {
+      header?: { resultCode?: string; resultMsg?: string };
+      body?: { totalCount?: number; items?: { item?: Array<Record<string, unknown>> } };
+    };
+  };
+  if (data.response?.header?.resultCode && data.response.header.resultCode !== "00") {
+    const failure = parseGovApiFailure(JSON.stringify({ response: { header: data.response.header } }), key);
+    throw new GovApiResponseError(response.status, failure, elapsedMs);
+  }
   return {
     total: Number(data.response?.body?.totalCount || 0),
     rows: data.response?.body?.items?.item || [],
@@ -86,6 +99,7 @@ export async function GET(request: Request) {
         pageSize: 10,
         responseCode: first.responseCode,
         elapsedMs: first.elapsedMs,
+        executedOn: process.env.VERCEL ? "vercel-server" : "local-server",
         returnedRows: first.rows.length,
         totalCount: first.total
       });
@@ -119,6 +133,17 @@ export async function GET(request: Request) {
       result
     });
   } catch (error) {
-    return NextResponse.json({ dataset, message: error instanceof Error ? error.message : "측정 실패", targetProvinces }, { status: 502 });
+    return NextResponse.json({
+      dataset,
+      message: error instanceof Error ? error.message : "측정 실패",
+      targetProvinces,
+      ...(error instanceof GovApiResponseError ? {
+        upstreamStatus: error.status,
+        upstreamResultCode: error.failure.resultCode,
+        upstreamResultMessage: error.failure.resultMessage,
+        elapsedMs: error.elapsedMs,
+        executedOn: process.env.VERCEL ? "vercel-server" : "local-server"
+      } : {})
+    }, { status: 502 });
   }
 }

@@ -18,6 +18,8 @@
  * 커버리지까지는 며칠~몇 주가 걸릴 수 있습니다.
  */
 
+import { GovApiResponseError, parseGovApiFailure } from "./gov-api-response";
+
 const GOV_RESTAURANT_URL = "https://apis.data.go.kr/1741000/general_restaurants/info";
 const PAGE_SIZE = 1000; // 공공데이터포털 표준 REST API의 일반적인 numOfRows 상한
 const MAX_LOOKBACK_DAYS = 14;
@@ -101,11 +103,19 @@ async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown
   url.searchParams.set("numOfRows", String(PAGE_SIZE));
   url.searchParams.set("type", "json");
 
+  const startedAt = performance.now();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error(`정부 일반음식점 API가 HTTP ${response.status}로 응답했습니다.`);
+  if (!response.ok) {
+    const failure = parseGovApiFailure(await response.text(), key);
+    throw new GovApiResponseError(response.status, failure, Math.round(performance.now() - startedAt));
+  }
   const data = (await response.json()) as GovRestaurantApiResponse;
   const body = data.response?.body;
   const resultCode = data.response?.header?.resultCode;
+  if (resultCode && resultCode !== "00") {
+    const failure = parseGovApiFailure(JSON.stringify({ response: { header: data.response?.header } }), key);
+    throw new GovApiResponseError(response.status, failure, Math.round(performance.now() - startedAt));
+  }
   if (!body) {
     throw new Error(`정부 일반음식점 API 응답 본문이 없습니다${resultCode ? ` (${resultCode})` : ""}.`);
   }

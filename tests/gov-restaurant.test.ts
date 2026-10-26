@@ -1,5 +1,26 @@
-import { describe, expect, it, vi } from "vitest";
-import { fetchGovPageWithRetry, fetchGovPagesWithRetry } from "../lib/gov-restaurant";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fetchGovPageWithRetry, fetchGovPagesWithRetry, fetchRecentGovRestaurantRows } from "../lib/gov-restaurant";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+describe("government API failures", () => {
+  it("reports an upstream 403 result without exposing the service key", async () => {
+    vi.stubEnv("GOV_RESTAURANT_API_KEY", "private-key");
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      response: { header: { resultCode: "SERVICE_ACCESS_DENIED_ERROR", resultMsg: "serviceKey=private-key denied" } }
+    }), { status: 403 }));
+    vi.stubGlobal("fetch", request);
+
+    const error = await fetchRecentGovRestaurantRows().catch((failure: Error) => failure);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain("SERVICE_ACCESS_DENIED_ERROR");
+    expect(String(error)).not.toContain("private-key");
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("fetchGovPageWithRetry", () => {
   it("retries the required first page exactly once", async () => {
