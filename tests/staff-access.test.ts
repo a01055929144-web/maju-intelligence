@@ -51,4 +51,3 @@ describe("staff access", () => {
     expect(canChangeStaffPermission("owner", "owner", "manager")).toBe(true);
   });
 });
-
