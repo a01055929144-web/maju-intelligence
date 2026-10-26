@@ -21,12 +21,13 @@ describe("지역 조건 정부 수집", () => {
     });
   });
 
-  it("완전성을 검증하지 못한 시·도 전체 선택은 부분 코드 목록 대신 미확인으로 돌린다", () => {
-    expect(getGovAreaCodes(["인천광역시"])).toEqual({
+  it("완전성을 검증하지 못한 시·도 전체 선택은 부분 조회를 시작하지 않도록 오류로 돌린다", () => {
+    const result = getGovAreaCodes(["인천광역시"]);
+    expect(result).toEqual({
       codes: [],
       missing: ["인천광역시"],
     });
-    expect(getGovAreaCoverageStatus(["인천광역시"])).toBe("error");
+    expect(getGovAreaCoverageStatus(result.missing)).toBe("error");
   });
 
   it("저장 커서 지역이 현재 영업 지역에서 빠졌으면 새 스캔 시각과 cutoff로 초기화한다", () => {

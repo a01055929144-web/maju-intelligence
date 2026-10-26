@@ -9267,6 +9267,25 @@ export async function syncGovRestaurantLeads(
   try {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     const { codes, missing } = getGovAreaCodes(salesAreas);
+    if (getGovAreaCoverageStatus(missing) === "error") {
+      const message = `미확인 영업 지역 코드가 있어 수집을 시작하지 않습니다: ${missing.join(", ")}`;
+      await recordLeadSyncStatus(companyId, "gov", "error", {
+        trigger,
+        startedAt,
+        fetched: 0,
+        ingest: EMPTY_PERMIT_INGEST_RESULT,
+        message,
+        metadata: { scannedPages: 0, areaCodes: codes.length, missingAreas: missing, areaCursor: null }
+      });
+      return {
+        configured: true,
+        fetched: 0,
+        ingest: EMPTY_PERMIT_INGEST_RESULT,
+        scannedPages: 0,
+        totalPages: 0,
+        skippedPages: []
+      };
+    }
     const previousRuns = await supabaseRequest<Array<{
       started_at: string;
       finished_at: string | null;
@@ -9321,11 +9340,8 @@ export async function syncGovRestaurantLeads(
       }
     }
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
-    let status: "success" | "error" = getGovAreaCoverageStatus(missing);
+    let status: "success" | "error" = "success";
     let message = `${summarizeLeadSyncIngest(ingest)} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
-    if (missing.length) {
-      message = `미확인 영업 지역 코드가 있어 수집 완료로 기록하지 않습니다: ${missing.join(", ")}`;
-    }
     if (trigger === "cron" && codes.length && rows.length === 0 && !nextCursor &&
         isConsecutiveDailyZeroFetch({
           currentStartedAt: startedAt,
