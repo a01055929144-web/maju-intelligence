@@ -219,7 +219,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
   }
 
   return (
-    <form className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => event.preventDefault()}>
+    <form className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => event.preventDefault()}>
       <div className="space-y-5">
         {/* 2026-09-08 개선: 예전엔 이 카드 하나("회사 설정" 헤더)에 회사 정보 + 문자 발송 설정 +
             텔레그램 이탈 알림까지 서로 다른 세 기능이 한 카드 안에 섞여 있어서, 카드 헤더가 말하는

@@ -227,7 +227,7 @@ export function SalesAreaSelector({
   }, [province, snapshot.salesAreaState.effectiveAreas]);
 
   return (
-    <div className={compact ? "space-y-3" : "space-y-4"}>
+    <div className={`min-w-0 max-w-full ${compact ? "space-y-3" : "space-y-4"}`}>
       <div>
         <p className="text-xs font-black text-slate-700">현재 적용 중 · {sourceLabel}</p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -360,7 +360,7 @@ function SalesAreaCheckbox({
     <label className={`flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 ${disabled ? "opacity-60" : "cursor-pointer hover:bg-teal-50"}`}>
       <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
       <span className="min-w-0 flex-1 text-xs font-black text-slate-800">{label}</span>
-      <span className="shrink-0 text-[10px] font-semibold tabular-nums text-slate-500">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
+      <span className="text-right text-[10px] font-semibold tabular-nums text-slate-500 sm:shrink-0">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
     </label>
   );
 }

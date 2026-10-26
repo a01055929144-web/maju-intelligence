@@ -1,5 +1,9 @@
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 
+export function operationalMarkerPersonIcon(deliveryVehicle?: string): "person" | undefined {
+  return deliveryVehicle?.trim() ? undefined : "person";
+}
+
 type RouteMapStop = {
   readonly address?: string;
   readonly id?: string;
