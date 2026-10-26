@@ -2022,37 +2022,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             {liveVehicleSummary.stale ? <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline">지연 {liveVehicleSummary.stale}</span> : null}
             {liveVehicleSummary.lastOperation ? <span className="hidden rounded-full bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-500 lg:inline">마지막 운행 {liveVehicleSummary.lastOperation}</span> : null}
           </button>
-          {activeView === "map" ? (
-            <div
-              aria-label="지도 업무 패널 빠른 전환"
-              className="hidden h-10 shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 lg:flex"
-              role="group"
-            >
-              {([
-                ["split", "3분할", "담당자·지도·업무 목록 함께 보기"],
-                ["driver", "담당자", "담당자·차량 목록 열기"],
-                ["customer", "거래처", "전체 거래처 목록 열기"],
-                ["newLead", "신규", "신규 리드 목록과 마커 열기"],
-                ["salesLead", "영업", "영업 리드 목록과 마커 열기"],
-                ["map", "지도만", "업무 패널 닫기"]
-              ] as const).map(([mode, label, title]) => (
-                <button
-                  aria-pressed={mapPanelMode === mode}
-                  className={`h-8 rounded-md px-2 text-[11px] font-bold transition ${
-                    mapPanelMode === mode
-                      ? "bg-white text-teal-800 shadow-sm ring-1 ring-slate-200"
-                      : "text-slate-500 hover:bg-white hover:text-slate-900"
-                  }`}
-                  key={mode}
-                  onClick={() => setMapPanelMode(mode)}
-                  title={title}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <details className="group relative shrink-0">
             <summary
               aria-label="지도 화면 설정"
@@ -2533,22 +2502,17 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         ) : null}
         {activeView === "map" && mapSalesRegionsConfigured === false ? (
-          <div className="hidden space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 lg:block">
-            <div>
-              <p className="text-sm font-black text-amber-950">영업할 지역을 골라 주세요</p>
-              <p className="mt-1 text-xs font-semibold text-amber-800">현재는 기존 리드를 전체 표시합니다. 지역을 고르면 해당 지역 리드만 보이고 매일 새 리드가 들어옵니다.</p>
-            </div>
-            <SalesAreaSelector
-              compact
-              mapCenterPoint={mapCenterPoint}
-              onChanged={() => {
-                setMapLeadsVisible(true);
-                setShowOutsideSalesAreaOnMap(false);
-                void loadAllLeadsForMap();
-              }}
-              onSnapshot={handleMapSalesAreaSnapshot}
-            />
-          </div>
+          <button
+            className="hidden w-full items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left lg:flex"
+            onClick={() => setMobileSalesAreaOpen(true)}
+            type="button"
+          >
+            <span className="min-w-0">
+              <span className="block text-xs font-black text-amber-950">영업 지역 미설정</span>
+              <span className="block truncate text-[11px] font-semibold text-amber-800">지도를 가리지 않고 옆 창에서 지역을 선택할 수 있습니다.</span>
+            </span>
+            <span className="shrink-0 rounded-md bg-amber-900 px-3 py-1.5 text-xs font-black text-white">지역 선택</span>
+          </button>
         ) : null}
         {activeView === "map" && leadRadiusOpen ? (
           <div className="space-y-2 rounded-lg border border-teal-100 bg-teal-50/60 px-3 py-2.5">
@@ -3256,9 +3220,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       ) : null}
       </div>
       {mobileSalesAreaOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-end bg-slate-950/45 lg:hidden" role="dialog" aria-modal="true" aria-label="영업 지역 선택">
+        <div className="fixed inset-0 z-[70] flex items-end bg-slate-950/45 lg:items-center lg:justify-center lg:p-6" role="dialog" aria-modal="true" aria-label="영업 지역 선택">
           <button className="absolute inset-0" aria-label="영업 지역 선택 닫기" onClick={() => setMobileSalesAreaOpen(false)} type="button" />
-          <section className="relative z-10 max-h-[82dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-2xl">
+          <section className="relative z-10 max-h-[82dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 shadow-2xl lg:max-w-3xl lg:rounded-2xl lg:p-5">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300" />
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>

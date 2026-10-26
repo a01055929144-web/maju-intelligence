@@ -99,7 +99,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           높이에 고정해야 section이 실제로 h-full만큼만 받고, 그 안의 xl:overflow-y-auto가 넘치는
           내용을 스크롤로 보여줄 수 있습니다. */}
       <div className={`grid min-h-screen transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-800 bg-[#111827] text-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:border-slate-800">
+        <aside className="border-b border-slate-800 bg-[#111827] text-white lg:sticky lg:top-0 lg:h-dvh lg:overflow-hidden lg:border-b-0 lg:border-r lg:border-slate-800">
           <div className="flex h-full flex-col">
             <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
               {collapsed ? (
