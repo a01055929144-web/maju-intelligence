@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as ManagedCompanyAccountInput | null;
-  if (!body?.name || !body.customerEmail || !body.customerPassword) {
-    return NextResponse.json({ message: "고객사명, 로그인 이메일, 비밀번호는 필수입니다." }, { status: 400 });
+  if (!body?.name || !body.customerEmail || (!body.id && !body.customerPassword)) {
+    return NextResponse.json({ message: "고객사명과 로그인 이메일은 필수이며, 신규 고객사는 비밀번호도 필요합니다." }, { status: 400 });
   }
 
   try {

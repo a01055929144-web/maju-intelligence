@@ -120,7 +120,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
       originAddress: company.originAddress,
       status: company.status,
       customerEmail: company.customerEmail,
-      customerPassword: company.customerPassword
+      customerPassword: ""
     };
     setForm(next);
     setFormBaseline(next);
@@ -213,7 +213,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
       originAddress: saved.originAddress,
       status: saved.status,
       customerEmail: saved.customerEmail,
-      customerPassword: saved.customerPassword
+      customerPassword: ""
     };
     setForm(savedForm);
     setFormBaseline(savedForm);
@@ -662,7 +662,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
                 <span>{company.ownerName || "대표자 미입력"}</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                <ListStatusBadge ok={Boolean(company.customerEmail && company.customerPassword)} label="계정" />
+                <ListStatusBadge ok={Boolean(company.customerEmail && company.hasPassword)} label="계정" />
                 <ListStatusBadge ok={Boolean(company.originAddress)} label="출발지" />
                 <ListStatusBadge ok={company.customerCount > 0} label="거래처" />
                 <ListStatusBadge ok={company.salesTransactionCount > 0} label="매출" />
@@ -1023,10 +1023,10 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="로그인 이메일" required type="email" value={form.customerEmail} onChange={(value) => update("customerEmail", value)} />
               <Field
-                label="로그인 비밀번호"
-                required
+                label="새 비밀번호 (바꿀 때만)"
+                required={!form.id}
                 type={showPassword ? "text" : "password"}
-                value={form.customerPassword}
+                value={form.customerPassword || ""}
                 onChange={(value) => update("customerPassword", value)}
               />
             </div>
@@ -1034,7 +1034,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, so
               <div className="flex items-start gap-2">
                 <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
                 <p className="text-xs font-bold leading-5 text-muted-foreground">
-                  어드민이 고객사 로그인 계정을 생성하고 수정합니다. 운영 안정화 단계에서는 비밀번호 해시 저장, 초기 비밀번호 발급, 변경 이력 관리로 보안을 강화합니다.
+                  저장된 비밀번호는 화면으로 다시 보내지 않습니다. 기존 고객사는 새 비밀번호를 입력하지 않으면 현재 비밀번호가 유지됩니다.
                 </p>
               </div>
             </div>
@@ -1151,9 +1151,9 @@ type CompanyReadiness = {
 function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
   const checks = [
     {
-      description: company.customerEmail && company.customerPassword ? "고객사 로그인 이메일과 비밀번호가 등록되어 있습니다." : "고객사 로그인 계정을 먼저 등록하세요.",
+      description: company.customerEmail && company.hasPassword ? "고객사 로그인 이메일과 비밀번호가 등록되어 있습니다." : "고객사 로그인 계정을 먼저 등록하세요.",
       label: "로그인 계정",
-      ok: Boolean(company.customerEmail && company.customerPassword)
+      ok: Boolean(company.customerEmail && company.hasPassword)
     },
     {
       description: company.originAddress ? "물류 출발지 주소가 있어 배송/영업 코스 계산에 사용할 수 있습니다." : "회사 출발지 주소를 입력해야 경로 계산이 가능합니다.",

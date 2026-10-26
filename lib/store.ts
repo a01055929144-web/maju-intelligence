@@ -2,6 +2,7 @@ import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
+import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
@@ -508,7 +509,7 @@ export type ManagedCompanyAccount = {
   originAddress: string;
   status: string;
   customerEmail: string;
-  customerPassword: string;
+  hasPassword: boolean;
   customerCount: number;
   salesTransactionCount: number;
   uploadCount: number;
@@ -526,7 +527,7 @@ export type ManagedCompanyAccountInput = {
   originAddress?: string;
   status?: string;
   customerEmail: string;
-  customerPassword: string;
+  customerPassword?: string;
 };
 export type CustomerLoginCredentials = AuthCredentials & {
   companyName: string;
@@ -2112,8 +2113,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           ownerName: company.owner_name || "",
           originAddress: company.origin_address || "",
           status: company.status,
-          customerEmail: credentials?.customer_email || "",
-          customerPassword: credentials?.customer_password || "",
+          ...exposeManagedCompanyCredentialState(credentials?.customer_email, credentials?.customer_password),
           customerCount: customerCountByCompany.get(company.id) || 0,
           salesTransactionCount: salesCountByCompany.get(company.id) || 0,
           uploadCount: uploadStats?.count || 0,
@@ -2141,7 +2141,9 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
   const isNewCompany = !input.id;
 
   if (!companyName) throw new Error("고객사명은 필수입니다.");
-  if (!customerEmail || !input.customerPassword) throw new Error("고객사 이메일과 비밀번호는 필수입니다.");
+  if (!customerEmail || (isNewCompany && !input.customerPassword)) {
+    throw new Error("신규 고객사는 로그인 이메일과 비밀번호가 필수입니다.");
+  }
 
   if (!isProductionStoreConfigured()) {
     return {
@@ -2154,7 +2156,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         originAddress: input.originAddress || "",
         status: input.status || "active",
         customerEmail,
-        customerPassword: input.customerPassword,
+        hasPassword: Boolean(input.customerPassword),
         customerCount: 0,
         salesTransactionCount: 0,
         uploadCount: 0,
@@ -2327,7 +2329,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       originAddress: company.origin_address || "",
       status: company.status,
       customerEmail,
-      customerPassword: input.customerPassword,
+      hasPassword: Boolean(customerPasswordToStore),
       customerCount: 0,
       salesTransactionCount: 0,
       uploadCount: 0,
