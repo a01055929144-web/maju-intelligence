@@ -1,4 +1,4 @@
-import { digitsOnly, extractInstagramHandle, type LeadContactChannel } from "@/domains/lead/contact-channels";
+import { digitsOnly, extractInstagramHandle, type LeadContactChannel } from "./contact-channels";
 
 export const SALES_OUTREACH_POLICY_VERSION = "2026-10-27-draft";
 

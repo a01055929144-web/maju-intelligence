@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildLeadSourceDisclosure,
@@ -27,5 +29,20 @@ describe("lead outreach governance", () => {
     expect(normalizeDoNotContactValue("email", "MAILTO:Owner@Example.COM")).toBe("owner@example.com");
     expect(normalizeDoNotContactValue("instagram", "https://instagram.com/My.Shop/")).toBe("my.shop");
     expect(normalizeDoNotContactValue("talktalk", "HTTPS://TALK.NAVER.COM/ct/ABC/")).toBe("https://talk.naver.com/ct/abc");
+  });
+
+  it("requires a confirmed audit row before reporting source disclosure success", () => {
+    const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/store.ts"), "utf8");
+    expect(storeSource).toContain('Array<{ id: string }>>("lead_actions?select=id"');
+    expect(storeSource).toContain('Prefer: "return=representation"');
+    expect(storeSource).toContain('if (!rows[0]?.id) throw new Error("출처 안내 감사 기록 저장을 확인하지 못했습니다.")');
+  });
+
+  it("keeps tenant ownership and direct client access controls in the SQL draft", () => {
+    const sql = fs.readFileSync(path.join(process.cwd(), "docs/sql-drafts/lead-contact-governance.sql"), "utf8");
+    expect(sql).toContain("foreign key (company_id, lead_id)");
+    expect(sql).toContain("foreign key (company_id, source_lead_id)");
+    expect(sql.match(/enable row level security/g)).toHaveLength(3);
+    expect(sql.match(/from public, anon, authenticated/g)).toHaveLength(3);
   });
 });

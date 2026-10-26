@@ -10517,14 +10517,19 @@ export async function recordLeadSourceDisclosureAudit(
 ): Promise<boolean> {
   const lead = await getPermitLeadIdentityForCompany(companyId, leadId);
   if (!lead) return false;
-  await recordLeadEnrichmentEvent({
-    companyId,
-    context: { actorName: context.actorName, actorUserId: context.actorUserId, source: "manual", trigger: "manual" },
-    leadId,
-    message: "리드 정보 출처 안내 문구 복사",
-    metadata: { event_type: "source_disclosure", business_name: lead.businessName },
-    succeeded: true
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      actor_name: context.actorName || null,
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "source_disclosure",
+      result: "출처 안내 문구 복사",
+      memo: `${lead.businessName} 리드의 정보 출처 안내 문구를 복사했습니다.`
+    })
   });
+  if (!rows[0]?.id) throw new Error("출처 안내 감사 기록 저장을 확인하지 못했습니다.");
   return true;
 }
 
