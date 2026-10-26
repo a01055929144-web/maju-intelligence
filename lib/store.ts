@@ -1,7 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
-import { isConsecutiveDailyZeroFetch } from "@/domains/lead/sync-health";
+import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
 import { GoogleReviewSyncResult, isGoogleReviewsApiConfigured, syncGoogleReviewsForCustomer } from "./google-reviews";
