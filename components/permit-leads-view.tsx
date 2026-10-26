@@ -3089,6 +3089,7 @@ function PermitLeadDetailPanel({
   const [detailActionMessage, setDetailActionMessage] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
+  const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "files" | "changes">("overview");
   const historySectionRef = useRef<HTMLDivElement>(null);
   const resultSectionRef = useRef<HTMLDivElement>(null);
   const intentGuide =
@@ -3113,6 +3114,7 @@ function PermitLeadDetailPanel({
     setBusinessHoursDraft("");
     setBusinessHoursMessage("");
     setResultOpen(Boolean(intent));
+    setDetailTab("overview");
     setExternalSignals({
       googlePlaceUrl: lead.googlePlaceUrl || "",
       kakaoPlaceUrl: lead.kakaoPlaceUrl || "",
@@ -3270,6 +3272,7 @@ function PermitLeadDetailPanel({
   }
 
   function focusMobileSection(section: "history" | "result") {
+    setDetailTab("overview");
     if (section === "history") setHistoryOpen(true);
     else setResultOpen(true);
     window.requestAnimationFrame(() => {
@@ -3499,7 +3502,31 @@ function PermitLeadDetailPanel({
           </div>
         </div>
 
-        <div className="space-y-3 p-4 pb-24 sm:pb-4">
+        {detailMode === "page" ? (
+          <nav aria-label="매장 상세 탭" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2" role="tablist">
+            {([
+              ["overview", "개요"],
+              ["delivery", "배송 기록"],
+              ["sales", "영업 기록"],
+              ["files", "파일"],
+              ["changes", "수정 기록"]
+            ] as const).map(([key, label]) => (
+              <button
+                aria-controls={detailTab === key ? `lead-detail-${key}` : undefined}
+                aria-selected={detailTab === key}
+                className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-bold ${detailTab === key ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                id={`lead-tab-${key}`}
+                key={key}
+                onClick={() => setDetailTab(key)}
+                role="tab"
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
+        <div aria-labelledby={detailMode === "page" ? "lead-tab-overview" : undefined} className={`${detailMode === "page" && detailTab !== "overview" ? "hidden" : ""} space-y-3 p-4 pb-24 sm:pb-4`} id="lead-detail-overview" role={detailMode === "page" ? "tabpanel" : undefined}>
           {detailActionMessage ? (
             <p aria-live="polite" className={`rounded-lg px-3 py-2 text-xs font-bold ${detailActionMessage.includes("저장했습니다") ? "bg-teal-50 text-teal-800" : "bg-rose-50 text-rose-700"}`}>
               {detailActionMessage}
@@ -3898,6 +3925,7 @@ function PermitLeadDetailPanel({
           <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
             <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
             <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
+            <PermitDetailRow label="사업자번호" value={lead.businessNumber || "확인 필요"} />
             <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
             <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
             <PermitDetailRow label="개시일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
@@ -4040,6 +4068,50 @@ function PermitLeadDetailPanel({
             </button>
           </div>
         </div>
+        {detailMode === "page" && detailTab !== "overview" ? (
+          <section aria-labelledby={`lead-tab-${detailTab}`} className="space-y-3 p-4 pb-24" id={`lead-detail-${detailTab}`} role="tabpanel">
+            {detailTab === "delivery" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="font-black text-slate-950">배송 기록</h4>
+                <p className="mt-2 text-sm text-slate-600">리드에는 배송 기록이 없습니다. 거래처로 연결된 뒤 배송 이력에서 확인할 수 있습니다.</p>
+                {(convertedCustomerId || lead.matchedCustomerId) ? <a className="maju-button-secondary mt-3 inline-flex h-11" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(convertedCustomerId || lead.matchedCustomerId || "")}`)}>연결된 거래처 보기</a> : null}
+              </div>
+            ) : null}
+            {detailTab === "sales" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="font-black text-slate-950">영업 기록</h4>
+                {historyState === "loading" ? <p className="mt-2 text-sm text-slate-500">기록을 불러오는 중입니다.</p> : null}
+                {historyState === "error" ? <p className="mt-2 text-sm text-rose-700">기록을 불러오지 못했습니다.</p> : null}
+                {historyState === "ready" && !actionHistory.length ? <p className="mt-2 text-sm text-slate-500">아직 기록이 없습니다.</p> : null}
+                <div className="mt-3 space-y-2">
+                  {actionHistory.map((action) => (
+                    <article className="rounded-lg bg-slate-50 p-3 text-sm" key={action.id}>
+                      <p className="font-bold text-slate-900">{action.result || permitLeadActionLabel(action.actionType)}</p>
+                      <p className="mt-1 text-xs text-slate-500">{action.createdAt} · {action.actorName || "담당자 미기록"}</p>
+                      {action.memo ? <p className="mt-2 whitespace-pre-wrap text-slate-700">{action.memo}</p> : null}
+                    </article>
+                  ))}
+                </div>
+                <button className="maju-button-secondary mt-3 h-11" onClick={() => setDetailTab("overview")} type="button">새 영업 결과 기록</button>
+              </div>
+            ) : null}
+            {detailTab === "files" ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="font-black text-slate-950">파일·사진</h4>
+                {(convertedCustomerId || lead.matchedCustomerId)
+                  ? <CustomerAttachmentUploadPanel customerId={convertedCustomerId || lead.matchedCustomerId || ""} customerName={lead.businessName} />
+                  : <p className="mt-2 text-sm text-slate-600">리드 파일 저장소는 준비 중입니다. 거래처로 연결되면 사업자등록증과 배송 사진을 이곳에서 관리할 수 있습니다.</p>}
+              </div>
+            ) : null}
+            {detailTab === "changes" ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h4 className="font-black text-slate-950">수정 기록</h4>
+                <p className="mt-2 text-sm text-slate-700">공통 수정 기록 테이블 승인 후 누가, 언제, 어떤 정보를 바꿨는지 표시합니다.</p>
+                <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">승인 대기</span>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <div className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur sm:hidden">
           <button className="maju-button-primary h-11 justify-center" onClick={() => focusMobileSection("result")} type="button">
             <MessageCircle className="h-4 w-4" />
