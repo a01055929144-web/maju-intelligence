@@ -63,24 +63,14 @@ async function collectLayoutProblems(page: Page) {
       problems.push(`horizontal-overflow:${root.scrollWidth}>${root.clientWidth}`);
       const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
         .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-        .filter(({ element, rect }) => {
-          if (rect.width <= 1 || rect.height <= 1 || rect.right <= innerWidth + tolerance) return false;
-          let parent = element.parentElement;
-          while (parent && parent !== root) {
-            const style = getComputedStyle(parent);
-            const parentRect = parent.getBoundingClientRect();
-            if (
-              (style.overflowX === "auto" || style.overflowX === "scroll") &&
-              parentRect.left >= -tolerance &&
-              parentRect.right <= innerWidth + tolerance
-            ) return false;
-            parent = parent.parentElement;
-          }
-          return true;
-        })
+        .filter(({ rect }) => rect.width > 1 && rect.height > 1 && rect.right > innerWidth + tolerance)
         .sort((a, b) => b.rect.right - a.rect.right)
-        .slice(0, 5)
-        .map(({ element, rect }) => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 50)}:${Math.round(rect.left)}..${Math.round(rect.right)}`);
+        .slice(0, 8)
+        .map(({ element, rect }) => {
+          const parent = element.parentElement;
+          const ancestor = parent ? `${parent.tagName.toLowerCase()}.${String(parent.className).slice(0, 25)}:${getComputedStyle(parent).overflowX}:${parent.clientWidth}/${parent.scrollWidth}` : "none";
+          return `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 35)}:${Math.round(rect.left)}..${Math.round(rect.right)}[${ancestor}]`;
+        });
       problems.push(`overflow-elements:${offenders.join(" | ")}`);
     }
 
