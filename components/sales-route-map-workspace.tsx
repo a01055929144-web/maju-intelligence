@@ -69,6 +69,7 @@ import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
+import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import type {
@@ -5458,6 +5459,7 @@ function VehicleAnalysisModal({
       markerColor: vehicle.isStale ? "#64748b" : "#0f766e",
       name: `${vehicle.driverName} · 최근 수신 ${new Date(last.recordedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`,
       tone: "vehicle" as const,
+      vehicleIcon: operationalMarkerPersonIcon(vehicle.deliveryVehicle),
       x: 50,
       y: 50
     };
@@ -5567,7 +5569,7 @@ function VehicleAnalysisModal({
                 <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
                   <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
                   <p className="mt-1 text-[10px] font-bold text-slate-500">
-                    가까운 장소 {event.currentCustomerId && event.currentCustomerId === currentStore?.id ? currentStore.name : "운행 경로"} · 위치 기록
+                    가까운 장소 {event.currentCustomerId && event.currentCustomerId === currentStore?.id ? currentStore.name : "운행 경로"} · {event.currentCustomerId ? "배송 업무 중" : "이동 기록"}
                   </p>
                 </div>
               ))}
@@ -10070,6 +10072,7 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
       const checkedAt = location.lastLocationAt ? new Date(location.lastLocationAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "시간 미확인";
       const accuracyText = Number.isFinite(location.accuracyMeters) ? ` · 오차 ${Math.round(location.accuracyMeters || 0)}m` : "";
       const statusText = getVehicleMarkerStatusText(location);
+      const vehicleAssigned = Boolean(location.deliveryVehicle?.trim());
       const currentStore = location.currentCustomerId ? storeById.get(location.currentCustomerId) : undefined;
       const currentStoreText = currentStore ? ` · 작업 ${currentStore.name}` : "";
       const driverName = location.driverName || location.deliveryVehicle || "라이브 차량";
@@ -10080,8 +10083,9 @@ function createLiveVehicleMarkers(locations: StaffVehicleLocation[], storeById: 
         lat: location.lat,
         lng: location.lng,
         markerColor: location.displayState === "last_operation" ? "#cbd5e1" : location.isStale ? "#64748b" : vehicleColorForId(location.id),
-        name: `${driverName} · ${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
+        name: `${driverName} · ${vehicleAssigned ? "차량 배정" : "차량 미배정 직원"} · ${statusText}${location.displayState === "last_operation" ? "" : ` · ${checkedAt}`}${currentStoreText}${accuracyText}`,
         tone: "vehicle" as const,
+        vehicleIcon: operationalMarkerPersonIcon(location.deliveryVehicle),
         x: 50,
         y: 50
       };

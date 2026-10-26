@@ -28,6 +28,8 @@ export type KakaoMapMarker = {
   readonly lat?: number;
   readonly lng?: number;
   readonly markerColor?: string;
+  /** Vehicle markers without an assigned vehicle represent an on-duty person. */
+  readonly vehicleIcon?: "person";
   // 기거래처 근접 리드 표시(2026-08-24 피드백: "기거래처 주변의 리드들은 별도의 뱃지가 있으면
   // 가독성이 좋을 것 같네") — tone: "lead" 마커에만 의미가 있습니다.
   readonly nearAnchor?: boolean;
@@ -1545,7 +1547,7 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
     return htmlToElement(`
       <button type="button" title="${name}" style="cursor:pointer;position:relative;width:36px;height:36px;border-radius:999px;background:#ffffff;border:2px solid ${borderColor};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 5px ${haloColor},0 10px 22px rgba(15,23,42,.28);padding:0;">
         <span class="${pulseClass}" style="width:28px;height:28px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;">
-          🚚
+          ${marker.vehicleIcon === "person" ? "🧍" : "🚚"}
         </span>
       </button>
     `);
@@ -1723,7 +1725,7 @@ function FallbackAddressMap({
               }`}
               style={marker.markerColor ? { backgroundColor: marker.markerColor } : undefined}
             >
-              {marker.tone === "vehicle" ? "차" : marker.label}
+              {marker.tone === "vehicle" ? (marker.vehicleIcon === "person" ? "사람" : "차") : marker.label}
             </span>
             <div className="pointer-events-none absolute left-1/2 top-10 z-10 hidden w-56 -translate-x-1/2 rounded-md border border-border bg-white p-3 text-xs shadow-lg group-hover:block">
               <p className="font-black">{marker.name}</p>
