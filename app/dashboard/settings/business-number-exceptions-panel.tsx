@@ -92,8 +92,8 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{exceptions.length}건</Badge>
       </div>
 
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-3">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-3">
           {exceptions.map((exception) => (
             <div key={exception.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
               <div className="min-w-0">
@@ -113,7 +113,7 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
           ) : null}
         </div>
 
-        <aside className="h-fit rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <aside className="h-fit min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-700">
               <ShieldCheck className="h-5 w-5" />
@@ -123,20 +123,20 @@ export function BusinessNumberExceptionsPanel({ initialExceptions }: { initialEx
               <p className="mt-1 text-xs font-bold text-slate-500">등록한 번호는 거래처 중복 경고에서 제외됩니다.</p>
             </div>
           </div>
-          <div className="mt-4 grid gap-3">
+          <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
             <input
-              className="h-11 rounded-md border border-slate-200 bg-white px-3 font-mono text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+              className="h-11 min-w-0 w-full rounded-md border border-slate-200 bg-white px-3 font-mono text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
               placeholder="123-45-67890"
               value={businessNumber}
               onChange={(event) => setBusinessNumber(formatBusinessNumberInput(event.target.value))}
             />
             <input
-              className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+              className="h-11 min-w-0 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
               placeholder="메모 (예: OO프랜차이즈 종사업자, 지점 3곳)"
               value={memo}
               onChange={(event) => setMemo(event.target.value)}
             />
-            <Button className="h-12 bg-teal-700 font-black hover:bg-teal-800" disabled={!businessNumber.trim() || creating} onClick={addException} type="button">
+            <Button className="h-12 min-w-0 w-full bg-teal-700 font-black hover:bg-teal-800" disabled={!businessNumber.trim() || creating} onClick={addException} type="button">
               <Plus className="h-4 w-4" />
               {creating ? "등록 중" : "중복 허용 등록"}
             </Button>
