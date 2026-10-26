@@ -68,6 +68,27 @@ async function collectLayoutProblems(page: Page) {
     const root = document.documentElement;
     if (root.scrollWidth > root.clientWidth + tolerance) {
       problems.push(`horizontal-overflow:${root.scrollWidth}>${root.clientWidth}`);
+      const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+        .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+        .filter(({ element, rect }) => {
+          if (rect.width <= 1 || rect.height <= 1 || rect.right <= innerWidth + tolerance) return false;
+          let parent = element.parentElement;
+          while (parent && parent !== root) {
+            const style = getComputedStyle(parent);
+            const parentRect = parent.getBoundingClientRect();
+            if (
+              (style.overflowX === "auto" || style.overflowX === "scroll") &&
+              parentRect.left >= -tolerance &&
+              parentRect.right <= innerWidth + tolerance
+            ) return false;
+            parent = parent.parentElement;
+          }
+          return true;
+        })
+        .sort((a, b) => b.rect.right - a.rect.right)
+        .slice(0, 5)
+        .map(({ element, rect }) => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 50)}:${Math.round(rect.left)}..${Math.round(rect.right)}`);
+      problems.push(`overflow-elements:${offenders.join(" | ")}`);
     }
 
     const interactive = Array.from(
