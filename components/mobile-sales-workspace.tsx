@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
 import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/application/mobile-sales/today-tasks";
 import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
+import { runBulkActions } from "@/application/mobile-sales/bulk-actions";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
@@ -321,11 +322,23 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     if (actionType === "exclude" && !window.confirm(`${targets.length}개 리드를 제외 상태로 변경할까요?`)) return;
     setBulkSaving(true);
     setBulkMessage("");
-    const outcomes = await Promise.all(targets.map((lead) => saveLeadAction(lead, actionType, result, "모바일 목록 일괄 변경")));
-    const failed = outcomes.filter((outcome) => !outcome.ok).length;
+    const outcomes = await runBulkActions(targets, async (lead) => {
+      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/action`, {
+        body: JSON.stringify({ actionType, memo: "모바일 목록 일괄 변경", result }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = await response.json().catch(() => null) as { lead?: PermitLeadItem; message?: string; status?: string } | null;
+      if (!response.ok) throw new Error(payload?.message || `${lead.businessName} 상태를 변경하지 못했습니다.`);
+      return payload?.lead || { ...lead, status: payload?.status || result };
+    }, 4);
+    const failedIds = outcomes.filter((outcome) => !outcome.ok).map((outcome) => outcome.item.id);
+    const updatedById = new Map(outcomes.filter((outcome) => outcome.ok).map((outcome) => [outcome.item.id, outcome.result]));
+    setLeads((items) => items.map((item) => updatedById.get(item.id) || item));
     setBulkSaving(false);
-    setBulkMessage(failed ? `${targets.length - failed}개 변경 · ${failed}개 실패` : `${targets.length}개를 ${result} 상태로 변경했습니다.`);
-    if (!failed) { setBulkSelection([]); setBulkMode(false); }
+    setBulkSelection(failedIds);
+    setBulkMessage(failedIds.length ? `${targets.length - failedIds.length}개 변경 · 실패 ${failedIds.length}개 선택 유지` : `${targets.length}개를 ${result} 상태로 변경했습니다.`);
+    if (!failedIds.length) setBulkMode(false);
   }
 
   return (
