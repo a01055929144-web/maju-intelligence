@@ -2692,7 +2692,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                   />
                 ) : null}
               </div>
-              <div className="h-[calc(100dvh-300px)] min-h-[60vh] min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain">
+              <div className="h-[calc(100dvh-300px)] min-h-[60vh] min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain [contain:paint]">
               {/* 2026-10-25: 표 글자가 두 줄로 깨지지 않도록 칸은 내용 너비만큼 넓히고(w-max·nowrap) 좌우 스크롤로 봅니다. */}
               <table className={`w-max min-w-full border-separate border-spacing-0 whitespace-nowrap text-left text-sm [&_tbody_td]:py-1.5 ${showMoreLeadColumns ? "min-w-[1560px]" : "min-w-[1080px]"}`}>
                 <thead className="sticky top-0 z-10 bg-slate-50/95 text-xs font-black text-slate-500 shadow-[0_1px_0_#e2e8f0] backdrop-blur">
