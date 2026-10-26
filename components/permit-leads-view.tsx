@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -1690,14 +1691,14 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">{leadPageCopy.description}</p>
           </div>
           <nav aria-label="리드 업무 화면" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:min-w-[340px]">
-            <a aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
+            <Link aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
               <span className="block text-xs font-black">신규 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">발견·검증</span>
-            </a>
-            <a aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
+            </Link>
+            <Link aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
               <span className="block text-xs font-black">영업 리드</span>
               <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">접촉·견적·후속</span>
-            </a>
+            </Link>
           </nav>
         </div>
       </div>
