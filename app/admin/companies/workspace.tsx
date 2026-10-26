@@ -472,7 +472,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
     .slice(0, 4);
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {!defaultCompany ? (
         <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -561,8 +561,8 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-      <aside className="rounded-lg border border-slate-200 bg-white">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+      <aside className="min-w-0 rounded-lg border border-slate-200 bg-white">
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -706,7 +706,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         </div>
       </aside>
 
-      <section className="rounded-lg border border-slate-200 bg-white">
+      <section className="min-w-0 rounded-lg border border-slate-200 bg-white">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -1482,7 +1482,7 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
   });
 
   return (
-    <div className="overflow-x-auto">
+    <div className="max-w-full overflow-x-auto">
       <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
         <thead>
           <tr className="text-left text-xs font-black text-slate-500">
