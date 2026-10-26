@@ -10,6 +10,7 @@ import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { MobileRouteList } from "@/components/mobile-route-list";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
+import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { getCompanySettings, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
@@ -19,8 +20,13 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const session = await getCustomerSession();
   if (!session) redirect("/mobile/join");
 
-  const assignmentKeys = getCustomerAssignmentKeys(session);
-  const isScopedStaffView = shouldScopeCustomerData(session);
+  const deliveryOwner = isLegacyDeliveryOwner({
+    assignedVehicle: session.assignedVehicle,
+    staffAccessV2Enabled: process.env.STAFF_ACCESS_V2_ENABLED === "true",
+    workspaceRole: normalizeWorkspaceRole(session.workspaceRole)
+  });
+  const assignmentKeys = getCustomerAssignmentKeys(session, { forceScope: deliveryOwner });
+  const isScopedStaffView = shouldScopeCustomerData(session) || deliveryOwner;
   const driverName = getCustomerOperationalName(session);
   const [routePlan, companySettings, completionEvents] = await Promise.all([
     getTodayRoutePlan(session.companyId, { assignmentKeys }),
@@ -204,3 +210,4 @@ function MobileOperationalEmptyState() {
     </section>
   );
 }
+
