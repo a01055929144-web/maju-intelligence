@@ -1,0 +1,40 @@
+import { describe, expect, it } from "vitest";
+import {
+  canGrantStaffPermission,
+  getDefaultTemporaryExpiry,
+  legacyRoleToStaffAccess,
+  resolveMobileStaffLanding,
+  validateStaffAccess
+} from "../domains/organization/staff-access";
+
+describe("staff access", () => {
+  it("converts legacy roles without guessing custom roles", () => {
+    expect(legacyRoleToStaffAccess("driver")).toEqual({ duties: ["delivery"], permissionRole: "staff" });
+    expect(legacyRoleToStaffAccess("sales")).toEqual({ duties: ["sales"], permissionRole: "staff" });
+    expect(legacyRoleToStaffAccess("owner")).toEqual({ duties: ["sales", "delivery"], permissionRole: "owner" });
+    expect(legacyRoleToStaffAccess("냉동창고 관리")).toEqual({ duties: [], permissionRole: "staff" });
+  });
+
+  it("requires a vehicle for delivery and expiry for temporary workers", () => {
+    expect(validateStaffAccess({ duties: ["delivery"], permissionRole: "staff" })).toContain("배정 차량");
+    expect(validateStaffAccess({ duties: ["sales"], permissionRole: "temporary" })).toContain("만료일");
+    expect(validateStaffAccess({ duties: ["sales", "delivery"], permissionRole: "temporary", expiresOn: "2026-11-25", vehicleId: "vehicle-1" })).toBeNull();
+  });
+
+  it("defaults temporary access to 30 days", () => {
+    expect(getDefaultTemporaryExpiry(new Date("2026-10-26T00:00:00.000Z"))).toBe("2026-11-25");
+  });
+
+  it("routes dual-duty workers to delivery only when a route exists", () => {
+    expect(resolveMobileStaffLanding({ duties: ["sales"], hasTodayRoute: true })).toBe("/mobile/sales");
+    expect(resolveMobileStaffLanding({ duties: ["delivery"], hasTodayRoute: false })).toBe("/mobile/today");
+    expect(resolveMobileStaffLanding({ duties: ["sales", "delivery"], hasTodayRoute: true })).toBe("/mobile/today");
+    expect(resolveMobileStaffLanding({ duties: ["sales", "delivery"], hasTodayRoute: false })).toBe("/mobile/sales");
+  });
+
+  it("allows owner grants only from an owner or MAJU admin", () => {
+    expect(canGrantStaffPermission("manager", "owner")).toBe(false);
+    expect(canGrantStaffPermission("owner", "owner")).toBe(true);
+    expect(canGrantStaffPermission("maju_admin", "owner")).toBe(true);
+  });
+});
