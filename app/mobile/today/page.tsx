@@ -210,4 +210,3 @@ function MobileOperationalEmptyState() {
     </section>
   );
 }
-
