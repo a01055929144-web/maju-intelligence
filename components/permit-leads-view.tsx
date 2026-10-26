@@ -32,6 +32,7 @@ import {
   Radar,
   RefreshCw,
   Search,
+  Truck,
   Trash2,
   Upload,
   UserCheck,
@@ -3096,6 +3097,16 @@ function PermitLeadDetailPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
   const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "files" | "changes">("overview");
+  const [deliveryHistory, setDeliveryHistory] = useState<Array<{
+    id: string;
+    createdAt: string;
+    createdByName: string;
+    memo: string;
+    nextAction: string;
+  }>>([]);
+  const [deliveryHistoryState, setDeliveryHistoryState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [deliveryHistoryTruncated, setDeliveryHistoryTruncated] = useState(false);
+  const deliveryHistoryRequestRef = useRef(0);
   const historySectionRef = useRef<HTMLDivElement>(null);
   const resultSectionRef = useRef<HTMLDivElement>(null);
   const intentGuide =
@@ -3134,6 +3145,15 @@ function PermitLeadDetailPanel({
   }, [intent, lead.businessNumber, lead.googlePlaceUrl, lead.id, lead.instagramUrl, lead.kakaoPlaceUrl, lead.keywordVolume, lead.naverPlaceUrl, lead.rating, lead.reviewCount]);
 
   useEffect(() => {
+    setConvertedCustomerId("");
+    setMatchedExistingCustomer(false);
+    setDeliveryHistory([]);
+    setDeliveryHistoryState("idle");
+    setDeliveryHistoryTruncated(false);
+    deliveryHistoryRequestRef.current += 1;
+  }, [lead.id]);
+
+  useEffect(() => {
     const refreshQuoteDraftState = () => setQuoteDraftSavedAt(readQuoteDraft(quoteSubject)?.savedAt || "");
     refreshQuoteDraftState();
     window.addEventListener(QUOTE_DRAFT_UPDATED_EVENT, refreshQuoteDraftState);
@@ -3164,6 +3184,41 @@ function PermitLeadDetailPanel({
       cancelled = true;
     };
   }, [lead.id]);
+
+  const linkedCustomerId = convertedCustomerId || lead.matchedCustomerId || "";
+
+  const loadDeliveryHistory = useCallback(async () => {
+    const requestId = deliveryHistoryRequestRef.current + 1;
+    deliveryHistoryRequestRef.current = requestId;
+    if (!linkedCustomerId) {
+      setDeliveryHistory([]);
+      setDeliveryHistoryState("idle");
+      setDeliveryHistoryTruncated(false);
+      return;
+    }
+
+    setDeliveryHistoryState("loading");
+    const params = new URLSearchParams({ customerId: linkedCustomerId, noteType: "delivery" });
+    const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customer-operations?${params.toString()}`), { cache: "no-store" }, 12000).catch(() => null);
+    if (requestId !== deliveryHistoryRequestRef.current) return;
+    if (!response?.ok) {
+      setDeliveryHistoryState("error");
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as {
+      notes?: Array<{ id: string; createdAt: string; createdByName: string; memo: string; nextAction: string }>;
+      notesTruncated?: boolean;
+    } | null;
+    setDeliveryHistory(Array.isArray(payload?.notes) ? payload.notes : []);
+    setDeliveryHistoryTruncated(Boolean(payload?.notesTruncated));
+    setDeliveryHistoryState("ready");
+  }, [linkedCustomerId]);
+
+  useEffect(() => {
+    if (detailMode !== "page" || detailTab !== "delivery") return;
+    void loadDeliveryHistory();
+  }, [detailMode, detailTab, loadDeliveryHistory]);
 
   function buildActionMemo(result: string, followUpDate = nextActionDate) {
     const parts = [
@@ -4152,9 +4207,49 @@ function PermitLeadDetailPanel({
           <section aria-labelledby={`lead-tab-${detailTab}`} className="space-y-3 p-4 pb-24" id={`lead-detail-${detailTab}`} role="tabpanel">
             {detailTab === "delivery" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h4 className="font-black text-slate-950">배송 기록</h4>
-                <p className="mt-2 text-sm text-slate-600">리드에는 배송 기록이 없습니다. 거래처로 연결된 뒤 배송 이력에서 확인할 수 있습니다.</p>
-                {(convertedCustomerId || lead.matchedCustomerId) ? <a className="maju-button-secondary mt-3 inline-flex h-11" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(convertedCustomerId || lead.matchedCustomerId || "")}`)}>연결된 거래처 보기</a> : null}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-black text-slate-950">배송 기록</h4>
+                    <p className="mt-1 text-sm text-slate-600">연결된 거래처에 저장된 배송 완료·특이사항을 최신순으로 표시합니다.</p>
+                  </div>
+                  {linkedCustomerId ? (
+                    <button className="maju-button-secondary h-9 px-3 text-xs" disabled={deliveryHistoryState === "loading"} onClick={() => void loadDeliveryHistory()} type="button">
+                      <RefreshCw className={`h-3.5 w-3.5 ${deliveryHistoryState === "loading" ? "animate-spin" : ""}`} />
+                      새로고침
+                    </button>
+                  ) : null}
+                </div>
+                {!linkedCustomerId ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">리드에는 배송 기록이 없습니다. 거래처로 연결하면 이 탭에서 배송 이력을 확인할 수 있습니다.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "loading" ? (
+                  <p className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />배송 기록을 불러오는 중입니다.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "error" ? (
+                  <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700" role="alert">배송 기록을 불러오지 못했습니다. 담당 거래처 권한과 연결 상태를 확인한 뒤 다시 시도해주세요.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "ready" && !deliveryHistory.length ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">아직 저장된 배송 기록이 없습니다.</p>
+                ) : null}
+                {deliveryHistory.length ? (
+                  <div className="mt-3 space-y-2">
+                    {deliveryHistory.map((note) => (
+                      <article className="rounded-lg border border-blue-100 bg-blue-50/50 p-3" key={note.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="flex items-center gap-1.5 text-sm font-black text-blue-950"><Truck className="h-4 w-4 text-blue-700" />배송 완료</p>
+                          <time className="text-xs font-bold text-slate-500">{note.createdAt}</time>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.memo}</p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
+                          <span>기록자 · {note.createdByName || "담당자 미기록"}</span>
+                          {note.nextAction ? <span>다음 조치 · {note.nextAction}</span> : null}
+                        </div>
+                      </article>
+                    ))}
+                    {deliveryHistoryTruncated ? <p className="text-xs font-bold text-amber-700">최근 50건을 표시합니다. 전체 기록은 거래처 원장에서 확인하세요.</p> : null}
+                  </div>
+                ) : null}
+                {linkedCustomerId ? <a className="maju-button-secondary mt-3 inline-flex h-11" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(linkedCustomerId)}`)}>연결된 거래처 보기</a> : null}
               </div>
             ) : null}
             {detailTab === "sales" ? (

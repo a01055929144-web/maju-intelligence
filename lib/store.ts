@@ -6016,11 +6016,12 @@ export async function removeCompanyJobTitle(companyId: string, jobTitleId: strin
 export async function getCustomerOperations(
   customerId: string,
   companyId?: string,
-  options: { attachmentOffset?: number; noteOffset?: number } = {}
+  options: { attachmentOffset?: number; noteOffset?: number; noteType?: string } = {}
 ) {
   const id = companyId || getDefaultCompanyId();
   const attachmentOffset = Math.max(0, Math.floor(options.attachmentOffset || 0));
   const noteOffset = Math.max(0, Math.floor(options.noteOffset || 0));
+  const noteTypeFilter = options.noteType?.trim();
   const pageSize = 50;
 
   if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) {
@@ -6046,7 +6047,7 @@ export async function getCustomerOperations(
     >(
       `customer_notes?select=id,note_type,memo,next_action,created_by_name,created_at&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(
         customerId
-      )}&order=created_at.desc&limit=${pageSize + 1}&offset=${noteOffset}`
+      )}${noteTypeFilter ? `&note_type=eq.${encodeURIComponent(noteTypeFilter)}` : ""}&order=created_at.desc&limit=${pageSize + 1}&offset=${noteOffset}`
     ),
     supabaseRequest<
       Array<{
