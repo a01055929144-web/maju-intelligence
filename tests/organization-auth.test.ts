@@ -61,6 +61,15 @@ describe("organization data exposure policy", () => {
     }
   });
 
+  it("scopes only an explicitly assigned owner's mobile delivery view when requested", () => {
+    const session = makeSession("owner", { assignedVehicle: " 의정부 ", companyMemberId: "member-owner" });
+    expect(getCustomerAssignmentKeys(session)).toBeUndefined();
+    expect(getCustomerAssignmentKeys(session, { forceScope: true })).toMatchObject({
+      staffMemberId: "member-owner",
+      legacyTerritoryKeys: ["의정부"]
+    });
+  });
+
   it("keeps daily route confirmation tenant-scoped and manager-gated", () => {
     const source = readFileSync(resolve(process.cwd(), "app/api/routes/confirm-order/route.ts"), "utf8");
     expect(source).toContain("getRequestAuthScope(request, body?.companyId)");
@@ -100,3 +109,4 @@ function makeSession(
     ...overrides
   };
 }
+
