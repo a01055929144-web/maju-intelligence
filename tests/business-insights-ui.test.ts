@@ -5,6 +5,7 @@ import type { PermitLeadItem, SalesContactLedgerItem, SalesQuoteListItem } from 
 
 const range = resolveInsightsDateRange("week", new Date("2026-10-26T12:00:00+09:00"));
 const trendChartSource = readFileSync("components/insight-trend-chart.tsx", "utf8");
+const insightsPageSource = readFileSync("app/insights/page.tsx", "utf8");
 
 describe("N4-1 insights UI data", () => {
   it("shows an explicit empty state while keeping the mobile chart scrollable", () => {
@@ -38,5 +39,13 @@ describe("N4-1 insights UI data", () => {
 
     expect(insights.funnel[0]).toMatchObject({ conversionRate: 50, previousConversionRate: 50 });
     expect(insights.funnel[1]).toMatchObject({ conversionRate: 50, previousConversionRate: 100 });
+  });
+
+  it("keeps SQL-dependent N4 sections visibly off without adding restricted reads", () => {
+    expect(insightsPageSource).toContain("deliveryIssues: false");
+    expect(insightsPageSource).toContain("itemProfitability: false");
+    expect(insightsPageSource).toContain("receivables: false");
+    expect(insightsPageSource).toContain("shareLinks: false");
+    expect(insightsPageSource).not.toMatch(/listProductCatalog|supplier_product_cost_history|getPartnerLedger|delivery_events\?/);
   });
 });
