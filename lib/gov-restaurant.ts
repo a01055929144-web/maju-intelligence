@@ -27,7 +27,7 @@ export function isGovSuccessResultCode(code?: string | null) {
 }
 
 export const GOV_DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
-const PAGE_SIZE = 200; // 느린 데이터셋도 함수 제한 안에 끝나도록 작은 페이지를 사용한다.
+const PAGE_SIZE = 100;
 
 export type GovRestaurantRow = {
   businessName: string;
@@ -125,6 +125,8 @@ export async function fetchGovAreaRows(input: {
   cutoff?: Date;
   activeOnly?: boolean;
   shouldStop?: () => boolean;
+  timeoutMs?: number;
+  retry?: boolean;
 }): Promise<GovAreaFetchResult> {
   const key = getGovRestaurantApiKey();
   if (!key) throw new Error("정부 음식점 API 키가 없습니다.");
@@ -146,7 +148,7 @@ export async function fetchGovAreaRows(input: {
       url.searchParams.set("cond[OPN_ATMY_GRP_CD::EQ]", input.areaCode);
       if (input.activeOnly) url.searchParams.set("cond[SALS_STTS_CD::EQ]", "01");
       const startedAt = performance.now();
-      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(25_000) });
+      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(input.timeoutMs || 25_000) });
       if (!response.ok) {
         throw new GovApiResponseError(
           response.status,
@@ -172,7 +174,7 @@ export async function fetchGovAreaRows(input: {
         throw new Error(`${input.dataset} API가 영업 상태 조건을 적용하지 않았습니다.`);
       }
       return { rows, totalCount: Number(data.response.body.totalCount || 0) };
-    })
+    }, input.retry !== false)
   });
   return {
     rows: result.rows.map(mapRow).filter((row): row is GovRestaurantRow => row !== null),
@@ -183,10 +185,11 @@ export async function fetchGovAreaRows(input: {
 }
 
 
-export async function fetchGovPageWithRetry<T>(pageNo: number, load: (pageNo: number) => Promise<T>): Promise<T> {
+export async function fetchGovPageWithRetry<T>(pageNo: number, load: (pageNo: number) => Promise<T>, retry = true): Promise<T> {
   try {
     return await load(pageNo);
-  } catch {
+  } catch (error) {
+    if (!retry) throw error;
     return load(pageNo);
   }
 }

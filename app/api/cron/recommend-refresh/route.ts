@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enrichAllCompaniesLeadsMissingContactInfo, purgeExpiredStaffLocationEvents, refreshAllCompaniesRecommendationScores } from "@/lib/store";
+import { enrichAllCompaniesLeadsMissingContactInfo, purgeExpiredStaffLocationEvents, refreshAllCompaniesRecommendationScores, syncAllCompaniesGovRestaurantLeads } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -33,10 +33,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const [recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention] = await Promise.all([
+  const [recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention, foodPermitRefresh] = await Promise.all([
     refreshAllCompaniesRecommendationScores(),
     enrichAllCompaniesLeadsMissingContactInfo(),
-    purgeExpiredStaffLocationEvents()
+    purgeExpiredStaffLocationEvents(),
+    syncAllCompaniesGovRestaurantLeads(["rest_cafes", "bakeries"])
   ]);
-  return NextResponse.json({ ...recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention });
+  return NextResponse.json({ ...recommendationScoreRefresh, contactInfoBackfill, staffLocationRetention, foodPermitRefresh });
 }

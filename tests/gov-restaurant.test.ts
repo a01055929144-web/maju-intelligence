@@ -38,6 +38,17 @@ describe("government API failures", () => {
     const url = request.mock.calls[0][0] as URL;
     expect(url.searchParams.get("cond[OPN_ATMY_GRP_CD::EQ]")).toBe("3220000");
     expect(url.searchParams.get("cond[SALS_STTS_CD::EQ]")).toBe("01");
+    expect(url.searchParams.get("numOfRows")).toBe("100");
+  });
+
+  it("fan-out 요청은 재시도하지 않아 12초 예산을 두 배로 쓰지 않는다", async () => {
+    vi.stubEnv("GOV_RESTAURANT_API_KEY", "private-key");
+    const request = vi.fn().mockRejectedValue(new Error("timeout"));
+    vi.stubGlobal("fetch", request);
+    await expect(fetchGovAreaRows({
+      dataset: "general_restaurants", areaCode: "3220000", maxPages: 1, timeoutMs: 12_000, retry: false
+    })).rejects.toThrow();
+    expect(request).toHaveBeenCalledTimes(1);
   });
 });
 
