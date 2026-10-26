@@ -22,12 +22,22 @@ function textOf(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
-async function fetchPage(dataset: string, pageNo: number, pageSize: number, key: string): Promise<ApiPage> {
+async function fetchPage(
+  dataset: string,
+  pageNo: number,
+  pageSize: number,
+  key: string,
+  condition?: { areaCode: string; statusCode?: string }
+): Promise<ApiPage> {
   const url = new URL(`https://apis.data.go.kr/1741000/${dataset}/info`);
   url.searchParams.set("serviceKey", key);
   url.searchParams.set("pageNo", String(pageNo));
   url.searchParams.set("numOfRows", String(pageSize));
   url.searchParams.set("type", "json");
+  if (condition) {
+    url.searchParams.set("cond[OPN_ATMY_GRP_CD::EQ]", condition.areaCode);
+    if (condition.statusCode) url.searchParams.set("cond[SALS_STTS_CD::EQ]", condition.statusCode);
+  }
   const startedAt = performance.now();
   const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45_000) });
   const elapsedMs = Math.round(performance.now() - startedAt);
@@ -85,13 +95,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "dataset 쿼리가 필요합니다.", datasets: DATASETS }, { status: 400 });
   }
   const dataset = requestedDataset as (typeof DATASETS)[number];
+  const conditionMode = requestUrl.searchParams.get("mode") === "cond";
   const probeOnly = requestUrl.searchParams.get("mode") === "probe";
   const pageSize = dataset === "general_restaurants" ? GENERAL_RESTAURANT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
   const samplePageCount = dataset === "general_restaurants" ? GENERAL_RESTAURANT_SAMPLE_PAGES : DEFAULT_SAMPLE_PAGES;
-  const targetProvinces = await getTargetProvinces();
+  const areaCode = requestUrl.searchParams.get("areaCode") || "";
+  const statusCode = requestUrl.searchParams.get("statusCode") || "";
+  if (conditionMode && (!/^\d{7}$/.test(areaCode) || (statusCode && !/^\d{2}$/.test(statusCode)))) {
+    return NextResponse.json({ message: "areaCode는 7자리, statusCode는 2자리 숫자여야 합니다." }, { status: 400 });
+  }
+  const targetProvinces = conditionMode ? [] : await getTargetProvinces();
   try {
-    const first = await fetchPage(dataset, 1, probeOnly ? 10 : pageSize, key);
-    if (probeOnly) {
+    const first = await fetchPage(
+      dataset, 1, probeOnly || conditionMode ? 10 : pageSize, key,
+      conditionMode ? { areaCode, statusCode: statusCode || undefined } : undefined
+    );
+    if (probeOnly || conditionMode) {
       return NextResponse.json({
         measuredAt: new Date().toISOString(),
         dataset,
@@ -101,7 +120,14 @@ export async function GET(request: Request) {
         elapsedMs: first.elapsedMs,
         executedOn: process.env.VERCEL ? "vercel-server" : "local-server",
         returnedRows: first.rows.length,
-        totalCount: first.total
+        totalCount: first.total,
+        ...(conditionMode ? {
+          areaCode,
+          statusCode: statusCode || null,
+          allRowsMatchArea: first.rows.every((row) => textOf(row, ["OPN_ATMY_GRP_CD"]) === areaCode),
+          allRowsMatchStatus: statusCode ? first.rows.every((row) => textOf(row, ["SALS_STTS_CD"]) === statusCode) : null,
+          newestModifiedAt: textOf(first.rows[0] || {}, ["DAT_UPDT_PNT", "LAST_MDFCN_PNT"])
+        } : {})
       });
     }
     const totalPages = Math.max(1, Math.ceil(first.total / pageSize));

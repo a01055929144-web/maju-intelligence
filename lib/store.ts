@@ -2,7 +2,8 @@ import { analyzeCompany, AnalysisResult } from "./analysis";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
-import { fetchRecentGovRestaurantRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
+import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
+import { canScanNextGovArea, getGovAreaCodes, getGovChangeCutoff, govLastSuccessRunQuery } from "./gov-area-scan";
 import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
@@ -9252,6 +9253,8 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
 // 2026-09-07 피드백("시간은 넉넉하고 끊어서 진행하면 더 자세한 데이터가 있지 않을까") 대응:
 // startPage를 넘기면 그 구간부터 스캔하고, 결과에 nextStartPage를 함께 돌려줘서 화면이 "계속
 // 가져오기"로 바로 다음 구간을 이어서 요청할 수 있습니다. 안 넘기면 예전처럼 날짜 기반 회전입니다.
+type GovAreaCursor = { areaCode: string; page: number; cutoff: string; scanStartedAt: string };
+
 export async function syncGovRestaurantLeads(
   companyId: string,
   days = 3,
@@ -9264,50 +9267,100 @@ export async function syncGovRestaurantLeads(
 
   const startedAt = new Date().toISOString();
   try {
-    const result = await fetchRecentGovRestaurantRows(days, undefined, startPage);
-    const ingest = await ingestPermitLeadRows(companyId, result.rows, { source: "gov_restaurant_api" });
-    let status: "success" | "error" = "success";
-    let message = `${summarizeLeadSyncIngest(ingest)} · 건너뛴 페이지 ${result.skippedPages.length}개`;
-    if (trigger === "cron" && result.rows.length === 0) {
-      const previousRuns = await supabaseRequest<Array<{
-        started_at: string;
-        fetched_count: number;
-        status: string;
-      }>>(
-        `lead_sync_runs?select=started_at,fetched_count,status&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&trigger=eq.cron&started_at=lt.${encodeURIComponent(startedAt)}&order=started_at.desc&limit=1`
-      ).catch(() => []);
-      const previous = previousRuns[0];
-      if (isConsecutiveDailyZeroFetch({
-        currentStartedAt: startedAt,
-        currentFetched: result.rows.length,
-        previousStartedAt: previous?.started_at,
-        previousFetched: previous?.fetched_count,
-        previousStatus: previous?.status
-      })) {
-        status = "error";
-        message = "정부 일반음식점 API에서 이틀 연속 수집 행이 0건입니다. API 상태를 확인해 주세요.";
+    const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
+    const { codes, missing } = getGovAreaCodes(salesAreas);
+    const previousRuns = await supabaseRequest<Array<{
+      started_at: string;
+      finished_at: string | null;
+      fetched_count: number;
+      status: string;
+      metadata: { areaCursor?: GovAreaCursor | null; scanStartedAt?: string } | null;
+    }>>(
+      govLastSuccessRunQuery(companyId)
+    ).catch(() => []);
+    const previous = previousRuns.find((run) => run.status === "success");
+    const savedCursor = previous?.metadata?.areaCursor;
+    const scanStartedAt = savedCursor?.scanStartedAt || startedAt;
+    const cutoff = savedCursor?.cutoff
+      ? new Date(savedCursor.cutoff)
+      : getGovChangeCutoff(new Date(startedAt), previous?.metadata?.scanStartedAt || previous?.finished_at, days);
+    const deadline = Date.now() + 32_000;
+    const rows: Awaited<ReturnType<typeof fetchGovAreaRows>>["rows"] = [];
+    let scannedPages = 0;
+    let totalPages = 0;
+    let nextCursor: GovAreaCursor | null = null;
+    const startIndex = savedCursor ? Math.max(0, codes.indexOf(savedCursor.areaCode)) : 0;
+    for (let index = startIndex; index < codes.length; index += 1) {
+      if (!canScanNextGovArea(scannedPages, 14)) {
+        nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
+        break;
       }
+      if (Date.now() >= deadline && scannedPages) {
+        nextCursor = { areaCode: codes[index], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
+        break;
+      }
+      const areaCode = codes[index];
+      const result = await fetchGovAreaRows({
+        dataset: "general_restaurants",
+        areaCode,
+        startPage: savedCursor?.areaCode === areaCode ? savedCursor.page : index === 0 ? startPage : undefined,
+        maxPages: Math.min(2, 14 - scannedPages),
+        cutoff,
+        shouldStop: () => Date.now() >= deadline
+      });
+      rows.push(...result.rows);
+      scannedPages += result.scannedPages;
+      totalPages += result.totalPages;
+      if (result.nextPage) {
+        nextCursor = { areaCode, page: result.nextPage, cutoff: cutoff.toISOString(), scanStartedAt };
+        break;
+      }
+      if ((scannedPages >= 14 || rows.length >= 2_000) && index + 1 < codes.length) {
+        nextCursor = { areaCode: codes[index + 1], page: 1, cutoff: cutoff.toISOString(), scanStartedAt };
+        break;
+      }
+    }
+    const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
+    let status: "success" | "error" = "success";
+    let message = `${summarizeLeadSyncIngest(ingest)} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
+    if (trigger === "cron" && codes.length && rows.length === 0 && !nextCursor &&
+        isConsecutiveDailyZeroFetch({
+          currentStartedAt: startedAt,
+          currentFetched: 0,
+          previousStartedAt: previous?.started_at,
+          previousFetched: previous?.fetched_count,
+          previousStatus: previous?.status
+        })) {
+      status = "error";
+      message = "정부 일반음식점 API에서 이틀 연속 수집 행이 0건입니다. API 상태를 확인해 주세요.";
     }
     await recordLeadSyncStatus(companyId, "gov", status, {
       trigger,
       startedAt,
-      fetched: result.rows.length,
+      fetched: rows.length,
       ingest,
       message,
       metadata: {
-        scannedPages: result.scannedPages,
-        skippedPageCount: result.skippedPages.length,
-        skippedPages: result.skippedPages
+        scannedPages,
+        areaCodes: codes.length,
+        missingAreas: missing,
+        areaCursor: nextCursor,
+        scanStartedAt,
+        updateKinds: rows.reduce<Record<string, number>>((counts, row) => {
+          const kind = row.updateKind || "unknown";
+          counts[kind] = (counts[kind] || 0) + 1;
+          return counts;
+        }, {})
       }
     });
     return {
       configured: true,
-      fetched: result.rows.length,
+      fetched: rows.length,
       ingest,
-      nextStartPage: result.nextStartPage,
-      scannedPages: result.scannedPages,
-      totalPages: result.totalPages,
-      skippedPages: result.skippedPages
+      nextStartPage: nextCursor?.page,
+      scannedPages,
+      totalPages,
+      skippedPages: []
     };
   } catch (error) {
     await recordLeadSyncStatus(companyId, "gov", "error", {
@@ -9336,39 +9389,12 @@ export async function syncAllCompaniesGovRestaurantLeads(): Promise<GovRestauran
   };
   if (!empty.configured || !isProductionStoreConfigured()) return empty;
 
-  const companies = await supabaseRequest<Array<{ id: string; gov_restaurant_sync_cursor: number | null }>>(
-    "companies?select=id,gov_restaurant_sync_cursor"
-  ).catch(() => []);
-  // days=14(이 소스의 최대 조회 범위) — 스캔하는 구간(페이지 수)은 그대로고 그 안에서 걸러내는
-  // 날짜 필터만 넓어지므로 비용 증가 없이 회수율만 올라갑니다(2026-08-23 피드백 대응).
-  // 2026-08-28 피드백 대응: 회사 하나가 실패해도(네트워크 오류 등) Promise.all 전체가 reject되어
-  // 나머지 회사까지 동기화를 건너뛰지 않도록 개별적으로 catch합니다(실패 상태는 recordLeadSyncStatus로
-  // 이미 기록됨).
-  // 2026-09-07 피드백("전국 다 훑는데 시간이 오래 걸리면 시간을 넉넉히 줘도 된다") 대응: 예전에는
-  // 매일 rotateStartPage()가 "오늘 날짜" 기준으로 매번 새 구간을 계산해서, 하루치 스캔이 그 구간의
-  // 일부만 훑고 멈춰도 다음날은 그 나머지를 이어가지 않고 완전히 다른 구간으로 점프해버렸습니다 —
-  // 결국 대부분의 구간이 영영 스캔되지 않고 버려지는 셈이었습니다. 이제 회사별로 저장된 커서
-  // (gov_restaurant_sync_cursor)가 있으면 그 지점부터 진짜로 이어서 스캔하고, 끝난 지점을 다시
-  // 저장해둡니다 — 매일의 진행이 누적되어 결국 전국을 다 훑게 됩니다.
-  const results = await Promise.all(
-    companies.map(async (company) => {
-      const startPage = Number.isFinite(company.gov_restaurant_sync_cursor) && Number(company.gov_restaurant_sync_cursor) > 0
-        ? Number(company.gov_restaurant_sync_cursor)
-        : undefined;
-      const result = await syncGovRestaurantLeads(company.id, 14, startPage, "cron").catch(
-        (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
-      );
-      if (result.nextStartPage) {
-        await supabaseRequest(`companies?id=eq.${encodeURIComponent(company.id)}`, {
-          method: "PATCH",
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ gov_restaurant_sync_cursor: result.nextStartPage })
-        }).catch(() => null);
-      }
-      return result;
-    })
-  );
-
+  const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
+  const results = await Promise.all(companies.map(async ({ id }) =>
+    syncGovRestaurantLeads(id, 14, undefined, "cron").catch(
+      (): GovRestaurantSyncResult => ({ configured: true, fetched: 0, ingest: EMPTY_PERMIT_INGEST_RESULT })
+    )
+  ));
   return results.reduce<GovRestaurantDailySyncResult>(
     (total, result) => ({
       configured: true,

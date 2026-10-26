@@ -10,19 +10,14 @@
  * 대신 기존 파이프라인(lib/store.ts의 resolveLeadPoint → 카카오 지오코더)이 주소 텍스트만으로
  * lazy하게 좌표를 채우는 방식을 그대로 재사용합니다 — 수동 엑셀 업로드 리드와 동일한 경로입니다.
  *
- * 전국 데이터가 약 229만 건이고(2026-08-19 기준 totalCount), 이 API는 "최근 변경분만" 걸러주는
- * 요청 파라미터가 없습니다(/info는 현재 전체 스냅샷, /history는 과거 특정 기준일 스냅샷). 한 번의
- * 호출로 전체를 훑는 건 비현실적이라, LAST_MDFCN_PNT(최종수정일시) 값으로 응답 안에서만 최근 N일
- * 변경분을 걸러내고, 매 호출마다 시작 페이지를 날짜 기반으로 회전시켜(rotateStartPage) 여러 번
- * 반복 호출하면 전체 데이터를 결국 다 훑도록 설계했습니다. 별도 DB 커서 없이도 동작하지만, 완전
- * 커버리지까지는 며칠~몇 주가 걸릴 수 있습니다.
+ * /info의 개방자치단체코드 조건과 최신순 정렬을 사용해 회사 영업 지역만 조회합니다.
  */
 
+import { getGovUpdateKind, scanGovArea, type GovDataset } from "./gov-area-scan";
 import { GovApiResponseError, parseGovApiFailure } from "./gov-api-response";
 
-const GOV_RESTAURANT_URL = "https://apis.data.go.kr/1741000/general_restaurants/info";
-const PAGE_SIZE = 1000; // 공공데이터포털 표준 REST API의 일반적인 numOfRows 상한
-const MAX_LOOKBACK_DAYS = 14;
+export const GOV_DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
+const PAGE_SIZE = 200; // 느린 데이터셋도 함수 제한 안에 끝나도록 작은 페이지를 사용한다.
 
 export type GovRestaurantRow = {
   businessName: string;
@@ -36,6 +31,8 @@ export type GovRestaurantRow = {
   industry?: string;
   lastModified?: string;
   sourceRecordKey?: string;
+  updateKind?: ReturnType<typeof getGovUpdateKind>;
+  salesStatusCode?: string;
 };
 
 function getGovRestaurantApiKey() {
@@ -65,10 +62,16 @@ function mapRow(raw: Record<string, unknown>): GovRestaurantRow | null {
   const permitDate = pick(raw, ["LCPMT_YMD"]);
   const closeDate = pick(raw, ["CLSBIZ_YMD"]);
   const statusName = pick(raw, ["DTL_SALS_STTS_NM", "SALS_STTS_NM"]);
+  const updateKind = getGovUpdateKind(pick(raw, ["DAT_UPDT_SE"]));
+  const salesStatusCode = pick(raw, ["SALS_STTS_CD"]);
 
   return {
     businessName,
-    permitStatus: closeDate ? `${statusName || "폐업"}(${closeDate})` : statusName,
+    permitStatus: closeDate
+      ? `${statusName || "폐업"}(${closeDate})`
+      : updateKind === "delete" || salesStatusCode === "03" || salesStatusCode === "04"
+        ? "폐업"
+        : salesStatusCode === "02" ? "휴업" : statusName,
     permitDate,
     openDate: permitDate,
     closeDate,
@@ -77,7 +80,9 @@ function mapRow(raw: Record<string, unknown>): GovRestaurantRow | null {
     jurisdiction: pick(raw, ["OPN_ATMY_GRP_CD"]),
     industry: pick(raw, ["BZSTAT_SE_NM", "SNTTN_BZSTAT_NM"]),
     lastModified: pick(raw, ["LAST_MDFCN_PNT", "DAT_UPDT_PNT"]),
-    sourceRecordKey: pick(raw, ["MGTNO", "MNG_NO"])
+    sourceRecordKey: pick(raw, ["MGTNO", "MNG_NO"]),
+    updateKind,
+    salesStatusCode
   };
 }
 
@@ -93,85 +98,80 @@ type GovRestaurantApiResponse = {
   };
 };
 
-async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown>[]; totalCount: number }> {
-  const key = getGovRestaurantApiKey();
-  if (!key) throw new Error("정부 일반음식점 API 키가 없습니다.");
 
-  const url = new URL(GOV_RESTAURANT_URL);
-  url.searchParams.set("serviceKey", key);
-  url.searchParams.set("pageNo", String(pageNo));
-  url.searchParams.set("numOfRows", String(PAGE_SIZE));
-  url.searchParams.set("type", "json");
-
-  const startedAt = performance.now();
-  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) {
-    const failure = parseGovApiFailure(await response.text(), key);
-    throw new GovApiResponseError(response.status, failure, Math.round(performance.now() - startedAt));
-  }
-  const data = (await response.json()) as GovRestaurantApiResponse;
-  const body = data.response?.body;
-  const resultCode = data.response?.header?.resultCode;
-  if (resultCode && resultCode !== "00") {
-    const failure = parseGovApiFailure(JSON.stringify({ response: { header: data.response?.header } }), key);
-    throw new GovApiResponseError(response.status, failure, Math.round(performance.now() - startedAt));
-  }
-  if (!body) {
-    throw new Error(`정부 일반음식점 API 응답 본문이 없습니다${resultCode ? ` (${resultCode})` : ""}.`);
-  }
-  return { rows: body.items?.item || [], totalCount: Number(body.totalCount || 0) };
-}
-
-// 날짜 기반으로 시작 페이지를 회전시켜, 매일 다른 구간을 훑도록 합니다. pagesPerRun만큼 진행하면
-// 다음 실행에서는 그 바로 다음 구간부터 이어갑니다(전체 페이지 수를 넘으면 처음으로 순환).
-function rotateStartPage(totalPages: number, pagesPerRun: number): number {
-  if (totalPages <= pagesPerRun) return 1;
-  const dayIndex = Math.floor(Date.now() / 86400000);
-  const window = dayIndex % Math.max(1, Math.ceil(totalPages / pagesPerRun));
-  return 1 + window * pagesPerRun;
-}
-
-/**
- * 최근 days일 안에 변경(신규/정정/폐업)된 음식점 행을 가져옵니다. 전체 229만 건을 매번 다 훑을 수
- * 없어 pagesPerRun 페이지(기본 30페이지 = 30,000행)만 스캔하고, 그 안에서 LAST_MDFCN_PNT 기준으로
- * 최근분만 골라냅니다. 시작 위치는 날짜에 따라 회전해 반복 호출 시 결국 전국을 다 훑게 됩니다.
- */
-// 페이지를 순차로 하나씩 기다리면(await 30번) 응답 시간이 API 지연에 비례해 늘어나 Vercel 함수
-// 시간 제한(60초)을 넘기기 쉽습니다 — 서울시 공공데이터 쪽에서 실제로 타임아웃이 재현됐습니다
-// (2026-08-19). FETCH_CONCURRENCY만큼 동시에 요청하고, TIME_BUDGET_MS를 넘기면 지금까지 모은
-// 행만으로 즉시 반환합니다(다음 실행이 rotateStartPage로 이어서 훑으므로 데이터 유실은 아니고
-// 진행이 느려질 뿐입니다).
-const FETCH_CONCURRENCY = 5;
-// 2026-09-07 피드백("자동 수집에 실패했습니다" — 화면에 뜬 문구가 서버가 실제로 내려주는 어떤
-// 에러 메시지와도 일치하지 않아, 응답이 JSON이 아니었다는 뜻입니다. 즉 라우트가 던진 에러가
-// 아니라 Vercel 함수 실행 시간 제한에 걸려 죽었을 가능성이 가장 큽니다). 예전에 "45초 스캔 +
-// ingest로 총 48.9초"까지 나온 적이 있다는 기록으로 볼 때 60초 한도에 여유가 있었지만, 그날그날
-// 회전 구간(rotateStartPage)에 "최근 변경분"이 유난히 많이 몰리면 스캔한 행 수만큼 DB 적재
-// (ingest) 시간도 비례해 늘어나 가끔 60초를 넘길 수 있습니다. 스캔 예산을 20초로 더 줄이고,
-// 한 번에 적재할 행 수에도 상한(MAX_ROWS_PER_RUN)을 둬 ingest 소요 시간을 예측 가능한 범위로
-// 묶습니다 — 상한에 걸려 못 다 훑은 나머지는 데이터가 사라지는 게 아니라 다음 실행(rotateStartPage가
-// 이어서 훑음)으로 미뤄질 뿐입니다.
-// 2026-09-07 피드백("전국 다 훑는데 시간이 오래 걸리면 시간을 넉넉히 줘도 된다") 대응: 이 함수를
-// 호출하는 야간 cron(app/api/cron/business-status)은 이 작업과 병렬로 몇 가지 다른 작업만 함께
-// 돌기 때문에(순차로 실행되는 건 사업자 상태 새로고침뿐, 보통 몇 초 안에 끝남) 60초 함수 시간
-// 제한 안에서 20초보다 훨씬 더 써도 안전합니다. 35초로 올려 한 번에 스캔하는 페이지 수를 늘립니다.
-const TIME_BUDGET_MS = 35_000;
-const MAX_ROWS_PER_RUN = 4000;
-
-export type GovRestaurantFetchResult = {
+export type GovAreaFetchResult = {
   rows: GovRestaurantRow[];
-  // 2026-09-07 피드백("데이터양이 많아 시간이 오래걸리면 시간은 넉넉하고 끊어서 진행하면 더
-  // 자세한 데이터가 있지 않을까") 대응: 예전에는 시작 페이지가 날짜(day index)로만 정해져서, 같은
-  // 날 버튼을 여러 번 눌러도 항상 같은 구간을 다시 훑을 뿐이었습니다(회전 폭 150페이지가 전국
-  // 229만 건/1000행=2,290페이지를 다 돌려면 약 16일이 걸림). nextStartPage를 돌려줘서 화면이
-  // 이어서 바로 다음 구간을 요청할 수 있게 하면, 한 번의 "계속 가져오기" 세션 안에서 시간이
-  // 허용하는 만큼 여러 구간을 이어 붙여 짧은 시간에 훨씬 넓은 지역을 훑을 수 있습니다.
-  nextStartPage: number;
+  nextPage: number | null;
   scannedPages: number;
-  startPage: number;
   totalPages: number;
-  skippedPages: number[];
 };
+
+/** 영업 지역 코드만 요청한다. 첫 적재는 영업 중만, 이후 변경분은 폐업도 받아야 한다. */
+export async function fetchGovAreaRows(input: {
+  dataset: GovDataset;
+  areaCode: string;
+  startPage?: number;
+  maxPages: number;
+  cutoff?: Date;
+  activeOnly?: boolean;
+  shouldStop?: () => boolean;
+}): Promise<GovAreaFetchResult> {
+  const key = getGovRestaurantApiKey();
+  if (!key) throw new Error("정부 음식점 API 키가 없습니다.");
+  if (!/^\d{7}$/.test(input.areaCode)) throw new Error("개방자치단체코드가 올바르지 않습니다.");
+  const pageSize = PAGE_SIZE;
+  const result = await scanGovArea<Record<string, unknown>>({
+    startPage: input.startPage,
+    maxPages: input.maxPages,
+    pageSize,
+    cutoff: input.cutoff,
+    shouldStop: input.shouldStop,
+    modifiedAt: (row) => pick(row, ["DAT_UPDT_PNT", "LAST_MDFCN_PNT"]),
+    load: (pageNo) => fetchGovPageWithRetry(pageNo, async () => {
+      const url = new URL(`https://apis.data.go.kr/1741000/${input.dataset}/info`);
+      url.searchParams.set("serviceKey", key);
+      url.searchParams.set("pageNo", String(pageNo));
+      url.searchParams.set("numOfRows", String(pageSize));
+      url.searchParams.set("type", "json");
+      url.searchParams.set("cond[OPN_ATMY_GRP_CD::EQ]", input.areaCode);
+      if (input.activeOnly) url.searchParams.set("cond[SALS_STTS_CD::EQ]", "01");
+      const startedAt = performance.now();
+      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(25_000) });
+      if (!response.ok) {
+        throw new GovApiResponseError(
+          response.status,
+          parseGovApiFailure(await response.text(), key),
+          Math.round(performance.now() - startedAt)
+        );
+      }
+      const data = (await response.json()) as GovRestaurantApiResponse;
+      const code = data.response?.header?.resultCode;
+      if (code && code !== "00") {
+        throw new GovApiResponseError(
+          response.status,
+          parseGovApiFailure(JSON.stringify({ response: { header: data.response?.header } }), key),
+          Math.round(performance.now() - startedAt)
+        );
+      }
+      if (!data.response?.body) throw new Error(`${input.dataset} API 응답 본문이 없습니다.`);
+      const rows = data.response.body.items?.item || [];
+      if (rows.some((row) => pick(row, ["OPN_ATMY_GRP_CD"]) !== input.areaCode)) {
+        throw new Error(`${input.dataset} API가 요청한 시군구 조건을 적용하지 않았습니다.`);
+      }
+      if (input.activeOnly && rows.some((row) => pick(row, ["SALS_STTS_CD"]) !== "01")) {
+        throw new Error(`${input.dataset} API가 영업 상태 조건을 적용하지 않았습니다.`);
+      }
+      return { rows, totalCount: Number(data.response.body.totalCount || 0) };
+    })
+  });
+  return {
+    rows: result.rows.map(mapRow).filter((row): row is GovRestaurantRow => row !== null),
+    nextPage: result.nextPage,
+    scannedPages: result.scannedPages,
+    totalPages: result.totalPages
+  };
+}
+
 
 export async function fetchGovPageWithRetry<T>(pageNo: number, load: (pageNo: number) => Promise<T>): Promise<T> {
   try {
@@ -199,64 +199,5 @@ export async function fetchGovPagesWithRetry<T>(
   return {
     pages: settled.filter((item): item is { pageNo: number; value: Awaited<T> } => item !== null),
     skippedPages: pageNumbers.filter((pageNo) => !settled.some((item) => item?.pageNo === pageNo))
-  };
-}
-
-export async function fetchRecentGovRestaurantRows(
-  days = 3,
-  pagesPerRun = 150,
-  startPageOverride?: number
-): Promise<GovRestaurantFetchResult> {
-  const empty = { rows: [] as GovRestaurantRow[], nextStartPage: 1, scannedPages: 0, startPage: 1, totalPages: 1, skippedPages: [] as number[] };
-  if (!isGovRestaurantApiConfigured()) return empty;
-
-  const startedAt = Date.now();
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - Math.max(1, Math.min(days, MAX_LOOKBACK_DAYS)));
-
-  // 첫 페이지는 totalCount를 얻는 필수 요청입니다. 다른 페이지와 마찬가지로 일시 장애를 한 번
-  // 복구하되, 두 번째 시도까지 실패하면 전체 수집을 실패시켜 잘못된 페이지 범위를 만들지 않습니다.
-  const first = await fetchGovPageWithRetry(1, fetchPage);
-  const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
-  const startPage =
-    startPageOverride && startPageOverride >= 1 && startPageOverride <= totalPages
-      ? startPageOverride
-      : rotateStartPage(totalPages, pagesPerRun);
-  const pageNumbers = Array.from({ length: pagesPerRun }, (_, offset) => ((startPage - 1 + offset) % totalPages) + 1);
-
-  const rows: GovRestaurantRow[] = [];
-  let scannedPages = 0;
-  let processedPages = 0;
-  const skippedPages: number[] = [];
-  for (let i = 0; i < pageNumbers.length; i += FETCH_CONCURRENCY) {
-    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
-    if (rows.length >= MAX_ROWS_PER_RUN) break;
-    const batch = pageNumbers.slice(i, i + FETCH_CONCURRENCY);
-    const batchResult = await fetchGovPagesWithRetry(batch, (pageNo) => pageNo === 1 ? Promise.resolve(first) : fetchPage(pageNo));
-    processedPages += batch.length;
-    scannedPages += batchResult.pages.length;
-    skippedPages.push(...batchResult.skippedPages);
-    for (const { value: page } of batchResult.pages) {
-      if (!page.rows.length) continue;
-      for (const raw of page.rows) {
-        const mapped = mapRow(raw);
-        if (!mapped) continue;
-        if (mapped.lastModified) {
-          const modified = new Date(mapped.lastModified.replace(" ", "T"));
-          if (!Number.isNaN(modified.getTime()) && modified < cutoff) continue;
-        }
-        rows.push(mapped);
-      }
-    }
-  }
-
-  const nextStartPage = ((startPage - 1 + processedPages) % totalPages) + 1;
-  return {
-    rows: rows.length > MAX_ROWS_PER_RUN ? rows.slice(0, MAX_ROWS_PER_RUN) : rows,
-    nextStartPage,
-    scannedPages,
-    startPage,
-    totalPages,
-    skippedPages
   };
 }
