@@ -504,6 +504,7 @@ export type AuthCredentials = {
 export type ManagedCompanyAccount = {
   id: string;
   name: string;
+  businessRegistrationNumber: string;
   businessType: string;
   ownerName: string;
   originAddress: string;
@@ -522,6 +523,7 @@ export type ManagedCompanyAccount = {
 export type ManagedCompanyAccountInput = {
   id?: string;
   name: string;
+  businessRegistrationNumber?: string;
   businessType?: string;
   ownerName?: string;
   originAddress?: string;
@@ -2006,13 +2008,14 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         Array<{
           id: string;
           name: string;
+          business_registration_number: string | null;
           business_type: string | null;
           owner_name: string | null;
           origin_address: string | null;
           status: string;
           updated_at: string;
         }>
-      >("companies?select=id,name,business_type,owner_name,origin_address,status,updated_at&order=created_at.desc"),
+      >("companies?select=id,name,business_registration_number,business_type,owner_name,origin_address,status,updated_at&order=created_at.desc"),
       supabaseRequest<
         Array<{
           customer_company_id: string | null;
@@ -2109,6 +2112,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         return {
           id: company.id,
           name: company.name,
+          businessRegistrationNumber: company.business_registration_number || "",
           businessType: company.business_type || "",
           ownerName: company.owner_name || "",
           originAddress: company.origin_address || "",
@@ -2137,10 +2141,14 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
 export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountInput, auditContext: AuditActorContext = {}): Promise<{ company: ManagedCompanyAccount; persisted: boolean }> {
   const companyId = input.id || globalThis.crypto.randomUUID();
   const companyName = input.name.trim();
+  const businessRegistrationNumber = normalizeBusinessNumber(input.businessRegistrationNumber || "");
   const customerEmail = input.customerEmail.trim().toLowerCase();
   const isNewCompany = !input.id;
 
   if (!companyName) throw new Error("고객사명은 필수입니다.");
+  if (businessRegistrationNumber && !isValidBusinessRegistrationNumber(businessRegistrationNumber)) {
+    throw new Error("사업자등록번호 10자리를 확인해주세요.");
+  }
   if (!customerEmail || (isNewCompany && !input.customerPassword)) {
     throw new Error("신규 고객사는 로그인 이메일과 비밀번호가 필수입니다.");
   }
@@ -2151,6 +2159,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       company: {
         id: companyId,
         name: companyName,
+        businessRegistrationNumber,
         businessType: input.businessType || "",
         ownerName: input.ownerName || "",
         originAddress: input.originAddress || "",
@@ -2170,6 +2179,13 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
 
   const adminCredentials = await getAuthCredentials();
   const now = new Date().toISOString();
+
+  if (businessRegistrationNumber) {
+    const duplicates = await supabaseRequest<Array<{ id: string }>>(
+      `companies?select=id&business_registration_number=eq.${encodeURIComponent(businessRegistrationNumber)}&id=neq.${encodeURIComponent(companyId)}&limit=1`
+    ).catch(() => []);
+    if (duplicates.length) throw new Error("이미 등록된 사업자등록번호입니다.");
+  }
 
   const duplicateCredentialRows = await supabaseRequest<Array<{ customer_company_id: string | null }>>(
     `auth_credentials?select=customer_company_id&customer_email=eq.${encodeURIComponent(customerEmail)}`
@@ -2192,6 +2208,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
     Array<{
       id: string;
       name: string;
+      business_registration_number: string | null;
       business_type: string | null;
       owner_name: string | null;
       origin_address: string | null;
@@ -2207,6 +2224,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       {
         id: companyId,
         name: companyName,
+        business_registration_number: businessRegistrationNumber || null,
         business_type: input.businessType?.trim() || null,
         owner_name: input.ownerName?.trim() || null,
         origin_address: input.originAddress?.trim() || null,
@@ -2324,6 +2342,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
     company: {
       id: company.id,
       name: company.name,
+      businessRegistrationNumber: company.business_registration_number || "",
       businessType: company.business_type || "",
       ownerName: company.owner_name || "",
       originAddress: company.origin_address || "",

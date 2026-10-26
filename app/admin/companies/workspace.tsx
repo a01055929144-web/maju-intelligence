@@ -41,6 +41,7 @@ type CompanyDiagnosticResult = {
 
 const emptyCompany: ManagedCompanyAccountInput = {
   name: "",
+  businessRegistrationNumber: "",
   businessType: "식자재 유통",
   ownerName: "",
   originAddress: "",
@@ -118,6 +119,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
     const next = {
       id: company.id,
       name: company.name,
+      businessRegistrationNumber: company.businessRegistrationNumber,
       businessType: company.businessType,
       ownerName: company.ownerName,
       originAddress: company.originAddress,
@@ -176,6 +178,20 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const sameNameCompanies = companies.filter(
+      (company) => company.id !== form.id && company.name.trim().toLocaleLowerCase("ko-KR") === form.name.trim().toLocaleLowerCase("ko-KR")
+    );
+    if (sameNameCompanies.length) {
+      const existingSummary = sameNameCompanies
+        .map((company) => {
+          const area = company.originAddress.split(" ").slice(0, 2).join(" ") || "지역 미등록";
+          const lastFour = company.businessRegistrationNumber.slice(-4) || "번호 없음";
+          return `• ${company.name} · ${company.ownerName || "대표자 미등록"} · ${area} · 끝 ${lastFour}`;
+        })
+        .join("\n");
+      if (!window.confirm(`같은 상호명의 고객사가 이미 있습니다. 사업자등록번호가 다른 회사인지 확인해주세요.\n\n${existingSummary}\n\n계속 저장할까요?`)) return;
+    }
+
     const currentStatus = selectedCompany?.status || formBaseline.status || "active";
     const nextStatus = form.status || "active";
     if (form.id && currentStatus !== nextStatus && (nextStatus === "paused" || nextStatus === "closed")) {
@@ -211,6 +227,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
     const savedForm = {
       id: saved.id,
       name: saved.name,
+      businessRegistrationNumber: saved.businessRegistrationNumber,
       businessType: saved.businessType,
       ownerName: saved.ownerName,
       originAddress: saved.originAddress,
@@ -634,6 +651,9 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">기본 로그인</span> : null}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {company.ownerName || "대표자 미등록"} · {company.originAddress.split(" ").slice(0, 2).join(" ") || "지역 미등록"} · {company.businessRegistrationNumber ? `사업자번호 끝 ${company.businessRegistrationNumber.slice(-4)}` : "사업자번호 필요"}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">{company.customerEmail || "로그인 계정 미등록"}</p>
                 </div>
                 <Badge
@@ -993,6 +1013,12 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, initialCompanies, in
           <div className="grid gap-4 md:grid-cols-2" id="company-editor">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />
             <Field label="대표자/담당자명" value={form.ownerName || ""} onChange={(value) => update("ownerName", value)} />
+            <Field
+              help="상호명은 중복될 수 있지만 사업자등록번호는 회사마다 고유해야 합니다."
+              label="사업자등록번호"
+              value={form.businessRegistrationNumber || ""}
+              onChange={(value) => update("businessRegistrationNumber", value)}
+            />
             <Field label="업종" value={form.businessType || ""} onChange={(value) => update("businessType", value)} />
             <label className="block space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">운영상태</span>
