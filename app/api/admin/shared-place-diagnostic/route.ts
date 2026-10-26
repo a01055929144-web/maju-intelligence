@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/auth";
 import { supabaseRequest } from "@/lib/store";
 import { GovApiResponseError, parseGovApiFailure } from "@/lib/gov-api-response";
+import { isGovSuccessResultCode } from "@/lib/gov-restaurant";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,8 +52,8 @@ async function fetchPage(
       body?: { totalCount?: number; items?: { item?: Array<Record<string, unknown>> } };
     };
   };
-  if (data.response?.header?.resultCode && data.response.header.resultCode !== "00") {
-    const failure = parseGovApiFailure(JSON.stringify({ response: { header: data.response.header } }), key);
+  if (!isGovSuccessResultCode(data.response?.header?.resultCode)) {
+    const failure = parseGovApiFailure(JSON.stringify({ response: { header: data.response?.header } }), key);
     throw new GovApiResponseError(response.status, failure, elapsedMs);
   }
   return {
