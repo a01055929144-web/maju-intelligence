@@ -8,9 +8,11 @@ const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   "bank_account",
   "business_license",
+  "contract",
   "delivery_proof",
   "identity_document",
   "loading_position",
+  "store_sign",
   "etc"
 ]);
 

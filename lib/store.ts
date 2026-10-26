@@ -10477,6 +10477,7 @@ export async function getPermitLeadIdentityForCompany(
 }
 
 export type PermitLeadProfileInput = {
+  businessNumber?: string | null;
   instagramUrl?: string | null;
   fax?: string | null;
   email?: string | null;
@@ -10501,6 +10502,33 @@ export async function updatePermitLeadProfile(
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = { updated_at: now };
   const changed: string[] = [];
+  if ("businessNumber" in input) {
+    const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+    if (businessNumber && !isValidBusinessRegistrationNumber(businessNumber)) {
+      return { ok: false, message: "사업자등록번호 10자리를 확인해주세요." };
+    }
+    if (businessNumber) {
+      const [currentRows, duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
+        supabaseRequest<Array<{ matched_customer_id: string | null }>>(
+          `business_permit_leads?select=matched_customer_id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
+        ),
+        supabaseRequest<Array<{ id: string }>>(
+          `business_permit_leads?select=id&id=neq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=eq.${encodeURIComponent(businessNumber)}&limit=1`
+        ),
+        supabaseRequest<Array<{ id: string }>>(
+          `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=2`
+        )
+      ]);
+      if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
+      const matchedCustomerId = currentRows[0].matched_customer_id;
+      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== matchedCustomerId);
+      if (duplicateLeadRows.length || hasOtherCustomer) {
+        return { ok: false, message: "같은 회사에 이미 등록된 사업자등록번호입니다." };
+      }
+    }
+    payload.business_number = businessNumber || null;
+    changed.push("business_number");
+  }
   if ("instagramUrl" in input) {
     payload.instagram_url = input.instagramUrl || null;
     changed.push("instagram");
@@ -10546,9 +10574,15 @@ export async function updatePermitLeadProfile(
     leadId,
     message: changed.includes("instagram") && changed.length === 1
       ? (input.instagramUrl ? "인스타그램 정보 수정" : "인스타그램 정보 삭제")
-      : "영업 채널 정보 수정",
+      : changed.includes("business_number") && changed.length === 1
+        ? (input.businessNumber ? "사업자등록번호 수정" : "사업자등록번호 삭제")
+        : "리드 기본 정보 수정",
     metadata: {
-      event_type: changed.includes("instagram") && changed.length === 1 ? "instagram_profile_update" : "contact_channels_update",
+      event_type: changed.includes("instagram") && changed.length === 1
+        ? "instagram_profile_update"
+        : changed.includes("business_number") && changed.length === 1
+          ? "business_number_update"
+          : "lead_profile_update",
       changed_fields: changed,
       instagram_url_present: "instagramUrl" in input ? Boolean(input.instagramUrl) : undefined
     },

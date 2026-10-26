@@ -3061,6 +3061,9 @@ function PermitLeadDetailPanel({
   const [businessHoursDraft, setBusinessHoursDraft] = useState("");
   const [businessHoursSaving, setBusinessHoursSaving] = useState(false);
   const [businessHoursMessage, setBusinessHoursMessage] = useState("");
+  const [businessNumberDraft, setBusinessNumberDraft] = useState(lead.businessNumber || "");
+  const [businessNumberSaving, setBusinessNumberSaving] = useState(false);
+  const [businessNumberMessage, setBusinessNumberMessage] = useState("");
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
@@ -3116,6 +3119,8 @@ function PermitLeadDetailPanel({
     setDetailActionMessage("");
     setBusinessHoursDraft("");
     setBusinessHoursMessage("");
+    setBusinessNumberDraft(lead.businessNumber || "");
+    setBusinessNumberMessage("");
     setResultOpen(Boolean(intent));
     setDetailTab("overview");
     setExternalSignals({
@@ -3126,7 +3131,7 @@ function PermitLeadDetailPanel({
       rating: lead.rating,
       reviewCount: lead.reviewCount
     });
-  }, [intent, lead.googlePlaceUrl, lead.id, lead.instagramUrl, lead.kakaoPlaceUrl, lead.keywordVolume, lead.naverPlaceUrl, lead.rating, lead.reviewCount]);
+  }, [intent, lead.businessNumber, lead.googlePlaceUrl, lead.id, lead.instagramUrl, lead.kakaoPlaceUrl, lead.keywordVolume, lead.naverPlaceUrl, lead.rating, lead.reviewCount]);
 
   useEffect(() => {
     const refreshQuoteDraftState = () => setQuoteDraftSavedAt(readQuoteDraft(quoteSubject)?.savedAt || "");
@@ -3209,6 +3214,39 @@ function PermitLeadDetailPanel({
       setInstagramSaveMessage(error instanceof Error ? error.message : "인스타 정보를 저장하지 못했습니다.");
     } finally {
       setInstagramSaving(false);
+    }
+  }
+
+  async function saveBusinessNumber() {
+    const normalizedValue = businessNumberDraft.replace(/[^0-9]/g, "");
+    setBusinessNumberMessage("");
+    if (normalizedValue && normalizedValue.length !== 10) {
+      setBusinessNumberMessage("사업자등록번호 숫자 10자리를 입력해주세요.");
+      return;
+    }
+
+    setBusinessNumberSaving(true);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessNumber: normalizedValue || null })
+        },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { lead?: PermitLeadItem; message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok || !payload.lead) {
+        throw new Error(payload?.message || "사업자등록번호를 저장하지 못했습니다.");
+      }
+      onLeadUpdated(payload.lead);
+      setBusinessNumberDraft(payload.lead.businessNumber || "");
+      setBusinessNumberMessage(payload.lead.businessNumber ? "사업자등록번호를 저장했습니다." : "사업자등록번호를 비웠습니다.");
+    } catch (error) {
+      setBusinessNumberMessage(error instanceof Error ? error.message : "사업자등록번호를 저장하지 못했습니다.");
+    } finally {
+      setBusinessNumberSaving(false);
     }
   }
 
@@ -3925,10 +3963,49 @@ function PermitLeadDetailPanel({
             </p>
           </div> : null}
 
+          <section className="rounded-xl border border-slate-200 bg-white p-3" aria-labelledby="lead-business-identity-title">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h4 className="text-sm font-black text-slate-950" id="lead-business-identity-title">사업자 정보</h4>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">번호를 수정하면 리드 중복 확인과 거래처 전환에 같은 값을 사용합니다.</p>
+              </div>
+              <span className="w-fit shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
+                {convertedCustomerId || lead.matchedCustomerId ? "국세청 상태 · 거래처 원장에서 확인" : "국세청 상태 · 거래처 전환 후 확인"}
+              </span>
+            </div>
+            <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="min-w-0">
+                <span className="sr-only">사업자등록번호</span>
+                <input
+                  aria-describedby={businessNumberMessage ? "lead-business-number-message" : undefined}
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold tracking-wide text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  inputMode="numeric"
+                  maxLength={12}
+                  onChange={(event) => setBusinessNumberDraft(event.target.value)}
+                  placeholder="숫자 10자리"
+                  value={businessNumberDraft}
+                />
+              </label>
+              <button
+                className="maju-button-primary h-11 w-full justify-center px-4 sm:w-auto"
+                disabled={businessNumberSaving || businessNumberDraft.replace(/[^0-9]/g, "") === (lead.businessNumber || "").replace(/[^0-9]/g, "")}
+                onClick={() => void saveBusinessNumber()}
+                type="button"
+              >
+                {businessNumberSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                저장
+              </button>
+            </div>
+            {businessNumberMessage ? (
+              <p className={`mt-2 text-xs font-bold ${businessNumberMessage.includes("저장했습니다") || businessNumberMessage.includes("비웠습니다") ? "text-teal-700" : "text-rose-700"}`} id="lead-business-number-message" role="status">
+                {businessNumberMessage}
+              </p>
+            ) : null}
+          </section>
+
           <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
             <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
             <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
-            <PermitDetailRow label="사업자번호" value={lead.businessNumber || "확인 필요"} />
             <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
             <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
             <PermitDetailRow label="개시일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
