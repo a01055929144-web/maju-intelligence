@@ -31,7 +31,7 @@ describe("PC map workspace layout", () => {
 
   it("keeps the primary filter bar on one desktop row", () => {
     expect(workspaceSource).toContain("lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)]");
-    expect(workspaceSource).toContain("maju-toolbar-scroll flex min-w-0 flex-nowrap");
+    expect(workspaceSource).toContain("maju-toolbar-scroll flex min-w-0 flex-1 flex-nowrap");
   });
 
   it("places working layer controls at the upper-left of the map", () => {
@@ -54,5 +54,17 @@ describe("PC map workspace layout", () => {
     expect(workspaceSource).toContain("runMapLeadStageBulk(");
     expect(workspaceSource).toContain("setSelectedLeadIds(new Set(failed.map");
     expect(workspaceSource).toContain('body: JSON.stringify({ actionType: "status", memo, result: status })');
+  });
+});
+
+describe("시안 ⑫ 지도 기본 배치", () => {
+  it("defaults to the 3-pane split with a lead list on the right", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+    expect(source).toContain('useState<MapPanelMode>("split")');
+    expect(source).toContain('const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2"');
+    expect(source).toContain("function SplitListTabs(");
+    expect(source).toContain('label: "코스"');
+    expect(source).toContain('workspaceViews.filter((item) => item.value !== "leads")');
   });
 });

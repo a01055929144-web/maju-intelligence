@@ -373,7 +373,7 @@ const gradeFilters: Array<{ label: string; value: GradeFilter }> = [
 const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; shortLabel: string; value: WorkspaceView }> = [
   { helper: "신규·영업 리드와 거래처", icon: MapPin, label: "지도", shortLabel: "지도", value: "map" },
   { helper: "검색·상세·편집", icon: Store, label: "거래처", shortLabel: "원장", value: "customers" },
-  { helper: "선택 매장 경유·티맵", icon: Navigation, label: "동선", shortLabel: "동선", value: "course" },
+  { helper: "선택 매장 경유·티맵", icon: Navigation, label: "코스", shortLabel: "코스", value: "course" },
   { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
   // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
   // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.
@@ -388,7 +388,8 @@ const workspaceViewDescriptions: Record<WorkspaceView, string> = {
 };
 const originMarkerId = "origin-hub";
 export const tmapWaypointLimit = 15;
-const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v1";
+// v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
+const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
@@ -454,12 +455,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 첫 진입은 담당자 패널 + 지도의 2분할로 시작해 지도를 넓게 확보합니다. 거래처 목록은 상단의
   // 상시 노출 분할 스위치에서 한 번에 전환할 수 있고, 3분할/지도 전용 화면도 같은 자리에서 선택합니다.
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(true);
-  const [mapPanelMode, setMapPanelModeState] = useState<MapPanelMode>("driver");
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [mapPanelMode, setMapPanelModeState] = useState<MapPanelMode>("split");
   // 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함"): 지도에 신규 리드가
   // 함께 표시 중일 때(반경 검색 또는 "리드" 전체 표시 토글), 오른쪽 패널에서 거래처 목록과 리드
   // 목록을 탭으로 전환할 수 있게 합니다. 리드가 안 보이는 평소에는 기존처럼 거래처 목록만 보입니다.
-  const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("stores");
+  const [rightPanelTab, setRightPanelTab] = useState<"stores" | "leads">("leads");
   useEffect(() => {
     try {
       const savedMode = window.localStorage.getItem(MAP_PANEL_MODE_STORAGE_KEY);
@@ -471,6 +472,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         setLeftCollapsed(compatibleMode === "customer" || compatibleMode === "map");
         setRightCollapsed(compatibleMode === "driver" || compatibleMode === "map");
         if (compatibleMode === "customer") setRightPanelTab("stores");
+        if (compatibleMode !== "split") setShowAllLeadsOnMap(false);
       }
       // 지도는 매번 거래처·오늘 코스·차량 위치 중심으로 시작합니다. 과거 저장값이 true여도
       // 리드 레이어를 자동으로 켜지 않으며, 현재 화면에서 사용자가 직접 켠 경우에만 유지합니다.
@@ -612,7 +614,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // "전체 리드 보기" — 반경 검색과 무관하게 활성 신규 리드 전체를 메인 지도에 바로 표시합니다.
   // 예전에는 신규 리드 탭 안에 별도 지도가 있었는데(같은 데이터를 두 지도에서 따로 관리),
   // 이제 메인 지도 한 곳에서만 보여주도록 합칩니다(2026-08-20 피드백).
-  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(false);
+  // 시안 ⑫: 3분할 기본 화면은 오른쪽 "신규" 목록과 지도 리드 핀을 함께 보여줍니다.
+  const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(true);
   const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
   const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState<boolean | null>(null);
@@ -623,7 +626,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
   const [mapLeadStageFilter, setMapLeadStageFilter] = useState("");
   const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
-  const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
+  const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("new");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
@@ -2097,7 +2100,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         </div>
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 lg:w-auto lg:flex-1 lg:justify-end xl:gap-2">
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
-            {workspaceViews.map((item) => {
+            {workspaceViews.filter((item) => item.value !== "leads").map((item) => {
               const Icon = item.icon;
               const mapLeadPanelOpen = activeView === "map" && (mapPanelMode === "newLead" || mapPanelMode === "salesLead");
               const selected = item.value === "leads"
@@ -2540,21 +2543,30 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               </div>
             ) : null}
           </label>
-          <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/80 p-1">
-            <div className="maju-toolbar-scroll flex min-w-0 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto sm:justify-end">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="maju-toolbar-scroll flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto">
+              {/* 시안 ⑫ 필터 한 줄: 영업 지역 · 업종 · 개업일 · 단계 · 리마인드 · ⋯ */}
               <select
-                className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
-                  gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
+                aria-label="영업 지역"
+                className={`h-9 max-w-[160px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadRegionSigungu ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
                 }`}
-                onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
-                value={gradeFilter}
+                onChange={(event) => {
+                  if (event.target.value === "__setup") {
+                    setMobileSalesAreaOpen(true);
+                    return;
+                  }
+                  selectMapLeadRegionSigungu(event.target.value);
+                }}
+                value={mapLeadRegionSigungu}
               >
-                {gradeFilters.map((filter) => (
-                  <option key={filter.value} value={filter.value}>
-                    {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
-                  </option>
+                <option value="">영업 지역 전체</option>
+                {mapLeadRegionOptions.map(([sigungu, count]) => (
+                  <option key={sigungu} value={sigungu}>{sigungu} ({count.toLocaleString()})</option>
                 ))}
+                <option value="__setup">지역 설정…</option>
               </select>
+
               <select
                 aria-label="지도 업종 필터"
                 className={`h-9 max-w-[150px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
@@ -2579,6 +2591,31 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 <option value="">단계 전체</option>
                 {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
+              <select
+                aria-label="개업일"
+                className={`h-9 max-w-[120px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadOpenDateStart || mapLeadOpenDateEnd ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onChange={(event) => {
+                  const days = Number(event.target.value);
+                  const start = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10) : "";
+                  setMapLeadOpenDateStart(start);
+                  setMapLeadOpenDateEnd("");
+                  setMapLeadOpenDateStartDraft(start);
+                  setMapLeadOpenDateEndDraft("");
+                }}
+                value={
+                  !mapLeadOpenDateStart || mapLeadOpenDateEnd
+                    ? mapLeadOpenDateEnd ? "custom" : ""
+                    : String([7, 30, 90].find((days) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10) === mapLeadOpenDateStart) || "custom")
+                }
+              >
+                <option value="">개업일 전체</option>
+                <option value="7">최근 7일</option>
+                <option value="30">최근 30일</option>
+                <option value="90">최근 90일</option>
+                <option disabled value="custom">직접 지정(⋯)</option>
+              </select>
               <button
                 aria-pressed={mapLeadReminderOnly}
                 className={`h-9 shrink-0 rounded-md border px-3 text-xs font-black transition ${
@@ -2588,41 +2625,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 type="button"
               >
                 리마인드 {statusScopedLeadsForMap.filter((lead) => Boolean(getMapLeadReminderLabel(lead))).length}
-              </button>
-              <button
-                aria-pressed={excludeClosedStores}
-                className={`h-9 rounded-md border px-3 text-xs font-black transition ${
-                  excludeClosedStores
-                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
-                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
-                }`}
-                onClick={() => setExcludeClosedStores((value) => !value)}
-                type="button"
-              >
-                {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
-              </button>
-              {mapFilterPresetEnabled ? (
-                <div className="flex h-9 shrink-0 items-center rounded-md border border-slate-200 bg-white p-0.5">
-                  <select
-                    aria-label="저장된 지도 필터"
-                    className="h-8 max-w-[140px] rounded border-0 bg-transparent px-2 text-xs font-bold text-slate-700 outline-none"
-                    onChange={(event) => applyMapFilterPreset(event.target.value)}
-                    value={selectedMapFilterPresetId}
-                  >
-                    <option value="">저장 필터</option>
-                    {mapFilterPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-                  </select>
-                  <button className="h-8 rounded px-2 text-xs font-black text-teal-700 hover:bg-teal-50 disabled:opacity-50" disabled={mapFilterPresetBusy} onClick={() => void saveCurrentMapFilterPreset()} type="button">저장</button>
-                  <button aria-label="선택한 지도 필터 삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40" disabled={mapFilterPresetBusy || !selectedMapFilterPresetId} onClick={() => void removeSelectedMapFilterPreset()} type="button"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-              ) : null}
-              <button
-                className="maju-button-secondary h-9 rounded-md px-3 text-xs"
-                onClick={focusOrigin}
-                title="물류 출발지로 지도 이동"
-                type="button"
-              >
-                출발지
               </button>
               {isVehicleFiltered ? (
                 <button
@@ -2640,15 +2642,108 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   {sourceReady ? selectedVehicleLabel : "거래처 연결 대기"}
                 </span>
               )}
+            </div>
+            <details className="relative shrink-0">
+              <summary aria-label="필터 더보기" className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-md border border-slate-200 bg-white text-sm font-black text-slate-600 hover:bg-slate-50 [&::-webkit-details-marker]:hidden" title="이탈 제외·출발지·저장한 필터·기간 직접 지정">
+                ⋯
+              </summary>
+              <div className="absolute right-0 top-11 z-40 w-[min(92vw,340px)] space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-[0_16px_40px_rgba(15,23,42,.18)]">
+                <div className="flex flex-wrap items-center gap-1.5">
+              <select
+                className={`h-9 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  gradeFilter === "all" ? "border-slate-200 bg-white text-slate-700" : "border-teal-700 bg-teal-700 text-white"
+                }`}
+                onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
+                value={gradeFilter}
+              >
+                {gradeFilters.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
+                  </option>
+                ))}
+              </select>
+              <button
+                aria-pressed={excludeClosedStores}
+                className={`h-9 rounded-md border px-3 text-xs font-black transition ${
+                  excludeClosedStores
+                    ? "border-teal-700 bg-teal-700 text-white shadow-[0_6px_14px_rgba(15,118,110,0.16)]"
+                    : "border-slate-200 bg-white text-slate-700 shadow-[0_1px_0_rgba(15,23,42,0.025)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                }`}
+                onClick={() => setExcludeClosedStores((value) => !value)}
+                type="button"
+              >
+                {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
+              </button>
+              <button
+                className="maju-button-secondary h-9 rounded-md px-3 text-xs"
+                onClick={focusOrigin}
+                title="물류 출발지로 지도 이동"
+                type="button"
+              >
+                출발지
+              </button>
+                </div>
+              {mapFilterPresetEnabled ? (
+                <div className="flex h-9 shrink-0 items-center rounded-md border border-slate-200 bg-white p-0.5">
+                  <select
+                    aria-label="저장된 지도 필터"
+                    className="h-8 max-w-[140px] rounded border-0 bg-transparent px-2 text-xs font-bold text-slate-700 outline-none"
+                    onChange={(event) => applyMapFilterPreset(event.target.value)}
+                    value={selectedMapFilterPresetId}
+                  >
+                    <option value="">저장 필터</option>
+                    {mapFilterPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                  </select>
+                  <button className="h-8 rounded px-2 text-xs font-black text-teal-700 hover:bg-teal-50 disabled:opacity-50" disabled={mapFilterPresetBusy} onClick={() => void saveCurrentMapFilterPreset()} type="button">저장</button>
+                  <button aria-label="선택한 지도 필터 삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40" disabled={mapFilterPresetBusy || !selectedMapFilterPresetId} onClick={() => void removeSelectedMapFilterPreset()} type="button"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              ) : null}
+                <div className="space-y-1.5 border-t border-slate-100 pt-2">
+                  <p className="text-[11px] font-black text-slate-500">개업일 직접 지정</p>
+                  <div className="flex items-center gap-1.5">
+                    <input className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
+                    <span className="text-xs text-slate-400">~</span>
+                    <input className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-xs font-bold" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
+                    <button
+                      className="h-8 shrink-0 rounded-md bg-teal-700 px-2.5 text-xs font-black text-white disabled:bg-slate-200 disabled:text-slate-400"
+                      disabled={mapLeadOpenDateStartDraft === mapLeadOpenDateStart && mapLeadOpenDateEndDraft === mapLeadOpenDateEnd}
+                      onClick={() => {
+                        setMapLeadOpenDateStart(mapLeadOpenDateStartDraft);
+                        setMapLeadOpenDateEnd(mapLeadOpenDateEndDraft);
+                      }}
+                      type="button"
+                    >
+                      조회
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2">
+                  <button
+                    className={`h-8 rounded-md border px-2.5 text-xs font-bold ${showDismissedLeadsOnMap ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`}
+                    onClick={() => setShowDismissedLeadsOnMap((value) => !value)}
+                    type="button"
+                  >
+                    {showDismissedLeadsOnMap ? "숨김 리드 보는 중" : "숨김 리드 보기"}
+                  </button>
+                  {mapSalesRegionsConfigured === true ? (
+                    <label className="flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600">
+                      <input checked={showOutsideSalesAreaOnMap} onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
+                      영업 지역 밖도 보기
+                    </label>
+                  ) : null}
+                </div>
+                <p className="border-t border-slate-100 pt-2 text-[11px] font-semibold text-slate-500">
               {/* 지도 하단 범례가 레이어별 건수를 계속 보여주므로, 1366px급 작업 화면에서는
                   같은 집계를 한 번 더 길게 노출하지 않습니다. 필터와 선택 차량은 그대로 남기고
                   넓은 화면에서만 보조 요약을 추가해 검색·필터 행이 두 줄로 커지는 일을 줄입니다. */}
-              <span className="hidden shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 2xl:inline-flex">
+              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
                 {sourceReady
                   ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}${visibleMapLayerCounts.staleVehicles ? `(+지연 ${visibleMapLayerCounts.staleVehicles})` : ""}${visibleMapLayerCounts.lastOperationVehicles ? `(+마지막 운행 ${visibleMapLayerCounts.lastOperationVehicles})` : ""}`
                   : "등록 필요"}
               </span>
-            </div>
+                </p>
+              </div>
+            </details>
           </div>
         </div>
         {statsExpanded ? (
@@ -2797,7 +2892,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             ) : null}
           </div>
         ) : null}
-        {activeView === "map" && showAllLeadsOnMap ? (
+        {activeView === "map" && showAllLeadsOnMap && mapPanelMode !== "split" ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             {mapSalesRegionsConfigured === false ? (
               <p className="w-full rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
@@ -2822,8 +2917,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   key={option.value}
                   onClick={() => {
                     setMapLeadTypeFilter(option.value);
-                    if (mapPanelMode !== "split" && option.value === "new") setMapPanelMode("newLead");
-                    if (mapPanelMode !== "split" && option.value === "sales") setMapPanelMode("salesLead");
+                    if (option.value === "new") setMapPanelMode("newLead");
+                    if (option.value === "sales") setMapPanelMode("salesLead");
                   }}
                   type="button"
                 >
@@ -3022,7 +3117,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     mapPanelMode === "driver" || mapPanelMode === "split"
                       ? leftCollapsed
                         ? "lg:left-[68px]"
-                        : "lg:left-[344px] xl:left-[384px] 2xl:left-[424px]"
+                        : mapPanelMode === "split"
+                          ? "lg:left-[284px] xl:left-[304px]"
+                          : "lg:left-[344px] xl:left-[384px] 2xl:left-[424px]"
                       : "lg:left-3"
                   }
                   counts={visibleMapLayerCounts}
@@ -3186,11 +3283,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
               mapPanelMode !== "driver" && mapPanelMode !== "split"
                 ? "hidden"
-                : `flex lg:bottom-3 ${leftCollapsed ? "lg:w-14" : "lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"}`
+                : `flex lg:bottom-3 ${leftCollapsed ? "lg:w-14" : mapPanelMode === "split" ? "lg:w-[260px] xl:w-[280px]" : "lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"}`
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            <MapExplorerTabs
+            {mapPanelMode === "split" ? null : <MapExplorerTabs
               active={mapPanelMode}
               counts={{
                 customers: allStores.length,
@@ -3199,7 +3296,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
               }}
               onSelect={setMapPanelMode}
-            />
+            />}
             <div className="min-h-0 flex-1 overflow-hidden">
             <DeliveryAssignmentPanel
               canManageStaff={canManageStaff}
@@ -3267,16 +3364,38 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
-            <MapExplorerTabs
-              active={mapPanelMode}
-              counts={{
-                customers: allStores.length,
-                drivers: deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length,
-                newLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "new").length,
-                salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
-              }}
-              onSelect={setMapPanelMode}
-            />
+            {mapPanelMode === "split" ? (
+              <SplitListTabs
+                active={activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new"}
+                counts={{
+                  customers: allStores.length,
+                  newLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "new").length,
+                  salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
+                }}
+                leadsLoading={allLeadsLoadState === "loading" || allLeadsLoadState === "idle"}
+                onSelect={(tab) => {
+                  if (tab === "customers") {
+                    setRightPanelTab("stores");
+                    return;
+                  }
+                  setRightPanelTab("leads");
+                  setShowDismissedLeadsOnMap(false);
+                  setMapLeadTypeFilter(tab === "sales" ? "sales" : "new");
+                  setMapLeadsVisible(true);
+                }}
+              />
+            ) : (
+              <MapExplorerTabs
+                active={mapPanelMode}
+                counts={{
+                  customers: allStores.length,
+                  drivers: deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length,
+                  newLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "new").length,
+                  salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
+                }}
+                onSelect={setMapPanelMode}
+              />
+            )}
             <div className="min-h-0 flex-1 overflow-hidden">
             {activeRightPanelTab === "leads" ? (
               <LeadListPanel
@@ -3798,6 +3917,43 @@ function MapExplorerTabs({
   );
 }
 
+// 시안 ⑫ 3분할 오른쪽 목록 탭: 신규 / 영업 / 거래처 (담당자·차량은 왼쪽 패널 전용).
+function SplitListTabs({
+  active,
+  counts,
+  leadsLoading,
+  onSelect
+}: {
+  readonly active: "new" | "sales" | "customers";
+  readonly counts: { customers: number; newLeads: number; salesLeads: number };
+  readonly leadsLoading: boolean;
+  readonly onSelect: (tab: "new" | "sales" | "customers") => void;
+}) {
+  const tabs = [
+    { count: counts.newLeads, label: "신규", lead: true, value: "new" as const },
+    { count: counts.salesLeads, label: "영업", lead: true, value: "sales" as const },
+    { count: counts.customers, label: "거래처", lead: false, value: "customers" as const }
+  ];
+  return (
+    <nav aria-label="오른쪽 목록" className="grid shrink-0 grid-cols-3 gap-1 border-b border-slate-200 bg-slate-50 p-1.5">
+      {tabs.map((tab) => (
+        <button
+          aria-current={active === tab.value ? "page" : undefined}
+          className={`min-w-0 rounded-md px-1.5 py-1.5 text-xs font-bold transition ${
+            active === tab.value ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:bg-white hover:text-slate-900"
+          }`}
+          key={tab.value}
+          onClick={() => onSelect(tab.value)}
+          type="button"
+        >
+          <span className="whitespace-nowrap">{tab.label}</span>{" "}
+          <span className="text-[11px] font-semibold tabular-nums opacity-70">{tab.lead && leadsLoading ? "…" : tab.count.toLocaleString()}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function DeliveryAssignmentPanel({
   canManageStaff,
   collapsed,
@@ -3996,7 +4152,7 @@ function DeliveryAssignmentPanel({
             value={liveSearch}
           />
         </label>
-        <div className="grid grid-cols-5 gap-1.5" aria-label="담당자·차량 상태 필터">
+        <div className="flex flex-wrap gap-1" aria-label="담당자·차량 상태 필터">
           {(["all", "active", "stale", "last_operation", "offline"] as const).map((status) => {
             const count = status === "all"
               ? vehicles.length
@@ -4012,12 +4168,12 @@ function DeliveryAssignmentPanel({
               <button
                 aria-label={`${label} ${count}대`}
                 aria-pressed={liveStatusFilter === status}
-                className={`h-7 rounded-md px-1.5 text-[11px] font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}
+                className={`h-7 min-w-0 whitespace-nowrap rounded-md px-1 text-[11px] font-semibold ${liveStatusFilter === status ? "bg-teal-700 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}
                 key={status}
                 onClick={() => setLiveStatusFilter(status)}
                 type="button"
               >
-                {label} <span className="ml-0.5 opacity-80">{count}</span>
+                {label}<span className="ml-0.5 opacity-80">{count}</span>
               </button>
             );
           })}
