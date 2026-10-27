@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (!body.customerId || !body.memo?.trim() || !body.idempotencyKey || !isObject(body.event) || !Array.isArray(body.items || [])) {
       return NextResponse.json({ message: "배송 기록 필수값을 확인해 주세요." }, { status: 400 });
     }
-    const result = await supabaseRequest<Array<{ eventId: string; noteId: string }>>("rpc/record_delivery_event_atomic", {
+    const result = await supabaseRequest<{ eventId: string; noteId: string }>("rpc/record_delivery_event_atomic", {
       method: "POST",
       body: JSON.stringify({
         p_actor_name: actorName,
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     if (!body.leadId || !body.memo?.trim() || !isObject(body.action) || !Array.isArray(body.items) || !body.items.length) {
       return NextResponse.json({ message: "영업 제안 필수값을 확인해 주세요." }, { status: 400 });
     }
-    const result = await supabaseRequest<Array<{ actionId: string; offerId: string }>>("rpc/record_lead_sales_offer_atomic", {
+    const result = await supabaseRequest<{ actionId: string; offerId: string }>("rpc/record_lead_sales_offer_atomic", {
       method: "POST",
       body: JSON.stringify({
         p_action: body.action,

@@ -83,10 +83,10 @@ begin
   end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'offer_items_required'; end if;
 
-  insert into public.lead_actions(company_id, lead_id, action_type, result, memo, actor_name, actor_user_id, follow_up_at, collateral_types)
+  insert into public.lead_actions(company_id, lead_id, action_type, result, memo, actor_name, follow_up_at, collateral_types)
   values (
     p_company_id, p_lead_id, p_action->>'actionType', nullif(p_action->>'result', ''), p_memo,
-    nullif(btrim(p_actor_name), ''), p_actor_user_id, nullif(p_action->>'followUpAt', '')::timestamptz,
+    nullif(btrim(p_actor_name), ''), nullif(p_action->>'followUpAt', '')::timestamptz,
     coalesce(array(select jsonb_array_elements_text(coalesce(p_action->'collateralTypes', '[]'::jsonb))), '{}'::text[])
   ) returning id into v_action_id;
 
