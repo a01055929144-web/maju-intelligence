@@ -113,6 +113,11 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("contact_value_not_on_lead");
     expect(sql).toContain("status not in ('거래처 전환','기존 거래처')");
     expect(sql).toContain("legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다");
+    expect(sql).toContain("left(v_normalized,3)||'-****-'||right(v_normalized,4)");
+    expect(sql).toContain("'before_status',before_status");
+    expect(sql).toContain("lead.status='제외' and lead.exclude_reason='연락 거부 등록'");
+    expect(sql).toContain("coalesce(permission_role,role) in ('owner','manager')");
+    expect(route).toContain('scope.customerSession?.workspaceRole !== "owner"');
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {

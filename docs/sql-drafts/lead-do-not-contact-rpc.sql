@@ -60,12 +60,12 @@ begin
     select id into v_dnc_id from public.company_do_not_contact
     where company_id=p_company_id and channel=p_channel and normalized_value=v_normalized and released_at is null;
   end if;
-  v_masked := case when p_channel in ('sms','fax') then '***'||right(v_normalized,4)
+  v_masked := case when p_channel in ('sms','fax') then left(v_normalized,3)||'-****-'||right(v_normalized,4)
     when p_channel='email' then left(v_normalized,1)||'***@'||split_part(v_normalized,'@',2)
     else '***'||right(v_normalized,4) end;
 
   with targets as (
-    select id from public.business_permit_leads
+    select id,status as before_status,next_action as before_next_action from public.business_permit_leads
     where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
       or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
       or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
@@ -81,7 +81,8 @@ begin
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
   select p_company_id,id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
     jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
-      'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked)) from targets;
+      'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked,
+      'before_status',before_status,'before_next_action',before_next_action)) from targets;
   return true;
 end;
 $$;
@@ -91,7 +92,7 @@ create or replace function public.release_lead_do_not_contact(
 ) returns boolean
 language plpgsql security invoker set search_path = public
 as $$
-declare v_lead_id uuid; v_channel text; v_masked text;
+declare v_channel text; v_masked text;
 begin
   -- legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다.
   -- C6 전환 전에는 서버가 해제를 제공하지 않고 MAJU 운영 절차로 별도 검토한다.
@@ -104,14 +105,26 @@ begin
   update public.company_do_not_contact
   set released_at=now(),released_by=p_actor_user_id,release_reason=btrim(p_release_reason)
   where id=p_dnc_id and company_id=p_company_id and released_at is null
-  returning source_lead_id,channel,'***'||right(normalized_value,4) into v_lead_id,v_channel,v_masked;
+  returning channel,case when channel in ('sms','fax') then left(normalized_value,3)||'-****-'||right(normalized_value,4)
+    when channel='email' then left(normalized_value,1)||'***@'||split_part(normalized_value,'@',2)
+    else '***'||right(normalized_value,4) end into v_channel,v_masked;
   if not found then raise exception 'active_dnc_not_found'; end if;
-  if v_lead_id is not null then
-    insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
-    values (p_company_id,v_lead_id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
-      jsonb_build_object('event_type','do_not_contact_release','actor_user_id',p_actor_user_id,
-        'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked));
-  end if;
+  with latest as (
+    select distinct on (lead_id) lead_id,metadata from public.lead_actions
+    where company_id=p_company_id and metadata->>'dnc_id'=p_dnc_id::text
+    order by lead_id,created_at desc
+  ), restored as (
+    update public.business_permit_leads lead set
+      status=coalesce(latest.metadata->>'before_status','검토 필요'),
+      next_action=latest.metadata->>'before_next_action',exclude_reason=null,updated_at=now()
+    from latest where lead.company_id=p_company_id and lead.id=latest.lead_id
+      and lead.status='제외' and lead.exclude_reason='연락 거부 등록'
+    returning lead.id
+  )
+  insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
+  select p_company_id,id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
+    jsonb_build_object('event_type','do_not_contact_release','actor_user_id',p_actor_user_id,
+      'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked) from restored;
   return true;
 end;
 $$;
