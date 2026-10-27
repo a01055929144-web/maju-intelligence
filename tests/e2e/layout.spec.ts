@@ -180,7 +180,7 @@ for (const viewport of viewports) {
           await expect(page.getByText("테스트 매장 01").first()).toBeVisible();
         }
         if (route.path === "/map") {
-          await expect(page.getByText(/거래처 20곳/).first()).toBeVisible();
+          await expect(page.getByText(/거래처 20곳/).filter({ visible: true }).first()).toBeVisible();
         }
         if (route.slug === "lead-detail") {
           await expect(page.getByText("테스트 매장 01").first()).toBeVisible();
