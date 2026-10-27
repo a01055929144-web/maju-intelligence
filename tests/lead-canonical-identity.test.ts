@@ -21,6 +21,14 @@ describe("lead canonical identity", () => {
     expect(second).toBe(first);
   });
 
+  it("rebuilds the canonical key when a business number is added or removed", () => {
+    const identity = { businessName: "농가의 식탁", address: "서울 강남구 역삼동 10-1" };
+    expect(buildLeadCanonicalFingerprint({ ...identity, businessNumber: "220-81-62517" })).toBe("business:2208162517");
+    expect(buildLeadCanonicalFingerprint({ ...identity, businessNumber: undefined })).toBe(
+      buildLeadCanonicalFingerprint(identity)
+    );
+  });
+
   it("keeps source record identifiers separate from the cross-source fingerprint", () => {
     expect(buildLeadSourceRecordKey({ businessName: "가게", address: "서울 강남구", sourceRecordKey: "MGT-001" }))
       .toBe("source:mgt001");

@@ -23,9 +23,10 @@ export async function GET(request: NextRequest) {
 
   const attachmentOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("attachmentOffset") || "0", 10) || 0);
   const noteOffset = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("noteOffset") || "0", 10) || 0);
+  const noteType = request.nextUrl.searchParams.get("noteType") === "delivery" ? "delivery" : undefined;
   const [result, messageLogs] = await Promise.all([
-    getCustomerOperations(customerId, scope.companyId, { attachmentOffset, noteOffset }),
-    attachmentOffset || noteOffset ? Promise.resolve([]) : getCustomerMessageLogs(customerId, scope.companyId)
+    getCustomerOperations(customerId, scope.companyId, { attachmentOffset, noteOffset, noteType }),
+    attachmentOffset || noteOffset || noteType ? Promise.resolve([]) : getCustomerMessageLogs(customerId, scope.companyId)
   ]);
   return NextResponse.json({ ...result, messageLogs });
 }
