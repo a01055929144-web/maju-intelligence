@@ -8,7 +8,7 @@ import {
   type SensitiveAccessWarningCode
 } from "../../domains/organization/sensitive-access-log";
 import { legacyRoleToStaffAccess, normalizeStaffDuties, normalizeStaffPermissionRole } from "../../domains/organization/staff-access";
-import { supabaseRequest } from "../store";
+import { canAccessAssignedCustomer, isCustomerOnTodayRouteForDriver, supabaseRequest, type CustomerAssignmentScope } from "../store";
 
 type SensitiveAccessLogRow = {
   accessed_at: string;
@@ -33,6 +33,15 @@ export async function isActiveCompanyOwner(input: { companyId: string; userId: s
   );
   const member = rows[0];
   return Boolean(member && isOwnerMembershipRole({ legacyRole: member.role, permissionRole: member.permission_role }));
+}
+
+export async function isActiveSensitiveAccessMember(input: { companyId: string; userId: string }) {
+  const rows = await supabaseRequest<Array<{ membership_expires_at: string | null; permission_role: string | null }>>(
+    `company_members?select=permission_role,membership_expires_at&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&status=eq.active&limit=1`
+  );
+  const member = rows[0];
+  if (!member) return false;
+  return !(member.permission_role === "temporary" && member.membership_expires_at && new Date(member.membership_expires_at).getTime() <= Date.now());
 }
 
 function mapLog(row: SensitiveAccessLogRow): SensitiveAccessLog {
@@ -108,6 +117,8 @@ export async function revealAccessPasswordForMember(input: {
   companyId: string;
   customerId: string;
   deviceLabel?: string;
+  driverNames: string[];
+  assignmentScope: CustomerAssignmentScope;
   userId: string;
 }): Promise<RevealAccessPasswordResult> {
   if (!sensitiveAccessLogsEnabled()) return { status: "forbidden" };
@@ -144,14 +155,20 @@ export async function revealAccessPasswordForMember(input: {
   if (!customer) return { status: "not_found" };
 
   const canOverrideAssignment = permissionRole === "owner" || permissionRole === "manager";
-  const isAssignedDeliveryStaff = duties.includes("delivery") && customer.assigned_staff_member_id === member.id;
-  if (!canOverrideAssignment && !isAssignedDeliveryStaff) return { status: "forbidden" };
+  const [hasAssignmentAccess, hasTodayRouteAccess] = canOverrideAssignment
+    ? [true, false]
+    : await Promise.all([
+        canAccessAssignedCustomer(input.companyId, input.customerId, input.assignmentScope),
+        isCustomerOnTodayRouteForDriver(input.companyId, input.customerId, input.driverNames)
+      ]);
+  if (!canOverrideAssignment && (!duties.includes("delivery") || (!hasAssignmentAccess && !hasTodayRouteAccess))) return { status: "forbidden" };
 
   const recentLogs = await supabaseRequest<Array<{ id: string }>>(
     `sensitive_access_logs?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&actor_user_id=eq.${encodeURIComponent(input.userId)}&accessed_at=gte.${encodeURIComponent(kstDayStartIso())}&limit=20`
   );
   const warningCodes: SensitiveAccessWarningCode[] = [];
   if (canOverrideAssignment && customer.assigned_staff_member_id && customer.assigned_staff_member_id !== member.id) warningCodes.push("unassigned");
+  if (!canOverrideAssignment && hasTodayRouteAccess && !hasAssignmentAccess) warningCodes.push("unassigned");
   if (recentLogs.length >= 19) warningCodes.push("daily_20_plus");
 
   // Fail closed: the value is returned only after the audit INSERT succeeds.

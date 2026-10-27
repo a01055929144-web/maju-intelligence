@@ -50,11 +50,18 @@ describe("sensitive access log authorization", () => {
     const { readFile } = await import("node:fs/promises");
     const attachmentRoute = await readFile("app/api/customer-attachments/file/route.ts", "utf8");
     const exportRoute = await readFile("app/api/customer/security/sensitive-access-logs/export/route.ts", "utf8");
+    const revealStore = await readFile("lib/store/07-sensitive-access-logs.ts", "utf8");
     expect(attachmentRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(attachmentRoute.indexOf("createCustomerAttachmentSignedUrl(path)"));
     expect(attachmentRoute).toContain('item: "business_registration"');
     expect(attachmentRoute).toContain("!scope.customerSession?.userId");
+    expect(attachmentRoute).toContain("isActiveSensitiveAccessMember");
+    expect(attachmentRoute).toContain("if (sensitiveAccessLogsEnabled())");
     expect(exportRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(exportRoute.indexOf("return new NextResponse(csv"));
     expect(exportRoute).toContain('warningCodes: ["export"]');
     expect(exportRoute).toContain('status: 403');
+    expect(exportRoute).toContain("latest-200");
+    expect(revealStore).toContain("canAccessAssignedCustomer");
+    expect(revealStore).toContain("isCustomerOnTodayRouteForDriver");
+    expect(revealStore).toContain('warningCodes.push("unassigned")');
   });
 });

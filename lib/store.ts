@@ -5025,6 +5025,21 @@ export async function canAccessAssignedCustomer(companyId: string | undefined, c
   }, assignmentScope);
 }
 
+export async function isCustomerOnTodayRouteForDriver(companyId: string, customerId: string, driverNames: string[]) {
+  if (!isProductionStoreConfigured()) return true;
+  const normalizedNames = driverNames.map((name) => name.trim()).filter(Boolean);
+  if (!normalizedNames.length) return false;
+  const today = toKstDateKey(new Date().toISOString());
+  const rows = await supabaseRequest<Array<{ customer_ids: unknown; driver_name: string }>>(
+    `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
+  ).catch(() => []);
+  return rows.some((row) =>
+    normalizedNames.includes(row.driver_name.trim())
+    && Array.isArray(row.customer_ids)
+    && row.customer_ids.includes(customerId)
+  );
+}
+
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
 
 export async function upsertCustomerMaster(

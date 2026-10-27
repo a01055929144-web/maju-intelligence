@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCustomerSession } from "@/lib/auth";
+import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession } from "@/lib/auth";
 import { revealAccessPasswordForMember, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +24,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const result = await revealAccessPasswordForMember({
       actorName: session.operationalDisplayName || session.name,
+      assignmentScope: getCustomerAssignmentKeys(session, { forceScope: true })!,
       companyId: session.companyId,
       customerId: id,
       deviceLabel: deviceLabel(request),
+      driverNames: [getCustomerOperationalName(session), session.name, session.assignedManagerName || "", session.invitedEmployeeName || ""],
       userId: session.userId
     });
     if (result.status === "unauthorized") return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });

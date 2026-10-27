@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCustomerSession } from "@/lib/auth";
-import { isActiveCompanyOwner, listSensitiveAccessLogs, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
+import { isActiveCompanyOwner, isActiveSensitiveAccessMember, listSensitiveAccessLogs, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,9 @@ export async function GET() {
   }
   const session = await getCustomerSession();
   if (!session?.userId) return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  if (!(await isActiveSensitiveAccessMember({ companyId: session.companyId, userId: session.userId }))) {
+    return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  }
   if (!(await isActiveCompanyOwner({ companyId: session.companyId, userId: session.userId }))) {
     return NextResponse.json({ message: "민감정보 열람 기록은 회사 대표만 내보낼 수 있습니다." }, { headers: noStoreHeaders, status: 403 });
   }
@@ -41,7 +44,7 @@ export async function GET() {
     return new NextResponse(csv, {
       headers: {
         ...noStoreHeaders,
-        "Content-Disposition": 'attachment; filename="sensitive-access-logs.csv"',
+        "Content-Disposition": 'attachment; filename="sensitive-access-logs-latest-200.csv"',
         "Content-Type": "text/csv; charset=utf-8"
       }
     });
