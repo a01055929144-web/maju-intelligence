@@ -1,5 +1,6 @@
 -- Claude 검토용 초안. 운영 적용 금지.
 -- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
+-- 해제 활성화 전제: 서버 DELETE route가 서명된 customer session, company_id, owner/manager 역할을 검증한다.
 begin;
 
 create or replace function public.register_lead_do_not_contact(
@@ -90,19 +91,25 @@ end;
 $$;
 
 create or replace function public.release_lead_do_not_contact(
-  p_company_id uuid, p_dnc_id uuid, p_release_reason text, p_actor_user_id uuid, p_actor_name text
+  p_company_id uuid, p_dnc_id uuid, p_release_reason text, p_actor_kind text, p_actor_user_id uuid, p_actor_name text
 ) returns boolean
 language plpgsql security invoker set search_path = public
 as $$
 declare v_channel text; v_masked text;
 begin
-  -- legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다.
-  -- C6 전환 전에는 서버가 해제를 제공하지 않고 MAJU 운영 절차로 별도 검토한다.
   if nullif(btrim(p_release_reason),'') is null then raise exception 'release_reason_required'; end if;
-  if p_actor_user_id is null or not exists (
-    select 1 from public.company_members
-    where company_id=p_company_id and user_id=p_actor_user_id and status='active'
-      and coalesce(permission_role,role) in ('owner','manager')
+  if p_actor_kind is null or p_actor_kind not in ('app_user','legacy_owner') then raise exception 'invalid_actor_kind'; end if;
+  if not exists (
+    select 1 from public.companies where id=p_company_id and status in ('active','fallback')
+  ) then raise exception 'active_company_required'; end if;
+  if p_actor_kind='legacy_owner' then
+    -- service_role 호출 전 서버가 서명된 owner 세션과 그 세션의 company_id를 검증해야 한다.
+    if p_actor_user_id is not null then raise exception 'legacy_owner_user_id_must_be_null'; end if;
+  elsif p_actor_user_id is null or not exists (
+    select 1 from public.company_members member
+    join public.app_users app_user on app_user.id=member.user_id and app_user.status='active'
+    where member.company_id=p_company_id and member.user_id=p_actor_user_id and member.status='active'
+      and coalesce(member.permission_role,member.role) in ('owner','manager')
   ) then raise exception 'owner_or_manager_required'; end if;
   update public.company_do_not_contact
   set released_at=now(),released_by=p_actor_user_id,release_reason=btrim(p_release_reason)
@@ -147,7 +154,7 @@ begin
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
   select p_company_id,impacted.lead_id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
     jsonb_build_object('event_type','do_not_contact_release','actor_user_id',p_actor_user_id,
-      'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked,
+      'actor_kind',p_actor_kind,'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked,
       'restored_status',(restored.id is not null))
   from impacted left join restored on restored.id=impacted.lead_id;
   return true;
@@ -155,8 +162,8 @@ end;
 $$;
 
 revoke all on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) from public, anon, authenticated;
-revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,uuid,text) from public, anon, authenticated;
+revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) from public, anon, authenticated;
 grant execute on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) to service_role;
-grant execute on function public.release_lead_do_not_contact(uuid,uuid,text,uuid,text) to service_role;
+grant execute on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) to service_role;
 
 commit;

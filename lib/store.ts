@@ -10610,6 +10610,29 @@ export async function registerLeadDoNotContact(input: {
   return rows === true;
 }
 
+export async function releaseLeadDoNotContact(input: {
+  actorKind: "app_user" | "legacy_owner";
+  actorName?: string;
+  actorUserId?: string;
+  companyId: string;
+  dncId: string;
+  releaseReason: string;
+}): Promise<boolean> {
+  if (!LEAD_DNC_WRITE_ENABLED) throw new Error("연락 거부 원자 저장 기능이 아직 활성화되지 않았습니다.");
+  const rows = await supabaseRequest<boolean>("rpc/release_lead_do_not_contact", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_kind: input.actorKind,
+      p_actor_name: input.actorName || null,
+      p_actor_user_id: input.actorUserId || null,
+      p_company_id: input.companyId,
+      p_dnc_id: input.dncId,
+      p_release_reason: input.releaseReason
+    })
+  });
+  return rows === true;
+}
+
 export async function listLeadContactFieldSources(companyId: string, leadId: string) {
   if (!isProductionStoreConfigured()) return [];
   return supabaseRequest<Array<{ collected_at: string; field_name: string; source_type: string }>>(

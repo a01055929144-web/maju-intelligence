@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeDoNotContactValue } from "@/domains/lead/outreach-governance";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { LEAD_DNC_WRITE_ENABLED, registerLeadDoNotContact } from "@/lib/store";
+import { LEAD_DNC_WRITE_ENABLED, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = (await request.json().catch(() => null)) as { channel?: "sms" | "instagram" | "talktalk" | "email" | "fax" | "visit"; reason?: string; value?: string } | null;
@@ -26,6 +26,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     leadId: (await params).id,
     normalizedValue,
     reason: body?.reason
+  });
+  return NextResponse.json({ ok });
+}
+
+export async function DELETE(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as { dncId?: string; releaseReason?: string } | null;
+  const scope = await getRequestAuthScope(request);
+  if (!scope.ok || !scope.customerSession) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!["owner", "manager"].includes(scope.customerSession.workspaceRole)) {
+    return NextResponse.json({ message: "연락 거부를 해제할 권한이 없습니다." }, { status: 403 });
+  }
+  if (!scope.customerSession.userId && scope.customerSession.workspaceRole !== "owner") {
+    return NextResponse.json({ message: "legacy owner 세션만 사용자 ID 없이 해제할 수 있습니다." }, { status: 403 });
+  }
+  if (!LEAD_DNC_WRITE_ENABLED) return NextResponse.json({ message: "연락 거부 저장은 검토 중이며 아직 활성화되지 않았습니다." }, { status: 503 });
+  const dncId = body?.dncId?.trim();
+  const releaseReason = body?.releaseReason?.trim();
+  if (!dncId) return NextResponse.json({ message: "연락 거부 ID가 필요합니다." }, { status: 400 });
+  if (!releaseReason) return NextResponse.json({ message: "해제 사유가 필요합니다." }, { status: 400 });
+  const actorKind = scope.customerSession.userId ? "app_user" : "legacy_owner";
+  const ok = await releaseLeadDoNotContact({
+    actorKind,
+    actorName: getCustomerOperationalName(scope.customerSession) || scope.customerSession.name,
+    actorUserId: scope.customerSession.userId,
+    companyId: scope.companyId!,
+    dncId,
+    releaseReason
   });
   return NextResponse.json({ ok });
 }

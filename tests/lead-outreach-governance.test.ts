@@ -113,7 +113,12 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("release_reason_required");
     expect(sql).toContain("contact_value_not_on_lead");
     expect(sql).toContain("status not in ('거래처 전환','기존 거래처','제외')");
-    expect(sql).toContain("legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다");
+    expect(sql).toContain("p_actor_kind is null or p_actor_kind not in ('app_user','legacy_owner')");
+    expect(sql).toContain("해제 활성화 전제: 서버 DELETE route가 서명된 customer session");
+    expect(sql).toContain("p_actor_kind='legacy_owner'");
+    expect(sql).toContain("legacy_owner_user_id_must_be_null");
+    expect(sql).toContain("status in ('active','fallback')");
+    expect(sql).toContain("join public.app_users app_user on app_user.id=member.user_id and app_user.status='active'");
     expect(sql).toContain("left(v_normalized,3)||'-****-'||right(v_normalized,4)");
     expect(sql).toContain("'before_status',before_status");
     expect(sql).not.toContain("'before_next_action'");
@@ -133,8 +138,14 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("action.created_at>cycle_start.last_restored_at");
     expect(sql).toContain("'restored_status',(restored.id is not null)");
     expect(sql).toContain("from impacted left join restored on restored.id=impacted.lead_id");
-    expect(sql).toContain("coalesce(permission_role,role) in ('owner','manager')");
-    expect(route).toContain('scope.customerSession?.workspaceRole !== "owner"');
+    expect(sql).toMatch(/coalesce\((?:member\.)?permission_role\s*,\s*(?:member\.)?role\)\s+in\s+\('owner','manager'\)/);
+    expect(route).toContain("if (!scope.ok || !scope.customerSession)");
+    expect(route).toContain('["owner", "manager"].includes(scope.customerSession.workspaceRole)');
+    expect(route).toContain('!scope.customerSession.userId && scope.customerSession.workspaceRole !== "owner"');
+    expect(route).toContain('const actorKind = scope.customerSession.userId ? "app_user" : "legacy_owner"');
+    expect(route).toContain("companyId: scope.companyId!");
+    expect(storeSource).toContain('p_actor_kind: input.actorKind');
+    expect(storeSource).toContain('rpc/release_lead_do_not_contact');
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {
