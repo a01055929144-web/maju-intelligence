@@ -43,7 +43,8 @@ describe("sensitive access log authorization", () => {
     expect(route).toContain('"Cache-Control": "no-store, private, max-age=0"');
     expect(route).not.toContain("getAdminSession");
     expect(store.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(store.indexOf('return { status: "allowed", value: customer.access_password }'));
-    expect(store).toContain('actor_kind: "app_user"');
+    expect(store).toContain('input.actorUserId ? "app_user" : "legacy_owner"');
+    expect(store).toContain("actor_user_id: input.actorUserId || null");
   });
 
   it("records business-license and export access before returning a URL or file", async () => {
@@ -54,8 +55,9 @@ describe("sensitive access log authorization", () => {
     expect(attachmentRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(attachmentRoute.indexOf("createCustomerAttachmentSignedUrl(path)"));
     expect(attachmentRoute).toContain('item: "business_registration"');
     expect(attachmentRoute).toContain("!scope.customerSession?.userId");
-    expect(attachmentRoute).toContain("isActiveSensitiveAccessMember");
+    expect(attachmentRoute).toContain("isActiveSensitiveAccessActor");
     expect(attachmentRoute).toContain("if (sensitiveAccessLogsEnabled())");
+    expect(attachmentRoute.indexOf("if (sensitiveAccessLogsEnabled())")).toBeGreaterThan(attachmentRoute.indexOf('attachment.attachmentType === "business_license"'));
     expect(exportRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(exportRoute.indexOf("return new NextResponse(csv"));
     expect(exportRoute).toContain('warningCodes: ["export"]');
     expect(exportRoute).toContain('status: 403');

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
 import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl, getCustomerAttachmentOwnerByStoragePath } from "@/lib/store";
-import { isActiveSensitiveAccessMember, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
+import { isActiveSensitiveAccessActor, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
 export const dynamic = "force-dynamic";
 const noStoreHeaders = { "Cache-Control": "no-store, private, max-age=0" };
@@ -43,15 +43,16 @@ export async function GET(request: NextRequest) {
   if (attachment.attachmentType === "business_license") {
     // 플래그 OFF에서는 기존 파일 열람 동작을 유지한다. ON 전환 뒤에만 N3 감사 경계를 강제한다.
     if (sensitiveAccessLogsEnabled()) {
-      if (!scope.customerSession?.userId) {
+      if (!scope.customerSession || (!scope.customerSession.userId && scope.customerSession.workspaceRole !== "owner")) {
         return NextResponse.json({ message: "Forbidden" }, { headers: noStoreHeaders, status: 403 });
       }
-      if (!(await isActiveSensitiveAccessMember({ companyId: scope.companyId, userId: scope.customerSession.userId }))) {
+      if (!(await isActiveSensitiveAccessActor({ companyId: scope.companyId, isLegacyOwner: !scope.customerSession.userId && scope.customerSession.workspaceRole === "owner", userId: scope.customerSession.userId }))) {
         return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
       }
       try {
         const recorded = await recordSensitiveAccessLog({
           actorName: scope.customerSession.operationalDisplayName || scope.customerSession.name,
+          actorKind: scope.customerSession.userId ? "app_user" : "legacy_owner",
           actorRole: scope.customerSession.workspaceRole,
           actorUserId: scope.customerSession.userId,
           companyId: scope.companyId,

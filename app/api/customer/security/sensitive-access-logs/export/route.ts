@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCustomerSession } from "@/lib/auth";
-import { isActiveCompanyOwner, isActiveSensitiveAccessMember, listSensitiveAccessLogs, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
+import { isActiveSensitiveAccessOwner, listSensitiveAccessLogs, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +16,8 @@ export async function GET() {
     return NextResponse.json({ message: "민감정보 열람 기록 내보내기가 아직 승인되지 않았습니다." }, { headers: noStoreHeaders, status: 503 });
   }
   const session = await getCustomerSession();
-  if (!session?.userId) return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
-  if (!(await isActiveSensitiveAccessMember({ companyId: session.companyId, userId: session.userId }))) {
-    return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
-  }
-  if (!(await isActiveCompanyOwner({ companyId: session.companyId, userId: session.userId }))) {
+  if (!session) return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  if (!(await isActiveSensitiveAccessOwner({ companyId: session.companyId, isLegacyOwner: !session.userId && session.workspaceRole === "owner", userId: session.userId }))) {
     return NextResponse.json({ message: "민감정보 열람 기록은 회사 대표만 내보낼 수 있습니다." }, { headers: noStoreHeaders, status: 403 });
   }
 
@@ -32,6 +29,7 @@ export async function GET() {
 
     const recorded = await recordSensitiveAccessLog({
       actorName: session.operationalDisplayName || session.name,
+      actorKind: session.userId ? "app_user" : "legacy_owner",
       actorRole: "owner",
       actorUserId: session.userId,
       companyId: session.companyId,

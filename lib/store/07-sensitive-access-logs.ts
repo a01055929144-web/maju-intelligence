@@ -44,6 +44,20 @@ export async function isActiveSensitiveAccessMember(input: { companyId: string; 
   return !(member.permission_role === "temporary" && member.membership_expires_at && new Date(member.membership_expires_at).getTime() <= Date.now());
 }
 
+export async function isActiveSensitiveAccessActor(input: { companyId: string; isLegacyOwner?: boolean; userId?: string }) {
+  if (input.userId) return isActiveSensitiveAccessMember({ companyId: input.companyId, userId: input.userId });
+  if (!input.isLegacyOwner) return false;
+  const rows = await supabaseRequest<Array<{ status: string | null }>>(
+    `companies?select=status&id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+  );
+  return Boolean(rows[0] && (!rows[0].status || ["active", "fallback"].includes(rows[0].status)));
+}
+
+export async function isActiveSensitiveAccessOwner(input: { companyId: string; isLegacyOwner?: boolean; userId?: string }) {
+  if (input.userId) return isActiveCompanyOwner({ companyId: input.companyId, userId: input.userId });
+  return input.isLegacyOwner ? isActiveSensitiveAccessActor(input) : false;
+}
+
 function mapLog(row: SensitiveAccessLogRow): SensitiveAccessLog {
   return {
     accessedAt: row.accessed_at,
@@ -84,7 +98,8 @@ export async function listSensitiveAccessLogs(companyId: string, filters: Sensit
 export async function recordSensitiveAccessLog(input: {
   actorName: string;
   actorRole: string;
-  actorUserId: string;
+  actorKind?: "app_user" | "legacy_owner";
+  actorUserId?: string;
   companyId: string;
   deviceLabel?: string;
   item: SensitiveAccessItem;
@@ -94,10 +109,12 @@ export async function recordSensitiveAccessLog(input: {
   warningCodes?: SensitiveAccessWarningCode[];
 }) {
   if (!sensitiveAccessLogsEnabled()) return false;
+  const actorKind = input.actorKind || (input.actorUserId ? "app_user" : "legacy_owner");
+  if (actorKind === "app_user" && !input.actorUserId) throw new Error("sensitive_access_actor_user_required");
   await supabaseRequest("sensitive_access_logs", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
-    body: JSON.stringify([{ company_id: input.companyId, actor_user_id: input.actorUserId, actor_kind: "app_user", actor_name: input.actorName, actor_role: input.actorRole, store_id: input.storeId || null, store_name: input.storeName || null, item_type: input.item, device_label: input.deviceLabel || null, page_path: input.pagePath, warning_codes: input.warningCodes || [] }])
+    body: JSON.stringify([{ company_id: input.companyId, actor_user_id: input.actorUserId || null, actor_kind: actorKind, actor_name: input.actorName, actor_role: input.actorRole, store_id: input.storeId || null, store_name: input.storeName || null, item_type: input.item, device_label: input.deviceLabel || null, page_path: input.pagePath, warning_codes: input.warningCodes || [] }])
   });
   return true;
 }
@@ -119,11 +136,12 @@ export async function revealAccessPasswordForMember(input: {
   deviceLabel?: string;
   driverNames: string[];
   assignmentScope: CustomerAssignmentScope;
-  userId: string;
+  isLegacyOwner?: boolean;
+  userId?: string;
 }): Promise<RevealAccessPasswordResult> {
   if (!sensitiveAccessLogsEnabled()) return { status: "forbidden" };
 
-  const members = await supabaseRequest<Array<{
+  const members = input.userId ? await supabaseRequest<Array<{
     duties: unknown;
     id: string;
     membership_expires_at: string | null;
@@ -131,8 +149,10 @@ export async function revealAccessPasswordForMember(input: {
     role: string | null;
   }>>(
     `company_members?select=id,role,permission_role,duties,membership_expires_at&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&status=eq.active&limit=1`
-  );
-  const member = members[0];
+  ) : [];
+  const member = members[0] || (input.isLegacyOwner && await isActiveSensitiveAccessActor(input)
+    ? { duties: ["sales", "delivery"], id: "", membership_expires_at: null, permission_role: "owner", role: "owner" }
+    : null);
   if (!member) return { status: "unauthorized" };
 
   const permissionRole = member.permission_role
@@ -164,7 +184,7 @@ export async function revealAccessPasswordForMember(input: {
   if (!canOverrideAssignment && (!duties.includes("delivery") || (!hasAssignmentAccess && !hasTodayRouteAccess))) return { status: "forbidden" };
 
   const recentLogs = await supabaseRequest<Array<{ id: string }>>(
-    `sensitive_access_logs?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&actor_user_id=eq.${encodeURIComponent(input.userId)}&accessed_at=gte.${encodeURIComponent(kstDayStartIso())}&limit=20`
+    `sensitive_access_logs?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&${input.userId ? `actor_user_id=eq.${encodeURIComponent(input.userId)}` : "actor_kind=eq.legacy_owner"}&accessed_at=gte.${encodeURIComponent(kstDayStartIso())}&limit=20`
   );
   const warningCodes: SensitiveAccessWarningCode[] = [];
   if (canOverrideAssignment && customer.assigned_staff_member_id && customer.assigned_staff_member_id !== member.id) warningCodes.push("unassigned");
@@ -174,6 +194,7 @@ export async function revealAccessPasswordForMember(input: {
   // Fail closed: the value is returned only after the audit INSERT succeeds.
   const recorded = await recordSensitiveAccessLog({
     actorName: input.actorName,
+    actorKind: input.userId ? "app_user" : "legacy_owner",
     actorRole: permissionRole,
     actorUserId: input.userId,
     companyId: input.companyId,
@@ -188,12 +209,12 @@ export async function revealAccessPasswordForMember(input: {
   return { status: "allowed", value: customer.access_password };
 }
 
-export async function hideSensitiveAccessLog(input: { actorName: string; actorUserId: string; companyId: string; logId: string }) {
+export async function hideSensitiveAccessLog(input: { actorName: string; actorUserId?: string; companyId: string; logId: string }) {
   const now = new Date().toISOString();
   const rows = await supabaseRequest<Array<{ id: string }>>(`sensitive_access_logs?select=id&id=eq.${encodeURIComponent(input.logId)}&company_id=eq.${encodeURIComponent(input.companyId)}&hidden_at=is.null`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ hidden_at: now, hidden_by: input.actorUserId, hidden_by_actor_kind: "app_user", hidden_by_name: input.actorName })
+    body: JSON.stringify({ hidden_at: now, hidden_by: input.actorUserId || null, hidden_by_actor_kind: input.actorUserId ? "app_user" : "legacy_owner", hidden_by_name: input.actorName })
   });
   return rows[0] ? now : null;
 }

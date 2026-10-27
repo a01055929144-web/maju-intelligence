@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 import { getCustomerSession } from "@/lib/auth";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
-import { isActiveCompanyOwner, listSensitiveAccessLogs, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
+import { isActiveSensitiveAccessOwner, listSensitiveAccessLogs, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 import { SettingsShell } from "../settings-shell";
 import { SensitiveAccessLogPanel } from "./sensitive-access-log-panel";
 
 export default async function SecuritySettingsPage() {
   const session = await getCustomerSession();
-  if (!session?.userId) redirect("/dashboard/login");
-  if (!(await isActiveCompanyOwner({ companyId: session.companyId, userId: session.userId }))) redirect("/dashboard/settings/company");
+  if (!session) redirect("/dashboard/login");
+  if (!(await isActiveSensitiveAccessOwner({ companyId: session.companyId, isLegacyOwner: !session.userId && session.workspaceRole === "owner", userId: session.userId }))) redirect("/dashboard/settings/company");
   const enabled = sensitiveAccessLogsEnabled();
   const records = enabled ? await listSensitiveAccessLogs(session.companyId) : [];
   return (

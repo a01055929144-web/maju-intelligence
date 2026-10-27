@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const session = await getCustomerSession();
-  if (!session?.userId) return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
+  if (!session || (!session.userId && session.workspaceRole !== "owner")) return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
   const { id } = await params;
 
   try {
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       customerId: id,
       deviceLabel: deviceLabel(request),
       driverNames: [getCustomerOperationalName(session), session.name, session.assignedManagerName || "", session.invitedEmployeeName || ""],
+      isLegacyOwner: !session.userId && session.workspaceRole === "owner",
       userId: session.userId
     });
     if (result.status === "unauthorized") return NextResponse.json({ message: "Unauthorized" }, { headers: noStoreHeaders, status: 401 });
