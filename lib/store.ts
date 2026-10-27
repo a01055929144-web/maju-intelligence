@@ -206,7 +206,7 @@ export type CustomerMasterItem = {
   loadingPosition?: string;
   accessMethodType?: string;
   accessNote?: string;
-  accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -354,6 +354,7 @@ export type RoutePlanStop = LeadItem & {
   accessMethodType?: string;
   accessNote?: string;
   accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -5039,6 +5040,21 @@ export async function canAccessAssignedCustomer(companyId: string | undefined, c
   }, assignmentScope);
 }
 
+export async function isCustomerOnTodayRouteForDriver(companyId: string, customerId: string, driverNames: string[]) {
+  if (!isProductionStoreConfigured()) return true;
+  const normalizedNames = driverNames.map((name) => name.trim()).filter(Boolean);
+  if (!normalizedNames.length) return false;
+  const today = toKstDateKey(new Date().toISOString());
+  const rows = await supabaseRequest<Array<{ customer_ids: unknown; driver_name: string }>>(
+    `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
+  ).catch(() => []);
+  return rows.some((row) =>
+    normalizedNames.includes(row.driver_name.trim())
+    && Array.isArray(row.customer_ids)
+    && row.customer_ids.includes(customerId)
+  );
+}
+
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
 
 export async function upsertCustomerMaster(
@@ -7393,14 +7409,19 @@ export async function createCustomerAttachmentSignedUrl(storagePath: string, exp
   return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
 }
 
-export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<string | null> {
+export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<{
+  attachmentId: string;
+  attachmentType: string;
+  customerId: string;
+} | null> {
   if (!companyId || !storagePath || !isProductionStoreConfigured()) return null;
 
-  const rows = await supabaseRequest<Array<{ customer_id: string }>>(
-    `customer_attachments?select=customer_id&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
+  const rows = await supabaseRequest<Array<{ attachment_type: string; customer_id: string; id: string }>>(
+    `customer_attachments?select=id,customer_id,attachment_type&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
   );
 
-  return rows[0]?.customer_id || null;
+  const row = rows[0];
+  return row ? { attachmentId: row.id, attachmentType: row.attachment_type, customerId: row.customer_id } : null;
 }
 
 async function countTableRows(table: string, name: string, description: string, countColumn = "id"): Promise<DatabaseCheck> {
@@ -11846,7 +11867,7 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
         loadingPosition: customer.loadingPosition,
         accessMethodType: customer.accessMethodType,
         accessNote: customer.accessNote,
-        accessPassword: customer.accessPassword,
+        hasAccessPassword: customer.hasAccessPassword,
         businessHours: customer.businessHours,
         menuSummary: customer.menuSummary,
         naverPlaceUrl: customer.naverPlaceUrl,
@@ -14468,7 +14489,7 @@ function toCustomerMasterItem(
     loadingPosition: row.loading_position || undefined,
     accessMethodType: row.access_method_type || undefined,
     accessNote: row.access_note || undefined,
-    accessPassword: row.access_password || undefined,
+    hasAccessPassword: Boolean(row.access_password),
     businessHours: row.business_hours || undefined,
     menuSummary: row.menu_summary || undefined,
     googleMapUrl: row.google_map_url || undefined,

@@ -4810,6 +4810,8 @@ export function StoreQuickCard({
   // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
   // 필요할 때만 눌러서 확인합니다.
   const [showAccessPassword, setShowAccessPassword] = useState(false);
+  const [revealedAccessPassword, setRevealedAccessPassword] = useState("");
+  const [accessPasswordMessage, setAccessPasswordMessage] = useState("");
   // 2026-08-24 피드백: "기거래처 카드도 움직일 수 있도록 해줘" — 지도 위 리드 카드(PermitLeadMapQuickCard)와
   // 같은 방식으로, 기본 위치에서 마우스로 끌어 옮긴 만큼만 transform으로 얹습니다. 다른 거래처를 클릭해
   // 카드 내용이 바뀌면 다시 기본 위치로 돌아갑니다.
@@ -4837,6 +4839,27 @@ export function StoreQuickCard({
     }
   }
 
+  async function revealAccessPassword() {
+    if (showAccessPassword) {
+      setShowAccessPassword(false);
+      setRevealedAccessPassword("");
+      setAccessPasswordMessage("");
+      return;
+    }
+    setAccessPasswordMessage("");
+    const response = await fetch(`/api/customers/${encodeURIComponent(store.id)}/sensitive/access-password/reveal`, {
+      method: "POST",
+      cache: "no-store"
+    }).catch(() => null);
+    const payload = await response?.json().catch(() => null) as { accessPassword?: string | null; message?: string } | null;
+    if (!response?.ok) {
+      setAccessPasswordMessage(payload?.message || "출입 비밀번호를 불러오지 못했습니다.");
+      return;
+    }
+    setRevealedAccessPassword(payload?.accessPassword || "미등록");
+    setShowAccessPassword(true);
+  }
+
   useEffect(() => {
     setDraft({
       name: store.name,
@@ -4850,6 +4873,8 @@ export function StoreQuickCard({
     setIsEditing(false);
     setIsMemoEditing(false);
     setShowAccessPassword(false);
+    setRevealedAccessPassword("");
+    setAccessPasswordMessage("");
     setDragOffset({ x: 0, y: 0 });
     setSaveError("");
   }, [store.id]);
@@ -5016,7 +5041,7 @@ export function StoreQuickCard({
         {/* 출입방법·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를 저장해야해 ... 퀵카드,
         상세에도 적재해서 보여줘야해"). 비밀번호는 기본 마스킹, 눌러야만 노출됩니다. 적재위치 사진도
         같이 보여달라는 요청(1-1)에 맞춰 바로 아래에 사진 미리보기를 함께 붙입니다. */}
-        {!isEditing && (store.accessMethodType || store.accessNote || store.accessPassword) ? (
+        {!isEditing && (store.accessMethodType || store.accessNote || store.hasAccessPassword) ? (
           <div className="mt-1.5 rounded-md bg-teal-50/60 px-2 py-1.5">
             <p className="flex items-start gap-1.5 text-[11px] font-bold leading-4 text-slate-700">
               {(() => {
@@ -5029,16 +5054,17 @@ export function StoreQuickCard({
                 <span className="line-clamp-2">{store.accessNote}</span>
               </span>
             </p>
-            {store.accessPassword ? (
+            {store.hasAccessPassword ? (
               <button
                 className="mt-1 inline-flex items-center gap-1 text-[11px] font-black text-teal-700"
-                onClick={() => setShowAccessPassword((value) => !value)}
+                onClick={revealAccessPassword}
                 type="button"
               >
                 {showAccessPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                비밀번호 {showAccessPassword ? store.accessPassword : "••••••"}
+                비밀번호 {showAccessPassword ? revealedAccessPassword : "••••••"}
               </button>
             ) : null}
+            {accessPasswordMessage ? <p className="mt-1 text-[10.5px] font-bold text-amber-700">{accessPasswordMessage}</p> : null}
             <QuickCardAccessPhotoPreview customerId={store.id} />
           </div>
         ) : null}
@@ -6756,7 +6782,7 @@ function CustomerDirectoryView({
                       </td>
                       {showMoreDirectoryColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td> : null}
                       {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3">
-                        {store.accessPassword ? (
+                        {store.hasAccessPassword ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
                             <Lock className="h-3 w-3" /> 등록됨
                           </span>
@@ -8657,7 +8683,8 @@ function StoreDetail({
   // 저장해야해. 놓친 것 같아 ... 열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등 넣어야해").
   const [draftAccessMethodType, setDraftAccessMethodType] = useState(store.accessMethodType || "");
   const [draftAccessNote, setDraftAccessNote] = useState(store.accessNote || "");
-  const [draftAccessPassword, setDraftAccessPassword] = useState(store.accessPassword || "");
+  const [draftAccessPassword, setDraftAccessPassword] = useState("");
+  const [accessPasswordChanged, setAccessPasswordChanged] = useState(false);
   const [showDraftAccessPassword, setShowDraftAccessPassword] = useState(false);
   const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
   const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
@@ -8711,7 +8738,7 @@ function StoreDetail({
       menuSummary: draftMenuSummary,
       accessMethodType: draftAccessMethodType,
       accessNote: draftAccessNote,
-      accessPassword: draftAccessPassword,
+      ...(accessPasswordChanged ? { accessPassword: draftAccessPassword } : {}),
       reviewSummary: draftReviewSummary,
       reviewKeywords: draftReviewKeywords
         .split(",")
@@ -9119,8 +9146,8 @@ function StoreDetail({
                     <div className="flex items-center gap-1.5">
                       <input
                         className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
-                        onChange={(event) => setDraftAccessPassword(event.target.value)}
-                        placeholder="도어락 비밀번호 등"
+                        onChange={(event) => { setDraftAccessPassword(event.target.value); setAccessPasswordChanged(true); }}
+                        placeholder={store.hasAccessPassword ? "새 값 입력 시에만 변경" : "도어락 비밀번호 등"}
                         type={showDraftAccessPassword ? "text" : "password"}
                         value={draftAccessPassword}
                       />

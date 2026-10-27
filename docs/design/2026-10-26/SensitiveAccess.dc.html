@@ -20,6 +20,15 @@
       <span style="margin-left: auto; font-size: 12px; color: #5B6673">기록은 지울 수 없고 숨김만 가능 · 숨김도 기록에 남음</span>
     </header>
 
+    <section style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 12px; padding: 12px 14px">
+      <div>
+        <b style="color: #065F46">서버 경유 열람 경계</b>
+        <div style="margin-top: 4px; color: #166534; font-size: 12px; line-height: 1.7">목록에는 민감값 없음 → 보기 요청 → 최신 멤버십·담당 범위 재검증 → 감사 로그 저장 성공 → 값 또는 짧은 파일 URL 반환</div>
+        <div style="color: #166534; font-size: 11px">로그 실패·퇴사·만료·타회사·담당 밖이면 값을 반환하지 않음 · 비밀번호/전화번호/문서 원문은 로그에 저장하지 않음</div>
+      </div>
+      <span style="padding: 5px 9px; border-radius: 999px; background: #FEF3C7; color: #92400E; font-size: 11px; font-weight: 700; white-space: nowrap">SQL 승인 전 기능 OFF</span>
+    </section>
+
     <!-- 필터 한 줄 -->
     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #FFFFFF; border: 1px solid #E3E8ED; border-radius: 12px; padding: 10px 12px">
       <div style="display: flex; border: 1px solid #CBD3DB; border-radius: 8px; overflow: hidden"><sc-for list="{{ periods }}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div>
