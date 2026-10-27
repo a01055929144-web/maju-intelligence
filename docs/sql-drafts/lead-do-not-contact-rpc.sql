@@ -65,7 +65,7 @@ begin
     else '***'||right(v_normalized,4) end;
 
   with targets as (
-    select id,status as before_status,next_action as before_next_action from public.business_permit_leads
+    select id,status as before_status,next_action as before_next_action,exclude_reason as before_exclude_reason from public.business_permit_leads
     where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
       or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
       or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
@@ -82,7 +82,8 @@ begin
   select p_company_id,id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
     jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
       'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked,
-      'before_status',before_status,'before_next_action',before_next_action)) from targets;
+      'before_status',before_status,'before_next_action',before_next_action,
+      'before_exclude_reason',before_exclude_reason)) from targets;
   return true;
 end;
 $$;
@@ -116,7 +117,8 @@ begin
   ), restored as (
     update public.business_permit_leads lead set
       status=coalesce(latest.metadata->>'before_status','검토 필요'),
-      next_action=latest.metadata->>'before_next_action',exclude_reason=null,updated_at=now()
+      next_action=latest.metadata->>'before_next_action',
+      exclude_reason=latest.metadata->>'before_exclude_reason',updated_at=now()
     from latest where lead.company_id=p_company_id and lead.id=latest.lead_id
       and lead.status='제외' and lead.exclude_reason='연락 거부 등록'
     returning lead.id
