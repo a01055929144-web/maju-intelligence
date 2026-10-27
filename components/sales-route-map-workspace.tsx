@@ -474,6 +474,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         if (compatibleMode === "customer") setRightPanelTab("stores");
         if (compatibleMode !== "split") setShowAllLeadsOnMap(false);
       }
+      // 휴대폰 폭에서는 예전처럼 거래처 중심으로 시작합니다(오른쪽 목록은 PC 3분할 전용).
+      if (window.matchMedia && !window.matchMedia("(min-width: 1024px)").matches) setShowAllLeadsOnMap(false);
       // 지도는 매번 거래처·오늘 코스·차량 위치 중심으로 시작합니다. 과거 저장값이 true여도
       // 리드 레이어를 자동으로 켜지 않으며, 현재 화면에서 사용자가 직접 켠 경우에만 유지합니다.
       window.localStorage.removeItem("maju:map-leads-visible:v1");
@@ -3042,6 +3044,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               <>
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
+                    controlsOffsetClassName={mapPanelMode === "split" && !rightCollapsed ? "lg:right-[344px] xl:right-[384px] 2xl:right-[424px]" : undefined}
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 lg:min-h-0"
@@ -3359,7 +3362,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
               mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
-                ? `flex lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px] ${mapPanelMode === "split" ? "lg:left-auto lg:right-3" : ""}`
+                ? `${mapPanelMode === "split" ? "hidden lg:flex lg:left-auto lg:right-3" : "flex"} lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px]`
                 : "hidden"
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}

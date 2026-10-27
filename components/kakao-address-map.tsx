@@ -1131,6 +1131,7 @@ export function KakaoAddressMap({
   if (status === "fallback") {
     return (
       <FallbackAddressMap
+        controlsOffsetClassName={controlsOffsetClassName}
         controlsOffsetPx={controlsOffsetPx}
         fallbackReason={fallbackReason}
         focusedMarkerId={focusedMarkerId}
@@ -1646,6 +1647,7 @@ function escapeHtml(value: string) {
 }
 
 function FallbackAddressMap({
+  controlsOffsetClassName,
   controlsOffsetPx,
   fallbackReason,
   focusedMarkerId,
@@ -1662,7 +1664,7 @@ function FallbackAddressMap({
   return (
     <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-[linear-gradient(135deg,#eef7f2_0%,#eef7f2_34%,#f8fafc_34%,#f8fafc_45%,#edf2ff_45%,#edf2ff_100%)]`}>
-        <div className="absolute right-3 z-30 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur" style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
+        <div className={`absolute right-3 z-30 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur ${controlsOffsetClassName || ""}`} style={{ top: controlsOffsetPx !== undefined ? `${controlsOffsetPx}px` : "0.75rem" }}>
           <button
             aria-label="전체화면 지도"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-teal-700 text-white transition hover:bg-teal-800"
