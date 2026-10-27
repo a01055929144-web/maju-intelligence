@@ -113,11 +113,16 @@ begin
     when channel='email' then left(normalized_value,1)||'***@'||split_part(normalized_value,'@',2)
     else '***'||right(normalized_value,4) end into v_channel,v_masked;
   if not found then raise exception 'active_dnc_not_found'; end if;
-  with original_change as (
-    select distinct on (lead_id) lead_id,metadata from public.lead_actions
-    where company_id=p_company_id and metadata->>'dnc_id'=p_dnc_id::text
-      and metadata->>'changed_status'='true'
-    order by lead_id,created_at asc
+  with impacted as (
+    select distinct lead_id from public.lead_actions
+    where company_id=p_company_id and metadata->>'event_type'='do_not_contact'
+      and metadata->>'dnc_id'=p_dnc_id::text
+  ), original_change as (
+    select distinct on (action.lead_id) action.lead_id,action.metadata
+    from public.lead_actions action join impacted on impacted.lead_id=action.lead_id
+    where action.company_id=p_company_id and action.metadata->>'event_type'='do_not_contact'
+      and action.metadata->>'changed_status'='true'
+    order by action.lead_id,action.created_at asc
   ), restored as (
     update public.business_permit_leads lead set
       status=coalesce(original_change.metadata->>'before_status','검토 필요'),
@@ -127,8 +132,9 @@ begin
       and lead.status='제외' and lead.exclude_reason='연락 거부 등록'
       and not exists (
         select 1 from public.lead_actions other_action
-        join public.company_do_not_contact other_dnc on other_dnc.id=(other_action.metadata->>'dnc_id')::uuid
+        join public.company_do_not_contact other_dnc on other_dnc.id::text=other_action.metadata->>'dnc_id'
         where other_action.company_id=p_company_id and other_action.lead_id=lead.id
+          and other_action.metadata->>'event_type'='do_not_contact'
           and other_dnc.company_id=p_company_id and other_dnc.released_at is null
       )
     returning lead.id

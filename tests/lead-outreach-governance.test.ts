@@ -123,6 +123,11 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("order by lead_id,created_at asc");
     expect(sql).toContain("not (status='제외' and exclude_reason='연락 거부 등록')");
     expect(sql).toContain("other_dnc.released_at is null");
+    expect(sql).toContain("other_dnc.id::text=other_action.metadata->>'dnc_id'");
+    expect(sql).not.toContain("metadata->>'dnc_id')::uuid");
+    expect(sql).toContain("with impacted as");
+    expect(sql).toContain("join impacted on impacted.lead_id=action.lead_id");
+    expect(sql).toContain("action.metadata->>'changed_status'='true'");
     expect(sql).toContain("coalesce(permission_role,role) in ('owner','manager')");
     expect(route).toContain('scope.customerSession?.workspaceRole !== "owner"');
   });
