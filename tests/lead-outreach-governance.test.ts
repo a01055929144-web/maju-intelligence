@@ -91,7 +91,6 @@ describe("lead outreach governance", () => {
 
   it("keeps DNC writes disabled until the atomic RPC is approved", () => {
     const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/store.ts"), "utf8");
-    const authSource = fs.readFileSync(path.join(process.cwd(), "lib/auth.ts"), "utf8");
     const route = fs.readFileSync(path.join(process.cwd(), "app/api/leads/permits/[id]/do-not-contact/route.ts"), "utf8");
     const sql = fs.readFileSync(path.join(process.cwd(), "docs/sql-drafts/lead-do-not-contact-rpc.sql"), "utf8");
     expect(storeSource).toContain('process.env.LEAD_DNC_WRITE_ENABLED === "true"');
@@ -115,7 +114,7 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("contact_value_not_on_lead");
     expect(sql).toContain("status not in ('거래처 전환','기존 거래처','제외')");
     expect(sql).toContain("p_actor_kind is null or p_actor_kind not in ('app_user','legacy_owner')");
-    expect(sql).toContain("getCustomerSession이 서명과 활성 legacy credential/company를 매 요청 재검증");
+    expect(sql).toContain("legacy owner는 활성 legacy credential/company 연결을 DNC 전용 helper로 매 요청 재검증");
     expect(sql).toContain("p_actor_kind='legacy_owner'");
     expect(sql).toContain("legacy_owner_user_id_must_be_null");
     expect(sql).toContain("status in ('active','fallback')");
@@ -147,8 +146,9 @@ describe("lead outreach governance", () => {
     expect(route).toContain("companyId: scope.companyId!");
     expect(storeSource).toContain('p_actor_kind: input.actorKind');
     expect(storeSource).toContain('rpc/release_lead_do_not_contact');
-    expect(authSource).toContain('if (session.workspaceRole !== "owner") return null');
-    expect(authSource).toContain("isActiveLegacyOwnerSession({ companyId: session.companyId, email: session.email })");
+    expect(route).toContain("await isActiveLegacyOwnerSession({");
+    expect(route).toContain("email: scope.customerSession.email");
+    expect(route).toContain("}).catch(() => false)");
     expect(storeSource).toContain("auth_credentials?select=customer_company_id,customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}");
     expect(storeSource).toContain('return Boolean(companyRows[0] && ["active", "fallback"].includes(companyRows[0].status || ""))');
   });

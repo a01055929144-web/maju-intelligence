@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeDoNotContactValue } from "@/domains/lead/outreach-governance";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { LEAD_DNC_WRITE_ENABLED, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
+import { isActiveLegacyOwnerSession, LEAD_DNC_WRITE_ENABLED, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = (await request.json().catch(() => null)) as { channel?: "sms" | "instagram" | "talktalk" | "email" | "fax" | "visit"; reason?: string; value?: string } | null;
@@ -39,6 +39,13 @@ export async function DELETE(request: NextRequest) {
   }
   if (!scope.customerSession.userId && scope.customerSession.workspaceRole !== "owner") {
     return NextResponse.json({ message: "legacy owner 세션만 사용자 ID 없이 해제할 수 있습니다." }, { status: 403 });
+  }
+  if (!scope.customerSession.userId) {
+    const activeLegacyOwner = await isActiveLegacyOwnerSession({
+      companyId: scope.companyId!,
+      email: scope.customerSession.email
+    }).catch(() => false);
+    if (!activeLegacyOwner) return NextResponse.json({ message: "legacy owner 자격을 확인할 수 없습니다." }, { status: 403 });
   }
   if (!LEAD_DNC_WRITE_ENABLED) return NextResponse.json({ message: "연락 거부 저장은 검토 중이며 아직 활성화되지 않았습니다." }, { status: 503 });
   const dncId = body?.dncId?.trim();
