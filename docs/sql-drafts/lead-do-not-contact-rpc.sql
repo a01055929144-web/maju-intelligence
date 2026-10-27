@@ -65,7 +65,7 @@ begin
     else '***'||right(v_normalized,4) end;
 
   with targets as (
-    select id,status as before_status,next_action as before_next_action,exclude_reason as before_exclude_reason from public.business_permit_leads
+    select id,status as before_status from public.business_permit_leads
     where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
       or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
       or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
@@ -75,8 +75,7 @@ begin
   ), affected as (
     update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
     where company_id=p_company_id and id in (select id from targets)
-      and status not in ('거래처 전환','기존 거래처')
-      and not (status='제외' and exclude_reason='연락 거부 등록')
+      and status not in ('거래처 전환','기존 거래처','제외')
     returning id
   )
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
@@ -84,8 +83,7 @@ begin
     jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
       'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked,
       'changed_status',(affected.id is not null),
-      'before_status',before_status,'before_next_action',before_next_action,
-      'before_exclude_reason',before_exclude_reason))
+      'before_status',before_status))
   from targets left join affected on affected.id=targets.id;
   return true;
 end;
@@ -134,8 +132,7 @@ begin
   ), restored as (
     update public.business_permit_leads lead set
       status=coalesce(original_change.metadata->>'before_status','검토 필요'),
-      next_action=original_change.metadata->>'before_next_action',
-      exclude_reason=original_change.metadata->>'before_exclude_reason',updated_at=now()
+      next_action=null,exclude_reason=null,updated_at=now()
     from original_change where lead.company_id=p_company_id and lead.id=original_change.lead_id
       and lead.status='제외' and lead.exclude_reason='연락 거부 등록'
       and not exists (
