@@ -72,7 +72,7 @@ export function AdminCompanySetupWorkspace({ company }: { company: ManagedCompan
       <div id="sales-area-step" className={`rounded-xl border p-4 ${salesAreaConfigured ? "border-emerald-200 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
         <p className="text-xs font-black text-amber-800">필수 1단계</p>
         <h2 className="mt-1 text-lg font-black text-slate-950">영업 지역부터 설정</h2>
-        <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">지역이 없으면 매일 수집할 리드가 0곳입니다. 시·도와 시·군·구를 선택하면 현재 리드 수를 확인하고 다음 설정을 진행합니다.</p>
+        <p className="mt-1 text-sm font-semibold leading-6 text-slate-700">출발지·배송 권역의 자동 기본값과 별도로, 리드 수집 기준 지역을 직접 선택해야 다음 설정을 진행할 수 있습니다.</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <label className="text-sm font-bold text-slate-700">시·도
             <select className="maju-input mt-1 w-full" onChange={(event) => { setProvince(event.target.value); setDistrict(""); }} value={province}>
