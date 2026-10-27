@@ -5,7 +5,7 @@ import { MapPin, X } from "lucide-react";
 import { KakaoAddressMap, type KakaoSalesAreaStat } from "@/components/kakao-address-map";
 import { isSalesAreaCovered, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
-type Region = { id: string; label: string };
+type Region = { areaKind?: "assigned" | "expansion_candidate"; id: string; label: string };
 type Recommendation = { administrativeArea: string; customerCount: number; existingLeadCount: number; recentLeadCount: number };
 type SalesAreaState = {
   defaultAreas: string[];
@@ -17,6 +17,7 @@ type SalesAreaState = {
 
 export type SalesAreaSelectorSnapshot = {
   canManage: boolean;
+  expansionCandidateRegions: Region[];
   recommendations: Recommendation[];
   regions: Region[];
   salesAreaState: SalesAreaState;
@@ -24,6 +25,7 @@ export type SalesAreaSelectorSnapshot = {
 
 const EMPTY_STATE: SalesAreaSelectorSnapshot = {
   canManage: false,
+  expansionCandidateRegions: [],
   recommendations: [],
   regions: [],
   salesAreaState: { defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none", unrecognizedRegions: [] }
@@ -90,7 +92,7 @@ export function SalesAreaSelector({
 
   const unrecognizedIds = useMemo(() => new Set(snapshot.salesAreaState.unrecognizedRegions.map((item) => item.id)), [snapshot.salesAreaState.unrecognizedRegions]);
 
-  async function addArea(administrativeArea: string) {
+  async function addArea(administrativeArea: string, areaKind: "assigned" | "expansion_candidate" = "assigned") {
     if (!snapshot.canManage || !administrativeArea) return false;
     setBusy(true);
     setMessage("");
@@ -98,7 +100,7 @@ export function SalesAreaSelector({
       const response = await fetch(withPreviewCompany("/api/leads/permits/keyword-search-regions"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: previewCompanyId() || undefined, label: administrativeArea })
+        body: JSON.stringify({ areaKind, companyId: previewCompanyId() || undefined, label: administrativeArea })
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
@@ -107,7 +109,9 @@ export function SalesAreaSelector({
       }
       await load();
       onChanged?.();
-      setMessage(`저장했습니다. 기존 ${administrativeArea} 리드 ${(payload?.existingLeadCount || 0).toLocaleString()}건을 바로 표시하고, 내일 아침부터 새 매장이 들어옵니다.`);
+      setMessage(areaKind === "assigned"
+        ? `저장했습니다. 기존 ${administrativeArea} 리드 ${(payload?.existingLeadCount || 0).toLocaleString()}건을 바로 표시하고, 내일 아침부터 새 매장이 들어옵니다.`
+        : `${administrativeArea}을 영업 필요 지역으로 저장했습니다. 수동 탐색에만 사용하며 매일 자동 수집에는 포함하지 않습니다.`);
       return true;
     } catch {
       setMessage("네트워크 연결을 확인한 뒤 다시 시도해주세요.");
@@ -243,6 +247,35 @@ export function SalesAreaSelector({
           {!snapshot.regions.length ? snapshot.salesAreaState.effectiveAreas.map((area) => <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700" key={area}>{area}</span>) : null}
           {!snapshot.salesAreaState.effectiveAreas.length && !snapshot.regions.length ? <span className="text-xs font-semibold text-amber-700">영업할 지역을 골라 주세요.</span> : null}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+        <p className="text-xs font-black text-violet-950">영업 필요 지역</p>
+        <p className="mt-1 text-[11px] font-semibold text-violet-700">확장 검토·수동 탐색 전용입니다. 매일 자동 수집 지역과 분리됩니다.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {snapshot.expansionCandidateRegions.map((region) => (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-violet-800 ring-1 ring-inset ring-violet-200" key={region.id}>
+              {region.label}
+              {snapshot.canManage ? <button aria-label={`${region.label} 영업 필요 지역 해제`} disabled={busy} onClick={() => void removeArea(region.id)} type="button"><X className="h-3 w-3" /></button> : null}
+            </span>
+          ))}
+          {!snapshot.expansionCandidateRegions.length ? <span className="text-xs font-semibold text-violet-700">아래 추천 지역에서 추가할 수 있습니다.</span> : null}
+        </div>
+        {snapshot.recommendations.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {snapshot.recommendations.slice(0, 6).map((item) => (
+              <button
+                className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-left text-xs font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-50"
+                disabled={!snapshot.canManage || busy || snapshot.expansionCandidateRegions.some((region) => region.label === item.administrativeArea)}
+                key={`expansion-${item.administrativeArea}`}
+                onClick={() => void addArea(item.administrativeArea, "expansion_candidate")}
+                type="button"
+              >
+                + {item.administrativeArea}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {snapshot.recommendations.length ? (

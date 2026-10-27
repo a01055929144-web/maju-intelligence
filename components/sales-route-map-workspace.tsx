@@ -74,6 +74,7 @@ import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/l
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
 import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
+import type { MapFilterPresetFilters } from "@/lib/map-filter-presets";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -630,6 +631,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 조회 버튼이 필요해보여").
   const [mapLeadOpenDateStartDraft, setMapLeadOpenDateStartDraft] = useState("");
   const [mapLeadOpenDateEndDraft, setMapLeadOpenDateEndDraft] = useState("");
+  const [mapFilterPresets, setMapFilterPresets] = useState<Array<{ id: string; name: string; filters: MapFilterPresetFilters }>>([]);
+  const [mapFilterPresetEnabled, setMapFilterPresetEnabled] = useState(false);
+  const [selectedMapFilterPresetId, setSelectedMapFilterPresetId] = useState("");
+  const [mapFilterPresetBusy, setMapFilterPresetBusy] = useState(false);
   // 숨김(제외) 처리한 리드도 나중에 다시 거래할 수 있으니, 지도에서 완전히 사라지게 하지 않고
   // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
   // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
@@ -856,6 +861,72 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const handleMapSalesAreaSnapshot = useCallback((snapshot: SalesAreaSelectorSnapshot) => {
     setMapSalesRegionsConfigured(snapshot.salesAreaState.effectiveAreas.length > 0);
   }, []);
+
+  const loadMapFilterPresets = useCallback(async () => {
+    const response = await fetch("/api/map/filter-presets", { cache: "no-store" });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.enabled) {
+      setMapFilterPresetEnabled(false);
+      setMapFilterPresets([]);
+      return;
+    }
+    setMapFilterPresetEnabled(true);
+    setMapFilterPresets(Array.isArray(payload.presets) ? payload.presets : []);
+  }, []);
+
+  useEffect(() => { void loadMapFilterPresets(); }, [loadMapFilterPresets]);
+
+  function applyMapFilterPreset(presetId: string) {
+    setSelectedMapFilterPresetId(presetId);
+    const preset = mapFilterPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setGradeFilter(preset.filters.gradeFilter);
+    setMapLeadIndustryFilter(preset.filters.industry);
+    setMapLeadStageFilter(preset.filters.stage);
+    setMapLeadTypeFilter(preset.filters.leadType);
+    setMapLeadReminderOnly(preset.filters.reminderOnly);
+    setExcludeClosedStores(preset.filters.excludeClosedStores);
+  }
+
+  async function saveCurrentMapFilterPreset() {
+    const name = window.prompt("저장할 지도 필터 이름을 입력해주세요.")?.trim();
+    if (!name) return;
+    setMapFilterPresetBusy(true);
+    try {
+      const response = await fetch("/api/map/filter-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          filters: {
+            excludeClosedStores,
+            gradeFilter,
+            industry: mapLeadIndustryFilter,
+            leadType: mapLeadTypeFilter,
+            reminderOnly: mapLeadReminderOnly,
+            stage: mapLeadStageFilter
+          } satisfies MapFilterPresetFilters
+        })
+      });
+      if (response.ok) await loadMapFilterPresets();
+    } finally {
+      setMapFilterPresetBusy(false);
+    }
+  }
+
+  async function removeSelectedMapFilterPreset() {
+    if (!selectedMapFilterPresetId) return;
+    setMapFilterPresetBusy(true);
+    try {
+      const response = await fetch(`/api/map/filter-presets?id=${encodeURIComponent(selectedMapFilterPresetId)}`, { method: "DELETE" });
+      if (response.ok) {
+        setSelectedMapFilterPresetId("");
+        await loadMapFilterPresets();
+      }
+    } finally {
+      setMapFilterPresetBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -2530,6 +2601,21 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               >
                 {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
               </button>
+              {mapFilterPresetEnabled ? (
+                <div className="flex h-9 shrink-0 items-center rounded-md border border-slate-200 bg-white p-0.5">
+                  <select
+                    aria-label="저장된 지도 필터"
+                    className="h-8 max-w-[140px] rounded border-0 bg-transparent px-2 text-xs font-bold text-slate-700 outline-none"
+                    onChange={(event) => applyMapFilterPreset(event.target.value)}
+                    value={selectedMapFilterPresetId}
+                  >
+                    <option value="">저장 필터</option>
+                    {mapFilterPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                  </select>
+                  <button className="h-8 rounded px-2 text-xs font-black text-teal-700 hover:bg-teal-50 disabled:opacity-50" disabled={mapFilterPresetBusy} onClick={() => void saveCurrentMapFilterPreset()} type="button">저장</button>
+                  <button aria-label="선택한 지도 필터 삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40" disabled={mapFilterPresetBusy || !selectedMapFilterPresetId} onClick={() => void removeSelectedMapFilterPreset()} type="button"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              ) : null}
               <button
                 className="maju-button-secondary h-9 rounded-md px-3 text-xs"
                 onClick={focusOrigin}

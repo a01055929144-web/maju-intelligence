@@ -22,6 +22,13 @@ describe("PC map workspace layout", () => {
     expect(deliveryProofSource).not.toContain("위치 태그:");
   });
 
+  it("wires saved filter restore controls while the server flag remains authoritative", () => {
+    expect(workspaceSource).toContain('fetch("/api/map/filter-presets"');
+    expect(workspaceSource).toContain('aria-label="저장된 지도 필터"');
+    expect(workspaceSource).toContain("applyMapFilterPreset");
+    expect(workspaceSource).toContain("removeSelectedMapFilterPreset");
+  });
+
   it("keeps the primary filter bar on one desktop row", () => {
     expect(workspaceSource).toContain("lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)]");
     expect(workspaceSource).toContain("maju-toolbar-scroll flex min-w-0 flex-nowrap");
