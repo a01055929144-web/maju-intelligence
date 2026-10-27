@@ -1,5 +1,12 @@
 -- 검토용 초안. Claude 검토와 대표 승인 전 운영 DB 실행 금지.
 -- 전제: 20261026223523_delivery_sales_structure_20261027 적용 완료.
+--
+-- 검토 체크리스트
+-- 1. 함수 서명은 아래 REVOKE/GRANT의 서명과 반드시 일치한다.
+-- 2. company_id와 customer/lead의 동일 회사 소유권을 INSERT 전에 검증한다.
+-- 3. idempotency_key별 transaction advisory lock으로 동시 재시도를 직렬화한다.
+-- 4. 함수 한 호출 안에서 원본 note/action + header + items를 저장한다.
+-- 5. plpgsql 함수 실행 중 하나라도 실패하면 호출 트랜잭션 전체가 롤백된다.
 
 begin;
 
@@ -21,6 +28,9 @@ declare
   v_note_id uuid;
   v_event_id uuid;
 begin
+  if p_idempotency_key is null or btrim(p_idempotency_key) = '' then raise exception 'idempotency_key_required'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':delivery:' || p_idempotency_key, 0));
+  if not exists (select 1 from public.companies where id = p_company_id) then raise exception 'company_not_found'; end if;
   if not exists (select 1 from public.normalized_customers where company_id = p_company_id and id = p_customer_id) then
     raise exception 'customer_not_found';
   end if;
@@ -67,6 +77,7 @@ create or replace function public.record_lead_sales_offer_atomic(
   p_action jsonb,
   p_actor_user_id uuid,
   p_actor_name text,
+  p_idempotency_key text,
   p_memo text,
   p_items jsonb default '[]'::jsonb
 ) returns jsonb
@@ -78,16 +89,32 @@ declare
   v_action_id uuid;
   v_offer_id uuid;
 begin
+  if p_idempotency_key is null or btrim(p_idempotency_key) = '' then raise exception 'idempotency_key_required'; end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':sales:' || p_idempotency_key, 0));
+  if not exists (select 1 from public.companies where id = p_company_id) then raise exception 'company_not_found'; end if;
   if not exists (select 1 from public.business_permit_leads where company_id = p_company_id and id = p_lead_id) then
     raise exception 'lead_not_found';
   end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'offer_items_required'; end if;
 
-  insert into public.lead_actions(company_id, lead_id, action_type, result, memo, actor_name, follow_up_at, collateral_types)
+  select a.id, o.id into v_action_id, v_offer_id
+    from public.lead_actions a
+    join public.sales_offers o
+      on o.company_id = a.company_id and o.lead_id = a.lead_id and o.lead_action_id = a.id
+   where a.company_id = p_company_id
+     and a.lead_id = p_lead_id
+     and a.metadata->>'structuredIdempotencyKey' = p_idempotency_key
+   limit 1;
+  if v_action_id is not null then
+    return jsonb_build_object('actionId', v_action_id, 'offerId', v_offer_id, 'replayed', true);
+  end if;
+
+  insert into public.lead_actions(company_id, lead_id, action_type, result, memo, actor_name, follow_up_at, collateral_types, metadata)
   values (
     p_company_id, p_lead_id, p_action->>'actionType', nullif(p_action->>'result', ''), p_memo,
     nullif(btrim(p_actor_name), ''), nullif(p_action->>'followUpAt', '')::timestamptz,
-    coalesce(array(select jsonb_array_elements_text(coalesce(p_action->'collateralTypes', '[]'::jsonb))), '{}'::text[])
+    coalesce(array(select jsonb_array_elements_text(coalesce(p_action->'collateralTypes', '[]'::jsonb))), '{}'::text[]),
+    jsonb_build_object('structuredIdempotencyKey', p_idempotency_key)
   ) returning id into v_action_id;
 
   insert into public.sales_offers(company_id, lead_id, lead_action_id, recorded_by_user_id, recorded_by_name, memo)
@@ -109,8 +136,8 @@ begin
 end $$;
 
 revoke all on function public.record_delivery_event_atomic(uuid, uuid, text, uuid, text, text, jsonb, jsonb) from public, anon, authenticated;
-revoke all on function public.record_lead_sales_offer_atomic(uuid, uuid, jsonb, uuid, text, text, jsonb) from public, anon, authenticated;
+revoke all on function public.record_lead_sales_offer_atomic(uuid, uuid, jsonb, uuid, text, text, text, jsonb) from public, anon, authenticated;
 grant execute on function public.record_delivery_event_atomic(uuid, uuid, text, uuid, text, text, jsonb, jsonb) to service_role;
-grant execute on function public.record_lead_sales_offer_atomic(uuid, uuid, jsonb, uuid, text, text, jsonb) to service_role;
+grant execute on function public.record_lead_sales_offer_atomic(uuid, uuid, jsonb, uuid, text, text, text, jsonb) to service_role;
 
 commit;

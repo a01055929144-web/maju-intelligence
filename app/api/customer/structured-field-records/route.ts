@@ -5,7 +5,7 @@ import { supabaseRequest } from "@/lib/store";
 
 type StructuredRecordRequest =
   | { kind: "delivery"; customerId: string; memo: string; idempotencyKey: string; event: Record<string, unknown>; items?: unknown[] }
-  | { kind: "lead_sales_offer"; leadId: string; memo: string; action: Record<string, unknown>; items: unknown[] };
+  | { kind: "lead_sales_offer"; leadId: string; memo: string; idempotencyKey: string; action: Record<string, unknown>; items: unknown[] };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   if (body.kind === "lead_sales_offer") {
-    if (!body.leadId || !body.memo?.trim() || !isObject(body.action) || !Array.isArray(body.items) || !body.items.length) {
+    if (!body.leadId || !body.memo?.trim() || !body.idempotencyKey || !isObject(body.action) || !Array.isArray(body.items) || !body.items.length) {
       return NextResponse.json({ message: "영업 제안 필수값을 확인해 주세요." }, { status: 400 });
     }
     const result = await supabaseRequest<{ actionId: string; offerId: string }>("rpc/record_lead_sales_offer_atomic", {
@@ -57,6 +57,7 @@ export async function POST(request: Request) {
         p_actor_user_id: session.userId || null,
         p_company_id: session.companyId,
         p_items: body.items,
+        p_idempotency_key: body.idempotencyKey,
         p_lead_id: body.leadId,
         p_memo: body.memo.trim()
       })
