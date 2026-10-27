@@ -27,7 +27,7 @@ export function isGovSuccessResultCode(code?: string | null) {
 }
 
 export const GOV_DATASETS = ["general_restaurants", "rest_cafes", "bakeries", "group_meal_facilities", "contract_catering"] as const;
-const PAGE_SIZE = 100;
+export const GOV_PAGE_SIZE = 100;
 
 export type GovRestaurantRow = {
   businessName: string;
@@ -131,7 +131,7 @@ export async function fetchGovAreaRows(input: {
   const key = getGovRestaurantApiKey();
   if (!key) throw new Error("정부 음식점 API 키가 없습니다.");
   if (!/^\d{7}$/.test(input.areaCode)) throw new Error("개방자치단체코드가 올바르지 않습니다.");
-  const pageSize = PAGE_SIZE;
+  const pageSize = GOV_PAGE_SIZE;
   const result = await scanGovArea<Record<string, unknown>>({
     startPage: input.startPage,
     maxPages: input.maxPages,
