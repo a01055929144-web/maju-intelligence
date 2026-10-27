@@ -76,14 +76,17 @@ begin
     update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
     where company_id=p_company_id and id in (select id from targets)
       and status not in ('거래처 전환','기존 거래처')
+      and not (status='제외' and exclude_reason='연락 거부 등록')
     returning id
   )
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
-  select p_company_id,id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
+  select p_company_id,targets.id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
     jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
       'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked,
+      'changed_status',(affected.id is not null),
       'before_status',before_status,'before_next_action',before_next_action,
-      'before_exclude_reason',before_exclude_reason)) from targets;
+      'before_exclude_reason',before_exclude_reason))
+  from targets left join affected on affected.id=targets.id;
   return true;
 end;
 $$;
@@ -110,17 +113,24 @@ begin
     when channel='email' then left(normalized_value,1)||'***@'||split_part(normalized_value,'@',2)
     else '***'||right(normalized_value,4) end into v_channel,v_masked;
   if not found then raise exception 'active_dnc_not_found'; end if;
-  with latest as (
+  with original_change as (
     select distinct on (lead_id) lead_id,metadata from public.lead_actions
     where company_id=p_company_id and metadata->>'dnc_id'=p_dnc_id::text
-    order by lead_id,created_at desc
+      and metadata->>'changed_status'='true'
+    order by lead_id,created_at asc
   ), restored as (
     update public.business_permit_leads lead set
-      status=coalesce(latest.metadata->>'before_status','검토 필요'),
-      next_action=latest.metadata->>'before_next_action',
-      exclude_reason=latest.metadata->>'before_exclude_reason',updated_at=now()
-    from latest where lead.company_id=p_company_id and lead.id=latest.lead_id
+      status=coalesce(original_change.metadata->>'before_status','검토 필요'),
+      next_action=original_change.metadata->>'before_next_action',
+      exclude_reason=original_change.metadata->>'before_exclude_reason',updated_at=now()
+    from original_change where lead.company_id=p_company_id and lead.id=original_change.lead_id
       and lead.status='제외' and lead.exclude_reason='연락 거부 등록'
+      and not exists (
+        select 1 from public.lead_actions other_action
+        join public.company_do_not_contact other_dnc on other_dnc.id=(other_action.metadata->>'dnc_id')::uuid
+        where other_action.company_id=p_company_id and other_action.lead_id=lead.id
+          and other_dnc.company_id=p_company_id and other_dnc.released_at is null
+      )
     returning lead.id
   )
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
