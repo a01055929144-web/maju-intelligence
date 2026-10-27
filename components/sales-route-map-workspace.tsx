@@ -690,6 +690,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (mode === "split") {
       setLeftCollapsed(false);
       setRightCollapsed(false);
+      // 시안 ⑫: 3분할은 신규 리드 목록·지도 표시가 기본입니다(넓은 화면만 — 모바일은 지도 핀이 넘침).
+      if (typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches) {
+        setRightPanelTab("leads");
+        setShowDismissedLeadsOnMap(false);
+        if (mapLeadTypeFilter === "all") setMapLeadTypeFilter("new");
+        setMapLeadsVisible(true);
+      }
       return;
     }
     if (mode === "driver") {
@@ -3692,7 +3699,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   : "hidden"
             }`}
           >
-            {activeRightPanelTab === "leads" ? null : rightListTabs}
             <div className="min-h-0 flex-1 overflow-hidden">
             {activeRightPanelTab === "leads" ? (
               <LeadListPanel
@@ -3739,6 +3745,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 recalculatingDistances={recalculatingDistances}
                 selectedStoreId={previewStoreId || selectedId}
                 sourceReady={sourceReady}
+                tabs={rightListTabs}
                 title={selectedVehicle ? `${selectedVehicle.name} 거래처` : "전체 거래처"}
                 stores={visibleStores}
               />
@@ -6319,6 +6326,7 @@ function StoreManagementPanel({
   selectedStoreId,
   sourceReady,
   stores,
+  tabs,
   title
 }: {
   readonly collapsed: boolean;
@@ -6333,6 +6341,8 @@ function StoreManagementPanel({
   readonly selectedStoreId: string;
   readonly sourceReady: boolean;
   readonly stores: StoreRow[];
+  /** 시안 ⑫: 신규·영업·거래처 탭. 있으면 제목 줄 대신 얇은 요약 줄 + 탭 순서로 보여줍니다. */
+  readonly tabs?: ReactNode;
   readonly title: string;
 }) {
   const storesMissingDistance = stores.filter((store) => !store.distanceKm && store.address);
@@ -6369,26 +6379,41 @@ function StoreManagementPanel({
   return (
     <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-black text-slate-950">{title}</p>
-            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">목록 {stores.length.toLocaleString()}곳</p>
-          </div>
-          {onClearFilter ? (
-            <button className="maju-button-secondary ml-auto h-8 shrink-0 px-2 text-xs" onClick={onClearFilter} title="담당자 선택을 풀고 전체 거래처 보기" type="button">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              전체 보기
+        {tabs ? (
+          <>
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap border-b border-slate-100 bg-slate-50 px-3 py-2 text-[13px]">
+              <span className="min-w-0 truncate font-bold text-slate-900">{title}</span>
+              <span className="shrink-0 text-xs text-slate-400">{stores.length.toLocaleString()}곳</span>
+              {onClearFilter ? (
+                <button className="ml-auto h-7 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 hover:bg-slate-50" onClick={onClearFilter} title="담당자 선택을 풀고 전체 거래처 보기" type="button">
+                  전체 보기
+                </button>
+              ) : null}
+            </div>
+            {tabs}
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-slate-950">{title}</p>
+              <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">목록 {stores.length.toLocaleString()}곳</p>
+            </div>
+            {onClearFilter ? (
+              <button className="maju-button-secondary ml-auto h-8 shrink-0 px-2 text-xs" onClick={onClearFilter} title="담당자 선택을 풀고 전체 거래처 보기" type="button">
+                <ArrowLeft className="h-3.5 w-3.5" />
+                전체 보기
+              </button>
+            ) : null}
+            <button
+              aria-label="거래처 목록 패널 접기"
+              className="maju-button-secondary h-8 w-8 shrink-0 px-0"
+              onClick={onToggleCollapsed}
+              type="button"
+            >
+              <PanelRightClose className="h-4 w-4" />
             </button>
-          ) : null}
-          <button
-            aria-label="거래처 목록 패널 접기"
-            className="maju-button-secondary h-8 w-8 shrink-0 px-0"
-            onClick={onToggleCollapsed}
-            type="button"
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </button>
-        </div>
+          </div>
+        )}
         {storesMissingDistance.length > 0 ? (
           <div className="shrink-0 border-b border-slate-200/80 bg-amber-50 px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
