@@ -1,5 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { buildKakaoPlaceSearchQueries, isAllowedKakaoPlaceCandidate, isKakaoPlaceCandidate, selectKakaoPlaceResult } from "../lib/place-links";
+import {
+  buildKakaoPlaceSearchQueries,
+  classifyNaverLocalLink,
+  isAllowedKakaoPlaceCandidate,
+  isKakaoPlaceCandidate,
+  isNaverLocalCandidateMatch,
+  planNaverLocalLinkEnrichment,
+  selectKakaoPlaceResult
+} from "../lib/place-links";
+
+describe("네이버 지역검색 링크 A3 드라이런", () => {
+  const lead = { customerName: "도야집 강남점", address: "서울특별시 강남구 테헤란로6길 45, 1층" };
+  const matched = {
+    title: "<b>도야집 강남점</b>",
+    roadAddress: "서울 강남구 테헤란로6길 45",
+    address: "서울 강남구 역삼동 1",
+  };
+
+  it("공식 지역검색 link를 인스타·네이버 블로그·홈페이지·지도 링크로 분류한다", () => {
+    expect(classifyNaverLocalLink("https://www.instagram.com/doyajip/").kind).toBe("instagram");
+    expect(classifyNaverLocalLink("https://blog.naver.com/doyajip").kind).toBe("naver_blog");
+    expect(classifyNaverLocalLink("https://doyajip.example/menu").kind).toBe("homepage");
+    expect(classifyNaverLocalLink("https://map.naver.com/p/entry/place/123").kind).toBe("naver_map");
+    expect(classifyNaverLocalLink("javascript:alert(1)")).toEqual({ kind: "unsupported", url: "" });
+  });
+
+  it("상호명과 주소가 모두 일치해야 후보로 인정한다", () => {
+    expect(isNaverLocalCandidateMatch(lead, matched)).toBe(true);
+    expect(isNaverLocalCandidateMatch(lead, { ...matched, title: "다른 식당" })).toBe(false);
+    expect(isNaverLocalCandidateMatch(lead, { ...matched, roadAddress: "서울 송파구 올림픽로 1", address: "" })).toBe(false);
+  });
+
+  it("기존 인스타는 덮어쓰지 않고 모든 제안을 쓰기 0 상태로 만든다", () => {
+    expect(planNaverLocalLinkEnrichment(
+      lead,
+      { ...matched, link: "https://instagram.com/doyajip_new" },
+      { instagramUrl: "https://instagram.com/doyajip" }
+    )).toMatchObject({
+      matched: true,
+      kind: "instagram",
+      proposedUrl: "",
+      preservesExistingInstagram: true,
+      writeEnabled: false
+    });
+    expect(planNaverLocalLinkEnrichment(
+      lead,
+      { ...matched, link: "https://blog.naver.com/doyajip" }
+    )).toMatchObject({
+      matched: true,
+      kind: "naver_blog",
+      proposedUrl: "https://blog.naver.com/doyajip",
+      writeEnabled: false
+    });
+  });
+});
 
 describe("buildKakaoPlaceSearchQueries", () => {
   it("tries broad region, local detail, then name only without the full address", () => {

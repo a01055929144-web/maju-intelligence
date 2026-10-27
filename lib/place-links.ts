@@ -31,6 +31,61 @@ export type PlaceLinks = {
 
 type ExistingPlaceLinks = Partial<Pick<PlaceLinks, "googleMapUrl" | "kakaoPlaceUrl" | "naverPlaceUrl">>;
 
+export type NaverLocalCandidate = {
+  title?: string;
+  link?: string;
+  address?: string;
+  roadAddress?: string;
+};
+
+export type NaverLocalLinkKind = "instagram" | "naver_blog" | "homepage" | "naver_map" | "unsupported";
+
+export function classifyNaverLocalLink(value?: string): { kind: NaverLocalLinkKind; url: string } {
+  const raw = value?.trim() || "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return { kind: "unsupported", url: "" };
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (hostname === "instagram.com" || hostname.endsWith(".instagram.com")) return { kind: "instagram", url: url.toString() };
+    if (hostname === "blog.naver.com") return { kind: "naver_blog", url: url.toString() };
+    if (hostname === "map.naver.com" || hostname.endsWith(".map.naver.com")) return { kind: "naver_map", url: url.toString() };
+    return { kind: "homepage", url: url.toString() };
+  } catch {
+    return { kind: "unsupported", url: "" };
+  }
+}
+
+export function isNaverLocalCandidateMatch(input: PlaceLinkInput, candidate: NaverLocalCandidate) {
+  const expectedName = normalizePlaceName(input.customerName);
+  const candidateName = normalizePlaceName(candidate.title || "");
+  if (!expectedName || !candidateName || (!expectedName.includes(candidateName) && !candidateName.includes(expectedName))) {
+    return false;
+  }
+
+  const expectedAddress = normalizeComparableAddress(input.address || "");
+  if (!expectedAddress) return false;
+  return [candidate.roadAddress, candidate.address]
+    .map((address) => normalizeComparableAddress(address || ""))
+    .some((address) => Boolean(address) && (expectedAddress.includes(address) || address.includes(expectedAddress)));
+}
+
+export function planNaverLocalLinkEnrichment(
+  input: PlaceLinkInput,
+  candidate: NaverLocalCandidate,
+  existing: { instagramUrl?: string | null } = {}
+) {
+  const matched = isNaverLocalCandidateMatch(input, candidate);
+  const classified = classifyNaverLocalLink(candidate.link);
+  const preservesExistingInstagram = classified.kind === "instagram" && Boolean(existing.instagramUrl?.trim());
+  return {
+    matched,
+    kind: matched ? classified.kind : "unsupported" as NaverLocalLinkKind,
+    proposedUrl: matched && !preservesExistingInstagram ? classified.url : "",
+    preservesExistingInstagram,
+    writeEnabled: false
+  };
+}
+
 export async function resolvePlaceLinks(input: PlaceLinkInput, existing: ExistingPlaceLinks = {}): Promise<PlaceLinks> {
   const query = buildPlaceSearchQuery(input);
   const fallbackLinks = buildPlaceSearchLinks(input);
@@ -201,7 +256,21 @@ export function isAllowedKakaoPlaceCandidate(input: PlaceLinkInput, document: Ka
 }
 
 function normalizePlaceName(value: string) {
-  return value.toLowerCase().replace(/\(주\)|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
+  return value.toLowerCase().replace(/<[^>]*>/g, "").replace(/&[a-z0-9#]+;/g, "").replace(/\(주\)|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function normalizeComparableAddress(value: string) {
+  return value
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/서울특별시/g, "서울")
+    .replace(/부산광역시/g, "부산")
+    .replace(/대구광역시/g, "대구")
+    .replace(/인천광역시/g, "인천")
+    .replace(/광주광역시/g, "광주")
+    .replace(/대전광역시/g, "대전")
+    .replace(/울산광역시/g, "울산")
+    .replace(/경기도/g, "경기")
+    .replace(/[^0-9가-힣]/g, "");
 }
 
 function kakaoCandidateDistanceM(input: PlaceLinkInput, document: KakaoKeywordDocument) {
