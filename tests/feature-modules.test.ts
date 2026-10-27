@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { areHoldModulesEnabled, CORE_LEADS_HREF, isHoldModulePath, resolveLegacyDashboardHref } from "../lib/feature-modules";
+import { areHoldModulesEnabled, CORE_LEADS_HREF, isHoldModulePath, isMapFilterPersistenceEnabled, resolveLegacyDashboardHref } from "../lib/feature-modules";
 
 describe("hold feature modules", () => {
+  it("keeps map filter persistence disabled unless explicitly enabled", () => {
+    expect(isMapFilterPersistenceEnabled("")).toBe(false);
+    expect(isMapFilterPersistenceEnabled("false")).toBe(false);
+    expect(isMapFilterPersistenceEnabled("true")).toBe(true);
+    expect(isMapFilterPersistenceEnabled("1")).toBe(true);
+  });
+
   it("is hidden by default and enabled only for an allow-listed company", () => {
     expect(areHoldModulesEnabled("company-a", "")).toBe(false);
     expect(areHoldModulesEnabled("company-a", "company-b, company-a")).toBe(true);

@@ -69,6 +69,8 @@ import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../do
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { evaluateStaffLocation, getStaffLocationDisplayState, resolveStaffLocationPersistence, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import type { MapFilterPresetFilters } from "./map-filter-presets";
+import { isMapFilterPersistenceEnabled } from "./feature-modules";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -9582,6 +9584,7 @@ export type CompanyLeadSearchRegion = {
   latitude?: number;
   longitude?: number;
   createdAt: string;
+  areaKind: "assigned" | "expansion_candidate";
 };
 
 export type CompanySalesAreaState = {
@@ -9599,18 +9602,22 @@ export type CompanySalesAreaRecommendation = {
   recentLeadCount: number;
 };
 
-export async function getCompanyLeadSearchRegions(companyId: string): Promise<CompanyLeadSearchRegion[]> {
+export async function getCompanyLeadSearchRegions(
+  companyId: string,
+  areaKind: "assigned" | "expansion_candidate" = "assigned"
+): Promise<CompanyLeadSearchRegion[]> {
   if (!isProductionStoreConfigured()) return [];
   const rows = await supabaseRequest<
-    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
-  >(`company_lead_search_regions?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc`).catch(() => []);
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string; area_kind: "assigned" | "expansion_candidate" }>
+  >(`company_lead_search_regions?select=*&company_id=eq.${encodeURIComponent(companyId)}&area_kind=eq.${areaKind}&order=created_at.desc`).catch(() => []);
   return rows.map((row) => ({
     id: row.id,
     companyId: row.company_id,
     label: row.label,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    areaKind: row.area_kind || "assigned"
   }));
 }
 
@@ -9758,18 +9765,22 @@ function salesAreaPostgrestFilter(areas: readonly string[]) {
  * 한 번만 geocodeRegionLabel로 확정해두고(재탐색마다 다시 지오코딩하지 않음), 좌표를 못 찾아도
  * 지역명은 저장합니다 — 화면에서 "좌표 확인 필요"로 표시하고, 탐색 시에는 좌표 없는 지역은 건너뜁니다.
  */
-export async function addCompanyLeadSearchRegion(companyId: string, label: string): Promise<CompanyLeadSearchRegion> {
+export async function addCompanyLeadSearchRegion(
+  companyId: string,
+  label: string,
+  areaKind: "assigned" | "expansion_candidate" = "assigned"
+): Promise<CompanyLeadSearchRegion> {
   const trimmed = label.trim();
   if (!trimmed) throw new Error("지역명을 입력해주세요.");
   const administrativeArea = normalizeSelectableSalesArea(trimmed);
   if (!administrativeArea) throw new Error("시·도와 시·군·구를 함께 입력해주세요. 예: 서울특별시 강남구");
   if (!isProductionStoreConfigured()) {
-    return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString() };
+    return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString(), areaKind };
   }
 
   const point = await geocodeRegionLabel(administrativeArea).catch(() => null);
   const rows = await supabaseRequest<
-    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string; area_kind: "assigned" | "expansion_candidate" }>
   >("company_lead_search_regions", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -9778,7 +9789,8 @@ export async function addCompanyLeadSearchRegion(companyId: string, label: strin
         company_id: companyId,
         label: administrativeArea,
         latitude: point?.lat ?? null,
-        longitude: point?.lng ?? null
+        longitude: point?.lng ?? null,
+        area_kind: areaKind
       }
     ])
   });
@@ -9789,7 +9801,8 @@ export async function addCompanyLeadSearchRegion(companyId: string, label: strin
     label: row.label,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    areaKind: row.area_kind || areaKind
   };
 }
 
@@ -9799,6 +9812,43 @@ export async function removeCompanyLeadSearchRegion(companyId: string, regionId:
     method: "DELETE",
     headers: { Prefer: "return=minimal" }
   }).catch(() => null);
+}
+
+export type MapFilterPreset = {
+  id: string;
+  name: string;
+  filters: MapFilterPresetFilters;
+  updatedAt: string;
+};
+
+export async function getMapFilterPresets(companyId: string, actorKey: string): Promise<MapFilterPreset[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<Array<{ id: string; name: string; filters: MapFilterPresetFilters; updated_at: string }>>(
+    `map_filter_presets?select=id,name,filters,updated_at&company_id=eq.${encodeURIComponent(companyId)}&actor_key=eq.${encodeURIComponent(actorKey)}&order=updated_at.desc`
+  );
+  return rows.map((row) => ({ id: row.id, name: row.name, filters: row.filters, updatedAt: row.updated_at }));
+}
+
+export async function saveMapFilterPreset(input: { appUserId?: string; actorKey: string; companyId: string; filters: MapFilterPresetFilters; name: string }) {
+  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
+  const rows = await supabaseRequest<Array<{ id: string; name: string; filters: MapFilterPresetFilters; updated_at: string }>>(
+    "map_filter_presets?on_conflict=company_id,actor_key,name",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([{ company_id: input.companyId, actor_key: input.actorKey, app_user_id: input.appUserId || null, name: input.name, filters: input.filters, updated_at: new Date().toISOString() }])
+    }
+  );
+  const row = rows[0];
+  return { id: row.id, name: row.name, filters: row.filters, updatedAt: row.updated_at } satisfies MapFilterPreset;
+}
+
+export async function deleteMapFilterPreset(companyId: string, actorKey: string, presetId: string) {
+  if (!isProductionStoreConfigured()) return;
+  await supabaseRequest(`map_filter_presets?id=eq.${encodeURIComponent(presetId)}&company_id=eq.${encodeURIComponent(companyId)}&actor_key=eq.${encodeURIComponent(actorKey)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
 }
 
 export type KakaoKeywordLeadSweepResult = {
@@ -9862,7 +9912,11 @@ export async function runKakaoKeywordLeadSweep(
   const startedAt = new Date().toISOString();
   try {
     // 1) 기준점 후보를 모읍니다.
-    const savedRegions = await getCompanyLeadSearchRegions(companyId);
+    const assignedRegions = await getCompanyLeadSearchRegions(companyId, "assigned");
+    const expansionRegions = options.mode === "manual" && isMapFilterPersistenceEnabled()
+      ? await getCompanyLeadSearchRegions(companyId, "expansion_candidate")
+      : [];
+    const savedRegions = [...assignedRegions, ...expansionRegions];
     const regionAnchors: Array<{ label: string; point: GeoPoint }> = savedRegions
       .filter((region) => typeof region.latitude === "number" && typeof region.longitude === "number")
       .map((region) => ({ label: region.label, point: { lat: region.latitude as number, lng: region.longitude as number } }));

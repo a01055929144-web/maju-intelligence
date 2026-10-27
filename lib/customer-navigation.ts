@@ -48,7 +48,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
       { active: "dashboard", description: "오늘 확인할 영업·배송 업무", href: "/dashboard", icon: LayoutDashboard, label: "오늘 현황" },
       { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
       { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
-      { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "연락 기록" },
+      { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 기록" },
       { active: "report", description: "영업 퍼널과 운영 성과", href: "/insights", icon: BarChart3, label: "성과", workspaceRoles: ["owner", "manager"] }
     ]
   },

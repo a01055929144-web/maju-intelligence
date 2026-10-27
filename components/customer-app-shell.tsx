@@ -9,7 +9,6 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Settings,
   Smartphone
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -43,8 +42,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
-  const settingsHref = mode === "admin-preview" ? "/admin/companies" : "/dashboard/settings/company";
-  const settingsLabel = mode === "admin-preview" ? "고객사" : "회사 설정";
   const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
   const compactMapHome = fullBleed && hidePageTitle;
   const scopedHref = (href: string) => {
@@ -148,11 +145,11 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 
             <nav
               aria-label="주요 작업공간"
-              className={`${mobileMenuOpen ? "block" : "hidden"} maju-sidebar-scroll min-h-0 max-h-[min(60dvh,32rem)] flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-3 lg:block lg:max-h-none`}
+              className={`${mobileMenuOpen ? "flex" : "hidden"} maju-sidebar-scroll min-h-0 max-h-[min(60dvh,32rem)] flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:flex lg:max-h-none`}
             >
               {visibleNavigationGroups.map((group, groupIndex) => (
                 <div
-                  className={`${groupIndex === 0 ? "pb-4" : "border-t border-white/10 py-4"}`}
+                  className={`${group.label === "설정" ? "mt-auto border-t border-white/10 pt-4" : groupIndex === 0 ? "pb-4" : "border-t border-white/10 py-4"}`}
                   key={group.label}
                 >
                   {!collapsed ? (
@@ -247,9 +244,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                       <Building2 className="h-4 w-4" />
                     </Link>
                   ) : null}
-                  <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`grid h-9 w-9 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
-                    <Settings className="h-4 w-4" />
-                  </Link>
                   {mode === "customer" ? <CustomerAccountActions compact sidebar /> : null}
                 </>
               ) : (
@@ -268,9 +262,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
                         <Building2 className="h-4 w-4" />
                       </Link>
                     ) : null}
-                    <Link aria-current={isCurrentNavItem(pathname, settingsHref, currentSearch) ? "page" : undefined} aria-label={settingsLabel} className={`maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md transition ${isCurrentNavItem(pathname, settingsHref, currentSearch) ? "bg-teal-600 text-white" : "text-slate-400 hover:bg-white/10 hover:text-white"}`} href={settingsHref} title={settingsLabel}>
-                      <Settings className="h-4 w-4" />
-                    </Link>
                     {mode === "customer" ? <CustomerAccountActions sidebar /> : null}
                   </div>
                 </div>
