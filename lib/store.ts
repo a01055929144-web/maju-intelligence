@@ -257,7 +257,6 @@ export type CustomerMasterInput = {
   accessMethodType?: string;
   accessNote?: string;
   accessPassword?: string;
-  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -353,6 +352,7 @@ export type RoutePlanStop = LeadItem & {
   accessMethodType?: string;
   accessNote?: string;
   accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
