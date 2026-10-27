@@ -23,6 +23,7 @@ import {
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
+import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -69,6 +70,8 @@ import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../do
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { evaluateStaffLocation, getStaffLocationDisplayState, resolveStaffLocationPersistence, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
+import type { MapFilterPresetFilters } from "./map-filter-presets";
+import { isMapFilterPersistenceEnabled } from "./feature-modules";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -204,7 +207,7 @@ export type CustomerMasterItem = {
   loadingPosition?: string;
   accessMethodType?: string;
   accessNote?: string;
-  accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -352,6 +355,7 @@ export type RoutePlanStop = LeadItem & {
   accessMethodType?: string;
   accessNote?: string;
   accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -1764,6 +1768,23 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     console.error("Customer credential lookup fallback:", error);
     return fallbackCustomerCredentials();
   }
+}
+
+export async function isActiveLegacyOwnerSession(input: { companyId: string; email: string }): Promise<boolean> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  if (!normalizedEmail || !input.companyId) return false;
+  if (!isProductionStoreConfigured()) {
+    const fallback = getFallbackAuthCredentials();
+    return fallback.customerEmail.toLowerCase() === normalizedEmail && fallback.customerCompanyId === input.companyId;
+  }
+  const credentialRows = await supabaseRequest<Array<{ customer_company_id: string; customer_email: string }>>(
+    `auth_credentials?select=customer_company_id,customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`
+  );
+  if (!credentialRows[0]) return false;
+  const companyRows = await supabaseRequest<Array<{ id: string; status: string | null }>>(
+    `companies?select=id,status&id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+  );
+  return Boolean(companyRows[0] && ["active", "fallback"].includes(companyRows[0].status || ""));
 }
 
 export async function updateCustomerUserLastLogin(userId: string, provider = "password"): Promise<void> {
@@ -5037,6 +5058,21 @@ export async function canAccessAssignedCustomer(companyId: string | undefined, c
   }, assignmentScope);
 }
 
+export async function isCustomerOnTodayRouteForDriver(companyId: string, customerId: string, driverNames: string[]) {
+  if (!isProductionStoreConfigured()) return true;
+  const normalizedNames = driverNames.map((name) => name.trim()).filter(Boolean);
+  if (!normalizedNames.length) return false;
+  const today = toKstDateKey(new Date().toISOString());
+  const rows = await supabaseRequest<Array<{ customer_ids: unknown; driver_name: string }>>(
+    `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
+  ).catch(() => []);
+  return rows.some((row) =>
+    normalizedNames.includes(row.driver_name.trim())
+    && Array.isArray(row.customer_ids)
+    && row.customer_ids.includes(customerId)
+  );
+}
+
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
 
 export async function upsertCustomerMaster(
@@ -6029,11 +6065,12 @@ export async function removeCompanyJobTitle(companyId: string, jobTitleId: strin
 export async function getCustomerOperations(
   customerId: string,
   companyId?: string,
-  options: { attachmentOffset?: number; noteOffset?: number } = {}
+  options: { attachmentOffset?: number; noteOffset?: number; noteType?: string } = {}
 ) {
   const id = companyId || getDefaultCompanyId();
   const attachmentOffset = Math.max(0, Math.floor(options.attachmentOffset || 0));
   const noteOffset = Math.max(0, Math.floor(options.noteOffset || 0));
+  const noteTypeFilter = options.noteType?.trim();
   const pageSize = 50;
 
   if (!isProductionStoreConfigured() || customerId.startsWith("sample-") || customerId.startsWith("local-")) {
@@ -6059,7 +6096,7 @@ export async function getCustomerOperations(
     >(
       `customer_notes?select=id,note_type,memo,next_action,created_by_name,created_at&company_id=eq.${encodeURIComponent(id)}&customer_id=eq.${encodeURIComponent(
         customerId
-      )}&order=created_at.desc&limit=${pageSize + 1}&offset=${noteOffset}`
+      )}${noteTypeFilter ? `&note_type=eq.${encodeURIComponent(noteTypeFilter)}` : ""}&order=created_at.desc&limit=${pageSize + 1}&offset=${noteOffset}`
     ),
     supabaseRequest<
       Array<{
@@ -7391,14 +7428,19 @@ export async function createCustomerAttachmentSignedUrl(storagePath: string, exp
   return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
 }
 
-export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<string | null> {
+export async function getCustomerAttachmentOwnerByStoragePath(companyId: string, storagePath: string): Promise<{
+  attachmentId: string;
+  attachmentType: string;
+  customerId: string;
+} | null> {
   if (!companyId || !storagePath || !isProductionStoreConfigured()) return null;
 
-  const rows = await supabaseRequest<Array<{ customer_id: string }>>(
-    `customer_attachments?select=customer_id&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
+  const rows = await supabaseRequest<Array<{ attachment_type: string; customer_id: string; id: string }>>(
+    `customer_attachments?select=id,customer_id,attachment_type&company_id=eq.${encodeURIComponent(companyId)}&storage_path=eq.${encodeURIComponent(storagePath)}&limit=1`
   );
 
-  return rows[0]?.customer_id || null;
+  const row = rows[0];
+  return row ? { attachmentId: row.id, attachmentType: row.attachment_type, customerId: row.customer_id } : null;
 }
 
 async function countTableRows(table: string, name: string, description: string, countColumn = "id"): Promise<DatabaseCheck> {
@@ -8714,14 +8756,21 @@ export async function ingestPermitLeadRows(
     eligibleRows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)
   ));
 
-  const [existingCustomerRows, areaLeadRows, businessNumberLeadRows, existingSourceRows] = await Promise.all([
+  const [existingCustomerRows, areaLeadRows, businessNumberLeadRows, existingSourceRows, doNotContactRows] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>>(
       `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
     ).catch(() => []),
     listExistingCanonicalLeadRows(companyId, ingestAreas),
     listExistingLeadsByBusinessNumbers(companyId, ingestBusinessNumbers),
-    listExistingLeadSourceRows(companyId)
+    listExistingLeadSourceRows(companyId),
+    supabaseRequest<Array<{ channel: string; normalized_value: string; source_lead_id: string | null }>>(
+      `company_do_not_contact?select=channel,normalized_value,source_lead_id&company_id=eq.${encodeURIComponent(companyId)}&released_at=is.null`
+    ).catch(() => [])
   ]);
+  const blockedLeadIds = new Set(doNotContactRows.flatMap((item) => item.source_lead_id ? [item.source_lead_id] : []));
+  const blockedSmsValues = new Set(doNotContactRows
+    .filter((item) => item.channel === "sms")
+    .map((item) => item.normalized_value));
   const existingLeadRows = Array.from(
     new Map([...areaLeadRows, ...businessNumberLeadRows].map((row) => [row.id, row])).values()
   );
@@ -8916,7 +8965,9 @@ export async function ingestPermitLeadRows(
     });
     const isNewTemporaryOperation = !existingId && temporaryOperation.isTemporary;
     const isNewTemporaryOperationSuspected = !existingId && temporaryOperation.isSuspected;
-    const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation;
+    const normalizedPhone = normalizeDoNotContactValue("sms", existingLead?.phone || row.phone);
+    const isContactBlocked = Boolean((existingId && blockedLeadIds.has(existingId)) || (normalizedPhone && blockedSmsValues.has(normalizedPhone)));
+    const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation || isContactBlocked;
     const isOwnershipChange = Boolean(placeMatchedLead && !safePlaceMatchedLead);
     if (isOwnershipChange) result.ownershipChange += 1;
     if (existingLead && !(existingLead.source_list || []).includes(source)) {
@@ -8952,7 +9003,9 @@ export async function ingestPermitLeadRows(
       matched_customer_method: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).method : null,
       matched_customer_confidence: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).confidence : null,
       is_duplicate: isDuplicate,
-      exclude_reason: isNewTemporaryOperation
+      exclude_reason: isContactBlocked
+        ? "연락 거부 등록"
+        : isNewTemporaryOperation
         ? "임시 영업"
         : !isActive
         ? "폐업·휴업 등 비활성 상태"
@@ -8961,7 +9014,7 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: resolveTemporaryLeadIngestStatus({
+      status: isContactBlocked ? "제외" : resolveTemporaryLeadIngestStatus({
         excluded,
         isOwnershipChange,
         isSuspected: isNewTemporaryOperationSuspected,
@@ -9582,6 +9635,7 @@ export type CompanyLeadSearchRegion = {
   latitude?: number;
   longitude?: number;
   createdAt: string;
+  areaKind: "assigned" | "expansion_candidate";
 };
 
 export type CompanySalesAreaState = {
@@ -9599,18 +9653,22 @@ export type CompanySalesAreaRecommendation = {
   recentLeadCount: number;
 };
 
-export async function getCompanyLeadSearchRegions(companyId: string): Promise<CompanyLeadSearchRegion[]> {
+export async function getCompanyLeadSearchRegions(
+  companyId: string,
+  areaKind: "assigned" | "expansion_candidate" = "assigned"
+): Promise<CompanyLeadSearchRegion[]> {
   if (!isProductionStoreConfigured()) return [];
   const rows = await supabaseRequest<
-    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
-  >(`company_lead_search_regions?select=*&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc`).catch(() => []);
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string; area_kind: "assigned" | "expansion_candidate" }>
+  >(`company_lead_search_regions?select=*&company_id=eq.${encodeURIComponent(companyId)}&area_kind=eq.${areaKind}&order=created_at.desc`).catch(() => []);
   return rows.map((row) => ({
     id: row.id,
     companyId: row.company_id,
     label: row.label,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    areaKind: row.area_kind || "assigned"
   }));
 }
 
@@ -9758,18 +9816,22 @@ function salesAreaPostgrestFilter(areas: readonly string[]) {
  * 한 번만 geocodeRegionLabel로 확정해두고(재탐색마다 다시 지오코딩하지 않음), 좌표를 못 찾아도
  * 지역명은 저장합니다 — 화면에서 "좌표 확인 필요"로 표시하고, 탐색 시에는 좌표 없는 지역은 건너뜁니다.
  */
-export async function addCompanyLeadSearchRegion(companyId: string, label: string): Promise<CompanyLeadSearchRegion> {
+export async function addCompanyLeadSearchRegion(
+  companyId: string,
+  label: string,
+  areaKind: "assigned" | "expansion_candidate" = "assigned"
+): Promise<CompanyLeadSearchRegion> {
   const trimmed = label.trim();
   if (!trimmed) throw new Error("지역명을 입력해주세요.");
   const administrativeArea = normalizeSelectableSalesArea(trimmed);
   if (!administrativeArea) throw new Error("시·도와 시·군·구를 함께 입력해주세요. 예: 서울특별시 강남구");
   if (!isProductionStoreConfigured()) {
-    return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString() };
+    return { id: globalThis.crypto.randomUUID(), companyId, label: administrativeArea, createdAt: new Date().toISOString(), areaKind };
   }
 
   const point = await geocodeRegionLabel(administrativeArea).catch(() => null);
   const rows = await supabaseRequest<
-    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string }>
+    Array<{ id: string; company_id: string; label: string; latitude: number | null; longitude: number | null; created_at: string; area_kind: "assigned" | "expansion_candidate" }>
   >("company_lead_search_regions", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -9778,7 +9840,8 @@ export async function addCompanyLeadSearchRegion(companyId: string, label: strin
         company_id: companyId,
         label: administrativeArea,
         latitude: point?.lat ?? null,
-        longitude: point?.lng ?? null
+        longitude: point?.lng ?? null,
+        area_kind: areaKind
       }
     ])
   });
@@ -9789,7 +9852,8 @@ export async function addCompanyLeadSearchRegion(companyId: string, label: strin
     label: row.label,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    areaKind: row.area_kind || areaKind
   };
 }
 
@@ -9799,6 +9863,43 @@ export async function removeCompanyLeadSearchRegion(companyId: string, regionId:
     method: "DELETE",
     headers: { Prefer: "return=minimal" }
   }).catch(() => null);
+}
+
+export type MapFilterPreset = {
+  id: string;
+  name: string;
+  filters: MapFilterPresetFilters;
+  updatedAt: string;
+};
+
+export async function getMapFilterPresets(companyId: string, actorKey: string): Promise<MapFilterPreset[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<Array<{ id: string; name: string; filters: MapFilterPresetFilters; updated_at: string }>>(
+    `map_filter_presets?select=id,name,filters,updated_at&company_id=eq.${encodeURIComponent(companyId)}&actor_key=eq.${encodeURIComponent(actorKey)}&order=updated_at.desc`
+  );
+  return rows.map((row) => ({ id: row.id, name: row.name, filters: row.filters, updatedAt: row.updated_at }));
+}
+
+export async function saveMapFilterPreset(input: { appUserId?: string; actorKey: string; companyId: string; filters: MapFilterPresetFilters; name: string }) {
+  if (!isProductionStoreConfigured()) throw new Error("Supabase is not configured.");
+  const rows = await supabaseRequest<Array<{ id: string; name: string; filters: MapFilterPresetFilters; updated_at: string }>>(
+    "map_filter_presets?on_conflict=company_id,actor_key,name",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([{ company_id: input.companyId, actor_key: input.actorKey, app_user_id: input.appUserId || null, name: input.name, filters: input.filters, updated_at: new Date().toISOString() }])
+    }
+  );
+  const row = rows[0];
+  return { id: row.id, name: row.name, filters: row.filters, updatedAt: row.updated_at } satisfies MapFilterPreset;
+}
+
+export async function deleteMapFilterPreset(companyId: string, actorKey: string, presetId: string) {
+  if (!isProductionStoreConfigured()) return;
+  await supabaseRequest(`map_filter_presets?id=eq.${encodeURIComponent(presetId)}&company_id=eq.${encodeURIComponent(companyId)}&actor_key=eq.${encodeURIComponent(actorKey)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
 }
 
 export type KakaoKeywordLeadSweepResult = {
@@ -9862,7 +9963,11 @@ export async function runKakaoKeywordLeadSweep(
   const startedAt = new Date().toISOString();
   try {
     // 1) 기준점 후보를 모읍니다.
-    const savedRegions = await getCompanyLeadSearchRegions(companyId);
+    const assignedRegions = await getCompanyLeadSearchRegions(companyId, "assigned");
+    const expansionRegions = options.mode === "manual" && isMapFilterPersistenceEnabled()
+      ? await getCompanyLeadSearchRegions(companyId, "expansion_candidate")
+      : [];
+    const savedRegions = [...assignedRegions, ...expansionRegions];
     const regionAnchors: Array<{ label: string; point: GeoPoint }> = savedRegions
       .filter((region) => typeof region.latitude === "number" && typeof region.longitude === "number")
       .map((region) => ({ label: region.label, point: { lat: region.latitude as number, lng: region.longitude as number } }));
@@ -10521,6 +10626,154 @@ async function recordLeadEnrichmentEvent(input: {
   }
 }
 
+export async function recordLeadSourceDisclosureAudit(
+  companyId: string,
+  leadId: string,
+  context: { actorName?: string; actorUserId?: string }
+): Promise<boolean> {
+  const lead = await getPermitLeadIdentityForCompany(companyId, leadId);
+  if (!lead) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      actor_name: context.actorName || null,
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "source_disclosure",
+      result: "출처 안내 문구 복사",
+      memo: `${lead.businessName} 리드의 정보 출처 안내 문구를 복사했습니다.`
+    })
+  });
+  if (!rows[0]?.id) throw new Error("출처 안내 감사 기록 저장을 확인하지 못했습니다.");
+  return true;
+}
+
+export async function hasSalesOutreachPolicyAcknowledgement(companyId: string, actorSubject: string, policyVersion: string): Promise<boolean> {
+  if (!isProductionStoreConfigured()) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `sales_outreach_policy_acknowledgements?select=id&company_id=eq.${encodeURIComponent(companyId)}&actor_subject=eq.${encodeURIComponent(actorSubject)}&policy_version=eq.${encodeURIComponent(policyVersion)}&limit=1`
+  );
+  return Boolean(rows[0]?.id);
+}
+
+export async function acknowledgeSalesOutreachPolicy(input: {
+  actorKind: "app_user" | "legacy_owner";
+  actorSubject: string;
+  companyId: string;
+  policyVersion: string;
+  roleAtAck: string;
+  surface: "pc" | "mobile" | "admin_assisted";
+  userId?: string;
+}): Promise<boolean> {
+  if (!isProductionStoreConfigured()) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    "sales_outreach_policy_acknowledgements?on_conflict=company_id,actor_subject,policy_version&select=id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        actor_kind: input.actorKind,
+        actor_subject: input.actorSubject,
+        company_id: input.companyId,
+        policy_version: input.policyVersion,
+        role_at_ack: input.roleAtAck,
+        surface: input.surface,
+        user_id: input.userId || null
+      })
+    }
+  );
+  if (!rows[0]?.id) throw new Error("영업 수칙 확인 저장을 확인하지 못했습니다.");
+  return true;
+}
+
+export const LEAD_DNC_WRITE_ENABLED = process.env.LEAD_DNC_WRITE_ENABLED === "true";
+
+export async function registerLeadDoNotContact(input: {
+  actorName?: string;
+  actorUserId?: string;
+  channel: "sms" | "instagram" | "talktalk" | "email" | "fax" | "visit";
+  companyId: string;
+  leadId: string;
+  normalizedValue: string;
+  reason?: string;
+}): Promise<boolean> {
+  if (!LEAD_DNC_WRITE_ENABLED) throw new Error("연락 거부 원자 저장 기능이 아직 활성화되지 않았습니다.");
+  const rows = await supabaseRequest<boolean>("rpc/register_lead_do_not_contact", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_name: input.actorName || null,
+      p_actor_user_id: input.actorUserId || null,
+      p_channel: input.channel,
+      p_company_id: input.companyId,
+      p_lead_id: input.leadId,
+      p_contact_value: input.normalizedValue,
+      p_reason: input.reason || "연락 거부"
+    })
+  });
+  return rows === true;
+}
+
+export async function releaseLeadDoNotContact(input: {
+  actorKind: "app_user" | "legacy_owner";
+  actorName?: string;
+  actorUserId?: string;
+  companyId: string;
+  dncId: string;
+  releaseReason: string;
+}): Promise<boolean> {
+  if (!LEAD_DNC_WRITE_ENABLED) throw new Error("연락 거부 원자 저장 기능이 아직 활성화되지 않았습니다.");
+  const rows = await supabaseRequest<boolean>("rpc/release_lead_do_not_contact", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_kind: input.actorKind,
+      p_actor_name: input.actorName || null,
+      p_actor_user_id: input.actorUserId || null,
+      p_company_id: input.companyId,
+      p_dnc_id: input.dncId,
+      p_release_reason: input.releaseReason
+    })
+  });
+  return rows === true;
+}
+
+export async function listLeadContactFieldSources(companyId: string, leadId: string) {
+  if (!isProductionStoreConfigured()) return [];
+  return supabaseRequest<Array<{ collected_at: string; field_name: string; source_type: string }>>(
+    `lead_contact_field_sources?select=field_name,source_type,collected_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&order=collected_at.desc`
+  );
+}
+
+export const LEAD_FIELD_SOURCE_WRITE_ENABLED = process.env.LEAD_FIELD_SOURCE_WRITE_ENABLED === "true";
+
+export async function recordLeadContactFieldSource(input: {
+  collectedAt?: string;
+  companyId: string;
+  fieldName: "phone" | "email" | "fax" | "instagram_url" | "naver_talktalk_url" | "address" | "business_name";
+  leadId: string;
+  recordedBy?: string;
+  sourceReference?: string;
+  sourceType: "kakao" | "permit" | "manual" | "upload" | "naver_homepage" | "google" | "other";
+}) {
+  if (!LEAD_FIELD_SOURCE_WRITE_ENABLED) throw new Error("칸별 출처 쓰기가 아직 활성화되지 않았습니다.");
+  const lead = await getPermitLeadIdentityForCompany(input.companyId, input.leadId);
+  if (!lead) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_contact_field_sources?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      collected_at: input.collectedAt || new Date().toISOString(),
+      company_id: input.companyId,
+      field_name: input.fieldName,
+      lead_id: input.leadId,
+      recorded_by: input.recordedBy || null,
+      source_reference: input.sourceReference || null,
+      source_type: input.sourceType
+    })
+  });
+  return Boolean(rows[0]?.id);
+}
+
 /** 인스타 후보 찾기 등 한 리드의 기본 정보만 필요할 때 씁니다. 다른 회사 리드는 돌려주지 않습니다. */
 export async function getPermitLeadIdentityForCompany(
   companyId: string,
@@ -10535,6 +10788,7 @@ export async function getPermitLeadIdentityForCompany(
 }
 
 export type PermitLeadProfileInput = {
+  businessNumber?: string | null;
   instagramUrl?: string | null;
   fax?: string | null;
   email?: string | null;
@@ -10559,6 +10813,42 @@ export async function updatePermitLeadProfile(
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = { updated_at: now };
   const changed: string[] = [];
+  if ("businessNumber" in input) {
+    const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+    if (businessNumber && !isValidBusinessRegistrationNumber(businessNumber)) {
+      return { ok: false, message: "사업자등록번호 10자리를 확인해주세요." };
+    }
+    const currentRows = await supabaseRequest<Array<{
+      address: string | null;
+      business_name: string;
+      matched_customer_id: string | null;
+    }>>(
+      `business_permit_leads?select=business_name,address,matched_customer_id&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
+    );
+    if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    const currentLead = currentRows[0];
+    if (businessNumber) {
+      const [duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
+        supabaseRequest<Array<{ id: string }>>(
+          `business_permit_leads?select=id&id=neq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=eq.${encodeURIComponent(businessNumber)}&limit=1`
+        ),
+        supabaseRequest<Array<{ id: string }>>(
+          `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=2`
+        )
+      ]);
+      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== currentLead.matched_customer_id);
+      if (duplicateLeadRows.length || hasOtherCustomer) {
+        return { ok: false, message: "같은 회사에 이미 등록된 사업자등록번호입니다." };
+      }
+    }
+    payload.business_number = businessNumber || null;
+    payload.canonical_fingerprint = buildLeadCanonicalFingerprint({
+      address: currentLead.address || undefined,
+      businessName: currentLead.business_name,
+      businessNumber: businessNumber || undefined
+    }) || null;
+    changed.push("business_number");
+  }
   if ("instagramUrl" in input) {
     payload.instagram_url = input.instagramUrl || null;
     changed.push("instagram");
@@ -10604,9 +10894,15 @@ export async function updatePermitLeadProfile(
     leadId,
     message: changed.includes("instagram") && changed.length === 1
       ? (input.instagramUrl ? "인스타그램 정보 수정" : "인스타그램 정보 삭제")
-      : "영업 채널 정보 수정",
+      : changed.includes("business_number") && changed.length === 1
+        ? (input.businessNumber ? "사업자등록번호 수정" : "사업자등록번호 삭제")
+        : "리드 기본 정보 수정",
     metadata: {
-      event_type: changed.includes("instagram") && changed.length === 1 ? "instagram_profile_update" : "contact_channels_update",
+      event_type: changed.includes("instagram") && changed.length === 1
+        ? "instagram_profile_update"
+        : changed.includes("business_number") && changed.length === 1
+          ? "business_number_update"
+          : "lead_profile_update",
       changed_fields: changed,
       instagram_url_present: "instagramUrl" in input ? Boolean(input.instagramUrl) : undefined
     },
@@ -11792,7 +12088,7 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
         loadingPosition: customer.loadingPosition,
         accessMethodType: customer.accessMethodType,
         accessNote: customer.accessNote,
-        accessPassword: customer.accessPassword,
+        hasAccessPassword: customer.hasAccessPassword,
         businessHours: customer.businessHours,
         menuSummary: customer.menuSummary,
         naverPlaceUrl: customer.naverPlaceUrl,
@@ -14414,7 +14710,7 @@ function toCustomerMasterItem(
     loadingPosition: row.loading_position || undefined,
     accessMethodType: row.access_method_type || undefined,
     accessNote: row.access_note || undefined,
-    accessPassword: row.access_password || undefined,
+    hasAccessPassword: Boolean(row.access_password),
     businessHours: row.business_hours || undefined,
     menuSummary: row.menu_summary || undefined,
     googleMapUrl: row.google_map_url || undefined,

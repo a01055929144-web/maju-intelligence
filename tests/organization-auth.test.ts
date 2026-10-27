@@ -91,6 +91,13 @@ describe("organization data exposure policy", () => {
     expect(source).toContain("전체 배송 히스토리는 대표 또는 관리자만 조회할 수 있습니다.");
     expect(source).toContain("status: 403");
   });
+
+  it("keeps lead detail delivery notes behind assigned-customer access", () => {
+    const source = readFileSync(resolve(process.cwd(), "app/api/customer-operations/route.ts"), "utf8");
+    expect(source).toContain("canAccessAssignedCustomer(scope.companyId, customerId");
+    expect(source).toContain('request.nextUrl.searchParams.get("noteType") === "delivery"');
+    expect(source).toContain("status: 403");
+  });
 });
 
 function makeSession(

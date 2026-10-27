@@ -98,10 +98,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/map">PC</Link>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2" aria-label="업무 모드">
+          <div className="mt-3 grid grid-cols-4 gap-2" aria-label="업무 모드">
             <span className="mobile-primary-action grid min-h-10 place-items-center rounded-full text-xs font-bold">배송</span>
             <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=new#lead-list">신규</Link>
             <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=sales#lead-list">영업</Link>
+            <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=route#lead-map">가는 길</Link>
           </div>
           <MobileLocationReporter autoStart={todayStops.length > 0} currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
         </header>

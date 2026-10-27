@@ -72,6 +72,9 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
+import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
+import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
+import type { MapFilterPresetFilters } from "@/lib/map-filter-presets";
 import type {
   ChurnRiskCustomer,
   CustomerContactItem,
@@ -88,6 +91,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import {
   QUOTE_MARGIN_PRESETS,
   calculateQuoteLine,
@@ -373,7 +377,7 @@ const workspaceViews: Array<{ helper: string; icon: LucideIcon; label: string; s
   { helper: "인허가·반경·전환", icon: Radar, label: "리드", shortLabel: "신규", value: "leads" },
   // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
   // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 탭입니다.
-  { helper: "달력·방문순서·경로", icon: CalendarDays, label: "히스토리", shortLabel: "기록", value: "history" }
+  { helper: "달력·방문순서·경로", icon: CalendarDays, label: "배송 이력", shortLabel: "배송", value: "history" }
 ];
 const workspaceViewDescriptions: Record<WorkspaceView, string> = {
   course: "배송차와 거래처를 선택해 티맵 도로 기준 방문 순서를 계산합니다.",
@@ -617,6 +621,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
+  const [mapLeadStageFilter, setMapLeadStageFilter] = useState("");
+  const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
   const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("all");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
@@ -625,6 +631,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 조회 버튼이 필요해보여").
   const [mapLeadOpenDateStartDraft, setMapLeadOpenDateStartDraft] = useState("");
   const [mapLeadOpenDateEndDraft, setMapLeadOpenDateEndDraft] = useState("");
+  const [mapFilterPresets, setMapFilterPresets] = useState<Array<{ id: string; name: string; filters: MapFilterPresetFilters }>>([]);
+  const [mapFilterPresetEnabled, setMapFilterPresetEnabled] = useState(false);
+  const [selectedMapFilterPresetId, setSelectedMapFilterPresetId] = useState("");
+  const [mapFilterPresetBusy, setMapFilterPresetBusy] = useState(false);
   // 숨김(제외) 처리한 리드도 나중에 다시 거래할 수 있으니, 지도에서 완전히 사라지게 하지 않고
   // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
   // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
@@ -852,6 +862,72 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setMapSalesRegionsConfigured(snapshot.salesAreaState.effectiveAreas.length > 0);
   }, []);
 
+  const loadMapFilterPresets = useCallback(async () => {
+    const response = await fetch("/api/map/filter-presets", { cache: "no-store" });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.enabled) {
+      setMapFilterPresetEnabled(false);
+      setMapFilterPresets([]);
+      return;
+    }
+    setMapFilterPresetEnabled(true);
+    setMapFilterPresets(Array.isArray(payload.presets) ? payload.presets : []);
+  }, []);
+
+  useEffect(() => { void loadMapFilterPresets(); }, [loadMapFilterPresets]);
+
+  function applyMapFilterPreset(presetId: string) {
+    setSelectedMapFilterPresetId(presetId);
+    const preset = mapFilterPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setGradeFilter(preset.filters.gradeFilter);
+    setMapLeadIndustryFilter(preset.filters.industry);
+    setMapLeadStageFilter(preset.filters.stage);
+    setMapLeadTypeFilter(preset.filters.leadType);
+    setMapLeadReminderOnly(preset.filters.reminderOnly);
+    setExcludeClosedStores(preset.filters.excludeClosedStores);
+  }
+
+  async function saveCurrentMapFilterPreset() {
+    const name = window.prompt("저장할 지도 필터 이름을 입력해주세요.")?.trim();
+    if (!name) return;
+    setMapFilterPresetBusy(true);
+    try {
+      const response = await fetch("/api/map/filter-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          filters: {
+            excludeClosedStores,
+            gradeFilter,
+            industry: mapLeadIndustryFilter,
+            leadType: mapLeadTypeFilter,
+            reminderOnly: mapLeadReminderOnly,
+            stage: mapLeadStageFilter
+          } satisfies MapFilterPresetFilters
+        })
+      });
+      if (response.ok) await loadMapFilterPresets();
+    } finally {
+      setMapFilterPresetBusy(false);
+    }
+  }
+
+  async function removeSelectedMapFilterPreset() {
+    if (!selectedMapFilterPresetId) return;
+    setMapFilterPresetBusy(true);
+    try {
+      const response = await fetch(`/api/map/filter-presets?id=${encodeURIComponent(selectedMapFilterPresetId)}`, { method: "DELETE" });
+      if (response.ok) {
+        setSelectedMapFilterPresetId("");
+        await loadMapFilterPresets();
+      }
+    } finally {
+      setMapFilterPresetBusy(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     fetch(withPermitLeadCompanyQuery("/api/leads/permits/keyword-search-regions"), { cache: "no-store" })
@@ -919,6 +995,25 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       setAllLeadsForMap((current) => current.map((item) => (item.id === lead.id ? { ...item, status: "검토 필요" } : item)));
     } catch {
       // 지도 위 가벼운 액션이라 실패해도 조용히 둡니다.
+    }
+  }
+
+  async function updateMapLeadStage(leadId: string, status: string, memo?: string): Promise<{ ok: boolean; message?: string }> {
+    try {
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits/${leadId}/action`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType: "status", memo, result: status })
+      });
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) return { ok: false, message: payload?.message || "단계 변경에 실패했습니다." };
+      setAllLeadsForMap((current) => current.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)));
+      setLeadRadiusResult((current) => current
+        ? { ...current, leads: current.leads.map((lead) => (lead.id === leadId ? { ...lead, status } : lead)) }
+        : current);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "네트워크 상태를 확인한 뒤 다시 시도해 주세요." };
     }
   }
 
@@ -1268,10 +1363,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setMapLeadRegionDong("");
   }
   const filteredAllLeadsForMap = useMemo(() => {
-    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
       if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
       if (mapLeadIndustryFilter && (lead.industryPrimary || "미분류") !== mapLeadIndustryFilter) return false;
+      if (mapLeadStageFilter && toLeadStageValue(lead.status) !== mapLeadStageFilter) return false;
+      if (mapLeadReminderOnly && !getMapLeadReminderLabel(lead)) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
       }
@@ -1282,7 +1379,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -1406,6 +1503,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setVehicleFilterId(vehicleId);
     setSelectedLiveVehicleId("");
     setGradeFilter("all");
+    setMapLeadIndustryFilter("");
+    setMapLeadStageFilter("");
+    setMapLeadReminderOnly(false);
     setMapFocusId("");
     setPreviewStoreId("");
     setSelectedId("");
@@ -1991,12 +2091,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       ) : null}
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div>
-            <h2 className="text-[17px] font-bold leading-tight tracking-[-0.025em] lg:whitespace-nowrap">오늘의 운영 지도</h2>
-            <p className="mt-0.5 text-xs font-medium text-slate-500 lg:whitespace-nowrap">
-              {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
-            </p>
-          </div>
+          <p className="text-xs font-medium text-slate-500 lg:whitespace-nowrap">
+            {sourceReady ? `거래처 ${allStores.length}곳 · 차량 ${realVehicleCount}대` : "거래처를 등록하면 지도 운영을 시작할 수 있습니다"}
+          </p>
         </div>
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 lg:w-auto lg:flex-1 lg:justify-end xl:gap-2">
           <nav className="maju-toolbar-scroll flex h-10 min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" aria-label="운영 지도 화면">
@@ -2287,7 +2384,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           </div>
         ) : null}
         <div className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
-        <div className="grid gap-1.5 lg:grid-cols-[minmax(240px,1fr)_minmax(0,auto)] lg:items-center xl:grid-cols-[minmax(320px,1fr)_minmax(0,auto)] xl:gap-2">
+        <div className="grid gap-1.5 lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)] lg:items-center xl:gap-2">
           <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -2458,6 +2555,40 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="지도 업종 필터"
+                className={`h-9 max-w-[150px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadIndustryFilter ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
+                value={mapLeadIndustryFilter}
+              >
+                <option value="">업종 전체</option>
+                {mapLeadIndustryOptions.map(([industry, count]) => (
+                  <option key={industry} value={industry}>{industry} ({count.toLocaleString()})</option>
+                ))}
+              </select>
+              <select
+                aria-label="지도 단계 필터"
+                className={`h-9 max-w-[130px] shrink-0 rounded-md border px-2.5 text-xs font-black outline-none transition ${
+                  mapLeadStageFilter ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onChange={(event) => setMapLeadStageFilter(event.target.value)}
+                value={mapLeadStageFilter}
+              >
+                <option value="">단계 전체</option>
+                {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <button
+                aria-pressed={mapLeadReminderOnly}
+                className={`h-9 shrink-0 rounded-md border px-3 text-xs font-black transition ${
+                  mapLeadReminderOnly ? "border-amber-500 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"
+                }`}
+                onClick={() => setMapLeadReminderOnly((value) => !value)}
+                type="button"
+              >
+                리마인드 {statusScopedLeadsForMap.filter((lead) => Boolean(getMapLeadReminderLabel(lead))).length}
+              </button>
               <button
                 aria-pressed={excludeClosedStores}
                 className={`h-9 rounded-md border px-3 text-xs font-black transition ${
@@ -2470,6 +2601,21 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               >
                 {excludeClosedStores ? "이탈 제외 중" : "이탈 제외"}
               </button>
+              {mapFilterPresetEnabled ? (
+                <div className="flex h-9 shrink-0 items-center rounded-md border border-slate-200 bg-white p-0.5">
+                  <select
+                    aria-label="저장된 지도 필터"
+                    className="h-8 max-w-[140px] rounded border-0 bg-transparent px-2 text-xs font-bold text-slate-700 outline-none"
+                    onChange={(event) => applyMapFilterPreset(event.target.value)}
+                    value={selectedMapFilterPresetId}
+                  >
+                    <option value="">저장 필터</option>
+                    {mapFilterPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                  </select>
+                  <button className="h-8 rounded px-2 text-xs font-black text-teal-700 hover:bg-teal-50 disabled:opacity-50" disabled={mapFilterPresetBusy} onClick={() => void saveCurrentMapFilterPreset()} type="button">저장</button>
+                  <button aria-label="선택한 지도 필터 삭제" className="grid h-8 w-8 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40" disabled={mapFilterPresetBusy || !selectedMapFilterPresetId} onClick={() => void removeSelectedMapFilterPreset()} type="button"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              ) : null}
               <button
                 className="maju-button-secondary h-9 rounded-md px-3 text-xs"
                 onClick={focusOrigin}
@@ -2701,18 +2847,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 숨김 리드
               </button>
             </div>
-            <select
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => setMapLeadIndustryFilter(event.target.value)}
-              value={mapLeadIndustryFilter}
-            >
-              <option value="">업종 전체</option>
-              {mapLeadIndustryOptions.map(([industry, count]) => (
-                <option key={industry} value={industry}>
-                  {industry} ({count.toLocaleString()})
-                </option>
-              ))}
-            </select>
             {/* 지역 필터는 업종과 같은 리드 필터 그룹 안에서 시군구→동 순서로 좁힙니다. */}
             {mapLeadRegionOptions.length ? (
               <>
@@ -2774,12 +2908,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             >
               조회
             </button>
-            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
+            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadStageFilter || mapLeadReminderOnly || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
                 onClick={() => {
                   setMapLeadTypeFilter("all");
                   setMapLeadIndustryFilter("");
+                  setMapLeadStageFilter("");
+                  setMapLeadReminderOnly(false);
                   setMapLeadRegionSigungu("");
                   setMapLeadRegionDong("");
                   setMapLeadOpenDateStart("");
@@ -2881,6 +3017,27 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     showList={false}
                   />
                 </div>
+                <MapLayerControl
+                  className={
+                    mapPanelMode === "driver" || mapPanelMode === "split"
+                      ? leftCollapsed
+                        ? "lg:left-[68px]"
+                        : "lg:left-[344px] xl:left-[384px] 2xl:left-[424px]"
+                      : "lg:left-3"
+                  }
+                  counts={visibleMapLayerCounts}
+                  headerOffsetPx={mapHeaderHeightPx}
+                  markerViewMode={markerViewMode}
+                  onSelectLeadLayer={(type) => {
+                    const next = nextLeadLayerSelection(showAllLeadsOnMap, mapLeadTypeFilter, type);
+                    setMapLeadsVisible(next.visible);
+                    setMapLeadTypeFilter(next.type);
+                    setShowDismissedLeadsOnMap(false);
+                  }}
+                  onSelectMarkerMode={() => setMarkerViewMode((mode) => (mode === "vehicle" ? "grade" : "vehicle"))}
+                  showAllLeadsOnMap={showAllLeadsOnMap}
+                  typeFilter={mapLeadTypeFilter}
+                />
                 <MapLayerLegend counts={visibleMapLayerCounts} />
                 {/* 2026-09-07 피드백("분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도
                     구현할 수 있도록해줘"): 라이브 차량 패널에서 "경로" 버튼을 누르면 그 차량의 최근
@@ -3027,7 +3184,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               스타일로 반영합니다. */}
           <div
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:left-3 lg:z-10 lg:max-h-none lg:flex-col lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-lg ${
-              mapPanelMode !== "driver" && mapPanelMode !== "split" ? "hidden" : "flex lg:bottom-3 lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"
+              mapPanelMode !== "driver" && mapPanelMode !== "split"
+                ? "hidden"
+                : `flex lg:bottom-3 ${leftCollapsed ? "lg:w-14" : "lg:w-[320px] xl:w-[360px] 2xl:w-[400px]"}`
             }`}
             style={{ top: mapHeaderHeightPx ? `${mapHeaderHeightPx}px` : "0.75rem" }}
           >
@@ -3086,7 +3245,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 if (liveVehicle) selectLiveVehicle(liveVehicle);
                 else selectVehicle(vehicleId);
               }}
-              onToggleCollapsed={() => setMapPanelMode(leftCollapsed ? "driver" : "map")}
+              onToggleCollapsed={() => setLeftCollapsed((collapsed) => !collapsed)}
               onUpdateVehicle={updateVehicle}
               selectedVehicleId={vehicleFilterId}
               totalStores={allStores.length}
@@ -3132,6 +3291,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
                 }}
                 onRetry={() => void loadAllLeadsForMap()}
+                onUpdateStage={updateMapLeadStage}
                 onOpenTable={() => {
                   const params = new URLSearchParams(window.location.search);
                   params.delete("view");
@@ -4373,7 +4533,7 @@ function RouteWorkspaceGuide({
         : activeView === "leads"
           ? "신규리드"
           : activeView === "history"
-            ? "히스토리"
+            ? "배송 이력"
             : "방문 코스";
   const markerLabel = markerViewMode === "grade" ? "등급별 보기" : "차량별 보기";
   const guide =
@@ -4650,6 +4810,8 @@ export function StoreQuickCard({
   // 출입방법 비밀번호는 카드가 열려 있는 동안 실수로 어깨너머로 노출되지 않도록 기본은 가려두고,
   // 필요할 때만 눌러서 확인합니다.
   const [showAccessPassword, setShowAccessPassword] = useState(false);
+  const [revealedAccessPassword, setRevealedAccessPassword] = useState("");
+  const [accessPasswordMessage, setAccessPasswordMessage] = useState("");
   // 2026-08-24 피드백: "기거래처 카드도 움직일 수 있도록 해줘" — 지도 위 리드 카드(PermitLeadMapQuickCard)와
   // 같은 방식으로, 기본 위치에서 마우스로 끌어 옮긴 만큼만 transform으로 얹습니다. 다른 거래처를 클릭해
   // 카드 내용이 바뀌면 다시 기본 위치로 돌아갑니다.
@@ -4677,6 +4839,27 @@ export function StoreQuickCard({
     }
   }
 
+  async function revealAccessPassword() {
+    if (showAccessPassword) {
+      setShowAccessPassword(false);
+      setRevealedAccessPassword("");
+      setAccessPasswordMessage("");
+      return;
+    }
+    setAccessPasswordMessage("");
+    const response = await fetch(`/api/customers/${encodeURIComponent(store.id)}/sensitive/access-password/reveal`, {
+      method: "POST",
+      cache: "no-store"
+    }).catch(() => null);
+    const payload = await response?.json().catch(() => null) as { accessPassword?: string | null; message?: string } | null;
+    if (!response?.ok) {
+      setAccessPasswordMessage(payload?.message || "출입 비밀번호를 불러오지 못했습니다.");
+      return;
+    }
+    setRevealedAccessPassword(payload?.accessPassword || "미등록");
+    setShowAccessPassword(true);
+  }
+
   useEffect(() => {
     setDraft({
       name: store.name,
@@ -4690,6 +4873,8 @@ export function StoreQuickCard({
     setIsEditing(false);
     setIsMemoEditing(false);
     setShowAccessPassword(false);
+    setRevealedAccessPassword("");
+    setAccessPasswordMessage("");
     setDragOffset({ x: 0, y: 0 });
     setSaveError("");
   }, [store.id]);
@@ -4856,7 +5041,7 @@ export function StoreQuickCard({
         {/* 출입방법·비밀번호(2026-08-24 피드백: "거래처의 출입방법과 비밀번호를 저장해야해 ... 퀵카드,
         상세에도 적재해서 보여줘야해"). 비밀번호는 기본 마스킹, 눌러야만 노출됩니다. 적재위치 사진도
         같이 보여달라는 요청(1-1)에 맞춰 바로 아래에 사진 미리보기를 함께 붙입니다. */}
-        {!isEditing && (store.accessMethodType || store.accessNote || store.accessPassword) ? (
+        {!isEditing && (store.accessMethodType || store.accessNote || store.hasAccessPassword) ? (
           <div className="mt-1.5 rounded-md bg-teal-50/60 px-2 py-1.5">
             <p className="flex items-start gap-1.5 text-[11px] font-bold leading-4 text-slate-700">
               {(() => {
@@ -4869,16 +5054,17 @@ export function StoreQuickCard({
                 <span className="line-clamp-2">{store.accessNote}</span>
               </span>
             </p>
-            {store.accessPassword ? (
+            {store.hasAccessPassword ? (
               <button
                 className="mt-1 inline-flex items-center gap-1 text-[11px] font-black text-teal-700"
-                onClick={() => setShowAccessPassword((value) => !value)}
+                onClick={revealAccessPassword}
                 type="button"
               >
                 {showAccessPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                비밀번호 {showAccessPassword ? store.accessPassword : "••••••"}
+                비밀번호 {showAccessPassword ? revealedAccessPassword : "••••••"}
               </button>
             ) : null}
+            {accessPasswordMessage ? <p className="mt-1 text-[10.5px] font-bold text-amber-700">{accessPasswordMessage}</p> : null}
             <QuickCardAccessPhotoPreview customerId={store.id} />
           </div>
         ) : null}
@@ -5157,6 +5343,83 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
 // DriverSelectField는 components/driver-select-field.tsx로 옮겨서 app/dashboard/settings의
 // 직원 배정 기준 화면에서도 같이 씁니다(무거운 지도 워크스페이스 모듈 전체를 끌어오지 않도록
 // 이 파일이 그 작은 컴포넌트를 import합니다 — 아래 import 문 참고).
+
+function MapLayerControl({
+  className,
+  counts,
+  headerOffsetPx,
+  markerViewMode,
+  onSelectLeadLayer,
+  onSelectMarkerMode,
+  showAllLeadsOnMap,
+  typeFilter
+}: {
+  readonly className: string;
+  readonly counts: {
+    activeVehicles: number;
+    customers: number;
+    newLeads: number;
+    salesLeads: number;
+  };
+  readonly headerOffsetPx: number;
+  readonly markerViewMode: MarkerViewMode;
+  readonly onSelectLeadLayer: (type: PermitLeadType) => void;
+  readonly onSelectMarkerMode: () => void;
+  readonly showAllLeadsOnMap: boolean;
+  readonly typeFilter: "all" | PermitLeadType;
+}) {
+  const leadButtonClass = (active: boolean) =>
+    `flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-black transition ${
+      active ? "bg-teal-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+    }`;
+
+  return (
+    <div
+      aria-label="지도 레이어"
+      className={`pointer-events-auto absolute left-3 z-10 hidden max-w-[calc(100%-1.5rem)] items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-1 shadow-[0_8px_24px_rgba(15,23,42,.14)] backdrop-blur lg:flex ${className}`}
+      style={{ top: headerOffsetPx ? `${headerOffsetPx + 12}px` : "4.5rem" }}
+    >
+      <span className="flex h-8 shrink-0 items-center gap-1 px-2 text-[11px] font-black text-slate-500">
+        <Layers className="h-3.5 w-3.5" />
+        레이어
+      </span>
+      <span className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-blue-50 px-2.5 text-[11px] font-black text-blue-800">
+        <Store className="h-3.5 w-3.5" />
+        거래처 {counts.customers}
+      </span>
+      <button
+        aria-pressed={showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new")}
+        className={leadButtonClass(showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "new"))}
+        onClick={() => onSelectLeadLayer("new")}
+        title="신규 리드 레이어 켜기 또는 끄기"
+        type="button"
+      >
+        <Radar className="h-3.5 w-3.5" />
+        신규 {counts.newLeads}
+      </button>
+      <button
+        aria-pressed={showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales")}
+        className={leadButtonClass(showAllLeadsOnMap && (typeFilter === "all" || typeFilter === "sales"))}
+        onClick={() => onSelectLeadLayer("sales")}
+        title="영업 리드 레이어 켜기 또는 끄기"
+        type="button"
+      >
+        <Target className="h-3.5 w-3.5" />
+        영업 {counts.salesLeads}
+      </button>
+      <button
+        aria-pressed={markerViewMode === "vehicle"}
+        className={leadButtonClass(markerViewMode === "vehicle")}
+        onClick={onSelectMarkerMode}
+        title="거래처 마커를 차량별 또는 등급별로 표시"
+        type="button"
+      >
+        <Truck className="h-3.5 w-3.5" />
+        차량 {counts.activeVehicles}
+      </button>
+    </div>
+  );
+}
 
 function MapLayerLegend({
   counts
@@ -5750,6 +6013,7 @@ function LeadListPanel({
   onRetry,
   onOpenTable,
   onToggleCollapsed,
+  onUpdateStage,
   selectedLeadId,
   title
 }: {
@@ -5760,9 +6024,16 @@ function LeadListPanel({
   readonly onRetry: () => void;
   readonly onOpenTable: () => void;
   readonly onToggleCollapsed: () => void;
+  readonly onUpdateStage: (leadId: string, status: string, memo?: string) => Promise<{ ok: boolean; message?: string }>;
   readonly selectedLeadId: string;
   readonly title: string;
 }) {
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
   // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -5770,6 +6041,36 @@ function LeadListPanel({
     if (!selectedLeadId) return;
     itemRefs.current[selectedLeadId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [selectedLeadId]);
+  useEffect(() => {
+    const visibleIds = new Set(leads.map((lead) => lead.id));
+    setSelectedLeadIds((current) => new Set(Array.from(current).filter((id) => visibleIds.has(id))));
+  }, [leads]);
+
+  const allSelected = leads.length > 0 && selectedLeadIds.size === leads.length;
+  const toggleLeadSelection = (leadId: string) => {
+    setSelectedLeadIds((current) => {
+      const next = new Set(current);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+  const applyBulkStage = async () => {
+    if (!bulkStage || !selectedLeadIds.size) return;
+    setBulkBusy(true);
+    setBulkMessage("");
+    const results = await runMapLeadStageBulk(
+      Array.from(selectedLeadIds),
+      (leadId) => onUpdateStage(leadId, bulkStage, bulkReason || undefined),
+      4
+    );
+    const failed = results.filter((result) => !result.ok);
+    const succeeded = results.length - failed.length;
+    setBulkMessage(failed.length ? `${succeeded}곳 변경 · ${failed.length}곳 실패` : `${succeeded}곳 단계를 변경했습니다.`);
+    setSelectedLeadIds(new Set(failed.map((result) => result.leadId)));
+    setRowErrors(Object.fromEntries(failed.map((result) => [result.leadId, result.message || "단계 변경에 실패했습니다."])));
+    setBulkBusy(false);
+  };
   if (collapsed) {
     return (
       <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
@@ -5808,6 +6109,36 @@ function LeadListPanel({
             <PanelRightClose className="h-4 w-4" />
           </button>
         </div>
+        <div className="shrink-0 space-y-2 border-b border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+            <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+              <input
+                checked={allSelected}
+                className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                onChange={() => setSelectedLeadIds(allSelected ? new Set() : new Set(leads.map((lead) => lead.id)))}
+                type="checkbox"
+              />
+              전체
+            </label>
+            <span className="min-w-0 truncate">선택 {selectedLeadIds.size.toLocaleString()}곳</span>
+          </div>
+          {selectedLeadIds.size ? (
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
+              <select aria-label="바꿀 단계" className="h-8 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold" onChange={(event) => setBulkStage(event.target.value)} value={bulkStage}>
+                <option value="">단계 바꾸기</option>
+                {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <select aria-label="변경 사유" className="h-8 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold" onChange={(event) => setBulkReason(event.target.value)} value={bulkReason}>
+                <option value="">사유</option>
+                {["단가 안 맞음", "기존 거래처 유지", "폐업", "이전", "미수", "결제 문제", "기타"].map((reason) => <option key={reason}>{reason}</option>)}
+              </select>
+              <button className="h-8 shrink-0 rounded-md bg-teal-700 px-3 text-xs font-black text-white disabled:opacity-50" disabled={!bulkStage || bulkBusy} onClick={() => void applyBulkStage()} type="button">
+                {bulkBusy ? "변경 중" : "적용"}
+              </button>
+            </div>
+          ) : null}
+          {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
+        </div>
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {leads.length ? (
             leads.map((lead) => {
@@ -5819,6 +6150,7 @@ function LeadListPanel({
               const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
               const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
               const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
+              const reminder = getMapLeadReminderLabel(lead);
               return (
                 <div
                   className={`block w-full border-b border-slate-100 px-3 py-2.5 text-left transition hover:bg-teal-50 ${
@@ -5829,13 +6161,33 @@ function LeadListPanel({
                     itemRefs.current[lead.id] = el;
                   }}
                 >
-                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
-                    <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{lead.businessName}</p>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <input aria-label={`${lead.businessName} 선택`} checked={selectedLeadIds.has(lead.id)} className="h-4 w-4 shrink-0 rounded border-slate-300 text-teal-700" onChange={() => toggleLeadSelection(lead.id)} type="checkbox" />
+                    <button className="min-w-0 flex-1 truncate text-left text-sm font-black text-slate-950" onClick={() => onSelectLead(lead.id)} title={lead.businessName} type="button">
+                      {lead.businessName}
+                    </button>
                       <Badge className={`shrink-0 px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>
                         {lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}
                       </Badge>
-                    </div>
+                    <select
+                      aria-label={`${lead.businessName} 단계`}
+                      className="h-8 w-[92px] shrink-0 rounded-md border border-slate-200 bg-white px-1 text-[11px] font-black text-slate-700"
+                      onChange={async (event) => {
+                        const result = await onUpdateStage(lead.id, event.target.value);
+                        setRowErrors((current) => {
+                          const next = { ...current };
+                          if (result.ok) delete next[lead.id];
+                          else next[lead.id] = result.message || "단계 변경에 실패했습니다.";
+                          return next;
+                        });
+                      }}
+                      value={toLeadStageValue(lead.status)}
+                    >
+                      {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                  {rowErrors[lead.id] ? <p className="mt-1 text-[11px] font-bold text-rose-700" role="alert">{rowErrors[lead.id]}</p> : null}
+                  <button className="block w-full text-left" onClick={() => onSelectLead(lead.id)} type="button">
                     <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{lead.address || "주소 확인 필요"}</p>
                     <div className="mt-1.5 grid grid-cols-2 gap-1 text-[11px] font-bold text-slate-500">
                       <span className="truncate">{lead.industryPrimary || "업종 미분류"}</span>
@@ -5843,6 +6195,12 @@ function LeadListPanel({
                       <span className="truncate">{lead.phone || "전화 미확인"}</span>
                       <span className="truncate font-black text-teal-700">우선순위 {confidence.score}점</span>
                     </div>
+                    {reminder ? (
+                      <p className="mt-1.5 flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-800">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{reminder}</span>
+                      </p>
+                    ) : null}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-100">
@@ -6424,7 +6782,7 @@ function CustomerDirectoryView({
                       </td>
                       {showMoreDirectoryColumns ? <td className="max-w-[110px] truncate border-r border-slate-100 px-4 py-3 font-bold text-slate-500">{store.accessMethodType || "미등록"}</td> : null}
                       {showMoreDirectoryColumns ? <td className="border-r border-slate-100 px-4 py-3">
-                        {store.accessPassword ? (
+                        {store.hasAccessPassword ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">
                             <Lock className="h-3 w-3" /> 등록됨
                           </span>
@@ -8311,6 +8669,7 @@ function StoreDetail({
   readonly store: StoreRow;
   readonly vehicleOptions: string[];
 }) {
+  const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "order" | "ledger">("overview");
   const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
   const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
@@ -8324,7 +8683,8 @@ function StoreDetail({
   // 저장해야해. 놓친 것 같아 ... 열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등 넣어야해").
   const [draftAccessMethodType, setDraftAccessMethodType] = useState(store.accessMethodType || "");
   const [draftAccessNote, setDraftAccessNote] = useState(store.accessNote || "");
-  const [draftAccessPassword, setDraftAccessPassword] = useState(store.accessPassword || "");
+  const [draftAccessPassword, setDraftAccessPassword] = useState("");
+  const [accessPasswordChanged, setAccessPasswordChanged] = useState(false);
   const [showDraftAccessPassword, setShowDraftAccessPassword] = useState(false);
   const [draftReviewSummary, setDraftReviewSummary] = useState(store.reviewSummary || "");
   const [draftReviewKeywords, setDraftReviewKeywords] = useState((store.reviewKeywords || []).join(", "));
@@ -8378,7 +8738,7 @@ function StoreDetail({
       menuSummary: draftMenuSummary,
       accessMethodType: draftAccessMethodType,
       accessNote: draftAccessNote,
-      accessPassword: draftAccessPassword,
+      ...(accessPasswordChanged ? { accessPassword: draftAccessPassword } : {}),
       reviewSummary: draftReviewSummary,
       reviewKeywords: draftReviewKeywords
         .split(",")
@@ -8498,7 +8858,7 @@ function StoreDetail({
   return (
     <>
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/45" onClick={onClose} type="button" />
-      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[1360px] flex-col border-l border-slate-200 bg-white shadow-2xl">
         <header className="maju-card-header border-b px-4 py-4">
           {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
               오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
@@ -8509,6 +8869,7 @@ function StoreDetail({
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                <span className="rounded-md bg-violet-700 px-2 py-1 text-[11px] font-black text-white">거래처</span>
                 <h3 className="truncate text-2xl font-black text-slate-950">{draftName}</h3>
                 <span className={gradeBadgeClass(draftGrade)}>{draftGrade}</span>
                 <span className={businessStatusClass(draftBusinessStatus)}>{getBusinessStatusLabel(draftBusinessStatus)}</span>
@@ -8522,6 +8883,10 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
+                {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
+                <span className="ml-1 text-[10px] font-bold text-amber-700">단계 저장 미연결</span>
+              </div>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
               {relationshipStatusError ? <p className="mt-2 text-xs font-black text-rose-600">{relationshipStatusError}</p> : null}
@@ -8561,8 +8926,26 @@ function StoreDetail({
           </div>
         </header>
 
+        <section aria-label="연락하기" className="border-b border-slate-200 bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {draftPhone ? <a className="maju-button-primary inline-flex h-11 items-center gap-2 px-4 text-sm" href={`sms:${draftPhone.replace(/[^0-9+]/g, "")}`}><MessageCircle className="h-4 w-4" />문자 보내기 · 휴대폰</a> : null}
+            {draftPhone ? <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`tel:${draftPhone.replace(/[^0-9+]/g, "")}`}><Phone className="h-4 w-4" />매장전화</a> : null}
+            {draftEmail ? <a className="maju-button-secondary inline-flex h-11 items-center px-3 text-sm" href={`mailto:${draftEmail}`}>이메일</a> : null}
+            <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`https://map.kakao.com/link/search/${encodeURIComponent(draftAddress || draftName)}`} rel="noreferrer" target="_blank"><Navigation className="h-4 w-4" />방문 길안내</a>
+            <span className="ml-auto text-xs font-bold text-slate-500">추천 · <b className="text-teal-700">{draftPhone ? "오늘 문자로 단가표 보내기" : "연락처 먼저 보강"}</b></span>
+          </div>
+        </section>
+
+        <nav aria-label="매장 정보 탭" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
+          {([
+            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문 (준비 중)"], ["ledger", "매출 원장 (준비 중)"]
+          ] as const).map(([value, label]) => (
+            <button className={`h-11 shrink-0 border-b-[3px] px-3 text-sm font-black ${detailTab === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500"}`} key={value} onClick={() => setDetailTab(value)} type="button">{label}</button>
+          ))}
+        </nav>
+
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
-          <div className="space-y-5">
+          {detailTab === "overview" ? <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
@@ -8763,8 +9146,8 @@ function StoreDetail({
                     <div className="flex items-center gap-1.5">
                       <input
                         className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300"
-                        onChange={(event) => setDraftAccessPassword(event.target.value)}
-                        placeholder="도어락 비밀번호 등"
+                        onChange={(event) => { setDraftAccessPassword(event.target.value); setAccessPasswordChanged(true); }}
+                        placeholder={store.hasAccessPassword ? "새 값 입력 시에만 변경" : "도어락 비밀번호 등"}
                         type={showDraftAccessPassword ? "text" : "password"}
                         value={draftAccessPassword}
                       />
@@ -8913,7 +9296,48 @@ function StoreDetail({
                   ))}
                 </div>
               </CollapsibleSection>
-          </div>
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">수정 기록</h4>
+                <p className="mt-2 rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">권한별 이전→이후 감사 로그는 SQL 적용 전이라 읽기 미연결 상태입니다. 실제 기록이 연결되기 전에는 예시 데이터를 표시하지 않습니다.</p>
+              </section>
+          </div> : null}
+
+          {detailTab === "delivery" ? (
+            <div className="mx-auto max-w-5xl space-y-3">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
+                <span>기간 <b className="text-slate-950">최근 30일</b></span><span>·</span><span>{draftDeliveryVehicleName || "차량 미배정"}</span><span>·</span><span>{draftDeliveryDriver || "기사 미배정"}</span>
+              </div>
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">배송·반품 기록</h4>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={formatDistanceKmLabel(store.distanceKm)} />
+                  <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
+                  <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
+                  <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
+                </div>
+                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">배송 완료·반품·파손 사진 원장은 SQL 의존 영역으로 현재 읽기 미연결입니다. 연결 전까지 기록 생성·다운로드 기능은 OFF입니다.</p>
+              </section>
+            </div>
+          ) : null}
+
+          {detailTab === "sales" ? (
+            <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[1fr_320px]">
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">영업 기록</h4>
+                <textarea className="mt-3 min-h-24 w-full rounded-lg border border-slate-200 p-3 text-sm font-bold outline-none focus:border-teal-400" onChange={(event) => setHistoryMemo(event.target.value)} placeholder="통화·방문 결과와 다음 연락 일정을 남기세요." value={historyMemo} />
+                <button className="maju-button-primary mt-2 h-10 w-full text-sm" onClick={() => { const memo = historyMemo.trim(); if (!memo) return; onWriteHistory(store.id, memo); setHistoryMemo(""); }} type="button">결과 저장</button>
+                <div className="mt-4 space-y-2">{history.length ? history.map((item) => <article className="rounded-lg border border-slate-200 p-3" key={item.id}><p className="text-xs font-black text-slate-400">{item.recordedAt}</p><p className="mt-1 text-sm font-bold text-slate-700"><LinkifiedText text={item.memo} /></p></article>) : <p className="rounded-lg bg-slate-50 p-4 text-sm font-bold text-slate-400">아직 영업 기록이 없습니다.</p>}</div>
+              </section>
+              <aside className="space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-sm font-black">결과 남기기</h4><p className="mt-2 text-xs font-bold leading-5 text-slate-500">부재·관심·견적 전달·재연락·계약·거절 단계의 구조화 저장은 SQL 적용 전이라 기능 OFF입니다. 현재는 왼쪽 메모 기록을 사용하세요.</p></div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-sm font-black">담당</h4><p className="mt-2 text-sm font-bold text-slate-700">{draftDeliveryDriver || "담당자 미지정"}</p></div>
+              </aside>
+            </div>
+          ) : null}
+
+          {detailTab === "order" || detailTab === "ledger" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-black text-slate-950">{detailTab === "order" ? "주문" : "매출 원장"} 연결 준비 중</h4><p className="mt-2 text-sm font-bold text-slate-500">같은 매장 ID에 연결할 SQL 원장이 아직 적용되지 않아 읽기·쓰기를 모두 OFF로 유지합니다.</p></div>
+          ) : null}
         </div>
       </aside>
     </>

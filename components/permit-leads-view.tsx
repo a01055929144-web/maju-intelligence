@@ -32,6 +32,7 @@ import {
   Radar,
   RefreshCw,
   Search,
+  Truck,
   Trash2,
   Upload,
   UserCheck,
@@ -46,7 +47,12 @@ import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-ac
 import { getAdjacentLeadIds } from "@/domains/lead/detail-navigation";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
+import {
+  isLeadBusinessHoursDraftEnabled,
+  isLeadNativeAttachmentsEnabled,
+  isStoreDeliveryProofHistoryEnabled,
+  isStoreRevisionHistoryEnabled
+} from "@/lib/feature-modules";
 import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
@@ -3054,6 +3060,9 @@ function PermitLeadDetailPanel({
   const [businessHoursDraft, setBusinessHoursDraft] = useState("");
   const [businessHoursSaving, setBusinessHoursSaving] = useState(false);
   const [businessHoursMessage, setBusinessHoursMessage] = useState("");
+  const [businessNumberDraft, setBusinessNumberDraft] = useState(lead.businessNumber || "");
+  const [businessNumberSaving, setBusinessNumberSaving] = useState(false);
+  const [businessNumberMessage, setBusinessNumberMessage] = useState("");
   const [actionMemo, setActionMemo] = useState("");
   const [externalInfoMessage, setExternalInfoMessage] = useState("");
   const [externalInfoSaving, setExternalInfoSaving] = useState(false);
@@ -3086,6 +3095,16 @@ function PermitLeadDetailPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
   const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "files" | "changes">("overview");
+  const [deliveryHistory, setDeliveryHistory] = useState<Array<{
+    id: string;
+    createdAt: string;
+    createdByName: string;
+    memo: string;
+    nextAction: string;
+  }>>([]);
+  const [deliveryHistoryState, setDeliveryHistoryState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [deliveryHistoryTruncated, setDeliveryHistoryTruncated] = useState(false);
+  const deliveryHistoryRequestRef = useRef(0);
   const historySectionRef = useRef<HTMLDivElement>(null);
   const resultSectionRef = useRef<HTMLDivElement>(null);
   const intentGuide =
@@ -3109,6 +3128,8 @@ function PermitLeadDetailPanel({
     setDetailActionMessage("");
     setBusinessHoursDraft("");
     setBusinessHoursMessage("");
+    setBusinessNumberDraft(lead.businessNumber || "");
+    setBusinessNumberMessage("");
     setResultOpen(Boolean(intent));
     setDetailTab("overview");
     setExternalSignals({
@@ -3119,7 +3140,16 @@ function PermitLeadDetailPanel({
       rating: lead.rating,
       reviewCount: lead.reviewCount
     });
-  }, [intent, lead.googlePlaceUrl, lead.id, lead.instagramUrl, lead.kakaoPlaceUrl, lead.keywordVolume, lead.naverPlaceUrl, lead.rating, lead.reviewCount]);
+  }, [intent, lead.businessNumber, lead.googlePlaceUrl, lead.id, lead.instagramUrl, lead.kakaoPlaceUrl, lead.keywordVolume, lead.naverPlaceUrl, lead.rating, lead.reviewCount]);
+
+  useEffect(() => {
+    setConvertedCustomerId("");
+    setMatchedExistingCustomer(false);
+    setDeliveryHistory([]);
+    setDeliveryHistoryState("idle");
+    setDeliveryHistoryTruncated(false);
+    deliveryHistoryRequestRef.current += 1;
+  }, [lead.id]);
 
   useEffect(() => {
     const refreshQuoteDraftState = () => setQuoteDraftSavedAt(readQuoteDraft(quoteSubject)?.savedAt || "");
@@ -3152,6 +3182,41 @@ function PermitLeadDetailPanel({
       cancelled = true;
     };
   }, [lead.id]);
+
+  const linkedCustomerId = convertedCustomerId || lead.matchedCustomerId || "";
+
+  const loadDeliveryHistory = useCallback(async () => {
+    const requestId = deliveryHistoryRequestRef.current + 1;
+    deliveryHistoryRequestRef.current = requestId;
+    if (!linkedCustomerId) {
+      setDeliveryHistory([]);
+      setDeliveryHistoryState("idle");
+      setDeliveryHistoryTruncated(false);
+      return;
+    }
+
+    setDeliveryHistoryState("loading");
+    const params = new URLSearchParams({ customerId: linkedCustomerId, noteType: "delivery" });
+    const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customer-operations?${params.toString()}`), { cache: "no-store" }, 12000).catch(() => null);
+    if (requestId !== deliveryHistoryRequestRef.current) return;
+    if (!response?.ok) {
+      setDeliveryHistoryState("error");
+      return;
+    }
+
+    const payload = (await response.json().catch(() => null)) as {
+      notes?: Array<{ id: string; createdAt: string; createdByName: string; memo: string; nextAction: string }>;
+      notesTruncated?: boolean;
+    } | null;
+    setDeliveryHistory(Array.isArray(payload?.notes) ? payload.notes : []);
+    setDeliveryHistoryTruncated(Boolean(payload?.notesTruncated));
+    setDeliveryHistoryState("ready");
+  }, [linkedCustomerId]);
+
+  useEffect(() => {
+    if (detailMode !== "page" || detailTab !== "delivery") return;
+    void loadDeliveryHistory();
+  }, [detailMode, detailTab, loadDeliveryHistory]);
 
   function buildActionMemo(result: string, followUpDate = nextActionDate) {
     const parts = [
@@ -3202,6 +3267,39 @@ function PermitLeadDetailPanel({
       setInstagramSaveMessage(error instanceof Error ? error.message : "인스타 정보를 저장하지 못했습니다.");
     } finally {
       setInstagramSaving(false);
+    }
+  }
+
+  async function saveBusinessNumber() {
+    const normalizedValue = businessNumberDraft.replace(/[^0-9]/g, "");
+    setBusinessNumberMessage("");
+    if (normalizedValue && normalizedValue.length !== 10) {
+      setBusinessNumberMessage("사업자등록번호 숫자 10자리를 입력해주세요.");
+      return;
+    }
+
+    setBusinessNumberSaving(true);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}`),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessNumber: normalizedValue || null })
+        },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { lead?: PermitLeadItem; message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok || !payload.lead) {
+        throw new Error(payload?.message || "사업자등록번호를 저장하지 못했습니다.");
+      }
+      onLeadUpdated(payload.lead);
+      setBusinessNumberDraft(payload.lead.businessNumber || "");
+      setBusinessNumberMessage(payload.lead.businessNumber ? "사업자등록번호를 저장했습니다." : "사업자등록번호를 비웠습니다.");
+    } catch (error) {
+      setBusinessNumberMessage(error instanceof Error ? error.message : "사업자등록번호를 저장하지 못했습니다.");
+    } finally {
+      setBusinessNumberSaving(false);
     }
   }
 
@@ -3918,10 +4016,49 @@ function PermitLeadDetailPanel({
             </p>
           </div> : null}
 
+          <section className="rounded-xl border border-slate-200 bg-white p-3" aria-labelledby="lead-business-identity-title">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h4 className="text-sm font-black text-slate-950" id="lead-business-identity-title">사업자 정보</h4>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">번호를 수정하면 리드 중복 확인과 거래처 전환에 같은 값을 사용합니다.</p>
+              </div>
+              <span className="w-fit shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
+                {convertedCustomerId || lead.matchedCustomerId ? "국세청 상태 · 거래처 원장에서 확인" : "국세청 상태 · 거래처 전환 후 확인"}
+              </span>
+            </div>
+            <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="min-w-0">
+                <span className="sr-only">사업자등록번호</span>
+                <input
+                  aria-describedby={businessNumberMessage ? "lead-business-number-message" : undefined}
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold tracking-wide text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  inputMode="numeric"
+                  maxLength={12}
+                  onChange={(event) => setBusinessNumberDraft(event.target.value)}
+                  placeholder="숫자 10자리"
+                  value={businessNumberDraft}
+                />
+              </label>
+              <button
+                className="maju-button-primary h-11 w-full justify-center px-4 sm:w-auto"
+                disabled={businessNumberSaving || businessNumberDraft.replace(/[^0-9]/g, "") === (lead.businessNumber || "").replace(/[^0-9]/g, "")}
+                onClick={() => void saveBusinessNumber()}
+                type="button"
+              >
+                {businessNumberSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                저장
+              </button>
+            </div>
+            {businessNumberMessage ? (
+              <p className={`mt-2 text-xs font-bold ${businessNumberMessage.includes("저장했습니다") || businessNumberMessage.includes("비웠습니다") ? "text-teal-700" : "text-rose-700"}`} id="lead-business-number-message" role="status">
+                {businessNumberMessage}
+              </p>
+            ) : null}
+          </section>
+
           <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
             <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
             <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
-            <PermitDetailRow label="사업자번호" value={lead.businessNumber || "확인 필요"} />
             <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
             <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
             <PermitDetailRow label="개시일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
@@ -4010,7 +4147,7 @@ function PermitLeadDetailPanel({
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
             <p className="text-sm font-black text-slate-800">수정 기록</p>
             <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">공통 수정 기록 테이블 승인 후 이 탭에 변경 이력을 연결합니다.</p>
-            <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">승인 대기</span>
+            {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
           </div>
 
           {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">현재 · {formatLeadBusinessHours(lead.businessHourIntervals || [])}</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><button className="maju-button-secondary mt-2 h-8 text-xs" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button>{businessHoursMessage ? <p className="mt-2 text-[11px] font-bold text-amber-900">{businessHoursMessage}</p> : null}</div> : null}
@@ -4068,9 +4205,50 @@ function PermitLeadDetailPanel({
           <section aria-labelledby={`lead-tab-${detailTab}`} className="space-y-3 p-4 pb-24" id={`lead-detail-${detailTab}`} role="tabpanel">
             {detailTab === "delivery" ? (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <h4 className="font-black text-slate-950">배송 기록</h4>
-                <p className="mt-2 text-sm text-slate-600">리드에는 배송 기록이 없습니다. 거래처로 연결된 뒤 배송 이력에서 확인할 수 있습니다.</p>
-                {(convertedCustomerId || lead.matchedCustomerId) ? <a className="maju-button-secondary mt-3 inline-flex h-11" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(convertedCustomerId || lead.matchedCustomerId || "")}`)}>연결된 거래처 보기</a> : null}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-black text-slate-950">배송 기록</h4>
+                    <p className="mt-1 text-sm text-slate-600">연결된 거래처의 배송 관련 메모·특이사항을 최신순 최대 50건 표시합니다. 실제 배송 상태·사진 증빙 이력과는 구분됩니다.</p>
+                    {!isStoreDeliveryProofHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">실제 배송 증빙 기능 꺼짐 · SQL 승인 대기</span> : null}
+                  </div>
+                  {linkedCustomerId ? (
+                    <button className="maju-button-secondary h-9 px-3 text-xs" disabled={deliveryHistoryState === "loading"} onClick={() => void loadDeliveryHistory()} type="button">
+                      <RefreshCw className={`h-3.5 w-3.5 ${deliveryHistoryState === "loading" ? "animate-spin" : ""}`} />
+                      새로고침
+                    </button>
+                  ) : null}
+                </div>
+                {!linkedCustomerId ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">리드에는 배송 기록이 없습니다. 거래처로 연결하면 이 탭에서 배송 이력을 확인할 수 있습니다.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "loading" ? (
+                  <p className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />배송 기록을 불러오는 중입니다.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "error" ? (
+                  <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700" role="alert">배송 기록을 불러오지 못했습니다. 담당 거래처 권한과 연결 상태를 확인한 뒤 다시 시도해주세요.</p>
+                ) : null}
+                {linkedCustomerId && deliveryHistoryState === "ready" && !deliveryHistory.length ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">아직 저장된 배송 기록이 없습니다.</p>
+                ) : null}
+                {deliveryHistory.length ? (
+                  <div className="mt-3 space-y-2">
+                    {deliveryHistory.map((note) => (
+                      <article className="rounded-lg border border-blue-100 bg-blue-50/50 p-3" key={note.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="flex items-center gap-1.5 text-sm font-black text-blue-950"><Truck className="h-4 w-4 text-blue-700" />배송 메모</p>
+                          <time className="text-xs font-bold text-slate-500">{note.createdAt}</time>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.memo}</p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
+                          <span>기록자 · {note.createdByName || "담당자 미기록"}</span>
+                          {note.nextAction ? <span>다음 조치 · {note.nextAction}</span> : null}
+                        </div>
+                      </article>
+                    ))}
+                    {deliveryHistoryTruncated ? <p className="text-xs font-bold text-amber-700">최근 50건을 표시합니다. 전체 기록은 거래처 원장에서 확인하세요.</p> : null}
+                  </div>
+                ) : null}
+                {linkedCustomerId ? <a className="maju-button-secondary mt-3 inline-flex h-11" href={withPermitLeadCompanyQuery(`/crm/timeline?section=ledger&customerId=${encodeURIComponent(linkedCustomerId)}`)}>연결된 거래처 보기</a> : null}
               </div>
             ) : null}
             {detailTab === "sales" ? (
@@ -4096,14 +4274,14 @@ function PermitLeadDetailPanel({
                 <h4 className="font-black text-slate-950">파일·사진</h4>
                 {(convertedCustomerId || lead.matchedCustomerId)
                   ? <CustomerAttachmentUploadPanel customerId={convertedCustomerId || lead.matchedCustomerId || ""} customerName={lead.businessName} />
-                  : <p className="mt-2 text-sm text-slate-600">리드 파일 저장소는 준비 중입니다. 거래처로 연결되면 사업자등록증과 배송 사진을 이곳에서 관리할 수 있습니다.</p>}
+                  : <div className="mt-2"><p className="text-sm text-slate-600">리드 파일 저장소는 준비 중입니다. 거래처로 연결되면 사업자등록증과 배송 사진을 이곳에서 관리할 수 있습니다.</p>{!isLeadNativeAttachmentsEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">전환 전 리드 파일 기능 꺼짐 · SQL 승인 대기</span> : null}</div>}
               </div>
             ) : null}
             {detailTab === "changes" ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <h4 className="font-black text-slate-950">수정 기록</h4>
                 <p className="mt-2 text-sm text-slate-700">공통 수정 기록 테이블 승인 후 누가, 언제, 어떤 정보를 바꿨는지 표시합니다.</p>
-                <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">승인 대기</span>
+                {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
               </div>
             ) : null}
           </section>

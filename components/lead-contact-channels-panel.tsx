@@ -6,7 +6,7 @@
 // 팩스는 팩스 서비스 연동 전까지 "문구 복사 + 보냈음 기록"만 합니다(보낸 척하지 않습니다).
 // 채널 순위·형식 검사·링크 생성 규칙은 domains/lead/contact-channels.ts가 가지고, 이 컴포넌트는 화면만 담당합니다.
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2, Mail, MessageCircle, MessageSquare, Printer, Smartphone } from "lucide-react";
 import {
   buildInstagramDmUrl,
@@ -20,6 +20,12 @@ import {
   type LeadContactChannel,
   resolvePrimaryLeadContactChannel
 } from "@/domains/lead/contact-channels";
+import {
+  buildLeadSourceDisclosure,
+  leadSourceLabel,
+  requiresAfterHoursConfirmation,
+  SALES_OUTREACH_RULES
+} from "@/domains/lead/outreach-governance";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { PermitLeadItem } from "@/lib/store";
 import {
@@ -63,6 +69,9 @@ export function LeadContactChannelsPanel({
   const [editing, setEditing] = useState<EditableChannel | null>(null);
   const [saving, setSaving] = useState<EditableChannel | null>(null);
   const [recording, setRecording] = useState<LeadContactChannel | null>(null);
+  const [recordingSourceDisclosure, setRecordingSourceDisclosure] = useState(false);
+  const [policyState, setPolicyState] = useState<"loading" | "required" | "saving" | "acknowledged">("loading");
+  const [fieldSources, setFieldSources] = useState<Array<{ collectedAt: string; fieldName: string; sourceType: string }>>([]);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -73,6 +82,46 @@ export function LeadContactChannelsPanel({
     // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/outreach-policy"), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { acknowledged?: boolean } | null;
+        if (active) setPolicyState(response.ok && payload?.acknowledged ? "acknowledged" : "required");
+      })
+      .catch(() => { if (active) setPolicyState("required"); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { sources?: Array<{ collectedAt: string; fieldName: string; sourceType: string }> } | null;
+        if (active && response.ok) setFieldSources(payload?.sources || []);
+      })
+      .catch(() => { if (active) setFieldSources([]); });
+    return () => { active = false; };
+  }, [lead.id]);
+
+  async function acknowledgePolicy() {
+    setPolicyState("saving");
+    try {
+      const mobileSurface = typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/outreach-policy"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-maju-surface": mobileSurface ? "mobile" : "pc" },
+        body: JSON.stringify({})
+      }, 12000);
+      const payload = (await response.json().catch(() => null)) as { acknowledged?: boolean; message?: string } | null;
+      if (!response.ok || !payload?.acknowledged) throw new Error(payload?.message || "영업 수칙 확인을 저장하지 못했습니다.");
+      setPolicyState("acknowledged");
+    } catch (error) {
+      setPolicyState("required");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "영업 수칙 확인을 저장하지 못했습니다." });
+    }
+  }
 
   const mobile = isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : undefined;
   const storePhone = lead.phone && !mobile ? formatKoreanPhoneNumber(lead.phone) : undefined;
@@ -110,6 +159,38 @@ export function LeadContactChannelsPanel({
     } finally {
       setRecording(null);
     }
+  }
+
+  async function copySourceDisclosure() {
+    if (recordingSourceDisclosure) return;
+    const disclosure = buildLeadSourceDisclosure({ businessName: lead.businessName, collectedAt: lead.createdAt, source: lead.source });
+    setRecordingSourceDisclosure(true);
+    setNotice(null);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/source-disclosure`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || "출처 안내 기록을 남기지 못했습니다.");
+      try {
+        await navigator.clipboard.writeText(disclosure);
+      } catch {
+        setNotice({ tone: "error", text: "안내 기록은 저장했지만 복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
+        return;
+      }
+      setNotice({ tone: "ok", text: "출처 답변을 복사하고 안내 기록을 남겼습니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다." });
+    } finally {
+      setRecordingSourceDisclosure(false);
+    }
+  }
+
+  function confirmAfterHoursSms(event: MouseEvent<HTMLAnchorElement>) {
+    if (!requiresAfterHoursConfirmation()) return;
+    if (!window.confirm("현재는 문자 발송을 피해야 하는 시간(21:00~08:00)입니다. 그래도 문자 앱을 여시겠습니까?")) event.preventDefault();
   }
 
   async function saveChannel(key: EditableChannel) {
@@ -185,6 +266,22 @@ export function LeadContactChannelsPanel({
 
   return (
     <section aria-label="영업 채널" className="rounded-xl border border-slate-200 bg-white p-3">
+      {policyState !== "acknowledged" ? (
+        <div aria-labelledby="sales-outreach-policy-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-3 sm:items-center" role="dialog">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <p className="text-xs font-black text-teal-700">처음 한 번만 확인</p>
+            <h2 className="mt-1 text-lg font-black text-slate-950" id="sales-outreach-policy-title">영업 연락 수칙</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">상대방의 의사와 공개 정보의 출처를 존중하며 영업합니다.</p>
+            <ul className="mt-4 list-disc space-y-2 rounded-xl bg-amber-50 px-5 py-4 text-sm font-semibold leading-6 text-amber-950">
+              {SALES_OUTREACH_RULES.map((rule) => <li key={rule}>{rule}</li>)}
+            </ul>
+            <button className="maju-button-primary mt-4 min-h-12 w-full justify-center disabled:cursor-wait disabled:opacity-60" disabled={policyState !== "required"} onClick={() => void acknowledgePolicy()} type="button">
+              {policyState === "loading" || policyState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {policyState === "loading" ? "확인 기록 불러오는 중" : policyState === "saving" ? "확인 기록 저장 중" : "확인하고 영업 시작"}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-black text-slate-950">영업 채널</p>
         <span className="text-[11px] font-bold text-slate-500">먼저: {LEAD_CONTACT_CHANNEL_LABELS[primary]}</span>
@@ -205,13 +302,40 @@ export function LeadContactChannelsPanel({
         </div>
       </div>
 
+      <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-black text-blue-950">연락처·매장 정보 출처</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-blue-800">{leadSourceLabel(lead.source)} · {new Date(lead.createdAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })} 확인</p>
+            {fieldSources.length ? <p className="mt-1 text-[10px] font-bold text-blue-700">칸별 출처 {Array.from(new Set(fieldSources.map((item) => item.fieldName))).join(" · ")}</p> : null}
+          </div>
+          <button
+            aria-busy={recordingSourceDisclosure}
+            className="maju-button-secondary min-h-11 px-3 text-xs disabled:cursor-wait disabled:opacity-50"
+            disabled={recordingSourceDisclosure}
+            onClick={() => void copySourceDisclosure()}
+            type="button"
+          >
+            {recordingSourceDisclosure ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+            {recordingSourceDisclosure ? "기록 중" : "출처 답변 복사·기록"}
+          </button>
+        </div>
+      </div>
+
+      <details className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <summary className="min-h-11 cursor-pointer py-3 text-xs font-black text-amber-950">영업 수칙 다시 보기</summary>
+        <ul className="list-disc space-y-1 pb-2 pl-5 text-[11px] font-semibold leading-5 text-amber-900">
+          {SALES_OUTREACH_RULES.map((rule) => <li key={rule}>{rule}</li>)}
+        </ul>
+      </details>
+
       <div className="mt-2 grid gap-2">
         <div className={rowClass("sms")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             {rowTitle("sms", <Smartphone className="h-3.5 w-3.5" />, mobile)}
             {mobile ? (
               <div className="flex gap-1.5">
-                <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "sms" ? "text-sm" : ""}`} href={buildSmsUrl(mobile, message)}>
+                <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "sms" ? "text-sm" : ""}`} href={buildSmsUrl(mobile, message)} onClick={confirmAfterHoursSms}>
                   <MessageSquare className="h-3.5 w-3.5" />
                   문자 열기
                 </a>

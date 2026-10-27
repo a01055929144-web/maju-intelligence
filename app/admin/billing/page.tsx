@@ -3,6 +3,7 @@ import { AdminBillingWorkspace } from "@/components/admin-billing-workspace";
 import { getAdminSession } from "@/lib/auth";
 import { listSubscriptionsForAdmin } from "@/lib/store";
 import { AdminPageHeader } from "../admin-page-header";
+import { AdminPlanSettingsWorkspace } from "./plan-settings-workspace";
 
 export default async function AdminBillingPage() {
   const session = await getAdminSession();
@@ -17,6 +18,7 @@ export default async function AdminBillingPage() {
       <AdminPageHeader active="billing" badge="결제 관리" session={session} subtitle="고객사별 월 이용료와 자동결제 상태" title="결제 관리" />
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-4">
         <AdminBillingWorkspace initialSubscriptions={result.subscriptions} loadError={result.loadError} />
+        <AdminPlanSettingsWorkspace enabled={process.env.WO8_BILLING_V2_ENABLED === "true"} />
       </main>
     </div>
   );

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
 import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/application/mobile-sales/today-tasks";
 import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
+import { runBulkActions } from "@/application/mobile-sales/bulk-actions";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
@@ -22,7 +23,7 @@ import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
-type ViewMode = "all" | MobileLeadType | "contacted" | "reminder" | MobileSalesTaskKind;
+type ViewMode = "all" | MobileLeadType | "route" | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
 
 const collateralOptions = ["명함", "견적서", "단가표", "카탈로그", "샘플"] as const;
@@ -32,7 +33,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType; kakaoMapAppKey?: string }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -64,6 +65,10 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [salesPrice, setSalesPrice] = useState("");
   const [salesPriceValidUntil, setSalesPriceValidUntil] = useState("");
   const [importantNote, setImportantNote] = useState("");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState<string[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("");
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -143,6 +148,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     const filtered = leads.filter((lead) => {
       if (taskIds && !taskIds.has(lead.id)) return false;
       if (view === "new" || view === "sales") if (getMobileLeadType(lead) !== view) return false;
+      if (view === "route" && (!lead.address || (distanceKm(location, lead) ?? Number.POSITIVE_INFINITY) > 0.5)) return false;
       if (view === "contacted" && !isContactedLead(lead.status)) return false;
       if (view === "reminder" && lead.status !== "재연락 예정") return false;
       if (!token) return true;
@@ -311,6 +317,31 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const quoteCount = leads.filter((lead) => ["견적 요청", "견적 발송"].includes(lead.status)).length;
   const reminderCount = leads.filter((lead) => lead.status === "재연락 예정").length;
 
+  async function updateSelectedLeads(actionType: "hold" | "exclude", result: "보류" | "제외") {
+    const targets = leads.filter((lead) => bulkSelection.includes(lead.id));
+    if (!targets.length || bulkSaving) return;
+    if (actionType === "exclude" && !window.confirm(`${targets.length}개 리드를 제외 상태로 변경할까요?`)) return;
+    setBulkSaving(true);
+    setBulkMessage("");
+    const outcomes = await runBulkActions(targets, async (lead) => {
+      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/action`, {
+        body: JSON.stringify({ actionType, memo: "모바일 목록 일괄 변경", result }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = await response.json().catch(() => null) as { lead?: PermitLeadItem; message?: string; status?: string } | null;
+      if (!response.ok) throw new Error(payload?.message || `${lead.businessName} 상태를 변경하지 못했습니다.`);
+      return payload?.lead || { ...lead, status: payload?.status || result };
+    }, 4);
+    const failedIds = outcomes.filter((outcome) => !outcome.ok).map((outcome) => outcome.item.id);
+    const updatedById = new Map(outcomes.filter((outcome) => outcome.ok).map((outcome) => [outcome.item.id, outcome.result]));
+    setLeads((items) => items.map((item) => updatedById.get(item.id) || item));
+    setBulkSaving(false);
+    setBulkSelection(failedIds);
+    setBulkMessage(failedIds.length ? `${targets.length - failedIds.length}개 변경 · 실패 ${failedIds.length}개 선택 유지` : `${targets.length}개를 ${result} 상태로 변경했습니다.`);
+    if (!failedIds.length) setBulkMode(false);
+  }
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <MobileThemeShell>
@@ -320,10 +351,11 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
               <div className="min-w-0"><p className="text-sm font-semibold">MAJU 모바일 영업</p><p className="mobile-muted truncate text-xs font-semibold">{actorName} · {companyName}</p><p className="mt-1 text-[11px] font-black text-emerald-700">● 근무 중</p></div>
               <Link className="mobile-secondary-action inline-flex min-h-10 items-center rounded-lg border px-3 text-xs font-semibold" href="/mobile/today">배송 화면</Link>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="업무 모드">
+            <div className="mt-3 grid grid-cols-4 gap-2" aria-label="업무 모드">
               <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/today">배송</Link>
               <button className={`min-h-10 rounded-full text-xs font-bold ${view === "new" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("new")} type="button">신규</button>
               <button className={`min-h-10 rounded-full text-xs font-bold ${view === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setView("sales")} type="button">영업</button>
+              <button className={`min-h-10 rounded-full text-xs font-bold ${view === "route" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => { setView("route"); requestLocation(); document.getElementById("lead-map")?.scrollIntoView({ behavior: "smooth" }); }} type="button">가는 길</button>
             </div>
           </header>
 
@@ -353,7 +385,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
             </section>
 
             <section className="mobile-card order-4 rounded-xl border p-3" id="lead-list">
-              <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input aria-label="리드 검색" className="mobile-input min-h-10 w-full rounded-lg border py-2 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="매장명·주소·업종 검색" value={query} /></div>
+              <div className="flex items-center gap-2"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input aria-label="리드 검색" className="mobile-input min-h-10 w-full rounded-lg border py-2 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="매장명·주소·업종 검색" value={query} /></div><button className={`min-h-10 shrink-0 rounded-lg px-3 text-xs font-semibold ${bulkMode ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => { setBulkMode((current) => !current); setBulkSelection([]); setBulkMessage(""); }} type="button">{bulkMode ? "선택 취소" : "일괄 변경"}</button></div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button className={`min-h-10 rounded-lg text-xs font-semibold ${sort === "sales" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={() => setSort("sales")} type="button">세일즈 추천</button>
                 <button className={`min-h-10 rounded-lg text-xs font-semibold ${sort === "near" ? "mobile-primary-action" : "mobile-secondary-action border"}`} onClick={requestLocation} type="button">가까운 순</button>
@@ -364,7 +396,9 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
 
               {loadState === "loading" ? <StateMessage icon={Loader2} text="영업 후보를 불러오는 중입니다." spin /> : null}
               {loadState === "error" ? <div className="mt-3 rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700"><p>{error}</p><button className="mt-2 inline-flex min-h-10 items-center gap-1 rounded-lg bg-white px-3" onClick={() => void loadLeads()} type="button"><RefreshCw className="h-4 w-4" />다시 시도</button></div> : null}
-              {loadState === "ready" ? <div className="mt-3 space-y-2">{visibleLeads.slice(0, 50).map((lead) => <LeadCard key={lead.id} lead={lead} location={location} onOpen={() => void openLead(lead)} />)}{visibleLeads.length === 0 ? <StateMessage icon={MapPin} text="조건에 맞는 리드가 없습니다." /> : null}</div> : null}
+              {bulkMode ? <div className="mobile-card-raised sticky top-2 z-10 mt-3 flex items-center gap-2 rounded-lg border p-2"><span className="mobile-muted mr-auto text-xs font-semibold">{bulkSelection.length}개 선택</span><button className="min-h-9 rounded-lg border border-amber-300 px-3 text-xs font-semibold text-amber-700 disabled:opacity-50" disabled={!bulkSelection.length || bulkSaving} onClick={() => void updateSelectedLeads("hold", "보류")} type="button">보류</button><button className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-semibold text-rose-700 disabled:opacity-50" disabled={!bulkSelection.length || bulkSaving} onClick={() => void updateSelectedLeads("exclude", "제외")} type="button">제외</button></div> : null}
+              {bulkMessage ? <p aria-live="polite" className="mobile-muted mt-2 text-xs font-semibold">{bulkMessage}</p> : null}
+              {loadState === "ready" ? <div className="mt-3 space-y-2">{visibleLeads.slice(0, 50).map((lead) => <LeadCard checked={bulkSelection.includes(lead.id)} key={lead.id} lead={lead} location={location} selectable={bulkMode} onOpen={() => bulkMode ? setBulkSelection((current) => current.includes(lead.id) ? current.filter((id) => id !== lead.id) : [...current, lead.id]) : void openLead(lead)} />)}{visibleLeads.length === 0 ? <StateMessage icon={MapPin} text="조건에 맞는 리드가 없습니다." /> : null}</div> : null}
             </section>
 
             <section className="mobile-card order-5 rounded-xl border p-3" id="reminders">
@@ -427,31 +461,16 @@ function TaskCard({ count, kind, onClick }: { count: number; kind: MobileSalesTa
 
 function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin; spin?: boolean; text: string }) { return <div className="mobile-muted mt-3 flex min-h-20 items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--mobile-border)] text-xs font-semibold"><Icon className={`h-4 w-4 ${spin ? "animate-spin" : ""}`} />{text}</div>; }
 
-function LeadCard({ lead, location, onOpen }: { lead: PermitLeadItem; location: LocationPoint | null; onOpen: () => void }) {
+function LeadCard({ checked = false, lead, location, onOpen, selectable = false }: { checked?: boolean; lead: PermitLeadItem; location: LocationPoint | null; onOpen: () => void; selectable?: boolean }) {
   const type = getMobileLeadType(lead);
   const leadDistance = distanceKm(location, lead);
-  const reasons = lead.nextActionReasons.slice(0, 2);
   return (
-    <button className="mobile-card-raised w-full rounded-lg border p-3 text-left" onClick={onOpen} type="button">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span>
-            <span className="mobile-muted text-[11px]">{lead.status}</span>
-          </div>
-          <p className="mt-1.5 truncate text-sm font-semibold">{lead.businessName}</p>
-          <p className="mobile-muted mt-1 truncate text-xs">{lead.address || lead.jurisdiction || "주소 확인 필요"}</p>
-        </div>
-        <div className="shrink-0 text-right">
-          <span className="block rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{lead.scoreTotal}점</span>
-          {leadDistance != null ? <span className="mobile-muted mt-1 block text-[10px] font-semibold">{leadDistance.toFixed(1)}km</span> : null}
-        </div>
-      </div>
-      {reasons.length ? <p className="mt-2 line-clamp-2 rounded-md bg-teal-50 px-2 py-1.5 text-[11px] font-semibold leading-4 text-teal-800">추천 이유 · {reasons.join(" · ")}</p> : null}
-      <div className="mobile-muted mt-2 flex items-center justify-between text-[11px]">
-        <span>{lead.industryPrimary} · {lead.grade || "미채점"}</span>
-        <span className="inline-flex items-center gap-1 text-teal-700">영업 기록 <ChevronRight className="h-3.5 w-3.5" /></span>
-      </div>
+    <button aria-pressed={selectable ? checked : undefined} className={`mobile-card-raised flex min-h-14 w-full items-center gap-2 rounded-lg border px-3 py-2 text-left ${checked ? "ring-2 ring-teal-500" : ""}`} onClick={onOpen} type="button">
+      {selectable ? <span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded border text-[11px] ${checked ? "border-teal-600 bg-teal-600 text-white" : "border-[var(--mobile-border)]"}`}>{checked ? "✓" : ""}</span> : null}
+      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span>
+      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{lead.businessName}</span><span className="mobile-muted block truncate text-[11px]">{lead.status} · {lead.address || lead.jurisdiction || "주소 확인 필요"}</span></span>
+      <span className="shrink-0 text-right"><span className="block text-xs font-semibold">{lead.scoreTotal}점</span>{leadDistance != null ? <span className="mobile-muted block text-[10px]">{leadDistance.toFixed(1)}km</span> : null}</span>
+      <ChevronRight className="mobile-accent h-4 w-4 shrink-0" />
     </button>
   );
 }

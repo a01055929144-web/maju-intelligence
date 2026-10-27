@@ -18,6 +18,8 @@ type AttachmentItem = {
 
 const slots = [
   { accept: "image/*,.pdf", description: "사업자 정보 원본", key: "business_license", label: "사업자등록증", recommended: false, required: true },
+  { accept: "image/*", description: "매장 외관과 간판 확인", key: "store_sign", label: "간판 사진", recommended: false, required: false },
+  { accept: "image/*,.pdf", description: "계약서 원본 또는 사본", key: "contract", label: "계약서", recommended: false, required: false },
   { accept: "image/*,.pdf", description: "필요 시 마스킹 후 보관", key: "identity_document", label: "신분증", recommended: false, required: false },
   { accept: "image/*,.pdf", description: "정산 계좌 확인", key: "bank_account", label: "통장사본", recommended: true, required: false },
   { accept: "image/*,video/*", description: "후문, 냉장고, 적재 위치", key: "loading_position", label: "배송 적재위치", recommended: true, required: false }

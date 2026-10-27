@@ -6,7 +6,7 @@ import { deletePermitLead, updatePermitLeadProfile, type PermitLeadProfileInput 
 // 요청 본문에 실제로 들어온 칸만 수정합니다(보내지 않은 칸을 null로 지우지 않도록).
 function pickPermitLeadProfileInput(body: Record<string, unknown> | null): PermitLeadProfileInput {
   const input: PermitLeadProfileInput = {};
-  for (const key of ["instagramUrl", "fax", "email", "naverTalktalkUrl"] as const) {
+  for (const key of ["businessNumber", "instagramUrl", "fax", "email", "naverTalktalkUrl"] as const) {
     if (!body || !(key in body)) continue;
     const value = body[key];
     input[key] = typeof value === "string" ? value.trim() : null;
@@ -17,7 +17,7 @@ function pickPermitLeadProfileInput(body: Record<string, unknown> | null): Permi
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as
-    | { companyId?: string; instagramUrl?: string | null; fax?: string | null; email?: string | null; naverTalktalkUrl?: string | null }
+    | { companyId?: string; businessNumber?: string | null; instagramUrl?: string | null; fax?: string | null; email?: string | null; naverTalktalkUrl?: string | null }
     | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
 

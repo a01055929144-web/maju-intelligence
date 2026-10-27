@@ -25,12 +25,44 @@ export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_
   return value !== "false" && value !== "0";
 }
 
+function isExplicitlyEnabled(value: string) {
+  return value === "1" || value.toLowerCase() === "true";
+}
+
+export function isStoreDeliveryProofHistoryEnabled(value = process.env.NEXT_PUBLIC_STORE_DELIVERY_PROOF_HISTORY_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
+export function isLeadNativeAttachmentsEnabled(value = process.env.NEXT_PUBLIC_LEAD_NATIVE_ATTACHMENTS_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
+export function isStoreRevisionHistoryEnabled(value = process.env.NEXT_PUBLIC_STORE_REVISION_HISTORY_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
 export function getLeadWorkspaceV2EnabledCompanyIds(value = process.env.LEAD_WORKSPACE_V2_ENABLED_COMPANY_IDS || "") {
   return new Set(value.split(",").map((item) => item.trim()).filter(Boolean));
 }
 
 export function isLeadWorkspaceV2Enabled(companyId?: string | null, value?: string) {
   return Boolean(companyId && getLeadWorkspaceV2EnabledCompanyIds(value).has(companyId));
+}
+
+export function isMapFilterPersistenceEnabled(value = process.env.MAP_FILTER_PERSISTENCE_ENABLED || "") {
+  return value === "true" || value === "1";
+}
+
+export function getStructuredFieldRecordsEnabledCompanyIds(value = process.env.STRUCTURED_FIELD_RECORDS_ENABLED_COMPANY_IDS || "") {
+  return new Set(value.split(",").map((item) => item.trim()).filter(Boolean));
+}
+
+/**
+ * #35 원장과 단일 트랜잭션 저장 API가 승인·적용된 회사만 켭니다.
+ * 환경변수가 비어 있으면 false라서 현재 메모 기반 저장 흐름을 바꾸지 않습니다.
+ */
+export function areStructuredFieldRecordsEnabled(companyId?: string | null, value?: string) {
+  return Boolean(companyId && getStructuredFieldRecordsEnabledCompanyIds(value).has(companyId));
 }
 
 export const CORE_LEADS_HREF = "/leads?type=permit";

@@ -12,6 +12,27 @@ describe("resolveInsightsDateRange", () => {
 });
 
 describe("buildBusinessInsights", () => {
+  it("returns a safe empty dashboard without exposing internal cost fields", () => {
+    const range = resolveInsightsDateRange("month", new Date("2026-10-26T12:00:00+09:00"));
+    const result = buildBusinessInsights({
+      churnRisks: [],
+      deliveries: [],
+      leads: [],
+      ledger: [],
+      quotes: []
+    }, range, new Date("2026-10-26T12:00:00+09:00"));
+
+    expect(result.current).toEqual({ contracts: 0, contacts: 0, deliveries: 0, leads: 0, quotes: 0, shareRate: 0 });
+    expect(result.previous).toEqual({ contracts: 0, contacts: 0, deliveries: 0, leads: 0, quotes: 0, shareRate: 0 });
+    expect(result.risks).toEqual({ churnCustomers: [], expiringQuotes: 0 });
+    expect(result.trend).toHaveLength(6);
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toMatch(/purchase|cost|margin/i);
+    expect(serialized).not.toContain("매입");
+    expect(serialized).not.toContain("원가");
+  });
+
   it("compares funnel, delivery sharing and risks without cost data", () => {
     const range = resolveInsightsDateRange("month", new Date("2026-10-26T12:00:00+09:00"));
     const leads = [
@@ -66,9 +87,12 @@ describe("buildBusinessInsights", () => {
 });
 
 describe("insightsRoleRedirect", () => {
-  it("redirects staff and delivery users before querying company insights", () => {
+  it("allows only owners and managers into company insights", () => {
     expect(insightsRoleRedirect("staff")).toBe("/leads?type=permit");
     expect(insightsRoleRedirect("driver")).toBe("/leads?type=permit");
+    expect(insightsRoleRedirect("sales")).toBe("/leads?type=permit");
+    expect(insightsRoleRedirect(null)).toBe("/leads?type=permit");
+    expect(insightsRoleRedirect(undefined)).toBe("/leads?type=permit");
     expect(insightsRoleRedirect("owner")).toBeNull();
     expect(insightsRoleRedirect("manager")).toBeNull();
   });

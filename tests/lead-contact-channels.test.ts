@@ -71,6 +71,14 @@ describe("lead contact channels", () => {
       "면볶당 사장님, 마주식자재입니다."
     );
     expect(fillLeadMessageTemplate("안녕하세요. 담당자 연락처: {담당자 연락처}. 단가표 링크: {단가표 링크}", { businessName: "면볶당" })).toBe("안녕하세요.");
+    expect(
+      fillLeadMessageTemplate("{상호} 사장님, {회사명} {담당자명}입니다. 담당자 연락처: {담당자 연락처}. 단가표 링크: {단가표 링크}", {
+        businessName: "면볶당"
+      })
+    ).toBe("면볶당 사장님.");
+    expect(fillLeadMessageTemplate("안녕하세요. (담당 {담당자명} · {담당자 연락처}) 상담 도와드리겠습니다.", { businessName: "면볶당" })).toBe(
+      "안녕하세요.\n상담 도와드리겠습니다."
+    );
     expect(fillLeadMessageTemplate("{상호} 대표님, 반갑습니다! 오늘 납품 품목을 안내드립니다. 확인 부탁드립니다.", { businessName: "면볶당" })).toBe(
       "면볶당 대표님, 반갑습니다!\n오늘 납품 품목을 안내드립니다.\n확인 부탁드립니다."
     );

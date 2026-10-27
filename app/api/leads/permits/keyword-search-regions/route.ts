@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { isMapFilterPersistenceEnabled } from "@/lib/feature-modules";
 import {
   addCompanyLeadSearchRegion,
   countCompanyLeadsInAdministrativeArea,
@@ -15,17 +16,19 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  const [regions, salesAreaState, recommendations] = await Promise.all([
-    getCompanyLeadSearchRegions(scope.companyId!).catch(() => []),
+  const expansionCandidateEnabled = isMapFilterPersistenceEnabled();
+  const [regions, expansionCandidateRegions, salesAreaState, recommendations] = await Promise.all([
+    getCompanyLeadSearchRegions(scope.companyId!, "assigned").catch(() => []),
+    expansionCandidateEnabled ? getCompanyLeadSearchRegions(scope.companyId!, "expansion_candidate").catch(() => []) : Promise.resolve([]),
     getCompanySalesAreaState(scope.companyId!).catch(() => ({ defaultAreas: [], effectiveAreas: [], explicitAreas: [], source: "none" as const, unrecognizedRegions: [] })),
     getCompanySalesAreaRecommendations(scope.companyId!).catch(() => [])
   ]);
-  return NextResponse.json({ canManage: scopeHasCapability(scope, "manage_customers") || scopeHasCapability(scope, "manage_company"), recommendations, regions, salesAreaState });
+  return NextResponse.json({ canManage: scopeHasCapability(scope, "manage_customers") || scopeHasCapability(scope, "manage_company"), expansionCandidateEnabled, expansionCandidateRegions, recommendations, regions, salesAreaState });
 }
 
 // POST: 새 탐색 지역을 추가합니다(지역명을 카카오 키워드 검색으로 좌표화해 저장).
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { companyId?: string; label?: string } | null;
+  const body = (await request.json().catch(() => null)) as { areaKind?: string; companyId?: string; label?: string } | null;
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_customers") && !scopeHasCapability(scope, "manage_company")) {
@@ -36,7 +39,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const region = await addCompanyLeadSearchRegion(scope.companyId!, body.label);
+    const areaKind = body.areaKind === "expansion_candidate" ? "expansion_candidate" : "assigned";
+    if (areaKind === "expansion_candidate" && !isMapFilterPersistenceEnabled()) {
+      return NextResponse.json({ message: "영업 필요 지역 기능은 서버 검증 전까지 비활성화되어 있습니다." }, { status: 404 });
+    }
+    const region = await addCompanyLeadSearchRegion(scope.companyId!, body.label, areaKind);
     const existingLeadCount = await countCompanyLeadsInAdministrativeArea(scope.companyId!, body.label);
     return NextResponse.json({ existingLeadCount, region });
   } catch (error) {
