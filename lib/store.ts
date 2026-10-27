@@ -70,6 +70,7 @@ import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { evaluateStaffLocation, getStaffLocationDisplayState, resolveStaffLocationPersistence, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import type { MapFilterPresetFilters } from "./map-filter-presets";
+import { isMapFilterPersistenceEnabled } from "./feature-modules";
 
 export type RawUploadRow = Record<string, string | number | boolean | null | undefined>;
 export type ColumnMapping = Record<string, string>;
@@ -9901,7 +9902,7 @@ export async function runKakaoKeywordLeadSweep(
   try {
     // 1) 기준점 후보를 모읍니다.
     const assignedRegions = await getCompanyLeadSearchRegions(companyId, "assigned");
-    const expansionRegions = options.mode === "manual"
+    const expansionRegions = options.mode === "manual" && isMapFilterPersistenceEnabled()
       ? await getCompanyLeadSearchRegions(companyId, "expansion_candidate")
       : [];
     const savedRegions = [...assignedRegions, ...expansionRegions];

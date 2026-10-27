@@ -25,7 +25,7 @@ describe("map filter presets", () => {
 
   it("keeps expansion candidates out of automatic collection", () => {
     expect(storeSource).toContain('getCompanyLeadSearchRegions(companyId, "assigned")');
-    expect(storeSource).toContain('options.mode === "manual"');
+    expect(storeSource).toContain('options.mode === "manual" && isMapFilterPersistenceEnabled()');
     expect(storeSource).toContain('getCompanyLeadSearchRegions(companyId, "expansion_candidate")');
   });
 });

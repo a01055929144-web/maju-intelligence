@@ -17,6 +17,7 @@ type SalesAreaState = {
 
 export type SalesAreaSelectorSnapshot = {
   canManage: boolean;
+  expansionCandidateEnabled: boolean;
   expansionCandidateRegions: Region[];
   recommendations: Recommendation[];
   regions: Region[];
@@ -25,6 +26,7 @@ export type SalesAreaSelectorSnapshot = {
 
 const EMPTY_STATE: SalesAreaSelectorSnapshot = {
   canManage: false,
+  expansionCandidateEnabled: false,
   expansionCandidateRegions: [],
   recommendations: [],
   regions: [],
@@ -249,7 +251,7 @@ export function SalesAreaSelector({
         </div>
       </div>
 
-      <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+      {snapshot.expansionCandidateEnabled ? <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
         <p className="text-xs font-black text-violet-950">영업 필요 지역</p>
         <p className="mt-1 text-[11px] font-semibold text-violet-700">확장 검토·수동 탐색 전용입니다. 매일 자동 수집 지역과 분리됩니다.</p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -276,7 +278,7 @@ export function SalesAreaSelector({
             ))}
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       {snapshot.recommendations.length ? (
         <div>
