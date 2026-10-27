@@ -5,6 +5,45 @@ export const DELIVERY_ISSUE_CAUSES = [
 
 export type DeliveryIssueCause = (typeof DELIVERY_ISSUE_CAUSES)[number];
 
+export const DELIVERY_ISSUE_CAUSE_CODES: Record<DeliveryIssueCause, string> = {
+  "냉동 해동": "frozen_thaw",
+  "냉장 온도": "cold_temperature",
+  "신선도/품질": "freshness_quality",
+  "파손": "damage",
+  "누락": "missing",
+  "오배송": "wrong_delivery",
+  "수량 차이": "quantity_difference",
+  "유통기한": "expiration",
+  "포장 불량": "packaging_defect",
+  "고객 요청": "customer_request",
+  "기타": "other"
+};
+
+export const DELIVERY_OCCURRENCE_STAGES = [
+  { label: "입고", value: "receiving" },
+  { label: "보관", value: "storage" },
+  { label: "적재", value: "loading" },
+  { label: "운송", value: "transit" },
+  { label: "하차", value: "unloading" }
+] as const;
+
+export const DELIVERY_ACTIONS = [
+  { label: "재배송", value: "redelivery" },
+  { label: "교환", value: "exchange" },
+  { label: "차감 금액", value: "deduction" },
+  { label: "공급처 클레임", value: "supplier_claim" }
+] as const;
+
+export const DELIVERY_EVENT_STATUSES = [
+  { label: "접수", value: "received" },
+  { label: "조치 중", value: "in_progress" },
+  { label: "완료", value: "completed" }
+] as const;
+
+export type DeliveryOccurrenceStage = (typeof DELIVERY_OCCURRENCE_STAGES)[number]["value"];
+export type DeliveryAction = (typeof DELIVERY_ACTIONS)[number]["value"];
+export type DeliveryEventStatus = (typeof DELIVERY_EVENT_STATUSES)[number]["value"];
+
 export const DELIVERY_RECORD_TYPES = [
   { label: "완료", value: "arrived" },
   { label: "부분 배송", value: "partial" },
