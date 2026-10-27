@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
-import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
+import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, isActiveLegacyOwnerSession, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 import { getStaffAccessState } from "./store/07-staff-access";
@@ -105,7 +105,16 @@ export async function getAdminSession() {
 export async function getCustomerSession() {
   const cookieStore = await cookies();
   const session = decodeSession<CustomerSession>(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
-  if (!session?.userId) return session;
+  if (!session) return null;
+  if (!session.userId) {
+    if (session.workspaceRole !== "owner") return null;
+    try {
+      return (await isActiveLegacyOwnerSession({ companyId: session.companyId, email: session.email })) ? session : null;
+    } catch (error) {
+      console.error("Legacy owner session validation failed:", error);
+      return null;
+    }
+  }
 
   try {
     const membership = await getActiveCustomerMembership({ companyId: session.companyId, userId: session.userId });

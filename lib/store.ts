@@ -1761,6 +1761,23 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
   }
 }
 
+export async function isActiveLegacyOwnerSession(input: { companyId: string; email: string }): Promise<boolean> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  if (!normalizedEmail || !input.companyId) return false;
+  if (!isProductionStoreConfigured()) {
+    const fallback = getFallbackAuthCredentials();
+    return fallback.customerEmail.toLowerCase() === normalizedEmail && fallback.customerCompanyId === input.companyId;
+  }
+  const credentialRows = await supabaseRequest<Array<{ customer_company_id: string; customer_email: string }>>(
+    `auth_credentials?select=customer_company_id,customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`
+  );
+  if (!credentialRows[0]) return false;
+  const companyRows = await supabaseRequest<Array<{ id: string; status: string | null }>>(
+    `companies?select=id,status&id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+  );
+  return Boolean(companyRows[0] && ["active", "fallback"].includes(companyRows[0].status || ""));
+}
+
 export async function updateCustomerUserLastLogin(userId: string, provider = "password"): Promise<void> {
   if (!userId || !isProductionStoreConfigured()) return;
   await supabaseRequest(`app_users?id=eq.${encodeURIComponent(userId)}`, {

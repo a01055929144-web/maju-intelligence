@@ -1,6 +1,7 @@
 -- Claude 검토용 초안. 운영 적용 금지.
 -- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
--- 해제 활성화 전제: 서버 DELETE route가 서명된 customer session, company_id, owner/manager 역할을 검증한다.
+-- 해제 활성화 전제: getCustomerSession이 서명과 활성 legacy credential/company를 매 요청 재검증하고,
+-- 서버 DELETE route가 그 customer session의 company_id와 owner/manager 역할을 검증한다.
 begin;
 
 create or replace function public.register_lead_do_not_contact(
