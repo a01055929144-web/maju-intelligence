@@ -54,7 +54,7 @@ describe("sensitive access log authorization", () => {
     const revealStore = await readFile("lib/store/07-sensitive-access-logs.ts", "utf8");
     expect(attachmentRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(attachmentRoute.indexOf("createCustomerAttachmentSignedUrl(path)"));
     expect(attachmentRoute).toContain('item: "business_registration"');
-    expect(attachmentRoute).toContain("!scope.customerSession?.userId");
+    expect(attachmentRoute).toContain("!scope.customerSession || (!scope.customerSession.userId && scope.customerSession.workspaceRole !== \"owner\")");
     expect(attachmentRoute).toContain("isActiveSensitiveAccessActor");
     expect(attachmentRoute).toContain("if (sensitiveAccessLogsEnabled())");
     expect(attachmentRoute.indexOf("if (sensitiveAccessLogsEnabled())")).toBeGreaterThan(attachmentRoute.indexOf('attachment.attachmentType === "business_license"'));
