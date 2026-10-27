@@ -24,7 +24,8 @@ describe("PC map workspace layout", () => {
 
   it("wires saved filter restore controls while the server flag remains authoritative", () => {
     expect(workspaceSource).toContain('fetch("/api/map/filter-presets"');
-    expect(workspaceSource).toContain('aria-label="저장된 지도 필터"');
+    expect(workspaceSource).toContain("이 조건 저장");
+    expect(workspaceSource).toContain("저장한 필터");
     expect(workspaceSource).toContain("applyMapFilterPreset");
     expect(workspaceSource).toContain("removeSelectedMapFilterPreset");
   });
@@ -49,7 +50,7 @@ describe("PC map workspace layout", () => {
 
   it("keeps lead card controls fixed-width and exposes guarded bulk stage changes", () => {
     expect(workspaceSource).toContain('aria-label={`${lead.businessName} 선택`}');
-    expect(workspaceSource).toContain('className="h-8 w-[92px] shrink-0');
+    expect(workspaceSource).toContain("max-w-[96px] shrink-0");
     expect(workspaceSource).toContain('aria-label="바꿀 단계"');
     expect(workspaceSource).toContain("runMapLeadStageBulk(");
     expect(workspaceSource).toContain("setSelectedLeadIds(new Set(failed.map");
@@ -66,5 +67,30 @@ describe("시안 ⑫ 지도 기본 배치", () => {
     expect(source).toContain("function SplitListTabs(");
     expect(source).toContain('label: "코스"');
     expect(source).toContain('workspaceViews.filter((item) => item.value !== "leads")');
+  });
+});
+
+describe("시안 ⑫ 필터 줄 · 격자", () => {
+  it("uses chip popovers, a static full-width filter row and flush side panels", () => {
+    expect(workspaceSource).toContain('placeholder="상호·주소·전화"');
+    expect(workspaceSource).toContain("data-map-filter-chip");
+    expect(workspaceSource).toContain('label: "규모(평)", muted: true');
+    expect(workspaceSource).not.toContain("lg:absolute lg:inset-x-2 lg:top-2 lg:z-20");
+    expect(workspaceSource).toContain('"lg:left-[250px]"');
+    expect(workspaceSource).toContain('"lg:right-[340px]"');
+    expect(workspaceSource).toContain('aria-label="보기 방식"');
+    expect(workspaceSource).toContain('aria-label="현재 필터 조건"');
+  });
+
+  it("keeps multi-select filters backward compatible with single saved values", async () => {
+    const { areaLabelMatchesSigungu, splitMultiFilter, summarizeMultiFilter, toggleMultiFilter } = await import("../lib/map-filter-multi");
+    expect(splitMultiFilter("")).toEqual([]);
+    expect(splitMultiFilter("한식")).toEqual(["한식"]);
+    expect(toggleMultiFilter("한식", "일식")).toBe("한식|일식");
+    expect(toggleMultiFilter("한식|일식", "한식")).toBe("일식");
+    expect(summarizeMultiFilter("강남구|서초구|송파구", "영업 지역")).toBe("강남구 +2");
+    expect(summarizeMultiFilter("", "영업 지역")).toBe("영업 지역");
+    expect(areaLabelMatchesSigungu("서울특별시 강남구", "강남구")).toBe(true);
+    expect(areaLabelMatchesSigungu("인천광역시 부평구", "강남구")).toBe(false);
   });
 });
