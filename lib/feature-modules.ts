@@ -25,6 +25,22 @@ export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_
   return value !== "false" && value !== "0";
 }
 
+function isExplicitlyEnabled(value: string) {
+  return value === "1" || value.toLowerCase() === "true";
+}
+
+export function isStoreDeliveryProofHistoryEnabled(value = process.env.NEXT_PUBLIC_STORE_DELIVERY_PROOF_HISTORY_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
+export function isLeadNativeAttachmentsEnabled(value = process.env.NEXT_PUBLIC_LEAD_NATIVE_ATTACHMENTS_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
+export function isStoreRevisionHistoryEnabled(value = process.env.NEXT_PUBLIC_STORE_REVISION_HISTORY_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
 export function getLeadWorkspaceV2EnabledCompanyIds(value = process.env.LEAD_WORKSPACE_V2_ENABLED_COMPANY_IDS || "") {
   return new Set(value.split(",").map((item) => item.trim()).filter(Boolean));
 }

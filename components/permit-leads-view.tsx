@@ -47,7 +47,12 @@ import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-ac
 import { getAdjacentLeadIds } from "@/domains/lead/detail-navigation";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
+import {
+  isLeadBusinessHoursDraftEnabled,
+  isLeadNativeAttachmentsEnabled,
+  isStoreDeliveryProofHistoryEnabled,
+  isStoreRevisionHistoryEnabled
+} from "@/lib/feature-modules";
 import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
@@ -4149,7 +4154,7 @@ function PermitLeadDetailPanel({
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
             <p className="text-sm font-black text-slate-800">수정 기록</p>
             <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">공통 수정 기록 테이블 승인 후 이 탭에 변경 이력을 연결합니다.</p>
-            <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">승인 대기</span>
+            {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
           </div>
 
           {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">현재 · {formatLeadBusinessHours(lead.businessHourIntervals || [])}</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><button className="maju-button-secondary mt-2 h-8 text-xs" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button>{businessHoursMessage ? <p className="mt-2 text-[11px] font-bold text-amber-900">{businessHoursMessage}</p> : null}</div> : null}
@@ -4211,6 +4216,7 @@ function PermitLeadDetailPanel({
                   <div>
                     <h4 className="font-black text-slate-950">배송 기록</h4>
                     <p className="mt-1 text-sm text-slate-600">연결된 거래처의 배송 관련 메모·특이사항을 최신순 최대 50건 표시합니다. 실제 배송 상태·사진 증빙 이력과는 구분됩니다.</p>
+                    {!isStoreDeliveryProofHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">실제 배송 증빙 기능 꺼짐 · SQL 승인 대기</span> : null}
                   </div>
                   {linkedCustomerId ? (
                     <button className="maju-button-secondary h-9 px-3 text-xs" disabled={deliveryHistoryState === "loading"} onClick={() => void loadDeliveryHistory()} type="button">
@@ -4275,14 +4281,14 @@ function PermitLeadDetailPanel({
                 <h4 className="font-black text-slate-950">파일·사진</h4>
                 {(convertedCustomerId || lead.matchedCustomerId)
                   ? <CustomerAttachmentUploadPanel customerId={convertedCustomerId || lead.matchedCustomerId || ""} customerName={lead.businessName} />
-                  : <p className="mt-2 text-sm text-slate-600">리드 파일 저장소는 준비 중입니다. 거래처로 연결되면 사업자등록증과 배송 사진을 이곳에서 관리할 수 있습니다.</p>}
+                  : <div className="mt-2"><p className="text-sm text-slate-600">리드 파일 저장소는 준비 중입니다. 거래처로 연결되면 사업자등록증과 배송 사진을 이곳에서 관리할 수 있습니다.</p>{!isLeadNativeAttachmentsEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">전환 전 리드 파일 기능 꺼짐 · SQL 승인 대기</span> : null}</div>}
               </div>
             ) : null}
             {detailTab === "changes" ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <h4 className="font-black text-slate-950">수정 기록</h4>
                 <p className="mt-2 text-sm text-slate-700">공통 수정 기록 테이블 승인 후 누가, 언제, 어떤 정보를 바꿨는지 표시합니다.</p>
-                <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">승인 대기</span>
+                {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
               </div>
             ) : null}
           </section>

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { areHoldModulesEnabled, CORE_LEADS_HREF, isHoldModulePath, resolveLegacyDashboardHref } from "../lib/feature-modules";
+import {
+  areHoldModulesEnabled,
+  CORE_LEADS_HREF,
+  isHoldModulePath,
+  isLeadNativeAttachmentsEnabled,
+  isStoreDeliveryProofHistoryEnabled,
+  isStoreRevisionHistoryEnabled,
+  resolveLegacyDashboardHref
+} from "../lib/feature-modules";
 
 describe("hold feature modules", () => {
   it("is hidden by default and enabled only for an allow-listed company", () => {
@@ -22,5 +30,14 @@ describe("hold feature modules", () => {
     expect(isHoldModulePath("/settings/billing")).toBe(false);
     expect(isHoldModulePath("/quote/public-token")).toBe(false);
     expect(CORE_LEADS_HREF).toBe("/leads?type=permit");
+  });
+
+  it("keeps SQL-dependent store detail modules off unless explicitly enabled", () => {
+    expect(isStoreDeliveryProofHistoryEnabled("")).toBe(false);
+    expect(isLeadNativeAttachmentsEnabled("false")).toBe(false);
+    expect(isStoreRevisionHistoryEnabled("0")).toBe(false);
+    expect(isStoreDeliveryProofHistoryEnabled("true")).toBe(true);
+    expect(isLeadNativeAttachmentsEnabled("1")).toBe(true);
+    expect(isStoreRevisionHistoryEnabled("TRUE")).toBe(true);
   });
 });
