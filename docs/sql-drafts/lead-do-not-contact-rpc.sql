@@ -38,9 +38,16 @@ begin
   ) then raise exception 'actor_not_active_company_member'; end if;
   if not exists (
     select 1 from public.business_permit_leads
-    where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null
+    where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null and (
+      p_channel='visit'
+      or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
+      or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
+      or (p_channel='email' and lower(btrim(coalesce(email,'')))=v_normalized)
+      or (p_channel='instagram' and lower(regexp_replace(regexp_replace(btrim(coalesce(instagram_url,'')),'^https?://(www\.)?instagram\.com/','','i'),'/$',''))=v_normalized)
+      or (p_channel='talktalk' and lower(regexp_replace(btrim(coalesce(naver_talktalk_url,'')),'/$',''))=v_normalized)
+    )
   ) then
-    raise exception 'lead_not_found';
+    raise exception 'contact_value_not_on_lead';
   end if;
 
   insert into public.company_do_not_contact (
@@ -57,20 +64,24 @@ begin
     when p_channel='email' then left(v_normalized,1)||'***@'||split_part(v_normalized,'@',2)
     else '***'||right(v_normalized,4) end;
 
-  with affected as (
-    update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
+  with targets as (
+    select id from public.business_permit_leads
     where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
       or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
       or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
       or (p_channel='email' and lower(btrim(coalesce(email,'')))=v_normalized)
       or (p_channel='instagram' and lower(regexp_replace(regexp_replace(btrim(coalesce(instagram_url,'')),'^https?://(www\.)?instagram\.com/','','i'),'/$',''))=v_normalized)
       or (p_channel='talktalk' and lower(regexp_replace(btrim(coalesce(naver_talktalk_url,'')),'/$',''))=v_normalized))
+  ), affected as (
+    update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
+    where company_id=p_company_id and id in (select id from targets)
+      and status not in ('거래처 전환','기존 거래처')
     returning id
   )
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
   select p_company_id,id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
     jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
-      'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked)) from affected;
+      'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked)) from targets;
   return true;
 end;
 $$;
@@ -82,6 +93,8 @@ language plpgsql security invoker set search_path = public
 as $$
 declare v_lead_id uuid; v_channel text; v_masked text;
 begin
+  -- legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다.
+  -- C6 전환 전에는 서버가 해제를 제공하지 않고 MAJU 운영 절차로 별도 검토한다.
   if nullif(btrim(p_release_reason),'') is null then raise exception 'release_reason_required'; end if;
   if p_actor_user_id is null or not exists (
     select 1 from public.company_members

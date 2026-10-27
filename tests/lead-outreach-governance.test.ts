@@ -98,9 +98,9 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("security invoker");
     expect(sql).toContain("revoke all on function public.register_lead_do_not_contact");
     expect(sql).toContain("grant execute on function public.register_lead_do_not_contact");
-    expect(sql).toContain("action_type, result, memo, actor_name, metadata");
+    expect(sql).toContain("action_type,result,memo,actor_name,metadata");
     expect(sql).not.toContain("actor_name, actor_user_id)");
-    expect(sql).toContain("'exclude',\n    '제외'");
+    expect(sql).toContain("'exclude','제외'");
     expect(sql).toContain("'actor_user_id', p_actor_user_id");
     expect(sql).not.toContain("'normalized_value',");
     expect(sql).toContain("'masked_value',v_masked");
@@ -110,6 +110,9 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("create or replace function public.release_lead_do_not_contact");
     expect(sql).toContain("owner_or_manager_required");
     expect(sql).toContain("release_reason_required");
+    expect(sql).toContain("contact_value_not_on_lead");
+    expect(sql).toContain("status not in ('거래처 전환','기존 거래처')");
+    expect(sql).toContain("legacy_owner 세션은 app_users/company_members 행이 없어 이 RPC로 해제할 수 없다");
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {
