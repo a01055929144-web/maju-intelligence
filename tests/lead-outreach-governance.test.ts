@@ -127,7 +127,7 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("other_dnc.id::text=other_action.metadata->>'dnc_id'");
     expect(sql).not.toContain("metadata->>'dnc_id')::uuid");
     expect(sql).toContain("with impacted as");
-    expect(sql).toContain("join impacted on impacted.lead_id=action.lead_id");
+    expect(sql).toMatch(/from\s+impacted\s+left join\s+public\.lead_actions\s+action/);
     expect(sql).toContain("action.metadata->>'changed_status'='true'");
     expect(sql).toContain("action.metadata->>'restored_status'='true'");
     expect(sql).toContain("action.created_at>cycle_start.last_restored_at");
