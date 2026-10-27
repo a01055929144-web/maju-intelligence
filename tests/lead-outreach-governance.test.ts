@@ -122,7 +122,7 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("next_action=null,exclude_reason=null");
     expect(sql).toContain("'changed_status',(affected.id is not null)");
     expect(sql).toContain("metadata->>'changed_status'='true'");
-    expect(sql).toContain("order by lead_id,created_at asc");
+    expect(sql).toMatch(/order by\s+(?:action\.)?lead_id\s*,\s*(?:action\.)?created_at\s+asc/);
     expect(sql).toContain("other_dnc.released_at is null");
     expect(sql).toContain("other_dnc.id::text=other_action.metadata->>'dnc_id'");
     expect(sql).not.toContain("metadata->>'dnc_id')::uuid");
