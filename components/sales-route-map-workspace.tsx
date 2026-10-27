@@ -8643,6 +8643,7 @@ function StoreDetail({
   readonly store: StoreRow;
   readonly vehicleOptions: string[];
 }) {
+  const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "order" | "ledger">("overview");
   const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
   const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
@@ -8830,7 +8831,7 @@ function StoreDetail({
   return (
     <>
       <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/45" onClick={onClose} type="button" />
-      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[960px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[1360px] flex-col border-l border-slate-200 bg-white shadow-2xl">
         <header className="maju-card-header border-b px-4 py-4">
           {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
               오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
@@ -8841,6 +8842,7 @@ function StoreDetail({
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                <span className="rounded-md bg-violet-700 px-2 py-1 text-[11px] font-black text-white">거래처</span>
                 <h3 className="truncate text-2xl font-black text-slate-950">{draftName}</h3>
                 <span className={gradeBadgeClass(draftGrade)}>{draftGrade}</span>
                 <span className={businessStatusClass(draftBusinessStatus)}>{getBusinessStatusLabel(draftBusinessStatus)}</span>
@@ -8854,6 +8856,10 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
+                {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
+                <span className="ml-1 text-[10px] font-bold text-amber-700">단계 저장 미연결</span>
+              </div>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
               {relationshipStatusError ? <p className="mt-2 text-xs font-black text-rose-600">{relationshipStatusError}</p> : null}
@@ -8893,8 +8899,26 @@ function StoreDetail({
           </div>
         </header>
 
+        <section aria-label="연락하기" className="border-b border-slate-200 bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {draftPhone ? <a className="maju-button-primary inline-flex h-11 items-center gap-2 px-4 text-sm" href={`sms:${draftPhone.replace(/[^0-9+]/g, "")}`}><MessageCircle className="h-4 w-4" />문자 보내기 · 휴대폰</a> : null}
+            {draftPhone ? <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`tel:${draftPhone.replace(/[^0-9+]/g, "")}`}><Phone className="h-4 w-4" />매장전화</a> : null}
+            {draftEmail ? <a className="maju-button-secondary inline-flex h-11 items-center px-3 text-sm" href={`mailto:${draftEmail}`}>이메일</a> : null}
+            <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`https://map.kakao.com/link/search/${encodeURIComponent(draftAddress || draftName)}`} rel="noreferrer" target="_blank"><Navigation className="h-4 w-4" />방문 길안내</a>
+            <span className="ml-auto text-xs font-bold text-slate-500">추천 · <b className="text-teal-700">{draftPhone ? "오늘 문자로 단가표 보내기" : "연락처 먼저 보강"}</b></span>
+          </div>
+        </section>
+
+        <nav aria-label="매장 정보 탭" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
+          {([
+            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문 (준비 중)"], ["ledger", "매출 원장 (준비 중)"]
+          ] as const).map(([value, label]) => (
+            <button className={`h-11 shrink-0 border-b-[3px] px-3 text-sm font-black ${detailTab === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500"}`} key={value} onClick={() => setDetailTab(value)} type="button">{label}</button>
+          ))}
+        </nav>
+
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-4">
-          <div className="space-y-5">
+          {detailTab === "overview" ? <div className="space-y-5">
               <CollapsibleSection defaultOpen title="기본 정보">
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
@@ -9245,7 +9269,48 @@ function StoreDetail({
                   ))}
                 </div>
               </CollapsibleSection>
-          </div>
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">수정 기록</h4>
+                <p className="mt-2 rounded-lg bg-slate-50 p-3 text-xs font-bold leading-5 text-slate-500">권한별 이전→이후 감사 로그는 SQL 적용 전이라 읽기 미연결 상태입니다. 실제 기록이 연결되기 전에는 예시 데이터를 표시하지 않습니다.</p>
+              </section>
+          </div> : null}
+
+          {detailTab === "delivery" ? (
+            <div className="mx-auto max-w-5xl space-y-3">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
+                <span>기간 <b className="text-slate-950">최근 30일</b></span><span>·</span><span>{draftDeliveryVehicleName || "차량 미배정"}</span><span>·</span><span>{draftDeliveryDriver || "기사 미배정"}</span>
+              </div>
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">배송·반품 기록</h4>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <MetricRow icon={<Navigation className="h-4 w-4" />} label="거리" value={formatDistanceKmLabel(store.distanceKm)} />
+                  <MetricRow icon={<Clock className="h-4 w-4" />} label="출발지 기준 시간" value={formatMinutes(store.durationMinutes || 0)} />
+                  <MetricRow icon={<CalendarDays className="h-4 w-4" />} label="방문순서" value={`${store.order}번째`} />
+                  <MetricRow label="경로출처" value={getProviderLabel(store.routeProvider)} />
+                </div>
+                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-800">배송 완료·반품·파손 사진 원장은 SQL 의존 영역으로 현재 읽기 미연결입니다. 연결 전까지 기록 생성·다운로드 기능은 OFF입니다.</p>
+              </section>
+            </div>
+          ) : null}
+
+          {detailTab === "sales" ? (
+            <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[1fr_320px]">
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h4 className="text-sm font-black text-slate-950">영업 기록</h4>
+                <textarea className="mt-3 min-h-24 w-full rounded-lg border border-slate-200 p-3 text-sm font-bold outline-none focus:border-teal-400" onChange={(event) => setHistoryMemo(event.target.value)} placeholder="통화·방문 결과와 다음 연락 일정을 남기세요." value={historyMemo} />
+                <button className="maju-button-primary mt-2 h-10 w-full text-sm" onClick={() => { const memo = historyMemo.trim(); if (!memo) return; onWriteHistory(store.id, memo); setHistoryMemo(""); }} type="button">결과 저장</button>
+                <div className="mt-4 space-y-2">{history.length ? history.map((item) => <article className="rounded-lg border border-slate-200 p-3" key={item.id}><p className="text-xs font-black text-slate-400">{item.recordedAt}</p><p className="mt-1 text-sm font-bold text-slate-700"><LinkifiedText text={item.memo} /></p></article>) : <p className="rounded-lg bg-slate-50 p-4 text-sm font-bold text-slate-400">아직 영업 기록이 없습니다.</p>}</div>
+              </section>
+              <aside className="space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-sm font-black">결과 남기기</h4><p className="mt-2 text-xs font-bold leading-5 text-slate-500">부재·관심·견적 전달·재연락·계약·거절 단계의 구조화 저장은 SQL 적용 전이라 기능 OFF입니다. 현재는 왼쪽 메모 기록을 사용하세요.</p></div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-sm font-black">담당</h4><p className="mt-2 text-sm font-bold text-slate-700">{draftDeliveryDriver || "담당자 미지정"}</p></div>
+              </aside>
+            </div>
+          ) : null}
+
+          {detailTab === "order" || detailTab === "ledger" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-black text-slate-950">{detailTab === "order" ? "주문" : "매출 원장"} 연결 준비 중</h4><p className="mt-2 text-sm font-bold text-slate-500">같은 매장 ID에 연결할 SQL 원장이 아직 적용되지 않아 읽기·쓰기를 모두 OFF로 유지합니다.</p></div>
+          ) : null}
         </div>
       </aside>
     </>
