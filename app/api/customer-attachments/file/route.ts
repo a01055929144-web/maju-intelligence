@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerAssignmentKeys, getRequestAuthScope } from "@/lib/auth";
+import { isOutsideSensitiveWorkSession } from "@/domains/organization/sensitive-access-log";
 import { canAccessAssignedCustomer, createCustomerAttachmentSignedUrl, getCustomerAttachmentOwnerByStoragePath } from "@/lib/store";
 import { isActiveSensitiveAccessActor, recordSensitiveAccessLog, sensitiveAccessLogsEnabled } from "@/lib/store/07-sensitive-access-logs";
 
@@ -59,7 +60,8 @@ export async function GET(request: NextRequest) {
           deviceLabel: (request.headers.get("user-agent") || "알 수 없는 기기").replace(/[\r\n]/g, " ").slice(0, 160),
           item: "business_registration",
           pagePath: "/api/customer-attachments/file",
-          storeId: attachment.customerId
+          storeId: attachment.customerId,
+          warningCodes: isOutsideSensitiveWorkSession(scope.customerSession.workspaceRole) ? ["outside_work_session"] : []
         });
         if (!recorded) return NextResponse.json({ message: "사업자등록증 서버 열람 기능이 비활성화됐습니다." }, { headers: noStoreHeaders, status: 503 });
       } catch {

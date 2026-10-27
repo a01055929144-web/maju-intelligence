@@ -204,7 +204,7 @@ export type CustomerMasterItem = {
   loadingPosition?: string;
   accessMethodType?: string;
   accessNote?: string;
-  accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -257,6 +257,7 @@ export type CustomerMasterInput = {
   accessMethodType?: string;
   accessNote?: string;
   accessPassword?: string;
+  hasAccessPassword?: boolean;
   businessHours?: string;
   menuSummary?: string;
   naverPlaceUrl?: string;
@@ -11801,7 +11802,7 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
         loadingPosition: customer.loadingPosition,
         accessMethodType: customer.accessMethodType,
         accessNote: customer.accessNote,
-        accessPassword: customer.accessPassword,
+        hasAccessPassword: customer.hasAccessPassword,
         businessHours: customer.businessHours,
         menuSummary: customer.menuSummary,
         naverPlaceUrl: customer.naverPlaceUrl,
@@ -14423,7 +14424,7 @@ function toCustomerMasterItem(
     loadingPosition: row.loading_position || undefined,
     accessMethodType: row.access_method_type || undefined,
     accessNote: row.access_note || undefined,
-    accessPassword: row.access_password || undefined,
+    hasAccessPassword: Boolean(row.access_password),
     businessHours: row.business_hours || undefined,
     menuSummary: row.menu_summary || undefined,
     googleMapUrl: row.google_map_url || undefined,

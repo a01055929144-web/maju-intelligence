@@ -45,3 +45,9 @@ export function normalizeSensitiveAccessItem(value: unknown): SensitiveAccessIte
 export function normalizeSensitiveAccessWarning(value: unknown): SensitiveAccessWarningCode | undefined {
   return SENSITIVE_ACCESS_WARNING_CODES.find((warning) => warning === value);
 }
+
+export function isOutsideSensitiveWorkSession(role: string, now = new Date()) {
+  if (role === "owner" || role === "manager") return false;
+  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "2-digit", hour12: false, timeZone: "Asia/Seoul" }).format(now));
+  return hour < 6 || hour >= 22;
+}

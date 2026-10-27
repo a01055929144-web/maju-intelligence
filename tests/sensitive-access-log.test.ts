@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorizeSensitiveAccessLogRead, isOwnerMembershipRole, normalizeSensitiveAccessItem, normalizeSensitiveAccessWarning } from "../domains/organization/sensitive-access-log";
+import { authorizeSensitiveAccessLogRead, isOutsideSensitiveWorkSession, isOwnerMembershipRole, normalizeSensitiveAccessItem, normalizeSensitiveAccessWarning } from "../domains/organization/sensitive-access-log";
 
 describe("sensitive access log authorization", () => {
   it("allows only an active company owner", () => {
@@ -61,9 +61,26 @@ describe("sensitive access log authorization", () => {
     expect(exportRoute.indexOf("await recordSensitiveAccessLog({")).toBeLessThan(exportRoute.indexOf("return new NextResponse(csv"));
     expect(exportRoute).toContain('warningCodes: ["export"]');
     expect(exportRoute).toContain('status: 403');
-    expect(exportRoute).toContain("latest-200");
+    expect(exportRoute).toContain("for (let offset = 0; ; offset += pageSize)");
     expect(revealStore).toContain("canAccessAssignedCustomer");
     expect(revealStore).toContain("isCustomerOnTodayRouteForDriver");
     expect(revealStore).toContain('warningCodes.push("unassigned")');
+  });
+
+  it("marks non-manager access outside the 06:00-22:00 KST operating window", () => {
+    expect(isOutsideSensitiveWorkSession("staff", new Date("2026-10-26T20:59:00Z"))).toBe(true);
+    expect(isOutsideSensitiveWorkSession("staff", new Date("2026-10-26T13:00:00Z"))).toBe(true);
+    expect(isOutsideSensitiveWorkSession("staff", new Date("2026-10-26T00:00:00Z"))).toBe(false);
+    expect(isOutsideSensitiveWorkSession("owner", new Date("2026-10-26T20:59:00Z"))).toBe(false);
+  });
+
+  it("does not serialize access-password plaintext into customer or route responses", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const store = await readFile("lib/store.ts", "utf8");
+    const workspace = await readFile("components/sales-route-map-workspace.tsx", "utf8");
+    expect(store).toContain("hasAccessPassword: Boolean(row.access_password)");
+    expect(store).not.toContain("accessPassword: row.access_password");
+    expect(workspace).toContain("/sensitive/access-password/reveal");
+    expect(workspace).not.toContain("showAccessPassword ? store.accessPassword");
   });
 });

@@ -22,7 +22,13 @@ export async function GET() {
   }
 
   try {
-    const records = await listSensitiveAccessLogs(session.companyId, { includeHidden: true });
+    const records: Awaited<ReturnType<typeof listSensitiveAccessLogs>> = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await listSensitiveAccessLogs(session.companyId, { includeHidden: true }, { limit: pageSize, offset });
+      records.push(...page);
+      if (page.length < pageSize) break;
+    }
     const header = ["시각", "사용자", "역할", "매장", "항목", "기기", "경로", "주의", "숨김시각"];
     const rows = records.map((record) => [record.accessedAt, record.actorName, record.actorRole, record.storeName, record.item, record.deviceLabel, record.pagePath, record.warningCodes.join("|"), record.hiddenAt || ""]);
     const csv = `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
@@ -42,7 +48,7 @@ export async function GET() {
     return new NextResponse(csv, {
       headers: {
         ...noStoreHeaders,
-        "Content-Disposition": 'attachment; filename="sensitive-access-logs-latest-200.csv"',
+        "Content-Disposition": 'attachment; filename="sensitive-access-logs.csv"',
         "Content-Type": "text/csv; charset=utf-8"
       }
     });

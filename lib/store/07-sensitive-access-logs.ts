@@ -2,6 +2,7 @@ import {
   normalizeSensitiveAccessItem,
   normalizeSensitiveAccessWarning,
   isOwnerMembershipRole,
+  isOutsideSensitiveWorkSession,
   type SensitiveAccessItem,
   type SensitiveAccessLog,
   type SensitiveAccessLogFilters,
@@ -75,12 +76,15 @@ function mapLog(row: SensitiveAccessLogRow): SensitiveAccessLog {
   };
 }
 
-export async function listSensitiveAccessLogs(companyId: string, filters: SensitiveAccessLogFilters = {}) {
+export async function listSensitiveAccessLogs(companyId: string, filters: SensitiveAccessLogFilters = {}, page: { limit?: number; offset?: number } = {}) {
+  const limit = Math.max(1, Math.min(500, Math.floor(page.limit || 200)));
+  const offset = Math.max(0, Math.floor(page.offset || 0));
   const query = new URLSearchParams({
     select: "id,actor_name,actor_role,store_name,item_type,device_label,page_path,warning_codes,accessed_at,hidden_at",
     company_id: `eq.${companyId}`,
     order: "accessed_at.desc",
-    limit: "200"
+    limit: String(limit),
+    offset: String(offset)
   });
   if (!filters.includeHidden) query.set("hidden_at", "is.null");
   if (filters.from) query.set("accessed_at", `gte.${filters.from}`);
@@ -189,6 +193,7 @@ export async function revealAccessPasswordForMember(input: {
   const warningCodes: SensitiveAccessWarningCode[] = [];
   if (canOverrideAssignment && customer.assigned_staff_member_id && customer.assigned_staff_member_id !== member.id) warningCodes.push("unassigned");
   if (!canOverrideAssignment && hasTodayRouteAccess && !hasAssignmentAccess) warningCodes.push("unassigned");
+  if (isOutsideSensitiveWorkSession(permissionRole)) warningCodes.push("outside_work_session");
   if (recentLogs.length >= 19) warningCodes.push("daily_20_plus");
 
   // Fail closed: the value is returned only after the audit INSERT succeeds.

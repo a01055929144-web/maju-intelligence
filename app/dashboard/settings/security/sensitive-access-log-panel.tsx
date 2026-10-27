@@ -56,7 +56,7 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = "sensitive-access-logs-latest-200.csv";
+    link.download = "sensitive-access-logs.csv";
     link.click();
     URL.revokeObjectURL(url);
     setLoading(false);
@@ -73,7 +73,7 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
       {!enabled ? (
         <div className="m-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
           <p className="font-black">서버 경유 열람 준비 완료 · 운영 승인 대기</p>
-          <p className="mt-1">출입 비밀번호 reveal API는 최신 권한 재검증 → 감사 선기록 → 값 반환 순서로 준비됐습니다. 기존 화면의 원문 전달 제거와 N3 SQL 운영 검증 전까지 조회·기록·민감값 열람 기능은 모두 꺼져 있습니다.</p>
+          <p className="mt-1">출입 비밀번호는 목록에 원문을 싣지 않고 보기 요청 때 최신 권한 재검증 → 감사 선기록 → 값 반환 순서로 동작합니다. 운영 검증과 별도 활성화 승인 전까지 조회·기록·민감값 열람 기능은 모두 꺼져 있습니다.</p>
         </div>
       ) : (
         <>
@@ -82,7 +82,7 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
             <select aria-label="민감정보 항목" className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setItem(event.target.value)} value={item}><option value="">모든 항목</option>{SENSITIVE_ACCESS_ITEMS.map((value) => <option key={value} value={value}>{itemLabels[value]}</option>)}</select>
             <select aria-label="주의 유형" className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setWarning(event.target.value)} value={warning}><option value="">모든 주의</option>{SENSITIVE_ACCESS_WARNING_CODES.map((value) => <option key={value} value={value}>{warningLabels[value]}</option>)}</select>
             <Button disabled={loading} onClick={loadRecords} type="button">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}조회</Button>
-            <Button disabled={loading} onClick={exportRecords} type="button" variant="outline"><Download className="h-4 w-4" />최근 200건 내보내기</Button>
+            <Button disabled={loading} onClick={exportRecords} type="button" variant="outline"><Download className="h-4 w-4" />전체 기록 내보내기</Button>
             <label className="flex items-center gap-2 text-sm font-bold text-slate-600 md:col-span-5"><input checked={includeHidden} onChange={(event) => setIncludeHidden(event.target.checked)} type="checkbox" />숨긴 기록 보기</label>
           </div>
           {message ? <p aria-live="polite" className="mx-4 mt-4 rounded-md bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">{message}</p> : null}
