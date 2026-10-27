@@ -1,5 +1,7 @@
 -- 검토용 초안. Claude 검토와 대표 승인 전 운영 DB 실행 금지.
 -- 전제: 20261026223523_delivery_sales_structure_20261027 적용 완료.
+-- 2026-10-27 22:45 운영 읽기 전용 점검: 필요한 컬럼 31개 모두 존재, delivery_events_customer_note_uq 존재,
+--   두 함수는 아직 없음. 멱등 인덱스는 note_type 조건 없는 부분 인덱스라 DO UPDATE에 note_type 가드를 추가함.
 --
 -- 검토 체크리스트
 -- 1. 함수 서명은 아래 REVOKE/GRANT의 서명과 반드시 일치한다.
@@ -40,7 +42,11 @@ begin
   values (p_company_id, p_customer_id, 'delivery', p_memo, nullif(btrim(p_actor_name), ''), p_idempotency_key)
   on conflict (company_id, customer_id, idempotency_key) where note_type = 'delivery' and idempotency_key is not null
   do update set memo = excluded.memo
+    -- 운영 인덱스 uq_customer_notes_delivery_idempotency는 note_type 조건 없이 (idempotency_key is not null)만 걸려 있어
+    -- 같은 키의 배송 외 메모와 충돌할 수 있습니다. 배송 메모일 때만 갱신하고, 아니면 아래에서 오류로 멈춥니다.
+    where public.customer_notes.note_type = 'delivery'
   returning id into v_note_id;
+  if v_note_id is null then raise exception 'idempotency_key_conflict'; end if;
 
   insert into public.delivery_events(
     company_id, customer_id, customer_note_id, recorded_by_user_id, recorded_by_name,
