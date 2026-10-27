@@ -23,6 +23,7 @@ import {
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
+import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -1767,6 +1768,23 @@ export async function getCustomerLoginCredentials(email: string): Promise<Custom
     console.error("Customer credential lookup fallback:", error);
     return fallbackCustomerCredentials();
   }
+}
+
+export async function isActiveLegacyOwnerSession(input: { companyId: string; email: string }): Promise<boolean> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  if (!normalizedEmail || !input.companyId) return false;
+  if (!isProductionStoreConfigured()) {
+    const fallback = getFallbackAuthCredentials();
+    return fallback.customerEmail.toLowerCase() === normalizedEmail && fallback.customerCompanyId === input.companyId;
+  }
+  const credentialRows = await supabaseRequest<Array<{ customer_company_id: string; customer_email: string }>>(
+    `auth_credentials?select=customer_company_id,customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}&customer_email=eq.${encodeURIComponent(normalizedEmail)}&limit=1`
+  );
+  if (!credentialRows[0]) return false;
+  const companyRows = await supabaseRequest<Array<{ id: string; status: string | null }>>(
+    `companies?select=id,status&id=eq.${encodeURIComponent(input.companyId)}&limit=1`
+  );
+  return Boolean(companyRows[0] && ["active", "fallback"].includes(companyRows[0].status || ""));
 }
 
 export async function updateCustomerUserLastLogin(userId: string, provider = "password"): Promise<void> {
@@ -8737,14 +8755,21 @@ export async function ingestPermitLeadRows(
     eligibleRows.map((row) => normalizeBusinessNumber(row.businessNumber || "")).filter(Boolean)
   ));
 
-  const [existingCustomerRows, areaLeadRows, businessNumberLeadRows, existingSourceRows] = await Promise.all([
+  const [existingCustomerRows, areaLeadRows, businessNumberLeadRows, existingSourceRows, doNotContactRows] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string; business_registration_number: string | null; address: string | null; phone: string | null }>>(
       `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}`
     ).catch(() => []),
     listExistingCanonicalLeadRows(companyId, ingestAreas),
     listExistingLeadsByBusinessNumbers(companyId, ingestBusinessNumbers),
-    listExistingLeadSourceRows(companyId)
+    listExistingLeadSourceRows(companyId),
+    supabaseRequest<Array<{ channel: string; normalized_value: string; source_lead_id: string | null }>>(
+      `company_do_not_contact?select=channel,normalized_value,source_lead_id&company_id=eq.${encodeURIComponent(companyId)}&released_at=is.null`
+    ).catch(() => [])
   ]);
+  const blockedLeadIds = new Set(doNotContactRows.flatMap((item) => item.source_lead_id ? [item.source_lead_id] : []));
+  const blockedSmsValues = new Set(doNotContactRows
+    .filter((item) => item.channel === "sms")
+    .map((item) => item.normalized_value));
   const existingLeadRows = Array.from(
     new Map([...areaLeadRows, ...businessNumberLeadRows].map((row) => [row.id, row])).values()
   );
@@ -8939,7 +8964,9 @@ export async function ingestPermitLeadRows(
     });
     const isNewTemporaryOperation = !existingId && temporaryOperation.isTemporary;
     const isNewTemporaryOperationSuspected = !existingId && temporaryOperation.isSuspected;
-    const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation;
+    const normalizedPhone = normalizeDoNotContactValue("sms", existingLead?.phone || row.phone);
+    const isContactBlocked = Boolean((existingId && blockedLeadIds.has(existingId)) || (normalizedPhone && blockedSmsValues.has(normalizedPhone)));
+    const excluded = !isActive || !classification.isTarget || isDuplicate || isNewTemporaryOperation || isContactBlocked;
     const isOwnershipChange = Boolean(placeMatchedLead && !safePlaceMatchedLead);
     if (isOwnershipChange) result.ownershipChange += 1;
     if (existingLead && !(existingLead.source_list || []).includes(source)) {
@@ -8975,7 +9002,9 @@ export async function ingestPermitLeadRows(
       matched_customer_method: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).method : null,
       matched_customer_confidence: duplicateMatch ? getLeadCustomerMatchAudit(duplicateMatch.reason).confidence : null,
       is_duplicate: isDuplicate,
-      exclude_reason: isNewTemporaryOperation
+      exclude_reason: isContactBlocked
+        ? "연락 거부 등록"
+        : isNewTemporaryOperation
         ? "임시 영업"
         : !isActive
         ? "폐업·휴업 등 비활성 상태"
@@ -8984,7 +9013,7 @@ export async function ingestPermitLeadRows(
           : isDuplicate
             ? `이미 등록된 거래처(${duplicateMatch?.reason || "중복 일치"})`
             : null,
-      status: resolveTemporaryLeadIngestStatus({
+      status: isContactBlocked ? "제외" : resolveTemporaryLeadIngestStatus({
         excluded,
         isOwnershipChange,
         isSuspected: isNewTemporaryOperationSuspected,
@@ -10594,6 +10623,154 @@ async function recordLeadEnrichmentEvent(input: {
       console.error("lead enrichment event write failed:", error);
     }
   }
+}
+
+export async function recordLeadSourceDisclosureAudit(
+  companyId: string,
+  leadId: string,
+  context: { actorName?: string; actorUserId?: string }
+): Promise<boolean> {
+  const lead = await getPermitLeadIdentityForCompany(companyId, leadId);
+  if (!lead) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      actor_name: context.actorName || null,
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "source_disclosure",
+      result: "출처 안내 문구 복사",
+      memo: `${lead.businessName} 리드의 정보 출처 안내 문구를 복사했습니다.`
+    })
+  });
+  if (!rows[0]?.id) throw new Error("출처 안내 감사 기록 저장을 확인하지 못했습니다.");
+  return true;
+}
+
+export async function hasSalesOutreachPolicyAcknowledgement(companyId: string, actorSubject: string, policyVersion: string): Promise<boolean> {
+  if (!isProductionStoreConfigured()) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `sales_outreach_policy_acknowledgements?select=id&company_id=eq.${encodeURIComponent(companyId)}&actor_subject=eq.${encodeURIComponent(actorSubject)}&policy_version=eq.${encodeURIComponent(policyVersion)}&limit=1`
+  );
+  return Boolean(rows[0]?.id);
+}
+
+export async function acknowledgeSalesOutreachPolicy(input: {
+  actorKind: "app_user" | "legacy_owner";
+  actorSubject: string;
+  companyId: string;
+  policyVersion: string;
+  roleAtAck: string;
+  surface: "pc" | "mobile" | "admin_assisted";
+  userId?: string;
+}): Promise<boolean> {
+  if (!isProductionStoreConfigured()) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    "sales_outreach_policy_acknowledgements?on_conflict=company_id,actor_subject,policy_version&select=id",
+    {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        actor_kind: input.actorKind,
+        actor_subject: input.actorSubject,
+        company_id: input.companyId,
+        policy_version: input.policyVersion,
+        role_at_ack: input.roleAtAck,
+        surface: input.surface,
+        user_id: input.userId || null
+      })
+    }
+  );
+  if (!rows[0]?.id) throw new Error("영업 수칙 확인 저장을 확인하지 못했습니다.");
+  return true;
+}
+
+export const LEAD_DNC_WRITE_ENABLED = process.env.LEAD_DNC_WRITE_ENABLED === "true";
+
+export async function registerLeadDoNotContact(input: {
+  actorName?: string;
+  actorUserId?: string;
+  channel: "sms" | "instagram" | "talktalk" | "email" | "fax" | "visit";
+  companyId: string;
+  leadId: string;
+  normalizedValue: string;
+  reason?: string;
+}): Promise<boolean> {
+  if (!LEAD_DNC_WRITE_ENABLED) throw new Error("연락 거부 원자 저장 기능이 아직 활성화되지 않았습니다.");
+  const rows = await supabaseRequest<boolean>("rpc/register_lead_do_not_contact", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_name: input.actorName || null,
+      p_actor_user_id: input.actorUserId || null,
+      p_channel: input.channel,
+      p_company_id: input.companyId,
+      p_lead_id: input.leadId,
+      p_contact_value: input.normalizedValue,
+      p_reason: input.reason || "연락 거부"
+    })
+  });
+  return rows === true;
+}
+
+export async function releaseLeadDoNotContact(input: {
+  actorKind: "app_user" | "legacy_owner";
+  actorName?: string;
+  actorUserId?: string;
+  companyId: string;
+  dncId: string;
+  releaseReason: string;
+}): Promise<boolean> {
+  if (!LEAD_DNC_WRITE_ENABLED) throw new Error("연락 거부 원자 저장 기능이 아직 활성화되지 않았습니다.");
+  const rows = await supabaseRequest<boolean>("rpc/release_lead_do_not_contact", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_kind: input.actorKind,
+      p_actor_name: input.actorName || null,
+      p_actor_user_id: input.actorUserId || null,
+      p_company_id: input.companyId,
+      p_dnc_id: input.dncId,
+      p_release_reason: input.releaseReason
+    })
+  });
+  return rows === true;
+}
+
+export async function listLeadContactFieldSources(companyId: string, leadId: string) {
+  if (!isProductionStoreConfigured()) return [];
+  return supabaseRequest<Array<{ collected_at: string; field_name: string; source_type: string }>>(
+    `lead_contact_field_sources?select=field_name,source_type,collected_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&order=collected_at.desc`
+  );
+}
+
+export const LEAD_FIELD_SOURCE_WRITE_ENABLED = process.env.LEAD_FIELD_SOURCE_WRITE_ENABLED === "true";
+
+export async function recordLeadContactFieldSource(input: {
+  collectedAt?: string;
+  companyId: string;
+  fieldName: "phone" | "email" | "fax" | "instagram_url" | "naver_talktalk_url" | "address" | "business_name";
+  leadId: string;
+  recordedBy?: string;
+  sourceReference?: string;
+  sourceType: "kakao" | "permit" | "manual" | "upload" | "naver_homepage" | "google" | "other";
+}) {
+  if (!LEAD_FIELD_SOURCE_WRITE_ENABLED) throw new Error("칸별 출처 쓰기가 아직 활성화되지 않았습니다.");
+  const lead = await getPermitLeadIdentityForCompany(input.companyId, input.leadId);
+  if (!lead) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_contact_field_sources?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      collected_at: input.collectedAt || new Date().toISOString(),
+      company_id: input.companyId,
+      field_name: input.fieldName,
+      lead_id: input.leadId,
+      recorded_by: input.recordedBy || null,
+      source_reference: input.sourceReference || null,
+      source_type: input.sourceType
+    })
+  });
+  return Boolean(rows[0]?.id);
 }
 
 /** 인스타 후보 찾기 등 한 리드의 기본 정보만 필요할 때 씁니다. 다른 회사 리드는 돌려주지 않습니다. */
