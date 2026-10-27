@@ -117,11 +117,19 @@ begin
     select distinct lead_id from public.lead_actions
     where company_id=p_company_id and metadata->>'event_type'='do_not_contact'
       and metadata->>'dnc_id'=p_dnc_id::text
+  ), cycle_start as (
+    select impacted.lead_id,max(action.created_at) as last_restored_at
+    from impacted left join public.lead_actions action on action.company_id=p_company_id
+      and action.lead_id=impacted.lead_id
+      and action.metadata->>'event_type'='do_not_contact_release'
+      and action.metadata->>'restored_status'='true'
+    group by impacted.lead_id
   ), original_change as (
     select distinct on (action.lead_id) action.lead_id,action.metadata
-    from public.lead_actions action join impacted on impacted.lead_id=action.lead_id
+    from public.lead_actions action join cycle_start on cycle_start.lead_id=action.lead_id
     where action.company_id=p_company_id and action.metadata->>'event_type'='do_not_contact'
       and action.metadata->>'changed_status'='true'
+      and (cycle_start.last_restored_at is null or action.created_at>cycle_start.last_restored_at)
     order by action.lead_id,action.created_at asc
   ), restored as (
     update public.business_permit_leads lead set
@@ -140,9 +148,11 @@ begin
     returning lead.id
   )
   insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
-  select p_company_id,id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
+  select p_company_id,impacted.lead_id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
     jsonb_build_object('event_type','do_not_contact_release','actor_user_id',p_actor_user_id,
-      'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked) from restored;
+      'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked,
+      'restored_status',(restored.id is not null))
+  from impacted left join restored on restored.id=impacted.lead_id;
   return true;
 end;
 $$;

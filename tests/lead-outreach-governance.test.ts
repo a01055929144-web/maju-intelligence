@@ -128,6 +128,10 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("with impacted as");
     expect(sql).toContain("join impacted on impacted.lead_id=action.lead_id");
     expect(sql).toContain("action.metadata->>'changed_status'='true'");
+    expect(sql).toContain("action.metadata->>'restored_status'='true'");
+    expect(sql).toContain("action.created_at>cycle_start.last_restored_at");
+    expect(sql).toContain("'restored_status',(restored.id is not null)");
+    expect(sql).toContain("from impacted left join restored on restored.id=impacted.lead_id");
     expect(sql).toContain("coalesce(permission_role,role) in ('owner','manager')");
     expect(route).toContain('scope.customerSession?.workspaceRole !== "owner"');
   });
