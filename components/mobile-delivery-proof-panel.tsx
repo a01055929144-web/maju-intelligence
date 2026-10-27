@@ -9,7 +9,7 @@ import { MessageTemplateManager } from "@/components/message-template-manager";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
-import { DELIVERY_ISSUE_CAUSES, DELIVERY_RECORD_TYPES, requiresDeliveryIssueCause, requiresDeliveryItems, type DeliveryIssueCause, type DeliveryRecordType } from "@/domains/delivery/issue-causes";
+import { DELIVERY_ACTIONS, DELIVERY_EVENT_STATUSES, DELIVERY_ISSUE_CAUSES, DELIVERY_OCCURRENCE_STAGES, DELIVERY_RECORD_TYPES, requiresDeliveryIssueCause, requiresDeliveryItems, type DeliveryAction, type DeliveryEventStatus, type DeliveryIssueCause, type DeliveryOccurrenceStage, type DeliveryRecordType } from "@/domains/delivery/issue-causes";
 
 type DeliveryStatus = DeliveryRecordType;
 type MessageChannel = "kakao" | "sms";
@@ -85,6 +85,11 @@ export function MobileDeliveryProofPanel({
   const [issueCause, setIssueCause] = useState<DeliveryIssueCause | "">("");
   const [itemName, setItemName] = useState("");
   const [itemQuantity, setItemQuantity] = useState("");
+  const [supplierName, setSupplierName] = useState("");
+  const [occurrenceStage, setOccurrenceStage] = useState<DeliveryOccurrenceStage | "">("");
+  const [deliveryAction, setDeliveryAction] = useState<DeliveryAction | "">("");
+  const [actionAmount, setActionAmount] = useState("");
+  const [eventStatus, setEventStatus] = useState<DeliveryEventStatus>("received");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState("");
@@ -124,7 +129,7 @@ export function MobileDeliveryProofPanel({
       other: deliveryIssueMessage
     }
   });
-  useUnsavedChangesWarning(Boolean(files.length || memo.trim() || manualRecipientPhone.trim() || deliveryStatus !== "arrived" || itemName.trim() || itemQuantity.trim() || issueCause));
+  useUnsavedChangesWarning(Boolean(files.length || memo.trim() || manualRecipientPhone.trim() || deliveryStatus !== "arrived" || itemName.trim() || itemQuantity.trim() || supplierName.trim() || issueCause || occurrenceStage || deliveryAction || actionAmount.trim() || eventStatus !== "received"));
 
   function handleFileSelect(selected: File[]) {
     const oversized = selected.find((file) => file.size > MAX_UPLOAD_SIZE_BYTES);
@@ -196,8 +201,15 @@ export function MobileDeliveryProofPanel({
       setFileError("원인 코드를 한 번 선택해 주세요.");
       return;
     }
+    if (deliveryAction === "deduction" && !actionAmount.trim()) {
+      setFileError("차감 금액을 입력해 주세요.");
+      return;
+    }
     const locationText = location ? "\n위치 확인: 배송 완료 시점에 확인됨" : "";
-    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}${itemName.trim() ? `\n품목·수량: ${itemName.trim()} · ${itemQuantity.trim()}` : ""}${issueCause ? `\n원인 코드: ${issueCause}` : ""}\n알림 방식: ${messageChannel === "kakao" ? "카카오 공유" : "SMS 자동/무료 수동"}${files.length ? `\n증빙 파일: ${files.map((file) => file.name).join(", ")}` : ""}${locationText}`;
+    const stageLabel = DELIVERY_OCCURRENCE_STAGES.find((item) => item.value === occurrenceStage)?.label;
+    const actionLabel = DELIVERY_ACTIONS.find((item) => item.value === deliveryAction)?.label;
+    const eventStatusLabel = DELIVERY_EVENT_STATUSES.find((item) => item.value === eventStatus)?.label;
+    const memoText = `${ownerMessage}\n\n배송 상태: ${deliveryStatusLabel(deliveryStatus)}${itemName.trim() ? `\n품목·수량: ${itemName.trim()} · ${itemQuantity.trim()}` : ""}${supplierName.trim() ? `\n공급처: ${supplierName.trim()}` : ""}${issueCause ? `\n원인 코드: ${issueCause}` : ""}${stageLabel ? `\n발생 단계: ${stageLabel}` : ""}${actionLabel ? `\n조치: ${actionLabel}${deliveryAction === "deduction" && actionAmount.trim() ? ` · ${actionAmount.trim()}원` : ""}` : ""}${requiresDeliveryItems(deliveryStatus) && eventStatusLabel ? `\n처리 상태: ${eventStatusLabel}` : ""}\n알림 방식: ${messageChannel === "kakao" ? "카카오 공유" : "SMS 자동/무료 수동"}${files.length ? `\n증빙 파일: ${files.map((file) => file.name).join(", ")}` : ""}${locationText}`;
     const attemptKey = JSON.stringify([
       customerId,
       deliveryStatus,
@@ -313,6 +325,11 @@ export function MobileDeliveryProofPanel({
     setIssueCause("");
     setItemName("");
     setItemQuantity("");
+    setSupplierName("");
+    setOccurrenceStage("");
+    setDeliveryAction("");
+    setActionAmount("");
+    setEventStatus("received");
     setManualRecipientPhone("");
     saveProgressRef.current = null;
     setSaving(false);
@@ -481,6 +498,17 @@ export function MobileDeliveryProofPanel({
               {DELIVERY_ISSUE_CAUSES.map((cause) => <button className={`min-h-10 shrink-0 rounded-full border px-3 text-xs font-bold ${issueCause === cause ? "mobile-primary-action border-teal-700" : "mobile-card border-slate-200"}`} key={cause} onClick={() => setIssueCause(cause)} type="button">{cause}</button>)}
             </div>
           </fieldset> : null}
+
+          {requiresDeliveryItems(deliveryStatus) ? <details className="mobile-card mt-3 rounded-xl border p-3">
+            <summary className="cursor-pointer text-xs font-black">공급처 · 발생 단계 · 조치 · 처리 상태</summary>
+            <input aria-label="공급처" className="mobile-input mt-3 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setSupplierName(event.target.value)} placeholder="공급처명 (선택)" value={supplierName} />
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <select aria-label="발생 단계" className="mobile-input min-h-11 rounded-lg border px-2 text-sm" onChange={(event) => setOccurrenceStage(event.target.value as DeliveryOccurrenceStage | "")} value={occurrenceStage}><option value="">발생 단계</option>{DELIVERY_OCCURRENCE_STAGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+              <select aria-label="조치" className="mobile-input min-h-11 rounded-lg border px-2 text-sm" onChange={(event) => setDeliveryAction(event.target.value as DeliveryAction | "")} value={deliveryAction}><option value="">조치 선택</option>{DELIVERY_ACTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+            </div>
+            {deliveryAction === "deduction" ? <input aria-label="차감 금액" className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" inputMode="numeric" onChange={(event) => setActionAmount(event.target.value.replace(/[^0-9]/g, ""))} placeholder="차감 금액" value={actionAmount} /> : null}
+            <div aria-label="처리 상태" className="mt-2 grid grid-cols-3 gap-2">{DELIVERY_EVENT_STATUSES.map((item) => <button aria-pressed={eventStatus === item.value} className={`min-h-10 rounded-lg border text-xs font-bold ${eventStatus === item.value ? "mobile-primary-action" : "mobile-secondary-action"}`} key={item.value} onClick={() => setEventStatus(item.value)} type="button">{item.label}</button>)}</div>
+          </details> : null}
 
       <MessageTemplateManager compact mode="driver" onSelect={(body) => setMemo(body.replaceAll("{매장명}", customerName))} />
       <textarea

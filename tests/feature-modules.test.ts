@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   areHoldModulesEnabled,
+  areStructuredFieldRecordsEnabled,
   CORE_LEADS_HREF,
   isHoldModulePath,
   isLeadNativeAttachmentsEnabled,
@@ -22,6 +23,12 @@ describe("hold feature modules", () => {
   it("is hidden by default and enabled only for an allow-listed company", () => {
     expect(areHoldModulesEnabled("company-a", "")).toBe(false);
     expect(areHoldModulesEnabled("company-a", "company-b, company-a")).toBe(true);
+  });
+
+  it("keeps structured field records off until a company is explicitly enabled", () => {
+    expect(areStructuredFieldRecordsEnabled("company-a", "")).toBe(false);
+    expect(areStructuredFieldRecordsEnabled("company-a", "company-b, company-a")).toBe(true);
+    expect(areStructuredFieldRecordsEnabled(undefined, "company-a")).toBe(false);
   });
 
   it("routes legacy dashboard URLs to separated map and lead pages", () => {
