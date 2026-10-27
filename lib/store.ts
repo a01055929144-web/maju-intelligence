@@ -10603,7 +10603,7 @@ export async function registerLeadDoNotContact(input: {
       p_channel: input.channel,
       p_company_id: input.companyId,
       p_lead_id: input.leadId,
-      p_normalized_value: input.normalizedValue,
+      p_contact_value: input.normalizedValue,
       p_reason: input.reason || "연락 거부"
     })
   });

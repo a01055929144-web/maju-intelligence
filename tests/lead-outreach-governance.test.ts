@@ -102,6 +102,14 @@ describe("lead outreach governance", () => {
     expect(sql).not.toContain("actor_name, actor_user_id)");
     expect(sql).toContain("'exclude',\n    '제외'");
     expect(sql).toContain("'actor_user_id', p_actor_user_id");
+    expect(sql).not.toContain("'normalized_value',");
+    expect(sql).toContain("'masked_value',v_masked");
+    expect(sql).toContain("do nothing returning id into v_dnc_id");
+    expect(sql).toContain("status='active'");
+    expect(sql).toContain("regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized");
+    expect(sql).toContain("create or replace function public.release_lead_do_not_contact");
+    expect(sql).toContain("owner_or_manager_required");
+    expect(sql).toContain("release_reason_required");
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {

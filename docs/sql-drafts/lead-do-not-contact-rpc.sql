@@ -1,12 +1,12 @@
 -- Claude 검토용 초안. 운영 적용 금지.
--- 적용 전 SECURITY INVOKER, 테넌트 경계, 권한, 기존 데이터 충돌을 재검토한다.
+-- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
 begin;
 
 create or replace function public.register_lead_do_not_contact(
   p_company_id uuid,
   p_lead_id uuid,
   p_channel text,
-  p_normalized_value text,
+  p_contact_value text,
   p_reason text,
   p_actor_user_id uuid,
   p_actor_name text
@@ -15,13 +15,27 @@ language plpgsql
 security invoker
 set search_path = public
 as $$
+declare
+  v_dnc_id uuid;
+  v_normalized text;
+  v_masked text;
 begin
   if p_channel not in ('sms','instagram','talktalk','email','fax','visit') then
     raise exception 'invalid_channel';
   end if;
-  if nullif(btrim(p_normalized_value), '') is null then
-    raise exception 'normalized_value_required';
-  end if;
+  v_normalized := case p_channel
+    when 'sms' then regexp_replace(coalesce(p_contact_value, ''), '[^0-9]', '', 'g')
+    when 'fax' then regexp_replace(coalesce(p_contact_value, ''), '[^0-9]', '', 'g')
+    when 'email' then lower(regexp_replace(btrim(coalesce(p_contact_value, '')), '^mailto:', '', 'i'))
+    when 'instagram' then lower(regexp_replace(regexp_replace(btrim(coalesce(p_contact_value, '')), '^https?://(www\.)?instagram\.com/', '', 'i'), '/$', ''))
+    when 'talktalk' then lower(regexp_replace(btrim(coalesce(p_contact_value, '')), '/$', ''))
+    else lower(btrim(coalesce(p_contact_value, '')))
+  end;
+  if v_normalized = '' then raise exception 'contact_value_required'; end if;
+  if p_actor_user_id is not null and not exists (
+    select 1 from public.company_members
+    where company_id=p_company_id and user_id=p_actor_user_id and status='active'
+  ) then raise exception 'actor_not_active_company_member'; end if;
   if not exists (
     select 1 from public.business_permit_leads
     where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null
@@ -32,35 +46,66 @@ begin
   insert into public.company_do_not_contact (
     company_id, channel, normalized_value, reason, source_lead_id, blocked_by
   ) values (
-    p_company_id, p_channel, p_normalized_value, coalesce(nullif(btrim(p_reason), ''), '연락 거부'), p_lead_id, p_actor_user_id
+    p_company_id, p_channel, v_normalized, coalesce(nullif(btrim(p_reason), ''), '연락 거부'), p_lead_id, p_actor_user_id
   ) on conflict (company_id, channel, normalized_value) where released_at is null
-    do update set reason = excluded.reason, source_lead_id = excluded.source_lead_id,
-      blocked_by = excluded.blocked_by, blocked_at = now();
+    do nothing returning id into v_dnc_id;
+  if v_dnc_id is null then
+    select id into v_dnc_id from public.company_do_not_contact
+    where company_id=p_company_id and channel=p_channel and normalized_value=v_normalized and released_at is null;
+  end if;
+  v_masked := case when p_channel in ('sms','fax') then '***'||right(v_normalized,4)
+    when p_channel='email' then left(v_normalized,1)||'***@'||split_part(v_normalized,'@',2)
+    else '***'||right(v_normalized,4) end;
 
-  update public.business_permit_leads
-  set status = '제외', exclude_reason = '연락 거부 등록', next_action = '연락 금지', updated_at = now()
-  where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null;
+  with affected as (
+    update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
+    where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
+      or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
+      or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
+      or (p_channel='email' and lower(btrim(coalesce(email,'')))=v_normalized)
+      or (p_channel='instagram' and lower(regexp_replace(regexp_replace(btrim(coalesce(instagram_url,'')),'^https?://(www\.)?instagram\.com/','','i'),'/$',''))=v_normalized)
+      or (p_channel='talktalk' and lower(regexp_replace(btrim(coalesce(naver_talktalk_url,'')),'/$',''))=v_normalized))
+    returning id
+  )
+  insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
+  select p_company_id,id,'exclude','제외',coalesce(nullif(btrim(p_reason),''),'연락 거부'),p_actor_name,
+    jsonb_strip_nulls(jsonb_build_object('event_type','do_not_contact','actor_user_id',p_actor_user_id,
+      'dnc_id',v_dnc_id,'channel',p_channel,'masked_value',v_masked)) from affected;
+  return true;
+end;
+$$;
 
-  insert into public.lead_actions (company_id, lead_id, action_type, result, memo, actor_name, metadata)
-  values (
-    p_company_id,
-    p_lead_id,
-    'exclude',
-    '제외',
-    coalesce(nullif(btrim(p_reason), ''), '연락 거부'),
-    p_actor_name,
-    jsonb_strip_nulls(jsonb_build_object(
-      'event_type', 'do_not_contact',
-      'actor_user_id', p_actor_user_id,
-      'channel', p_channel,
-      'normalized_value', p_normalized_value
-    ))
-  );
+create or replace function public.release_lead_do_not_contact(
+  p_company_id uuid, p_dnc_id uuid, p_release_reason text, p_actor_user_id uuid, p_actor_name text
+) returns boolean
+language plpgsql security invoker set search_path = public
+as $$
+declare v_lead_id uuid; v_channel text; v_masked text;
+begin
+  if nullif(btrim(p_release_reason),'') is null then raise exception 'release_reason_required'; end if;
+  if p_actor_user_id is null or not exists (
+    select 1 from public.company_members
+    where company_id=p_company_id and user_id=p_actor_user_id and status='active'
+      and coalesce(permission_role,role) in ('owner','manager')
+  ) then raise exception 'owner_or_manager_required'; end if;
+  update public.company_do_not_contact
+  set released_at=now(),released_by=p_actor_user_id,release_reason=btrim(p_release_reason)
+  where id=p_dnc_id and company_id=p_company_id and released_at is null
+  returning source_lead_id,channel,'***'||right(normalized_value,4) into v_lead_id,v_channel,v_masked;
+  if not found then raise exception 'active_dnc_not_found'; end if;
+  if v_lead_id is not null then
+    insert into public.lead_actions (company_id,lead_id,action_type,result,memo,actor_name,metadata)
+    values (p_company_id,v_lead_id,'status','연락 거부 해제',btrim(p_release_reason),p_actor_name,
+      jsonb_build_object('event_type','do_not_contact_release','actor_user_id',p_actor_user_id,
+        'dnc_id',p_dnc_id,'channel',v_channel,'masked_value',v_masked));
+  end if;
   return true;
 end;
 $$;
 
 revoke all on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) from public, anon, authenticated;
+revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,uuid,text) from public, anon, authenticated;
 grant execute on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) to service_role;
+grant execute on function public.release_lead_do_not_contact(uuid,uuid,text,uuid,text) to service_role;
 
 commit;
