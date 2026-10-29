@@ -72,3 +72,6 @@
 ## 도메인 미분류(공용 인프라)
 
 특정 도메인 소유가 아니라 여러 도메인이 공유하는 인프라 함수: `isProductionStoreConfigured`, `mapWithConcurrency`, `getUploadHistory`, `getExcelMappingPreset`, `upsertExcelMappingPreset`, `deleteExcelMappingPreset`, `sendBusinessClosureAlerts`(customer+lead 교차).
+
+## pricing
+가격표 P0: domains/pricing/price-rules.ts → application/pricing/manage-price-sheets.ts → lib/pricing/price-sheet-repository.ts. 가격표 원가/마진은 회사 대표·관리자에게만 제공하며 공개 견적·계약 단가를 수정하지 않는다. SQL은 docs/sql-drafts/20261030-pricing-p0.sql 초안만 작성한다.
