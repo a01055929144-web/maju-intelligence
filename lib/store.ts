@@ -24,7 +24,7 @@ import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/le
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
-import { getStoreAreaSqmFilterBounds, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
+import { getStoreAreaSqmFilterBounds, mergePendingInsertStoreArea, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -9057,6 +9057,9 @@ export async function ingestPermitLeadRows(
         const pending = inserts[pendingIndex];
         pending.sourceRecords.push({ sourceRecordKey, row });
         if (!pending.payload.phone && row.phone) pending.payload.phone = row.phone;
+        if (process.env.LEAD_STORE_AREA_ENABLED === "true") {
+          pending.payload.store_area_sqm = mergePendingInsertStoreArea(pending.payload.store_area_sqm, row.storeAreaSqm);
+        }
       } else {
         pendingInsertByFingerprint.set(canonicalFingerprint, inserts.length);
         inserts.push({ payload: insertPayload, sourceRecords: [{ sourceRecordKey, row }] });

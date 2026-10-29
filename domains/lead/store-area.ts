@@ -38,6 +38,13 @@ export function storeAreaWriteFields(
   return storeAreaSqm === undefined ? {} : { store_area_sqm: storeAreaSqm };
 }
 
+export function mergePendingInsertStoreArea(
+  currentStoreAreaSqm: unknown,
+  incomingStoreAreaSqm: number | undefined
+): number | null {
+  return typeof currentStoreAreaSqm === "number" ? currentStoreAreaSqm : incomingStoreAreaSqm ?? null;
+}
+
 /**
  * 공공 인허가 원천의 소재지 면적은 ㎡ 단위로 취급합니다. 빈 문자열, 0/음수,
  * 숫자가 아닌 값과 명백한 이상치는 저장하지 않습니다.

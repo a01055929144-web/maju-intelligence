@@ -3,6 +3,7 @@ import {
   formatStoreAreaPyeong,
   getStoreAreaSqmFilterBounds,
   isStoreAreaInRange,
+  mergePendingInsertStoreArea,
   parseStoreAreaSqm,
   squareMetersToPyeong,
   storeAreaWriteFields
@@ -66,5 +67,11 @@ describe("lead store area", () => {
     expect(storeAreaWriteFields(undefined, "update", true)).toEqual({});
     expect(storeAreaWriteFields(66.12, "update", true)).toEqual({ store_area_sqm: 66.12 });
     expect(storeAreaWriteFields(66.12, "insert", false)).toEqual({});
+  });
+
+  it("fills a pending duplicate from a later area without overwriting an existing value", () => {
+    expect(mergePendingInsertStoreArea(null, 66.12)).toBe(66.12);
+    expect(mergePendingInsertStoreArea(null, undefined)).toBeNull();
+    expect(mergePendingInsertStoreArea(33.06, 66.12)).toBe(33.06);
   });
 });
