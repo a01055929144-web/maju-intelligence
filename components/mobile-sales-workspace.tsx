@@ -20,6 +20,7 @@ import { formatLeadBusinessHours } from "@/domains/lead/business-hours";
 import type { PermitLeadActionItem, PermitLeadItem } from "@/lib/store";
 import type { PermitLeadActionKind, PermitLeadActionResult } from "@/components/sales-route-map-workspace";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
+import { createStructuredSaveSnapshot, resolveStructuredSaveAttempt, type StructuredSaveAttempt } from "@/lib/structured-record-idempotency";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
@@ -69,7 +70,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
-  const structuredSaveKeyRef = useRef("");
+  const structuredSaveAttemptRef = useRef<StructuredSaveAttempt | null>(null);
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -199,7 +200,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setSalesPrice("");
     setSalesPriceValidUntil("");
     setImportantNote("");
-    structuredSaveKeyRef.current = "";
+    structuredSaveAttemptRef.current = null;
     try {
       const [historyResponse, structuredResponse] = await Promise.all([
         fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" }),
@@ -308,7 +309,12 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       salesPriceItem.trim() ? { itemName: salesPriceItem.trim(), offeredPrice: toNumericString(salesPrice) || undefined, currencyCode: "KRW", validUntil: salesPriceValidUntil || undefined } : null
     ].filter(Boolean);
     const usesStructuredOffer = structuredRecordsEnabled && structuredItems.length > 0;
-    if (usesStructuredOffer && !structuredSaveKeyRef.current) structuredSaveKeyRef.current = `sales:${crypto.randomUUID()}`;
+    const structuredSnapshot = usesStructuredOffer
+      ? createStructuredSaveSnapshot({ action: actionPayload, items: structuredItems, leadId: selected.id, memo: actionPayload.memo })
+      : "";
+    if (usesStructuredOffer) {
+      structuredSaveAttemptRef.current = resolveStructuredSaveAttempt(structuredSaveAttemptRef.current, structuredSnapshot);
+    }
     try {
       const response = await fetch(usesStructuredOffer ? "/api/customer/structured-field-records" : `/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
@@ -317,7 +323,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           kind: "lead_sales_offer",
           leadId: selected.id,
           memo: actionPayload.memo,
-          idempotencyKey: structuredSaveKeyRef.current,
+          idempotencyKey: structuredSaveAttemptRef.current?.key,
           action: actionPayload,
           items: structuredItems
         } : actionPayload)
@@ -328,7 +334,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: payload?.status || lead.status } : lead));
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
       try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 브라우저 저장 실패는 기록 저장을 막지 않습니다. */ }
-      structuredSaveKeyRef.current = "";
+      structuredSaveAttemptRef.current = null;
       if (usesStructuredOffer) {
         await openLead(selected);
         void loadLeads();
