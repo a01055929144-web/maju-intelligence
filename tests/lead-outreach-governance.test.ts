@@ -107,7 +107,9 @@ describe("lead outreach governance", () => {
     expect(sql).toMatch(/'masked_value'\s*,\s*v_masked/);
     expect(sql).toContain("do nothing returning id into v_dnc_id");
     expect(sql).toContain("status='active'");
-    expect(sql).toContain("regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized");
+    expect(sql).toContain("create or replace function public.normalize_dnc_value");
+    expect(sql).toContain("when 'sms' then phone when 'fax' then fax");
+    expect(sql).toContain("pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':dnc:'");
     expect(sql).toContain("create or replace function public.release_lead_do_not_contact");
     expect(sql).toContain("owner_or_manager_required");
     expect(sql).toContain("release_reason_required");
@@ -119,7 +121,8 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("legacy_owner_user_id_must_be_null");
     expect(sql).toContain("status in ('active','fallback')");
     expect(sql).toContain("join public.app_users app_user on app_user.id=member.user_id and app_user.status='active'");
-    expect(sql).toContain("left(v_normalized,3)||'-****-'||right(v_normalized,4)");
+    expect(sql).toContain("v_masked := public.mask_dnc_value(p_channel, v_normalized)");
+    expect(sql).toContain("when length(coalesce(p_value, '')) < 7 then '***'");
     expect(sql).toContain("'before_status',before_status");
     expect(sql).not.toContain("'before_next_action'");
     expect(sql).not.toContain("'before_exclude_reason'");

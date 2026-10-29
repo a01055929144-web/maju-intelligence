@@ -2,7 +2,47 @@
 -- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
 -- 해제 활성화 전제: 서버 DELETE route가 서명된 customer session의 company_id와 owner/manager 역할을 검증하고,
 -- legacy owner는 활성 legacy credential/company 연결을 DNC 전용 helper로 매 요청 재검증한다.
+-- 2026-10-29 Claude 보완(적용 전 필수):
+--  1) 값 정규화를 앱(domains/lead/outreach-governance.ts normalizeDoNotContactValue)과 같은 SQL 함수 하나로 통일
+--     (휴대폰 10xxxxxxxx → 010…, 인스타 @·주소·?igsh= 꼬리 제거 후 아이디만). 리드 쪽 값도 같은 함수로 비교.
+--  2) 같은 값 동시 등록·해제를 회사+채널+값 단위 트랜잭션 잠금으로 직렬화.
+--  3) 이미 막힌 값을 다시 등록해도 같은 dnc_id 기록이 있는 리드에는 영업 기록을 또 남기지 않음.
+--  4) 등록도 해제와 같이 활성 회사(active/fallback)만 허용.
+--  5) 가림 표시: 7자리 미만 값은 전부 가림(앞3+뒤4가 겹쳐 원래 값이 드러나는 문제).
 begin;
+
+create or replace function public.normalize_dnc_value(p_channel text, p_value text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select nullif(case p_channel
+    when 'sms' then (select case when d ~ '^10[0-9]{8}$' then '0' || d else d end
+                     from (select regexp_replace(coalesce(p_value, ''), '[^0-9]', '', 'g') as d) x)
+    when 'fax' then (select case when d ~ '^10[0-9]{8}$' then '0' || d else d end
+                     from (select regexp_replace(coalesce(p_value, ''), '[^0-9]', '', 'g') as d) x)
+    when 'email' then lower(regexp_replace(btrim(coalesce(p_value, '')), '^mailto:', '', 'i'))
+    when 'instagram' then lower(coalesce(
+      substring(btrim(coalesce(p_value, '')) from '(?i)instagram\.com/([A-Za-z0-9._]{1,30})'),
+      regexp_replace(regexp_replace(btrim(coalesce(p_value, '')), '^@', ''), '/$', '')))
+    when 'talktalk' then lower(regexp_replace(btrim(coalesce(p_value, '')), '/$', ''))
+    else lower(btrim(coalesce(p_value, '')))
+  end, '');
+$$;
+
+create or replace function public.mask_dnc_value(p_channel text, p_value text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when length(coalesce(p_value, '')) < 7 then '***'
+    when p_channel in ('sms','fax') then left(p_value, 3) || '-****-' || right(p_value, 4)
+    when p_channel = 'email' then left(p_value, 1) || '***@' || split_part(p_value, '@', 2)
+    else '***' || right(p_value, 4)
+  end;
+$$;
 
 create or replace function public.register_lead_do_not_contact(
   p_company_id uuid,
@@ -25,15 +65,12 @@ begin
   if p_channel not in ('sms','instagram','talktalk','email','fax','visit') then
     raise exception 'invalid_channel';
   end if;
-  v_normalized := case p_channel
-    when 'sms' then regexp_replace(coalesce(p_contact_value, ''), '[^0-9]', '', 'g')
-    when 'fax' then regexp_replace(coalesce(p_contact_value, ''), '[^0-9]', '', 'g')
-    when 'email' then lower(regexp_replace(btrim(coalesce(p_contact_value, '')), '^mailto:', '', 'i'))
-    when 'instagram' then lower(regexp_replace(regexp_replace(btrim(coalesce(p_contact_value, '')), '^https?://(www\.)?instagram\.com/', '', 'i'), '/$', ''))
-    when 'talktalk' then lower(regexp_replace(btrim(coalesce(p_contact_value, '')), '/$', ''))
-    else lower(btrim(coalesce(p_contact_value, '')))
-  end;
-  if v_normalized = '' then raise exception 'contact_value_required'; end if;
+  v_normalized := public.normalize_dnc_value(p_channel, p_contact_value);
+  if v_normalized is null then raise exception 'contact_value_required'; end if;
+  if not exists (select 1 from public.companies where id = p_company_id and status in ('active','fallback')) then
+    raise exception 'active_company_required';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':dnc:' || p_channel || ':' || v_normalized, 0));
   if p_actor_user_id is not null and not exists (
     select 1 from public.company_members
     where company_id=p_company_id and user_id=p_actor_user_id and status='active'
@@ -42,11 +79,9 @@ begin
     select 1 from public.business_permit_leads
     where company_id = p_company_id and id = p_lead_id and merged_into_lead_id is null and (
       p_channel='visit'
-      or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
-      or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
-      or (p_channel='email' and lower(btrim(coalesce(email,'')))=v_normalized)
-      or (p_channel='instagram' and lower(regexp_replace(regexp_replace(btrim(coalesce(instagram_url,'')),'^https?://(www\.)?instagram\.com/','','i'),'/$',''))=v_normalized)
-      or (p_channel='talktalk' and lower(regexp_replace(btrim(coalesce(naver_talktalk_url,'')),'/$',''))=v_normalized)
+      or public.normalize_dnc_value(p_channel, case p_channel
+           when 'sms' then phone when 'fax' then fax when 'email' then email
+           when 'instagram' then instagram_url when 'talktalk' then naver_talktalk_url end) = v_normalized
     )
   ) then
     raise exception 'contact_value_not_on_lead';
@@ -62,18 +97,20 @@ begin
     select id into v_dnc_id from public.company_do_not_contact
     where company_id=p_company_id and channel=p_channel and normalized_value=v_normalized and released_at is null;
   end if;
-  v_masked := case when p_channel in ('sms','fax') then left(v_normalized,3)||'-****-'||right(v_normalized,4)
-    when p_channel='email' then left(v_normalized,1)||'***@'||split_part(v_normalized,'@',2)
-    else '***'||right(v_normalized,4) end;
+  v_masked := public.mask_dnc_value(p_channel, v_normalized);
 
   with targets as (
     select id,status as before_status from public.business_permit_leads
     where company_id=p_company_id and merged_into_lead_id is null and (id=p_lead_id
-      or (p_channel='sms' and regexp_replace(coalesce(phone,''),'[^0-9]','','g')=v_normalized)
-      or (p_channel='fax' and regexp_replace(coalesce(fax,''),'[^0-9]','','g')=v_normalized)
-      or (p_channel='email' and lower(btrim(coalesce(email,'')))=v_normalized)
-      or (p_channel='instagram' and lower(regexp_replace(regexp_replace(btrim(coalesce(instagram_url,'')),'^https?://(www\.)?instagram\.com/','','i'),'/$',''))=v_normalized)
-      or (p_channel='talktalk' and lower(regexp_replace(btrim(coalesce(naver_talktalk_url,'')),'/$',''))=v_normalized))
+      or (p_channel<>'visit' and public.normalize_dnc_value(p_channel, case p_channel
+           when 'sms' then phone when 'fax' then fax when 'email' then email
+           when 'instagram' then instagram_url when 'talktalk' then naver_talktalk_url end) = v_normalized))
+      and not exists (
+        select 1 from public.lead_actions logged
+        where logged.company_id=p_company_id and logged.lead_id=business_permit_leads.id
+          and logged.metadata->>'event_type'='do_not_contact'
+          and logged.metadata->>'dnc_id'=v_dnc_id::text
+      )
   ), affected as (
     update public.business_permit_leads set status='제외',exclude_reason='연락 거부 등록',next_action='연락 금지',updated_at=now()
     where company_id=p_company_id and id in (select id from targets)
@@ -112,12 +149,13 @@ begin
     where member.company_id=p_company_id and member.user_id=p_actor_user_id and member.status='active'
       and coalesce(member.permission_role,member.role) in ('owner','manager')
   ) then raise exception 'owner_or_manager_required'; end if;
+  -- 같은 값의 동시 등록과 겹치지 않도록 등록과 같은 잠금 키를 잡습니다.
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':dnc:' || channel || ':' || normalized_value, 0))
+    from public.company_do_not_contact where id=p_dnc_id and company_id=p_company_id;
   update public.company_do_not_contact
   set released_at=now(),released_by=p_actor_user_id,release_reason=btrim(p_release_reason)
   where id=p_dnc_id and company_id=p_company_id and released_at is null
-  returning channel,case when channel in ('sms','fax') then left(normalized_value,3)||'-****-'||right(normalized_value,4)
-    when channel='email' then left(normalized_value,1)||'***@'||split_part(normalized_value,'@',2)
-    else '***'||right(normalized_value,4) end into v_channel,v_masked;
+  returning channel,public.mask_dnc_value(channel,normalized_value) into v_channel,v_masked;
   if not found then raise exception 'active_dnc_not_found'; end if;
   with impacted as (
     select distinct lead_id from public.lead_actions
@@ -162,6 +200,10 @@ begin
 end;
 $$;
 
+revoke all on function public.normalize_dnc_value(text,text) from public, anon, authenticated;
+revoke all on function public.mask_dnc_value(text,text) from public, anon, authenticated;
+grant execute on function public.normalize_dnc_value(text,text) to service_role;
+grant execute on function public.mask_dnc_value(text,text) to service_role;
 revoke all on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) from public, anon, authenticated;
 revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) from public, anon, authenticated;
 grant execute on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) to service_role;
