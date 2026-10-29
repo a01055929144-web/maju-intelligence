@@ -4,6 +4,8 @@ import { useEffect, type ReactNode } from "react";
 import { ExternalLink, Instagram, MessageCircle, Navigation } from "lucide-react";
 import { isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 
+const RELATIONSHIP_STAGE_OPTIONS = ["거래중", "거래종료"] as const;
+
 export function MapStoreDetailDrawer({ children, onClose }: { readonly children: ReactNode; readonly onClose: () => void }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
@@ -26,7 +28,7 @@ export function MapStoreDetailActions({ address, currentStage, email, name, onDm
       {email ? <a aria-label={`${name}에게 이메일 보내기`} className={actionClassName} href={`mailto:${email}`} title="이메일">이메일</a> : null}
       <button aria-label={`${name} DM 문안 준비`} className={actionClassName} onClick={onDm} title="DM 문안 준비" type="button"><Instagram aria-hidden="true" className="h-4 w-4" />DM 문안</button>
       <a aria-label={`${name} 길안내`} className={actionClassName} href={`https://map.kakao.com/link/search/${encodeURIComponent(address || name)}`} rel="noreferrer" target="_blank" title="길안내"><Navigation aria-hidden="true" className="h-4 w-4" />길안내</a>
-      <label className="sr-only" htmlFor="map-store-stage">영업 단계</label><select className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700" id="map-store-stage" onChange={(event) => onStageChange(event.target.value)} title="단계" value={currentStage}><option value="거래중">거래중</option><option value="거래종료">거래종료</option></select>
+      <label className="sr-only" htmlFor="map-store-stage">영업 단계</label><select className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700" id="map-store-stage" onChange={(event) => onStageChange(event.target.value)} title="단계" value={currentStage}>{RELATIONSHIP_STAGE_OPTIONS.some((stage) => stage === currentStage) ? null : <option value={currentStage}>{currentStage}</option>}{RELATIONSHIP_STAGE_OPTIONS.map((stage) => <option key={stage} value={stage}>{stage}</option>)}</select>
       <a aria-label={`${name} 새 창에서 열기`} className={`${actionClassName} ml-auto`} href={openHref} rel="noreferrer" target="_blank" title="새 창"><ExternalLink aria-hidden="true" className="h-4 w-4" />새 창</a>
     </div></section>
   );
