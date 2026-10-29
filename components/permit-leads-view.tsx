@@ -1372,93 +1372,29 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
 
   async function runLeadAction(lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string): Promise<PermitLeadActionResult> {
     setActionMessage("");
-    try {
-      const response = await fetchWithTimeout(
-        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actionType, followUpAt, result, memo })
-        },
-        12000
-      );
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = payload?.message || "처리에 실패했습니다.";
-        setActionMessage(message);
-        return { message, ok: false };
-      }
-      setActionMessage(`${lead.businessName} · "${payload.status}"로 갱신했습니다.`);
-      if (actionType === "exclude") {
-        setSelectedLead(null);
-        setSelectedLeadIntent("");
-      } else {
-        setSelectedLead((current) => (current?.id === lead.id ? { ...current, status: payload.status || current.status } : current));
-        setLeads((current) => current.map((item) => (item.id === lead.id ? { ...item, status: payload.status || item.status } : item)));
-      }
-      void loadLeads();
-      return { action: payload.action, ok: true, status: payload.status };
-    } catch {
-      const message = "네트워크 오류로 처리하지 못했습니다.";
-      setActionMessage(message);
-      return { message, ok: false };
+    const outcome = await requestPermitLeadAction(lead, actionType, result, memo, followUpAt);
+    if (!outcome.ok) {
+      setActionMessage(outcome.message || "처리에 실패했습니다.");
+      return outcome;
     }
+    setActionMessage(`${lead.businessName} · "${outcome.status}"로 갱신했습니다.`);
+    if (actionType === "exclude") {
+      setSelectedLead(null);
+      setSelectedLeadIntent("");
+    } else {
+      setSelectedLead((current) => (current?.id === lead.id ? { ...current, status: outcome.status || current.status } : current));
+      setLeads((current) => current.map((item) => (item.id === lead.id ? { ...item, status: outcome.status || item.status } : item)));
+    }
+    void loadLeads();
+    return outcome;
   }
 
-  async function convertToCustomer(lead: PermitLeadItem): Promise<{
-    customerId?: string;
-    existingCustomer?: boolean;
-    message?: string;
-    ok: boolean;
-    pricingAppliedCount?: number;
-    pricingFailedCount?: number;
-  }> {
+  async function convertToCustomer(lead: PermitLeadItem): Promise<PermitLeadConvertResult> {
     setActionMessage("");
-    try {
-      const previewResponse = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { cache: "no-store" }, 12000);
-      const preview = previewResponse.ok ? await previewResponse.json().catch(() => null) : null;
-      const territoryStaff = preview?.recommendation?.assignedStaffName as string | undefined;
-      const leadStaff = preview?.leadStaff?.staffName as string | undefined;
-      let assignedStaffMemberId = preview?.recommendation?.assignedStaffMemberId as string | undefined;
-      if (leadStaff && territoryStaff && preview?.leadStaff?.staffMemberId !== assignedStaffMemberId) {
-        const useTerritory = window.confirm(
-          `거래처 담당자를 확인해주세요.\n\n권역 기본 담당자: ${territoryStaff} (기본 선택)\n리드 영업 담당자: ${leadStaff}\n\n[확인] 권역 담당자 / [취소] 영업 담당자 선택으로 이동`
-        );
-        if (!useTerritory) {
-          if (!window.confirm(`${leadStaff}님을 거래처 담당자로 선택할까요?`)) return { ok: false, message: "전환을 취소했습니다." };
-          assignedStaffMemberId = preview.leadStaff.staffMemberId;
-        }
-      }
-      const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignedStaffMemberId, deliveryTerritoryId: preview?.recommendation?.territoryId })
-      }, 15000);
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = payload?.message || "거래처 전환에 실패했습니다.";
-        setActionMessage(message);
-        return {
-          customerId: typeof payload?.customerId === "string" ? payload.customerId : undefined,
-          existingCustomer: Boolean(payload?.existingCustomer),
-          message,
-          ok: false
-        };
-      }
-      const successMessage = payload?.message || `${lead.businessName}을(를) 거래처로 전환했습니다.`;
-      setActionMessage(successMessage);
-      void loadLeads();
-      return {
-        customerId: payload?.customerId,
-        message: payload?.message,
-        ok: true,
-        pricingAppliedCount: payload?.pricingAppliedCount,
-        pricingFailedCount: payload?.pricingFailedCount
-      };
-    } catch {
-      setActionMessage("네트워크 오류로 처리하지 못했습니다.");
-      return { ok: false };
-    }
+    const outcome = await requestPermitLeadConversion(lead);
+    if (outcome.message) setActionMessage(outcome.message);
+    if (outcome.ok) void loadLeads();
+    return outcome;
   }
 
   async function runNearbySearch() {
@@ -2980,6 +2916,131 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         />
       ) : null}
     </section>
+  );
+}
+
+export type PermitLeadConvertResult = {
+  customerId?: string;
+  existingCustomer?: boolean;
+  message?: string;
+  ok: boolean;
+  pricingAppliedCount?: number;
+  pricingFailedCount?: number;
+};
+
+/** 리드 영업 결과·단계 저장 요청. 리드 목록 화면과 지도 상세 드로어가 같이 씁니다. */
+export async function requestPermitLeadAction(
+  lead: PermitLeadItem,
+  actionType: PermitLeadActionKind,
+  result?: string,
+  memo?: string,
+  followUpAt?: string
+): Promise<PermitLeadActionResult> {
+  try {
+    const response = await fetchWithTimeout(
+      withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/action`),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType, followUpAt, result, memo })
+      },
+      12000
+    );
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) return { message: payload?.message || "처리에 실패했습니다.", ok: false };
+    return { action: payload.action, ok: true, status: payload.status };
+  } catch {
+    return { message: "네트워크 오류로 처리하지 못했습니다.", ok: false };
+  }
+}
+
+/** 리드 → 거래처 전환 요청(담당자 확인 포함). 리드 목록 화면과 지도 상세 드로어가 같이 씁니다. */
+export async function requestPermitLeadConversion(lead: PermitLeadItem): Promise<PermitLeadConvertResult> {
+  try {
+    const previewResponse = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), { cache: "no-store" }, 12000);
+    const preview = previewResponse.ok ? await previewResponse.json().catch(() => null) : null;
+    const territoryStaff = preview?.recommendation?.assignedStaffName as string | undefined;
+    const leadStaff = preview?.leadStaff?.staffName as string | undefined;
+    let assignedStaffMemberId = preview?.recommendation?.assignedStaffMemberId as string | undefined;
+    if (leadStaff && territoryStaff && preview?.leadStaff?.staffMemberId !== assignedStaffMemberId) {
+      const useTerritory = window.confirm(
+        `거래처 담당자를 확인해주세요.\n\n권역 기본 담당자: ${territoryStaff} (기본 선택)\n리드 영업 담당자: ${leadStaff}\n\n[확인] 권역 담당자 / [취소] 영업 담당자 선택으로 이동`
+      );
+      if (!useTerritory) {
+        if (!window.confirm(`${leadStaff}님을 거래처 담당자로 선택할까요?`)) return { ok: false, message: "전환을 취소했습니다." };
+        assignedStaffMemberId = preview.leadStaff.staffMemberId;
+      }
+    }
+    const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/convert`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignedStaffMemberId, deliveryTerritoryId: preview?.recommendation?.territoryId })
+    }, 15000);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = payload?.message || "거래처 전환에 실패했습니다.";
+      return {
+        customerId: typeof payload?.customerId === "string" ? payload.customerId : undefined,
+        existingCustomer: Boolean(payload?.existingCustomer),
+        message,
+        ok: false
+      };
+    }
+    const successMessage = payload?.message || `${lead.businessName}을(를) 거래처로 전환했습니다.`;
+    return {
+      customerId: payload?.customerId,
+      message: successMessage,
+      ok: true,
+      pricingAppliedCount: payload?.pricingAppliedCount,
+      pricingFailedCount: payload?.pricingFailedCount
+    };
+  } catch {
+    return { message: "네트워크 오류로 처리하지 못했습니다.", ok: false };
+  }
+}
+
+/** 지도 화면에서 신규·영업 리드 상세를 거래처 상세처럼 옆 창으로 엽니다(대표 요청 10-29). */
+export function PermitLeadDetailDrawer({
+  lead,
+  onClose,
+  onConverted,
+  onLeadChanged,
+  onOpenQuote
+}: {
+  readonly lead: PermitLeadItem;
+  readonly onClose: () => void;
+  readonly onConverted?: (lead: PermitLeadItem, customerId?: string) => void;
+  readonly onLeadChanged?: (lead: PermitLeadItem) => void;
+  readonly onOpenQuote?: (lead: PermitLeadItem) => void;
+}) {
+  const [current, setCurrent] = useState(lead);
+  useEffect(() => setCurrent(lead), [lead]);
+  return (
+    <PermitLeadDetailPanel
+      detailMode="drawer"
+      lead={current}
+      onAction={async (target, actionType, result, memo, followUpAt) => {
+        const outcome = await requestPermitLeadAction(target, actionType, result, memo, followUpAt);
+        if (outcome.ok) {
+          const updated = { ...target, status: outcome.status || target.status };
+          setCurrent(updated);
+          onLeadChanged?.(updated);
+          if (actionType === "exclude") onClose();
+        }
+        return outcome;
+      }}
+      onClose={onClose}
+      onConvert={async (target) => {
+        const outcome = await requestPermitLeadConversion(target);
+        if (outcome.ok) onConverted?.(target, outcome.customerId);
+        return outcome;
+      }}
+      onLeadUpdated={(updated) => {
+        setCurrent(updated);
+        onLeadChanged?.(updated);
+      }}
+      onOpenQuote={onOpenQuote}
+    />
   );
 }
 

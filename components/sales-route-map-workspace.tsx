@@ -583,6 +583,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   });
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
+  const [detailLeadId, setDetailLeadId] = useState("");
   const [selectedId, setSelectedId] = useState(initialCustomerId || "");
   // 지도 홈 퀵카드에서 "경유지 추가"를 누르면 경유 코스 탭으로 바로 이동시키면서 이 값을 같이
   // 넘겨, TodayCourseView가 마운트된 뒤 해당 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
@@ -1557,6 +1558,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
   // 우측 목록은 원본 조회 결과가 아니라 실제 생성된 지도 마커 ID를 기준으로 만듭니다. 반경과 전체
   // 보기를 함께 켠 경우 두 집합을 합치고, 주소가 없어 마커를 만들 수 없는 리드는 목록에서도 제외합니다.
+  const detailLead = useMemo(
+    () => (detailLeadId ? [...(leadRadiusResult?.leads || []), ...allLeadsForMap].find((lead) => lead.id === detailLeadId) || null : null),
+    [detailLeadId, leadRadiusResult, allLeadsForMap]
+  );
   const leadsForRightPanel = useMemo(() => {
     const visibleLeadIds = new Set([...leadRadiusMapMarkers, ...allLeadsMapMarkers].map((marker) => marker.id));
     if (!visibleLeadIds.size) return [];
@@ -3595,6 +3600,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       setPreviewLeadId("");
                     }}
                     onDismiss={dismissLeadFromMap}
+                    onOpenDetail={(lead) => setDetailLeadId(lead.id)}
                     onOpenQuote={holdModulesEnabled ? (lead) => setQuoteSubject(getPermitLeadQuoteSubject(lead)) : undefined}
                     onRestore={restoreLeadFromMap}
                   />
@@ -3715,6 +3721,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   const selectedLead = leadsForRightPanel.find((lead) => lead.id === leadId);
                   if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
                 }}
+                onOpenDetail={setDetailLeadId}
                 onRetry={() => void loadAllLeadsForMap()}
                 onUpdateStage={updateMapLeadStage}
                 onOpenTable={() => {
@@ -3813,6 +3820,24 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           sourceReady={sourceReady}
           stores={visibleStores}
           vehicles={deliveryVehicles}
+        />
+      ) : null}
+
+      {detailLeadId && detailLead ? (
+        <PermitLeadDetailDrawer
+          lead={detailLead}
+          onClose={() => setDetailLeadId("")}
+          onConverted={(lead) => {
+            setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((item) => item.id !== lead.id) } : current));
+            setAllLeadsForMap((current) => current.filter((item) => item.id !== lead.id));
+            setPreviewLeadId("");
+            router.refresh();
+          }}
+          onLeadChanged={(updated) => {
+            setAllLeadsForMap((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+            setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)) } : current));
+          }}
+          onOpenQuote={holdModulesEnabled ? (lead) => setQuoteSubject(getPermitLeadQuoteSubject(lead)) : undefined}
         />
       ) : null}
 
@@ -6517,6 +6542,7 @@ function LeadListPanel({
   leads,
   loadState,
   onSelectLead,
+  onOpenDetail,
   onRetry,
   onOpenTable,
   onToggleCollapsed,
@@ -6529,6 +6555,7 @@ function LeadListPanel({
   readonly leads: Array<PermitLeadItem & { distanceKm?: number }>;
   readonly loadState: "idle" | "loading" | "ready" | "error";
   readonly onSelectLead: (leadId: string) => void;
+  readonly onOpenDetail: (leadId: string) => void;
   readonly onRetry: () => void;
   readonly onOpenTable: () => void;
   readonly onToggleCollapsed: () => void;
@@ -6713,6 +6740,15 @@ function LeadListPanel({
                     </span>
                     <button className="min-w-0 flex-1 truncate text-left text-sm font-bold text-slate-950" onClick={() => onSelectLead(lead.id)} title={[lead.businessName, lead.address].filter(Boolean).join(" · ")} type="button">
                       {lead.businessName}
+                    </button>
+                    <button
+                      aria-label={`${lead.businessName} 상세 열기`}
+                      className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
+                      onClick={() => onOpenDetail(lead.id)}
+                      title="상세 열기 · 정보 기록"
+                      type="button"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
                     </button>
                     <select
                       aria-label={`${lead.businessName} 단계`}
@@ -7730,6 +7766,7 @@ function PermitLeadMapQuickCard({
   onClose,
   onConverted,
   onDismiss,
+  onOpenDetail,
   onOpenQuote,
   onRestore
 }: {
@@ -7742,6 +7779,7 @@ function PermitLeadMapQuickCard({
   readonly onClose: () => void;
   readonly onConverted: () => void;
   readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
+  readonly onOpenDetail: (lead: PermitLeadItem) => void;
   readonly onOpenQuote?: (lead: PermitLeadItem) => void;
   readonly onRestore: (lead: PermitLeadItem) => void | Promise<void>;
 }) {
@@ -8035,9 +8073,13 @@ function PermitLeadMapQuickCard({
         </div>
         {message ? <p className={`mt-1.5 text-[11px] font-bold ${message.includes("복사했습니다") ? "text-teal-700" : "text-rose-600"}`}>{message}</p> : null}
         <div className="mt-2 grid grid-cols-2 gap-1.5">
-          <button className="maju-button-secondary col-span-2 h-8 justify-center text-xs" onClick={() => void copyLeadDmScript()} type="button">
+          <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenDetail(lead)} type="button">
+            <ExternalLink className="h-3.5 w-3.5" />
+            상세 열기
+          </button>
+          <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => void copyLeadDmScript()} type="button">
             <MessageSquareText className="h-3.5 w-3.5" />
-            맞춤 DM 문구 복사
+            DM 문구 복사
           </button>
           {onOpenQuote ? (
             <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
@@ -9054,6 +9096,9 @@ export type NearbyPermitLeadResult = {
  * (표가 기본, 지도는 보조), 업로드·엑셀 다운로드·기존 거래처 반경 안 "리드 탐색"(AI 영업 세일즈)을
  * 한 화면에서 처리합니다. 별도 페이지가 아니라 지도 홈의 데이터를 그대로 씁니다.
  */
+// 지도에서 신규·영업 리드 상세를 거래처 상세처럼 옆 창으로 엽니다(대표 요청 10-29). 리드 화면과 같은 상세 패널을 씁니다.
+const PermitLeadDetailDrawer = dynamic(() => import("./permit-leads-view").then((module) => module.PermitLeadDetailDrawer), { ssr: false });
+
 const PermitLeadsView = dynamic(() => import("./permit-leads-view").then((module) => module.PermitLeadsView), {
   loading: () => (
     <div className="maju-empty-state flex min-h-[320px] items-center justify-center gap-2 p-8 text-center text-sm font-bold text-slate-500">
