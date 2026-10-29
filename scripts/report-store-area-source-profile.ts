@@ -16,8 +16,6 @@ const GOV_AREAS = [
 ] as const;
 const GOV_PAGE_SIZE = 100;
 const SEOUL_SERVICE = "LOCALDATA_072404";
-const SEOUL_PAGE_SIZE = 1000;
-const SEOUL_STRATA = 8;
 
 type SourceResult = {
   caveat: string;
@@ -85,6 +83,9 @@ async function fetchGovProfile(): Promise<SourceResult> {
 }
 
 async function fetchSeoulPage(apiKey: string, start: number, end: number) {
+  if (apiKey !== "sample") {
+    throw new Error("서울 API는 HTTPS 공식 엔드포인트가 확인되기 전까지 인증키 수집을 지원하지 않습니다.");
+  }
   const url = `http://openapi.seoul.go.kr:8088/${encodeURIComponent(apiKey)}/json/${SEOUL_SERVICE}/${start}/${end}/`;
   const data = await fetchJson(url) as Record<string, { list_total_count?: number; row?: Record<string, unknown>[] }>;
   const body = data[SEOUL_SERVICE];
@@ -93,44 +94,22 @@ async function fetchSeoulPage(apiKey: string, start: number, end: number) {
 }
 
 async function fetchSeoulProfile(): Promise<SourceResult> {
-  const apiKey = process.env.SEOUL_OPENDATA_API_KEY?.trim() || "sample";
-  if (apiKey === "sample") {
-    const sample = await fetchSeoulPage(apiKey, 1, 5);
-    const rows = sample.rows.map((row) => ({
-      areaRaw: pick(row, ["SITEAREA"]),
-      industry: String(pick(row, ["UPTAENM"]) || "미분류"),
-      source: "seoul:official-sample"
-    }));
-    return {
-      caveat: "서울시가 인증키 없이 제공하는 공식 샘플 5건이다. 표본이 극히 작아 모집단 외삽과 대표성 판단을 하지 않는다.",
-      estimateOmissionReason: "모집단 크기는 확인했지만 표본이 5건뿐이라 외삽 추정치를 생성하지 않음.",
-      label: "서울 열린데이터광장 일반음식점 원천(공식 샘플)",
-      minimumIndustrySample: 1,
-      populationLabel: `서울 원천 전체 ${sample.totalCount.toLocaleString("ko-KR")}건(표본 비율 외삽 금지)`,
-      profile: profileStoreAreaSource(rows, { minimumIndustrySample: 1 }),
-      sampledStrata: 1
-    };
-  }
-  const first = await fetchSeoulPage(apiKey, 1, 1);
-  const total = first.totalCount;
-  if (!total) throw new Error("서울 원천 전체 건수를 확인하지 못했습니다.");
-  const maxStart = Math.max(1, total - SEOUL_PAGE_SIZE + 1);
-  const starts = Array.from({ length: SEOUL_STRATA }, (_, index) =>
-    Math.max(1, Math.min(maxStart, Math.round((maxStart * index) / Math.max(1, SEOUL_STRATA - 1))))
-  );
-  const pages = await Promise.all(starts.map((start) => fetchSeoulPage(apiKey, start, Math.min(total, start + SEOUL_PAGE_SIZE - 1))));
-  const rows = pages.flatMap((page, index) => page.rows.map((row) => ({
+  // 공식 문서는 HTTP :8088 예시만 제공하고 HTTPS 연결은 실패한다. 인증키를 평문 URL에
+  // 포함하지 않도록 키 없는 sample 경로만 허용한다.
+  const sample = await fetchSeoulPage("sample", 1, 5);
+  const rows = sample.rows.map((row) => ({
     areaRaw: pick(row, ["SITEAREA"]),
     industry: String(pick(row, ["UPTAENM"]) || "미분류"),
-    source: `seoul:stratum-${index + 1}`
-  })));
+    source: "seoul:official-sample"
+  }));
   return {
-    caveat: "전체 인덱스를 8구간으로 나눈 계통 표본이다. 원천 정렬과 시점 효과가 남아 있어 추정치는 반올림된 참고값이다.",
-    label: "서울 열린데이터광장 일반음식점 원천",
-    minimumIndustrySample: 10,
-    populationLabel: `서울 원천 전체 ${total.toLocaleString("ko-KR")}건`,
-    profile: profileStoreAreaSource(rows, { estimatedSourceRows: total, minimumIndustrySample: 10 }),
-    sampledStrata: starts.length
+    caveat: "서울시가 인증키 없이 제공하는 공식 샘플 5건이다. 표본이 극히 작아 모집단 외삽과 대표성 판단을 하지 않는다.",
+    estimateOmissionReason: "모집단 크기는 확인했지만 표본이 5건뿐이라 외삽 추정치를 생성하지 않음.",
+    label: "서울 열린데이터광장 일반음식점 원천(공식 샘플)",
+    minimumIndustrySample: 1,
+    populationLabel: `서울 원천 전체 ${sample.totalCount.toLocaleString("ko-KR")}건(표본 비율 외삽 금지)`,
+    profile: profileStoreAreaSource(rows, { minimumIndustrySample: 1 }),
+    sampledStrata: 1
   };
 }
 
@@ -205,6 +184,7 @@ async function main() {
 - 추정값: 표본 비율을 원천이 알려준 모집단 건수에 단순 외삽한 값
 - 이상치 기준: 음수, 비숫자, 100,000㎡ 초과는 유효 범위 밖으로 분류. 유효값 상위 1%는 별도 관측 예시로 표시.
 - 미측정 원천: ${govConfigured ? "없음" : "행정안전부 1741000 원천(API 키가 승인 환경에서만 복호화되어 이번 실행에서는 미측정)"}
+- 보안 제한: 서울 API는 HTTPS 지원이 확인되지 않아 인증키 수집을 실행하지 않고 키 없는 공식 sample 경로만 사용.
 
 두 원천은 중복 행을 포함할 수 있어 합산하지 않는다.
 
@@ -213,7 +193,7 @@ ${results.map(sourceSection).join("\n\n")}
 ## 해석 제한과 다음 단계
 
 - 정부 원천 표본은 최신순 편향이 있으므로 전국 비율로 해석하지 않는다.
-- 서울 공식 샘플 또는 계통 표본 모두 원천 정렬에 따른 편향 가능성이 있다.
+- 서울 공식 샘플은 원천 정렬에 따른 편향 가능성이 있다.
 - 업종 중앙값은 면적 대체값을 생성하는 근거가 아니다. 실제 면적과 추정 면적은 저장·표시 단계에서도 구분해야 한다.
 - 기능 플래그 활성화 전 제한된 테스트 회사에서 새 수집분의 분포를 재확인한다.
 `;
