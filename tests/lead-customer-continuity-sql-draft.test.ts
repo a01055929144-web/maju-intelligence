@@ -43,16 +43,19 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/revision_json_is_mobile_phone\(history\.old_value\)/i);
     expect(sql).toContain("retention_expired");
     expect(sql).toContain("data_subject_request");
-    expect(sql).toMatch(/member\.role in \('owner', 'manager'\)/i);
+    expect(sql).toMatch(/member\.permission_role = 'owner'/i);
+    expect(sql).toMatch(/v_approver_role not in \('owner', 'manager'\)/i);
     expect(sql).toMatch(/raise insufficient_privilege using message = 'owner_or_manager_required'/i);
     expect(sql).toMatch(/customer_revision_redaction_audit/i);
-    expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
+    expect(sql).not.toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
+    expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*maju_revision_redaction_operator/i);
     expect(pg16Test).toContain("100_day_landline_not_redacted");
     expect(pg16Test).toContain("100_day_mobile_was_redacted");
     expect(pg16Test).toContain("89_day_landline_was_redacted");
     expect(pg16Test).toContain("other_company_was_redacted");
     expect(pg16Test).toContain("mixed_mobile_landline_row_was_redacted");
     expect(pg16Test).toContain("member_should_be_forbidden");
+    expect(pg16Test).toContain("service_role_spoofed_owner_should_be_forbidden");
   });
 
   it("documents option A, option B, and reuse of the existing request functions", () => {

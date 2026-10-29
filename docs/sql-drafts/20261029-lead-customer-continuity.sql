@@ -132,14 +132,17 @@ begin
     raise exception 'approved_reason_code_required';
   end if;
 
-  select member.role into v_approver_role
+  select case
+    when member.role = 'owner' or member.permission_role = 'owner' then 'owner'
+    else coalesce(member.permission_role, case when member.role = 'manager' then 'manager' else 'staff' end)
+  end into v_approver_role
   from public.company_members member
   where member.company_id = p_company_id
     and member.user_id = p_approved_by_user_id
     and member.status = 'active'
-    and member.role in ('owner', 'manager')
+    and (member.membership_expires_at is null or member.membership_expires_at > p_now)
   limit 1;
-  if v_approver_role is null then
+  if v_approver_role is null or v_approver_role not in ('owner', 'manager') then
     raise insufficient_privilege using message = 'owner_or_manager_required';
   end if;
 
@@ -180,8 +183,15 @@ $$;
 
 revoke all on function maju_private.redact_expired_customer_revision_values(timestamptz, uuid) from public, anon, authenticated, service_role;
 revoke all on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) from public, anon, authenticated, service_role;
-grant usage on schema maju_private to service_role;
-grant execute on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) to service_role;
+-- service_role에는 의도적으로 실행권한을 주지 않는다. 승인자 UUID를 인자로 받으므로 일반 서버 호출자가
+-- 다른 owner/manager UUID를 넣어 승인을 가장할 수 있다. 별도 운영자 자격으로 승인된 내부 작업만 실행한다.
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'maju_revision_redaction_operator') then
+    create role maju_revision_redaction_operator nologin;
+  end if;
+end $$;
+grant usage on schema maju_private to maju_revision_redaction_operator;
+grant execute on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) to maju_revision_redaction_operator;
 
 -- 전환 UI는 기존 requestPermitLeadConversion을 재사용한다. 서버 플래그가 true인 경로만 이 함수를 호출한다.
 -- 새 거래처/기존 거래처의 현재 값을 우선하고 비어 있는 칸만 리드에서 채운다.

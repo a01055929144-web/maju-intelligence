@@ -16,7 +16,9 @@ create table public.company_members (
   company_id uuid not null references public.companies(id),
   user_id uuid references public.app_users(id),
   role text not null,
-  status text not null
+  permission_role text,
+  status text not null,
+  membership_expires_at timestamptz
 );
 create table public.normalized_customers (
   id uuid primary key,
@@ -99,9 +101,9 @@ insert into public.companies(id) values
 insert into public.app_users(id) values
   ('30000000-0000-0000-0000-000000000001'),
   ('30000000-0000-0000-0000-000000000002');
-insert into public.company_members(company_id, user_id, role, status) values
-  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'owner', 'active'),
-  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', 'member', 'active');
+insert into public.company_members(company_id, user_id, role, permission_role, status) values
+  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'member', 'owner', 'active'),
+  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', 'member', 'staff', 'active');
 insert into public.normalized_customers(id, company_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
@@ -129,8 +131,23 @@ begin
   if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000005' and redacted_at is not null) then raise exception 'mixed_mobile_landline_row_was_redacted'; end if;
 end $$;
 
--- member는 42501(HTTP 403 경계)이어야 한다.
-set role service_role;
+-- 일반 service_role은 owner UUID를 가장해도 함수 자체를 실행할 수 없어야 한다.
+do $$
+begin
+  set local role service_role;
+  perform maju_private.anonymize_customer_revision_values_for_request(
+    '10000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000001',
+    'data_subject_request', false, timestamptz '2026-10-29 00:00:00+00'
+  );
+  raise exception 'service_role_spoofed_owner_should_be_forbidden';
+exception
+  when insufficient_privilege then null;
+end $$;
+
+-- 신뢰된 내부 운영자 경로에서도 member는 42501(HTTP 403 경계)이어야 한다.
+set role maju_revision_redaction_operator;
 do $$
 begin
   perform maju_private.anonymize_customer_revision_values_for_request(
@@ -147,7 +164,7 @@ end $$;
 reset role;
 
 -- owner가 승인한 매장 본인 요청은 휴대폰도 익명화하고 비민감 감사 행만 남긴다.
-set role service_role;
+set role maju_revision_redaction_operator;
 select maju_private.anonymize_customer_revision_values_for_request(
   '10000000-0000-0000-0000-000000000001',
   '40000000-0000-0000-0000-000000000001',

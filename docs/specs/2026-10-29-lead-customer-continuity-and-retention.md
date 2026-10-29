@@ -48,9 +48,9 @@ A안에서는 `(company_id, matched_customer_id)`를 모든 상세 조회의 경
 - 90일이 지나면 행은 유지하되 `old_value`와 `new_value`를 `{ "redacted": true }`로 바꾸고 `redacted_at`, `redaction_reason='retention_expired'`만 남긴다. 이때 변경값 제약은 `redacted_at is not null or old_value is distinct from new_value`로 유지한다.
 - 정보주체의 유효한 삭제 요청은 90일을 기다리지 않고 해당 회사·거래처의 주소와 유선 전화 수정 기록을 같은 방식으로 즉시 익명화한다.
 - 매장 본인이 삭제를 요청하고 승인 사유가 `store_self_request`인 경우에만 010 휴대폰 수정 기록도 함께 익명화할 수 있다.
-- 삭제·익명화 요청은 해당 회사의 활성 `owner` 또는 `manager`만 승인한다. 일반 `member` 요청은 SQLSTATE `42501`로 거부해 API에서 403으로 처리한다.
+- 삭제·익명화 요청은 C6 실권한인 `permission_role`을 우선해 해당 회사의 만료되지 않은 활성 `owner` 또는 `manager`만 승인한다(레거시 `role`은 호환 fallback). 일반 `member` 요청은 SQLSTATE `42501`로 거부해 API에서 403으로 처리한다.
 - 감사 로그에는 승인자 ID·당시 역할·제한된 사유 코드·승인 시각·휴대폰 포함 여부·처리 행 수만 저장한다. 전화번호·주소·자유 입력 메모·키·토큰은 기록하지 않는다.
-- 애플리케이션의 append-only 경계는 유지한다. `service_role`에는 UPDATE/DELETE를 주지 않고, 익명화는 공개되지 않은 내부 스키마의 소유자 전용 함수만 수행한다.
+- 애플리케이션의 append-only 경계는 유지한다. `service_role`에는 UPDATE/DELETE나 익명화 함수 실행권한을 주지 않는다. 승인자 UUID 인자를 임의로 바꾸는 가장을 막기 위해 익명화는 공개되지 않은 내부 스키마의 별도 `maju_revision_redaction_operator` 역할만 수행한다. 향후 서버 API로 연결할 때도 서명된 사용자 세션에서 승인자 ID를 추출·검증하는 경계가 마련되기 전에는 이 권한을 확대하지 않는다.
 - 회사 완전 삭제의 기존 `ON DELETE CASCADE`는 그대로 유지한다. 소프트 폐쇄는 보존 정책을 계속 적용한다.
 - 익명화 함수는 처리 건수와 실행 시각을 운영 감사 로그에 별도 남기는 후속 승인이 필요하다. 실패 시 성공으로 숨기지 않는다.
 
