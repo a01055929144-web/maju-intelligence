@@ -1,7 +1,7 @@
 "use client";
 
 import { Instagram, Mail, MessageCircle, Phone, Printer, Smartphone } from "lucide-react";
-import { buildInstagramDmUrl, extractInstagramHandle } from "@/domains/lead/contact-channels";
+import { buildInstagramDmUrl, extractInstagramHandle, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 import type { PermitLeadItem } from "@/lib/store";
 
 type Props = { readonly lead: Pick<PermitLeadItem, "businessName" | "email" | "fax" | "instagramUrl" | "naverTalktalkUrl" | "phone"> };
@@ -9,7 +9,7 @@ const iconClassName = "grid h-[26px] w-[26px] place-items-center rounded-md bord
 const cleanPhone = (value: string) => value.replace(/[^0-9+]/g, "");
 
 export function MapLeadChannelIcons({ lead }: Props) {
-  const mobile = lead.phone && /^01[016789]/.test(cleanPhone(lead.phone)) ? lead.phone : "";
+  const mobile = isMobilePhoneNumber(lead.phone) ? lead.phone || "" : "";
   const storePhone = lead.phone && !mobile ? lead.phone : "";
   const instagramHandle = extractInstagramHandle(lead.instagramUrl);
   return (

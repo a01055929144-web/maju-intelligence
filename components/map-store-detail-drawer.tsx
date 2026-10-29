@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { ExternalLink, Instagram, MessageCircle, Navigation } from "lucide-react";
+import { isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 
 export function MapStoreDetailDrawer({ children, onClose }: { readonly children: ReactNode; readonly onClose: () => void }) {
   useEffect(() => {
@@ -17,7 +18,7 @@ type ActionsProps = { readonly address: string; readonly currentStage: string; r
 export function MapStoreDetailActions({ address, currentStage, email, name, onDm, onStageChange, openHref, phone }: ActionsProps) {
   const actionClassName = "maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm";
   const cleanPhone = phone.replace(/[^0-9+]/g, "");
-  const canSms = /^010/.test(cleanPhone);
+  const canSms = isMobilePhoneNumber(phone);
   return (
     <section aria-label="연락하기" className="border-b border-slate-200 bg-white px-4 py-3"><div className="flex flex-wrap items-center gap-2">
       {canSms ? <a aria-label={`${name}에게 문자 보내기`} className="maju-button-primary inline-flex h-11 items-center gap-2 px-4 text-sm" href={`sms:${cleanPhone}`} title="문자"><MessageCircle aria-hidden="true" className="h-4 w-4" />문자</a> : null}

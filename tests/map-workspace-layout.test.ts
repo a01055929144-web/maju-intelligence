@@ -98,7 +98,8 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     expect(workspaceSource).toContain("const selectedStore = allStores.find((store) => store.id === selectedId)");
     expect(mapDrawerSource).toContain('title="매장전화"');
     expect(mapDrawerSource).toContain('title="이메일"');
-    expect(mapDrawerSource).toContain("const canSms = /^010/.test(cleanPhone)");
+    expect(mapDrawerSource).toContain("const canSms = isMobilePhoneNumber(phone)");
+    expect(mapLeadChannelsSource).toContain("isMobilePhoneNumber(lead.phone)");
   });
 });
 
