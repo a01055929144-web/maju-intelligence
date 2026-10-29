@@ -22,4 +22,13 @@ describe("structured sales save idempotency", () => {
     expect(next.snapshot).toBe(changed);
     expect(createId).toHaveBeenCalledTimes(2);
   });
+
+  it("issues a new key for a new record after a successful save, even if the values match", () => {
+    const createId = vi.fn().mockReturnValueOnce("first").mockReturnValueOnce("next-record");
+    const snapshot = createStructuredSaveSnapshot({ leadId: "lead-1", memo: "방문", items: [{ itemName: "두부" }] });
+    const saved = resolveStructuredSaveAttempt(null, snapshot, createId);
+    const next = resolveStructuredSaveAttempt(null, snapshot, createId);
+    expect(saved.key).toBe("sales:first");
+    expect(next.key).toBe("sales:next-record");
+  });
 });

@@ -32,6 +32,16 @@ type OperationNote = {
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
 type DeliverySaveProgress = { attachments: Record<string, Attachment>; attemptId: string; key: string; noteId?: string };
+type RecentStructuredDelivery = {
+  action_amount?: number | string;
+  action_code?: DeliveryAction;
+  cause_code?: DeliveryIssueCause;
+  event_type?: DeliveryStatus;
+  items?: Array<{ item_name?: string; quantity?: number | string; supplier_name?: string }>;
+  memo?: string;
+  occurrence_stage?: DeliveryOccurrenceStage;
+  status?: DeliveryEventStatus;
+};
 type MessageOutcome = "failed" | "idle" | "pending" | "sent";
 type MessageLog = {
   createdAt: string;
@@ -108,6 +118,7 @@ export function MobileDeliveryProofPanel({
   const [retryingMessageId, setRetryingMessageId] = useState("");
   const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
+  const [recentStructuredDelivery, setRecentStructuredDelivery] = useState<RecentStructuredDelivery | null>(null);
   const [saving, setSaving] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [progressLabel, setProgressLabel] = useState("");
@@ -431,6 +442,7 @@ export function MobileDeliveryProofPanel({
     const structuredController = new AbortController();
     requestLocation();
     void loadProofs();
+    setRecentStructuredDelivery(null);
     if (structuredRecordsEnabled) {
       setDeliveryStatus("arrived");
       setIssueCause("");
@@ -444,18 +456,7 @@ export function MobileDeliveryProofPanel({
       void fetch(`/api/customer/structured-field-records?kind=delivery&customerId=${encodeURIComponent(customerId)}`, { cache: "no-store", signal: structuredController.signal })
         .then(async (response) => response.ok ? response.json() : null)
         .then((payload) => {
-          const record = payload?.record as { action_amount?: number | string; action_code?: DeliveryAction; cause_code?: DeliveryIssueCause; event_type?: DeliveryStatus; items?: Array<{ item_name?: string; quantity?: number | string; supplier_name?: string }>; occurrence_stage?: DeliveryOccurrenceStage; status?: DeliveryEventStatus } | undefined;
-          if (!record) return;
-          setDeliveryStatus(record.event_type || "arrived");
-          setIssueCause(record.cause_code || "");
-          setOccurrenceStage(record.occurrence_stage || "");
-          setDeliveryAction(record.action_code || "");
-          setActionAmount(record.action_amount == null ? "" : String(record.action_amount));
-          setEventStatus(record.status || "received");
-          const item = record.items?.[0];
-          setItemName(item?.item_name || "");
-          setItemQuantity(item?.quantity == null ? "" : String(item.quantity));
-          setSupplierName(item?.supplier_name || "");
+          if (!structuredController.signal.aborted) setRecentStructuredDelivery((payload?.record as RecentStructuredDelivery | null) || null);
         })
         .catch(() => undefined);
     }
@@ -686,6 +687,12 @@ export function MobileDeliveryProofPanel({
         </a>
       ) : null}
 
+      {recentStructuredDelivery ? <section aria-label="최근 구조화 배송 기록" className="mobile-card-raised mt-4 rounded-xl border p-3">
+        <p className="text-xs font-semibold">최근 기록 · 읽기 전용</p>
+        <p className="mobile-muted mt-1 text-xs">{deliveryStatusLabel(recentStructuredDelivery.event_type || "arrived")}{recentStructuredDelivery.cause_code ? ` · ${recentStructuredDelivery.cause_code}` : ""}</p>
+        {recentStructuredDelivery.items?.map((item, index) => <p className="mt-1 text-xs" key={`${item.item_name || "품목"}-${index}`}>{item.item_name || "품목 미확인"}{item.quantity != null ? ` · ${item.quantity}` : ""}{item.supplier_name ? ` · ${item.supplier_name}` : ""}</p>)}
+        {recentStructuredDelivery.memo ? <p className="mt-2 whitespace-pre-wrap text-xs">{recentStructuredDelivery.memo}</p> : null}
+      </section> : null}
       <details className="delivery-history mobile-card-raised group mt-4 rounded-xl border" id="delivery-history">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black text-slate-600">
           이전 배송 기록

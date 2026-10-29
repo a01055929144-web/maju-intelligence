@@ -26,6 +26,10 @@ type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
 type ViewMode = "all" | MobileLeadType | "route" | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
+type RecentStructuredOffer = {
+  items?: Array<{ item_name?: string; offered_price?: number | string; sample_provided?: boolean; sample_quantity?: number | string; valid_until?: string }>;
+  memo?: string;
+};
 
 const collateralOptions = ["명함", "견적서", "단가표", "카탈로그", "샘플"] as const;
 const COLLATERAL_STORAGE_KEY = "maju:mobile-sales:last-collateral:v1";
@@ -66,11 +70,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [salesPrice, setSalesPrice] = useState("");
   const [salesPriceValidUntil, setSalesPriceValidUntil] = useState("");
   const [importantNote, setImportantNote] = useState("");
+  const [recentStructuredOffer, setRecentStructuredOffer] = useState<RecentStructuredOffer | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
   const structuredSaveAttemptRef = useRef<StructuredSaveAttempt | null>(null);
+  const openLeadRequestRef = useRef(0);
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -183,6 +189,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   })), [visibleLeads]);
 
   const openLead = useCallback(async (lead: PermitLeadItem) => {
+    const requestId = ++openLeadRequestRef.current;
     setSelected(lead);
     setSaveMessage("");
     setHistory([]);
@@ -200,6 +207,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setSalesPrice("");
     setSalesPriceValidUntil("");
     setImportantNote("");
+    setRecentStructuredOffer(null);
     structuredSaveAttemptRef.current = null;
     try {
       const [historyResponse, structuredResponse] = await Promise.all([
@@ -209,21 +217,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           : Promise.resolve(null)
       ]);
       const payload = (await historyResponse.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
+      if (requestId !== openLeadRequestRef.current) return;
       if (historyResponse.ok) setHistory(payload?.actions || []);
       const structuredPayload = structuredResponse?.ok ? await structuredResponse.json().catch(() => null) : null;
-      const record = structuredPayload?.record as { items?: Array<{ item_name?: string; offered_price?: number | string; sample_provided?: boolean; sample_quantity?: number | string; valid_until?: string }>; memo?: string } | undefined;
-      if (record) {
-        const sample = record.items?.find((item) => item.sample_provided);
-        const priced = record.items?.find((item) => item.offered_price != null);
-        setSampleItem(sample?.item_name || "");
-        setSampleQuantity(sample?.sample_quantity == null ? "" : String(sample.sample_quantity));
-        setSalesPriceItem(priced?.item_name || "");
-        setSalesPrice(priced?.offered_price == null ? "" : String(priced.offered_price));
-        setSalesPriceValidUntil(priced?.valid_until || "");
-        setImportantNote(record.memo || "");
-      }
+      if (requestId !== openLeadRequestRef.current) return;
+      setRecentStructuredOffer((structuredPayload?.record as RecentStructuredOffer | null) || null);
     } finally {
-      setHistoryLoading(false);
+      if (requestId === openLeadRequestRef.current) setHistoryLoading(false);
     }
   }, [structuredRecordsEnabled]);
 
@@ -475,6 +475,16 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           {isLeadBusinessHoursDraftEnabled() ? <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-950">영업시간·브레이크타임 빠른 입력</p><p className="mt-1 text-[11px] text-amber-800">현재 · {formatLeadBusinessHours(selected.businessHourIntervals || [])}</p><input className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setBusinessHoursDraft(event.target.value)} placeholder="예: 매일 15:00~17:00 브레이크 · 월 휴무" value={businessHoursDraft} /><button className="mt-2 min-h-10 w-full rounded-lg border bg-white text-xs font-semibold text-amber-800 disabled:opacity-50" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button></section> : null}
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-result">방문 결과</label><select className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="contact-result" onChange={(event) => { const value = event.target.value as StandardVisitResult; setResult(value); if (needsVisitFollowUp(value) && !reminderDate) setReminderDate(getDefaultVisitFollowUpDate()); }} value={result}>{STANDARD_VISIT_RESULTS.map((option) => <option key={option}>{option}</option>)}</select></div>
           <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-2 gap-2">{collateralOptions.filter((item) => holdModulesEnabled || item !== "견적서").map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "카탈로그" || item === "단가표" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
+          {recentStructuredOffer ? <section aria-label="최근 구조화 영업 기록" className="mobile-card-raised mt-4 rounded-xl border p-3">
+            <p className="text-xs font-semibold">최근 기록 · 읽기 전용</p>
+            {recentStructuredOffer.items?.map((item, index) => <p className="mt-1 text-xs" key={`${item.item_name || "품목"}-${index}`}>
+              {item.sample_provided ? "샘플" : "영업 단가"} · {item.item_name || "품목 미확인"}
+              {item.sample_quantity != null ? ` · 수량 ${item.sample_quantity}` : ""}
+              {item.offered_price != null ? ` · ${item.offered_price}원` : ""}
+              {item.valid_until ? ` · ${item.valid_until}까지` : ""}
+            </p>)}
+            {recentStructuredOffer.memo ? <p className="mt-2 whitespace-pre-wrap text-xs">{recentStructuredOffer.memo}</p> : null}
+          </section> : null}
           <details className="mobile-card-raised mt-4 rounded-xl border p-3">
             <summary className="cursor-pointer text-xs font-bold">샘플 · 영업 단가 · 중요 특이사항</summary>
             <div className="mt-3 grid grid-cols-[1fr_92px] gap-2"><input aria-label="샘플 품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleItem(event.target.value)} placeholder="샘플 품목" value={sampleItem} /><input aria-label="샘플 수량" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleQuantity(event.target.value)} placeholder="수량" value={sampleQuantity} /></div>
