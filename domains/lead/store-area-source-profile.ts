@@ -49,7 +49,7 @@ export type StoreAreaSourceComparison = {
   equalWithinPrecisionCount: number;
   governmentSourceRecords: number;
   matchedLeadCount: number;
-  measurement: "measured";
+  measurement: "measured" | "unmeasured";
   medianAbsoluteDifferenceSqm?: number;
   missingAreaOnEitherSourceCount: number;
   seoulSourceRecords: number;
@@ -182,7 +182,7 @@ export function compareStoredStoreAreaSources(
     equalWithinPrecisionCount,
     governmentSourceRecords: government.length,
     matchedLeadCount,
-    measurement: "measured",
+    measurement: differences.length ? "measured" : "unmeasured",
     medianAbsoluteDifferenceSqm: differences.length ? round(median(differences)!) : undefined,
     missingAreaOnEitherSourceCount,
     seoulSourceRecords: seoul.length

@@ -49,4 +49,16 @@ describe("store area source profile", () => {
       seoulSourceRecords: 2
     });
   });
+
+  it("marks area agreement as unmeasured when matched leads have no comparable areas", () => {
+    expect(compareStoredStoreAreaSources([
+      { leadId: "same", source: "gov_restaurant_api", areaRaw: "" },
+      { leadId: "same", source: "seoul_opendata_api", areaRaw: undefined }
+    ])).toMatchObject({
+      comparableAreaCount: 0,
+      matchedLeadCount: 1,
+      measurement: "unmeasured",
+      missingAreaOnEitherSourceCount: 1
+    });
+  });
 });

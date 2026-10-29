@@ -2,31 +2,35 @@ import {
   compareStoredStoreAreaSources,
   profileStoreAreaSource,
   type StoreAreaSourceRecord
-} from "@/domains/lead/store-area-source-profile";
-import { supabaseRequest } from "@/lib/store";
+} from "../domains/lead/store-area-source-profile";
+import { supabaseRequest } from "./store";
+import { readCappedPages } from "./paginated-profile-read";
 
 const PAGE_SIZE = 1000;
+const MAX_ROWS_PER_DATASET = 30_000;
 
-async function readAll<T>(table: string, select: string) {
-  const rows: T[] = [];
-  for (let offset = 0; ; offset += PAGE_SIZE) {
-    const page = await supabaseRequest<T[]>(
+export async function readAllProfileRows<T>(table: string, select: string) {
+  // Supabase/PostgREST max_rows가 PAGE_SIZE보다 작아도 실제 수신 건수만큼 다음 offset으로
+  // 이동한다. page.length < PAGE_SIZE만으로 종료하면 조용히 불완전한 집계를 만들 수 있다.
+  return readCappedPages<T>(
+    (offset) => supabaseRequest<T[]>(
       `${table}?select=${select}&order=id.asc&offset=${offset}&limit=${PAGE_SIZE}`
-    );
-    rows.push(...page);
-    if (page.length < PAGE_SIZE) return rows;
-  }
+    ),
+    MAX_ROWS_PER_DATASET
+  );
 }
 
 type LeadAreaRow = { industry_raw: string | null; store_area_sqm: number | null };
-type SourceRow = { lead_id: string; raw_payload: Record<string, unknown> | null; source: string };
+type SourceRow = { area_raw: unknown; lead_id: string; source: string };
 
 export async function getAdminStoreAreaProfile() {
   const [leads, sourceRows] = await Promise.all([
-    readAll<LeadAreaRow>("business_permit_leads", "id,industry_raw,store_area_sqm"),
-    readAll<SourceRow>(
+    readAllProfileRows<LeadAreaRow>("business_permit_leads", "id,industry_raw,store_area_sqm"),
+    readAllProfileRows<SourceRow>(
       "business_permit_lead_source_records",
-      "id,lead_id,source,raw_payload&source=in.(gov_restaurant_api,seoul_opendata_api)"
+      // ingestPermitLeadRows가 PermitLeadIngestRow를 raw_payload에 그대로 저장하므로 실제 키는
+      // camelCase storeAreaSqm이다. 전체 JSON 대신 이 한 필드만 PostgREST에서 투영한다.
+      "id,lead_id,source,area_raw:raw_payload->storeAreaSqm&source=in.(gov_restaurant_api,seoul_opendata_api)"
     )
   ]);
   const profile = profileStoreAreaSource(leads.map((row) => ({
@@ -35,7 +39,7 @@ export async function getAdminStoreAreaProfile() {
     source: "operational_database"
   })), { minimumIndustrySample: 1 });
   const comparisonRows: StoreAreaSourceRecord[] = sourceRows.map((row) => ({
-    areaRaw: row.raw_payload?.storeAreaSqm,
+    areaRaw: row.area_raw,
     leadId: row.lead_id,
     source: row.source
   }));
