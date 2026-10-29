@@ -162,6 +162,35 @@ body .font-black {
   font-weight: 700;
 }
 
+/* 2026-10-29 대표 피드백("100%인데 너무 크고 굵직하다"): PC(1024px 이상)에서만 한 단계 작고 가볍게.
+   - 기준 글자 94% → 88%: rem을 쓰는 글자·여백·버튼 높이가 함께 약 6% 줄어듭니다.
+   - rem을 안 타는 임의 px 글자(13/12/11px)도 같은 비율로 맞춥니다.
+   - 굵기: 700(굵게·더 굵게) → 600. 제목·버튼 위계는 유지됩니다.
+   휴대폰·태블릿(1023px 이하)은 터치 크기 때문에 그대로 둡니다. */
+@media (min-width: 1024px) {
+  html {
+    font-size: 88%;
+  }
+
+  .text-\[13px\] {
+    font-size: 12.25px;
+  }
+
+  .text-\[12px\] {
+    font-size: 11.25px;
+  }
+
+  .text-\[11px\] {
+    font-size: 10.5px;
+  }
+
+  body .font-bold,
+  body .font-extrabold,
+  body .font-black {
+    font-weight: 600;
+  }
+}
+
 .mobile-theme-shell[data-mobile-theme="dark"] {
   --mobile-bg: #0b1120;
   --mobile-surface: #121b2b;
