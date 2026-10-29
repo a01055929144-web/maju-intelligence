@@ -15,7 +15,7 @@ type PlanDraft = {
 
 const emptyPlan = (id: string): PlanDraft => ({ code: "", id, monthlyAmountWon: "", monthlyLeadLimit: "", name: "", staffLimit: "", trialDays: "" });
 
-export function AdminPlanSettingsWorkspace({ enabled }: { readonly enabled: boolean }) {
+export function AdminPlanSettingsWorkspace() {
   const [usageWindowMonths, setUsageWindowMonths] = useState("");
   const [plans, setPlans] = useState<PlanDraft[]>(() => [emptyPlan("plan-1")]);
   const [message, setMessage] = useState("");
@@ -33,18 +33,16 @@ export function AdminPlanSettingsWorkspace({ enabled }: { readonly enabled: bool
   }
 
   return (
-    <section className="maju-section-card mt-6" data-feature-enabled={enabled ? "true" : "false"}>
+    <section className="maju-section-card mt-6" data-feature-enabled="true">
       <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="maju-section-title">요금제 정책 설정</p>
           <p className="mt-1 maju-muted-label">금액·체험 기간·리드 기준을 대표 승인값으로 입력하는 WO-8 준비 화면</p>
         </div>
-        <span className={`w-fit rounded-full px-3 py-1 text-xs font-black ${enabled ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-700"}`}>
-          {enabled ? "입력 검토 모드" : "기능 OFF"}
-        </span>
+        <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">입력 검토 모드</span>
       </div>
 
-      <div className={`m-4 flex items-start gap-3 rounded-lg border p-4 ${enabled ? "border-amber-200 bg-amber-50 text-amber-950" : "border-slate-200 bg-slate-50 text-slate-800"}`}>
+      <div className="m-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
           <p className="font-black">SQL 승인·적용 전에는 저장과 결제를 실행하지 않습니다.</p>
@@ -54,7 +52,7 @@ export function AdminPlanSettingsWorkspace({ enabled }: { readonly enabled: bool
         </div>
       </div>
 
-      <fieldset className="space-y-5 p-4 pt-0 disabled:cursor-not-allowed disabled:opacity-60" disabled={!enabled}>
+      <fieldset className="space-y-5 p-4 pt-0">
         <label className="block max-w-sm">
           <span className="mb-2 block text-sm font-black text-slate-800">추천 산정 기간</span>
           <span className="flex h-11 items-center rounded-md border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">

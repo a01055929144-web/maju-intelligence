@@ -5,10 +5,13 @@ const pageSource = readFileSync("app/admin/billing/page.tsx", "utf8");
 const workspaceSource = readFileSync("app/admin/billing/plan-settings-workspace.tsx", "utf8");
 
 describe("WO-8 admin plan settings preparation", () => {
-  it("is off by default behind a server-only feature flag", () => {
-    expect(pageSource).toContain('process.env.WO8_BILLING_V2_ENABLED === "true"');
-    expect(workspaceSource).toContain("disabled={!enabled}");
-    expect(workspaceSource).toContain("기능 OFF");
+  it("is hidden on direct admin billing access unless the server-only flag is enabled", () => {
+    expect(pageSource).toContain("const session = await getAdminSession()");
+    expect(pageSource).toContain('if (!session) redirect("/admin/login")');
+    expect(pageSource).toContain('const billingV2Enabled = process.env.WO8_BILLING_V2_ENABLED === "true"');
+    expect(pageSource).toContain("{billingV2Enabled ? <AdminPlanSettingsWorkspace /> : null}");
+    expect(pageSource).not.toContain("<AdminPlanSettingsWorkspace enabled=");
+    expect(workspaceSource).not.toContain("기능 OFF");
   });
 
   it("does not access unapplied billing tables or payment APIs", () => {
