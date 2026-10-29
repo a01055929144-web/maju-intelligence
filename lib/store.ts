@@ -10729,18 +10729,23 @@ export async function listActiveLeadDoNotContacts(companyId: string, leadId: str
     const normalized = normalizeDoNotContactValue(channel, value);
     if (normalized) expected.set(channel, normalized);
   }
-  const rows = await supabaseRequest<Array<{
+  type DncRow = {
     blocked_at: string;
     channel: LeadContactChannel;
     id: string;
     normalized_value: string;
     source_lead_id: string | null;
-  }>>(
-    `company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at&company_id=eq.${encodeURIComponent(companyId)}&released_at=is.null&order=blocked_at.desc&limit=1000`
+  };
+  const valueLookups = Array.from(expected.entries()).map(([channel, normalizedValue]) =>
+    supabaseRequest<DncRow[]>(
+      `company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at&company_id=eq.${encodeURIComponent(companyId)}&channel=eq.${encodeURIComponent(channel)}&normalized_value=eq.${encodeURIComponent(normalizedValue)}&released_at=is.null&limit=1`
+    )
   );
-  return rows
-    .filter((row) => row.channel === "visit" ? row.source_lead_id === leadId : expected.get(row.channel) === row.normalized_value)
-    .map((row) => ({
+  const visitLookup = supabaseRequest<DncRow[]>(
+    `company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at&company_id=eq.${encodeURIComponent(companyId)}&channel=eq.visit&source_lead_id=eq.${encodeURIComponent(leadId)}&released_at=is.null&limit=1`
+  );
+  const rows = (await Promise.all([...valueLookups, visitLookup])).flat();
+  return rows.map((row) => ({
       blockedAt: row.blocked_at,
       channel: row.channel,
       dncId: row.id,
