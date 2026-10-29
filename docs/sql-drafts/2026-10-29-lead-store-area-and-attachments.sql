@@ -17,16 +17,8 @@ comment on column public.business_permit_leads.store_area_sqm is
 -- customer_attachments는 customer_id NOT NULL/FK라 리드에 그대로 연결할 수 없다.
 -- Storage의 private customer-attachments 버킷과 서명 URL 생성기는 재사용하되,
 -- 메타데이터 소유권은 회사+리드 FK를 갖는 별도 테이블로 분리한다.
-do $$ begin
-  if not exists (
-    select 1 from pg_constraint
-    where conrelid = 'public.customer_attachments'::regclass
-      and conname = 'customer_attachments_company_id_id_uq'
-  ) then
-    alter table public.customer_attachments
-      add constraint customer_attachments_company_id_id_uq unique (company_id, id);
-  end if;
-end $$;
+-- 거래처 전환 추적 FK는 이번 최소 초안에서 제외한다. 운영 customer_attachments의
+-- 복합 UNIQUE를 제약 이름이 아닌 실제 컬럼 기준으로 조사한 뒤 별도 승인안으로 추가한다.
 
 create table if not exists public.lead_attachments (
   id uuid primary key default gen_random_uuid(),
@@ -41,12 +33,9 @@ create table if not exists public.lead_attachments (
   created_by uuid references public.app_users(id) on delete set null,
   created_by_name text,
   created_at timestamptz not null default now(),
-  migrated_customer_attachment_id uuid,
   deleted_at timestamptz,
   constraint lead_attachments_lead_fk foreign key (company_id, lead_id)
     references public.business_permit_leads(company_id, id) on delete cascade,
-  constraint lead_attachments_migrated_customer_fk foreign key (company_id, migrated_customer_attachment_id)
-    references public.customer_attachments(company_id, id) on delete set null (migrated_customer_attachment_id),
   constraint lead_attachments_storage_path_uq unique (storage_path)
 );
 

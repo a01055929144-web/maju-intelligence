@@ -13,7 +13,7 @@
 
 `customer-attachments` Storage 버킷은 private 업로드, MIME/50MB 제한, 경로 정규화, 짧은 signed URL 패턴을 재사용할 수 있다. 그러나 `customer_attachments.customer_id`는 필수이고 거래처 FK이므로 리드 파일 메타데이터를 그 테이블에 억지로 넣으면 소유권 모델이 깨진다.
 
-최신 main의 기존 제안서 `docs/lead-file-storage-proposal.md`가 이미 이 결론과 전환 추적·soft delete 정책을 담고 있으므로 이를 기준안으로 재사용한다. 같은 private 버킷에 `companyId/leads/leadId/...` 경로를 사용하고, 메타데이터는 별도 `lead_attachments` 테이블에 둔다. 허용 유형은 사업자등록증·간판·매장사진·기타로 제한한다. 기존 `NEXT_PUBLIC_LEAD_NATIVE_ATTACHMENTS_ENABLED=false`를 유지하며 별도 중복 플래그는 만들지 않는다.
+최신 main의 기존 제안서 `docs/lead-file-storage-proposal.md`가 이미 이 결론과 전환 추적·soft delete 정책을 담고 있으므로 이를 기준안으로 재사용한다. 같은 private 버킷에 `companyId/leads/leadId/...` 경로를 사용하고, 메타데이터는 별도 `lead_attachments` 테이블에 둔다. 허용 유형은 사업자등록증·간판·매장사진·기타로 제한한다. 기존 `NEXT_PUBLIC_LEAD_NATIVE_ATTACHMENTS_ENABLED=false`를 유지하며 별도 중복 플래그는 만들지 않는다. 이번 최소 SQL 초안에는 거래처 전환 추적 FK를 넣지 않는다. 운영 `customer_attachments(company_id,id)`에 같은 컬럼의 다른 이름 UNIQUE가 있는지 컬럼 기준으로 확인한 뒤 후속 승인안에서 추가한다.
 
 ## 인증·보존·감사
 
