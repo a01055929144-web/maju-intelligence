@@ -15,6 +15,7 @@ import {
   buildSmsUrl,
   extractInstagramHandle,
   formatKoreanPhoneNumber,
+  getSafeNaverTalktalkUrl,
   isMobilePhoneNumber,
   LEAD_CONTACT_CHANNEL_LABELS,
   type LeadContactChannel,
@@ -159,6 +160,7 @@ export function LeadContactChannelsPanel({
   const mobile = isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : undefined;
   const storePhone = lead.phone && !mobile ? formatKoreanPhoneNumber(lead.phone) : undefined;
   const instagramHandle = extractInstagramHandle(lead.instagramUrl);
+  const talktalkUrl = getSafeNaverTalktalkUrl(lead.naverTalktalkUrl);
   const primary = useMemo(
     () =>
       resolvePrimaryLeadContactChannel({
@@ -446,11 +448,11 @@ export function LeadContactChannelsPanel({
 
         <div className={rowClass("talktalk")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {rowTitle("talktalk", <MessageCircle className="h-3.5 w-3.5" />, lead.naverTalktalkUrl ? "톡톡 주소 있음" : undefined)}
+            {rowTitle("talktalk", <MessageCircle className="h-3.5 w-3.5" />, talktalkUrl ? "톡톡 주소 있음" : undefined)}
             <div className="flex gap-1.5">
-              {lead.naverTalktalkUrl ? (
+              {talktalkUrl ? (
                 <>
-                  <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "talktalk" ? "text-sm" : ""}`} href={lead.naverTalktalkUrl} onClick={() => void copyMessage()} rel="noreferrer" target="_blank">
+                  <a className={`maju-button-primary min-h-11 px-3 text-xs ${primary === "talktalk" ? "text-sm" : ""}`} href={talktalkUrl} onClick={() => void copyMessage()} rel="noreferrer" target="_blank">
                     <ExternalLink className="h-3.5 w-3.5" />
                     톡톡 열기 · 문구 복사
                   </a>

@@ -41,7 +41,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getDefaultVisitFollowUpDate, needsVisitFollowUp, STANDARD_VISIT_RESULTS, VISIT_RESULT_ACTION_TYPE } from "@/domains/lead/visit-results";
 import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lead/business-hours";
-import { formatKoreanPhoneNumber, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
+import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
 import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
 import { getAdjacentLeadIds } from "@/domains/lead/detail-navigation";
@@ -644,7 +644,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
       .filter((lead) => !hasPhoneOnly || isMobilePhoneNumber(lead.phone))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
-      .filter((lead) => !hasTalktalkOnly || Boolean(lead.naverTalktalkUrl))
+      .filter((lead) => !hasTalktalkOnly || Boolean(getSafeNaverTalktalkUrl(lead.naverTalktalkUrl)))
       .filter((lead) => !hasEmailOnly || Boolean(lead.email))
       .filter((lead) => !hasFaxOnly || Boolean(lead.fax))
       .filter((lead) => !uncontactedOnly || isLeadUncontacted(lead))

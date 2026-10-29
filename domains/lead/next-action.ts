@@ -1,4 +1,4 @@
-import { extractInstagramHandle, isMobilePhoneNumber } from "./contact-channels";
+import { extractInstagramHandle, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "./contact-channels";
 import { toLeadStageValue } from "./lead-status";
 
 export type LeadNextActionSource = {
@@ -23,7 +23,7 @@ const LEGACY_NEXT_ACTION_LABELS: Record<string, string> = { "DM 발송": "DM 후
 /** 신규 리드의 확보 채널을 기준으로 오늘 실행할 한 가지 행동을 추천합니다. */
 export function recommendLeadNextAction(source: LeadNextActionSource): LeadNextActionRecommendation {
   if (isMobilePhoneNumber(source.phone)) return { action: "sms", label: "오늘 문자" };
-  if (extractInstagramHandle(source.instagramUrl) || source.naverTalktalkUrl?.trim()) return { action: "dm", label: "오늘 DM" };
+  if (extractInstagramHandle(source.instagramUrl) || getSafeNaverTalktalkUrl(source.naverTalktalkUrl)) return { action: "dm", label: "오늘 DM" };
   if (source.email?.trim()) return { action: "email", label: "오늘 이메일" };
   if (source.fax?.trim()) return { action: "fax", label: "오늘 팩스" };
   return { action: "visit", label: "방문 검토" };

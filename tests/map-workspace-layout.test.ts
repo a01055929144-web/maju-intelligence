@@ -74,7 +74,8 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   });
 
   it("places current-location and zoom controls at the map bottom-right", () => {
-    expect(mapControlsSource).toContain("absolute bottom-3");
+    expect(mapControlsSource).toContain("absolute bottom-16");
+    expect(mapControlsSource).toContain("sm:bottom-3");
     expect(mapControlsSource).toContain('aria-label="현재 위치"');
     expect(mapControlsSource).toContain('aria-label="지도 확대"');
     expect(mapControlsSource).toContain('aria-label="지도 축소"');
@@ -100,6 +101,11 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     expect(mapDrawerSource).toContain('title="이메일"');
     expect(mapDrawerSource).toContain("const canSms = isMobilePhoneNumber(phone)");
     expect(mapLeadChannelsSource).toContain("isMobilePhoneNumber(lead.phone)");
+  });
+
+  it("keeps an unknown current relationship stage selectable", () => {
+    expect(mapDrawerSource).toContain("RELATIONSHIP_STAGE_OPTIONS.some");
+    expect(mapDrawerSource).toContain("<option value={currentStage}>{currentStage}</option>");
   });
 });
 

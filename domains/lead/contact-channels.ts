@@ -89,6 +89,12 @@ export function normalizeNaverTalktalkInput(value: string | null | undefined): N
   return { ok: false, message: "톡톡 주소 형식을 확인해 주세요. 예: https://talk.naver.com/ct/w4abcd" };
 }
 
+/** 화면 링크에는 정규화된 HTTPS 톡톡 주소만 노출합니다. 오래된·비정상 저장값은 링크로 만들지 않습니다. */
+export function getSafeNaverTalktalkUrl(value: string | null | undefined): string | undefined {
+  const normalized = normalizeNaverTalktalkInput(value);
+  return normalized.ok && normalized.value?.startsWith("https://talk.naver.com/") ? normalized.value : undefined;
+}
+
 /** 인스타그램 핸들(아이디)을 URL·@표기 어느 쪽이든 받아 아이디만 돌려줍니다. */
 export function extractInstagramHandle(value: string | null | undefined): string | undefined {
   const raw = String(value || "").trim();
@@ -190,10 +196,11 @@ export type LeadChannelAvailability = {
 export function resolveLeadContactChannels(source: LeadChannelSource): LeadChannelAvailability[] {
   const mobile = [source.mobilePhone, source.phone].find((value) => isMobilePhoneNumber(value));
   const instagram = extractInstagramHandle(source.instagramUrl);
+  const talktalkUrl = getSafeNaverTalktalkUrl(source.naverTalktalkUrl);
   const entries: LeadChannelAvailability[] = [
     { channel: "sms", label: LEAD_CONTACT_CHANNEL_LABELS.sms, value: mobile ? formatKoreanPhoneNumber(mobile) : undefined, available: Boolean(mobile) },
     { channel: "instagram", label: LEAD_CONTACT_CHANNEL_LABELS.instagram, value: instagram ? `@${instagram}` : undefined, available: Boolean(instagram) },
-    { channel: "talktalk", label: LEAD_CONTACT_CHANNEL_LABELS.talktalk, value: source.naverTalktalkUrl || undefined, available: Boolean(source.naverTalktalkUrl) },
+    { channel: "talktalk", label: LEAD_CONTACT_CHANNEL_LABELS.talktalk, value: talktalkUrl, available: Boolean(talktalkUrl) },
     { channel: "email", label: LEAD_CONTACT_CHANNEL_LABELS.email, value: source.email || undefined, available: Boolean(source.email) },
     { channel: "fax", label: LEAD_CONTACT_CHANNEL_LABELS.fax, value: source.fax ? formatKoreanPhoneNumber(source.fax) : undefined, available: Boolean(source.fax) }
   ];

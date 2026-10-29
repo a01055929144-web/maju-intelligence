@@ -7,6 +7,7 @@ import {
   extractInstagramHandle,
   fillLeadMessageTemplate,
   formatKoreanPhoneNumber,
+  getSafeNaverTalktalkUrl,
   isLeadContactActionType,
   isMobilePhoneNumber,
   leadContactPriorityRank,
@@ -50,6 +51,8 @@ describe("lead contact channels", () => {
     expect(normalizeNaverTalktalkInput("talk.naver.com/w4abcd?frm=place")).toEqual({ ok: true, value: "https://talk.naver.com/ct/w4abcd" });
     expect(normalizeNaverTalktalkInput("w4abcd")).toEqual({ ok: true, value: "https://talk.naver.com/ct/w4abcd" });
     expect(normalizeNaverTalktalkInput("https://map.naver.com/p/entry/place/1234").ok).toBe(false);
+    expect(getSafeNaverTalktalkUrl("http://talk.naver.com/ct/w4abcd")).toBe("https://talk.naver.com/ct/w4abcd");
+    expect(getSafeNaverTalktalkUrl("https://evil.example/ct/w4abcd")).toBeUndefined();
   });
 
   it("extracts instagram handles", () => {
