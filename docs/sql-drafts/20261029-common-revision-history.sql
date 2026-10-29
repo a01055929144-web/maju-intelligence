@@ -74,9 +74,9 @@ comment on column public.common_revision_history.source_path is
 comment on column public.common_revision_history.field_key is
   '명시적 allow-list만 기록한다. 신규 컬럼은 이 제약을 승인 변경하기 전까지 기본 미기록한다.';
 comment on column public.common_revision_history.old_value is
-  '사진 변경은 첨부 ID 등 비민감 식별자만 저장하며 URL·저장 경로·서명 값은 저장하지 않는다.';
+  '사진 변경은 첨부 ID 등 비민감 식별자만 저장한다. 일반 URL은 앱에서 마스킹하고, DB는 서명 URL·저장 경로·자격증명 값을 거부한다.';
 comment on column public.common_revision_history.new_value is
-  '사진 변경은 첨부 ID 등 비민감 식별자만 저장하며 URL·저장 경로·서명 값은 저장하지 않는다.';
+  '사진 변경은 첨부 ID 등 비민감 식별자만 저장한다. 일반 URL은 앱에서 마스킹하고, DB는 서명 URL·저장 경로·자격증명 값을 거부한다.';
 
 create index if not exists common_revision_history_target_time_idx
   on public.common_revision_history(company_id, target_type, target_id, created_at desc, id);
@@ -100,7 +100,7 @@ begin
   if jsonb_typeof(p_value) = 'object' then
     for v_key, v_child in select key, value from jsonb_each(p_value)
     loop
-      if lower(v_key) ~ '(password|passcode|token|secret|credential|authorization|cookie|api[_-]?key|private[_-]?key|access[_-]?key|refresh[_-]?token|door[_-]?(code|pin)|entrance[_-]?(code|pin)|url|uri|storage[_-]?path|signed[_-]?url|download[_-]?url)'
+      if lower(v_key) ~ '(password|passcode|token|secret|credential|authorization|cookie|api[_-]?key|private[_-]?key|access[_-]?key|refresh[_-]?token|door[_-]?(code|pin)|entrance[_-]?(code|pin)|storage[_-]?path|signed[_-]?url|download[_-]?url)|(^|_)(url|uri)($|_)'
         or public.revision_json_contains_sensitive_key(v_child) then
         return true;
       end if;
@@ -128,19 +128,15 @@ security invoker
 set search_path = pg_catalog, public
 as $$
 begin
-  if tg_op <> 'INSERT' then
-    raise exception 'common_revision_history is append-only';
-  end if;
-
   new.field_key := btrim(new.field_key);
   new.actor_name := btrim(new.actor_name);
   new.actor_role := btrim(new.actor_role);
 
-  if lower(new.field_key) ~ '(password|passcode|token|secret|credential|authorization|cookie|api[_-]?key|private[_-]?key|access[_-]?key|refresh[_-]?token|door[_-]?(code|pin)|entrance[_-]?(code|pin)|url|uri|storage[_-]?path|signed[_-]?url|download[_-]?url)'
+  if lower(new.field_key) ~ '(password|passcode|token|secret|credential|authorization|cookie|api[_-]?key|private[_-]?key|access[_-]?key|refresh[_-]?token|door[_-]?(code|pin)|entrance[_-]?(code|pin)|storage[_-]?path|signed[_-]?url|download[_-]?url)|(^|_)(url|uri)($|_)'
     or coalesce(public.revision_json_contains_sensitive_key(new.old_value), false)
     or coalesce(public.revision_json_contains_sensitive_key(new.new_value), false)
-    or coalesce(new.old_value::text ~* '(https?://|storage/v1/object|[?&](token|signature|expires)=)', false)
-    or coalesce(new.new_value::text ~* '(https?://|storage/v1/object|[?&](token|signature|expires)=)', false) then
+    or coalesce(new.old_value::text ~* '(storage/v1/object/sign/|[?&](token|signature|x-amz-signature|x-goog-signature|expires)=)', false)
+    or coalesce(new.new_value::text ~* '(storage/v1/object/sign/|[?&](token|signature|x-amz-signature|x-goog-signature|expires)=)', false) then
     raise exception 'sensitive credential values must not be recorded';
   end if;
 
@@ -190,7 +186,7 @@ grant execute on function public.guard_common_revision_history() to service_role
 
 drop trigger if exists common_revision_history_guard on public.common_revision_history;
 create trigger common_revision_history_guard
-before insert or update or delete on public.common_revision_history
+before insert on public.common_revision_history
 for each row execute function public.guard_common_revision_history();
 
 alter table public.common_revision_history enable row level security;
@@ -200,6 +196,8 @@ alter table public.common_revision_history force row level security;
 -- 승인된 서버 API가 회사·권한을 확인한 뒤 service_role로만 접근한다. 정책이 없는 RLS는
 -- anon/authenticated에 기본 거부로 동작하며, 아래 권한 회수로 Data API 직접 접근도 차단한다.
 revoke all on table public.common_revision_history from public, anon, authenticated;
+-- 추가 전용 경계는 UPDATE/DELETE 트리거가 아니라 service_role의 SELECT/INSERT 권한으로 보장한다.
+-- 따라서 companies의 ON DELETE CASCADE와 app_users의 ON DELETE SET NULL은 정상 동작한다.
 grant select, insert on table public.common_revision_history to service_role;
 
 commit;
@@ -207,7 +205,7 @@ commit;
 -- 승인 후 검증 항목:
 -- 1) 다른 company_id의 lead/customer target_id 삽입 거부
 -- 2) 비밀번호·토큰 필드명 및 중첩 JSON 키 삽입 거부
--- 3) update/delete 거부와 service_role select/insert만 허용
+-- 3) service_role select/insert만 허용하고 회사 cascade·사용자 set null은 정상 동작
 -- 4) EXPLAIN으로 회사+대상+시각 조회가 common_revision_history_target_time_idx 사용
 -- 5) UI/API 연결 전 NEXT_PUBLIC_STORE_REVISION_HISTORY_ENABLED는 계속 false 유지
 -- 6) 개인정보 보존·삭제 정책 승인: actor_name 스냅샷, phone/address 이전값의 보존 기간,
