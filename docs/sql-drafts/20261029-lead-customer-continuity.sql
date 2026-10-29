@@ -57,7 +57,7 @@ create table if not exists maju_private.customer_revision_redaction_audit (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id) on delete cascade,
   customer_id uuid not null,
-  approved_by_user_id uuid not null references public.app_users(id) on delete restrict,
+  approved_by_user_id uuid references public.app_users(id) on delete set null,
   approver_role text not null check (approver_role in ('owner', 'manager')),
   reason_code text not null check (reason_code in ('data_subject_request', 'store_self_request', 'legal_obligation', 'correction')),
   included_mobile_phone boolean not null default false,

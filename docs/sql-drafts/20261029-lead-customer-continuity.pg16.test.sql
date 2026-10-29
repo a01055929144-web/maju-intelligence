@@ -14,7 +14,7 @@ create table public.app_users (id uuid primary key);
 create table public.company_members (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.companies(id),
-  user_id uuid references public.app_users(id),
+  user_id uuid references public.app_users(id) on delete set null,
   role text not null,
   permission_role text,
   status text not null,
@@ -201,6 +201,17 @@ begin
       and approver_role='owner' and reason_code='store_self_request'
       and included_mobile_phone and redacted_row_count >= 1
   ) then raise exception 'approval_audit_missing'; end if;
+end $$;
+
+-- 사용자 계정 삭제는 감사 로그 때문에 막히지 않으며 당시 역할 스냅샷은 남아야 한다.
+delete from public.app_users where id='30000000-0000-0000-0000-000000000001';
+do $$
+begin
+  if not exists (
+    select 1 from maju_private.customer_revision_redaction_audit
+    where approved_by_user_id is null and approver_role='owner'
+      and reason_code='store_self_request' and approved_at=timestamptz '2026-10-29 00:01:00+00'
+  ) then raise exception 'approval_snapshot_not_preserved_after_user_delete'; end if;
 end $$;
 
 select 'pg16 lead-customer continuity tests passed' as result;

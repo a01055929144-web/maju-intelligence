@@ -47,6 +47,7 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/v_approver_role not in \('owner', 'manager'\)/i);
     expect(sql).toMatch(/raise insufficient_privilege using message = 'owner_or_manager_required'/i);
     expect(sql).toMatch(/customer_revision_redaction_audit/i);
+    expect(sql).toMatch(/approved_by_user_id uuid references public\.app_users\(id\) on delete set null/i);
     expect(sql).not.toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
     expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*maju_revision_redaction_operator/i);
     expect(pg16Test).toContain("100_day_landline_not_redacted");
@@ -57,6 +58,7 @@ describe("lead to customer continuity SQL draft", () => {
     expect(pg16Test).toContain("member_should_be_forbidden");
     expect(pg16Test).toContain("service_role_spoofed_owner_should_be_forbidden");
     expect(pg16Test).toContain("legacy_owner_downgraded_to_staff_should_be_forbidden");
+    expect(pg16Test).toContain("approval_snapshot_not_preserved_after_user_delete");
   });
 
   it("documents option A, option B, and reuse of the existing request functions", () => {
