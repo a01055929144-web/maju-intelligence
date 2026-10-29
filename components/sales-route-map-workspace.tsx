@@ -900,6 +900,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
       const params = new URLSearchParams({ excludeExcluded: "false" });
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
       const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) {
@@ -1011,7 +1012,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -6761,7 +6762,6 @@ function LeadListPanel({
                 typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : ""
               ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
               const storeAreaLabel = LEAD_STORE_AREA_FEATURE_ENABLED ? formatStoreAreaPyeong(lead.storeAreaSqm) : undefined;
-              const channelClass = "grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-slate-700 hover:bg-slate-50";
               return (
                 <div
                   className={`flex flex-col gap-1.5 rounded-[10px] border bg-white p-2.5 text-left transition ${

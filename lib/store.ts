@@ -24,6 +24,7 @@ import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/le
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
+import { getStoreAreaSqmFilterBounds, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -9034,16 +9035,22 @@ export async function ingestPermitLeadRows(
       score_breakdown: scoreBreakdown,
       grade,
       raw_payload: row,
-      ...(process.env.LEAD_STORE_AREA_ENABLED === "true" && row.storeAreaSqm !== undefined
-        ? { store_area_sqm: row.storeAreaSqm }
-        : {}),
       ...(row.kakaoCategoryName ? { kakao_category_name: row.kakaoCategoryName.slice(0, 500) } : {}),
       updated_at: new Date().toISOString()
     };
 
     if (existingId) {
-      updates.push({ id: existingId, payload, sourceRecordKey, row });
+      updates.push({
+        id: existingId,
+        payload: { ...payload, ...storeAreaWriteFields(row.storeAreaSqm, "update", process.env.LEAD_STORE_AREA_ENABLED === "true") },
+        sourceRecordKey,
+        row
+      });
     } else {
+      const insertPayload = {
+        ...payload,
+        ...storeAreaWriteFields(row.storeAreaSqm, "insert", process.env.LEAD_STORE_AREA_ENABLED === "true")
+      };
       const pendingIndex = pendingInsertByFingerprint.get(canonicalFingerprint);
       if (pendingIndex !== undefined) {
         result.batchDuplicates += 1;
@@ -9052,7 +9059,7 @@ export async function ingestPermitLeadRows(
         if (!pending.payload.phone && row.phone) pending.payload.phone = row.phone;
       } else {
         pendingInsertByFingerprint.set(canonicalFingerprint, inserts.length);
-        inserts.push({ payload, sourceRecords: [{ sourceRecordKey, row }] });
+        inserts.push({ payload: insertPayload, sourceRecords: [{ sourceRecordKey, row }] });
       }
     }
   }
@@ -10152,6 +10159,7 @@ export type PermitLeadFilters = {
   includeExistingCustomers?: boolean;
   includeTemporaryOperations?: boolean;
   leadId?: string;
+  storeAreaRange?: StoreAreaRange;
 };
 
 type LeadBusinessHourRow = {
@@ -10220,6 +10228,11 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
+  if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
+    const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
+    if (bounds.min !== undefined) params.push(`store_area_sqm=gte.${bounds.min}`);
+    if (bounds.max !== undefined) params.push(`store_area_sqm=lte.${bounds.max}`);
+  }
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
   if (!filters.includeTemporaryOperations && filters.status !== "임시 영업") params.push(`status=neq.${encodeURIComponent("임시 영업")}`);
