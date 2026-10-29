@@ -132,10 +132,10 @@ begin
     raise exception 'approved_reason_code_required';
   end if;
 
-  select case
-    when member.role = 'owner' or member.permission_role = 'owner' then 'owner'
-    else coalesce(member.permission_role, case when member.role = 'manager' then 'manager' else 'staff' end)
-  end into v_approver_role
+  select coalesce(
+    member.permission_role,
+    case when member.role in ('owner', 'manager') then member.role else 'staff' end
+  ) into v_approver_role
   from public.company_members member
   where member.company_id = p_company_id
     and member.user_id = p_approved_by_user_id

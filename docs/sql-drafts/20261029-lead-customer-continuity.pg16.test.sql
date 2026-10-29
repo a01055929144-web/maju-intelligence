@@ -100,10 +100,12 @@ insert into public.companies(id) values
   ('20000000-0000-0000-0000-000000000002');
 insert into public.app_users(id) values
   ('30000000-0000-0000-0000-000000000001'),
-  ('30000000-0000-0000-0000-000000000002');
+  ('30000000-0000-0000-0000-000000000002'),
+  ('30000000-0000-0000-0000-000000000003');
 insert into public.company_members(company_id, user_id, role, permission_role, status) values
   ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'member', 'owner', 'active'),
-  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', 'member', 'staff', 'active');
+  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', 'member', 'staff', 'active'),
+  ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', 'owner', 'staff', 'active');
 insert into public.normalized_customers(id, company_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
@@ -157,6 +159,23 @@ begin
     'data_subject_request', false, timestamptz '2026-10-29 00:00:00+00'
   );
   raise exception 'member_should_be_forbidden';
+exception
+  when insufficient_privilege then
+    if sqlstate <> '42501' or sqlerrm <> 'owner_or_manager_required' then raise; end if;
+end $$;
+reset role;
+
+-- permission_role이 있으면 레거시 role보다 우선한다. owner→staff 강등을 우회할 수 없어야 한다.
+set role maju_revision_redaction_operator;
+do $$
+begin
+  perform maju_private.anonymize_customer_revision_values_for_request(
+    '10000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000003',
+    'data_subject_request', false, timestamptz '2026-10-29 00:00:00+00'
+  );
+  raise exception 'legacy_owner_downgraded_to_staff_should_be_forbidden';
 exception
   when insufficient_privilege then
     if sqlstate <> '42501' or sqlerrm <> 'owner_or_manager_required' then raise; end if;

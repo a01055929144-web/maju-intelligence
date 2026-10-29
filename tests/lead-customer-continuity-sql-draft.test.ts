@@ -43,7 +43,7 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/revision_json_is_mobile_phone\(history\.old_value\)/i);
     expect(sql).toContain("retention_expired");
     expect(sql).toContain("data_subject_request");
-    expect(sql).toMatch(/member\.permission_role = 'owner'/i);
+    expect(sql).toMatch(/coalesce\(\s*member\.permission_role/i);
     expect(sql).toMatch(/v_approver_role not in \('owner', 'manager'\)/i);
     expect(sql).toMatch(/raise insufficient_privilege using message = 'owner_or_manager_required'/i);
     expect(sql).toMatch(/customer_revision_redaction_audit/i);
@@ -56,6 +56,7 @@ describe("lead to customer continuity SQL draft", () => {
     expect(pg16Test).toContain("mixed_mobile_landline_row_was_redacted");
     expect(pg16Test).toContain("member_should_be_forbidden");
     expect(pg16Test).toContain("service_role_spoofed_owner_should_be_forbidden");
+    expect(pg16Test).toContain("legacy_owner_downgraded_to_staff_should_be_forbidden");
   });
 
   it("documents option A, option B, and reuse of the existing request functions", () => {
