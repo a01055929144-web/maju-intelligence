@@ -24,10 +24,11 @@ A안에서는 `(company_id, matched_customer_id)`를 모든 상세 조회의 경
 거래처의 기존 값이 우선이다. 비어 있는 칸만 리드 값으로 채우며 덮어쓰지 않는다.
 
 - 기본: 대표자, 주소, 전화, 이메일, 업종, 개업일, 장소 링크
-- 연락 채널: 팩스는 숫자 중심 표준화, 이메일은 소문자, 인스타는 프로필 URL, 톡톡은 끝 `/` 제거
+- 연락 채널: `domains/lead/contact-channels.ts` 규칙을 재사용한다. 팩스는 숫자 중심 표준화, 이메일은 소문자, 인스타는 유효 핸들만 `https://www.instagram.com/{handle}/`, 톡톡은 `talk.naver.com` 또는 계정 ID만 `https://talk.naver.com/ct/{id}`로 정규화한다. 네이버 지도·플레이스와 임의 외부 URL은 거부한다.
 - 영업시간: 담당자 입력(`manual`) 구간만 거래처 `business_hours` 요약으로 채운다. 거래처에 값이 있으면 유지한다.
 - `lead_actions`, DNC, 칸별 출처는 거래처 테이블로 복사하지 않는다.
 - 전환 함수는 `matched_customer_id`와 전환 상태만 연결하고, 연락 채널의 빈 거래처 칸만 채운다.
+- `contact_channels_updated_at`은 유효한 정규화 값이 실제로 빈 거래처 칸에 들어간 경우에만 갱신한다.
 
 프런트 요청 함수는 바꾸지 않는다. 플래그가 켜진 서버 경로에서 기존 전환 API가 원장 생성/선택 후 `apply_lead_customer_continuity_draft`를 호출하는 구조를 검토한다. 플래그 OFF면 현재 `convertPermitLeadToCustomer` 동작을 그대로 유지한다.
 

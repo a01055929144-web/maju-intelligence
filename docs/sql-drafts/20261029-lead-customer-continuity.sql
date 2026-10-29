@@ -111,6 +111,13 @@ as $$
 declare
   v_lead public.business_permit_leads%rowtype;
   v_hours text;
+  v_fax text;
+  v_instagram_handle text;
+  v_instagram_match text[];
+  v_instagram_url text;
+  v_talktalk_id text;
+  v_talktalk_match text[];
+  v_talktalk_url text;
 begin
   if not p_rollout_enabled then
     raise exception 'lead_customer_continuity_disabled';
@@ -138,6 +145,38 @@ begin
   from public.lead_business_hour_intervals hours
   where hours.company_id = p_company_id and hours.lead_id = p_lead_id and hours.source = 'manual';
 
+  -- domains/lead/contact-channels.ts의 정규화·허용 규칙과 동등하게 맞춘다.
+  v_fax := nullif(regexp_replace(coalesce(v_lead.fax, ''), '[^0-9]', '', 'g'), '');
+
+  v_instagram_match := regexp_match(
+    btrim(coalesce(v_lead.instagram_url, '')),
+    '^(https?://)?(www\.)?instagram\.com/([A-Za-z0-9._]{1,30})([/?#].*)?$',
+    'i'
+  );
+  v_instagram_handle := coalesce(
+    v_instagram_match[3],
+    substring(btrim(coalesce(v_lead.instagram_url, '')) from '^@?([A-Za-z0-9._]{1,30})/?$')
+  );
+  if lower(coalesce(v_instagram_handle, '')) in ('p', 'reel', 'explore', 'accounts', 'stories') then
+    v_instagram_handle := null;
+  end if;
+  v_instagram_url := case when v_instagram_handle is not null
+    then 'https://www.instagram.com/' || v_instagram_handle || '/'
+    else null end;
+
+  v_talktalk_match := regexp_match(
+    btrim(coalesce(v_lead.naver_talktalk_url, '')),
+    '^(https?://)?(m\.)?talk\.naver\.com/(ct/)?([A-Za-z0-9_-]{3,64})([/?#].*)?$',
+    'i'
+  );
+  v_talktalk_id := coalesce(
+    v_talktalk_match[4],
+    substring(btrim(coalesce(v_lead.naver_talktalk_url, '')) from '^([A-Za-z0-9_-]{3,64})$')
+  );
+  v_talktalk_url := case when v_talktalk_id is not null
+    then 'https://talk.naver.com/ct/' || v_talktalk_id
+    else null end;
+
   update public.normalized_customers customer
   set representative_name = coalesce(nullif(customer.representative_name, ''), nullif(v_lead.representative_name, '')),
       address = coalesce(nullif(customer.address, ''), nullif(v_lead.address, '')),
@@ -148,12 +187,15 @@ begin
       naver_place_url = coalesce(nullif(customer.naver_place_url, ''), nullif(btrim(v_lead.naver_place_url), '')),
       kakao_place_url = coalesce(nullif(customer.kakao_place_url, ''), nullif(btrim(v_lead.kakao_place_url), '')),
       google_map_url = coalesce(nullif(customer.google_map_url, ''), nullif(btrim(v_lead.google_place_url), '')),
-      fax = coalesce(nullif(customer.fax, ''), nullif(regexp_replace(v_lead.fax, '[^0-9]', '', 'g'), '')),
-      instagram_url = coalesce(nullif(customer.instagram_url, ''), nullif(btrim(v_lead.instagram_url), '')),
-      naver_talktalk_url = coalesce(nullif(customer.naver_talktalk_url, ''), nullif(regexp_replace(btrim(v_lead.naver_talktalk_url), '/$', ''), '')),
+      fax = coalesce(nullif(customer.fax, ''), v_fax),
+      instagram_url = coalesce(nullif(customer.instagram_url, ''), v_instagram_url),
+      naver_talktalk_url = coalesce(nullif(customer.naver_talktalk_url, ''), v_talktalk_url),
       business_hours = coalesce(nullif(customer.business_hours, ''), nullif(v_hours, '')),
       contact_channels_updated_at = case
-        when customer.fax is null or customer.instagram_url is null or customer.naver_talktalk_url is null then clock_timestamp()
+        when (nullif(customer.fax, '') is null and v_fax is not null)
+          or (nullif(customer.instagram_url, '') is null and v_instagram_url is not null)
+          or (nullif(customer.naver_talktalk_url, '') is null and v_talktalk_url is not null)
+          then clock_timestamp()
         else customer.contact_channels_updated_at
       end
   where customer.company_id = p_company_id and customer.id = p_customer_id;

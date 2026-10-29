@@ -18,6 +18,10 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/coalesce\(nullif\(customer\.fax, ''\)/i);
     expect(sql).toMatch(/matched_customer_id = p_customer_id/i);
     expect(sql).toMatch(/hours\.source = 'manual'/i);
+    expect(sql).toContain("https://www.instagram.com/");
+    expect(sql).toContain("https://talk.naver.com/ct/");
+    expect(sql).toMatch(/talk\\\.naver\\\.com/i);
+    expect(sql).toMatch(/customer\.instagram_url, ''\) is null and v_instagram_url is not null/i);
     expect(sql).toMatch(/lead_actions와 company_do_not_contact는 복사·수정하지 않는다/i);
   });
 
