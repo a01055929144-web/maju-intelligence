@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRawStoreArea, profileStoreAreaSource } from "../domains/lead/store-area-source-profile";
+import { compareStoredStoreAreaSources, parseRawStoreArea, profileStoreAreaSource } from "../domains/lead/store-area-source-profile";
 
 describe("store area source profile", () => {
   it("separates blanks, zeroes, valid positives and invalid outliers", () => {
@@ -27,5 +27,26 @@ describe("store area source profile", () => {
 
   it("does not emit estimates when the source population is unknown", () => {
     expect(profileStoreAreaSource([{ areaRaw: 33, source: "sample" }]).estimated).toBeUndefined();
+  });
+
+  it("compares only same-lead observations and keeps missing areas distinct", () => {
+    const comparison = compareStoredStoreAreaSources([
+      { leadId: "same", source: "gov_restaurant_api", areaRaw: 30 },
+      { leadId: "same", source: "seoul_opendata_api", areaRaw: 30.01 },
+      { leadId: "missing", source: "gov_restaurant_api", areaRaw: "" },
+      { leadId: "missing", source: "seoul_opendata_api", areaRaw: 20 },
+      { leadId: "government-only", source: "gov_restaurant_api", areaRaw: 10 }
+    ]);
+
+    expect(comparison).toEqual({
+      comparableAreaCount: 1,
+      equalWithinPrecisionCount: 1,
+      governmentSourceRecords: 3,
+      matchedLeadCount: 2,
+      measurement: "measured",
+      medianAbsoluteDifferenceSqm: 0.01,
+      missingAreaOnEitherSourceCount: 1,
+      seoulSourceRecords: 2
+    });
   });
 });

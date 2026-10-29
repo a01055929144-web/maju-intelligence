@@ -38,6 +38,23 @@ export type StoreAreaSourceProfile = {
   };
 };
 
+export type StoreAreaSourceRecord = {
+  areaRaw: unknown;
+  leadId: string;
+  source: string;
+};
+
+export type StoreAreaSourceComparison = {
+  comparableAreaCount: number;
+  equalWithinPrecisionCount: number;
+  governmentSourceRecords: number;
+  matchedLeadCount: number;
+  measurement: "measured";
+  medianAbsoluteDifferenceSqm?: number;
+  missingAreaOnEitherSourceCount: number;
+  seoulSourceRecords: number;
+};
+
 function round(value: number, digits = 2) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
@@ -125,5 +142,49 @@ export function profileStoreAreaSource(
     },
     byIndustry,
     estimated
+  };
+}
+
+export function compareStoredStoreAreaSources(
+  records: readonly StoreAreaSourceRecord[]
+): StoreAreaSourceComparison {
+  const government = records.filter((record) => record.source === "gov_restaurant_api");
+  const seoul = records.filter((record) => record.source === "seoul_opendata_api");
+  const byLead = new Map<string, { government: unknown[]; seoul: unknown[] }>();
+
+  for (const record of [...government, ...seoul]) {
+    const current = byLead.get(record.leadId) || { government: [], seoul: [] };
+    if (record.source === "gov_restaurant_api") current.government.push(record.areaRaw);
+    if (record.source === "seoul_opendata_api") current.seoul.push(record.areaRaw);
+    byLead.set(record.leadId, current);
+  }
+
+  let matchedLeadCount = 0;
+  let missingAreaOnEitherSourceCount = 0;
+  let equalWithinPrecisionCount = 0;
+  const differences: number[] = [];
+  for (const pair of Array.from(byLead.values())) {
+    if (!pair.government.length || !pair.seoul.length) continue;
+    matchedLeadCount += 1;
+    const governmentArea = pair.government.map(parseRawStoreArea).find((area) => area.kind === "positive")?.value;
+    const seoulArea = pair.seoul.map(parseRawStoreArea).find((area) => area.kind === "positive")?.value;
+    if (governmentArea === undefined || seoulArea === undefined) {
+      missingAreaOnEitherSourceCount += 1;
+      continue;
+    }
+    const difference = round(Math.abs(governmentArea - seoulArea));
+    differences.push(difference);
+    if (difference <= 0.01) equalWithinPrecisionCount += 1;
+  }
+
+  return {
+    comparableAreaCount: differences.length,
+    equalWithinPrecisionCount,
+    governmentSourceRecords: government.length,
+    matchedLeadCount,
+    measurement: "measured",
+    medianAbsoluteDifferenceSqm: differences.length ? round(median(differences)!) : undefined,
+    missingAreaOnEitherSourceCount,
+    seoulSourceRecords: seoul.length
   };
 }

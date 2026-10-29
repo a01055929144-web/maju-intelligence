@@ -64,6 +64,7 @@ function getSeoulOpenDataApiKey() {
 }
 
 export function isSeoulOpenDataConfigured() {
+  if (process.env.LEAD_SEOUL_SOURCE_ENABLED !== "true") return false;
   const key = getSeoulOpenDataApiKey();
   return Boolean(key && key !== "replace-with-seoul-opendata-api-key");
 }
@@ -107,6 +108,7 @@ function mapRow(raw: Record<string, unknown>): SeoulRestaurantRow | null {
 }
 
 async function fetchPage(pageNo: number): Promise<{ rows: Record<string, unknown>[]; totalCount: number } | null> {
+  if (!isSeoulOpenDataConfigured()) return null;
   const key = getSeoulOpenDataApiKey();
   if (!key) return null;
 
