@@ -105,6 +105,14 @@ heartbeat는 인증이 완료된 서버 요청에서만 최대 5분에 한 번 �
 5. **UI**: 관리자 보안 화면에 알림 목록과 확인 버튼 제공. 세션 원문·IP는 표시하지 않음.
 6. **점진 배포**: 기록 전용 플래그 → 관리자 화면 → 알림 발송 순서. 자동 차단은 별도 작업.
 
+### 기록 전용 구현 초안 (기능 플래그 OFF)
+
+- `STAFF_SESSION_OBSERVATION_ENABLED=false`를 기본값으로 둔다.
+- 플래그가 켜진 테스트 환경에서만 서버 발급 httpOnly 기기 쿠키를 비밀값과 함께 SHA-256으로 해시하고, 기존 `staff_account_sessions`에 5분 간격의 `last_seen_at` heartbeat를 upsert한다.
+- 현재 운영 스키마에 없는 `auth_session_id`/`app_session_id` 컬럼에는 의존하지 않는다. `appSessionId`는 서명된 서버 세션에만 보관해 후속 스키마 승인 시 연결할 수 있게 한다.
+- 이 단계에서는 `staff_security_alerts`를 생성하지 않고, 앱 내 알림·이메일·자동 차단도 실행하지 않는다.
+- 서버리스 인스턴스별 메모리 throttle은 DB 쓰기를 줄이는 보조 수단일 뿐이다. 정확한 전역 5분 dedupe는 후속 SQL 승인 후 DB 제약으로 고정한다.
+
 ## 7. 검증 기준
 
 - 임시 초대 기본값이 KST 달력 기준 30일 후이며 저장 payload에 명시적으로 포함된다.
