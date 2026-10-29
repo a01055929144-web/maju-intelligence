@@ -26,9 +26,15 @@ describe("lead outreach governance", () => {
 
   it("normalizes contact values for a company do-not-contact registry", () => {
     expect(normalizeDoNotContactValue("sms", "10-3306-4790")).toBe("01033064790");
+    expect(normalizeDoNotContactValue("fax", "02-555-1234")).toBe("025551234");
     expect(normalizeDoNotContactValue("email", "MAILTO:Owner@Example.COM")).toBe("owner@example.com");
     expect(normalizeDoNotContactValue("instagram", "https://instagram.com/My.Shop/")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "https://instagram.com/My.Shop/?igsh=abc")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "@My.Shop")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "@bad?igsh=abc")).toBeNull();
+    expect(normalizeDoNotContactValue("instagram", "https://instagram.com/reel/abc")).toBeNull();
     expect(normalizeDoNotContactValue("talktalk", "HTTPS://TALK.NAVER.COM/ct/ABC/")).toBe("https://talk.naver.com/ct/abc");
+    expect(normalizeDoNotContactValue("visit", "  Store Door  ")).toBe("store door");
   });
 
   it("requires a confirmed audit row before reporting source disclosure success", () => {
@@ -108,6 +114,8 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("do nothing returning id into v_dnc_id");
     expect(sql).toContain("status='active'");
     expect(sql).toContain("create or replace function public.normalize_dnc_value");
+    expect(sql).toContain("candidate ~ '^[A-Za-z0-9._]{1,30}$'");
+    expect(sql).toContain("lower(candidate) not in ('p','reel','explore','accounts','stories')");
     expect(sql).toContain("when 'sms' then phone when 'fax' then fax");
     expect(sql).toContain("pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':dnc:'");
     expect(sql).toContain("create or replace function public.release_lead_do_not_contact");
