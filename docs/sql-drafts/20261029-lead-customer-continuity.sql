@@ -28,8 +28,47 @@ alter table public.common_revision_history
   add constraint common_revision_history_redaction_reason_check
   check (redaction_reason is null or redaction_reason in ('retention_expired', 'data_subject_request'));
 
+-- 익명화 뒤에는 old/new가 같은 redacted 표식이 되므로 기존 변경값 제약에 예외를 둔다.
+alter table public.common_revision_history
+  drop constraint if exists common_revision_history_value_changed_check;
+alter table public.common_revision_history
+  add constraint common_revision_history_value_changed_check
+  check (redacted_at is not null or old_value is distinct from new_value);
+
 create schema if not exists maju_private;
 revoke all on schema maju_private from public, anon, authenticated, service_role;
+
+-- contact-channels.ts의 숫자 정규화 뒤 모바일 판정과 같은 경계를 SQL 보존 작업에서도 사용한다.
+-- 현재 앱 helper가 인정하는 010 및 앞자리 0이 빠진 10자리 휴대폰을 true로 본다.
+create or replace function maju_private.revision_json_is_mobile_phone(p_value jsonb)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = pg_catalog
+as $$
+  select regexp_replace(trim(both '"' from coalesce(p_value::text, '')), '[^0-9]', '', 'g')
+    ~ '^(010[0-9]{8}|10[0-9]{8})$';
+$$;
+
+revoke all on function maju_private.revision_json_is_mobile_phone(jsonb) from public, anon, authenticated, service_role;
+
+create table if not exists maju_private.customer_revision_redaction_audit (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  customer_id uuid not null,
+  approved_by_user_id uuid not null references public.app_users(id) on delete restrict,
+  approver_role text not null check (approver_role in ('owner', 'manager')),
+  reason_code text not null check (reason_code in ('data_subject_request', 'store_self_request', 'legal_obligation', 'correction')),
+  included_mobile_phone boolean not null default false,
+  redacted_row_count integer not null check (redacted_row_count >= 0),
+  approved_at timestamptz not null default clock_timestamp()
+);
+
+create index if not exists customer_revision_redaction_audit_lookup_idx
+  on maju_private.customer_revision_redaction_audit(company_id, customer_id, approved_at desc);
+
+revoke all on table maju_private.customer_revision_redaction_audit from public, anon, authenticated, service_role;
 
 -- 90일 경과 전화·주소 원문 익명화. 앱 역할에는 실행 권한을 주지 않는다.
 create or replace function maju_private.redact_expired_customer_revision_values(
@@ -53,6 +92,14 @@ begin
     and history.field_key in ('phone', 'address')
     and history.redacted_at is null
     and history.created_at < p_now - interval '90 days'
+    and (
+      history.field_key = 'address'
+      or (
+        history.field_key = 'phone'
+        and not maju_private.revision_json_is_mobile_phone(history.old_value)
+        and not maju_private.revision_json_is_mobile_phone(history.new_value)
+      )
+    )
     and (p_company_id is null or history.company_id = p_company_id);
   get diagnostics v_count = row_count;
   return v_count;
@@ -63,6 +110,9 @@ $$;
 create or replace function maju_private.anonymize_customer_revision_values_for_request(
   p_company_id uuid,
   p_customer_id uuid,
+  p_approved_by_user_id uuid,
+  p_reason_code text,
+  p_store_self_request boolean default false,
   p_now timestamptz default clock_timestamp()
 )
 returns integer
@@ -72,9 +122,29 @@ set search_path = pg_catalog, public
 as $$
 declare
   v_count integer;
+  v_approver_role text;
 begin
-  if p_company_id is null or p_customer_id is null then
-    raise exception 'company_and_customer_required';
+  if p_company_id is null or p_customer_id is null or p_approved_by_user_id is null then
+    raise exception 'company_customer_and_approver_required';
+  end if;
+
+  if p_reason_code not in ('data_subject_request', 'store_self_request', 'legal_obligation', 'correction') then
+    raise exception 'approved_reason_code_required';
+  end if;
+
+  select member.role into v_approver_role
+  from public.company_members member
+  where member.company_id = p_company_id
+    and member.user_id = p_approved_by_user_id
+    and member.status = 'active'
+    and member.role in ('owner', 'manager')
+  limit 1;
+  if v_approver_role is null then
+    raise insufficient_privilege using message = 'owner_or_manager_required';
+  end if;
+
+  if p_store_self_request and p_reason_code <> 'store_self_request' then
+    raise exception 'store_self_request_reason_required';
   end if;
 
   update public.common_revision_history history
@@ -86,14 +156,32 @@ begin
     and history.target_type = 'customer'
     and history.target_id = p_customer_id
     and history.field_key in ('phone', 'address')
-    and history.redacted_at is null;
+    and history.redacted_at is null
+    and (
+      history.field_key = 'address'
+      or p_store_self_request
+      or (
+        not maju_private.revision_json_is_mobile_phone(history.old_value)
+        and not maju_private.revision_json_is_mobile_phone(history.new_value)
+      )
+    );
   get diagnostics v_count = row_count;
+
+  insert into maju_private.customer_revision_redaction_audit (
+    company_id, customer_id, approved_by_user_id, approver_role, reason_code,
+    included_mobile_phone, redacted_row_count, approved_at
+  ) values (
+    p_company_id, p_customer_id, p_approved_by_user_id, v_approver_role, p_reason_code,
+    p_store_self_request, v_count, p_now
+  );
   return v_count;
 end;
 $$;
 
 revoke all on function maju_private.redact_expired_customer_revision_values(timestamptz, uuid) from public, anon, authenticated, service_role;
-revoke all on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) from public, anon, authenticated, service_role;
+grant usage on schema maju_private to service_role;
+grant execute on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) to service_role;
 
 -- 전환 UI는 기존 requestPermitLeadConversion을 재사용한다. 서버 플래그가 true인 경로만 이 함수를 호출한다.
 -- 새 거래처/기존 거래처의 현재 값을 우선하고 비어 있는 칸만 리드에서 채운다.

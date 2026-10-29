@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const sql = readFileSync("docs/sql-drafts/20261029-lead-customer-continuity.sql", "utf8");
 const design = readFileSync("docs/specs/2026-10-29-lead-customer-continuity-and-retention.md", "utf8");
+const pg16Test = readFileSync("docs/sql-drafts/20261029-lead-customer-continuity.pg16.test.sql", "utf8");
 
 describe("lead to customer continuity SQL draft", () => {
   it("keeps the rollout disabled and company scoped", () => {
@@ -38,9 +39,20 @@ describe("lead to customer continuity SQL draft", () => {
   it("redacts phone and address after 90 days or on a deletion request", () => {
     expect(sql).toMatch(/field_key in \('phone', 'address'\)/i);
     expect(sql).toMatch(/interval '90 days'/i);
+    expect(sql).toMatch(/redacted_at is not null or old_value is distinct from new_value/i);
+    expect(sql).toMatch(/revision_json_is_mobile_phone\(history\.old_value\)/i);
     expect(sql).toContain("retention_expired");
     expect(sql).toContain("data_subject_request");
-    expect(sql).toMatch(/revoke all on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
+    expect(sql).toMatch(/member\.role in \('owner', 'manager'\)/i);
+    expect(sql).toMatch(/raise insufficient_privilege using message = 'owner_or_manager_required'/i);
+    expect(sql).toMatch(/customer_revision_redaction_audit/i);
+    expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
+    expect(pg16Test).toContain("100_day_landline_not_redacted");
+    expect(pg16Test).toContain("100_day_mobile_was_redacted");
+    expect(pg16Test).toContain("89_day_landline_was_redacted");
+    expect(pg16Test).toContain("other_company_was_redacted");
+    expect(pg16Test).toContain("mixed_mobile_landline_row_was_redacted");
+    expect(pg16Test).toContain("member_should_be_forbidden");
   });
 
   it("documents option A, option B, and reuse of the existing request functions", () => {

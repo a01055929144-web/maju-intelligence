@@ -43,8 +43,13 @@ A안에서는 `(company_id, matched_customer_id)`를 모든 상세 조회의 경
 ## 이전 전화·주소 보존과 삭제 요청
 
 - `common_revision_history`의 `field_key in ('phone', 'address')` 원문 이전/이후 값은 생성 후 **90일** 보존한다.
-- 90일이 지나면 행은 유지하되 `old_value`와 `new_value`를 `{ "redacted": true }`로 바꾸고 `redacted_at`, `redaction_reason='retention_expired'`만 남긴다.
-- 정보주체의 유효한 삭제 요청은 90일을 기다리지 않고 해당 회사·거래처의 전화/주소 수정 기록을 같은 방식으로 즉시 익명화한다.
+- 90일 자동 익명화는 주소와 유선 전화에만 적용한다. `contact-channels.ts`의 `isMobilePhoneNumber`가 인정하는 010 휴대폰(앞자리 0이 빠진 10자리 포함)은 자동 작업에서 건너뛴다.
+- 전화 변경 행의 `old_value` 또는 `new_value` 중 하나라도 010 휴대폰이면 행 전체를 자동 익명화에서 건너뛴다. 값별 부분 익명화로 변경 전후 의미가 왜곡되는 것을 피하고 010 보존 요구를 우선한다.
+- 90일이 지나면 행은 유지하되 `old_value`와 `new_value`를 `{ "redacted": true }`로 바꾸고 `redacted_at`, `redaction_reason='retention_expired'`만 남긴다. 이때 변경값 제약은 `redacted_at is not null or old_value is distinct from new_value`로 유지한다.
+- 정보주체의 유효한 삭제 요청은 90일을 기다리지 않고 해당 회사·거래처의 주소와 유선 전화 수정 기록을 같은 방식으로 즉시 익명화한다.
+- 매장 본인이 삭제를 요청하고 승인 사유가 `store_self_request`인 경우에만 010 휴대폰 수정 기록도 함께 익명화할 수 있다.
+- 삭제·익명화 요청은 해당 회사의 활성 `owner` 또는 `manager`만 승인한다. 일반 `member` 요청은 SQLSTATE `42501`로 거부해 API에서 403으로 처리한다.
+- 감사 로그에는 승인자 ID·당시 역할·제한된 사유 코드·승인 시각·휴대폰 포함 여부·처리 행 수만 저장한다. 전화번호·주소·자유 입력 메모·키·토큰은 기록하지 않는다.
 - 애플리케이션의 append-only 경계는 유지한다. `service_role`에는 UPDATE/DELETE를 주지 않고, 익명화는 공개되지 않은 내부 스키마의 소유자 전용 함수만 수행한다.
 - 회사 완전 삭제의 기존 `ON DELETE CASCADE`는 그대로 유지한다. 소프트 폐쇄는 보존 정책을 계속 적용한다.
 - 익명화 함수는 처리 건수와 실행 시각을 운영 감사 로그에 별도 남기는 후속 승인이 필요하다. 실패 시 성공으로 숨기지 않는다.
@@ -63,7 +68,7 @@ A안에서는 `(company_id, matched_customer_id)`를 모든 상세 조회의 경
 
 ## 미결정 사항
 
-- 삭제 요청의 승인 역할과 감사 로그 보존 기간
+- 익명화 감사 로그의 보존 기간과 열람 역할
 - 기존 거래처 값과 리드 값이 충돌할 때 비교 UI 제공 여부
 - B안 승격 기준(외부 장소 원장 포함 최소 3개 엔터티인지 여부)
 - 영업시간을 최종적으로 구조화된 `customer_business_hour_intervals`로 승격할 시점
