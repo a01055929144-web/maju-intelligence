@@ -1,5 +1,8 @@
 -- DRAFT ONLY. Never run against production. Local PostgreSQL 16 verification required.
--- Dependencies: companies; product_catalog with company_id/id unique, is_active.
+-- One-time draft for a fresh local test DB; NOT a rerunnable migration/upgrade script.
+-- Older draft already applied? Use a new disposable DB and apply the full current draft once.
+-- Recalculate/restore command retries are idempotent; DDL replay is not.
+-- Dependencies: companies; product_catalog with company_id/id unique, is_active/category.
 -- Service-only API: company authorization is mandatory at the server boundary.
 begin;
 create table public.margin_groups (
@@ -27,6 +30,10 @@ create table public.pricing_items (
  company_id uuid not null references public.companies(id) on delete cascade, product_id uuid not null,
  margin_bp integer check(margin_bp between 0 and 9999), group_id uuid, price bigint not null default 0 check(price between 0 and 1000000000000),
  direct_price bigint check(direct_price between 0 and 1000000000000),
+ -- Cost-only exception: existing product_catalog.purchase_price is numeric(14,2).
+ -- Preserve its exact source value (e.g. 800.01 -> 800.02); rounding to bigint
+ -- would miss sub-KRW cost changes and repeatedly mismatch the pending check.
+ -- This is a calculation-basis snapshot, not the payable selling/direct price.
  applied_cost numeric(14,2), applied_margin_bp integer, applied_rounding integer, revision bigint not null default 0,
  primary key(company_id,product_id),
  foreign key(company_id,product_id) references public.product_catalog(company_id,id) on delete cascade,
@@ -38,6 +45,8 @@ create table public.price_recalc_runs (
 );
 create table public.price_recalc_changes (
  company_id uuid not null references public.companies(id) on delete cascade, run_id uuid not null, product_id uuid not null,
+ -- price/direct_price inside both snapshots originate from bigint KRW columns;
+ -- restoration casts price back to bigint. applied_cost alone retains source decimals.
  before_value jsonb not null, after_value jsonb not null,
  primary key(company_id,run_id,product_id),
  foreign key(company_id,run_id) references public.price_recalc_runs(company_id,id) on delete cascade,
