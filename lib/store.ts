@@ -8241,6 +8241,8 @@ export type PermitLeadIngestRow = {
   /** 원천의 최종 변경 시각. 출처가 섞인 중복 그룹의 대표 상태 판정에 사용합니다. */
   lastModified?: string;
   kakaoCategoryName?: string;
+  /** 공공 인허가 원천의 소재지 면적 원본(㎡). 평은 표시 시에만 계산합니다. */
+  storeAreaSqm?: number;
 };
 
 export type PermitLeadItem = {
@@ -8298,6 +8300,7 @@ export type PermitLeadItem = {
   source?: string;
   createdAt: string;
   updatedAt: string;
+  storeAreaSqm?: number;
   businessHourIntervals?: LeadBusinessHourInterval[];
 };
 
@@ -8366,6 +8369,7 @@ type PermitLeadRow = {
   source: string | null;
   created_at: string;
   updated_at: string;
+  store_area_sqm?: number | null;
 };
 
 /**
@@ -8542,7 +8546,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     keywordVolume: row.keyword_volume ?? undefined,
     source: row.source || undefined,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    storeAreaSqm: row.store_area_sqm ?? undefined
   };
 }
 
@@ -9029,6 +9034,9 @@ export async function ingestPermitLeadRows(
       score_breakdown: scoreBreakdown,
       grade,
       raw_payload: row,
+      ...(process.env.LEAD_STORE_AREA_ENABLED === "true" && row.storeAreaSqm !== undefined
+        ? { store_area_sqm: row.storeAreaSqm }
+        : {}),
       ...(row.kakaoCategoryName ? { kakao_category_name: row.kakaoCategoryName.slice(0, 500) } : {}),
       updated_at: new Date().toISOString()
     };
