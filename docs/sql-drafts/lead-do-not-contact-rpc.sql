@@ -23,9 +23,13 @@ as $$
     when 'fax' then (select case when d ~ '^10[0-9]{8}$' then '0' || d else d end
                      from (select regexp_replace(coalesce(p_value, ''), '[^0-9]', '', 'g') as d) x)
     when 'email' then lower(regexp_replace(btrim(coalesce(p_value, '')), '^mailto:', '', 'i'))
-    when 'instagram' then lower(coalesce(
-      substring(btrim(coalesce(p_value, '')) from '(?i)instagram\.com/([A-Za-z0-9._]{1,30})'),
-      regexp_replace(regexp_replace(btrim(coalesce(p_value, '')), '^@', ''), '/$', '')))
+    when 'instagram' then (select lower(candidate)
+      from (select coalesce(
+        substring(btrim(coalesce(p_value, '')) from '(?i)instagram\.com/([A-Za-z0-9._]{1,30})'),
+        regexp_replace(regexp_replace(btrim(coalesce(p_value, '')), '^@', ''), '/$', '')
+      ) as candidate) normalized
+      where candidate ~ '^[A-Za-z0-9._]{1,30}$'
+        and lower(candidate) not in ('p','reel','explore','accounts','stories'))
     when 'talktalk' then lower(regexp_replace(btrim(coalesce(p_value, '')), '/$', ''))
     else lower(btrim(coalesce(p_value, '')))
   end, '');

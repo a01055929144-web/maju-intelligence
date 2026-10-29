@@ -26,9 +26,15 @@ describe("lead outreach governance", () => {
 
   it("normalizes contact values for a company do-not-contact registry", () => {
     expect(normalizeDoNotContactValue("sms", "10-3306-4790")).toBe("01033064790");
+    expect(normalizeDoNotContactValue("fax", "02-555-1234")).toBe("025551234");
     expect(normalizeDoNotContactValue("email", "MAILTO:Owner@Example.COM")).toBe("owner@example.com");
     expect(normalizeDoNotContactValue("instagram", "https://instagram.com/My.Shop/")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "https://instagram.com/My.Shop/?igsh=abc")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "@My.Shop")).toBe("my.shop");
+    expect(normalizeDoNotContactValue("instagram", "@bad?igsh=abc")).toBeNull();
+    expect(normalizeDoNotContactValue("instagram", "https://instagram.com/reel/abc")).toBeNull();
     expect(normalizeDoNotContactValue("talktalk", "HTTPS://TALK.NAVER.COM/ct/ABC/")).toBe("https://talk.naver.com/ct/abc");
+    expect(normalizeDoNotContactValue("visit", "  Store Door  ")).toBe("store door");
   });
 
   it("requires a confirmed audit row before reporting source disclosure success", () => {
@@ -95,6 +101,9 @@ describe("lead outreach governance", () => {
     const sql = fs.readFileSync(path.join(process.cwd(), "docs/sql-drafts/lead-do-not-contact-rpc.sql"), "utf8");
     expect(storeSource).toContain('process.env.LEAD_DNC_WRITE_ENABLED === "true"');
     expect(route).toContain("if (!LEAD_DNC_WRITE_ENABLED)");
+    expect(route).toContain("return NextResponse.json({ canRelease, enabled: false, entries: [] })");
+    expect(route).toContain('const canRelease = Boolean(scope.customerSession && ["owner", "manager"].includes(scope.customerSession.workspaceRole))');
+    expect(route).toContain("listActiveLeadDoNotContacts(scope.companyId!, (await params).id)");
     expect(sql).toContain("security invoker");
     expect(sql).toContain("revoke all on function public.register_lead_do_not_contact");
     expect(sql).toContain("grant execute on function public.register_lead_do_not_contact");
@@ -108,6 +117,8 @@ describe("lead outreach governance", () => {
     expect(sql).toContain("do nothing returning id into v_dnc_id");
     expect(sql).toContain("status='active'");
     expect(sql).toContain("create or replace function public.normalize_dnc_value");
+    expect(sql).toContain("candidate ~ '^[A-Za-z0-9._]{1,30}$'");
+    expect(sql).toContain("lower(candidate) not in ('p','reel','explore','accounts','stories')");
     expect(sql).toContain("when 'sms' then phone when 'fax' then fax");
     expect(sql).toContain("pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':dnc:'");
     expect(sql).toContain("create or replace function public.release_lead_do_not_contact");
@@ -149,11 +160,22 @@ describe("lead outreach governance", () => {
     expect(route).toContain("companyId: scope.companyId!");
     expect(storeSource).toContain('p_actor_kind: input.actorKind');
     expect(storeSource).toContain('rpc/release_lead_do_not_contact');
+    expect(storeSource).toContain("company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at");
+    expect(storeSource).toContain("maskedValue: maskDoNotContactValue(row.channel, row.normalized_value)");
+    expect(storeSource).toContain("&channel=eq.${encodeURIComponent(channel)}&normalized_value=eq.${encodeURIComponent(normalizedValue)}&released_at=is.null&limit=1");
+    expect(storeSource).toContain("&channel=eq.visit&source_lead_id=eq.${encodeURIComponent(leadId)}&released_at=is.null&limit=1");
+    expect(storeSource).not.toContain("&order=blocked_at.desc&limit=1000");
     expect(route).toContain("await isActiveLegacyOwnerSession({");
     expect(route).toContain("email: scope.customerSession.email");
     expect(route).toContain("}).catch(() => false)");
     expect(storeSource).toContain("auth_credentials?select=customer_company_id,customer_email&customer_company_id=eq.${encodeURIComponent(input.companyId)}");
     expect(storeSource).toContain('return Boolean(companyRows[0] && ["active", "fallback"].includes(companyRows[0].status || ""))');
+    const panel = fs.readFileSync(path.join(process.cwd(), "components/lead-contact-channels-panel.tsx"), "utf8");
+    expect(panel).toContain("운영 승인 전 비활성화됨");
+    expect(panel).toContain('reason: "상대방 요청"');
+    expect(panel).toContain('method: "DELETE"');
+    expect(panel).toContain("window.prompt(\"연락 거부 해제 사유를 입력해 주세요.\")");
+    expect(panel).not.toContain("normalizedValue");
   });
 
   it("reads field-level sources through a company-scoped server boundary", () => {

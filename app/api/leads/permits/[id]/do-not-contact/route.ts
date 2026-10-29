@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeDoNotContactValue } from "@/domains/lead/outreach-governance";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { isActiveLegacyOwnerSession, LEAD_DNC_WRITE_ENABLED, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
+import { isActiveLegacyOwnerSession, LEAD_DNC_WRITE_ENABLED, listActiveLeadDoNotContacts, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const scope = await getRequestAuthScope(request);
+  if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "연락 거부를 조회할 권한이 없습니다." }, { status: 403 });
+  const canRelease = Boolean(scope.customerSession && ["owner", "manager"].includes(scope.customerSession.workspaceRole));
+  if (!LEAD_DNC_WRITE_ENABLED) return NextResponse.json({ canRelease, enabled: false, entries: [] });
+  const entries = await listActiveLeadDoNotContacts(scope.companyId!, (await params).id);
+  return NextResponse.json({ canRelease, enabled: true, entries });
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = (await request.json().catch(() => null)) as { channel?: "sms" | "instagram" | "talktalk" | "email" | "fax" | "visit"; reason?: string; value?: string } | null;

@@ -72,6 +72,13 @@ export function LeadContactChannelsPanel({
   const [recordingSourceDisclosure, setRecordingSourceDisclosure] = useState(false);
   const [policyState, setPolicyState] = useState<"loading" | "required" | "saving" | "acknowledged">("loading");
   const [fieldSources, setFieldSources] = useState<Array<{ collectedAt: string; fieldName: string; sourceType: string }>>([]);
+  const [dncState, setDncState] = useState<{
+    canRelease: boolean;
+    enabled: boolean;
+    entries: Array<{ blockedAt: string; channel: LeadContactChannel; dncId: string; maskedValue: string }>;
+    loading: boolean;
+  }>({ canRelease: false, enabled: false, entries: [], loading: true });
+  const [savingDnc, setSavingDnc] = useState<LeadContactChannel | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -80,6 +87,32 @@ export function LeadContactChannelsPanel({
     setEditing(null);
     setNotice(null);
     // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
+
+  async function refreshDoNotContacts() {
+    setDncState((current) => ({ ...current, loading: true }));
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/do-not-contact`),
+        { cache: "no-store" },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        canRelease?: boolean;
+        enabled?: boolean;
+        entries?: Array<{ blockedAt: string; channel: LeadContactChannel; dncId: string; maskedValue: string }>;
+      } | null;
+      if (!response.ok) throw new Error("연락 거부 상태를 확인하지 못했습니다.");
+      setDncState({ canRelease: Boolean(payload?.canRelease), enabled: Boolean(payload?.enabled), entries: payload?.entries || [], loading: false });
+    } catch {
+      setDncState({ canRelease: false, enabled: false, entries: [], loading: false });
+    }
+  }
+
+  useEffect(() => {
+    void refreshDoNotContacts();
+    // refreshDoNotContacts는 현재 lead.id만 사용합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -214,6 +247,49 @@ export function LeadContactChannelsPanel({
       setNotice({ tone: "error", text: error instanceof Error ? error.message : "저장하지 못했습니다." });
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function registerDoNotContact(channel: LeadContactChannel, value: string) {
+    if (!window.confirm(`${LEAD_CONTACT_CHANNEL_LABELS[channel]} 채널을 연락 거부로 등록하시겠습니까?`)) return;
+    setSavingDnc(channel);
+    setNotice(null);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/do-not-contact`),
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel, reason: "상대방 요청", value }) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || "연락 거부를 등록하지 못했습니다.");
+      await refreshDoNotContacts();
+      setNotice({ tone: "ok", text: "연락 거부를 등록했습니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "연락 거부를 등록하지 못했습니다." });
+    } finally {
+      setSavingDnc(null);
+    }
+  }
+
+  async function releaseDoNotContact(entry: { channel: LeadContactChannel; dncId: string }) {
+    const releaseReason = window.prompt("연락 거부 해제 사유를 입력해 주세요.")?.trim();
+    if (!releaseReason) return;
+    setSavingDnc(entry.channel);
+    setNotice(null);
+    try {
+      const response = await fetchWithTimeout(
+        withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/do-not-contact`),
+        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dncId: entry.dncId, releaseReason }) },
+        12000
+      );
+      const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || "연락 거부를 해제하지 못했습니다.");
+      await refreshDoNotContacts();
+      setNotice({ tone: "ok", text: "연락 거부를 해제했습니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "연락 거부를 해제하지 못했습니다." });
+    } finally {
+      setSavingDnc(null);
     }
   }
 
@@ -439,6 +515,44 @@ export function LeadContactChannelsPanel({
       </div>
 
       {storePhone ? <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-slate-600">전화번호 보기</summary><p className="pb-2 text-xs font-semibold text-slate-700">매장 유선 {storePhone} · 참고용(콜드콜 대상 아님)</p></details> : null}
+      <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-black text-red-950">연락 거부</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-red-800">
+              {dncState.loading ? "상태 확인 중" : dncState.enabled ? "채널별 등록·해제" : "운영 승인 전 비활성화됨"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+          {([
+            ["sms", mobile],
+            ["instagram", instagramHandle ? `@${instagramHandle}` : undefined],
+            ["talktalk", lead.naverTalktalkUrl],
+            ["email", lead.email],
+            ["fax", lead.fax],
+            ["visit", lead.id]
+          ] as Array<[LeadContactChannel, string | undefined]>).filter(([, value]) => Boolean(value)).map(([channel, value]) => {
+            const active = dncState.entries.find((entry) => entry.channel === channel);
+            return (
+              <div className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-red-100 bg-white px-2" key={channel}>
+                <span className="text-[11px] font-bold text-slate-700">
+                  {LEAD_CONTACT_CHANNEL_LABELS[channel]}{active ? ` · ${active.maskedValue}` : ""}
+                </span>
+                <button
+                  className="maju-button-secondary min-h-9 px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!dncState.enabled || dncState.loading || savingDnc === channel || Boolean(active && !dncState.canRelease)}
+                  onClick={() => active ? void releaseDoNotContact(active) : void registerDoNotContact(channel, value!)}
+                  type="button"
+                >
+                  {savingDnc === channel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {active ? "해제" : "등록"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
       {notice ? <p className={`mt-2 text-[11px] font-bold ${notice.tone === "ok" ? "text-teal-700" : "text-red-700"}`}>{notice.text}</p> : null}
     </section>
   );
