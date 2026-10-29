@@ -12,6 +12,7 @@ import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
 import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
+import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
 import { getCompanySettings, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -173,6 +174,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 notificationSenderName={companySettings.notificationSenderName}
                 driverName={driverName}
                 driverPhone={session.operationalPhone}
+                structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}
               />
             </section>
               <details className="mobile-card group mt-3 rounded-xl border">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
@@ -33,7 +33,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey, structuredRecordsEnabled = false }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string; structuredRecordsEnabled?: boolean }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -69,6 +69,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
+  const structuredSaveKeyRef = useRef("");
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -190,14 +191,40 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     setConvertedCustomerId("");
     setConversionFailed(false);
     setBusinessHoursDraft("");
+    setMemo("");
+    setReminderDate("");
+    setSampleItem("");
+    setSampleQuantity("");
+    setSalesPriceItem("");
+    setSalesPrice("");
+    setSalesPriceValidUntil("");
+    setImportantNote("");
+    structuredSaveKeyRef.current = "";
     try {
-      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
-      if (response.ok) setHistory(payload?.actions || []);
+      const [historyResponse, structuredResponse] = await Promise.all([
+        fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" }),
+        structuredRecordsEnabled
+          ? fetch(`/api/customer/structured-field-records?kind=lead_sales_offer&leadId=${encodeURIComponent(lead.id)}`, { cache: "no-store" }).catch(() => null)
+          : Promise.resolve(null)
+      ]);
+      const payload = (await historyResponse.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
+      if (historyResponse.ok) setHistory(payload?.actions || []);
+      const structuredPayload = structuredResponse?.ok ? await structuredResponse.json().catch(() => null) : null;
+      const record = structuredPayload?.record as { items?: Array<{ item_name?: string; offered_price?: number | string; sample_provided?: boolean; sample_quantity?: number | string; valid_until?: string }>; memo?: string } | undefined;
+      if (record) {
+        const sample = record.items?.find((item) => item.sample_provided);
+        const priced = record.items?.find((item) => item.offered_price != null);
+        setSampleItem(sample?.item_name || "");
+        setSampleQuantity(sample?.sample_quantity == null ? "" : String(sample.sample_quantity));
+        setSalesPriceItem(priced?.item_name || "");
+        setSalesPrice(priced?.offered_price == null ? "" : String(priced.offered_price));
+        setSalesPriceValidUntil(priced?.valid_until || "");
+        setImportantNote(record.memo || "");
+      }
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [structuredRecordsEnabled]);
 
   async function saveBusinessHours() {
     if (!selected || !businessHoursDraft.trim()) return;
@@ -276,11 +303,24 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     ].filter(Boolean);
     const detailedMemo = [memo.trim(), ...detailLines, quoteUrl ? `[고객용 견적: ${quoteUrl}]` : ""].filter(Boolean).join("\n");
     const actionPayload = { actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: detailedMemo, reminderDate }), result: contactResult };
+    const structuredItems = [
+      sampleItem.trim() ? { itemName: sampleItem.trim(), sampleProvided: true, sampleQuantity: toNumericString(sampleQuantity) || undefined } : null,
+      salesPriceItem.trim() ? { itemName: salesPriceItem.trim(), offeredPrice: toNumericString(salesPrice) || undefined, currencyCode: "KRW", validUntil: salesPriceValidUntil || undefined } : null
+    ].filter(Boolean);
+    const usesStructuredOffer = structuredRecordsEnabled && structuredItems.length > 0;
+    if (usesStructuredOffer && !structuredSaveKeyRef.current) structuredSaveKeyRef.current = `sales:${crypto.randomUUID()}`;
     try {
-      const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
+      const response = await fetch(usesStructuredOffer ? "/api/customer/structured-field-records" : `/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(actionPayload)
+        body: JSON.stringify(usesStructuredOffer ? {
+          kind: "lead_sales_offer",
+          leadId: selected.id,
+          memo: actionPayload.memo,
+          idempotencyKey: structuredSaveKeyRef.current,
+          action: actionPayload,
+          items: structuredItems
+        } : actionPayload)
       });
       const payload = (await response.json().catch(() => null)) as { action?: PermitLeadActionItem; message?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "컨택 기록을 저장하지 못했습니다.");
@@ -288,7 +328,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: payload?.status || lead.status } : lead));
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
       try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 브라우저 저장 실패는 기록 저장을 막지 않습니다. */ }
-      setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
+      structuredSaveKeyRef.current = "";
+      if (usesStructuredOffer) {
+        await openLead(selected);
+        void loadLeads();
+      } else {
+        setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
+      }
       if (contactResult === "거래 시작") {
         await convertSelectedLead();
         setSaveMessage("거래 시작을 기록하고 거래처·배송지로 연결했습니다. 주소와 배송 설정을 확인하세요.");
@@ -296,7 +342,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         setSaveMessage(quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.");
       }
     } catch (saveError) {
-      if (saveError instanceof TypeError) {
+      if (saveError instanceof TypeError && !usesStructuredOffer) {
         const queued: QueuedMobileSalesAction = { createdAt: new Date().toISOString(), id: crypto.randomUUID(), leadId: selected.id, payload: actionPayload };
         const items = [...readMobileSalesActionQueue(window.localStorage), queued];
         writeMobileSalesActionQueue(window.localStorage, items);
@@ -460,6 +506,11 @@ function TaskCard({ count, kind, onClick }: { count: number; kind: MobileSalesTa
 }
 
 function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin; spin?: boolean; text: string }) { return <div className="mobile-muted mt-3 flex min-h-20 items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--mobile-border)] text-xs font-semibold"><Icon className={`h-4 w-4 ${spin ? "animate-spin" : ""}`} />{text}</div>; }
+
+function toNumericString(value: string) {
+  const normalized = value.replaceAll(",", "").trim();
+  return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : "";
+}
 
 function LeadCard({ checked = false, lead, location, onOpen, selectable = false }: { checked?: boolean; lead: PermitLeadItem; location: LocationPoint | null; onOpen: () => void; selectable?: boolean }) {
   const type = getMobileLeadType(lead);

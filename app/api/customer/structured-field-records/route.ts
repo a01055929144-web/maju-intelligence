@@ -11,6 +11,47 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+export async function GET(request: Request) {
+  const session = await getCustomerSession();
+  if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!areStructuredFieldRecordsEnabled(session.companyId)) {
+    return NextResponse.json({ message: "구조화 현장 기록 기능은 아직 활성화되지 않았습니다." }, { status: 404 });
+  }
+
+  const url = new URL(request.url);
+  const kind = url.searchParams.get("kind");
+  const subjectId = url.searchParams.get(kind === "delivery" ? "customerId" : "leadId") || "";
+  if (!subjectId) return NextResponse.json({ message: "조회 대상을 확인해 주세요." }, { status: 400 });
+  const companyId = encodeURIComponent(session.companyId);
+  const encodedSubjectId = encodeURIComponent(subjectId);
+
+  if (kind === "delivery") {
+    const events = await supabaseRequest<Array<Record<string, unknown>>>(
+      `delivery_events?select=id,event_type,cause_code,occurrence_stage,action_code,action_amount,status,memo,occurred_at&company_id=eq.${companyId}&customer_id=eq.${encodedSubjectId}&order=occurred_at.desc&limit=1`
+    );
+    const event = events[0];
+    if (!event?.id) return NextResponse.json({ record: null });
+    const items = await supabaseRequest<Array<Record<string, unknown>>>(
+      `delivery_event_items?select=id,line_number,item_name,quantity,quantity_unit,supplier_name&company_id=eq.${companyId}&delivery_event_id=eq.${encodeURIComponent(String(event.id))}&order=line_number.asc`
+    );
+    return NextResponse.json({ record: { ...event, items } });
+  }
+
+  if (kind === "lead_sales_offer") {
+    const offers = await supabaseRequest<Array<Record<string, unknown>>>(
+      `sales_offers?select=id,memo,offered_at&company_id=eq.${companyId}&lead_id=eq.${encodedSubjectId}&order=offered_at.desc&limit=1`
+    );
+    const offer = offers[0];
+    if (!offer?.id) return NextResponse.json({ record: null });
+    const items = await supabaseRequest<Array<Record<string, unknown>>>(
+      `sales_offer_items?select=id,line_number,item_name,offered_price,currency_code,valid_until,sample_provided,sample_quantity,sample_unit&company_id=eq.${companyId}&sales_offer_id=eq.${encodeURIComponent(String(offer.id))}&order=line_number.asc`
+    );
+    return NextResponse.json({ record: { ...offer, items } });
+  }
+
+  return NextResponse.json({ message: "지원하지 않는 기록 유형입니다." }, { status: 400 });
+}
+
 export async function POST(request: Request) {
   const session = await getCustomerSession();
   if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

@@ -62,7 +62,8 @@ export function MobileDeliveryProofPanel({
   nextCustomerId,
   nextCustomerName,
   notificationPhone,
-  notificationSenderName
+  notificationSenderName,
+  structuredRecordsEnabled = false
 }: {
   companyName?: string;
   customerId: string;
@@ -77,6 +78,7 @@ export function MobileDeliveryProofPanel({
   nextCustomerName?: string;
   notificationPhone?: string;
   notificationSenderName?: string;
+  structuredRecordsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [copyMessage, setCopyMessage] = useState("");
@@ -235,10 +237,28 @@ export function MobileDeliveryProofPanel({
 
     setProgressLabel(isNotificationRetry ? "알림만 다시 요청 중" : "사진과 메모 저장 중");
 
-    const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout("/api/customer-operations", {
+    const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout(structuredRecordsEnabled ? "/api/customer/structured-field-records" : "/api/customer-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(structuredRecordsEnabled ? {
+        kind: "delivery",
+        customerId,
+        memo: memoText,
+        idempotencyKey: `${progress.attemptId}:note`,
+        event: {
+          eventType: deliveryStatus,
+          causeCode: issueCause || undefined,
+          occurrenceStage: occurrenceStage || undefined,
+          actionCode: deliveryAction || undefined,
+          actionAmount: toNumericString(actionAmount) || undefined,
+          status: eventStatus
+        },
+        items: itemName.trim() ? [{
+          itemName: itemName.trim(),
+          quantity: toNumericString(itemQuantity) || undefined,
+          supplierName: supplierName.trim() || undefined
+        }] : []
+      } : {
         action: "note",
         customerId,
         memo: memoText,
@@ -251,8 +271,8 @@ export function MobileDeliveryProofPanel({
     const attachmentRequests = pendingFiles.map(async (file) => ({ file, response: await uploadDeliveryProof(customerId, file, file.name, `${progress.attemptId}:file:${files.indexOf(file)}`).catch(() => null) }));
     const [noteResponse, attachmentResponses] = await Promise.all([noteRequest, Promise.all(attachmentRequests)]);
 
-    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
-    const noteId = progress.noteId || notePayload?.note?.id;
+    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string }; record?: { noteId?: string } } | null) : null;
+    const noteId = progress.noteId || notePayload?.note?.id || notePayload?.record?.noteId;
     const uploadedAttachments = { ...progress.attachments };
     const attachmentFailures: string[] = [];
     for (const item of attachmentResponses) {
@@ -408,12 +428,42 @@ export function MobileDeliveryProofPanel({
   }
 
   useEffect(() => {
+    const structuredController = new AbortController();
     requestLocation();
     void loadProofs();
+    if (structuredRecordsEnabled) {
+      setDeliveryStatus("arrived");
+      setIssueCause("");
+      setOccurrenceStage("");
+      setDeliveryAction("");
+      setActionAmount("");
+      setEventStatus("received");
+      setItemName("");
+      setItemQuantity("");
+      setSupplierName("");
+      void fetch(`/api/customer/structured-field-records?kind=delivery&customerId=${encodeURIComponent(customerId)}`, { cache: "no-store", signal: structuredController.signal })
+        .then(async (response) => response.ok ? response.json() : null)
+        .then((payload) => {
+          const record = payload?.record as { action_amount?: number | string; action_code?: DeliveryAction; cause_code?: DeliveryIssueCause; event_type?: DeliveryStatus; items?: Array<{ item_name?: string; quantity?: number | string; supplier_name?: string }>; occurrence_stage?: DeliveryOccurrenceStage; status?: DeliveryEventStatus } | undefined;
+          if (!record) return;
+          setDeliveryStatus(record.event_type || "arrived");
+          setIssueCause(record.cause_code || "");
+          setOccurrenceStage(record.occurrence_stage || "");
+          setDeliveryAction(record.action_code || "");
+          setActionAmount(record.action_amount == null ? "" : String(record.action_amount));
+          setEventStatus(record.status || "received");
+          const item = record.items?.[0];
+          setItemName(item?.item_name || "");
+          setItemQuantity(item?.quantity == null ? "" : String(item.quantity));
+          setSupplierName(item?.supplier_name || "");
+        })
+        .catch(() => undefined);
+    }
     const savedContactMode = window.localStorage.getItem(`maju-contact-mode:${driverName}`);
     if (savedContactMode === "driver" && driverPhone) setContactMode("driver");
+    return () => structuredController.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  }, [customerId, structuredRecordsEnabled]);
 
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine);
@@ -767,6 +817,11 @@ async function uploadDeliveryProof(customerId: string, file: File, title: string
 
 function fileKey(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function toNumericString(value: string) {
+  const normalized = value.replaceAll(",", "").trim();
+  return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : "";
 }
 
 async function createMessageCardFile(customerName: string, message: string) {
