@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { presentDncRpcError } from "@/domains/lead/dnc-rpc-errors";
 import { normalizeDoNotContactValue } from "@/domains/lead/outreach-governance";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { isActiveLegacyOwnerSession, LEAD_DNC_WRITE_ENABLED, listActiveLeadDoNotContacts, registerLeadDoNotContact, releaseLeadDoNotContact } from "@/lib/store";
@@ -28,16 +29,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!channel) return NextResponse.json({ message: "연락 채널이 필요합니다." }, { status: 400 });
   const normalizedValue = normalizeDoNotContactValue(channel, body?.value);
   if (!normalizedValue) return NextResponse.json({ message: "연락처 값이 필요합니다." }, { status: 400 });
-  const ok = await registerLeadDoNotContact({
-    actorName: getCustomerOperationalName(scope.customerSession) || scope.customerSession?.name || scope.adminSession?.name,
-    actorUserId: scope.customerSession?.userId,
-    channel,
-    companyId: scope.companyId!,
-    leadId: (await params).id,
-    normalizedValue,
-    reason: body?.reason
-  });
-  return NextResponse.json({ ok });
+  try {
+    const ok = await registerLeadDoNotContact({
+      actorName: getCustomerOperationalName(scope.customerSession) || scope.customerSession?.name || scope.adminSession?.name,
+      actorUserId: scope.customerSession?.userId,
+      channel,
+      companyId: scope.companyId!,
+      leadId: (await params).id,
+      normalizedValue,
+      reason: body?.reason
+    });
+    return NextResponse.json({ ok });
+  } catch (error) {
+    const presentation = presentDncRpcError(error);
+    return NextResponse.json({ message: presentation.message }, { status: presentation.status });
+  }
 }
 
 export async function DELETE(request: NextRequest) {
@@ -63,13 +69,18 @@ export async function DELETE(request: NextRequest) {
   if (!dncId) return NextResponse.json({ message: "연락 거부 ID가 필요합니다." }, { status: 400 });
   if (!releaseReason) return NextResponse.json({ message: "해제 사유가 필요합니다." }, { status: 400 });
   const actorKind = scope.customerSession.userId ? "app_user" : "legacy_owner";
-  const ok = await releaseLeadDoNotContact({
-    actorKind,
-    actorName: getCustomerOperationalName(scope.customerSession) || scope.customerSession.name,
-    actorUserId: scope.customerSession.userId,
-    companyId: scope.companyId!,
-    dncId,
-    releaseReason
-  });
-  return NextResponse.json({ ok });
+  try {
+    const ok = await releaseLeadDoNotContact({
+      actorKind,
+      actorName: getCustomerOperationalName(scope.customerSession) || scope.customerSession.name,
+      actorUserId: scope.customerSession.userId,
+      companyId: scope.companyId!,
+      dncId,
+      releaseReason
+    });
+    return NextResponse.json({ ok });
+  } catch (error) {
+    const presentation = presentDncRpcError(error);
+    return NextResponse.json({ message: presentation.message }, { status: presentation.status });
+  }
 }
