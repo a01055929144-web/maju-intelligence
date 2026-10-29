@@ -2564,7 +2564,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       {/* 시안 ⑫ 2줄: 지도 위에 떠 있는 카드가 아니라 화면 폭 전체의 고정 필터 줄입니다. 지도와
           좌우 패널은 이 줄 바로 아래에서 시작합니다(겹치지 않으므로 mapHeaderHeightPx는 0). */}
       <section
-        className={`relative z-40 shrink-0 space-y-1 border-b border-slate-200 bg-white px-3 py-1.5 ${activeView === "map" ? "lg:px-4 lg:py-2" : ""}`}
+        className={`relative z-30 shrink-0 space-y-1 border-b border-slate-200 bg-white px-3 py-1.5 ${activeView === "map" ? "lg:px-4 lg:py-2" : ""}`}
         ref={mapHeaderRef}
       >
         {activeView === "map" ? (
