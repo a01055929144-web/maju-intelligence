@@ -50,6 +50,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [selected, setSelected] = useState<PermitLeadItem | null>(null);
   const [history, setHistory] = useState<PermitLeadActionItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [recentHistoryLoadError, setRecentHistoryLoadError] = useState("");
   const [result, setResult] = useState<StandardVisitResult>("부재");
   const [memo, setMemo] = useState("");
   const [reminderDate, setReminderDate] = useState("");
@@ -188,12 +189,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     y: 25 + (index % 6) * 9
   })), [visibleLeads]);
 
-  const openLead = useCallback(async (lead: PermitLeadItem) => {
+  const openLead = useCallback(async (lead: PermitLeadItem): Promise<boolean> => {
     const requestId = ++openLeadRequestRef.current;
     setSelected(lead);
     setSaveMessage("");
     setHistory([]);
     setHistoryLoading(true);
+    setRecentHistoryLoadError("");
     setQuoteOpen(false);
     setIssuedQuoteUrl("");
     setConvertedCustomerId("");
@@ -217,11 +219,17 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           : Promise.resolve(null)
       ]);
       const payload = (await historyResponse.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
-      if (requestId !== openLeadRequestRef.current) return;
+      if (requestId !== openLeadRequestRef.current) return false;
       if (historyResponse.ok) setHistory(payload?.actions || []);
       const structuredPayload = structuredResponse?.ok ? await structuredResponse.json().catch(() => null) : null;
-      if (requestId !== openLeadRequestRef.current) return;
+      if (requestId !== openLeadRequestRef.current) return false;
       setRecentStructuredOffer((structuredPayload?.record as RecentStructuredOffer | null) || null);
+      const loaded = historyResponse.ok && (!structuredRecordsEnabled || Boolean(structuredResponse?.ok));
+      if (!loaded) setRecentHistoryLoadError("최근 기록을 불러오지 못했습니다. 새 기록은 계속 작성할 수 있습니다.");
+      return loaded;
+    } catch {
+      if (requestId === openLeadRequestRef.current) setRecentHistoryLoadError("최근 기록을 불러오지 못했습니다. 새 기록은 계속 작성할 수 있습니다.");
+      return false;
     } finally {
       if (requestId === openLeadRequestRef.current) setHistoryLoading(false);
     }
@@ -335,8 +343,9 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
       try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 브라우저 저장 실패는 기록 저장을 막지 않습니다. */ }
       structuredSaveAttemptRef.current = null;
+      let recentRecordsLoaded = true;
       if (usesStructuredOffer) {
-        await openLead(selected);
+        recentRecordsLoaded = await openLead(selected);
         void loadLeads();
       } else {
         setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
@@ -345,7 +354,8 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
         await convertSelectedLead();
         setSaveMessage("거래 시작을 기록하고 거래처·배송지로 연결했습니다. 주소와 배송 설정을 확인하세요.");
       } else {
-        setSaveMessage(quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.");
+        const savedMessage = quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.";
+        setSaveMessage(recentRecordsLoaded ? savedMessage : `${savedMessage} 최근 기록을 다시 불러오지 못했습니다. 다시 열어 확인해 주세요.`);
       }
     } catch (saveError) {
       if (saveError instanceof TypeError && !usesStructuredOffer) {
@@ -485,6 +495,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
             </p>)}
             {recentStructuredOffer.memo ? <p className="mt-2 whitespace-pre-wrap text-xs">{recentStructuredOffer.memo}</p> : null}
           </section> : null}
+          {recentHistoryLoadError ? <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{recentHistoryLoadError}</p> : null}
           <details className="mobile-card-raised mt-4 rounded-xl border p-3">
             <summary className="cursor-pointer text-xs font-bold">샘플 · 영업 단가 · 중요 특이사항</summary>
             <div className="mt-3 grid grid-cols-[1fr_92px] gap-2"><input aria-label="샘플 품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleItem(event.target.value)} placeholder="샘플 품목" value={sampleItem} /><input aria-label="샘플 수량" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleQuantity(event.target.value)} placeholder="수량" value={sampleQuantity} /></div>

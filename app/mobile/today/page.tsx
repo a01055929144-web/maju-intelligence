@@ -163,6 +163,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               <MobileDeliveryProofPanel
                 companyName={companySettings.name || session.companyName}
                 customerId={selectedStop.id}
+                key={selectedStop.id}
                 customerName={selectedStop.name}
                 deliveryCompleteMessage={companySettings.deliveryCompleteMessage}
                 deliveryIssueMessage={companySettings.deliveryIssueMessage}

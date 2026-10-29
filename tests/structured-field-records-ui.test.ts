@@ -9,6 +9,7 @@ const salesPageSource = readFileSync("app/mobile/sales/page.tsx", "utf8");
 describe("structured record mobile flow wiring", () => {
   it("keeps delivery save and reopen behind the company flag", () => {
     expect(todayPageSource).toContain("structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}");
+    expect(todayPageSource).toMatch(/<MobileDeliveryProofPanel[\s\S]*?customerId=\{selectedStop\.id\}[\s\S]*?key=\{selectedStop\.id\}/);
     expect(deliverySource).toContain('structuredRecordsEnabled ? "/api/customer/structured-field-records" : "/api/customer-operations"');
     expect(deliverySource).toContain("kind=delivery&customerId=");
   });
@@ -17,7 +18,7 @@ describe("structured record mobile flow wiring", () => {
     expect(salesPageSource).toContain("structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}");
     expect(salesSource).toContain('usesStructuredOffer ? "/api/customer/structured-field-records"');
     expect(salesSource).toContain("kind=lead_sales_offer&leadId=");
-    expect(salesSource).toContain("await openLead(selected)");
+    expect(salesSource).toContain("recentRecordsLoaded = await openLead(selected)");
   });
 
   it("shows the latest delivery record separately without restoring it into a new report", () => {
@@ -41,8 +42,17 @@ describe("structured record mobile flow wiring", () => {
     }
     expect(reopen).toContain("setRecentStructuredOffer((structuredPayload?.record");
     expect(salesSource).toContain('aria-label="최근 구조화 영업 기록"');
-    expect(salesSource).toMatch(/structuredSaveAttemptRef\.current = null;\s+if \(usesStructuredOffer\) \{\s+await openLead\(selected\);/);
+    expect(salesSource).toMatch(/structuredSaveAttemptRef\.current = null;\s+let recentRecordsLoaded = true;\s+if \(usesStructuredOffer\) \{\s+recentRecordsLoaded = await openLead\(selected\);/);
     const save = salesSource.slice(salesSource.indexOf("async function saveContact"), salesSource.indexOf("const contactedCount"));
     expect(save).not.toContain("recentStructuredOffer");
+  });
+
+  it("keeps a successful sales save successful when the recent-record refresh fails", () => {
+    const reopen = salesSource.slice(salesSource.indexOf("const openLead = useCallback"), salesSource.indexOf("async function saveBusinessHours"));
+    expect(reopen).toContain("catch {");
+    expect(reopen).toContain("return false;");
+    const save = salesSource.slice(salesSource.indexOf("async function saveContact"), salesSource.indexOf("const contactedCount"));
+    expect(save).toContain("recentRecordsLoaded = await openLead(selected)");
+    expect(save).toContain("최근 기록을 다시 불러오지 못했습니다. 다시 열어 확인해 주세요.");
   });
 });
