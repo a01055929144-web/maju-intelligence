@@ -125,7 +125,8 @@ describe("시안 ⑫ 필터 줄 · 격자", () => {
   it("uses chip popovers, a static full-width filter row and flush side panels", () => {
     expect(workspaceSource).toContain('placeholder="상호·주소·전화"');
     expect(workspaceSource).toContain("data-map-filter-chip");
-    expect(workspaceSource).toContain('label: "규모(평)", muted: true');
+    expect(workspaceSource).toContain('muted: !LEAD_STORE_AREA_FEATURE_ENABLED');
+    expect(workspaceSource).toContain('title: LEAD_STORE_AREA_FEATURE_ENABLED ? "매장 규모(평)" : "매장 규모(평) · 준비 중"');
     expect(workspaceSource).not.toContain("lg:absolute lg:inset-x-2 lg:top-2 lg:z-20");
     expect(workspaceSource).toContain('"lg:left-[250px]"');
     expect(workspaceSource).toContain('"lg:right-[340px]"');

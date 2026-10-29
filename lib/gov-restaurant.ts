@@ -13,6 +13,7 @@
  * /info의 개방자치단체코드 조건과 최신순 정렬을 사용해 회사 영업 지역만 조회합니다.
  */
 
+import { parseStoreAreaSqm } from "../domains/lead/store-area";
 import { getGovUpdateKind, scanGovArea, type GovDataset } from "./gov-area-scan";
 import { GovApiResponseError, parseGovApiFailure } from "./gov-api-response";
 
@@ -43,6 +44,7 @@ export type GovRestaurantRow = {
   sourceRecordKey?: string;
   updateKind?: ReturnType<typeof getGovUpdateKind>;
   salesStatusCode?: string;
+  storeAreaSqm?: number;
 };
 
 function getGovRestaurantApiKey() {
@@ -92,7 +94,8 @@ function mapRow(raw: Record<string, unknown>): GovRestaurantRow | null {
     lastModified: pick(raw, ["LAST_MDFCN_PNT", "DAT_UPDT_PNT"]),
     sourceRecordKey: pick(raw, ["MGTNO", "MNG_NO"]),
     updateKind,
-    salesStatusCode
+    salesStatusCode,
+    storeAreaSqm: parseStoreAreaSqm(pick(raw, ["LCTN_AREA"]))
   };
 }
 

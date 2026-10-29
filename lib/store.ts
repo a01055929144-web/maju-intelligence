@@ -24,6 +24,7 @@ import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/le
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
+import { getStoreAreaSqmFilterBounds, mergePendingInsertStoreArea, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -8241,6 +8242,8 @@ export type PermitLeadIngestRow = {
   /** 원천의 최종 변경 시각. 출처가 섞인 중복 그룹의 대표 상태 판정에 사용합니다. */
   lastModified?: string;
   kakaoCategoryName?: string;
+  /** 공공 인허가 원천의 소재지 면적 원본(㎡). 평은 표시 시에만 계산합니다. */
+  storeAreaSqm?: number;
 };
 
 export type PermitLeadItem = {
@@ -8298,6 +8301,7 @@ export type PermitLeadItem = {
   source?: string;
   createdAt: string;
   updatedAt: string;
+  storeAreaSqm?: number;
   businessHourIntervals?: LeadBusinessHourInterval[];
 };
 
@@ -8366,6 +8370,7 @@ type PermitLeadRow = {
   source: string | null;
   created_at: string;
   updated_at: string;
+  store_area_sqm?: number | null;
 };
 
 /**
@@ -8542,7 +8547,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     keywordVolume: row.keyword_volume ?? undefined,
     source: row.source || undefined,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    storeAreaSqm: row.store_area_sqm ?? undefined
   };
 }
 
@@ -9034,17 +9040,29 @@ export async function ingestPermitLeadRows(
     };
 
     if (existingId) {
-      updates.push({ id: existingId, payload, sourceRecordKey, row });
+      updates.push({
+        id: existingId,
+        payload: { ...payload, ...storeAreaWriteFields(row.storeAreaSqm, "update", process.env.LEAD_STORE_AREA_ENABLED === "true") },
+        sourceRecordKey,
+        row
+      });
     } else {
+      const insertPayload = {
+        ...payload,
+        ...storeAreaWriteFields(row.storeAreaSqm, "insert", process.env.LEAD_STORE_AREA_ENABLED === "true")
+      };
       const pendingIndex = pendingInsertByFingerprint.get(canonicalFingerprint);
       if (pendingIndex !== undefined) {
         result.batchDuplicates += 1;
         const pending = inserts[pendingIndex];
         pending.sourceRecords.push({ sourceRecordKey, row });
         if (!pending.payload.phone && row.phone) pending.payload.phone = row.phone;
+        if (process.env.LEAD_STORE_AREA_ENABLED === "true") {
+          pending.payload.store_area_sqm = mergePendingInsertStoreArea(pending.payload.store_area_sqm, row.storeAreaSqm);
+        }
       } else {
         pendingInsertByFingerprint.set(canonicalFingerprint, inserts.length);
-        inserts.push({ payload, sourceRecords: [{ sourceRecordKey, row }] });
+        inserts.push({ payload: insertPayload, sourceRecords: [{ sourceRecordKey, row }] });
       }
     }
   }
@@ -10144,6 +10162,7 @@ export type PermitLeadFilters = {
   includeExistingCustomers?: boolean;
   includeTemporaryOperations?: boolean;
   leadId?: string;
+  storeAreaRange?: StoreAreaRange;
 };
 
 type LeadBusinessHourRow = {
@@ -10212,6 +10231,11 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
+  if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
+    const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
+    if (bounds.min !== undefined) params.push(`store_area_sqm=gte.${bounds.min}`);
+    if (bounds.max !== undefined) params.push(`store_area_sqm=lte.${bounds.max}`);
+  }
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
   if (!filters.includeTemporaryOperations && filters.status !== "임시 영업") params.push(`status=neq.${encodeURIComponent("임시 영업")}`);

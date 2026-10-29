@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { getCompanySalesAdministrativeAreas, getPermitLeadQueues, ingestPermitLeadRows, listPermitLeads, PermitLeadIngestRow, PermitLeadPeriod } from "@/lib/store";
+import { isStoreAreaRange } from "@/domains/lead/store-area";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest) {
   const includeExistingCustomers = params.get("includeExistingCustomers") === "true";
   const includeTemporaryOperations = params.get("includeTemporaryOperations") === "true";
   const leadId = params.get("leadId") || undefined;
+  const requestedStoreAreaRange = params.get("storeArea");
+  const storeAreaRange = process.env.LEAD_STORE_AREA_ENABLED === "true" && isStoreAreaRange(requestedStoreAreaRange)
+    ? requestedStoreAreaRange
+    : undefined;
 
   const [{ leads, total }, queues, salesAreas] = await Promise.all([
     listPermitLeads(scope.companyId!, {
@@ -35,7 +40,8 @@ export async function GET(request: NextRequest) {
       includeOutsideSalesArea: Boolean(leadId) || includeOutsideSalesArea,
       includeExistingCustomers: Boolean(leadId) || includeExistingCustomers,
       includeTemporaryOperations: Boolean(leadId) || includeTemporaryOperations,
-      leadId
+      leadId,
+      storeAreaRange
     }),
     getPermitLeadQueues(scope.companyId!),
     getCompanySalesAdministrativeAreas(scope.companyId!)

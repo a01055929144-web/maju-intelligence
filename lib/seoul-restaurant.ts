@@ -17,6 +17,7 @@
  */
 
 import proj4 from "proj4";
+import { parseStoreAreaSqm } from "../domains/lead/store-area";
 
 const SEOUL_API_BASE = "http://openapi.seoul.go.kr:8088";
 const SEOUL_RESTAURANT_SERVICE = "LOCALDATA_072404";
@@ -55,6 +56,7 @@ export type SeoulRestaurantRow = {
   longitude?: number;
   lastModified?: string;
   sourceRecordKey?: string;
+  storeAreaSqm?: number;
 };
 
 function getSeoulOpenDataApiKey() {
@@ -99,7 +101,8 @@ function mapRow(raw: Record<string, unknown>): SeoulRestaurantRow | null {
     latitude: point?.lat,
     longitude: point?.lng,
     lastModified: pick(raw, "LASTMODTS"),
-    sourceRecordKey: pick(raw, "MGTNO") || pick(raw, "MNGNO")
+    sourceRecordKey: pick(raw, "MGTNO") || pick(raw, "MNGNO"),
+    storeAreaSqm: parseStoreAreaSqm(pick(raw, "SITEAREA"))
   };
 }
 

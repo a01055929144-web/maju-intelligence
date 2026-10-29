@@ -102,6 +102,7 @@ import type {
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
+import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
   QUOTE_MARGIN_PRESETS,
   calculateQuoteLine,
@@ -158,6 +159,15 @@ export {
 type GradeFilter = "all" | RevenueGrade;
 type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 type MapFilterPopKey = "region" | "industry" | "size" | "date" | "stage" | "more";
+
+const LEAD_STORE_AREA_FEATURE_ENABLED = process.env.NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED === "true";
+const STORE_AREA_RANGE_OPTIONS: Array<{ label: string; value: StoreAreaRange }> = [
+  { label: "10평 이하", value: "lte10" },
+  { label: "20평 이하", value: "lte20" },
+  { label: "30평 이하", value: "lte30" },
+  { label: "30평 이상", value: "gte30" },
+  { label: "10~100평", value: "10to100" }
+];
 
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
@@ -660,6 +670,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
   const [mapLeadIndustryFilter, setMapLeadIndustryFilter] = useState("");
   const [mapLeadStageFilter, setMapLeadStageFilter] = useState("");
+  const [mapLeadAreaRange, setMapLeadAreaRange] = useState<StoreAreaRange | "">("");
   const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
   const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("new");
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
@@ -889,6 +900,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
       const params = new URLSearchParams({ excludeExcluded: "false" });
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
       const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) {
@@ -1000,7 +1012,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -1461,7 +1473,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapFilterChips: Array<{ active: boolean; icon: LucideIcon; key: MapFilterPopKey; label: string; muted?: boolean; title: string }> = [
     { active: Boolean(mapLeadRegionSigungu), icon: MapPin, key: "region", label: summarizeMultiFilter(mapLeadRegionSigungu, "영업 지역"), title: "영업 지역" },
     { active: Boolean(mapLeadIndustryFilter), icon: Utensils, key: "industry", label: summarizeMultiFilter(mapLeadIndustryFilter, "업종"), title: "업종" },
-    { active: false, icon: Ruler, key: "size", label: "규모(평)", muted: true, title: "매장 규모(평) · 준비 중" },
+    {
+      active: LEAD_STORE_AREA_FEATURE_ENABLED && Boolean(mapLeadAreaRange),
+      icon: Ruler,
+      key: "size",
+      label: LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange
+        ? STORE_AREA_RANGE_OPTIONS.find((option) => option.value === mapLeadAreaRange)?.label || "규모(평)"
+        : "규모(평)",
+      muted: !LEAD_STORE_AREA_FEATURE_ENABLED,
+      title: LEAD_STORE_AREA_FEATURE_ENABLED ? "매장 규모(평)" : "매장 규모(평) · 준비 중"
+    },
     {
       active: Boolean(mapOpenDatePreset),
       icon: CalendarDays,
@@ -1506,11 +1527,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [mapFilterPop]);
   const filteredAllLeadsForMap = useMemo(() => {
-    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
       if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
       if (mapLeadIndustryFilter && !splitMultiFilter(mapLeadIndustryFilter).includes(lead.industryPrimary || "미분류")) return false;
       if (mapLeadStageFilter && !splitMultiFilter(mapLeadStageFilter).includes(toLeadStageValue(lead.status))) return false;
+      if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange && !isStoreAreaInRange(lead.storeAreaSqm, mapLeadAreaRange)) return false;
       if (mapLeadReminderOnly && !getMapLeadReminderLabel(lead)) return false;
       if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
         if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
@@ -1522,7 +1544,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -2929,14 +2951,29 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               {mapFilterPop === "size" ? (
                 <div>
                   <div className="mb-2.5 flex flex-wrap gap-1.5">
-                    {["10평 이하", "20평 이하", "30평 이하", "30평 이상", "10~100평"].map((label) => (
-                      <button className="h-8 rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-400" disabled key={label} type="button">
-                        {label}
+                    {STORE_AREA_RANGE_OPTIONS.map((option) => (
+                      <button
+                        aria-pressed={mapLeadAreaRange === option.value}
+                        className={`h-8 rounded-full border px-3 text-[13px] ${
+                          LEAD_STORE_AREA_FEATURE_ENABLED
+                            ? mapLeadAreaRange === option.value
+                              ? "border-teal-700 bg-teal-700 font-bold text-white"
+                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            : "border-slate-200 bg-slate-50 text-slate-400"
+                        }`}
+                        disabled={!LEAD_STORE_AREA_FEATURE_ENABLED}
+                        key={option.value}
+                        onClick={() => setMapLeadAreaRange((current) => current === option.value ? "" : option.value)}
+                        type="button"
+                      >
+                        {option.label}
                       </button>
                     ))}
                   </div>
                   <p className="rounded-md bg-slate-50 px-2.5 py-2 text-xs leading-5 text-slate-600">
-                    매장 면적(평) 정보를 아직 수집하지 않아 이 필터는 준비 중입니다. 인허가 면적이 쌓이면 평 구간으로 거를 수 있습니다. (1평 = 3.3058㎡)
+                    {LEAD_STORE_AREA_FEATURE_ENABLED
+                      ? "공공 인허가 소재지 면적(㎡)을 평으로 환산한 구간입니다. 면적 미확인 리드는 구간 필터에서 제외됩니다."
+                      : "매장 면적(평) 정보를 아직 수집하지 않아 이 필터는 준비 중입니다. 인허가 면적이 쌓이면 평 구간으로 거를 수 있습니다. (1평 = 3.3058㎡)"}
                   </p>
                 </div>
               ) : null}
@@ -3342,13 +3379,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             >
               조회
             </button>
-            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadStageFilter || mapLeadReminderOnly || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
+            {mapLeadTypeFilter !== "all" || mapLeadIndustryFilter || mapLeadStageFilter || mapLeadAreaRange || mapLeadReminderOnly || mapLeadOpenDateStart || mapLeadOpenDateEnd || mapLeadRegionSigungu || mapLeadRegionDong ? (
               <button
                 className="h-8 shrink-0 rounded-md px-2 text-[11px] font-black text-slate-500 underline decoration-dotted underline-offset-2 hover:text-slate-800"
                 onClick={() => {
                   setMapLeadTypeFilter("all");
                   setMapLeadIndustryFilter("");
                   setMapLeadStageFilter("");
+                  setMapLeadAreaRange("");
                   setMapLeadReminderOnly(false);
                   setMapLeadRegionSigungu("");
                   setMapLeadRegionDong("");
@@ -6723,6 +6761,7 @@ function LeadListPanel({
                 lead.industryPrimary || "",
                 typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : ""
               ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
+              const storeAreaLabel = LEAD_STORE_AREA_FEATURE_ENABLED ? formatStoreAreaPyeong(lead.storeAreaSqm) : undefined;
               return (
                 <div
                   className={`flex flex-col gap-1.5 rounded-[10px] border bg-white p-2.5 text-left transition ${
@@ -6778,6 +6817,7 @@ function LeadListPanel({
                       </span>
                     ) : null}
                     <span className="min-w-0 truncate">{subText}</span>
+                    {storeAreaLabel ? <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-600">{storeAreaLabel}</span> : null}
                   </button>
                   {reminder ? (
                     <p className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
@@ -7921,6 +7961,11 @@ function PermitLeadMapQuickCard({
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
             {typeof lead.distanceKm === "number" ? (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
+            ) : null}
+            {LEAD_STORE_AREA_FEATURE_ENABLED && formatStoreAreaPyeong(lead.storeAreaSqm) ? (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-black text-indigo-700">
+                규모 {formatStoreAreaPyeong(lead.storeAreaSqm)}
+              </span>
             ) : null}
             {isOpeningSoon ? (
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
