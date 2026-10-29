@@ -11699,10 +11699,13 @@ export async function convertPermitLeadToCustomer(
       representativeName: lead.representative_name || undefined,
       address: lead.address || undefined,
       phone: lead.phone || undefined,
+      // 리드 상세에서 기록한 이메일도 거래처로 넘깁니다(대표 질문 10-29: 전환 시 정보가 이어지는지).
+      email: (lead as { email?: string | null }).email || undefined,
       industry: lead.industry_primary || undefined,
       openingDate: lead.open_date || undefined,
       naverPlaceUrl: lead.naver_place_url || undefined,
       kakaoPlaceUrl: lead.kakao_place_url || undefined,
+      googleMapUrl: (lead as { google_place_url?: string | null }).google_place_url || undefined,
       assignedStaffMemberId: assignment?.assignedStaffMemberId,
       deliveryTerritoryId: assignment?.deliveryTerritoryId,
       deliveryManager: selectedStaffName
