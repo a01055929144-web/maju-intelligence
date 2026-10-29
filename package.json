@@ -15,6 +15,7 @@
     "ops:migrate": "node scripts/apply-supabase-migrations.mjs",
     "ops:backfill-industries": "node scripts/backfill-kakao-industries.mjs",
     "ops:verify-persisted": "node scripts/verify-production-persistence.mjs",
+    "report:store-areas": "node --experimental-strip-types scripts/report-store-area-source-profile.ts",
     "maps:build-sales-areas": "node scripts/build-sales-area-boundaries.mjs"
   },
   "dependencies": {
