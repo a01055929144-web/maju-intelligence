@@ -32,6 +32,16 @@ type OperationNote = {
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
 type DeliverySaveProgress = { attachments: Record<string, Attachment>; attemptId: string; key: string; noteId?: string };
+type RecentStructuredDelivery = {
+  action_amount?: number | string;
+  action_code?: DeliveryAction;
+  cause_code?: DeliveryIssueCause;
+  event_type?: DeliveryStatus;
+  items?: Array<{ item_name?: string; quantity?: number | string; supplier_name?: string }>;
+  memo?: string;
+  occurrence_stage?: DeliveryOccurrenceStage;
+  status?: DeliveryEventStatus;
+};
 type MessageOutcome = "failed" | "idle" | "pending" | "sent";
 type MessageLog = {
   createdAt: string;
@@ -62,7 +72,8 @@ export function MobileDeliveryProofPanel({
   nextCustomerId,
   nextCustomerName,
   notificationPhone,
-  notificationSenderName
+  notificationSenderName,
+  structuredRecordsEnabled = false
 }: {
   companyName?: string;
   customerId: string;
@@ -77,6 +88,7 @@ export function MobileDeliveryProofPanel({
   nextCustomerName?: string;
   notificationPhone?: string;
   notificationSenderName?: string;
+  structuredRecordsEnabled?: boolean;
 }) {
   const router = useRouter();
   const [copyMessage, setCopyMessage] = useState("");
@@ -106,6 +118,7 @@ export function MobileDeliveryProofPanel({
   const [retryingMessageId, setRetryingMessageId] = useState("");
   const [resolvedMessage, setResolvedMessage] = useState("");
   const [notes, setNotes] = useState<OperationNote[]>([]);
+  const [recentStructuredDelivery, setRecentStructuredDelivery] = useState<RecentStructuredDelivery | null>(null);
   const [saving, setSaving] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [progressLabel, setProgressLabel] = useState("");
@@ -235,10 +248,28 @@ export function MobileDeliveryProofPanel({
 
     setProgressLabel(isNotificationRetry ? "알림만 다시 요청 중" : "사진과 메모 저장 중");
 
-    const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout("/api/customer-operations", {
+    const noteRequest = progress.noteId ? Promise.resolve(null) : fetchWithTimeout(structuredRecordsEnabled ? "/api/customer/structured-field-records" : "/api/customer-operations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(structuredRecordsEnabled ? {
+        kind: "delivery",
+        customerId,
+        memo: memoText,
+        idempotencyKey: `${progress.attemptId}:note`,
+        event: {
+          eventType: deliveryStatus,
+          causeCode: issueCause || undefined,
+          occurrenceStage: occurrenceStage || undefined,
+          actionCode: deliveryAction || undefined,
+          actionAmount: toNumericString(actionAmount) || undefined,
+          status: eventStatus
+        },
+        items: itemName.trim() ? [{
+          itemName: itemName.trim(),
+          quantity: toNumericString(itemQuantity) || undefined,
+          supplierName: supplierName.trim() || undefined
+        }] : []
+      } : {
         action: "note",
         customerId,
         memo: memoText,
@@ -251,8 +282,8 @@ export function MobileDeliveryProofPanel({
     const attachmentRequests = pendingFiles.map(async (file) => ({ file, response: await uploadDeliveryProof(customerId, file, file.name, `${progress.attemptId}:file:${files.indexOf(file)}`).catch(() => null) }));
     const [noteResponse, attachmentResponses] = await Promise.all([noteRequest, Promise.all(attachmentRequests)]);
 
-    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string } } | null) : null;
-    const noteId = progress.noteId || notePayload?.note?.id;
+    const notePayload = noteResponse?.ok ? ((await noteResponse.json().catch(() => null)) as { note?: { id?: string }; record?: { noteId?: string } } | null) : null;
+    const noteId = progress.noteId || notePayload?.note?.id || notePayload?.record?.noteId;
     const uploadedAttachments = { ...progress.attachments };
     const attachmentFailures: string[] = [];
     for (const item of attachmentResponses) {
@@ -408,12 +439,32 @@ export function MobileDeliveryProofPanel({
   }
 
   useEffect(() => {
+    const structuredController = new AbortController();
     requestLocation();
     void loadProofs();
+    setRecentStructuredDelivery(null);
+    if (structuredRecordsEnabled) {
+      setDeliveryStatus("arrived");
+      setIssueCause("");
+      setOccurrenceStage("");
+      setDeliveryAction("");
+      setActionAmount("");
+      setEventStatus("received");
+      setItemName("");
+      setItemQuantity("");
+      setSupplierName("");
+      void fetch(`/api/customer/structured-field-records?kind=delivery&customerId=${encodeURIComponent(customerId)}`, { cache: "no-store", signal: structuredController.signal })
+        .then(async (response) => response.ok ? response.json() : null)
+        .then((payload) => {
+          if (!structuredController.signal.aborted) setRecentStructuredDelivery((payload?.record as RecentStructuredDelivery | null) || null);
+        })
+        .catch(() => undefined);
+    }
     const savedContactMode = window.localStorage.getItem(`maju-contact-mode:${driverName}`);
     if (savedContactMode === "driver" && driverPhone) setContactMode("driver");
+    return () => structuredController.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  }, [customerId, structuredRecordsEnabled]);
 
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine);
@@ -636,6 +687,12 @@ export function MobileDeliveryProofPanel({
         </a>
       ) : null}
 
+      {recentStructuredDelivery ? <section aria-label="최근 구조화 배송 기록" className="mobile-card-raised mt-4 rounded-xl border p-3">
+        <p className="text-xs font-semibold">최근 기록 · 읽기 전용</p>
+        <p className="mobile-muted mt-1 text-xs">{deliveryStatusLabel(recentStructuredDelivery.event_type || "arrived")}{recentStructuredDelivery.cause_code ? ` · ${recentStructuredDelivery.cause_code}` : ""}</p>
+        {recentStructuredDelivery.items?.map((item, index) => <p className="mt-1 text-xs" key={`${item.item_name || "품목"}-${index}`}>{item.item_name || "품목 미확인"}{item.quantity != null ? ` · ${item.quantity}` : ""}{item.supplier_name ? ` · ${item.supplier_name}` : ""}</p>)}
+        {recentStructuredDelivery.memo ? <p className="mt-2 whitespace-pre-wrap text-xs">{recentStructuredDelivery.memo}</p> : null}
+      </section> : null}
       <details className="delivery-history mobile-card-raised group mt-4 rounded-xl border" id="delivery-history">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-black text-slate-600">
           이전 배송 기록
@@ -767,6 +824,11 @@ async function uploadDeliveryProof(customerId: string, file: File, title: string
 
 function fileKey(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function toNumericString(value: string) {
+  const normalized = value.replaceAll(",", "").trim();
+  return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : "";
 }
 
 async function createMessageCardFile(customerName: string, message: string) {

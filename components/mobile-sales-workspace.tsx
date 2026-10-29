@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
@@ -20,11 +20,16 @@ import { formatLeadBusinessHours } from "@/domains/lead/business-hours";
 import type { PermitLeadActionItem, PermitLeadItem } from "@/lib/store";
 import type { PermitLeadActionKind, PermitLeadActionResult } from "@/components/sales-route-map-workspace";
 import { isLeadBusinessHoursDraftEnabled } from "@/lib/feature-modules";
+import { createStructuredSaveSnapshot, resolveStructuredSaveAttempt, type StructuredSaveAttempt } from "@/lib/structured-record-idempotency";
 
 type LeadResponse = { leads?: PermitLeadItem[]; message?: string };
 type LocationPoint = { latitude: number; longitude: number };
 type ViewMode = "all" | MobileLeadType | "route" | "contacted" | "reminder" | MobileSalesTaskKind;
 type SalesKpi = { actualContacts: number; actualConversions: number; actualQuotes: number; targetContacts: number; targetConversions: number; targetQuotes: number };
+type RecentStructuredOffer = {
+  items?: Array<{ item_name?: string; offered_price?: number | string; sample_provided?: boolean; sample_quantity?: number | string; valid_until?: string }>;
+  memo?: string;
+};
 
 const collateralOptions = ["명함", "견적서", "단가표", "카탈로그", "샘플"] as const;
 const COLLATERAL_STORAGE_KEY = "maju:mobile-sales:last-collateral:v1";
@@ -33,7 +38,7 @@ const KakaoAddressMap = dynamic(() => import("@/components/kakao-address-map").t
   ssr: false
 });
 
-export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string }) {
+export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnabled = false, initialMode = "sales", kakaoMapAppKey, structuredRecordsEnabled = false }: { actorName: string; companyName: string; holdModulesEnabled?: boolean; initialMode?: MobileLeadType | "route"; kakaoMapAppKey?: string; structuredRecordsEnabled?: boolean }) {
   const [leads, setLeads] = useState<PermitLeadItem[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
@@ -45,6 +50,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [selected, setSelected] = useState<PermitLeadItem | null>(null);
   const [history, setHistory] = useState<PermitLeadActionItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [recentHistoryLoadError, setRecentHistoryLoadError] = useState("");
   const [result, setResult] = useState<StandardVisitResult>("부재");
   const [memo, setMemo] = useState("");
   const [reminderDate, setReminderDate] = useState("");
@@ -65,10 +71,13 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [salesPrice, setSalesPrice] = useState("");
   const [salesPriceValidUntil, setSalesPriceValidUntil] = useState("");
   const [importantNote, setImportantNote] = useState("");
+  const [recentStructuredOffer, setRecentStructuredOffer] = useState<RecentStructuredOffer | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
+  const structuredSaveAttemptRef = useRef<StructuredSaveAttempt | null>(null);
+  const openLeadRequestRef = useRef(0);
 
   const loadLeads = useCallback(async () => {
     setLoadState("loading");
@@ -180,24 +189,51 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     y: 25 + (index % 6) * 9
   })), [visibleLeads]);
 
-  const openLead = useCallback(async (lead: PermitLeadItem) => {
+  const openLead = useCallback(async (lead: PermitLeadItem): Promise<boolean> => {
+    const requestId = ++openLeadRequestRef.current;
     setSelected(lead);
     setSaveMessage("");
     setHistory([]);
     setHistoryLoading(true);
+    setRecentHistoryLoadError("");
     setQuoteOpen(false);
     setIssuedQuoteUrl("");
     setConvertedCustomerId("");
     setConversionFailed(false);
     setBusinessHoursDraft("");
+    setMemo("");
+    setReminderDate("");
+    setSampleItem("");
+    setSampleQuantity("");
+    setSalesPriceItem("");
+    setSalesPrice("");
+    setSalesPriceValidUntil("");
+    setImportantNote("");
+    setRecentStructuredOffer(null);
+    structuredSaveAttemptRef.current = null;
     try {
-      const response = await fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" });
-      const payload = (await response.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
-      if (response.ok) setHistory(payload?.actions || []);
+      const [historyResponse, structuredResponse] = await Promise.all([
+        fetch(`/api/leads/permits/${encodeURIComponent(lead.id)}/actions?limit=20`, { cache: "no-store" }),
+        structuredRecordsEnabled
+          ? fetch(`/api/customer/structured-field-records?kind=lead_sales_offer&leadId=${encodeURIComponent(lead.id)}`, { cache: "no-store" }).catch(() => null)
+          : Promise.resolve(null)
+      ]);
+      const payload = (await historyResponse.json().catch(() => null)) as { actions?: PermitLeadActionItem[] } | null;
+      if (requestId !== openLeadRequestRef.current) return false;
+      if (historyResponse.ok) setHistory(payload?.actions || []);
+      const structuredPayload = structuredResponse?.ok ? await structuredResponse.json().catch(() => null) : null;
+      if (requestId !== openLeadRequestRef.current) return false;
+      setRecentStructuredOffer((structuredPayload?.record as RecentStructuredOffer | null) || null);
+      const loaded = historyResponse.ok && (!structuredRecordsEnabled || Boolean(structuredResponse?.ok));
+      if (!loaded) setRecentHistoryLoadError("최근 기록을 불러오지 못했습니다. 새 기록은 계속 작성할 수 있습니다.");
+      return loaded;
+    } catch {
+      if (requestId === openLeadRequestRef.current) setRecentHistoryLoadError("최근 기록을 불러오지 못했습니다. 새 기록은 계속 작성할 수 있습니다.");
+      return false;
     } finally {
-      setHistoryLoading(false);
+      if (requestId === openLeadRequestRef.current) setHistoryLoading(false);
     }
-  }, []);
+  }, [structuredRecordsEnabled]);
 
   async function saveBusinessHours() {
     if (!selected || !businessHoursDraft.trim()) return;
@@ -276,11 +312,29 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
     ].filter(Boolean);
     const detailedMemo = [memo.trim(), ...detailLines, quoteUrl ? `[고객용 견적: ${quoteUrl}]` : ""].filter(Boolean).join("\n");
     const actionPayload = { actionType, collateralTypes: collateral, followUpAt: reminderDate || undefined, memo: buildContactMemo({ collateral, memo: detailedMemo, reminderDate }), result: contactResult };
+    const structuredItems = [
+      sampleItem.trim() ? { itemName: sampleItem.trim(), sampleProvided: true, sampleQuantity: toNumericString(sampleQuantity) || undefined } : null,
+      salesPriceItem.trim() ? { itemName: salesPriceItem.trim(), offeredPrice: toNumericString(salesPrice) || undefined, currencyCode: "KRW", validUntil: salesPriceValidUntil || undefined } : null
+    ].filter(Boolean);
+    const usesStructuredOffer = structuredRecordsEnabled && structuredItems.length > 0;
+    const structuredSnapshot = usesStructuredOffer
+      ? createStructuredSaveSnapshot({ action: actionPayload, items: structuredItems, leadId: selected.id, memo: actionPayload.memo })
+      : "";
+    if (usesStructuredOffer) {
+      structuredSaveAttemptRef.current = resolveStructuredSaveAttempt(structuredSaveAttemptRef.current, structuredSnapshot);
+    }
     try {
-      const response = await fetch(`/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
+      const response = await fetch(usesStructuredOffer ? "/api/customer/structured-field-records" : `/api/leads/permits/${encodeURIComponent(selected.id)}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(actionPayload)
+        body: JSON.stringify(usesStructuredOffer ? {
+          kind: "lead_sales_offer",
+          leadId: selected.id,
+          memo: actionPayload.memo,
+          idempotencyKey: structuredSaveAttemptRef.current?.key,
+          action: actionPayload,
+          items: structuredItems
+        } : actionPayload)
       });
       const payload = (await response.json().catch(() => null)) as { action?: PermitLeadActionItem; message?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "컨택 기록을 저장하지 못했습니다.");
@@ -288,15 +342,23 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
       setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: payload?.status || lead.status } : lead));
       setSelected((current) => current ? { ...current, status: payload?.status || current.status } : current);
       try { window.localStorage.setItem(COLLATERAL_STORAGE_KEY, JSON.stringify(collateral)); } catch { /* 브라우저 저장 실패는 기록 저장을 막지 않습니다. */ }
-      setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
+      structuredSaveAttemptRef.current = null;
+      let recentRecordsLoaded = true;
+      if (usesStructuredOffer) {
+        recentRecordsLoaded = await openLead(selected);
+        void loadLeads();
+      } else {
+        setMemo(""); setReminderDate(""); setSampleItem(""); setSampleQuantity(""); setSalesPriceItem(""); setSalesPrice(""); setSalesPriceValidUntil(""); setImportantNote("");
+      }
       if (contactResult === "거래 시작") {
         await convertSelectedLead();
         setSaveMessage("거래 시작을 기록하고 거래처·배송지로 연결했습니다. 주소와 배송 설정을 확인하세요.");
       } else {
-        setSaveMessage(quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.");
+        const savedMessage = quoteUrl ? "견적 링크와 컨택 기록이 함께 저장되었습니다." : "방문 기록과 후속 일정이 저장되었습니다.";
+        setSaveMessage(recentRecordsLoaded ? savedMessage : `${savedMessage} 최근 기록을 다시 불러오지 못했습니다. 다시 열어 확인해 주세요.`);
       }
     } catch (saveError) {
-      if (saveError instanceof TypeError) {
+      if (saveError instanceof TypeError && !usesStructuredOffer) {
         const queued: QueuedMobileSalesAction = { createdAt: new Date().toISOString(), id: crypto.randomUUID(), leadId: selected.id, payload: actionPayload };
         const items = [...readMobileSalesActionQueue(window.localStorage), queued];
         writeMobileSalesActionQueue(window.localStorage, items);
@@ -423,6 +485,17 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           {isLeadBusinessHoursDraftEnabled() ? <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-950">영업시간·브레이크타임 빠른 입력</p><p className="mt-1 text-[11px] text-amber-800">현재 · {formatLeadBusinessHours(selected.businessHourIntervals || [])}</p><input className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" onChange={(event) => setBusinessHoursDraft(event.target.value)} placeholder="예: 매일 15:00~17:00 브레이크 · 월 휴무" value={businessHoursDraft} /><button className="mt-2 min-h-10 w-full rounded-lg border bg-white text-xs font-semibold text-amber-800 disabled:opacity-50" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button></section> : null}
           <div className="mt-4"><label className="text-xs font-semibold" htmlFor="contact-result">방문 결과</label><select className="mobile-input mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" id="contact-result" onChange={(event) => { const value = event.target.value as StandardVisitResult; setResult(value); if (needsVisitFollowUp(value) && !reminderDate) setReminderDate(getDefaultVisitFollowUpDate()); }} value={result}>{STANDARD_VISIT_RESULTS.map((option) => <option key={option}>{option}</option>)}</select></div>
           <fieldset className="mt-4"><legend className="text-xs font-semibold">전달 자료</legend><div className="mt-2 grid grid-cols-2 gap-2">{collateralOptions.filter((item) => holdModulesEnabled || item !== "견적서").map((item) => <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${collateral.includes(item) ? "mobile-accent-soft" : "border-[var(--mobile-border)]"}`} key={item}><input className="sr-only" type="checkbox" checked={collateral.includes(item)} onChange={() => setCollateral((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item === "카탈로그" || item === "단가표" ? <MessageCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{item}</label>)}</div></fieldset>
+          {recentStructuredOffer ? <section aria-label="최근 구조화 영업 기록" className="mobile-card-raised mt-4 rounded-xl border p-3">
+            <p className="text-xs font-semibold">최근 기록 · 읽기 전용</p>
+            {recentStructuredOffer.items?.map((item, index) => <p className="mt-1 text-xs" key={`${item.item_name || "품목"}-${index}`}>
+              {item.sample_provided ? "샘플" : "영업 단가"} · {item.item_name || "품목 미확인"}
+              {item.sample_quantity != null ? ` · 수량 ${item.sample_quantity}` : ""}
+              {item.offered_price != null ? ` · ${item.offered_price}원` : ""}
+              {item.valid_until ? ` · ${item.valid_until}까지` : ""}
+            </p>)}
+            {recentStructuredOffer.memo ? <p className="mt-2 whitespace-pre-wrap text-xs">{recentStructuredOffer.memo}</p> : null}
+          </section> : null}
+          {recentHistoryLoadError ? <p role="status" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{recentHistoryLoadError}</p> : null}
           <details className="mobile-card-raised mt-4 rounded-xl border p-3">
             <summary className="cursor-pointer text-xs font-bold">샘플 · 영업 단가 · 중요 특이사항</summary>
             <div className="mt-3 grid grid-cols-[1fr_92px] gap-2"><input aria-label="샘플 품목" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleItem(event.target.value)} placeholder="샘플 품목" value={sampleItem} /><input aria-label="샘플 수량" className="mobile-input min-h-11 rounded-lg border px-3 text-sm" onChange={(event) => setSampleQuantity(event.target.value)} placeholder="수량" value={sampleQuantity} /></div>
@@ -460,6 +533,11 @@ function TaskCard({ count, kind, onClick }: { count: number; kind: MobileSalesTa
 }
 
 function StateMessage({ icon: Icon, spin = false, text }: { icon: typeof MapPin; spin?: boolean; text: string }) { return <div className="mobile-muted mt-3 flex min-h-20 items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--mobile-border)] text-xs font-semibold"><Icon className={`h-4 w-4 ${spin ? "animate-spin" : ""}`} />{text}</div>; }
+
+function toNumericString(value: string) {
+  const normalized = value.replaceAll(",", "").trim();
+  return /^\d+(?:\.\d+)?$/.test(normalized) ? normalized : "";
+}
 
 function LeadCard({ checked = false, lead, location, onOpen, selectable = false }: { checked?: boolean; lead: PermitLeadItem; location: LocationPoint | null; onOpen: () => void; selectable?: boolean }) {
   const type = getMobileLeadType(lead);
