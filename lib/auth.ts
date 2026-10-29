@@ -1,10 +1,13 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import { NextRequest } from "next/server";
+import { after, NextRequest } from "next/server";
 import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 import { getStaffAccessState } from "./store/07-staff-access";
+import { observeStaffSession } from "../application/organization/observe-staff-session";
+import { isValidObservationDeviceId, shouldRefreshSessionObservation } from "../domains/organization/session-observation";
+import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
 
 export type AdminSession = {
@@ -26,6 +29,9 @@ export type CustomerSession = {
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
   duties?: StaffDuty[];
+  /** 기록 전용 단계의 서버 발급 세션·기기 식별자. 기능 플래그 OFF에서는 생성하지 않는다. */
+  appSessionId?: string;
+  observationDeviceHash?: string;
   // 2026-09-07: 카카오 로그인 이름이 거래처의 배송담당자 표기와 달라 자동 매칭이 안 되는
   // 직원을 위해, 관리자가 직원 초대 화면에서 수동으로 지정한 담당자명/차량 값입니다.
   // getCustomerAssignmentKeys가 이 값도 매칭 후보로 함께 사용합니다.
@@ -49,6 +55,8 @@ export type CustomerSession = {
 
 const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
+const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
+const sessionObservationThrottle = new Map<string, number>();
 const DEFAULT_ADMIN_EMAIL = "admin@maju.local";
 const DEFAULT_ADMIN_PASSWORD = "maju-admin-2026";
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
@@ -58,6 +66,10 @@ const DEFAULT_CUSTOMER_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 function getSecret() {
   if (process.env.ADMIN_SESSION_SECRET) return process.env.ADMIN_SESSION_SECRET;
   return process.env.NODE_ENV === "production" ? "missing-production-session-secret" : "local-development-session-secret";
+}
+
+function sessionObservationEnabled() {
+  return process.env.STAFF_SESSION_OBSERVATION_ENABLED === "true";
 }
 
 function isDevelopmentAdminCredential(email: string, password: string) {
@@ -164,6 +176,7 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
   }
 
   if (customerSession) {
+    scheduleCustomerSessionObservation(customerSession);
     return {
       adminSession,
       companyId: customerSession.companyId,
@@ -194,6 +207,40 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
     ok: true as const,
     role: "admin" as const
   };
+}
+
+function scheduleCustomerSessionObservation(session: CustomerSession) {
+  if (!sessionObservationEnabled() || !session.userId || !session.observationDeviceHash) return;
+  try {
+    after(() => recordCustomerSessionObservation(session));
+  } catch {
+    // 테스트처럼 요청 컨텍스트가 없는 환경에서는 인증 성공을 우선한다.
+  }
+}
+
+async function recordCustomerSessionObservation(session: CustomerSession) {
+  if (!sessionObservationEnabled() || !session.userId || !session.observationDeviceHash) return;
+  const throttleKey = `${session.companyId}:${session.userId}:${session.observationDeviceHash}`;
+  const now = Date.now();
+  if (!shouldRefreshSessionObservation({ lastObservedAt: sessionObservationThrottle.get(throttleKey), now })) return;
+  if (sessionObservationThrottle.size >= 10_000) sessionObservationThrottle.clear();
+  sessionObservationThrottle.set(throttleKey, now);
+  try {
+    await observeStaffSession(
+      {
+        companyId: session.companyId,
+        deviceHash: session.observationDeviceHash,
+        enabled: true,
+        membershipValidated: true,
+        observedAt: new Date(now),
+        userId: session.userId
+      },
+      staffSessionObservationRepository
+    );
+  } catch {
+    sessionObservationThrottle.delete(throttleKey);
+    console.error("Staff session observation failed.");
+  }
 }
 
 /** Checks a customer session against the workspace capability matrix. */
@@ -329,7 +376,27 @@ export async function setAdminSession(session: AdminSession) {
 
 export async function setCustomerSession(session: CustomerSession, options?: { remember?: boolean }) {
   const cookieStore = await cookies();
-  cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(session), {
+  let sessionToStore = session;
+  if (sessionObservationEnabled() && session.userId) {
+    const cookieDeviceId = cookieStore.get(CUSTOMER_DEVICE_COOKIE_NAME)?.value;
+    const existingDeviceId = isValidObservationDeviceId(cookieDeviceId) ? cookieDeviceId : undefined;
+    const deviceId = existingDeviceId || randomBytes(32).toString("hex");
+    if (!existingDeviceId) {
+      cookieStore.set(CUSTOMER_DEVICE_COOKIE_NAME, deviceId, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 400
+      });
+    }
+    sessionToStore = {
+      ...session,
+      appSessionId: session.appSessionId || randomBytes(16).toString("hex"),
+      observationDeviceHash: createHash("sha256").update(`${deviceId}.${getSecret()}`).digest("hex")
+    };
+  }
+  cookieStore.set(CUSTOMER_COOKIE_NAME, encodeSession(sessionToStore), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
