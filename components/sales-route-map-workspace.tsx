@@ -4570,43 +4570,22 @@ function DeliveryAssignmentPanel({
                 />
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`min-w-0 flex-1 truncate text-sm font-bold ${selected ? "text-teal-950" : "text-slate-950"}`}>{vehicle.name}</p>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${liveVehicle ? (liveVehicle.displayState === "last_operation" ? "bg-slate-100 text-slate-500" : liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-teal-100 text-teal-800") : "bg-slate-100 text-slate-500"}`}>
-                        {liveVehicle ? getVehicleStatusLabel(liveVehicle) : "오프라인"}
-                      </span>
-                      {vehicle.isUnassigned ? null : (
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                          {vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}
-                          {fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : " (기본값)"}
-                        </span>
-                      )}
-                      <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
-                        {vehicle.stops.length}곳
-                      </span>
-                    </div>
-                  </div>
-                  {vehicle.isUnassigned ? (
-                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-400">
-                      <UserRound className="h-3.5 w-3.5" />
-                      담당자·배송차가 지정되지 않은 거래처 모음 (자동 그룹)
+                  {/* 대표 요청(10-29): 담당자·차량 카드는 2줄 — 1줄 이름·담당자·상태·곳수·편집, 2줄 오늘 배송·연료·지역 */}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Truck aria-hidden="true" className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-500"}`} />
+                    <p className={`min-w-0 flex-1 truncate text-[13px] font-bold ${selected ? "text-teal-950" : "text-slate-950"}`} title={[vehicle.name, vehicle.isUnassigned ? "담당자·배송차 미지정 거래처 모음" : vehicle.driver].filter(Boolean).join(" · ")}>
+                      {vehicle.name}
+                      <span className="ml-1 text-xs font-medium text-slate-500">{vehicle.isUnassigned ? "자동 그룹" : vehicle.driver}</span>
                     </p>
-                  ) : (
-                    <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
-                      <UserRound className="h-3.5 w-3.5" />
-                      {vehicle.driver}
-                    </p>
-                  )}
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-400">
-                      {vehicle.area}{liveVehicle ? ` · ${formatVehicleLocationAge(liveVehicle.lastLocationAt) || "수신 전"}` : " · 라이브 신호 없음"}
-                    </p>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${liveVehicle ? (liveVehicle.displayState === "last_operation" ? "bg-slate-100 text-slate-500" : liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800") : "bg-slate-100 text-slate-500"}`}>
+                      {liveVehicle ? getVehicleStatusLabel(liveVehicle) : "오프라인"}
+                    </span>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-600">{vehicle.stops.length}곳</span>
                     {vehicle.isUnassigned ? null : (
-                      <div className="flex shrink-0 items-center gap-1">
+                      <span className="flex shrink-0 items-center gap-0.5">
                         <span
                           aria-label="담당자·배송차 삭제"
-                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0 text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="maju-button-secondary inline-flex h-6 w-6 shrink-0 items-center justify-center px-0 text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={(event) => {
                             event.stopPropagation();
                             if (deletingVehicleId) return;
@@ -4627,11 +4606,11 @@ function DeliveryAssignmentPanel({
                               : `삭제 · 배정된 거래처 ${vehicle.stops.length}곳은 담당자 미지정 상태로 바뀝니다`
                           }
                         >
-                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          {deletingVehicleId === vehicle.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                         </span>
                         <span
                           aria-label="담당자·배송차 편집"
-                          className="maju-button-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center px-0"
+                          className="maju-button-secondary inline-flex h-6 w-6 shrink-0 items-center justify-center px-0"
                           onClick={(event) => {
                             event.stopPropagation();
                             setEditingVehicleId(vehicle.id);
@@ -4646,24 +4625,27 @@ function DeliveryAssignmentPanel({
                           tabIndex={0}
                           title="편집"
                         >
-                          <Edit3 className="h-3.5 w-3.5" />
+                          <Edit3 className="h-3 w-3" />
                         </span>
-                      </div>
+                      </span>
                     )}
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
+                  <p className="mt-1 truncate pl-[22px] text-[11px] text-slate-500" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
                     {vehicle.stops.length ? (
                       <>
-                        <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
-                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">완료 {completedCount}</span>
-                        <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">대기 {pendingCount}</span>
+                        <span className="font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
+                        {" · "}<span className="font-semibold text-emerald-700">완료 {completedCount}</span>
+                        {" · "}<span className="font-semibold text-amber-700">대기 {pendingCount}</span>
                       </>
-                    ) : vehicle.isUnassigned ? null : (
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">오늘 배송 없음</span>
+                    ) : (
+                      <span>오늘 배송 없음</span>
                     )}
-                  </div>
+                    {vehicle.isUnassigned ? null : ` · ${vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}${fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : "(기본)"}`}
+                    {vehicle.area ? ` · ${vehicle.area}` : ""}
+                    {liveVehicle ? ` · ${formatVehicleLocationAge(liveVehicle.lastLocationAt) || "수신 전"}` : ""}
+                  </p>
                   {deleteError?.vehicleId === vehicle.id ? (
-                    <p className="mt-1.5 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
+                    <p className="mt-1 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
                   ) : null}
                 </button>
               )}
@@ -6384,6 +6366,7 @@ function StoreManagementPanel({
       <div className="flex h-full min-h-0 flex-col">
         {tabs ? (
           <>
+            {tabs}
             <div className="flex shrink-0 items-center gap-2 whitespace-nowrap border-b border-slate-100 bg-slate-50 px-3 py-2 text-[13px]">
               <span className="min-w-0 truncate font-bold text-slate-900">{title}</span>
               <span className="shrink-0 text-xs text-slate-400">{stores.length.toLocaleString()}곳</span>
@@ -6393,7 +6376,6 @@ function StoreManagementPanel({
                 </button>
               ) : null}
             </div>
-            {tabs}
           </>
         ) : (
           <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2">
@@ -6446,22 +6428,21 @@ function StoreManagementPanel({
                   itemRefs.current[store.id] = el;
                 }}
               >
-                <button className="min-w-0 flex-1 px-3 py-2.5 text-left" onClick={() => onSelectStore(store.id)} type="button">
-                  <div className="flex items-center gap-2">
+                {/* 대표 요청(10-29): 거래처 줄은 2줄 — 1줄 상호·등급·상태, 2줄 주소·거리·시간·매출 */}
+                <button className="min-w-0 flex-1 px-3 py-2 text-left" onClick={() => onSelectStore(store.id)} title={store.address || store.region} type="button">
+                  <div className="flex items-center gap-1.5">
                     <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
                     <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                  </div>
-                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{store.address || store.region}</p>
-                  <div className="mt-1.5 grid grid-cols-[1fr_auto] items-center gap-2">
-                    <p className="truncate text-[11px] font-bold text-slate-400">
-                      {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원
-                    </p>
                     <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
                   </div>
+                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
+                    {store.address || store.region}
+                    <span className="text-slate-400"> · {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span>
+                  </p>
                 </button>
                 <button
                   aria-label={`${store.name} 상세 편집`}
-                  className="my-2.5 mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-teal-700 hover:shadow-sm"
+                  className="my-auto mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-teal-700 hover:shadow-sm"
                   onClick={() => onEditStore(store.id)}
                   title="상세 편집"
                   type="button"
@@ -6489,6 +6470,39 @@ function StoreManagementPanel({
       </div>
     </aside>
   );
+}
+
+type LeadListSortKey = "default" | "name" | "industry" | "openDate" | "grade";
+const LEAD_LIST_SORT_OPTIONS: Array<{ label: string; value: LeadListSortKey }> = [
+  { label: "기본 순", value: "default" },
+  { label: "상호명", value: "name" },
+  { label: "업종", value: "industry" },
+  { label: "개업일", value: "openDate" },
+  { label: "등급", value: "grade" }
+];
+
+/** 오른쪽 리드 목록 정렬. 값이 없는 리드(업종 미분류·개업일 미확인·채점 전)는 방향과 상관없이 맨 뒤에 둡니다. */
+export function sortLeadList<T extends Pick<PermitLeadItem, "businessName" | "grade" | "industryPrimary" | "openDate" | "permitDate">>(
+  leads: T[],
+  key: LeadListSortKey,
+  direction: "asc" | "desc"
+): T[] {
+  if (key === "default") return leads;
+  const valueOf = (lead: T): string => {
+    if (key === "name") return (lead.businessName || "").trim();
+    if (key === "industry") return (lead.industryPrimary || "").trim();
+    if (key === "openDate") return getPermitLeadOpenDate(lead);
+    return (lead.grade || "").trim().toUpperCase();
+  };
+  const sign = direction === "asc" ? 1 : -1;
+  return [...leads].sort((a, b) => {
+    const left = valueOf(a);
+    const right = valueOf(b);
+    if (!left && !right) return 0;
+    if (!left) return 1;
+    if (!right) return -1;
+    return sign * left.localeCompare(right, "ko", { numeric: true, sensitivity: "base" });
+  });
 }
 
 /** 2026-08-30 피드백("우측 패널 전체거래처는 거래처,리드목록 구별을 해야함") 대응: StoreManagementPanel과
@@ -6527,6 +6541,10 @@ function LeadListPanel({
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  // 대표 요청(10-29): 상호명·업종·개업일·등급 오름차순/내림차순 정렬. "기본"은 지도 필터 결과 순서.
+  const [sortKey, setSortKey] = useState<LeadListSortKey>("default");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const sortedLeads = useMemo(() => sortLeadList(leads, sortKey, sortDirection), [leads, sortKey, sortDirection]);
   // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
   // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -6604,6 +6622,7 @@ function LeadListPanel({
             </button>
           </div>
         )}
+        {tabs}
         <div className="flex shrink-0 flex-col gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2 text-[13px]">
           <div className="flex items-center gap-2 whitespace-nowrap">
             <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
@@ -6616,7 +6635,27 @@ function LeadListPanel({
               전체
             </label>
             <span className="min-w-0 truncate text-slate-500">{selectedLeadIds.size ? `${selectedLeadIds.size.toLocaleString()}곳 선택` : "선택 없음"}</span>
-            <span className="ml-auto shrink-0 text-xs text-slate-400">{leads.length.toLocaleString()}곳</span>
+            <span className="shrink-0 text-xs text-slate-400">· {leads.length.toLocaleString()}곳</span>
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <select
+                aria-label="정렬 기준"
+                className="h-7 rounded-md border border-slate-300 bg-white px-1.5 text-xs text-slate-700"
+                onChange={(event) => setSortKey(event.target.value as LeadListSortKey)}
+                value={sortKey}
+              >
+                {LEAD_LIST_SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <button
+                aria-label={sortDirection === "asc" ? "오름차순 (누르면 내림차순)" : "내림차순 (누르면 오름차순)"}
+                className="grid h-7 w-7 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                disabled={sortKey === "default"}
+                onClick={() => setSortDirection((direction) => (direction === "asc" ? "desc" : "asc"))}
+                title={sortDirection === "asc" ? "오름차순" : "내림차순"}
+                type="button"
+              >
+                {sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+              </button>
+            </span>
           </div>
           {selectedLeadIds.size ? (
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
@@ -6635,10 +6674,9 @@ function LeadListPanel({
           ) : null}
           {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
         </div>
-        {tabs}
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 space-y-1.5 overflow-auto p-2 xl:max-h-none">
-          {leads.length ? (
-            leads.map((lead) => {
+          {sortedLeads.length ? (
+            sortedLeads.map((lead) => {
               const confidence = getLeadConfidence(lead);
               const openDate = getPermitLeadOpenDate(lead);
               const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
@@ -6650,8 +6688,8 @@ function LeadListPanel({
               const leadType = getPermitLeadType(lead);
               const openDateShort = openDate ? openDate.slice(5).replace("-", "/") : "";
               const openDays = openDate ? Math.floor((Date.now() - new Date(`${openDate}T00:00:00+09:00`).getTime()) / 86_400_000) : null;
+              const openDateBadge = openDateShort ? `개업 ${openDateShort}${openDays !== null && openDays >= 0 ? ` · D+${openDays}` : ""}` : "";
               const subText = [
-                openDateShort ? `개업 ${openDateShort}${openDays !== null && openDays >= 0 ? ` · D+${openDays}` : ""}` : "",
                 lead.industryPrimary || "",
                 typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : ""
               ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
@@ -6695,6 +6733,11 @@ function LeadListPanel({
                     <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] ${lead.grade ? permitGradeToneClassName(lead.grade, false) : "bg-teal-700 text-white"}`}>
                       {lead.grade ? `${lead.grade}등급` : `우선 ${confidence.score}`}
                     </span>
+                    {openDateBadge ? (
+                      <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${openDays !== null && openDays <= 30 ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600"}`}>
+                        {openDateBadge}
+                      </span>
+                    ) : null}
                     <span className="min-w-0 truncate">{subText}</span>
                   </button>
                   {reminder ? (

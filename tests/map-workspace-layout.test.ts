@@ -139,3 +139,13 @@ describe("시안 ⑫ 필터 줄 · 격자", () => {
     expect(areaLabelMatchesSigungu("인천광역시 부평구", "강남구")).toBe(false);
   });
 });
+
+describe("10-29 목록 정리", () => {
+  it("puts list tabs above the select-all bar and offers sort options", () => {
+    const leadPanel = workspaceSource.slice(workspaceSource.indexOf("function LeadListPanel("));
+    expect(leadPanel.indexOf("{tabs}")).toBeLessThan(leadPanel.indexOf('aria-label="정렬 기준"'));
+    expect(workspaceSource).toContain('{ label: "상호명", value: "name" }');
+    expect(workspaceSource).toContain('{ label: "개업일", value: "openDate" }');
+    expect(workspaceSource).toContain("openDateBadge");
+  });
+});
