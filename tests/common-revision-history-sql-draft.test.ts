@@ -6,6 +6,7 @@ const sql = readFileSync("docs/sql-drafts/20261029-common-revision-history.sql",
 describe("common revision history SQL draft", () => {
   it("keeps the draft scoped to lead and customer field revisions", () => {
     expect(sql).toMatch(/create table if not exists public\.common_revision_history/i);
+    expect(sql).toMatch(/company_id uuid not null references public\.companies\(id\) on delete cascade/i);
     expect(sql).toMatch(/target_type in \('lead', 'customer'\)/i);
     expect(sql).toMatch(/old_value jsonb/i);
     expect(sql).toMatch(/new_value jsonb/i);
@@ -41,6 +42,7 @@ describe("common revision history SQL draft", () => {
   it("leaves privacy retention and deletion as an explicit approval gate", () => {
     expect(sql).toMatch(/개인정보 보존·삭제 정책 승인/i);
     expect(sql).toMatch(/익명화 또는 파기 방식/i);
+    expect(sql).toMatch(/소프트 폐쇄는 보존, 관리자 완전 삭제는 company FK cascade 파기/i);
     expect(sql).toMatch(/NEXT_PUBLIC_STORE_REVISION_HISTORY_ENABLED는 계속 false 유지/i);
   });
 });

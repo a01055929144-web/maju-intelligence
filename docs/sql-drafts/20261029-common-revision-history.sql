@@ -10,7 +10,7 @@ begin;
 
 create table if not exists public.common_revision_history (
   id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references public.companies(id) on delete restrict,
+  company_id uuid not null references public.companies(id) on delete cascade,
   target_type text not null,
   target_id uuid not null,
   field_key text not null,
@@ -63,6 +63,8 @@ create table if not exists public.common_revision_history (
 
 comment on table public.common_revision_history is
   '승인 전 SQL 초안: 리드·거래처 공통 칸 변경 이력. 추가 전용이며 비밀번호·토큰·자격증명 값 저장 금지.';
+comment on column public.common_revision_history.company_id is
+  '회사 탈퇴(소프트 폐쇄) 중에는 보존하고, 관리자 완전 삭제 시 기존 회사 데이터 정책과 같이 cascade 파기한다.';
 comment on column public.common_revision_history.actor_name is
   '사용자 삭제 후에도 표시할 당시 이름 스냅샷. 자동 작업은 시스템 이름을 기록한다.';
 comment on column public.common_revision_history.actor_role is
@@ -209,7 +211,8 @@ commit;
 -- 4) EXPLAIN으로 회사+대상+시각 조회가 common_revision_history_target_time_idx 사용
 -- 5) UI/API 연결 전 NEXT_PUBLIC_STORE_REVISION_HISTORY_ENABLED는 계속 false 유지
 -- 6) 개인정보 보존·삭제 정책 승인: actor_name 스냅샷, phone/address 이전값의 보존 기간,
---    회사 탈퇴·폐업·정보주체 삭제 요청 시 익명화 또는 파기 방식과 법정 보존 예외를 결정한다.
+--    정보주체 삭제 요청 시 익명화 또는 파기 방식과 법정 보존 예외를 결정한다.
+--    현행 회사 종료 경로 기준으로 소프트 폐쇄는 보존, 관리자 완전 삭제는 company FK cascade 파기한다.
 -- 7) 신규 추적 필드는 민감도 검토 후 common_revision_history_field_allowlist_check를
 --    별도 승인 SQL로 변경한다. 앱 컬럼 추가만으로 자동 기록하지 않는다.
 
