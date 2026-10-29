@@ -72,7 +72,7 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 - [x] 일일 코스 확정 회사 스코프·관리 권한, 기사 GPS 본인 범위, 전체 배송 히스토리 관리자 게이트를 회귀 테스트로 고정
 
 ## TODO
-- [ ] (없음, 새 요청 시 추가)
+- [ ] 알바(임시) 만료·권한 경계와 동일 계정 동시 2기기 관리자 알림은 `docs/specs/2026-10-29-temporary-access-and-concurrent-session-design.md` 검토 후 단계적으로 구현한다. 현재 문서는 설계 전용이며 운영 DB 적용을 승인하지 않는다.
 
 ## KNOWN ISSUES
 없음.
