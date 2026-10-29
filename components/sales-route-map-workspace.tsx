@@ -342,6 +342,7 @@ type SalesRouteMapWorkspaceProps = {
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
   readonly holdModulesEnabled?: boolean;
+  readonly initialCustomerId?: string;
   readonly initialLeadId?: string;
   readonly leadDetailMode?: "drawer" | "page";
   /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
@@ -456,7 +457,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialLeadId, initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -582,7 +583,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   });
   const [mapFocusId, setMapFocusId] = useState("");
   const [previewStoreId, setPreviewStoreId] = useState("");
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(initialCustomerId || "");
   // 지도 홈 퀵카드에서 "경유지 추가"를 누르면 경유 코스 탭으로 바로 이동시키면서 이 값을 같이
   // 넘겨, TodayCourseView가 마운트된 뒤 해당 거래처를 오늘 경유 선택에 자동으로 포함시킵니다.
   const [pendingCourseStoreId, setPendingCourseStoreId] = useState("");
@@ -6640,6 +6641,11 @@ function LeadListPanel({
             leads.map((lead) => {
               const confidence = getLeadConfidence(lead);
               const openDate = getPermitLeadOpenDate(lead);
+              const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
+              const savedNaverPlaceUrl = lead.naverPlaceUrl?.trim();
+              const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
+              const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
+              const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
               const reminder = getMapLeadReminderLabel(lead);
               const leadType = getPermitLeadType(lead);
               const openDateShort = openDate ? openDate.slice(5).replace("-", "/") : "";
@@ -6699,6 +6705,9 @@ function LeadListPanel({
                   ) : null}
                   <div className="flex items-center gap-1">
                     <MapLeadChannelIcons lead={lead} />
+                    <a aria-label="네이버 지도" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-[#03A94D] hover:bg-slate-50" href={naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
+                    <a aria-label="카카오맵" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-amber-600 hover:bg-slate-50" href={kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
+                    <a aria-label="구글 지도" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-[#EA4335] hover:bg-slate-50" href={googlePlaceUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
                     {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
                       <span className="ml-auto whitespace-nowrap text-[11px] text-amber-700">
                         ★ {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}
@@ -9398,10 +9407,11 @@ function StoreDetail({
         <MapStoreDetailActions
           address={draftAddress}
           currentStage={draftRelationshipStatus}
+          email={draftEmail}
           name={draftName}
           onDm={() => setDetailTab("sales")}
           onStageChange={(stage) => void updateRelationshipStatus(stage)}
-          openHref={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
+          openHref={`/dashboard?routeMode=map&customer=${encodeURIComponent(store.id)}`}
           phone={draftPhone}
         />
 

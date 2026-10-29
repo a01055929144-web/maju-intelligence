@@ -12,7 +12,7 @@ import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, 
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
-type OperationsSearchParams = { companyId?: string; detailMode?: "page"; lead?: string; leadType?: string; routeMode?: string; type?: string; view?: string };
+type OperationsSearchParams = { companyId?: string; customer?: string; detailMode?: "page"; lead?: string; leadType?: string; routeMode?: string; type?: string; view?: string };
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<OperationsSearchParams> }) {
   const params = (await searchParams) || {};
@@ -129,6 +129,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           holdModulesEnabled={showHoldModules}
           initialView={initialView}
           initialLeadId={params.lead}
+          initialCustomerId={params.customer}
           leadDetailMode={params.detailMode === "page" ? "page" : "drawer"}
           canManageStaff={canManageStaff}
           mapMarkers={mapMarkers}

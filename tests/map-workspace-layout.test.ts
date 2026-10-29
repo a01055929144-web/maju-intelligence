@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
 const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
 const deliveryProofSource = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
+const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
 const mapControlsSource = readFileSync("components/map-corner-controls.tsx", "utf8");
 const mapDrawerSource = readFileSync("components/map-store-detail-drawer.tsx", "utf8");
 const mapLeadChannelsSource = readFileSync("components/map-lead-channel-icons.tsx", "utf8");
@@ -65,7 +66,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   it("keeps the store detail in a separate right-side 62 percent drawer", () => {
     expect(mapDrawerSource).toContain("md:w-[62%]");
     expect(mapDrawerSource).toContain('title="문자"');
-    expect(mapDrawerSource).toContain('title="DM"');
+    expect(mapDrawerSource).toContain('title="DM 문안 준비"');
     expect(mapDrawerSource).toContain('title="길안내"');
     expect(mapDrawerSource).toContain('title="단계"');
     expect(mapDrawerSource).toContain('title="새 창"');
@@ -85,6 +86,19 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
       expect(mapLeadChannelsSource).toContain(`title="${label}"`);
     }
     expect(workspaceSource).toContain("<MapLeadChannelIcons lead={lead} />");
+    expect(workspaceSource).toContain('title="네이버 지도"');
+    expect(workspaceSource).toContain('title="카카오맵"');
+    expect(workspaceSource).toContain('title="구글 지도"');
+  });
+
+  it("opens customer detail on the core dashboard and preserves phone and email actions", () => {
+    expect(workspaceSource).toContain("/dashboard?routeMode=map&customer=");
+    expect(dashboardSource).toContain("initialCustomerId={params.customer}");
+    expect(workspaceSource).toContain('const [selectedId, setSelectedId] = useState(initialCustomerId || "")');
+    expect(workspaceSource).toContain("const selectedStore = allStores.find((store) => store.id === selectedId)");
+    expect(mapDrawerSource).toContain('title="매장전화"');
+    expect(mapDrawerSource).toContain('title="이메일"');
+    expect(mapDrawerSource).toContain("const canSms = /^010/.test(cleanPhone)");
   });
 });
 
