@@ -4570,20 +4570,57 @@ function DeliveryAssignmentPanel({
                 />
               ) : (
                 <button className="block w-full text-left" onClick={() => onSelectVehicle(vehicle.id)} type="button">
-                  {/* 대표 요청(10-29): 담당자·차량 카드는 2줄 — 1줄 이름·담당자·상태·곳수·편집, 2줄 오늘 배송·연료·지역 */}
+                  {/* 대표 요청(10-29): 담당자·차량 카드는 2줄 — 1줄 이름·담당자·곳수·편집, 2줄 상태·오늘 배송·연료·지역·삭제 */}
                   <div className="flex min-w-0 items-center gap-1.5">
                     <Truck aria-hidden="true" className={`h-4 w-4 shrink-0 ${selected ? "text-teal-700" : "text-slate-500"}`} />
                     <p className={`min-w-0 flex-1 truncate text-[13px] font-bold ${selected ? "text-teal-950" : "text-slate-950"}`} title={[vehicle.name, vehicle.isUnassigned ? "담당자·배송차 미지정 거래처 모음" : vehicle.driver].filter(Boolean).join(" · ")}>
                       {vehicle.name}
                       <span className="ml-1 text-xs font-medium text-slate-500">{vehicle.isUnassigned ? "자동 그룹" : vehicle.driver}</span>
                     </p>
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${liveVehicle ? (liveVehicle.displayState === "last_operation" ? "bg-slate-100 text-slate-500" : liveVehicle.isStale ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800") : "bg-slate-100 text-slate-500"}`}>
-                      {liveVehicle ? getVehicleStatusLabel(liveVehicle) : "오프라인"}
-                    </span>
                     <span className="shrink-0 text-[11px] font-semibold text-slate-600">{vehicle.stops.length}곳</span>
                     {vehicle.isUnassigned ? null : (
-                      <span className="flex shrink-0 items-center gap-0.5">
-                        <span
+                      <span
+                          aria-label="담당자·배송차 편집"
+                          className="maju-button-secondary inline-flex h-6 w-6 shrink-0 items-center justify-center px-0"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setEditingVehicleId(vehicle.id);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title="편집"
+                        >
+                          <Edit3 className="h-3 w-3" />
+                        </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex min-w-0 items-center gap-1.5 pl-[22px]">
+                    <p className="min-w-0 flex-1 truncate text-[11px] text-slate-500" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
+                      <span className={`font-semibold ${liveVehicle ? (liveVehicle.displayState === "last_operation" ? "text-slate-500" : liveVehicle.isStale ? "text-amber-700" : "text-emerald-700") : "text-slate-400"}`}>
+                        {liveVehicle ? getVehicleStatusLabel(liveVehicle) : "오프라인"}
+                      </span>
+                      {" · "}
+                      {vehicle.stops.length ? (
+                        <>
+                          <span className="font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
+                          {" "}<span className="font-semibold text-emerald-700">완료 {completedCount}</span>
+                          {" "}<span className="font-semibold text-amber-700">대기 {pendingCount}</span>
+                        </>
+                      ) : (
+                        <span>오늘 배송 없음</span>
+                      )}
+                      {vehicle.isUnassigned ? null : ` · ${vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}${fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : "(기본)"}`}
+                      {vehicle.area ? ` · ${vehicle.area}` : ""}
+                      {liveVehicle ? ` · ${formatVehicleLocationAge(liveVehicle.lastLocationAt) || "수신 전"}` : ""}
+                    </p>
+                    {vehicle.isUnassigned ? null : (
+                      <span
                           aria-label="담당자·배송차 삭제"
                           className="maju-button-secondary inline-flex h-6 w-6 shrink-0 items-center justify-center px-0 text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
                           onClick={(event) => {
@@ -4608,42 +4645,8 @@ function DeliveryAssignmentPanel({
                         >
                           {deletingVehicleId === vehicle.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                         </span>
-                        <span
-                          aria-label="담당자·배송차 편집"
-                          className="maju-button-secondary inline-flex h-6 w-6 shrink-0 items-center justify-center px-0"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setEditingVehicleId(vehicle.id);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter" && event.key !== " ") return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setEditingVehicleId(vehicle.id);
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          title="편집"
-                        >
-                          <Edit3 className="h-3 w-3" />
-                        </span>
-                      </span>
                     )}
                   </div>
-                  <p className="mt-1 truncate pl-[22px] text-[11px] text-slate-500" aria-label={`${vehicle.driver || vehicle.name} 오늘 배송 현황`}>
-                    {vehicle.stops.length ? (
-                      <>
-                        <span className="font-semibold text-sky-800">예정 {vehicle.stops.length}</span>
-                        {" · "}<span className="font-semibold text-emerald-700">완료 {completedCount}</span>
-                        {" · "}<span className="font-semibold text-amber-700">대기 {pendingCount}</span>
-                      </>
-                    ) : (
-                      <span>오늘 배송 없음</span>
-                    )}
-                    {vehicle.isUnassigned ? null : ` · ${vehicle.fuelType === "gasoline" ? "휘발유" : "경유"}${fuelTypeConfiguredByVehicleId.get(vehicle.id) ? "" : "(기본)"}`}
-                    {vehicle.area ? ` · ${vehicle.area}` : ""}
-                    {liveVehicle ? ` · ${formatVehicleLocationAge(liveVehicle.lastLocationAt) || "수신 전"}` : ""}
-                  </p>
                   {deleteError?.vehicleId === vehicle.id ? (
                     <p className="mt-1 text-[11px] font-bold leading-4 text-rose-600">{deleteError.message}</p>
                   ) : null}
