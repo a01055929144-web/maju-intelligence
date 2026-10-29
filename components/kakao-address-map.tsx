@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { Crosshair, ExternalLink, MapPin } from "lucide-react";
+import { ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 
 export type KakaoMapMarker = {
@@ -1175,10 +1175,17 @@ export function KakaoAddressMap({
     <div className={wrapperClassName}>
       <div className={`relative ${mapClassName} overflow-hidden rounded-md border border-border bg-muted`}>
         <div ref={mapRef} className="h-full w-full" />
-        <MapControls
+        <MapCornerControls
           offsetClassName={controlsOffsetClassName}
-          offsetPx={controlsOffsetPx}
           onLocation={moveToCurrentLocation}
+          onZoomIn={() => {
+            const map = mapInstanceRef.current;
+            if (map) map.setLevel(Math.max(1, map.getLevel() - 1));
+          }}
+          onZoomOut={() => {
+            const map = mapInstanceRef.current;
+            if (map) map.setLevel(Math.min(14, map.getLevel() + 1));
+          }}
         />
         {status === "loading" && (
           <div className="absolute inset-0 grid place-items-center bg-white/80 text-sm font-bold text-muted-foreground backdrop-blur-sm">
@@ -1187,41 +1194,6 @@ export function KakaoAddressMap({
         )}
       </div>
       {showList && <MarkerList markers={markers} />}
-    </div>
-  );
-}
-
-function MapControls({
-  offsetClassName,
-  offsetPx,
-  onLocation
-}: {
-  readonly offsetClassName?: string;
-  readonly offsetPx?: number;
-  readonly onLocation: () => void;
-}) {
-  // 모바일에서는 검색·필터 바가 지도 위 일반 흐름(in-flow)에 있어 지도 자체가 그 아래에서
-  // 시작하므로 작은 고정값(top-3= 0.75rem)이면 충분합니다. xl 이상에서는 그 바가 지도 위에 뜨는
-  // 카드(xl:absolute)로 바뀌는데, "신규 리드 반경"처럼 줄이 늘어나면 카드 높이가 달라집니다 —
-  // offsetPx로 그 카드의 실제 렌더 높이를 CSS 변수로 넘겨받아 xl에서만 그 아래로 밀어내고,
-  // offsetPx가 없으면(다른 화면들) 항상 top-3 그대로 사용합니다. offsetClassName은 가로 위치
-  // (예: 우측 패널 접힘 여부에 따른 right-*)처럼 top과 무관한 값만 추가로 얹는 용도입니다.
-  //
-  // "전체 보기"·"전체화면 지도" 버튼은 2026-08-19 제거했습니다 — 상단 툴바에 이미 워크스페이스
-  // 전체를 확대하는 "전체 화면" 버튼이 있어 기능이 겹쳤고, 사용자 피드백에 따라 모서리에는
-  // "내 위치" 하나만 남겨 단순하게 정리했습니다.
-  const style = offsetPx !== undefined ? ({ "--maju-map-controls-top": `${offsetPx}px` } as CSSProperties) : undefined;
-
-  return (
-    <div
-      className={`absolute right-3 z-20 flex max-w-[calc(100%-24px)] items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur top-3 ${
-        offsetPx !== undefined ? "xl:top-[var(--maju-map-controls-top)]" : ""
-      } ${offsetClassName || ""}`}
-      style={style}
-    >
-      <button aria-label="내 위치" title="내 위치" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100" onClick={onLocation} type="button">
-        <Crosshair className="h-3.5 w-3.5" />
-      </button>
     </div>
   );
 }

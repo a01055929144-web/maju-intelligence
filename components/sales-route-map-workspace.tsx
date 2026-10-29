@@ -73,6 +73,8 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
+import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
@@ -6638,12 +6640,6 @@ function LeadListPanel({
             leads.map((lead) => {
               const confidence = getLeadConfidence(lead);
               const openDate = getPermitLeadOpenDate(lead);
-              const instagramHandle = getLeadInstagramHandle(lead);
-              const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
-              const savedNaverPlaceUrl = lead.naverPlaceUrl?.trim();
-              const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
-              const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
-              const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
               const reminder = getMapLeadReminderLabel(lead);
               const leadType = getPermitLeadType(lead);
               const openDateShort = openDate ? openDate.slice(5).replace("-", "/") : "";
@@ -6653,7 +6649,6 @@ function LeadListPanel({
                 lead.industryPrimary || "",
                 typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : ""
               ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
-              const channelClass = "grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-slate-700 hover:bg-slate-50";
               return (
                 <div
                   className={`flex flex-col gap-1.5 rounded-[10px] border bg-white p-2.5 text-left transition ${
@@ -6703,17 +6698,7 @@ function LeadListPanel({
                     </p>
                   ) : null}
                   <div className="flex items-center gap-1">
-                    {lead.phone ? (
-                      <a aria-label={`${lead.businessName} 전화`} className={channelClass} href={`tel:${lead.phone.replace(/[^0-9+]/g, "")}`} title={lead.phone}>
-                        <Phone className="h-3.5 w-3.5" />
-                      </a>
-                    ) : null}
-                    <a aria-label="네이버 지도" className={`${channelClass} text-[#03A94D]`} href={naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
-                    <a aria-label="카카오맵" className={`${channelClass} text-amber-600`} href={kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
-                    <a aria-label="구글 지도" className={`${channelClass} text-[#EA4335]`} href={googlePlaceUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
-                    {instagramHandle ? (
-                      <a aria-label="인스타그램" className={`${channelClass} text-pink-600`} href={getLeadInstagramSearchUrl(lead)} rel="noreferrer" target="_blank" title={instagramHandle}>IG</a>
-                    ) : null}
+                    <MapLeadChannelIcons lead={lead} />
                     {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
                       <span className="ml-auto whitespace-nowrap text-[11px] text-amber-700">
                         ★ {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}
@@ -9324,8 +9309,8 @@ function StoreDetail({
     }
   };
 
-  const toggleRelationshipStatus = async () => {
-    const nextStatus = draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료";
+  const updateRelationshipStatus = async (nextStatus: string) => {
+    if (nextStatus === draftRelationshipStatus) return;
     if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 이후 대시보드·이탈 위험 알림·경로 계획에서 제외됩니다.`)) return;
 
     setIsSavingRelationshipStatus(true);
@@ -9339,11 +9324,10 @@ function StoreDetail({
       setIsSavingRelationshipStatus(false);
     }
   };
+  const toggleRelationshipStatus = () => void updateRelationshipStatus(draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료");
 
   return (
-    <>
-      <button aria-label="거래처 상세 닫기" className="fixed inset-0 z-30 bg-slate-950/45" onClick={onClose} type="button" />
-      <aside className="fixed right-0 top-0 z-40 flex h-screen w-full max-w-[1360px] flex-col border-l border-slate-200 bg-white shadow-2xl">
+    <MapStoreDetailDrawer onClose={onClose}>
         <header className="maju-card-header border-b px-4 py-4">
           {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
               오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
@@ -9411,15 +9395,15 @@ function StoreDetail({
           </div>
         </header>
 
-        <section aria-label="연락하기" className="border-b border-slate-200 bg-white px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {draftPhone ? <a className="maju-button-primary inline-flex h-11 items-center gap-2 px-4 text-sm" href={`sms:${draftPhone.replace(/[^0-9+]/g, "")}`}><MessageCircle className="h-4 w-4" />문자 보내기 · 휴대폰</a> : null}
-            {draftPhone ? <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`tel:${draftPhone.replace(/[^0-9+]/g, "")}`}><Phone className="h-4 w-4" />매장전화</a> : null}
-            {draftEmail ? <a className="maju-button-secondary inline-flex h-11 items-center px-3 text-sm" href={`mailto:${draftEmail}`}>이메일</a> : null}
-            <a className="maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm" href={`https://map.kakao.com/link/search/${encodeURIComponent(draftAddress || draftName)}`} rel="noreferrer" target="_blank"><Navigation className="h-4 w-4" />방문 길안내</a>
-            <span className="ml-auto text-xs font-bold text-slate-500">추천 · <b className="text-teal-700">{draftPhone ? "오늘 문자로 단가표 보내기" : "연락처 먼저 보강"}</b></span>
-          </div>
-        </section>
+        <MapStoreDetailActions
+          address={draftAddress}
+          currentStage={draftRelationshipStatus}
+          name={draftName}
+          onDm={() => setDetailTab("sales")}
+          onStageChange={(stage) => void updateRelationshipStatus(stage)}
+          openHref={`/crm/timeline?customerId=${encodeURIComponent(store.id)}`}
+          phone={draftPhone}
+        />
 
         <nav aria-label="매장 정보 탭" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
           {([
@@ -9824,8 +9808,7 @@ function StoreDetail({
             <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-black text-slate-950">{detailTab === "order" ? "주문" : "매출 원장"} 연결 준비 중</h4><p className="mt-2 text-sm font-bold text-slate-500">같은 매장 ID에 연결할 SQL 원장이 아직 적용되지 않아 읽기·쓰기를 모두 OFF로 유지합니다.</p></div>
           ) : null}
         </div>
-      </aside>
-    </>
+    </MapStoreDetailDrawer>
   );
 }
 
