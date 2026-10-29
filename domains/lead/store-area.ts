@@ -26,8 +26,10 @@ export function formatStoreAreaPyeong(squareMeters: number | null | undefined): 
 }
 
 export function isStoreAreaInRange(squareMeters: number | null | undefined, range: StoreAreaRange): boolean {
-  const pyeong = squareMetersToPyeong(squareMeters);
-  if (pyeong === undefined) return false;
+  const area = parseStoreAreaSqm(squareMeters);
+  if (area === undefined) return false;
+  // 경계 판정은 표시용 0.1평 반올림 전에 수행해 9.96평/30.04평이 잘못 분류되지 않게 합니다.
+  const pyeong = area / SQUARE_METERS_PER_PYEONG;
   if (range === "lte10") return pyeong <= 10;
   if (range === "lte20") return pyeong <= 20;
   if (range === "lte30") return pyeong <= 30;

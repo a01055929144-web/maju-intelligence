@@ -7,6 +7,7 @@
 - DB에는 원본 단위인 `store_area_sqm`만 저장하고, 평 표시는 `㎡ / 3.3058`을 소수 첫째 자리로 반올림한다.
 - `LEAD_STORE_AREA_ENABLED`와 `NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED`가 모두 기본 OFF다. SQL 미적용 상태에서는 ingest payload에 컬럼을 넣지 않고 지도 규모 칩도 기존 준비 중 상태를 유지한다.
 - 기존 행 일괄 백필은 포함하지 않는다. 승인 후 새 수집분으로 분포와 이상치를 확인한 뒤 별도 백필 계획을 만든다.
+- 현재 지도 리드 로드는 `listPermitLeads` 기본 상한 3,000건(최대 5,000건)의 클라이언트 목록이다. 따라서 규모 칩은 전체 DB가 아니라 로드된 목록만 필터링한다. 플래그 활성화 전 API에 `store_area` 구간 파라미터와 PostgREST 서버 필터를 추가하고, total count도 같은 조건으로 계산해야 한다.
 
 ## 파일 저장소 재사용 검토
 

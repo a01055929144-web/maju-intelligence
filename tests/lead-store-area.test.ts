@@ -22,4 +22,12 @@ describe("lead store area", () => {
     expect(isStoreAreaInRange(165.29, "gte30")).toBe(true);
     expect(isStoreAreaInRange(330.58, "10to100")).toBe(true);
   });
+
+  it("uses the unrounded pyeong value at filter boundaries", () => {
+    expect(squareMetersToPyeong(9.96 * 3.3058)).toBe(10);
+    expect(isStoreAreaInRange(9.96 * 3.3058, "lte10")).toBe(true);
+    expect(squareMetersToPyeong(30.04 * 3.3058)).toBe(30);
+    expect(isStoreAreaInRange(30.04 * 3.3058, "lte30")).toBe(false);
+    expect(isStoreAreaInRange(30.04 * 3.3058, "gte30")).toBe(true);
+  });
 });
