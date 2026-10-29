@@ -171,9 +171,10 @@ async function main() {
     timeZone: "Asia/Seoul"
   }).format(new Date());
   const govConfigured = Boolean(process.env.GOV_RESTAURANT_API_KEY?.trim());
+  const seoulPreviewEnabled = process.env.LEAD_SEOUL_SOURCE_ENABLED === "true";
   const results = await Promise.all([
     ...(govConfigured ? [fetchGovProfile()] : []),
-    fetchSeoulProfile()
+    ...(seoulPreviewEnabled ? [fetchSeoulProfile()] : [])
   ]);
   const report = `# 매장 면적 원천 분포 읽기 전용 리포트
 
@@ -183,8 +184,13 @@ async function main() {
 - 실제값: API 응답 표본에서 직접 관측한 값
 - 추정값: 표본 비율을 원천이 알려준 모집단 건수에 단순 외삽한 값
 - 이상치 기준: 음수, 비숫자, 100,000㎡ 초과는 유효 범위 밖으로 분류. 유효값 상위 1%는 별도 관측 예시로 표시.
-- 미측정 원천: ${govConfigured ? "없음" : "행정안전부 1741000 원천(API 키가 승인 환경에서만 복호화되어 이번 실행에서는 미측정)"}
-- 보안 제한: 서울 API는 HTTPS 지원이 확인되지 않아 인증키 수집을 실행하지 않고 키 없는 공식 sample 경로만 사용.
+- 미측정 원천: ${[
+    ...(!govConfigured ? ["행정안전부 1741000 원천(API 키가 승인 환경에서만 복호화되어 이번 실행에서는 미측정)"] : []),
+    ...(!seoulPreviewEnabled ? ["서울 열린데이터광장 원천(예비 플래그 기본 OFF로 미측정)"] : [])
+  ].join(", ") || "없음"}
+- 기본 수집 원천: 행정안전부 1741000 HTTPS API
+- 보안 제한: 서울 API는 HTTPS 지원이 확인되지 않아 인증키 수집을 실행하지 않는다. 예비 플래그를 명시적으로 켠 수동 리포트에서도 키 없는 공식 sample 경로만 허용한다.
+- 동일 매장 비교: 이번 외부 표본 실행은 두 원천의 공통 식별자를 보존하지 않아 미측정. 운영자 집계 API도 저장된 동일 lead_id 양쪽에 유효 면적이 있을 때만 measured로 표시하며 원문 행은 응답하지 않는다.
 
 두 원천은 중복 행을 포함할 수 있어 합산하지 않는다.
 
@@ -194,6 +200,7 @@ ${results.map(sourceSection).join("\n\n")}
 
 - 정부 원천 표본은 최신순 편향이 있으므로 전국 비율로 해석하지 않는다.
 - 서울 공식 샘플은 원천 정렬에 따른 편향 가능성이 있다.
+- 과거 코드에서 \`SEOUL_OPENDATA_API_KEY\`가 HTTP URL 경로에 포함된 실행 가능성이 있었다. 실제 노출을 확인한 것은 아니지만, 해당 경로를 운영에서 사용했다면 대표 승인으로 기존 키를 폐기·재발급할 것을 권고한다.
 - 업종 중앙값은 면적 대체값을 생성하는 근거가 아니다. 실제 면적과 추정 면적은 저장·표시 단계에서도 구분해야 한다.
 - 기능 플래그 활성화 전 제한된 테스트 회사에서 새 수집분의 분포를 재확인한다.
 `;
@@ -203,6 +210,8 @@ ${results.map(sourceSection).join("\n\n")}
 }
 
 void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "원천 분포 리포트 생성에 실패했습니다.");
+  console.error("원천 분포 리포트 생성 실패", {
+    errorName: error instanceof Error ? error.name : "UnknownError"
+  });
   process.exitCode = 1;
 });
