@@ -5,8 +5,8 @@ import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCreden
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 import { getStaffAccessState } from "./store/07-staff-access";
-import { observeStaffSession } from "@/application/organization/observe-staff-session";
-import { shouldRefreshSessionObservation } from "@/domains/organization/session-observation";
+import { observeStaffSession } from "../application/organization/observe-staff-session";
+import { shouldRefreshSessionObservation } from "../domains/organization/session-observation";
 import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
 
