@@ -2,21 +2,29 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { observeStaffSession } from "../application/organization/observe-staff-session";
-import { buildStaffSessionObservation, shouldRefreshSessionObservation } from "../domains/organization/session-observation";
+import { buildStaffSessionObservation, isValidObservationDeviceId, shouldRefreshSessionObservation } from "../domains/organization/session-observation";
 
 describe("staff session observation draft", () => {
   it("stays inert while the feature flag is disabled", async () => {
     const repository = { upsert: vi.fn() };
-    expect(buildStaffSessionObservation({ companyId: "company-1", deviceHash: "a".repeat(64), enabled: false, observedAt: new Date(), userId: "user-1" })).toBeNull();
-    await expect(observeStaffSession({ companyId: "company-1", deviceHash: "a".repeat(64), enabled: false, observedAt: new Date(), userId: "user-1" }, repository)).resolves.toBe("skipped");
+    expect(buildStaffSessionObservation({ companyId: "company-1", deviceHash: "a".repeat(64), enabled: false, membershipValidated: true, observedAt: new Date(), userId: "user-1" })).toBeNull();
+    await expect(observeStaffSession({ companyId: "company-1", deviceHash: "a".repeat(64), enabled: false, membershipValidated: true, observedAt: new Date(), userId: "user-1" }, repository)).resolves.toBe("skipped");
     expect(repository.upsert).not.toHaveBeenCalled();
   });
 
   it("records only a complete server-hashed device observation", async () => {
     const repository = { upsert: vi.fn().mockResolvedValue(undefined) };
     const observedAt = new Date("2026-10-29T00:00:00.000Z");
-    await expect(observeStaffSession({ companyId: "company-1", deviceHash: "b".repeat(64), enabled: true, observedAt, userId: "user-1" }, repository)).resolves.toBe("recorded");
+    await expect(observeStaffSession({ companyId: "company-1", deviceHash: "b".repeat(64), enabled: true, membershipValidated: true, observedAt, userId: "user-1" }, repository)).resolves.toBe("recorded");
     expect(repository.upsert).toHaveBeenCalledWith({ companyId: "company-1", deviceHash: "b".repeat(64), observedAt: observedAt.toISOString(), userId: "user-1" });
+  });
+
+  it("rejects unvalidated memberships and malformed device cookies", async () => {
+    const repository = { upsert: vi.fn() };
+    await expect(observeStaffSession({ companyId: "company-1", deviceHash: "c".repeat(64), enabled: true, membershipValidated: false, observedAt: new Date(), userId: "user-1" }, repository)).resolves.toBe("skipped");
+    expect(isValidObservationDeviceId("c".repeat(64))).toBe(true);
+    expect(isValidObservationDeviceId("user-controlled-value")).toBe(false);
+    expect(repository.upsert).not.toHaveBeenCalled();
   });
 
   it("throttles best-effort heartbeats to five minutes", () => {

@@ -9,6 +9,7 @@ export async function observeStaffSession(
     companyId?: string;
     deviceHash?: string;
     enabled: boolean;
+    membershipValidated: boolean;
     observedAt: Date;
     userId?: string;
   },

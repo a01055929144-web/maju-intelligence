@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import { NextRequest } from "next/server";
+import { after, NextRequest } from "next/server";
 import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 import { getStaffAccessState } from "./store/07-staff-access";
 import { observeStaffSession } from "../application/organization/observe-staff-session";
-import { shouldRefreshSessionObservation } from "../domains/organization/session-observation";
+import { isValidObservationDeviceId, shouldRefreshSessionObservation } from "../domains/organization/session-observation";
 import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
 
@@ -176,7 +176,7 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
   }
 
   if (customerSession) {
-    await recordCustomerSessionObservation(customerSession);
+    scheduleCustomerSessionObservation(customerSession);
     return {
       adminSession,
       companyId: customerSession.companyId,
@@ -209,6 +209,15 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
   };
 }
 
+function scheduleCustomerSessionObservation(session: CustomerSession) {
+  if (!sessionObservationEnabled() || !session.userId || !session.observationDeviceHash) return;
+  try {
+    after(() => recordCustomerSessionObservation(session));
+  } catch {
+    // 테스트처럼 요청 컨텍스트가 없는 환경에서는 인증 성공을 우선한다.
+  }
+}
+
 async function recordCustomerSessionObservation(session: CustomerSession) {
   if (!sessionObservationEnabled() || !session.userId || !session.observationDeviceHash) return;
   const throttleKey = `${session.companyId}:${session.userId}:${session.observationDeviceHash}`;
@@ -222,6 +231,7 @@ async function recordCustomerSessionObservation(session: CustomerSession) {
         companyId: session.companyId,
         deviceHash: session.observationDeviceHash,
         enabled: true,
+        membershipValidated: true,
         observedAt: new Date(now),
         userId: session.userId
       },
@@ -368,7 +378,8 @@ export async function setCustomerSession(session: CustomerSession, options?: { r
   const cookieStore = await cookies();
   let sessionToStore = session;
   if (sessionObservationEnabled() && session.userId) {
-    const existingDeviceId = cookieStore.get(CUSTOMER_DEVICE_COOKIE_NAME)?.value;
+    const cookieDeviceId = cookieStore.get(CUSTOMER_DEVICE_COOKIE_NAME)?.value;
+    const existingDeviceId = isValidObservationDeviceId(cookieDeviceId) ? cookieDeviceId : undefined;
     const deviceId = existingDeviceId || randomBytes(32).toString("hex");
     if (!existingDeviceId) {
       cookieStore.set(CUSTOMER_DEVICE_COOKIE_NAME, deviceId, {
