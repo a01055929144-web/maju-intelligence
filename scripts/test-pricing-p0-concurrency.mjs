@@ -10,7 +10,7 @@ export async function checkConcurrency(connectionString) {
     await a.query('insert into companies values($1)',[company]);
     await a.query("insert into product_catalog(id,company_id,purchase_product_name,purchase_price) values($1,$2,'concurrency fixture',800)",[product,company]);
     await a.query('select pricing_p0_command($1,$2)',[company,{ action:'group', name:'concurrency', margin:20, rounding:10 }]);
-    const group=(await a.query('select id from pricing_margin_groups where company_id=$1',[company])).rows[0].id;
+    const group=(await a.query('select id from margin_groups where company_id=$1',[company])).rows[0].id;
     await a.query('select pricing_p0_command($1,$2)',[company,{ action:'assign', productId:product, groupId:group }]);
     await a.query('begin');
     await a.query('select 1 from product_catalog where company_id=$1 for update',[company]);
@@ -23,9 +23,9 @@ export async function checkConcurrency(connectionString) {
     if (Number(price.price)!==1100 || Number(price.applied_cost)!==880) throw new Error('Concurrent cost not captured');
     await a.query('update product_catalog set purchase_price=960 where company_id=$1',[company]);
     await Promise.all([b,c].map(client => client.query('select pricing_p0_command($1,$2)',[company,{ action:'recalculate' }])));
-    const runs=(await a.query('select count(*) from pricing_runs where company_id=$1',[company])).rows[0];
+    const runs=(await a.query('select count(*) from price_recalc_runs where company_id=$1',[company])).rows[0];
     if (Number(runs.count)!==2) throw new Error('Duplicate concurrent recalculation');
-    const latest=(await a.query('select id from pricing_runs where company_id=$1 order by created_at desc,id desc limit 1',[company])).rows[0].id;
+    const latest=(await a.query('select id from price_recalc_runs where company_id=$1 order by created_at desc,id desc limit 1',[company])).rows[0].id;
     await Promise.all([b,c].map(client => client.query('select pricing_p0_command($1,$2)',[company,{ action:'restore',batchId:latest }])));
     if (Number((await a.query('select price from pricing_items where company_id=$1',[company])).rows[0].price)!==1100) throw new Error('Concurrent restore');
     console.log('PASS PostgreSQL16 concurrency: cost-update lock, duplicate recalculate, duplicate restore');

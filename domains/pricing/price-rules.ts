@@ -1,13 +1,17 @@
-/** P0 uses gross margin (profit / sales), matching quote pricing. Money is KRW. */
-
-
+/** Pure KRW rules. Gross margin = profit / sales. Null means inherit; zero is explicit. */
 export type MarginGroup = { id: string; name: string; margin: number; rounding: number };
+export type MarginCategory = { category: string; groupId: string };
 export type PriceItem = {
-  id: string; name: string; groupId: string | null; cost: number;
+  id: string; name: string; category: string; groupId: string | null; itemMargin: number | null; cost: number;
   price: number; appliedCost: number | null; appliedMargin: number | null;
   appliedRounding: number | null; active: boolean; directPrice: number | null;
 };
-export type PriceState = { groups: MarginGroup[]; items: PriceItem[]; lastBatch: string | null; restored: boolean };
+export type PriceState = {
+  groups: MarginGroup[]; categories: MarginCategory[]; items: PriceItem[];
+  defaultMargin: number; defaultRounding: number; pendingCount: number;
+  total: number; page: number; pageSize: number; lastBatch: string | null; restored: boolean;
+};
+export type PriceQuery = { search: string; page: number };
 export function calculatePrice(cost: number, margin: number, rounding = 10, directPrice: number | null = null) {
   if (directPrice !== null) {
     if (!Number.isSafeInteger(directPrice) || directPrice < 0 || directPrice > 1e12) throw new Error("직접 단가 범위를 확인해 주세요.");
@@ -26,9 +30,22 @@ export function calculatePrice(cost: number, margin: number, rounding = 10, dire
   if (!Number.isSafeInteger(result) || result > 1e12) throw new Error("판매가 범위를 초과했습니다.");
   return result;
 }
-export function needsRecalculation(item: PriceItem, groups: readonly MarginGroup[]) {
-  const group = groups.find(g => g.id === item.groupId);
-  return Boolean(item.directPrice === null && item.active && group && item.cost > 0 && (
-    item.appliedCost !== item.cost || item.appliedMargin !== group.margin || item.appliedRounding !== group.rounding
+export function resolvePriceRule(item: PriceItem, groups: readonly MarginGroup[], categories: readonly MarginCategory[] = [], defaultMargin = 0, defaultRounding = 10) {
+  const groupId = item.groupId ?? categories.find(c => c.category === item.category)?.groupId;
+  const group = groups.find(g => g.id === groupId);
+  return {
+    margin: item.itemMargin ?? group?.margin ?? defaultMargin,
+    rounding: group?.rounding ?? defaultRounding,
+    source: item.directPrice !== null ? "direct" : item.itemMargin !== null ? "item" : group ? "group" : "default"
+  };
+}
+export function calculateItemPrice(item: PriceItem, groups: readonly MarginGroup[], categories: readonly MarginCategory[] = [], defaultMargin = 0, defaultRounding = 10) {
+  const rule = resolvePriceRule(item, groups, categories, defaultMargin, defaultRounding);
+  return calculatePrice(item.cost, rule.margin, rule.rounding, item.directPrice);
+}
+export function needsRecalculation(item: PriceItem, groups: readonly MarginGroup[], categories: readonly MarginCategory[] = [], defaultMargin = 0, defaultRounding = 10) {
+  const rule = resolvePriceRule(item, groups, categories, defaultMargin, defaultRounding);
+  return Boolean(item.directPrice === null && item.active && item.cost > 0 && (
+    item.appliedCost !== item.cost || item.appliedMargin !== rule.margin || item.appliedRounding !== rule.rounding
   ));
 }

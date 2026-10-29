@@ -11,9 +11,9 @@ await client.connect();
 try {
   const version = await client.query('show server_version_num');
   if (Math.floor(Number(version.rows[0].server_version_num)/10000)!==16) throw new Error('PG16 required');
-  for (const path of ['tests/sql/pricing-p0-fixture.sql','docs/sql-drafts/20261030-pricing-p0.sql','tests/sql/pricing-p0.sql']) {
+  for (const path of ['tests/sql/pricing-p0-fixture.sql','docs/sql-drafts/20261030-pricing-p0.sql','tests/sql/pricing-p0.sql','tests/sql/pricing-p0-priority.sql']) {
     await client.query((await readFile(new URL('../'+path,import.meta.url),'utf8')).replace(/^\uFEFF/,''));
   }
-  console.log('PASS PostgreSQL16: company isolation, numeric boundaries, duplicate recalculation, restore idempotency/conflict, role denial, company cascade');
+  console.log('PASS PostgreSQL16: priority direct/item/category/default, 5000-row paging/search/global count/recalculate/restore, company isolation, numeric boundaries, idempotency/conflict, role denial/cascade');
 } finally { await client.end(); }
 await checkConcurrency(connectionString);
