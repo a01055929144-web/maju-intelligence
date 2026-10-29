@@ -23,7 +23,7 @@ describe("pricing boundary", () => {
     expect((await POST(new NextRequest("http://localhost/api/price-sheets", { method: "POST", body: '{}' }))).status).toBe(404);
     expect(mocks.auth).not.toHaveBeenCalled(); expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.execute).not.toHaveBeenCalled();
   });
-  it("rejects anonymous and nonowner requests", async () => {
+  it("rejects anonymous and ordinary staff requests", async () => {
     mocks.auth.mockResolvedValueOnce({ ok: false });
     expect((await GET(new NextRequest("http://localhost/api/price-sheets"))).status).toBe(401);
     mocks.auth.mockResolvedValueOnce({ ok: true, companyId: company, customerSession: { role: "member" } });
@@ -50,4 +50,11 @@ it("passes bounded search/pagination and refuses invalid pages before repository
   expect((await GET(new NextRequest("http://localhost/api/price-sheets?page=0"))).status).toBe(400);
   expect((await GET(new NextRequest("http://localhost/api/price-sheets?page=1.2"))).status).toBe(400);
   expect(mocks.read).not.toHaveBeenCalled();
+});
+
+it("allows a manager to read and recalculate within the authenticated company", async () => {
+  mocks.auth.mockResolvedValue({ ok: true, companyId: company, customerSession: { role: "member", workspaceRole: "manager" } });
+  expect((await GET(new NextRequest("http://localhost/api/price-sheets"))).status).toBe(200);
+  expect((await POST(new NextRequest("http://localhost/api/price-sheets", { method: "POST", body: JSON.stringify({ action: "recalculate" }) }))).status).toBe(200);
+  expect(mocks.execute).toHaveBeenCalledWith(company, { action: "recalculate" });
 });

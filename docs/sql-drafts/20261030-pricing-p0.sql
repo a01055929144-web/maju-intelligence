@@ -3,11 +3,13 @@
 -- Older draft already applied? Use a new disposable DB and apply the full current draft once.
 -- Recalculate/restore command retries are idempotent; DDL replay is not.
 -- Dependencies: companies; product_catalog with company_id/id unique, is_active/category.
+-- Markup (purchase-cost basis): bp 0..100000 = 0..1000%.
+-- Example: cost 18910, bp 1200, rounding 10 => 21180 bigint KRW.
 -- Service-only API: company authorization is mandatory at the server boundary.
 begin;
 create table public.margin_groups (
  id uuid primary key default gen_random_uuid(), company_id uuid not null references public.companies(id) on delete cascade,
- name text not null check(length(trim(name)) between 1 and 80), margin_bp integer not null check(margin_bp between 0 and 9999),
+ name text not null check(length(trim(name)) between 1 and 80), margin_bp integer not null check(margin_bp between 0 and 100000),
  rounding integer not null default 10 check(rounding in (1,10,100)), unique(company_id,id), unique(company_id,name)
 );
 create table public.margin_group_categories (
@@ -18,7 +20,7 @@ create table public.margin_group_categories (
 );
 create table public.pricing_settings (
  company_id uuid primary key references public.companies(id) on delete cascade,
- default_margin_bp integer not null default 0 check(default_margin_bp between 0 and 9999),
+ default_margin_bp integer not null default 0 check(default_margin_bp between 0 and 100000),
  rounding integer not null default 10 check(rounding in (1,10,100))
 );
 alter table public.margin_group_categories enable row level security;
@@ -28,7 +30,7 @@ grant select,insert,update,delete on public.margin_group_categories,public.prici
 
 create table public.pricing_items (
  company_id uuid not null references public.companies(id) on delete cascade, product_id uuid not null,
- margin_bp integer check(margin_bp between 0 and 9999), group_id uuid, price bigint not null default 0 check(price between 0 and 1000000000000),
+ margin_bp integer check(margin_bp between 0 and 100000), group_id uuid, price bigint not null default 0 check(price between 0 and 1000000000000),
  direct_price bigint check(direct_price between 0 and 1000000000000),
  -- Cost-only exception: existing product_catalog.purchase_price is numeric(14,2).
  -- Preserve its exact source value (e.g. 800.01 -> 800.02); rounding to bigint
@@ -67,8 +69,8 @@ begin
    if direct_price < 0 or direct_price > 1000000000000 then raise exception 'Invalid direct price'; end if;
    return direct_price;
  end if;
- if cost is null or cost < 0 or cost > 1000000000000 or bp is null or bp < 0 or bp > 9999 or rounding is null or rounding not in (1,10,100) then raise exception 'Invalid price inputs'; end if;
- result := ceil(cost * 10000 / (10000-bp) / rounding) * rounding;
+ if cost is null or cost < 0 or cost > 1000000000000 or bp is null or bp < 0 or bp > 100000 or rounding is null or rounding not in (1,10,100) then raise exception 'Invalid price inputs'; end if;
+ result := ceil(cost * (10000+bp) / 10000 / rounding) * rounding;
  if result > 1000000000000 then raise exception 'Price overflow'; end if;
  return result::bigint;
 end $$;

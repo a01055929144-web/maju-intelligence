@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "../../../lib/auth";
+import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { areHoldModulesEnabled } from "../../../lib/feature-modules";
 import { managePriceSheets, type PricingCommand } from "../../../application/pricing/manage-price-sheets";
@@ -11,7 +12,7 @@ async function handle(request: NextRequest, write: boolean) {
   const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (!scope.ok) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   if (!scope.companyId || !areHoldModulesEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
-  if (scope.customerSession && scope.customerSession.role !== "owner") return NextResponse.json({ message: "대표자 권한이 필요합니다." }, { status: 403 });
+  if (scope.customerSession && !canManagePriceSheets(scope.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1);
     const search = (request.nextUrl.searchParams.get("q") || "").trim();

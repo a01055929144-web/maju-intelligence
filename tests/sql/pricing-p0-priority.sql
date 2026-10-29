@@ -22,7 +22,7 @@ begin
  if jsonb_array_length(pricing_p0_state(c,'',101)->'items')<>0 then raise exception 'Page bounds'; end if;
  if (select count(distinct x->>'id') from (select jsonb_array_elements(pricing_p0_state(c,'',1)->'items') x union all select jsonb_array_elements(pricing_p0_state(c,'',2)->'items')) t)<>100 then raise exception 'Unstable page overlap'; end if;
  perform pricing_p0_command(c,'{"action":"recalculate"}');
- if (select count(*) from pricing_items where company_id=c and price=1600)<>5000 then raise exception 'Category calculation did not cover all pages'; end if;
+ if (select count(*) from pricing_items where company_id=c and price=1200)<>5000 then raise exception 'Category calculation did not cover all pages'; end if;
  if (pricing_p0_state(c)->>'pendingCount')::integer<>0 then raise exception 'Pending after calculation'; end if;
  perform pricing_p0_command(c,jsonb_build_object('action','item-margin','productId',p,'margin',0));
  perform pricing_p0_command(c,'{"action":"recalculate"}');
@@ -35,14 +35,14 @@ begin
  perform pricing_p0_command(c,jsonb_build_object('action','category','category','채소','groupId',''));
  if (pricing_p0_state(c)->>'pendingCount')::integer<>5000 then raise exception 'Category removal must inherit default'; end if;
  perform pricing_p0_command(c,'{"action":"recalculate"}');
- if (select count(*) from pricing_items where company_id=c and price=1000)<>5000 then raise exception 'Default fallback calculation'; end if;
+ if (select count(*) from pricing_items where company_id=c and price=960)<>5000 then raise exception 'Default fallback calculation'; end if;
  perform pricing_p0_command(c,'{"action":"defaults","margin":0,"rounding":100}');
  perform pricing_p0_command(c,'{"action":"recalculate"}');
  select id into run from price_recalc_runs where company_id=c order by created_at desc,id desc limit 1;
  if (select count(*) from pricing_items where company_id=c and price=800)<>5000 then raise exception 'Default zero margin'; end if;
  perform pricing_p0_command(c,jsonb_build_object('action','restore','batchId',run));
  perform pricing_p0_command(c,jsonb_build_object('action','restore','batchId',run));
- if (select count(*) from pricing_items where company_id=c and price=1000)<>5000 or (pricing_p0_state(c)->>'pendingCount')::integer<>5000 then raise exception '5000 row restore'; end if;
+ if (select count(*) from pricing_items where company_id=c and price=960)<>5000 or (pricing_p0_state(c)->>'pendingCount')::integer<>5000 then raise exception '5000 row restore'; end if;
  -- Retain a mapping so company deletion verifies its cascade as well.
  perform pricing_p0_command(c,jsonb_build_object('action','category','category','채소','groupId',g));
  if has_table_privilege('authenticated','margin_group_categories','select') or has_table_privilege('anon','pricing_settings','select') or has_table_privilege('anon','pricing_p0_effective','select') then raise exception 'New rule tables exposed'; end if;
