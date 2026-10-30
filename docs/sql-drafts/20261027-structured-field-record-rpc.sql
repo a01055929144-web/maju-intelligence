@@ -12,6 +12,12 @@
 
 begin;
 
+-- Advisory locks serialize calls through these RPCs. The partial unique index
+-- also protects sales-offer idempotency from any writer that bypasses the RPC.
+create unique index if not exists uq_lead_actions_structured_idempotency
+  on public.lead_actions(company_id, lead_id, (metadata->>'structuredIdempotencyKey'))
+  where nullif(metadata->>'structuredIdempotencyKey', '') is not null;
+
 create or replace function public.record_delivery_event_atomic(
   p_company_id uuid,
   p_customer_id uuid,
@@ -24,11 +30,12 @@ create or replace function public.record_delivery_event_atomic(
 ) returns jsonb
 language plpgsql
 security invoker
-set search_path = public, pg_temp
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_note_id uuid;
   v_event_id uuid;
+  v_status text;
 begin
   if p_idempotency_key is null or btrim(p_idempotency_key) = '' then raise exception 'idempotency_key_required'; end if;
   perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':delivery:' || p_idempotency_key, 0));
@@ -36,32 +43,49 @@ begin
   if not exists (select 1 from public.normalized_customers where company_id = p_company_id and id = p_customer_id) then
     raise exception 'customer_not_found';
   end if;
-  if jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
+  if p_actor_user_id is not null and not exists (
+    select 1 from public.company_members
+     where company_id = p_company_id and user_id = p_actor_user_id and status = 'active'
+  ) then raise exception 'actor_not_company_member'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
+  v_status := coalesce(nullif(p_event->>'status', ''), 'received');
+
+  -- A retry must return the original record. Updating a note or replacing its
+  -- items under the same key would let a late retry rewrite a completed event.
+  select n.id, e.id into v_note_id, v_event_id
+    from public.customer_notes n
+    left join public.delivery_events e
+      on e.company_id = n.company_id and e.customer_note_id = n.id
+   where n.company_id = p_company_id
+     and n.customer_id = p_customer_id
+     and n.note_type = 'delivery'
+     and n.idempotency_key = p_idempotency_key;
+  if v_note_id is not null then
+    if v_event_id is null then raise exception 'idempotency_key_conflict'; end if;
+    return jsonb_build_object('noteId', v_note_id, 'eventId', v_event_id, 'replayed', true);
+  end if;
 
   insert into public.customer_notes(company_id, customer_id, note_type, memo, created_by_name, idempotency_key)
   values (p_company_id, p_customer_id, 'delivery', p_memo, nullif(btrim(p_actor_name), ''), p_idempotency_key)
-  on conflict (company_id, customer_id, idempotency_key) where note_type = 'delivery' and idempotency_key is not null
-  do update set memo = excluded.memo
-    -- 운영 인덱스 uq_customer_notes_delivery_idempotency는 note_type 조건 없이 (idempotency_key is not null)만 걸려 있어
-    -- 같은 키의 배송 외 메모와 충돌할 수 있습니다. 배송 메모일 때만 갱신하고, 아니면 아래에서 오류로 멈춥니다.
-    where public.customer_notes.note_type = 'delivery'
+  -- Match the deployed partial unique index predicate exactly. A non-delivery
+  -- note using the same key is a conflict and must never be modified here.
+  on conflict (company_id, customer_id, idempotency_key) where idempotency_key is not null
+  do nothing
   returning id into v_note_id;
   if v_note_id is null then raise exception 'idempotency_key_conflict'; end if;
 
   insert into public.delivery_events(
     company_id, customer_id, customer_note_id, recorded_by_user_id, recorded_by_name,
-    event_type, cause_code, occurrence_stage, action_code, action_amount, status, memo
+    event_type, cause_code, occurrence_stage, action_code, action_amount, status, resolved_at, memo
   ) values (
     p_company_id, p_customer_id, v_note_id, p_actor_user_id, nullif(btrim(p_actor_name), ''),
     p_event->>'eventType', nullif(p_event->>'causeCode', ''), nullif(p_event->>'occurrenceStage', ''),
     nullif(p_event->>'actionCode', ''), nullif(p_event->>'actionAmount', '')::numeric,
-    coalesce(nullif(p_event->>'status', ''), 'received'), p_memo
+    v_status, case when v_status = 'completed' then now() else null end, p_memo
   )
-  on conflict (company_id, customer_note_id) do update set
-    cause_code = excluded.cause_code, occurrence_stage = excluded.occurrence_stage,
-    action_code = excluded.action_code, action_amount = excluded.action_amount,
-    status = excluded.status, memo = excluded.memo, updated_at = now()
+  on conflict (company_id, customer_note_id) do nothing
   returning id into v_event_id;
+  if v_event_id is null then raise exception 'idempotency_key_conflict'; end if;
 
   delete from public.delivery_event_items where company_id = p_company_id and delivery_event_id = v_event_id;
   insert into public.delivery_event_items(
@@ -89,7 +113,7 @@ create or replace function public.record_lead_sales_offer_atomic(
 ) returns jsonb
 language plpgsql
 security invoker
-set search_path = public, pg_temp
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_action_id uuid;
@@ -101,7 +125,13 @@ begin
   if not exists (select 1 from public.business_permit_leads where company_id = p_company_id and id = p_lead_id) then
     raise exception 'lead_not_found';
   end if;
-  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'offer_items_required'; end if;
+  if p_actor_user_id is not null and not exists (
+    select 1 from public.company_members
+     where company_id = p_company_id and user_id = p_actor_user_id and status = 'active'
+  ) then raise exception 'actor_not_company_member'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'offer_items_required';
+  end if;
 
   select a.id, o.id into v_action_id, v_offer_id
     from public.lead_actions a
