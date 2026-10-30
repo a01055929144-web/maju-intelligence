@@ -214,9 +214,9 @@ create or replace function public.list_active_lead_do_not_contacts(
 language sql stable security invoker set search_path = ''
 as $$
   with lead as (
-    select * from public.business_permit_leads
-    where company_id = p_company_id and id = p_lead_id
-      and merged_into_lead_id is null
+    select lead_row.* from public.business_permit_leads lead_row
+    where lead_row.company_id = p_company_id and lead_row.id = p_lead_id
+      and lead_row.merged_into_lead_id is null
   ), contact_values as (
     select lead.company_id, channels.channel, channels.normalized_value
     from lead

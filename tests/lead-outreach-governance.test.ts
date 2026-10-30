@@ -163,7 +163,7 @@ describe("lead outreach governance", () => {
     expect(storeSource).toContain('rpc/list_active_lead_do_not_contacts');
     expect(storeSource).toContain("maskedValue: row.masked_value");
     expect(sql).toContain("public.mask_dnc_value(dnc.channel, dnc.normalized_value)");
-    expect(sql).toContain("company_id = p_company_id and id = p_lead_id");
+    expect(sql).toContain("lead_row.company_id = p_company_id and lead_row.id = p_lead_id");
     expect(route).toContain("await isActiveLegacyOwnerSession({");
     expect(route).toContain("email: scope.customerSession.email");
     expect(route).toContain("}).catch(() => false)");
