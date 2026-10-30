@@ -151,7 +151,8 @@ export function StorefrontWorkspace() {
         onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4"><h2 className="font-semibold">주문 내역</h2>
-      {!data?.orders.length && <p className="text-sm text-slate-600">아직 주문이 없습니다.</p>}
+      {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
+        !data?.orders.length && <p className="text-sm text-slate-600">아직 주문이 없습니다.</p>}
       {data?.orders.map((order) => <article key={order.id} className="rounded border p-3 text-sm">
         <div className="flex justify-between gap-2"><strong>{order.deliveryDate} 배송</strong><span>{order.status}</span></div>
         <p className="mt-1 text-slate-600">{order.lines.map((line) => `${line.product_name} ${line.quantity}`).join(" · ")}</p>
