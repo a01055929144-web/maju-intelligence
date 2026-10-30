@@ -224,6 +224,19 @@ reset role;
 
 -- owner가 승인한 매장 본인 요청은 휴대폰도 익명화하고 비민감 감사 행만 남긴다.
 set role maju_revision_redaction_operator;
+do $$
+begin
+  perform maju_private.anonymize_customer_revision_values_for_request(
+    '10000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000001',
+    'store_self_request', false, timestamptz '2026-10-29 00:00:30+00'
+  );
+  raise exception 'store_self_request_without_mobile_should_be_forbidden';
+exception
+  when raise_exception then
+    if sqlerrm <> 'store_self_request_scope_mismatch' then raise; end if;
+end $$;
 select maju_private.anonymize_customer_revision_values_for_request(
   '10000000-0000-0000-0000-000000000001',
   '40000000-0000-0000-0000-000000000001',

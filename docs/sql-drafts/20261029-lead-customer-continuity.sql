@@ -220,8 +220,8 @@ begin
     raise insufficient_privilege using message = 'owner_or_manager_required';
   end if;
 
-  if p_store_self_request and p_reason_code <> 'store_self_request' then
-    raise exception 'store_self_request_reason_required';
+  if p_store_self_request is distinct from (p_reason_code = 'store_self_request') then
+    raise exception 'store_self_request_scope_mismatch';
   end if;
 
   update public.common_revision_history history
