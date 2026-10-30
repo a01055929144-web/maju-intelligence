@@ -29,6 +29,7 @@ as $$
 declare
   v_note_id uuid;
   v_event_id uuid;
+  v_status text;
 begin
   if p_idempotency_key is null or btrim(p_idempotency_key) = '' then raise exception 'idempotency_key_required'; end if;
   perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':delivery:' || p_idempotency_key, 0));
@@ -37,6 +38,7 @@ begin
     raise exception 'customer_not_found';
   end if;
   if jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
+  v_status := coalesce(nullif(p_event->>'status', ''), 'received');
 
   -- A retry must return the original record. Updating a note or replacing its
   -- items under the same key would let a late retry rewrite a completed event.
@@ -64,12 +66,12 @@ begin
 
   insert into public.delivery_events(
     company_id, customer_id, customer_note_id, recorded_by_user_id, recorded_by_name,
-    event_type, cause_code, occurrence_stage, action_code, action_amount, status, memo
+    event_type, cause_code, occurrence_stage, action_code, action_amount, status, resolved_at, memo
   ) values (
     p_company_id, p_customer_id, v_note_id, p_actor_user_id, nullif(btrim(p_actor_name), ''),
     p_event->>'eventType', nullif(p_event->>'causeCode', ''), nullif(p_event->>'occurrenceStage', ''),
     nullif(p_event->>'actionCode', ''), nullif(p_event->>'actionAmount', '')::numeric,
-    coalesce(nullif(p_event->>'status', ''), 'received'), p_memo
+    v_status, case when v_status = 'completed' then now() else null end, p_memo
   )
   on conflict (company_id, customer_note_id) do nothing
   returning id into v_event_id;
