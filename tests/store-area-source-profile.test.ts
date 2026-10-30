@@ -20,7 +20,18 @@ describe("store area source profile", () => {
       { areaRaw: 100_001, industry: "카페", source: "sample" }
     ], { estimatedSourceRows: 100, minimumIndustrySample: 2 });
 
-    expect(profile.actual).toMatchObject({ blank: 1, invalid: 1, medianSqm: 20, positive: 2, rows: 5, zero: 1 });
+    expect(profile.actual).toMatchObject({
+      blank: 1,
+      blankRate: 20,
+      invalid: 1,
+      invalidRate: 20,
+      medianSqm: 20,
+      positive: 2,
+      positiveRate: 40,
+      rows: 5,
+      zero: 1,
+      zeroRate: 20
+    });
     expect(profile.byIndustry).toEqual([{ industry: "한식", medianSqm: 20, positiveRows: 2, sampledRows: 4 }]);
     expect(profile.estimated).toEqual({ blank: 20, invalid: 20, positive: 40, sourceRows: 100, zero: 20 });
   });
@@ -60,5 +71,28 @@ describe("store area source profile", () => {
       measurement: "unmeasured",
       missingAreaOnEitherSourceCount: 1
     });
+  });
+
+  it("rounds source areas before applying the 0.01 equality tolerance", () => {
+    expect(compareStoredStoreAreaSources([
+      { leadId: "rounding-boundary", source: "gov_restaurant_api", areaRaw: " 30.005 " },
+      { leadId: "rounding-boundary", source: "seoul_opendata_api", areaRaw: "30.00" }
+    ])).toMatchObject({
+      comparableAreaCount: 1,
+      equalWithinPrecisionCount: 1,
+      medianAbsoluteDifferenceSqm: 0.01
+    });
+  });
+
+  it("classifies validity and exact zero before rounding positive values", () => {
+    expect(parseRawStoreArea(-0.004)).toEqual({ kind: "invalid", value: -0.004 });
+    expect(parseRawStoreArea(100_000.004)).toEqual({ kind: "invalid", value: 100_000.004 });
+    expect(parseRawStoreArea(0.004)).toEqual({ kind: "positive", value: 0 });
+
+    expect(profileStoreAreaSource([
+      { areaRaw: -0.004, source: "boundary" },
+      { areaRaw: 100_000.004, source: "boundary" },
+      { areaRaw: 0.004, source: "boundary" }
+    ]).actual).toMatchObject({ invalid: 2, positive: 1, zero: 0 });
   });
 });
