@@ -213,27 +213,37 @@ create or replace function public.list_active_lead_do_not_contacts(
 ) returns table(id uuid, channel text, masked_value text, blocked_at timestamptz)
 language sql stable security invoker set search_path = ''
 as $$
+  with lead as (
+    select * from public.business_permit_leads
+    where company_id = p_company_id and id = p_lead_id
+      and merged_into_lead_id is null
+  ), contact_values as (
+    select lead.company_id, channels.channel, channels.normalized_value
+    from lead
+    cross join lateral (values
+      ('sms', public.normalize_dnc_value('sms', lead.phone)),
+      ('fax', public.normalize_dnc_value('fax', lead.fax)),
+      ('email', public.normalize_dnc_value('email', lead.email)),
+      ('instagram', public.normalize_dnc_value('instagram', lead.instagram_url)),
+      ('talktalk', public.normalize_dnc_value('talktalk', lead.naver_talktalk_url))
+    ) as channels(channel, normalized_value)
+    where channels.normalized_value is not null
+  )
   select dnc.id, dnc.channel,
     public.mask_dnc_value(dnc.channel, dnc.normalized_value), dnc.blocked_at
-  from public.business_permit_leads lead
+  from contact_values values_for_lead
   join public.company_do_not_contact dnc
-    on dnc.company_id = lead.company_id and dnc.released_at is null
-   and (
-     (dnc.channel = 'visit' and dnc.source_lead_id = lead.id)
-     or (
-       dnc.channel in ('sms', 'fax', 'email', 'instagram', 'talktalk')
-       and dnc.normalized_value = public.normalize_dnc_value(dnc.channel,
-         case dnc.channel
-           when 'sms' then lead.phone
-           when 'fax' then lead.fax
-           when 'email' then lead.email
-           when 'instagram' then lead.instagram_url
-           when 'talktalk' then lead.naver_talktalk_url
-         end)
-     )
-   )
-  where lead.company_id = p_company_id and lead.id = p_lead_id
-    and lead.merged_into_lead_id is null;
+    on dnc.company_id = values_for_lead.company_id
+   and dnc.channel = values_for_lead.channel
+   and dnc.normalized_value = values_for_lead.normalized_value
+   and dnc.released_at is null
+  union all
+  select dnc.id, dnc.channel,
+    public.mask_dnc_value(dnc.channel, dnc.normalized_value), dnc.blocked_at
+  from lead
+  join public.company_do_not_contact dnc
+    on dnc.company_id = lead.company_id and dnc.channel = 'visit'
+   and dnc.source_lead_id = lead.id and dnc.released_at is null;
 $$;
 
 revoke all on function public.normalize_dnc_value(text,text) from public, anon, authenticated;

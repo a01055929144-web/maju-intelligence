@@ -15,7 +15,7 @@ describe("contact refusal lookup privacy boundary", () => {
     expect(lookup).not.toContain("email=");
     expect(lookup).not.toContain("normalized_value: string");
     expect(sql).toContain("public.mask_dnc_value(dnc.channel, dnc.normalized_value)");
-    expect(sql).toContain("lead.company_id = p_company_id and lead.id = p_lead_id");
+    expect(sql).toContain("company_id = p_company_id and id = p_lead_id");
     expect(sql).toContain("revoke all on function public.list_active_lead_do_not_contacts(uuid,uuid) from public, anon, authenticated");
   });
 });
