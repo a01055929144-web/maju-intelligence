@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const dashboardSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+const mobileMapSummarySource = readFileSync("components/mobile-map-summary.tsx", "utf8");
 const mobileSalesSource = readFileSync("components/mobile-sales-workspace.tsx", "utf8");
 
 describe("mobile map layout", () => {
@@ -13,6 +14,25 @@ describe("mobile map layout", () => {
     expect(dashboardSource).toContain("지도를 가리지 않고 옆 창에서 지역을 선택할 수 있습니다.");
     expect(dashboardSource).not.toContain('aria-label="지도 업무 패널 빠른 전환"');
     expect(dashboardSource).toContain("h-[calc(100dvh-10rem)]");
+  });
+
+  it("keeps filter state mounted while the mobile summary toggles its visibility", () => {
+    expect(dashboardSource).toContain("<MobileMapSummary");
+    expect(dashboardSource).toContain("controlsOpen={mobileMapControlsOpen}");
+    expect(dashboardSource).toContain("setMobileMapControlsOpen((open) => !open)");
+    expect(dashboardSource).toContain('id="map-mobile-filters"');
+    expect(dashboardSource).toContain('activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"');
+    expect(dashboardSource).toContain("space-y-1 lg:block");
+    expect(mobileMapSummarySource).toContain('aria-controls="map-mobile-filters"');
+    expect(mobileMapSummarySource).toContain("aria-expanded={controlsOpen}");
+  });
+
+  it("keeps summary actions compact and text truncatable on narrow screens", () => {
+    expect(mobileMapSummarySource).toContain("min-w-0");
+    expect(mobileMapSummarySource).toContain("truncate text-sm");
+    expect(mobileMapSummarySource).toContain("flex shrink-0 items-center");
+    expect(mobileMapSummarySource).toContain("h-9");
+    expect(mobileMapSummarySource).toContain("lg:hidden");
   });
 
   it("places today's sales tasks first and keeps the map sized from the viewport", () => {
