@@ -96,6 +96,11 @@ heartbeat는 인증이 완료된 서버 요청에서만 최대 5분에 한 번 �
 
 검토용 SQL은 `docs/sql-drafts/20261029-07-temporary-access-concurrent-session.sql`에 둔다. 기존 운영 마이그레이션을 수정하지 않으며, SQL Editor 실행 대상으로 간주하지 않는다.
 
+기록 전용 단계의 전역 5분 dedupe와 동시 기기 **판정만** 다루는 후속안은
+`docs/sql-drafts/20261030-07-session-observation-record-only.sql`에 분리한다. 이 후속안은
+`staff_security_alerts`를 변경하거나 쓰지 않으며, 검증 절차는
+`docs/qa/20261030-07-session-observation-sql-verification.md`를 따른다.
+
 ## 6. 단계별 구현안
 
 1. **세션 계약**: 자체 쿠키 payload에 `appSessionId` 추가, 로그인/로그아웃에서 서버 세션 생성·철회.
