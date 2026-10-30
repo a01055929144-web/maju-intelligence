@@ -1,6 +1,6 @@
 # 07 기록 전용 세션 관찰 SQL 검증 계획
 
-> 대상: `docs/sql-drafts/20261030-07-session-observation-record-only.sql`  
+> 대상: `docs/sql-drafts/20261030-07-session-observation-record-only.sql`
 > 상태: 검토용. 운영 DB 실행 금지. 기능 플래그 `STAFF_SESSION_OBSERVATION_ENABLED=false` 유지.
 
 ## 검증 범위
