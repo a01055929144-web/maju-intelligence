@@ -1,0 +1,180 @@
+import { randomUUID } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { getCustomerOperationalName, getRequestAuthScope } from "@/lib/auth";
+import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { canManagePriceSheets } from "@/domains/pricing/access";
+import { priceSheetsEnabled } from "@/lib/pricing/feature";
+import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
+import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
+import { supabaseRequest } from "@/lib/store";
+import { isId } from "@/domains/pricing/document";
+
+export const dynamic = "force-dynamic";
+
+type LinkRow = { id: string; customer_id: string; document_version_id: string;
+  token_nonce: string; issued_at: string; expires_at: string; revoked_at: string | null;
+  can_order: boolean; view_count: number; last_viewed_at: string | null };
+type LinkMetric = { link_id: string; order_count: number; recent_views: number;
+  last_order_at: string | null };
+
+function storePublicBase() {
+  const configured = process.env.STORE_PUBLIC_BASE_URL;
+  if (!configured) throw new Error("Store public URL is not configured");
+  const url = new URL(configured);
+  if (url.protocol !== "https:" && process.env.NODE_ENV === "production")
+    throw new Error("Store public URL must use HTTPS");
+  return url.origin;
+}
+
+async function scope(request: NextRequest, companyId?: string) {
+  if (!priceSheetsEnabled() || !storeOrderingEnabled())
+    return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  const auth = await getRequestAuthScope(request, companyId);
+  if (!auth.ok) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  if (!auth.companyId || !areHoldModulesEnabled(auth.companyId))
+    return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (auth.customerSession && !canManagePriceSheets(auth.customerSession))
+    return NextResponse.json({ message: "링크 관리 권한이 없습니다." }, { status: 403 });
+  return auth.companyId;
+}
+
+function sameOrigin(request: NextRequest) {
+  const raw = request.headers.get("origin");
+  if (!raw) return true;
+  try { return new URL(raw).host.toLowerCase() === (request.headers.get("host") || request.nextUrl.host).toLowerCase(); }
+  catch { return false; }
+}
+
+export async function GET(request: NextRequest) {
+  const company = await scope(request, request.nextUrl.searchParams.get("companyId") || undefined);
+  if (typeof company !== "string") return company;
+  const page = Number(request.nextUrl.searchParams.get("page") || 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 100000)
+    return NextResponse.json({ message: "페이지를 확인해 주세요." }, { status: 400 });
+  try {
+    const detailId = request.nextUrl.searchParams.get("linkId");
+    if (detailId) {
+      if (!isId(detailId)) return NextResponse.json({ message: "링크를 확인해 주세요." }, { status: 400 });
+      const rows = await supabaseRequest<LinkRow[]>(
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${detailId}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&limit=1`,
+      );
+      if (!rows.length) return NextResponse.json({ message: "링크를 찾지 못했습니다." }, { status: 404 });
+      const events = await supabaseRequest<{ id: string; event_type: string; occurred_at: string; device_class: string | null;
+        actor_name: string | null }[]>(
+        `storefront_link_events?company_id=eq.${encodeURIComponent(company)}&link_id=eq.${detailId}&select=id,event_type,occurred_at,device_class,actor_name&order=occurred_at.desc,id.desc&limit=50`,
+      );
+      return NextResponse.json({ events }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const offset = (page - 1) * 50;
+    const links = await supabaseRequest<LinkRow[]>(
+      `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
+    );
+    const customerIds = Array.from(new Set(links.map((link) => link.customer_id)));
+    const versionIds = Array.from(new Set(links.map((link) => link.document_version_id)));
+    const [customers, versions, metrics] = await Promise.all([
+      customerIds.length ? supabaseRequest<{ id: string; customer_name: string }[]>(
+        `normalized_customers?company_id=eq.${encodeURIComponent(company)}&id=in.(${customerIds.join(",")})&select=id,customer_name`,
+      ) : Promise.resolve([]),
+      versionIds.length ? supabaseRequest<{ id: string; document_id: string; version: number; content: { title?: string } }[]>(
+        `pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=in.(${versionIds.join(",")})&select=id,document_id,version,content`,
+      ) : Promise.resolve([]),
+      links.length ? supabaseRequest<LinkMetric[]>("rpc/storefront_link_metrics", {
+        method: "POST", body: JSON.stringify({ p_company: company,
+          p_links: links.map((link) => link.id) }),
+      }) : Promise.resolve([]),
+    ]);
+    const customerNames = new Map(customers.map((item) => [item.id, item.customer_name]));
+    const versionInfo = new Map(versions.map((item) => [item.id, item]));
+    const metricByLink = new Map(metrics.map((item) => [item.link_id, item]));
+    return NextResponse.json({
+      items: links.map((link) => {
+        const version = versionInfo.get(link.document_version_id);
+        const metric = metricByLink.get(link.id);
+        return { id: link.id, customerId: link.customer_id,
+          customerName: customerNames.get(link.customer_id) ?? "거래처",
+          documentVersionId: link.document_version_id,
+          documentId: version?.document_id ?? null,
+          documentTitle: version?.content.title ?? "문서",
+          documentVersion: version?.version ?? null,
+          url: `${storePublicBase()}/store#${issueStoreLinkToken(link.id, link.token_nonce).token}`,
+          issuedAt: link.issued_at, expiresAt: link.expires_at,
+          revokedAt: link.revoked_at, canOrder: link.can_order,
+          viewCount: link.view_count, lastViewedAt: link.last_viewed_at,
+          orderCount: metric?.order_count ?? 0,
+          recentViews: metric?.recent_views ?? 0,
+          lastOrderAt: metric?.last_order_at ?? null,
+          interest: (metric?.order_count ?? 0) > 0 ? "주문 중" :
+            (metric?.recent_views ?? 0) >= 3 ? "관심 높음" :
+              link.view_count > 0 ? "열람" : "미열람" };
+      }), hasMore: links.length === 50,
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ message: "매장 링크를 불러오지 못했습니다." }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    body = parsed as Record<string, unknown>;
+  } catch { return NextResponse.json({ message: "입력값을 확인해 주세요." }, { status: 400 }); }
+  const company = await scope(request, typeof body.companyId === "string" ? body.companyId : undefined);
+  if (typeof company !== "string") return company;
+  const actorScope = await getRequestAuthScope(request, company);
+  if (!actorScope.ok || actorScope.companyId !== company)
+    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  const actorUserId = actorScope.customerSession?.userId;
+  const actorName = getCustomerOperationalName(actorScope.customerSession) ||
+    actorScope.adminSession?.name || "운영자";
+  try {
+    if (body.action === "create") {
+      const publicBase = storePublicBase();
+      if (!isId(body.customerId) || !isId(body.documentVersionId))
+        throw new Error("거래처와 발행 문서를 선택해 주세요.");
+      const [customer, version] = await Promise.all([
+        supabaseRequest<{ id: string }[]>(`normalized_customers?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.customerId}&select=id&limit=1`),
+        supabaseRequest<{ id: string }[]>(`pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.documentVersionId}&select=id&limit=1`),
+      ]);
+      if (!customer.length || !version.length) throw new Error("같은 회사의 거래처와 발행 문서를 선택해 주세요.");
+      const id = randomUUID();
+      const token = issueStoreLinkToken(id);
+      const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      await supabaseRequest("storefront_links", { method: "POST", body: JSON.stringify({
+        id, company_id: company, customer_id: body.customerId,
+        document_version_id: body.documentVersionId, token_nonce: token.nonce,
+        token_hash: token.hash, expires_at: expires,
+        issued_by_user_id: isId(actorUserId) ? actorUserId : null,
+      }) });
+      return NextResponse.json({ id, url: `${publicBase}/store#${token.token}` });
+    }
+    if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");
+    if (body.action === "mark-sent") {
+      const rows = await supabaseRequest<{ id: string }[]>(
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.id}&select=id&limit=1`,
+      );
+      if (!rows.length) throw new Error("링크를 찾지 못했습니다.");
+      await supabaseRequest("storefront_link_events", { method: "POST", body: JSON.stringify({
+        company_id: company, link_id: body.id, event_type: "sent", device_class: null,
+        actor_user_id: isId(actorUserId) ? actorUserId : null, actor_name: actorName.slice(0, 100),
+      }) });
+      return NextResponse.json({ saved: true });
+    }
+    if (body.action === "revoke" || body.action === "set-ordering") {
+      const patch = body.action === "revoke" ? { revoked_at: new Date().toISOString(), can_order: false }
+        : { can_order: body.canOrder === true };
+      const rows = await supabaseRequest<{ id: string }[]>(
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.id}&select=id`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      );
+      if (!rows.length) throw new Error("링크를 찾지 못했습니다.");
+      return NextResponse.json({ saved: true });
+    }
+    throw new Error("링크 요청을 확인해 주세요.");
+  } catch (error) {
+    return NextResponse.json({ message: error instanceof Error && !error.message.startsWith("Supabase request failed")
+      ? error.message : "링크를 저장하지 못했습니다." }, { status: 400 });
+  }
+}
