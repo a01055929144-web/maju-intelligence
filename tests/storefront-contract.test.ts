@@ -57,7 +57,9 @@ it("matches the newest contract by product AND sales unit consistently with orde
     if (path.startsWith("product_catalog?"))
       return [{ id: "product", is_active: true, order_pricing_mode: "fixed" }];
     if (path.startsWith("store_order_territory_rules?"))
-      return [{ delivery_weekdays: [0, 1, 2, 3, 4, 5, 6] }];
+      return [
+        { delivery_weekdays: [0, 1, 2, 3, 4, 5, 6], cutoff_time: "23:59:00" },
+      ];
     if (path.startsWith("customer_price_agreements?"))
       return [
         {
@@ -85,6 +87,7 @@ it("matches the newest contract by product AND sales unit consistently with orde
     return [];
   });
   const store = await readStorefront("token", "2099-01-01");
+  expect(store?.policy.cutoffTime).toBe("23:59");
   expect(store?.lines[0]).toMatchObject({
     unitPrice: 900,
     taxType: "exempt",

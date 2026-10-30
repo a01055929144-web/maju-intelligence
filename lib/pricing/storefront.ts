@@ -238,10 +238,11 @@ export async function readStorefront(
       store.cutoff_days_before ??
       territory.cutoff_days_before ??
       settings.cutoff_days_before,
-    cutoffTime:
+    cutoffTime: (
       store.cutoff_time ??
       territory.cutoff_time ??
-      settings.cutoff_time.slice(0, 5),
+      settings.cutoff_time
+    ).slice(0, 5),
     minimumAmount:
       store.minimum_amount ??
       territory.minimum_amount ??

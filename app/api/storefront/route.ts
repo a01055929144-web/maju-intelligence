@@ -91,9 +91,10 @@ export async function POST(request: NextRequest) {
             has_market_price: boolean;
             submitted_at: string;
             revision: number;
+            request_memo: string;
           }[]
         >(
-          `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision&order=submitted_at.desc,id.desc&limit=11&offset=${(historyPage - 1) * 10}`,
+          `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision,request_memo&order=submitted_at.desc,id.desc&limit=11&offset=${(historyPage - 1) * 10}`,
         )
       : [];
     const visibleOrders = orders.slice(0, 10);
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest) {
           marketPricePending: order.has_market_price,
           submittedAt: order.submitted_at,
           revision: order.revision,
+          requestMemo: order.request_memo,
           lines: byOrder.get(order.id) ?? [],
         })),
       },

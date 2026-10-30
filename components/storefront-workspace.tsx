@@ -15,7 +15,7 @@ type Store = { title: string; companyName: string; customerName: string;
   selectedDeliveryDate: string;
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string; status: string; knownTotal: number;
-  marketPricePending: boolean; submittedAt: string; revision: number;
+  requestMemo: string; marketPricePending: boolean; submittedAt: string; revision: number;
   lines: { product_id: string; promotion_id: string | null; product_name: string; quantity: number;
     unit_price: number | null; total_amount: number | null }[] };
 type Preference = { productId: string; isFavorite: boolean;
@@ -115,6 +115,7 @@ export function StorefrontWorkspace() {
     const day = edit ? order.deliveryDate : store?.nextDeliveryDate || "";
     setDeliveryDate(day);
     if (day) void load(day).catch(() => setMessage("선택한 배송일의 가격을 불러오지 못했습니다."));
+    setMemo(edit ? order.requestMemo : "");
     setEditing(edit ? { id: order.id, revision: order.revision } : null);
     retryKey.current = null;
     setTab("order");

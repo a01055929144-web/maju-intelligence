@@ -59,6 +59,8 @@ try {
     "docs/sql-drafts/20261030-pricing-p1.sql",
     "tests/sql/pricing-p2-fixture.sql",
     "docs/sql-drafts/20261030-pricing-p2-store-ordering.sql",
+    "docs/sql-drafts/20261030-pricing-p2-onboarding-vault.sql",
+    "tests/sql/pricing-p2-vault.sql",
   ]) {
     await setup.query(
       (await readFile(new URL(`../${file}`, import.meta.url), "utf8")).replace(

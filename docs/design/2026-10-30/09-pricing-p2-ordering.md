@@ -63,3 +63,39 @@ Owner: pricing/order, Related: organization/product. 이번 보완 허용 파일
 PRICE_SHEETS_ENABLED 및 STORE_ORDERING_ENABLED 기본 OFF 유지. 운영 SQL 적용·main 병합·배포는 하지 않는다.
 
 최종 검증: 99 files / 524 tests, tsc, lint, production build PASS(기존 경고 유지). API 인증 경계 144 routes PASS. PG16에서 동시 주문 재시도·수정 충돌 및 행사 잠금 대기 후 링크 만료 거부도 PASS. 최신 main 75e7c2a 기준 충돌 없음. 공개 P2 화면의 브라우저 전체 검증은 미실시이며 위 로컬 검증과 구분한다.
+
+
+## 첫 주문 자료 보호 설계 (SMS 미연결, 실행 경로 미노출)
+
+Owner: order. Related: organization/customer, pricing(public field boundary). 허용 파일 추가: domains/order/onboarding-protection.ts, application/order/onboarding-vault.ts, lib/pricing/onboarding-crypto.ts, docs/sql-drafts/20261030-pricing-p2-onboarding-vault.sql, tests/onboarding-*.test.ts, tests/sql/pricing-p2-vault.sql, scripts/test-pricing-p2-browser.mjs, scripts/test-pricing-p2-local.mjs, tests/sql/pricing-p2-fixture.sql, tests/storefront-public.test.ts, components/storefront-workspace.tsx, 이 문서.
+
+자료 종류는 사업자등록증, 적재 위치 사진, 출입 정보로 제한한다. 원본 파일명·OCR·전화번호·출입 비밀번호를 공개 응답, 열람 이벤트, URL, 로그에 저장하지 않는다. 파일명은 서버가 생성한 UUID 경로이며 bucket은 비공개로만 구성한다. 공개 링크 토큰은 주문용 자격이며 자료 업로드·조회 자격으로 승격하지 않는다. SMS 인증 어댑터가 없으면 매장 자료 제출 API 자체를 노출하지 않는다.
+
+| 자료 | 허용 열람 | 차단 조건 | 보존 초안 |
+|---|---|---|---|
+| 사업자등록증 | 같은 회사 대표·관리자 | 격리/미검사/만료/삭제 | 최초 수집 후 최대 30일, 장기 보관은 별도 재검토 |
+| 적재 위치 사진 | 같은 회사 대표·관리자, 해당 배송일에 배정된 기사 | 격리/미검사/미배정/만료/삭제 | 수집 후 최대 30일 |
+| 출입 정보 | 같은 회사 대표·관리자, 해당 배송일에 배정된 기사 | 감사 기록 실패/미배정/만료/삭제/키 불일치 | 수집 후 최대 30일, 변경 시 구버전 폐기 |
+
+위 30일은 법정 보존 기간을 주장하지 않는 보수적인 기술 초안이다. 운영 책임자의 목적·보존 검토 전에는 수집하지 않는다. 담당 영업직원·다른 회사·다른 매장·공개 링크에는 원본 자료를 반환하지 않는다. 기사 배정은 서버 저장소에서 매장/기사/실제 KST 배송일을 확인하며 클라이언트가 전송한 assigned=true는 사용하지 않는다.
+
+파일은 최대 10MiB(PDF 사업자등록증), 최대 5MiB(JPEG/PNG 사진)로 제한하며 MIME 선언과 파일 시그니처를 함께 확인한다. 시그니처 검사는 악성코드 검사나 안전한 이미지 재인코딩을 대체하지 않는다. 업로드는 비공개 격리 상태, 저장소의 악성코드 검사와 사진 메타데이터 제거가 완료된 뒤에만 available 상태로 전환한다. 실제 저장소/검사 어댑터가 연결되기 전에는 available 처리나 signed URL 발급 경로가 없다.
+
+출입 정보는 별도 키 저장소의 32바이트 키로 AES-256-GCM 암호화한다. 회사/매장/레코드/키 ID를 AAD로 결합하고 링크 서명 비밀값을 재사용하지 않는다. 키가 없거나 바뀌어 해독할 수 없으면 닫힌다. 열람은 목적과 열람자 ID(개인 이름·전화 대신 내부 식별자)를 포함한 감사 기록을 먼저 영속화한 뒤 private stream 또는 복호화 결과를 반환한다. 공유 캐시·localStorage·사전 서명 URL은 사용하지 않는다. 실제 전송 경로를 연결할 때 no-store/no-referrer와 본문 로깅 제외를 필수로 적용한다.
+
+만료 자료는 즉시 열람 차단한다. 정리 작업은 먼저 상태를 deleting으로 바꾸고 외부 객체 삭제를 요청하며, 실제 객체 삭제 확인 후 deleted로 전환한다. 실패한 삭제는 재시도 대상으로 남기며 삭제 성공으로 기록하지 않는다. DB 회사 cascade만으로 객체 저장소 삭제를 보장할 수 없으므로, 회사 탈퇴는 객체 삭제 확인을 선행하는 별도 절차가 필요하다. 감사 로그는 원문 없이 별도로 보존하며, 보존 기간·법적 보류·백업에서의 삭제는 운영 정책 확정 전 잔여 관문이다.
+
+SQL은 비공개 메타데이터·암호문·감사 모델의 새 로컬 DB 전용 초안이다. 기존 P2 함수에 연결하지 않으며 운영 적용·bucket 생성·실제 개인정보 수집을 하지 않는다.
+
+
+### 보호 기반·브라우저 검증 결과
+
+보호 도메인 규칙, 감사 선행 열람 유스케이스, 회사/매장/레코드/키 ID에 묶인 AES-256-GCM 암호화와 SQL 초안을 구현했다. 실제 인증·기사 배정 조회·키 저장소·비공개 객체 저장소·악성코드 검사/사진 메타데이터 제거·정리 작업 어댑터는 아직 연결하지 않았으며 HTTP 입력/조회 API와 화면은 추가하지 않았다. 따라서 자료 수집이 준비됐다는 뜻이 아니다.
+
+로컬 공개 주문 browser→Next API→로컬 REST 어댑터→service_role→PG16 검증 PASS: 390px/PC, 계약가·행사 발행가, 최소 금액 배송비, 시세 품목, 즐겨찾기·숨김·복원, 후결제 주문·수정·재주문, 내역 페이지 이동, 다른 매장 주문 수정 거부, 문서 만료·링크 회수·변조 토큰 거부. 공개 응답에 파일 경로·암호문·출입 비밀번호가 없고, 공개 요청은 보호 테이블을 조회하지 않는다. 합성 데이터와 일회성 테스트 프로세스에서만 플래그를 켰으며 외부 호스트 요청은 차단했다. 운영 플래그/환경은 변경하지 않았다.
+
+브라우저에서 확인한 보완: DB time 형식(HH:mm:ss)을 배송 규칙용 HH:mm으로 통일하고, 주문 수정에서 기존 요청 사항을 불러오도록 했다. 로컬 REST 어댑터의 bigint/numeric/date 직렬화도 실제 PostgREST JSON과 맞췄다. 산출물은 저장소 밖 ../outputs/pricing-p2-browser이며 운영 Supabase·SMS/파일 저장소 테스트와 구분한다.
+
+SQL 보호 회귀: 교차 회사 FK, 미검사/미정리 사진 차단, null 암호문 거부, 30일 초안 상한, 삭제 확인 전 레코드/회사 삭제 차단, 감사 수정 거부, 공개 역할 권한 회수 PASS. 첫 주문 보호 기반과 공개 주문 검증을 포함해 P2 전체 진행률은 약 70%로 본다. SMS와 실제 보호 저장소/인증/키/배정/보존 어댑터 및 P3 전환 규약, 운영 승인·적용은 잔여 관문이다.
+
+후속 최종 검사: 100 files / 531 tests PASS, tsc/lint/production build PASS(기존 경고 유지), 인증 경계 144 routes PASS. 모바일 캡처를 직접 확인했으며 390px 가로 넘침 없음. 비운영 PG16/로컬 브라우저 검증 완료. 자료 열람 어댑터·삭제 작업자·보존 운영 정책은 아직 미연결이며 기본 OFF 유지.
