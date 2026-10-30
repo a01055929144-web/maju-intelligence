@@ -38,13 +38,25 @@ begin
   end if;
   if jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
 
+  -- A retry must return the original record. Updating a note or replacing its
+  -- items under the same key would let a late retry rewrite a completed event.
+  select n.id, e.id into v_note_id, v_event_id
+    from public.customer_notes n
+    left join public.delivery_events e
+      on e.company_id = n.company_id and e.customer_note_id = n.id
+   where n.company_id = p_company_id
+     and n.customer_id = p_customer_id
+     and n.note_type = 'delivery'
+     and n.idempotency_key = p_idempotency_key;
+  if v_note_id is not null then
+    if v_event_id is null then raise exception 'idempotency_key_conflict'; end if;
+    return jsonb_build_object('noteId', v_note_id, 'eventId', v_event_id, 'replayed', true);
+  end if;
+
   insert into public.customer_notes(company_id, customer_id, note_type, memo, created_by_name, idempotency_key)
   values (p_company_id, p_customer_id, 'delivery', p_memo, nullif(btrim(p_actor_name), ''), p_idempotency_key)
   on conflict (company_id, customer_id, idempotency_key) where note_type = 'delivery' and idempotency_key is not null
-  do update set memo = excluded.memo
-    -- 운영 인덱스 uq_customer_notes_delivery_idempotency는 note_type 조건 없이 (idempotency_key is not null)만 걸려 있어
-    -- 같은 키의 배송 외 메모와 충돌할 수 있습니다. 배송 메모일 때만 갱신하고, 아니면 아래에서 오류로 멈춥니다.
-    where public.customer_notes.note_type = 'delivery'
+  do nothing
   returning id into v_note_id;
   if v_note_id is null then raise exception 'idempotency_key_conflict'; end if;
 
@@ -57,11 +69,9 @@ begin
     nullif(p_event->>'actionCode', ''), nullif(p_event->>'actionAmount', '')::numeric,
     coalesce(nullif(p_event->>'status', ''), 'received'), p_memo
   )
-  on conflict (company_id, customer_note_id) do update set
-    cause_code = excluded.cause_code, occurrence_stage = excluded.occurrence_stage,
-    action_code = excluded.action_code, action_amount = excluded.action_amount,
-    status = excluded.status, memo = excluded.memo, updated_at = now()
+  on conflict (company_id, customer_note_id) do nothing
   returning id into v_event_id;
+  if v_event_id is null then raise exception 'idempotency_key_conflict'; end if;
 
   delete from public.delivery_event_items where company_id = p_company_id and delivery_event_id = v_event_id;
   insert into public.delivery_event_items(
