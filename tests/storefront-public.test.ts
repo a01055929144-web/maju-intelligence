@@ -7,6 +7,7 @@ describe("store link public response", () => {
       linkId: "private-link", companyId: "private-company",
       customerId: "private-customer", documentVersionId: "private-version",
       cost: 1200, margin: 25, supplierName: "private supplier",
+      accessPassword: "private entrance code", businessRegistrationFile: "private document URL",
       version: 1, title: "단가표", companyName: "회사", footer: "",
       customerName: "매장", deliveryAddress: "주소", validUntil: "2026-12-31",
       priceAvailable: true, canOrder: true, nextDeliveryDate: "2026-11-02",
@@ -18,11 +19,13 @@ describe("store link public response", () => {
         startsOn: null, endsOn: null, remaining: null, taxType: "exempt",
         unitPrice: 1500, priceIncludesTax: false, isMarketPrice: false,
         maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null,
-        purchaseCost: 1200, marginPercent: 25, supplierName: "private supplier" }],
+        purchaseCost: 1200, marginPercent: 25, supplierName: "private supplier",
+        loadingPhoto: "private loading photo", internalMemo: "private staff memo" }],
     } as unknown as Parameters<typeof toPublicStorefront>[0];
     const result = JSON.stringify(toPublicStorefront(internal));
     for (const privateValue of ["private-link", "private-company", "private-customer",
-      "private-version", "private supplier", "purchaseCost", "marginPercent"])
+      "private-version", "private supplier", "purchaseCost", "marginPercent",
+      "private entrance code", "private document URL", "private loading photo", "private staff memo"])
       expect(result).not.toContain(privateValue);
   });
 });

@@ -111,6 +111,9 @@ create table if not exists public.storefront_links (
 );
 create index if not exists storefront_links_customer_idx
   on public.storefront_links(company_id, customer_id, issued_at desc);
+create unique index if not exists storefront_links_one_active_version_uq
+  on public.storefront_links(company_id, customer_id, document_version_id)
+  where revoked_at is null;
 
 create table if not exists public.storefront_link_events (
   id uuid primary key default gen_random_uuid(),
@@ -126,6 +129,77 @@ create table if not exists public.storefront_link_events (
 );
 create index if not exists storefront_link_events_link_idx
   on public.storefront_link_events(company_id, link_id, occurred_at desc);
+
+-- Serializes issuance per company. Retries return the existing active link, so a
+-- company-wide run can resume at page 1 without sending duplicate links.
+create or replace function public.issue_storefront_links(
+  p_company uuid, p_document_version uuid, p_links jsonb,
+  p_expires_at timestamptz, p_actor_user_id uuid default null
+) returns table(issued_customer_id uuid, issued_link_id uuid,
+  issued_token_nonce text, was_created boolean)
+language plpgsql security invoker set search_path = public, pg_temp as $$
+declare
+  v_item jsonb;
+  v_customer uuid;
+  v_id uuid;
+  v_nonce text;
+  v_hash text;
+  v_existing_id uuid;
+  v_existing_nonce text;
+  v_seen uuid[] := '{}';
+begin
+  if p_company is null or p_document_version is null or p_expires_at is null
+    or p_expires_at <= now() or p_expires_at > now() + interval '370 days'
+    or jsonb_typeof(p_links) is distinct from 'array'
+    or jsonb_array_length(p_links) not between 1 and 100 then
+    raise exception 'Invalid link issue request';
+  end if;
+  perform 1 from public.companies c where c.id = p_company for update;
+  if not found or not exists(select 1 from public.pricing_document_versions v
+    where v.company_id = p_company and v.id = p_document_version) then
+    raise exception 'Company or published version unavailable';
+  end if;
+  for v_item in select value from jsonb_array_elements(p_links) loop
+    if jsonb_typeof(v_item) is distinct from 'object'
+      or coalesce(v_item->>'customerId','') !~* '^[0-9a-f-]{36}$'
+      or coalesce(v_item->>'id','') !~* '^[0-9a-f-]{36}$'
+      or coalesce(v_item->>'nonce','') !~ '^[0-9a-f]{32}$'
+      or coalesce(v_item->>'hash','') !~ '^[0-9a-f]{64}$' then
+      raise exception 'Invalid link issue row';
+    end if;
+    v_customer := (v_item->>'customerId')::uuid;
+    v_id := (v_item->>'id')::uuid;
+    v_nonce := v_item->>'nonce';
+    v_hash := v_item->>'hash';
+    if v_customer = any(v_seen) or not exists(select 1 from public.normalized_customers c
+      where c.company_id = p_company and c.id = v_customer) then
+      raise exception 'Duplicate or cross-company customer';
+    end if;
+    v_seen := array_append(v_seen,v_customer);
+    select l.id,l.token_nonce into v_existing_id,v_existing_nonce
+      from public.storefront_links l
+      where l.company_id = p_company and l.customer_id = v_customer
+        and l.document_version_id = p_document_version
+        and l.revoked_at is null and l.expires_at > now();
+    if found then
+      return query select v_customer,v_existing_id,v_existing_nonce,false;
+    else
+      update public.storefront_links l set revoked_at = now(),can_order = false
+        where l.company_id = p_company and l.customer_id = v_customer
+          and l.document_version_id = p_document_version
+          and l.revoked_at is null and l.expires_at <= now();
+      insert into public.storefront_links(id,company_id,customer_id,document_version_id,
+        token_nonce,token_hash,expires_at,issued_by_user_id)
+        values(v_id,p_company,v_customer,p_document_version,v_nonce,v_hash,
+          p_expires_at,p_actor_user_id);
+      return query select v_customer,v_id,v_nonce,true;
+    end if;
+  end loop;
+end $$;
+revoke all on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid)
+  to service_role;
 
 create table if not exists public.store_orders (
   id uuid primary key default gen_random_uuid(),
@@ -548,6 +622,7 @@ commit;
 -- begin;
 -- drop table if exists public.store_product_preferences;
 -- drop function if exists public.place_store_order(text,date,jsonb,uuid,uuid,integer,text);
+-- drop function if exists public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid);
 -- drop function if exists public.record_storefront_view(text,text);
 -- drop function if exists public.store_recent_dispatch_prices(uuid,uuid,uuid[]);
 -- drop function if exists public.storefront_link_metrics(uuid,uuid[]);

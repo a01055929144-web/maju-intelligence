@@ -65,6 +65,19 @@ export async function GET(request: NextRequest) {
       );
       return NextResponse.json({ events }, { headers: { "Cache-Control": "no-store" } });
     }
+    if (request.nextUrl.searchParams.get("customerPage") === "1") {
+      const cursor = request.nextUrl.searchParams.get("afterId");
+      if (cursor && !isId(cursor))
+        return NextResponse.json({ message: "거래처 페이지를 확인해 주세요." }, { status: 400 });
+      const customers = await supabaseRequest<{ id: string; customer_name: string; address: string | null }[]>(
+        `normalized_customers?company_id=eq.${encodeURIComponent(company)}` +
+        `${cursor ? `&id=gt.${cursor}` : ""}&select=id,customer_name,address&order=id.asc&limit=51`,
+      );
+      const items = customers.slice(0, 50);
+      return NextResponse.json({ items,
+        nextCursor: customers.length > 50 ? items.at(-1)?.id : null },
+      { headers: { "Cache-Control": "no-store" } });
+    }
     const offset = (page - 1) * 50;
     const links = await supabaseRequest<LinkRow[]>(
       `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
@@ -148,14 +161,18 @@ export async function POST(request: NextRequest) {
         const id = randomUUID();
         return { id, customerId, ...issueStoreLinkToken(id) };
       });
-      await supabaseRequest("storefront_links", { method: "POST", body: JSON.stringify(generated.map((item) => ({
-        id: item.id, company_id: company, customer_id: item.customerId,
-        document_version_id: body.documentVersionId, token_nonce: item.nonce,
-        token_hash: item.hash, expires_at: expires,
-        issued_by_user_id: isId(actorUserId) ? actorUserId : null,
-      }))) });
-      const links = generated.map((item) => ({ id: item.id, customerId: item.customerId,
-        url: `${publicBase}/store#${item.token}` }));
+      const issued = await supabaseRequest<{ issued_customer_id: string; issued_link_id: string;
+        issued_token_nonce: string; was_created: boolean }[]>("rpc/issue_storefront_links", {
+        method: "POST", body: JSON.stringify({ p_company: company,
+          p_document_version: body.documentVersionId,
+          p_links: generated.map((item) => ({ customerId: item.customerId,
+            id: item.id, nonce: item.nonce, hash: item.hash })),
+          p_expires_at: expires, p_actor_user_id: isId(actorUserId) ? actorUserId : null }),
+      });
+      const links = issued.map((item) => ({ id: item.issued_link_id,
+        customerId: item.issued_customer_id, created: item.was_created,
+        url: `${publicBase}/store#${issueStoreLinkToken(item.issued_link_id,
+          item.issued_token_nonce).token}` }));
       return NextResponse.json(body.action === "create" ? { ...links[0] } : { links });
     }
     if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");

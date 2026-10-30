@@ -15,7 +15,8 @@ const ids = Object.fromEntries(["companyA", "companyB", "territory", "customerA"
   "plainProduct", "promoProduct", "promotion", "document", "version", "link"].map((key) =>
   [key, randomUUID()]));
 const tokenHash = "a".repeat(64);
-const orderDate = "2099-01-01";
+const orderDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const linkExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
 async function callOrder(client, lines, key = randomUUID()) {
   const result = await client.query(
@@ -79,17 +80,25 @@ try {
     (company_id,territory_id,delivery_weekdays,cutoff_days_before,cutoff_time)
     values($1,$2,array[0,1,2,3,4,5,6]::smallint[],0,'23:59')`,
   [ids.companyA, ids.territory]);
-  await setup.query(`insert into public.storefront_links
-    (id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at)
-    values($1,$2,$3,$4,$5,$6,'2099-12-31')`,
-  [ids.link, ids.companyA, ids.customerA, ids.version, "c".repeat(32), tokenHash]);
+  const linkInput = [{ customerId: ids.customerA, id: ids.link,
+    nonce: "c".repeat(32), hash: tokenHash }];
+  const issued = await setup.query(`select * from public.issue_storefront_links
+    ($1,$2,$3::jsonb,$4,null)`,
+  [ids.companyA, ids.version, JSON.stringify(linkInput), linkExpiry]);
+  const reused = await setup.query(`select * from public.issue_storefront_links
+    ($1,$2,$3::jsonb,$4,null)`,
+  [ids.companyA, ids.version, JSON.stringify([{ ...linkInput[0], id: randomUUID(),
+    nonce: "d".repeat(32), hash: "e".repeat(64) }]), linkExpiry]);
+  if (issued.rows[0]?.issued_link_id !== ids.link || !issued.rows[0]?.was_created ||
+    reused.rows[0]?.issued_link_id !== ids.link || reused.rows[0]?.was_created)
+    throw new Error("Company-wide retry did not reuse an active store link");
 
   let rejectedTenant = false;
   try {
     await setup.query(`insert into public.storefront_links
       (company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at)
       values($1,$2,$3,$4,$5,'2099-12-31')`,
-    [ids.companyA, ids.customerB, ids.version, "d".repeat(32), "e".repeat(64)]);
+    [ids.companyA, ids.customerB, ids.version, "f".repeat(32), "e".repeat(64)]);
   } catch (error) { rejectedTenant = error.code === "23503"; }
   if (!rejectedTenant) throw new Error("Cross-company customer link was accepted");
   const permissions = await setup.query(`select
@@ -97,7 +106,7 @@ try {
     has_function_privilege('authenticated','public.place_store_order(text,date,jsonb,uuid,uuid,integer,text)','EXECUTE') as authenticated`);
   if (permissions.rows[0].anon || permissions.rows[0].authenticated)
     throw new Error("Public order RPC execute permission remains");
-  console.log("PASS company FK and public role denial");
+  console.log("PASS link retry, company FK, and public role denial");
 
   const plainLines = [{ productId: ids.plainProduct, quantity: 1 }];
   const requestKey = randomUUID();

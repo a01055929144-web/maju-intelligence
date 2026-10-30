@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Draft = { id: string; content: { title: string }; revision: number };
 type Version = { id: string; version: number; content: { title: string }; publishedAt: string };
-type Customer = { id: string; customer_name: string };
+type Customer = { id: string; customer_name: string; address?: string | null };
 type Link = { id: string; customerName: string; documentTitle: string; documentVersion: number | null;
   url: string; issuedAt: string; expiresAt: string; revokedAt: string | null;
   canOrder: boolean; viewCount: number; lastViewedAt: string | null;
@@ -79,6 +79,62 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     } catch (error) { setMessage(error instanceof Error ? error.message : "링크를 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
+  async function issueCompanyLinks() {
+    if (!versionId || busy || !window.confirm(
+      "회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 문서 링크는 재사용합니다. 계속할까요?",
+    )) return;
+    setBusy(true); setMessage(""); setCreatedUrl("");
+    let afterId: string | null = null;
+    let processed = 0;
+    let created = 0;
+    const output: string[] = [];
+    try {
+      for (let page = 0; page < 1000; page += 1) {
+        const params = new URLSearchParams({ companyId, customerPage: "1" });
+        if (afterId) params.set("afterId", afterId);
+        const pageResponse = await fetch(`/api/pricing-store-links?${params}`, { cache: "no-store" });
+        const pageResult = await pageResponse.json() as { items?: Customer[]; nextCursor?: string | null;
+          message?: string };
+        if (!pageResponse.ok) throw new Error(pageResult.message || "거래처 목록을 불러오지 못했습니다.");
+        const items = pageResult.items ?? [];
+        if (!items.length) break;
+        const response = await fetch("/api/pricing-store-links", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId, action: "create-batch",
+            customerIds: items.map((item) => item.id), documentVersionId: versionId }) });
+        const result = await response.json() as { links?: { customerId: string; url: string;
+          created: boolean }[]; message?: string };
+        if (!response.ok) throw new Error(result.message || "링크를 발급하지 못했습니다.");
+        if (result.links?.length !== items.length) throw new Error("발급된 링크 수가 거래처 수와 다릅니다.");
+        const byCustomer = new Map(result.links.map((item) => [item.customerId, item]));
+        for (const item of items) {
+          const link = byCustomer.get(item.id);
+          if (!link) throw new Error("매장별 링크를 확인하지 못했습니다.");
+          const label = `${item.customer_name}${item.address ? ` · ${item.address}` : ""}`.replace(/\s+/g, " ");
+          output.push(`${label}  ${link.url}`);
+          if (link.created) created += 1;
+        }
+        processed += items.length;
+        setCreatedUrl(output.join("\n"));
+        setMessage(`${processed}곳 확인 · 새 링크 ${created}개. 각 매장에 해당 링크만 전달해 주세요.`);
+        if (!pageResult.nextCursor) break;
+        if (page === 999) throw new Error("거래처가 너무 많아 일부만 처리했습니다. 저장된 링크를 확인해 주세요.");
+        afterId = pageResult.nextCursor;
+      }
+      if (!processed) setMessage("발급할 거래처가 없습니다.");
+      else {
+        try {
+          await navigator.clipboard.writeText(output.join("\n"));
+          setMessage(`${processed}곳 확인 · 새 링크 ${created}개를 복사했습니다. 각 매장에 해당 링크만 전달해 주세요.`);
+        } catch {
+          setMessage(`${processed}곳 확인 · 새 링크 ${created}개. 아래 목록을 직접 복사해 주세요.`);
+        }
+      }
+      await loadLinks();
+    } catch (error) {
+      setMessage(`${processed}곳까지 처리했습니다. ${error instanceof Error ? error.message : "나머지 링크를 처리하지 못했습니다."} 다시 시도하면 활성 링크를 재사용합니다.`);
+    } finally { setBusy(false); }
+  }
   async function showDetail(id: string) {
     try {
       const response = await fetch(`/api/pricing-store-links?${base}&linkId=${encodeURIComponent(id)}`);
@@ -125,6 +181,11 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
             documentVersionId: versionId })}>선택한 {selectedCustomerIds.length}곳 링크 일괄 발급</button>
         <p className="text-slate-600">한 번에 최대 30곳의 검색 결과를 발급합니다. 각 링크는 해당 매장에만 전달해 주세요.</p>
       </div>}
+      <div className="rounded border p-3 text-sm">
+        <button disabled={busy || !versionId} className="min-h-11 rounded border px-4 disabled:opacity-50"
+          onClick={() => void issueCompanyLinks()}>회사 전체 매장 링크 발급</button>
+        <p className="mt-2 text-slate-600">50곳씩 처리합니다. 중간에 끊겨 다시 눌러도 활성 링크를 재사용하며 자동 발송은 하지 않습니다.</p>
+      </div>
     </section>
     <section className="space-y-3"><h2 className="font-semibold">매장별 링크</h2>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-sm">
