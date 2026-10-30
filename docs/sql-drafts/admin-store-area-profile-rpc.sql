@@ -50,6 +50,7 @@ source_parsed as (
     source_record.id,
     source_record.lead_id,
     source_record.source,
+    source_record.last_seen_at,
     case
       when replace(btrim(coalesce(source_record.raw_payload ->> 'storeAreaSqm', '')), ',', '')
         ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
@@ -65,6 +66,7 @@ source_raw as (
     id,
     lead_id,
     source,
+    last_seen_at,
     raw_area_sqm,
     round(raw_area_sqm, 2) as rounded_area_sqm
   from source_parsed
@@ -80,10 +82,10 @@ source_per_lead as (
     lead_id,
     count(*) filter (where source = 'gov_restaurant_api') > 0 as has_government,
     count(*) filter (where source = 'seoul_opendata_api') > 0 as has_seoul,
-    (array_agg(rounded_area_sqm order by id) filter (
+    (array_agg(rounded_area_sqm order by last_seen_at desc nulls last, id) filter (
       where source = 'gov_restaurant_api' and raw_area_sqm > 0 and raw_area_sqm <= 100000
     ))[1] as government_area,
-    (array_agg(rounded_area_sqm order by id) filter (
+    (array_agg(rounded_area_sqm order by last_seen_at desc nulls last, id) filter (
       where source = 'seoul_opendata_api' and raw_area_sqm > 0 and raw_area_sqm <= 100000
     ))[1] as seoul_area
   from source_raw
