@@ -1,4 +1,6 @@
 -- Claude 검토용 초안. 운영 적용 금지.
+-- 2026-10-30 조회 RPC 추가: 연락처 원문이 GET URL·접근 로그에 남는 경로를 제거한다.
+-- 이전 2개 함수 승인과 별개로 이 3개 함수 묶음을 다시 검토·승인받기 전에는 기능 플래그를 켜지 않는다.
 -- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
 -- 해제 활성화 전제: 서버 DELETE route가 서명된 customer session의 company_id와 owner/manager 역할을 검증하고,
 -- legacy owner는 활성 legacy credential/company 연결을 DNC 전용 helper로 매 요청 재검증한다.
@@ -204,13 +206,45 @@ begin
 end;
 $$;
 
+-- 조회도 POST RPC로 처리한다. 연락처 원문을 PostgREST GET URL에 넣지 않고,
+-- 서버에는 이미 가린 값만 반환한다.
+create or replace function public.list_active_lead_do_not_contacts(
+  p_company_id uuid, p_lead_id uuid
+) returns table(id uuid, channel text, masked_value text, blocked_at timestamptz)
+language sql stable security invoker set search_path = ''
+as $$
+  select dnc.id, dnc.channel,
+    public.mask_dnc_value(dnc.channel, dnc.normalized_value), dnc.blocked_at
+  from public.business_permit_leads lead
+  join public.company_do_not_contact dnc
+    on dnc.company_id = lead.company_id and dnc.released_at is null
+   and (
+     (dnc.channel = 'visit' and dnc.source_lead_id = lead.id)
+     or (
+       dnc.channel in ('sms', 'fax', 'email', 'instagram', 'talktalk')
+       and dnc.normalized_value = public.normalize_dnc_value(dnc.channel,
+         case dnc.channel
+           when 'sms' then lead.phone
+           when 'fax' then lead.fax
+           when 'email' then lead.email
+           when 'instagram' then lead.instagram_url
+           when 'talktalk' then lead.naver_talktalk_url
+         end)
+     )
+   )
+  where lead.company_id = p_company_id and lead.id = p_lead_id
+    and lead.merged_into_lead_id is null;
+$$;
+
 revoke all on function public.normalize_dnc_value(text,text) from public, anon, authenticated;
 revoke all on function public.mask_dnc_value(text,text) from public, anon, authenticated;
 grant execute on function public.normalize_dnc_value(text,text) to service_role;
 grant execute on function public.mask_dnc_value(text,text) to service_role;
 revoke all on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) from public, anon, authenticated;
 revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) from public, anon, authenticated;
+revoke all on function public.list_active_lead_do_not_contacts(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) to service_role;
 grant execute on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) to service_role;
+grant execute on function public.list_active_lead_do_not_contacts(uuid,uuid) to service_role;
 
 commit;
