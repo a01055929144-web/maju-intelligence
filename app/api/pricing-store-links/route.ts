@@ -130,25 +130,33 @@ export async function POST(request: NextRequest) {
   const actorName = getCustomerOperationalName(actorScope.customerSession) ||
     actorScope.adminSession?.name || "운영자";
   try {
-    if (body.action === "create") {
+    if (body.action === "create" || body.action === "create-batch") {
       const publicBase = storePublicBase();
-      if (!isId(body.customerId) || !isId(body.documentVersionId))
+      const customerIds = body.action === "create" ? [body.customerId] : body.customerIds;
+      if (!Array.isArray(customerIds) || customerIds.length < 1 || customerIds.length > 100 ||
+        !customerIds.every(isId) || new Set(customerIds).size !== customerIds.length ||
+        !isId(body.documentVersionId))
         throw new Error("거래처와 발행 문서를 선택해 주세요.");
       const [customer, version] = await Promise.all([
-        supabaseRequest<{ id: string }[]>(`normalized_customers?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.customerId}&select=id&limit=1`),
+        supabaseRequest<{ id: string }[]>(`normalized_customers?company_id=eq.${encodeURIComponent(company)}&id=in.(${customerIds.join(",")})&select=id&limit=100`),
         supabaseRequest<{ id: string }[]>(`pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.documentVersionId}&select=id&limit=1`),
       ]);
-      if (!customer.length || !version.length) throw new Error("같은 회사의 거래처와 발행 문서를 선택해 주세요.");
-      const id = randomUUID();
-      const token = issueStoreLinkToken(id);
+      if (customer.length !== customerIds.length || !version.length)
+        throw new Error("같은 회사의 거래처와 발행 문서를 선택해 주세요.");
       const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-      await supabaseRequest("storefront_links", { method: "POST", body: JSON.stringify({
-        id, company_id: company, customer_id: body.customerId,
-        document_version_id: body.documentVersionId, token_nonce: token.nonce,
-        token_hash: token.hash, expires_at: expires,
+      const generated = customerIds.map((customerId) => {
+        const id = randomUUID();
+        return { id, customerId, ...issueStoreLinkToken(id) };
+      });
+      await supabaseRequest("storefront_links", { method: "POST", body: JSON.stringify(generated.map((item) => ({
+        id: item.id, company_id: company, customer_id: item.customerId,
+        document_version_id: body.documentVersionId, token_nonce: item.nonce,
+        token_hash: item.hash, expires_at: expires,
         issued_by_user_id: isId(actorUserId) ? actorUserId : null,
-      }) });
-      return NextResponse.json({ id, url: `${publicBase}/store#${token.token}` });
+      }))) });
+      const links = generated.map((item) => ({ id: item.id, customerId: item.customerId,
+        url: `${publicBase}/store#${item.token}` }));
+      return NextResponse.json(body.action === "create" ? { ...links[0] } : { links });
     }
     if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");
     if (body.action === "mark-sent") {

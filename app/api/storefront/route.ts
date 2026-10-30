@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   if (!priceSheetsEnabled() || !storeOrderingEnabled()) return unavailable();
   if (!sameOrigin(request)) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
   try {
-    const body = await request.json() as { token?: unknown; deliveryDate?: unknown };
+    const body = await request.json() as { token?: unknown; deliveryDate?: unknown; historyPage?: unknown };
     if (typeof body.token !== "string" || body.token.length > 200) return unavailable();
     const token = body.token;
     const requestedDate = body.deliveryDate === undefined ? undefined : body.deliveryDate;
@@ -36,13 +36,17 @@ export async function POST(request: NextRequest) {
       try { dateField(requestedDate); }
       catch { return NextResponse.json({ message: "배송일을 확인해 주세요." }, { status: 400 }); }
     }
+    const historyPage = body.historyPage === undefined ? 1 : Number(body.historyPage);
+    if (!Number.isSafeInteger(historyPage) || historyPage < 1 || historyPage > 1000)
+      return NextResponse.json({ message: "내역 페이지를 확인해 주세요." }, { status: 400 });
     const store = await readStorefront(token, requestedDate);
     if (!store) return unavailable();
     const orders = store.priceAvailable ? await supabaseRequest<{ id: string; delivery_date: string; status: string;
       known_total: number; has_market_price: boolean; submitted_at: string; revision: number }[]>(
-      `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision&order=submitted_at.desc,id.desc&limit=10`,
+      `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision&order=submitted_at.desc,id.desc&limit=11&offset=${(historyPage - 1) * 10}`,
     ) : [];
-    const orderIds = orders.map((order) => order.id);
+    const visibleOrders = orders.slice(0, 10);
+    const orderIds = visibleOrders.map((order) => order.id);
     const lines = orderIds.length ? await supabaseRequest<{ order_id: string; product_id: string;
       promotion_id: string | null; product_name: string; specification: string; sales_unit: string; quantity: number;
       unit_price: number | null; tax_type: string; supply_amount: number | null;
@@ -51,6 +55,11 @@ export async function POST(request: NextRequest) {
     ) : [];
     const byOrder = new Map<string, typeof lines>();
     for (const line of lines) byOrder.set(line.order_id, [...(byOrder.get(line.order_id) ?? []), line]);
+    const productIds = Array.from(new Set(store.lines.map((line) => line.productId)));
+    const preferences = productIds.length ? await supabaseRequest<{ product_id: string; is_favorite: boolean;
+      is_hidden: boolean; will_not_order: boolean }[]>(
+      `store_product_preferences?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&product_id=in.(${productIds.join(",")})&select=product_id,is_favorite,is_hidden,will_not_order&limit=100`,
+    ) : [];
     const verified = verifyStoreLinkToken(token);
     if (verified) {
       const device = /mobile/i.test(request.headers.get("user-agent") || "") ? "mobile" : "desktop";
@@ -58,13 +67,41 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({ p_token_hash: verified.hash, p_device_class: device }) }).catch(() => null);
     }
     return NextResponse.json({ store: toPublicStorefront(store),
-      orders: orders.map((order) => ({ id: order.id, deliveryDate: order.delivery_date,
+      preferences: preferences.map((item) => ({ productId: item.product_id,
+        isFavorite: item.is_favorite, isHidden: item.is_hidden,
+        willNotOrder: item.will_not_order })),
+      historyPage, historyHasMore: orders.length > 10,
+      orders: visibleOrders.map((order) => ({ id: order.id, deliveryDate: order.delivery_date,
         status: order.status, knownTotal: order.known_total,
         marketPricePending: order.has_market_price, submittedAt: order.submitted_at,
         revision: order.revision, lines: byOrder.get(order.id) ?? [] })) },
       { headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
   } catch {
     return NextResponse.json({ message: "매장 주문을 불러오지 못했습니다." }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  if (!priceSheetsEnabled() || !storeOrderingEnabled()) return unavailable();
+  if (!sameOrigin(request)) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
+  try {
+    const body = await request.json() as Record<string, unknown>;
+    if (typeof body.token !== "string" || body.token.length > 200 || !isId(body.productId) ||
+      typeof body.isFavorite !== "boolean" || typeof body.isHidden !== "boolean" ||
+      typeof body.willNotOrder !== "boolean")
+      return NextResponse.json({ message: "품목 설정을 확인해 주세요." }, { status: 400 });
+    const store = await readStorefront(body.token);
+    if (!store || !store.lines.some((line) => line.productId === body.productId)) return unavailable();
+    await supabaseRequest("store_product_preferences?on_conflict=company_id,customer_id,product_id", {
+      method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ company_id: store.companyId, customer_id: store.customerId,
+        product_id: body.productId, is_favorite: body.isFavorite,
+        is_hidden: body.isHidden, will_not_order: body.willNotOrder,
+        updated_at: new Date().toISOString() }),
+    });
+    return NextResponse.json({ saved: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ message: "품목 설정을 저장하지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -77,7 +114,8 @@ export async function PUT(request: NextRequest) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
     body = parsed as Record<string, unknown>;
   } catch { return NextResponse.json({ message: "주문 내용을 확인해 주세요." }, { status: 400 }); }
-  const verified = typeof body.token === "string" ? verifyStoreLinkToken(body.token) : null;
+  const verified = typeof body.token === "string" && body.token.length <= 200
+    ? verifyStoreLinkToken(body.token) : null;
   if (!verified) return unavailable();
   if (!isId(body.idempotencyKey) ||
     (body.orderId !== null && body.orderId !== undefined && !isId(body.orderId)) ||

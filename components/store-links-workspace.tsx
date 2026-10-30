@@ -20,6 +20,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   const [customerQuery, setCustomerQuery] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -52,6 +53,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       const result = await response.json() as { customers?: Customer[]; message?: string };
       if (!response.ok) throw new Error(result.message || "거래처를 찾지 못했습니다.");
       setCustomers(result.customers ?? []);
+      setSelectedCustomerIds([]);
     } catch (error) { setMessage(error instanceof Error ? error.message : "거래처를 찾지 못했습니다."); }
   }
   async function action(payload: Record<string, unknown>) {
@@ -59,13 +61,16 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     try {
       const response = await fetch("/api/pricing-store-links", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...payload }) });
-      const result = await response.json() as { message?: string; url?: string };
+      const result = await response.json() as { message?: string; url?: string;
+        links?: { customerId: string; url: string }[] };
       if (!response.ok) throw new Error(result.message || "링크를 저장하지 못했습니다.");
-      if (result.url) {
-        setCreatedUrl(result.url);
+      const copyText = result.url || result.links?.map((item) =>
+        `${customers.find((customer) => customer.id === item.customerId)?.customer_name || "매장"}  ${item.url}`).join("\n");
+      if (copyText) {
+        setCreatedUrl(copyText);
         try {
-          await navigator.clipboard.writeText(result.url);
-          setMessage("매장 링크를 만들고 복사했습니다. 받을 매장에 직접 전달해 주세요.");
+          await navigator.clipboard.writeText(copyText);
+          setMessage(`${result.links?.length ?? 1}개 매장 링크를 만들고 복사했습니다. 각 매장에 해당 링크만 전달해 주세요.`);
         } catch {
           setMessage("매장 링크는 만들어졌습니다. 아래 주소를 직접 복사해 주세요.");
         }
@@ -86,7 +91,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     <header><h1 className="text-xl font-semibold">공개 범위 · 매장 링크</h1>
       <p className="text-sm text-slate-600">매장마다 별도 링크를 만듭니다. 받은 매장만 해당 매장의 주문과 내역을 볼 수 있습니다.</p></header>
     {message && <p role="status" className="rounded border p-3 text-sm">{message}</p>}
-    {createdUrl && <input aria-label="방금 만든 매장 링크" readOnly value={createdUrl}
+    {createdUrl && <textarea aria-label="방금 만든 매장 링크" readOnly value={createdUrl} rows={Math.min(8, createdUrl.split("\n").length)}
       onFocus={(event) => event.currentTarget.select()} className="w-full rounded border p-2 text-sm" />}
     <section className="space-y-3 rounded border p-4"><h2 className="font-semibold">링크 만들기</h2>
       <label className="block text-sm">문서 선택<select className="mt-1 w-full rounded border p-2" value={documentId}
@@ -104,6 +109,22 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
       <button disabled={busy || !versionId || !customerId} className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
         onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</button>
+      {customers.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
+        <label className="flex min-h-11 items-center gap-2 font-semibold"><input type="checkbox"
+          checked={selectedCustomerIds.length === customers.length}
+          onChange={(event) => setSelectedCustomerIds(event.target.checked ? customers.map((item) => item.id) : [])} />
+          검색 결과 전체 선택 ({customers.length}곳)</label>
+        <div className="grid max-h-48 gap-1 overflow-y-auto sm:grid-cols-2">{customers.map((item) =>
+          <label key={item.id} className="flex min-h-11 items-center gap-2"><input type="checkbox"
+            checked={selectedCustomerIds.includes(item.id)} onChange={(event) => setSelectedCustomerIds((old) =>
+              event.target.checked ? [...old, item.id] : old.filter((id) => id !== item.id))} />
+            {item.customer_name}</label>)}</div>
+        <button disabled={busy || !versionId || selectedCustomerIds.length === 0}
+          className="min-h-11 rounded bg-slate-900 px-4 text-white disabled:opacity-50"
+          onClick={() => void action({ action: "create-batch", customerIds: selectedCustomerIds,
+            documentVersionId: versionId })}>선택한 {selectedCustomerIds.length}곳 링크 일괄 발급</button>
+        <p className="text-slate-600">한 번에 최대 30곳의 검색 결과를 발급합니다. 각 링크는 해당 매장에만 전달해 주세요.</p>
+      </div>}
     </section>
     <section className="space-y-3"><h2 className="font-semibold">매장별 링크</h2>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-sm">

@@ -229,6 +229,7 @@ create table if not exists public.store_order_requests (
   idempotency_key uuid not null,
   order_id uuid not null,
   request_fingerprint text not null check (request_fingerprint ~ '^[0-9a-f]{32}$'),
+  result jsonb not null,
   created_at timestamptz not null default now(),
   primary key (company_id, link_id, idempotency_key),
   constraint store_order_requests_link_fk foreign key (company_id, link_id)
@@ -300,10 +301,7 @@ begin
       and idempotency_key = p_idempotency_key;
   if found then
     if v_request.request_fingerprint <> v_fingerprint then raise exception 'Idempotency conflict'; end if;
-    select * into v_order from public.store_orders
-      where company_id = v_link.company_id and id = v_request.order_id;
-    return jsonb_build_object('id',v_order.id,'revision',v_order.revision,
-      'knownTotal',v_order.known_total,'marketPricePending',v_order.has_market_price);
+    return v_request.result;
   end if;
   if v_link.revoked_at is not null or v_link.expires_at <= now()
     or not v_link.can_order then raise exception 'Link unavailable'; end if;
@@ -445,8 +443,10 @@ begin
     has_market_price = v_market_count > 0, revision = case when p_order_id is null then 1 else revision + 1 end,
     updated_at = now()
     where company_id = v_link.company_id and id = v_order.id returning * into v_order;
-  insert into public.store_order_requests(company_id,link_id,idempotency_key,order_id,request_fingerprint)
-    values(v_link.company_id,v_link.id,p_idempotency_key,v_order.id,v_fingerprint);
+  insert into public.store_order_requests(company_id,link_id,idempotency_key,order_id,request_fingerprint,result)
+    values(v_link.company_id,v_link.id,p_idempotency_key,v_order.id,v_fingerprint,
+      jsonb_build_object('id',v_order.id,'revision',v_order.revision,
+        'knownTotal',v_order.known_total,'marketPricePending',v_order.has_market_price));
   return jsonb_build_object('id',v_order.id,'revision',v_order.revision,
     'knownTotal',v_order.known_total,'marketPricePending',v_order.has_market_price);
 end $$;

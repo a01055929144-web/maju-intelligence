@@ -18,7 +18,10 @@ type Order = { id: string; deliveryDate: string; status: string; knownTotal: num
   marketPricePending: boolean; submittedAt: string; revision: number;
   lines: { product_id: string; promotion_id: string | null; product_name: string; quantity: number;
     unit_price: number | null; total_amount: number | null }[] };
-type Response = { store: Store; orders: Order[]; message?: string };
+type Preference = { productId: string; isFavorite: boolean;
+  isHidden: boolean; willNotOrder: boolean };
+type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  historyPage: number; historyHasMore: boolean; message?: string };
 const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
 export function StorefrontWorkspace() {
@@ -29,6 +32,7 @@ export function StorefrontWorkspace() {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [memo, setMemo] = useState("");
   const [editing, setEditing] = useState<{ id: string; revision: number } | null>(null);
+  const [productView, setProductView] = useState<"all" | "favorites" | "hidden">("all");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const retryKey = useRef<string | null>(null);
@@ -39,12 +43,12 @@ export function StorefrontWorkspace() {
     if (value && value.length <= 200) setToken(value);
     else setMessage("매장 링크를 확인해 주세요.");
   }, []);
-  const load = useCallback(async (day?: string) => {
+  const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
     const sequence = ++loadSequence.current;
     const response = await fetch(endpoint, { method: "POST", cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, deliveryDate: day }) });
+      body: JSON.stringify({ token, deliveryDate: day, historyPage }) });
     const result = await response.json() as Response;
     if (!response.ok) throw new Error(result.message || "매장 링크를 열 수 없습니다.");
     if (sequence !== loadSequence.current) return;
@@ -53,6 +57,13 @@ export function StorefrontWorkspace() {
   }, [endpoint, token]);
   useEffect(() => { if (token) void load().catch((error) => setMessage(error instanceof Error ? error.message : "불러오지 못했습니다.")); }, [load, token]);
   const store = data?.store;
+  const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
+  const visibleProducts = store?.lines.filter((line) => {
+    const preference = preferences.get(line.productId);
+    return productView === "hidden" ? preference?.isHidden === true :
+      productView === "favorites" ? preference?.isFavorite === true && !preference.isHidden :
+        !preference?.isHidden || (cart[line.key] ?? 0) > 0;
+  }) ?? [];
   const selected = store?.lines.filter((line) => (cart[line.key] ?? 0) > 0) ?? [];
   let summary: ReturnType<typeof summarizeOrder> | null = null;
   try {
@@ -67,8 +78,38 @@ export function StorefrontWorkspace() {
     setCart((old) => { const next = { ...old, [line.key]: Math.max(0, Math.min(max, (old[line.key] || 0) + delta)) };
       retryKey.current = null; return next; });
   }
+  async function changePreference(productId: string, key: "isFavorite" | "isHidden") {
+    const current = preferences.get(productId) ?? {
+      productId, isFavorite: false, isHidden: false, willNotOrder: false,
+    };
+    const updated = { ...current, [key]: !current[key] };
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(endpoint, { method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, ...updated }) });
+      const result = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(result.message || "품목 설정을 저장하지 못했습니다.");
+      setData((old) => old ? { ...old, preferences: [
+        ...old.preferences.filter((item) => item.productId !== productId), updated,
+      ] } : old);
+      if (updated.isHidden) {
+        setCart((old) => Object.fromEntries(Object.entries(old).filter(([key]) =>
+          !key.startsWith(`${productId}:`))));
+        retryKey.current = null;
+      }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "품목 설정을 저장하지 못했습니다."); }
+    finally { setBusy(false); }
+  }
   function fromOrder(order: Order, edit: boolean) {
-    setCart(Object.fromEntries(order.lines.map((line) => [
+    const available = new Set(store?.lines.map((line) => line.key) ?? []);
+    const copied = order.lines.filter((line) => available.has(`${line.product_id}:${line.promotion_id ?? ""}`));
+    const missing = order.lines.length - copied.length;
+    if (edit && missing) {
+      setMessage(`현재 문서에서 ${missing}개 품목을 찾을 수 없어 이 주문을 수정할 수 없습니다. 담당자에게 문의해 주세요.`);
+      return;
+    }
+    setCart(Object.fromEntries(copied.map((line) => [
       `${line.product_id}:${line.promotion_id ?? ""}`, Number(line.quantity),
     ])));
     const day = edit ? order.deliveryDate : store?.nextDeliveryDate || "";
@@ -77,7 +118,8 @@ export function StorefrontWorkspace() {
     setEditing(edit ? { id: order.id, revision: order.revision } : null);
     retryKey.current = null;
     setTab("order");
-    setMessage(edit ? "마감 전 주문을 수정합니다. 현재 가격을 다시 확인해 주세요." : "지난 품목을 담았습니다. 현재 가격을 확인해 주세요.");
+    setMessage(`${edit ? "마감 전 주문을 수정합니다." : "지난 품목을 담았습니다."} 현재 가격을 다시 확인해 주세요.${
+      missing ? ` 현재 문서에 없는 품목 ${missing}개는 담지 않았습니다.` : ""}`);
   }
   async function submit() {
     if (!store || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
@@ -92,7 +134,13 @@ export function StorefrontWorkspace() {
       const result = await response.json() as { message?: string };
       if (!response.ok) throw new Error(result.message || "주문을 저장하지 못했습니다.");
       retryKey.current = null; setCart({}); setEditing(null); setMemo("");
-      await load(); setTab("history"); setMessage("주문을 받았습니다. 주문 내역에서 확인해 주세요.");
+      setTab("history");
+      try {
+        await load(undefined, 1);
+        setMessage("주문을 받았습니다. 주문 내역에서 확인해 주세요.");
+      } catch {
+        setMessage("주문은 저장됐습니다. 내역을 불러오지 못했으니 화면을 새로고침해 확인해 주세요.");
+      }
     } catch (error) { setMessage(error instanceof Error ? error.message : "주문을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -111,6 +159,8 @@ export function StorefrontWorkspace() {
         <button className="min-h-14 rounded bg-slate-900 px-4 text-white" onClick={() => setTab("order")}>주문하기</button>
         <button className="min-h-14 rounded border px-4" onClick={() => setTab("history")}>지난 주문 다시 담기</button>
       </div>
+      <button className="min-h-11 rounded border px-4 text-sm" onClick={() => { setProductView("favorites"); setTab("order"); }}>
+        즐겨찾기 품목 보기</button>
       <p className="text-sm text-slate-600">주문은 후결제로 접수됩니다. 시세 품목은 출고 전 단가가 확정됩니다.</p>
       <p className="text-sm">배송지: {store.deliveryAddress || "등록된 주소가 없습니다. 거래처 담당자에게 확인해 주세요."}</p>
     </section>}
@@ -122,7 +172,12 @@ export function StorefrontWorkspace() {
           onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
             if (day) void load(day).catch(() => setMessage("선택한 배송일의 가격을 불러오지 못했습니다.")); }} /></label>
       <p className="text-sm text-slate-600">배송 요일·휴일·마감은 저장할 때 다시 확인합니다.</p>
-      <ul className="space-y-2">{store.lines.map((line) => <li key={line.key} className="rounded border p-3">
+      <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
+        {(["all", "favorites", "hidden"] as const).map((view) =>
+          <button key={view} aria-pressed={productView === view} className="min-h-11 rounded border px-3"
+            onClick={() => setProductView(view)}>{view === "all" ? "전체" : view === "favorites" ? "즐겨찾기" : "숨긴 품목"}</button>)}
+      </div>
+      <ul className="space-y-2">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p></div>
@@ -132,6 +187,14 @@ export function StorefrontWorkspace() {
           {line.recentDispatchPrice !== null && line.recentDispatchDate &&
             <> 최근 출고 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)} (참고)</>}
         </p>}
+        <div className="mt-2 flex gap-2 text-xs">
+          <button disabled={busy} aria-pressed={preferences.get(line.productId)?.isFavorite === true}
+            className="min-h-11 rounded border px-3" onClick={() => void changePreference(line.productId, "isFavorite")}>
+            {preferences.get(line.productId)?.isFavorite ? "즐겨찾기 해제" : "즐겨찾기"}</button>
+          <button disabled={busy} className="min-h-11 rounded border px-3"
+            onClick={() => void changePreference(line.productId, "isHidden")}>
+            {preferences.get(line.productId)?.isHidden ? "다시 표시" : "품목 숨기기"}</button>
+        </div>
         <div className="mt-3 flex items-center justify-end gap-2">
           <button aria-label={`${line.name} 수량 줄이기`} className="min-h-11 min-w-11 rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
           <span className="min-w-8 text-center">{cart[line.key] || 0}</span>
@@ -159,7 +222,14 @@ export function StorefrontWorkspace() {
         <p>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</p>
         <div className="mt-2 flex gap-2"><button className="min-h-11 rounded border px-3" onClick={() => fromOrder(order, false)}>다시 담기</button>
           {order.status === "submitted" && <button className="min-h-11 rounded border px-3" onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div>
-      </article>)}</section>}
+      </article>)}
+      {store.priceAvailable && <div className="flex items-center justify-between gap-2 text-sm">
+        <button disabled={data?.historyPage === 1 || busy} className="min-h-11 rounded border px-3 disabled:opacity-50"
+          onClick={() => void load(deliveryDate, (data?.historyPage ?? 1) - 1).catch(() => setMessage("이전 내역을 불러오지 못했습니다."))}>이전</button>
+        <span>{data?.historyPage ?? 1}페이지</span>
+        <button disabled={!data?.historyHasMore || busy} className="min-h-11 rounded border px-3 disabled:opacity-50"
+          onClick={() => void load(deliveryDate, (data?.historyPage ?? 1) + 1).catch(() => setMessage("다음 내역을 불러오지 못했습니다."))}>다음</button>
+      </div>}</section>}
     {tab === "info" && <section className="space-y-3 p-4"><h2 className="font-semibold">매장 정보</h2>
       <p>매장: {store.customerName}</p><p>배송지: {store.deliveryAddress || "등록되지 않음"}</p>
       <p className="text-sm text-slate-600">배송지와 출입 정보 변경은 담당자에게 요청해 주세요.</p>

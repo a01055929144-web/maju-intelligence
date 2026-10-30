@@ -1,4 +1,5 @@
 import { supabaseRequest } from "@/lib/store";
+import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { verifyStoreLinkToken } from "./store-link-token";
 import { canOrderForDelivery, kstDateTime, nextDeliveryDate, type DeliveryPolicy, type HolidayRule } from "@/domains/order/order-rules";
 import type { DocumentContent } from "@/domains/pricing/document";
@@ -9,7 +10,7 @@ type Version = { id: string; content: DocumentContent; version: number; publishe
 type Customer = { id: string; customer_name: string; address: string | null; delivery_territory_id: string | null };
 type Agreement = { product_catalog_id: string; sales_unit: string; unit_price: number;
   tax_type: "taxable" | "exempt"; price_includes_tax: boolean };
-type ProductMode = { id: string; order_pricing_mode: "fixed" | "market" };
+type ProductMode = { id: string; is_active: boolean; order_pricing_mode: "fixed" | "market" };
 type Promotion = { id: string; starts_on: string; ends_on: string; stock: number | null;
   per_store_limit: number | null };
 type RecentPrice = { product_id: string; unit_price: number; document_date: string };
@@ -33,7 +34,8 @@ export async function readStorefront(token: string, requestedDeliveryDate?: stri
     `storefront_links?id=eq.${encodeURIComponent(decoded.id)}&token_hash=eq.${decoded.hash}&select=id,company_id,customer_id,document_version_id,expires_at,revoked_at,can_order&limit=1`,
   );
   const link = links[0];
-  if (!link || link.revoked_at || new Date(link.expires_at).getTime() <= Date.now()) return null;
+  if (!link || !areHoldModulesEnabled(link.company_id) || link.revoked_at ||
+    new Date(link.expires_at).getTime() <= Date.now()) return null;
   const company = link.company_id;
   const [versions, customers, settingsRows] = await Promise.all([
     supabaseRequest<Version[]>(path("pricing_document_versions", company,
@@ -62,7 +64,7 @@ export async function readStorefront(token: string, requestedDeliveryDate?: stri
     .filter((id): id is string => Boolean(id))));
   const [productModes, promotions, recentPrices, territoryRules, customerRules, holidays] = await Promise.all([
     productIds.length ? supabaseRequest<ProductMode[]>(path("product_catalog", company,
-      `&id=in.(${productIds.join(",")})&select=id,order_pricing_mode&limit=100`)) : Promise.resolve([]),
+      `&id=in.(${productIds.join(",")})&select=id,is_active,order_pricing_mode&limit=100`)) : Promise.resolve([]),
     promotionIds.length ? supabaseRequest<Promotion[]>(path("pricing_promotions", company,
       `&id=in.(${promotionIds.join(",")})&select=id,starts_on,ends_on,stock,per_store_limit&limit=100`)) : Promise.resolve([]),
     priceAvailable && productIds.length ? supabaseRequest<RecentPrice[]>("rpc/store_recent_dispatch_prices", {
@@ -77,6 +79,7 @@ export async function readStorefront(token: string, requestedDeliveryDate?: stri
       `&or=(territory_id.is.null,territory_id.eq.${customer.delivery_territory_id ?? "00000000-0000-0000-0000-000000000000"})&select=kind,weekday,month,day,holiday_date&limit=200`)),
   ]);
   const marketIds = new Set(productModes.filter((item) => item.order_pricing_mode === "market").map((item) => item.id));
+  const activeProductIds = new Set(productModes.filter((item) => item.is_active).map((item) => item.id));
   const livePromotions = new Map(promotions.filter((item) => item.starts_on <= today &&
     item.ends_on >= today && item.stock !== 0).map((item) => [item.id, item]));
   const recentByProduct = new Map(recentPrices.map((item) => [item.product_id, item]));
@@ -120,7 +123,7 @@ export async function readStorefront(token: string, requestedDeliveryDate?: stri
     notice: settings.notice,
     marketPriceNotice: settings.market_price_notice,
     policy,
-    lines: version.content.lines.filter((line) => line.visible &&
+    lines: version.content.lines.filter((line) => line.visible && activeProductIds.has(line.productId) &&
       (!line.promotionId || livePromotions.has(line.promotionId))).map((line) => {
       const agreement = agreementByProduct.get(line.productId);
       const matchingContract = agreement?.sales_unit === line.unit ? agreement : null;
