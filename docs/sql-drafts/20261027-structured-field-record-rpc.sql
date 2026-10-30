@@ -55,7 +55,9 @@ begin
 
   insert into public.customer_notes(company_id, customer_id, note_type, memo, created_by_name, idempotency_key)
   values (p_company_id, p_customer_id, 'delivery', p_memo, nullif(btrim(p_actor_name), ''), p_idempotency_key)
-  on conflict (company_id, customer_id, idempotency_key) where note_type = 'delivery' and idempotency_key is not null
+  -- Match the deployed partial unique index predicate exactly. A non-delivery
+  -- note using the same key is a conflict and must never be modified here.
+  on conflict (company_id, customer_id, idempotency_key) where idempotency_key is not null
   do nothing
   returning id into v_note_id;
   if v_note_id is null then raise exception 'idempotency_key_conflict'; end if;
