@@ -44,6 +44,9 @@ begin
  content:=jsonb_set(content,'{kind}','"quote"');content:=jsonb_set(content,'{lines,0,promotionId}',to_jsonb(promo));
  perform pricing_p1(c,a,true,'save',jsonb_build_object('id',doc,'expected',2,'content',content));
  v2:=pricing_p1(c,a,true,'publish',jsonb_build_object('id',doc,'expected',3));if v2->'content'->'lines'->0->>'displayName'<>'공개 행사' or (v2->'content'->'lines'->0->>'price')::integer<>120 then raise exception 'Promotion not sanitized';end if;
+ update pricing_promotions set stock=5 where company_id=c and id=promo;
+ if (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'promotionStock'->>promo::text)::integer<>5 then raise exception 'Current stock not returned';end if;
+ if (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'content'->'lines'->0->>'remaining')::integer<>10 then raise exception 'Stock update mutated snapshot';end if;
  update pricing_promotions set stock=0 where company_id=c and id=promo;
  if not (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'unavailablePromotions' ? promo::text) then raise exception 'Sold-out version still available';end if;
  -- Private set updates/deletes, common set permission, profile CAS and price-at-use.

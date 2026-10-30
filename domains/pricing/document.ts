@@ -44,6 +44,7 @@ export type DocumentVersion = {
   publishedAt: string;
   content: DocumentContent;
   unavailablePromotions: string[];
+  promotionStock?: Record<string, number | null>;
 };
 export type CatalogChoice = {
   id: string;
@@ -200,6 +201,15 @@ export function parseDocument(value: unknown): DocumentContent {
 export function documentOutput(version: DocumentVersion, day = koreaDay()) {
   const d = parseDocument(version.content),
     expired = day > d.validUntil;
+  const currentStock = (line: PrintLine) =>
+    line.promotionId &&
+    version.promotionStock &&
+    Object.prototype.hasOwnProperty.call(
+      version.promotionStock,
+      line.promotionId,
+    )
+      ? version.promotionStock[line.promotionId]
+      : line.remaining;
   const visible = d.lines.filter(
     (l) =>
       l.visible &&
@@ -207,7 +217,7 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
         (!version.unavailablePromotions.includes(l.promotionId) &&
           day >= l.startsOn! &&
           day <= l.endsOn! &&
-          l.remaining !== 0)),
+          currentStock(l) !== 0)),
   );
   return {
     title: d.title,
@@ -236,7 +246,7 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
       taxType: l.taxType,
       badge: l.badge,
       endsOn: l.endsOn,
-      remaining: l.remaining,
+      remaining: currentStock(l),
     })),
   };
 }

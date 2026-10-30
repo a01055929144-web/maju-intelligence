@@ -128,6 +128,28 @@ describe("pricing P1 documents", () => {
       ).lines,
     ).toHaveLength(0);
   });
+  it("uses current stock for output without repricing the fixed version", () => {
+    const line = {
+      ...content.lines[0],
+      promotionId: id,
+      startsOn: "2026-10-30",
+      endsOn: "2026-11-01",
+      remaining: 10,
+      badge: "행사" as const,
+    };
+    const v = {
+      ...version,
+      content: { ...content, lines: [line] },
+      promotionStock: { [id]: 3 },
+    };
+    const output = documentOutput(v, "2026-10-30");
+    expect(output.lines[0].remaining).toBe(3);
+    expect(output.lines[0].price).toBe(21180);
+    expect(v.content.lines[0].remaining).toBe(10);
+    expect(
+      documentOutput({ ...v, promotionStock: { [id]: 0 } }, "2026-10-30").lines,
+    ).toHaveLength(0);
+  });
   it("retains order and all long names across conservative A4 pages", () => {
     const lines = Array.from({ length: 100 }, (_, i) => ({
       ...content.lines[0],

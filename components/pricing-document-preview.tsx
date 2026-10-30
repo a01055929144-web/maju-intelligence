@@ -111,6 +111,9 @@ function PageContent({
                 <td className="border-b p-2 text-xs">
                   {l.taxType === "exempt" ? "면세" : "과세"}
                   {l.endsOn && <span className="block">{l.endsOn}까지</span>}
+                  {l.remaining !== null && (
+                    <span className="block">남은 수량 {l.remaining}</span>
+                  )}
                 </td>
               </tr>
             ))}

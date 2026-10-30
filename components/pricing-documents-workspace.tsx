@@ -1054,6 +1054,9 @@ export function PricingDocumentsWorkspace({
               const promos = await read<Promotion[]>("promotions");
               return {
                 ...preview,
+                promotionStock: Object.fromEntries(
+                  promos.map((p) => [p.id, p.stock]),
+                ),
                 unavailablePromotions: preview.content.lines
                   .filter(
                     (l) =>

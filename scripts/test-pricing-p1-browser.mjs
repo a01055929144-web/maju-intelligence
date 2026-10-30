@@ -353,6 +353,22 @@ try {
     await owner.request.get(base + "/api/pricing-documents?action=promotions")
   ).json();
   const promo = promoList.result.find((p) => p.displayName === "공개 행사 A");
+  const reduced = await owner.request.post(base + "/api/pricing-documents", {
+    data: {
+      action: "save-promotion",
+      id: promo.id,
+      expected: promo.revision,
+      content: { ...promo, stock: 1 },
+    },
+  });
+  if (!reduced.ok()) throw new Error("Promotion stock reduction failed");
+  promo.revision += 1;
+  const stockDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
+  await (await stockDownload).saveAs(resolve(artifacts, "live-stock-page.png"));
+  await expect(page.locator("#pricing-print-root")).toContainText(
+    "남은 수량 1",
+  );
   const changed = await owner.request.post(base + "/api/pricing-documents", {
     data: {
       action: "save-promotion",
@@ -510,7 +526,7 @@ try {
           "Excel bundle import",
           "long A4/PDF pagination",
           "common/private bundle/template create/copy/use and current-price reload",
-          "promotion create/quote/preview/sold-out PNG exclusion",
+          "promotion create/quote/preview/live stock/sold-out PNG exclusion",
         ],
         pngBytes: png.length,
       },
