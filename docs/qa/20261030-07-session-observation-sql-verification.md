@@ -29,7 +29,8 @@
 13. 각 필수 인자(`company_id`, `user_id`, 두 해시, source, expiry)를 하나씩 `NULL`로 호출하면 기록 없이 `22023`으로 거절된다.
 14. 트랜잭션 A가 활성 멤버 행을 `FOR UPDATE`로 잠근 채 관찰을 진행하는 동안 트랜잭션 B의 `status`, `permission_role`, `membership_expires_at` 변경은 대기한다. A 커밋 후 B가 비활성화하면 다음 관찰은 `42501`이고 기존 행의 `last_seen_at`은 바뀌지 않는다.
 15. 빈 상태에서 서로 다른 기기·세션 A/B를 두 트랜잭션으로 동시에 호출한다. 멤버십 행의 `FOR UPDATE` 때문에 한 호출은 대기해야 하며, 두 호출이 끝난 뒤 결과 중 하나는 반드시 `active_device_count=2`, `concurrent_devices=true`여야 한다. 최종 행도 서로 다른 기기 2개여야 한다.
-16. 잠금 대기 중 temporary 멤버십 또는 세션이 만료되면, 잠금을 얻은 뒤 갱신한 DB 시각으로 재검사하여 관찰 행을 만들지 않는다.
+16. 같은 `session_hash`를 서로 다른 두 `device_hash`에서 사용해도 고유 인덱스 오류가 없어야 한다. 기기별 행 2개와 `active_device_count=2`, `concurrent_devices=true`를 확인한다. 같은 기기의 반복 호출은 한 행으로 유지한다.
+17. 잠금 대기 중 temporary 멤버십 또는 세션이 만료되면, 잠금을 얻은 뒤 갱신한 DB 시각으로 재검사하여 관찰 행을 만들지 않는다.
 
 ## 정적·회귀 확인
 

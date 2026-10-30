@@ -30,7 +30,9 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 -- 원본 appSessionId/auth session_id는 저장하지 않고 서버 비밀값을 포함한 SHA-256 해시만 저장한다.
-create unique index if not exists staff_account_sessions_session_hash_uq
+-- 하나의 세션 쿠키가 두 기기에서 재사용되더라도 각각을 관찰해야 한다.
+-- 기기별 중복 행은 기존 unique(company_id, user_id, device_hash)가 방지한다.
+create index if not exists staff_account_sessions_session_hash_idx
   on public.staff_account_sessions(company_id, user_id, session_source, session_hash)
   where session_hash is not null;
 
