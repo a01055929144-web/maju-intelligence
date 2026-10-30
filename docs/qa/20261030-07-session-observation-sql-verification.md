@@ -37,11 +37,19 @@
 
 - 재현 fixture와 assertion은 각각 `tests/sql/session-observation-record-only-fixture.sql`, `tests/sql/session-observation-record-only-assertions.sql`에 둔다. fixture → 검토용 SQL의 바깥 `begin`/`rollback`을 제외한 본문 → assertion 순서로 격리 DB에 입력한다.
 - 실제 두 연결의 직렬화는 같은 격리 DB에서 `tests/sql/run-session-observation-concurrency.sh`를 실행해 A=`true/1/false`, B=`true/2/true`, 최종 기기 수 2를 확인한다.
+- `begin`/`rollback`을 포함한 초안을 그대로 실행한 뒤 `tests/sql/session-observation-record-only-rollback-assertions.sql`로 컬럼·함수 미잔존과 알림 sentinel 보존을 확인한다.
 - PostgreSQL 16에서 트랜잭션 실행 후 마지막 `rollback`으로 스키마가 원상 복구되는지 확인한다.
 - `EXPLAIN (COSTS OFF)`로 활성 기기 판정 인덱스 사용 가능성을 확인한다.
 - 승인된 마이그레이션 적용 전 기존 REST upsert를 RPC로 바꾸지 않는다.
 - 연결 승인 후 테스트 환경에서만 플래그를 켜고 서버 해시·현재 멤버십·인증 비차단 정책을 회귀 확인한다.
 - 앱 내 알림, 이메일, 자동 잠금, 강제 로그아웃은 별도 승인 전 추가하지 않는다.
+
+## 현재 스키마 충돌 점검
+
+- 적용 기록인 `20261026234400_c6_staff_access_v2.sql`에는 기존 `(company_id, user_id, device_hash)` 고유 제약과 활성 세션 인덱스만 있다. 이 초안의 세 컬럼, 두 CHECK, 두 인덱스, 함수명과 직접 충돌하는 적용 마이그레이션은 저장소에서 발견되지 않았다.
+- `20261029-07-temporary-access-concurrent-session.sql`은 같은 `session_source`/`expires_at`과 제약명을 쓰는 과거 검토용 초안이다. 두 파일 모두 `rollback`으로 끝나므로 적용 기록은 아니며, 운영 승인 시에는 두 초안을 합쳐 실행하지 않고 이 후속안 하나를 새 마이그레이션으로 재작성해야 한다.
+- `SECURITY INVOKER` 함수의 RLS 우회와 `FOR UPDATE`에는 `service_role`의 `BYPASSRLS`, `public` 스키마 `USAGE`, `company_members` `SELECT`, `UPDATE` 권한이 필요하다. 초안은 이를 변경하지 않고 사전 검사해 누락 시 중단한다.
+- `staff_account_sessions` 권한은 `service_role`의 `SELECT/INSERT/UPDATE/DELETE`와 함수 `EXECUTE`만 다시 부여한다. `PUBLIC`, `anon`, `authenticated`에는 테이블 접근과 함수 실행을 부여하지 않는다.
 
 ## 격리 PostgreSQL 16 실행 결과
 

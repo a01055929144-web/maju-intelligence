@@ -5,6 +5,24 @@
 
 begin;
 
+-- SECURITY INVOKER 함수의 멤버십 조회·잠금에 필요한 기존 권한을 fail-closed로 확인한다.
+-- RLS 우회(BYPASSRLS)는 테이블 SELECT/UPDATE 권한을 대신하지 않는다.
+do $$ begin
+  if not exists (
+       select 1 from pg_catalog.pg_roles
+        where rolname = 'service_role' and rolbypassrls
+     ) then
+    raise exception 'service_role requires BYPASSRLS';
+  end if;
+  if not has_schema_privilege('service_role', 'public', 'USAGE') then
+    raise exception 'service_role requires USAGE on schema public';
+  end if;
+  if not has_table_privilege('service_role', 'public.company_members', 'SELECT')
+     or not has_table_privilege('service_role', 'public.company_members', 'UPDATE') then
+    raise exception 'service_role requires SELECT and UPDATE on public.company_members';
+  end if;
+end $$;
+
 alter table public.staff_account_sessions
   add column if not exists session_source text,
   add column if not exists session_hash text,

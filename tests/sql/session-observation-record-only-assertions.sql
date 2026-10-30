@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 
+set role service_role;
+
 do $$
 declare
   v_result record;
@@ -73,9 +75,14 @@ begin
   exception when sqlstate '42501' then null;
   end;
 
-  assert (select count(*) from public.staff_security_alerts) = 1;
-  assert (select marker from public.staff_security_alerts limit 1) = 'sentinel';
 end;
 $$;
+
+reset role;
+
+do $$ begin
+  assert (select count(*) from public.staff_security_alerts) = 1;
+  assert (select marker from public.staff_security_alerts limit 1) = 'sentinel';
+end $$;
 
 select 'session observation PG16 assertions passed' as result;

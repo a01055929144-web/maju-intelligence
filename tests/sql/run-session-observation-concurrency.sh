@@ -13,10 +13,10 @@ trap 'rm -f "$a_out" "$b_out"' EXIT
 
 $psql_cmd -c "delete from public.staff_account_sessions where user_id = '00000000-0000-0000-0000-000000000013'" >/dev/null
 
-$psql_cmd -c "begin; select recorded, active_device_count, concurrent_devices from public.record_staff_session_observation('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000013', repeat('1', 64), 'application_cookie', repeat('3', 64), clock_timestamp() + interval '1 hour'); select pg_sleep(2); commit" >"$a_out" &
+$psql_cmd -c "set role service_role; begin; select recorded, active_device_count, concurrent_devices from public.record_staff_session_observation('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000013', repeat('1', 64), 'application_cookie', repeat('3', 64), clock_timestamp() + interval '1 hour'); select pg_sleep(2); commit" >"$a_out" &
 a_pid=$!
 sleep 0.2
-$psql_cmd -c "select recorded, active_device_count, concurrent_devices from public.record_staff_session_observation('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000013', repeat('2', 64), 'application_cookie', repeat('4', 64), clock_timestamp() + interval '1 hour')" >"$b_out" &
+$psql_cmd -c "set role service_role; select recorded, active_device_count, concurrent_devices from public.record_staff_session_observation('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000013', repeat('2', 64), 'application_cookie', repeat('4', 64), clock_timestamp() + interval '1 hour')" >"$b_out" &
 b_pid=$!
 
 wait "$a_pid"

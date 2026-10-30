@@ -3,6 +3,7 @@
 do $$ begin create role anon; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role; exception when duplicate_object then null; end $$;
+alter role service_role bypassrls;
 
 create extension if not exists pgcrypto;
 
@@ -33,6 +34,8 @@ create table public.staff_security_alerts (
   marker text not null
 );
 
+grant usage on schema public to service_role;
+
 insert into public.companies(id) values
   ('00000000-0000-0000-0000-000000000001'),
   ('00000000-0000-0000-0000-000000000002');
@@ -45,3 +48,5 @@ insert into public.company_members(company_id, user_id, role, permission_role, s
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000012', 'member', 'staff', 'inactive'),
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000013', 'member', 'staff', 'active');
 insert into public.staff_security_alerts(marker) values ('sentinel');
+
+grant select, update on table public.company_members to service_role;
