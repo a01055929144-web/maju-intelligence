@@ -41,7 +41,7 @@ PR #84의 보존·권한 원칙은 유지할 수 있지만, `docs/sql-drafts/202
 
 - `common_revision_history`와 필수 컬럼이 없으면 변경 전에 실패하는 preflight를 추가했다.
 - 운영 대상과 복합 FK 문법에 맞춰 PostgreSQL 15+ 요구를 명시했다.
-- 운영에 이미 존재하는 `normalized_customers(company_id, id)` unique를 선행 조건으로 검사한다.
+- 운영에 이미 존재하는 `normalized_customers(company_id, id)` 후보키를 제약 이름이 아니라 실제 컬럼 순서로 검사한다.
 - `business_permit_leads(company_id, matched_customer_id)` 인덱스와 복합 FK를 추가했다.
 - 복합 FK는 거래처 삭제 시 `matched_customer_id`만 NULL로 만들고 lead의 `company_id`는 유지한다.
 - 운영 읽기 감사에서 현재 매칭 행은 0건이고 교차 회사 매칭도 0건이었다. 적용 시점에는 `VALIDATE CONSTRAINT`가 다시 전체 기존 행을 검사한다.

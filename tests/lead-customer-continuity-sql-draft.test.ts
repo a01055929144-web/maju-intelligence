@@ -13,6 +13,10 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/customer\.company_id = p_company_id/i);
     expect(sql).toMatch(/security invoker/i);
     expect(sql).toContain("common_revision_history_prerequisite_not_applied");
+    expect(sql).toMatch(/constraint_row\.contype in \('p', 'u'\)/i);
+    expect(sql).toMatch(/array\['company_id', 'id'\]::name\[\]/i);
+    expect(sql).not.toContain("conname = 'normalized_customers_company_id_id_unique'");
+    expect(pg16Test).toContain("fixture_customer_company_id_unique");
     expect(sql).toMatch(/foreign key \(company_id, matched_customer_id\)/i);
     expect(sql).toMatch(/on delete set null \(matched_customer_id\)/i);
     expect(sql).toMatch(/validate constraint business_permit_leads_company_matched_customer_fk/i);

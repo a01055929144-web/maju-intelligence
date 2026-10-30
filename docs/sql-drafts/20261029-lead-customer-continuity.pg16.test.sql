@@ -33,7 +33,8 @@ create table public.normalized_customers (
   kakao_place_url text,
   google_map_url text,
   business_hours text,
-  constraint normalized_customers_company_id_id_unique unique (company_id, id)
+  -- 운영 migration과 이름이 달라도 초안은 실제 후보키 컬럼 순서로 인식해야 한다.
+  constraint fixture_customer_company_id_unique unique (company_id, id)
 );
 create table public.business_permit_leads (
   id uuid primary key,
