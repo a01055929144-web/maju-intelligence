@@ -12,6 +12,12 @@
 
 begin;
 
+-- Advisory locks serialize calls through these RPCs. The partial unique index
+-- also protects sales-offer idempotency from any writer that bypasses the RPC.
+create unique index if not exists uq_lead_actions_structured_idempotency
+  on public.lead_actions(company_id, lead_id, (metadata->>'structuredIdempotencyKey'))
+  where nullif(metadata->>'structuredIdempotencyKey', '') is not null;
+
 create or replace function public.record_delivery_event_atomic(
   p_company_id uuid,
   p_customer_id uuid,
@@ -24,7 +30,7 @@ create or replace function public.record_delivery_event_atomic(
 ) returns jsonb
 language plpgsql
 security invoker
-set search_path = public, pg_temp
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_note_id uuid;
@@ -37,7 +43,11 @@ begin
   if not exists (select 1 from public.normalized_customers where company_id = p_company_id and id = p_customer_id) then
     raise exception 'customer_not_found';
   end if;
-  if jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
+  if p_actor_user_id is not null and not exists (
+    select 1 from public.company_members
+     where company_id = p_company_id and user_id = p_actor_user_id and status = 'active'
+  ) then raise exception 'actor_not_company_member'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then raise exception 'items_must_be_array'; end if;
   v_status := coalesce(nullif(p_event->>'status', ''), 'received');
 
   -- A retry must return the original record. Updating a note or replacing its
@@ -103,7 +113,7 @@ create or replace function public.record_lead_sales_offer_atomic(
 ) returns jsonb
 language plpgsql
 security invoker
-set search_path = public, pg_temp
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_action_id uuid;
@@ -115,7 +125,13 @@ begin
   if not exists (select 1 from public.business_permit_leads where company_id = p_company_id and id = p_lead_id) then
     raise exception 'lead_not_found';
   end if;
-  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'offer_items_required'; end if;
+  if p_actor_user_id is not null and not exists (
+    select 1 from public.company_members
+     where company_id = p_company_id and user_id = p_actor_user_id and status = 'active'
+  ) then raise exception 'actor_not_company_member'; end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'offer_items_required';
+  end if;
 
   select a.id, o.id into v_action_id, v_offer_id
     from public.lead_actions a
