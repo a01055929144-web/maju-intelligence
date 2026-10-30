@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- 로컬 PostgreSQL 16 전용 실행 테스트. 운영 DB 실행 금지.
+-- 로컬 PostgreSQL 16+ 실행 테스트. 운영 DB 실행 금지. 운영 적용 전 PostgreSQL 17에서도 재실행한다.
 create extension if not exists pgcrypto;
 
 do $$ begin
@@ -32,7 +32,9 @@ create table public.normalized_customers (
   naver_place_url text,
   kakao_place_url text,
   google_map_url text,
-  business_hours text
+  business_hours text,
+  -- 운영 migration과 이름이 달라도 초안은 실제 후보키 컬럼 순서로 인식해야 한다.
+  constraint fixture_customer_company_id_unique unique (company_id, id)
 );
 create table public.business_permit_leads (
   id uuid primary key,
@@ -95,6 +97,21 @@ create table public.common_revision_history (
 
 \ir 20261029-lead-customer-continuity.sql
 
+-- 수동 익명화 operator는 직접 로그인하거나 다른 역할에 부여된 상태여서는 안 된다.
+do $$
+declare v_operator_oid oid;
+begin
+  select oid into v_operator_oid
+  from pg_roles
+  where rolname = 'maju_revision_redaction_operator' and not rolcanlogin;
+  if v_operator_oid is null then
+    raise exception 'redaction_operator_is_missing_or_can_login';
+  end if;
+  if exists (select 1 from pg_auth_members where roleid = v_operator_oid) then
+    raise exception 'redaction_operator_has_members';
+  end if;
+end $$;
+
 insert into public.companies(id) values
   ('10000000-0000-0000-0000-000000000001'),
   ('20000000-0000-0000-0000-000000000002');
@@ -108,15 +125,51 @@ insert into public.company_members(company_id, user_id, role, permission_role, s
   ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', 'owner', 'staff', 'active');
 insert into public.normalized_customers(id, company_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
-  ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
+  ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002'),
+  ('40000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001');
 
--- 100일 유선, 100일 010, 89일 유선, 타 회사 100일 유선, 유선→010 혼합 행.
+insert into public.business_permit_leads(id, company_id, fax) values
+  ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', null),
+  ('60000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'FAX 1234');
+
+-- matched_customer_id는 대상 UUID뿐 아니라 회사까지 일치해야 한다.
+do $$
+begin
+  update public.business_permit_leads
+     set matched_customer_id='40000000-0000-0000-0000-000000000002'
+   where id='60000000-0000-0000-0000-000000000001';
+  raise exception 'cross_company_matched_customer_should_be_forbidden';
+exception
+  when foreign_key_violation then null;
+end $$;
+
+-- 앱 normalizeFaxNumberInput이 거부하는 값은 거래처에 복사하지 않는다.
+select public.apply_lead_customer_continuity_draft(
+  '10000000-0000-0000-0000-000000000001',
+  '60000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000003',
+  true
+);
+do $$
+begin
+  if exists (
+    select 1 from public.normalized_customers
+    where id='40000000-0000-0000-0000-000000000003'
+      and (fax is not null or contact_channels_updated_at is not null)
+  ) then
+    raise exception 'malformed_fax_was_copied_to_customer';
+  end if;
+end $$;
+
+-- 100일 유선, 100일 010, 정확히 90일 유선, 89일 유선, 타 회사, 유선→010 혼합, 앞자리 0 누락 휴대폰.
 insert into public.common_revision_history(id, company_id, target_type, target_id, field_key, old_value, new_value, created_at) values
   ('50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-111-2222'::text), to_jsonb('02-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
   ('50000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('010-1111-2222'::text), to_jsonb('010-3333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-555-6666'::text), to_jsonb('02-777-8888'::text), timestamptz '2026-08-01 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000002', 'customer', '40000000-0000-0000-0000-000000000002', 'phone', to_jsonb('031-111-2222'::text), to_jsonb('031-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-999-0000'::text), to_jsonb('010-9999-0000'::text), timestamptz '2026-07-21 00:00:00+00');
+  ('50000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-555-6666'::text), to_jsonb('02-777-8888'::text), timestamptz '2026-07-31 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-444-5555'::text), to_jsonb('02-666-7777'::text), timestamptz '2026-08-01 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000002', 'customer', '40000000-0000-0000-0000-000000000002', 'phone', to_jsonb('031-111-2222'::text), to_jsonb('031-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-999-0000'::text), to_jsonb('010-9999-0000'::text), timestamptz '2026-07-21 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('1011112222'::text), to_jsonb('1033334444'::text), timestamptz '2026-07-21 00:00:00+00');
 
 do $$
 declare v_count integer;
@@ -128,9 +181,11 @@ begin
   if v_count <> 1 then raise exception 'expected_one_automatic_redaction_got_%', v_count; end if;
   if not exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000001' and redaction_reason='retention_expired') then raise exception '100_day_landline_not_redacted'; end if;
   if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000002' and redacted_at is not null) then raise exception '100_day_mobile_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000003' and redacted_at is not null) then raise exception '89_day_landline_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000004' and redacted_at is not null) then raise exception 'other_company_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000005' and redacted_at is not null) then raise exception 'mixed_mobile_landline_row_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000003' and redacted_at is not null) then raise exception 'exactly_90_day_landline_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000004' and redacted_at is not null) then raise exception '89_day_landline_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000005' and redacted_at is not null) then raise exception 'other_company_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000006' and redacted_at is not null) then raise exception 'mixed_mobile_landline_row_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000007' and redacted_at is not null) then raise exception 'mobile_without_leading_zero_was_redacted'; end if;
 end $$;
 
 -- 일반 service_role은 owner UUID를 가장해도 함수 자체를 실행할 수 없어야 한다.
@@ -184,6 +239,19 @@ reset role;
 
 -- owner가 승인한 매장 본인 요청은 휴대폰도 익명화하고 비민감 감사 행만 남긴다.
 set role maju_revision_redaction_operator;
+do $$
+begin
+  perform maju_private.anonymize_customer_revision_values_for_request(
+    '10000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000001',
+    'store_self_request', false, timestamptz '2026-10-29 00:00:30+00'
+  );
+  raise exception 'store_self_request_without_mobile_should_be_forbidden';
+exception
+  when raise_exception then
+    if sqlerrm <> 'store_self_request_scope_mismatch' then raise; end if;
+end $$;
 select maju_private.anonymize_customer_revision_values_for_request(
   '10000000-0000-0000-0000-000000000001',
   '40000000-0000-0000-0000-000000000001',

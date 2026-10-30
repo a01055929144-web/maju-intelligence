@@ -7,6 +7,36 @@ on:
       - main
 
 jobs:
+  lead-customer-continuity-pg17:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: maju_continuity_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d maju_continuity_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify lead-customer continuity on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=20261029-lead-customer-continuity.pg16.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
