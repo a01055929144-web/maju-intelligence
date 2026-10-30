@@ -20,7 +20,18 @@ describe("store area source profile", () => {
       { areaRaw: 100_001, industry: "카페", source: "sample" }
     ], { estimatedSourceRows: 100, minimumIndustrySample: 2 });
 
-    expect(profile.actual).toMatchObject({ blank: 1, invalid: 1, medianSqm: 20, positive: 2, rows: 5, zero: 1 });
+    expect(profile.actual).toMatchObject({
+      blank: 1,
+      blankRate: 20,
+      invalid: 1,
+      invalidRate: 20,
+      medianSqm: 20,
+      positive: 2,
+      positiveRate: 40,
+      rows: 5,
+      zero: 1,
+      zeroRate: 20
+    });
     expect(profile.byIndustry).toEqual([{ industry: "한식", medianSqm: 20, positiveRows: 2, sampledRows: 4 }]);
     expect(profile.estimated).toEqual({ blank: 20, invalid: 20, positive: 40, sourceRows: 100, zero: 20 });
   });
