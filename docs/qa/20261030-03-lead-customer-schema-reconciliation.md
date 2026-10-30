@@ -44,6 +44,7 @@ PR #84의 보존·권한 원칙은 유지할 수 있지만, `docs/sql-drafts/202
 - 운영에 이미 존재하는 `normalized_customers(company_id, id)` 후보키를 제약 이름이 아니라 실제 컬럼 순서로 검사한다.
 - `business_permit_leads(company_id, matched_customer_id)` 인덱스와 복합 FK를 추가했다.
 - 복합 FK는 거래처 삭제 시 `matched_customer_id`만 NULL로 만들고 lead의 `company_id`는 유지한다.
+- 팩스는 앱과 같은 국내 번호 접두·길이 규칙을 통과한 값만 이어받고, 기존 리드의 잘못된 값은 `null`로 처리한다.
 - 운영 읽기 감사에서 현재 매칭 행은 0건이고 교차 회사 매칭도 0건이었다. 적용 시점에는 `VALIDATE CONSTRAINT`가 다시 전체 기존 행을 검사한다.
 
 ## 적용 승인 전에 남은 일

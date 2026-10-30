@@ -110,10 +110,12 @@ insert into public.company_members(company_id, user_id, role, permission_role, s
   ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003', 'owner', 'staff', 'active');
 insert into public.normalized_customers(id, company_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
-  ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
+  ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002'),
+  ('40000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001');
 
-insert into public.business_permit_leads(id, company_id) values
-  ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001');
+insert into public.business_permit_leads(id, company_id, fax) values
+  ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', null),
+  ('60000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'FAX 1234');
 
 -- matched_customer_id는 대상 UUID뿐 아니라 회사까지 일치해야 한다.
 do $$
@@ -124,6 +126,24 @@ begin
   raise exception 'cross_company_matched_customer_should_be_forbidden';
 exception
   when foreign_key_violation then null;
+end $$;
+
+-- 앱 normalizeFaxNumberInput이 거부하는 값은 거래처에 복사하지 않는다.
+select public.apply_lead_customer_continuity_draft(
+  '10000000-0000-0000-0000-000000000001',
+  '60000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000003',
+  true
+);
+do $$
+begin
+  if exists (
+    select 1 from public.normalized_customers
+    where id='40000000-0000-0000-0000-000000000003'
+      and (fax is not null or contact_channels_updated_at is not null)
+  ) then
+    raise exception 'malformed_fax_was_copied_to_customer';
+  end if;
 end $$;
 
 -- 100일 유선, 100일 010, 정확히 90일 유선, 89일 유선, 타 회사, 유선→010 혼합, 앞자리 0 누락 휴대폰.

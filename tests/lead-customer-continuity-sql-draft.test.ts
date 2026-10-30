@@ -26,6 +26,8 @@ describe("lead to customer continuity SQL draft", () => {
   it("fills only empty customer fields and preserves the matched customer link", () => {
     expect(sql).toMatch(/coalesce\(nullif\(customer\.phone, ''\)/i);
     expect(sql).toMatch(/coalesce\(nullif\(customer\.fax, ''\)/i);
+    expect(sql).toContain("v_fax !~ '^(0[0-9]{8,10}|1[568][0-9]{6})$'");
+    expect(pg16Test).toContain("malformed_fax_was_copied_to_customer");
     expect(sql).toMatch(/matched_customer_id = p_customer_id/i);
     expect(sql).toMatch(/hours\.source = 'manual'/i);
     expect(sql).toContain("https://www.instagram.com/");

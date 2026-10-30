@@ -319,6 +319,11 @@ begin
 
   -- domains/lead/contact-channels.ts의 정규화·허용 규칙과 동등하게 맞춘다.
   v_fax := nullif(regexp_replace(coalesce(v_lead.fax, ''), '[^0-9]', '', 'g'), '');
+  if v_fax is not null
+    and v_fax !~ '^(0[0-9]{8,10}|1[568][0-9]{6})$'
+  then
+    v_fax := null;
+  end if;
 
   v_instagram_match := regexp_match(
     btrim(coalesce(v_lead.instagram_url, '')),
