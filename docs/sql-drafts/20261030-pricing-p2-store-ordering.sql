@@ -275,7 +275,6 @@ declare
   v_price bigint;
   v_tax_type text;
   v_includes_tax boolean;
-  v_has_agreement boolean;
   v_market boolean;
   v_saved public.store_order_lines%rowtype;
   v_taxable bigint := 0;
@@ -381,7 +380,6 @@ begin
     v_tax_type := v_print_line->>'taxType';
     v_price := (v_print_line->>'price')::bigint;
     v_includes_tax := false;
-    v_has_agreement := false;
     select * into v_agreement from public.customer_price_agreements a
       where a.company_id = v_link.company_id and a.customer_id = v_link.customer_id
         and a.product_catalog_id = v_product_id and a.status = 'active'
@@ -389,7 +387,6 @@ begin
         and (a.effective_until is null or a.effective_until >= p_delivery_date)
         and a.sales_unit = v_print_line->>'unit' limit 1;
     if found then
-      v_has_agreement := true;
       v_price := v_agreement.unit_price;
       v_tax_type := v_agreement.tax_type;
       v_includes_tax := v_agreement.price_includes_tax;
@@ -411,11 +408,8 @@ begin
         or (v_promotion.stock is not null and v_quantity + v_reserved > v_promotion.stock) then
         raise exception 'Promotion unavailable';
       end if;
-      if not v_has_agreement then
-        v_price := v_promotion.price;
-        v_tax_type := v_promotion.tax_type;
-        v_includes_tax := false;
-      end if;
+      -- The customer saw the published document snapshot. A later promotion edit
+      -- may change stock/availability, but must not silently change its price or tax.
     end if;
     if not v_market and v_price * v_quantity > 9007199254740991 then
       raise exception 'Order amount too large';
