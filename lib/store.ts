@@ -10721,59 +10721,23 @@ export type ActiveLeadDoNotContact = {
   maskedValue: string;
 };
 
-function maskDoNotContactValue(channel: LeadContactChannel, value: string) {
-  if (value.length < 7) return "***";
-  if (channel === "sms" || channel === "fax") return `${value.slice(0, 3)}-****-${value.slice(-4)}`;
-  if (channel === "email") return `${value.slice(0, 1)}***@${value.split("@")[1] || ""}`;
-  return `***${value.slice(-4)}`;
-}
-
 export async function listActiveLeadDoNotContacts(companyId: string, leadId: string): Promise<ActiveLeadDoNotContact[]> {
   if (!isProductionStoreConfigured()) return [];
-  const leads = await supabaseRequest<Array<{
-    email: string | null;
-    fax: string | null;
-    instagram_url: string | null;
-    naver_talktalk_url: string | null;
-    phone: string | null;
-  }>>(
-    `business_permit_leads?select=phone,fax,email,instagram_url,naver_talktalk_url&id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&limit=1`
-  );
-  const lead = leads[0];
-  if (!lead) return [];
-  const expected = new Map<LeadContactChannel, string>();
-  const values: Array<[LeadContactChannel, string | null]> = [
-    ["sms", lead.phone],
-    ["fax", lead.fax],
-    ["email", lead.email],
-    ["instagram", lead.instagram_url],
-    ["talktalk", lead.naver_talktalk_url]
-  ];
-  for (const [channel, value] of values) {
-    const normalized = normalizeDoNotContactValue(channel, value);
-    if (normalized) expected.set(channel, normalized);
-  }
   type DncRow = {
     blocked_at: string;
     channel: LeadContactChannel;
     id: string;
-    normalized_value: string;
-    source_lead_id: string | null;
+    masked_value: string;
   };
-  const valueLookups = Array.from(expected.entries()).map(([channel, normalizedValue]) =>
-    supabaseRequest<DncRow[]>(
-      `company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at&company_id=eq.${encodeURIComponent(companyId)}&channel=eq.${encodeURIComponent(channel)}&normalized_value=eq.${encodeURIComponent(normalizedValue)}&released_at=is.null&limit=1`
-    )
-  );
-  const visitLookup = supabaseRequest<DncRow[]>(
-    `company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at&company_id=eq.${encodeURIComponent(companyId)}&channel=eq.visit&source_lead_id=eq.${encodeURIComponent(leadId)}&released_at=is.null&limit=1`
-  );
-  const rows = (await Promise.all([...valueLookups, visitLookup])).flat();
+  const rows = await supabaseRequest<DncRow[]>("rpc/list_active_lead_do_not_contacts", {
+    method: "POST",
+    body: JSON.stringify({ p_company_id: companyId, p_lead_id: leadId })
+  });
   return rows.map((row) => ({
       blockedAt: row.blocked_at,
       channel: row.channel,
       dncId: row.id,
-      maskedValue: maskDoNotContactValue(row.channel, row.normalized_value)
+      maskedValue: row.masked_value
     }));
 }
 

@@ -40,8 +40,8 @@
 ### 2. SQL 적용 후 플래그 OFF 검증
 
 1. 백업과 현재 함수·권한 상태를 기록한 뒤 승인된 SQL만 적용한다.
-2. `normalize_dnc_value`, `mask_dnc_value`, 등록·해제 RPC가 예상 서명으로 존재하는지 확인한다.
-3. 함수가 `security invoker`인지, `anon`·`authenticated` 실행 권한이 없고 `service_role`만 실행 가능한지 확인한다.
+2. `normalize_dnc_value`, `mask_dnc_value`, 등록·해제·조회 RPC가 예상 서명으로 존재하는지 확인한다.
+3. 다섯 함수가 `security invoker`인지, `PUBLIC`·`anon`·`authenticated` 실행 권한이 없고 `service_role`만 실행 가능한지 확인한다.
 4. 애플리케이션은 `LEAD_DNC_WRITE_ENABLED=false` 상태로 배포한다.
 5. GET 응답이 `enabled=false`, 빈 `entries`, 올바른 `canRelease`만 반환하고 화면의 등록·해제 버튼이 비활성인지 확인한다.
 6. 이 단계에서는 RPC와 POST·DELETE API를 호출하지 않는다.

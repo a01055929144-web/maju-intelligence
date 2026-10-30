@@ -1,4 +1,6 @@
 -- Claude 검토용 초안. 운영 적용 금지.
+-- 2026-10-30 조회 RPC 추가: 연락처 원문이 GET URL·접근 로그에 남는 경로를 제거한다.
+-- 이전 2개 함수 승인과 별개로 이 3개 함수 묶음을 다시 검토·승인받기 전에는 기능 플래그를 켜지 않는다.
 -- SECURITY INVOKER + service_role 전용 호출. 앱 기능 플래그는 기본 OFF를 유지한다.
 -- 해제 활성화 전제: 서버 DELETE route가 서명된 customer session의 company_id와 owner/manager 역할을 검증하고,
 -- legacy owner는 활성 legacy credential/company 연결을 DNC 전용 helper로 매 요청 재검증한다.
@@ -204,13 +206,55 @@ begin
 end;
 $$;
 
+-- 조회도 POST RPC로 처리한다. 연락처 원문을 PostgREST GET URL에 넣지 않고,
+-- 서버에는 이미 가린 값만 반환한다.
+create or replace function public.list_active_lead_do_not_contacts(
+  p_company_id uuid, p_lead_id uuid
+) returns table(id uuid, channel text, masked_value text, blocked_at timestamptz)
+language sql stable security invoker set search_path = ''
+as $$
+  with lead as (
+    select lead_row.* from public.business_permit_leads lead_row
+    where lead_row.company_id = p_company_id and lead_row.id = p_lead_id
+      and lead_row.merged_into_lead_id is null
+  ), contact_values as (
+    select lead.company_id, channels.channel, channels.normalized_value
+    from lead
+    cross join lateral (values
+      ('sms', public.normalize_dnc_value('sms', lead.phone)),
+      ('fax', public.normalize_dnc_value('fax', lead.fax)),
+      ('email', public.normalize_dnc_value('email', lead.email)),
+      ('instagram', public.normalize_dnc_value('instagram', lead.instagram_url)),
+      ('talktalk', public.normalize_dnc_value('talktalk', lead.naver_talktalk_url))
+    ) as channels(channel, normalized_value)
+    where channels.normalized_value is not null
+  )
+  select dnc.id, dnc.channel,
+    public.mask_dnc_value(dnc.channel, dnc.normalized_value), dnc.blocked_at
+  from contact_values values_for_lead
+  join public.company_do_not_contact dnc
+    on dnc.company_id = values_for_lead.company_id
+   and dnc.channel = values_for_lead.channel
+   and dnc.normalized_value = values_for_lead.normalized_value
+   and dnc.released_at is null
+  union all
+  select dnc.id, dnc.channel,
+    public.mask_dnc_value(dnc.channel, dnc.normalized_value), dnc.blocked_at
+  from lead
+  join public.company_do_not_contact dnc
+    on dnc.company_id = lead.company_id and dnc.channel = 'visit'
+   and dnc.source_lead_id = lead.id and dnc.released_at is null;
+$$;
+
 revoke all on function public.normalize_dnc_value(text,text) from public, anon, authenticated;
 revoke all on function public.mask_dnc_value(text,text) from public, anon, authenticated;
 grant execute on function public.normalize_dnc_value(text,text) to service_role;
 grant execute on function public.mask_dnc_value(text,text) to service_role;
 revoke all on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) from public, anon, authenticated;
 revoke all on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) from public, anon, authenticated;
+revoke all on function public.list_active_lead_do_not_contacts(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.register_lead_do_not_contact(uuid,uuid,text,text,text,uuid,text) to service_role;
 grant execute on function public.release_lead_do_not_contact(uuid,uuid,text,text,uuid,text) to service_role;
+grant execute on function public.list_active_lead_do_not_contacts(uuid,uuid) to service_role;
 
 commit;

@@ -160,11 +160,10 @@ describe("lead outreach governance", () => {
     expect(route).toContain("companyId: scope.companyId!");
     expect(storeSource).toContain('p_actor_kind: input.actorKind');
     expect(storeSource).toContain('rpc/release_lead_do_not_contact');
-    expect(storeSource).toContain("company_do_not_contact?select=id,channel,normalized_value,source_lead_id,blocked_at");
-    expect(storeSource).toContain("maskedValue: maskDoNotContactValue(row.channel, row.normalized_value)");
-    expect(storeSource).toContain("&channel=eq.${encodeURIComponent(channel)}&normalized_value=eq.${encodeURIComponent(normalizedValue)}&released_at=is.null&limit=1");
-    expect(storeSource).toContain("&channel=eq.visit&source_lead_id=eq.${encodeURIComponent(leadId)}&released_at=is.null&limit=1");
-    expect(storeSource).not.toContain("&order=blocked_at.desc&limit=1000");
+    expect(storeSource).toContain('rpc/list_active_lead_do_not_contacts');
+    expect(storeSource).toContain("maskedValue: row.masked_value");
+    expect(sql).toContain("public.mask_dnc_value(dnc.channel, dnc.normalized_value)");
+    expect(sql).toContain("lead_row.company_id = p_company_id and lead_row.id = p_lead_id");
     expect(route).toContain("await isActiveLegacyOwnerSession({");
     expect(route).toContain("email: scope.customerSession.email");
     expect(route).toContain("}).catch(() => false)");
