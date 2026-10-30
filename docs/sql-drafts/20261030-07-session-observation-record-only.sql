@@ -66,13 +66,15 @@ begin
   end if;
 
   -- service_role은 RLS를 우회하므로 함수 안에서 회사·사용자·현재 멤버십을 다시 고정한다.
+  -- 회사·사용자 멤버십 행을 관찰 직렬화 키로 사용한다. 서로 다른 기기의 동시 호출도
+  -- 먼저 커밋된 관찰을 본 뒤 활성 기기 수를 세도록 FOR UPDATE가 필요하다.
   perform 1 from public.company_members as member
    where member.company_id = p_company_id and member.user_id = p_user_id
      and member.status = 'active'
      and (coalesce(member.permission_role,
        case when member.role = 'owner' then 'owner' else 'staff' end) <> 'temporary'
        or member.membership_expires_at > v_now)
-   for share;
+   for update;
   if not found then
     raise exception using errcode = '42501', message = 'active company membership required';
   end if;

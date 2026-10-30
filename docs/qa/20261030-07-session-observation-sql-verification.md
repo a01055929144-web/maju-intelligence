@@ -27,7 +27,8 @@
 11. 회사 삭제와 사용자 계정 삭제 시 기존 cascade FK가 관찰 행을 삭제한다.
 12. 실행 전후 `staff_security_alerts` 행 수와 정의가 동일하다.
 13. 각 필수 인자(`company_id`, `user_id`, 두 해시, source, expiry)를 하나씩 `NULL`로 호출하면 기록 없이 `22023`으로 거절된다.
-14. 트랜잭션 A가 활성 멤버 행을 `FOR SHARE`로 잠근 채 관찰을 진행하는 동안 트랜잭션 B의 `status`, `permission_role`, `membership_expires_at` 변경은 대기한다. A 커밋 후 B가 비활성화하면 다음 관찰은 `42501`이고 기존 행의 `last_seen_at`은 바뀌지 않는다.
+14. 트랜잭션 A가 활성 멤버 행을 `FOR UPDATE`로 잠근 채 관찰을 진행하는 동안 트랜잭션 B의 `status`, `permission_role`, `membership_expires_at` 변경은 대기한다. A 커밋 후 B가 비활성화하면 다음 관찰은 `42501`이고 기존 행의 `last_seen_at`은 바뀌지 않는다.
+15. 빈 상태에서 서로 다른 기기·세션 A/B를 두 트랜잭션으로 동시에 호출한다. 멤버십 행의 `FOR UPDATE` 때문에 한 호출은 대기해야 하며, 두 호출이 끝난 뒤 결과 중 하나는 반드시 `active_device_count=2`, `concurrent_devices=true`여야 한다. 최종 행도 서로 다른 기기 2개여야 한다.
 
 ## 정적·회귀 확인
 
