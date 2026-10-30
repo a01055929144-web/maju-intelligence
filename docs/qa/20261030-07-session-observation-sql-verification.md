@@ -35,14 +35,18 @@
 
 ## 정적·회귀 확인
 
+- 재현 fixture와 assertion은 각각 `tests/sql/session-observation-record-only-fixture.sql`, `tests/sql/session-observation-record-only-assertions.sql`에 둔다. fixture → 검토용 SQL의 바깥 `begin`/`rollback`을 제외한 본문 → assertion 순서로 격리 DB에 입력한다.
+- 실제 두 연결의 직렬화는 같은 격리 DB에서 `tests/sql/run-session-observation-concurrency.sh`를 실행해 A=`true/1/false`, B=`true/2/true`, 최종 기기 수 2를 확인한다.
 - PostgreSQL 16에서 트랜잭션 실행 후 마지막 `rollback`으로 스키마가 원상 복구되는지 확인한다.
 - `EXPLAIN (COSTS OFF)`로 활성 기기 판정 인덱스 사용 가능성을 확인한다.
 - 승인된 마이그레이션 적용 전 기존 REST upsert를 RPC로 바꾸지 않는다.
 - 연결 승인 후 테스트 환경에서만 플래그를 켜고 서버 해시·현재 멤버십·인증 비차단 정책을 회귀 확인한다.
 - 앱 내 알림, 이메일, 자동 잠금, 강제 로그아웃은 별도 승인 전 추가하지 않는다.
 
-## 현재 로컬 제약
+## 격리 PostgreSQL 16 실행 결과
 
-- 로컬 `psql`은 설치되어 있지 않다.
-- Docker CLI는 있으나 엔진 조회가 응답하지 않았고, 디스크 여유가 부족해 PostgreSQL 16 이미지를 새로 받지 않는다.
-- 이번 변경에서는 SQL 실행 결과를 주장하지 않는다. PR의 Linux CI 또는 격리 환경에서 위 시나리오를 실행한다.
+- 2026-10-30 KST에 Docker Desktop WSL에 포함된 PostgreSQL 16.14로 운영 연결 없이 검증했다. 새 이미지는 받지 않았다.
+- fixture → 검토용 SQL 본문 → assertion 실행 결과 `session observation PG16 assertions passed`를 확인했다.
+- 별도 두 연결 병행 실행 결과 A=`true/1/false`, B=`true/2/true`, 최종 기기 수 2를 확인했다.
+- 확인 범위: 함수/제약 생성, NULL 거절, 회사 격리, 비활성·만료 멤버 거절, 동일 세션 해시의 두 기기 관찰, 5분 heartbeat dedupe, 만료 세션 재개, 알림 테이블 무변경.
+- 임시 데이터 디렉터리와 소켓은 검증 후 제거한다. 이 결과는 검토용 초안 검증이며 운영 적용 승인을 의미하지 않는다.
