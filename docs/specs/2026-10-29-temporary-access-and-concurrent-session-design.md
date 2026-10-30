@@ -90,11 +90,16 @@ heartbeat는 인증이 완료된 서버 요청에서만 최대 5분에 한 번 �
 
 - 인증 세션 ID와 회사·사용자 연결
 - 철회/만료/최근 관측 시각
-- 동일 세션의 중복 행 금지
+- 동일 기기에서 동일 세션의 중복 행 금지. 같은 세션이 다른 기기에서 재사용되면 두 기기를 각각 관찰해 동시 사용으로 판정
 - 알림 dedupe key
 - `anon`, `authenticated`의 직접 접근 차단 및 RLS
 
 검토용 SQL은 `docs/sql-drafts/20261029-07-temporary-access-concurrent-session.sql`에 둔다. 기존 운영 마이그레이션을 수정하지 않으며, SQL Editor 실행 대상으로 간주하지 않는다.
+
+기록 전용 단계의 전역 5분 dedupe와 동시 기기 **판정만** 다루는 후속안은
+`docs/sql-drafts/20261030-07-session-observation-record-only.sql`에 분리한다. 이 후속안은
+`staff_security_alerts`를 변경하거나 쓰지 않으며, 검증 절차는
+`docs/qa/20261030-07-session-observation-sql-verification.md`를 따른다.
 
 ## 6. 단계별 구현안
 
