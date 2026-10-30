@@ -71,12 +71,22 @@ begin
   perform 1 from public.company_members as member
    where member.company_id = p_company_id and member.user_id = p_user_id
      and member.status = 'active'
-     and (coalesce(member.permission_role,
-       case when member.role = 'owner' then 'owner' else 'staff' end) <> 'temporary'
-       or member.membership_expires_at > v_now)
    for update;
   if not found then
     raise exception using errcode = '42501', message = 'active company membership required';
+  end if;
+
+  -- 잠금 대기 시간을 반영해 만료 경계를 다시 계산한다.
+  v_now := clock_timestamp();
+  if p_expires_at <= v_now or not exists (
+    select 1 from public.company_members as member
+     where member.company_id = p_company_id and member.user_id = p_user_id
+       and member.status = 'active'
+       and (coalesce(member.permission_role,
+         case when member.role = 'owner' then 'owner' else 'staff' end) <> 'temporary'
+         or member.membership_expires_at > v_now)
+  ) then
+    raise exception using errcode = '42501', message = 'active unexpired session and company membership required';
   end if;
 
   insert into public.staff_account_sessions as existing (
