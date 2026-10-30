@@ -97,6 +97,21 @@ create table public.common_revision_history (
 
 \ir 20261029-lead-customer-continuity.sql
 
+-- 수동 익명화 operator는 직접 로그인하거나 다른 역할에 부여된 상태여서는 안 된다.
+do $$
+declare v_operator_oid oid;
+begin
+  select oid into v_operator_oid
+  from pg_roles
+  where rolname = 'maju_revision_redaction_operator' and not rolcanlogin;
+  if v_operator_oid is null then
+    raise exception 'redaction_operator_is_missing_or_can_login';
+  end if;
+  if exists (select 1 from pg_auth_members where roleid = v_operator_oid) then
+    raise exception 'redaction_operator_has_members';
+  end if;
+end $$;
+
 insert into public.companies(id) values
   ('10000000-0000-0000-0000-000000000001'),
   ('20000000-0000-0000-0000-000000000002');

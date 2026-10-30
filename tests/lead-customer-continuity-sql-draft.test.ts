@@ -61,6 +61,9 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/approved_by_user_id uuid references public\.app_users\(id\) on delete set null/i);
     expect(sql).not.toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*service_role/i);
     expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*maju_revision_redaction_operator/i);
+    expect(sql).toContain("maju_revision_redaction_operator_must_be_nologin");
+    expect(sql).toContain("maju_revision_redaction_operator_must_have_no_members");
+    expect(pg16Test).toContain("redaction_operator_has_members");
     expect(pg16Test).toContain("100_day_landline_not_redacted");
     expect(pg16Test).toContain("100_day_mobile_was_redacted");
     expect(pg16Test).toContain("exactly_90_day_landline_was_redacted");

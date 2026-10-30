@@ -259,9 +259,25 @@ revoke all on function maju_private.redact_expired_customer_revision_values(time
 revoke all on function maju_private.anonymize_customer_revision_values_for_request(uuid, uuid, uuid, text, boolean, timestamptz) from public, anon, authenticated, service_role;
 -- service_role에는 의도적으로 실행권한을 주지 않는다. 승인자 UUID를 인자로 받으므로 일반 서버 호출자가
 -- 다른 owner/manager UUID를 넣어 승인을 가장할 수 있다. 별도 운영자 자격으로 승인된 내부 작업만 실행한다.
-do $$ begin
-  if not exists (select 1 from pg_roles where rolname = 'maju_revision_redaction_operator') then
+do $$
+declare
+  v_operator_oid oid;
+  v_operator_can_login boolean;
+begin
+  select oid, rolcanlogin
+    into v_operator_oid, v_operator_can_login
+  from pg_roles
+  where rolname = 'maju_revision_redaction_operator';
+
+  if v_operator_oid is null then
     create role maju_revision_redaction_operator nologin;
+  elsif v_operator_can_login then
+    raise exception 'maju_revision_redaction_operator_must_be_nologin';
+  elsif exists (
+    select 1 from pg_auth_members membership
+    where membership.roleid = v_operator_oid
+  ) then
+    raise exception 'maju_revision_redaction_operator_must_have_no_members';
   end if;
 end $$;
 grant usage on schema maju_private to maju_revision_redaction_operator;
