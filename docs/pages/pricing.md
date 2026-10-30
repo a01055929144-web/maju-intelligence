@@ -65,3 +65,37 @@ OFF 시 화면/API 404 및 신규 테이블 조회 없음. 메뉴 링크는 추�
 - npm run build: PASS. 요청 시 플래그 판정을 위한 dynamic route 최종 빌드 재확인.
 - 보존: 기존 견적·계약·상품 원장 판매가 파일 미수정. 운영 SQL·main push 없음.
 - 보완점: 원가 기준은 상품 원장 purchase_price, 기존 공급처 가격 동기화 및 P1~P3는 범위 밖. 외부 캔버스와의 시각적 일치는 미확인이나 저장소 텍스트판의 ①-2 구성은 반영.
+
+# Pricing P1 추가 범위 (2026-10-30)
+
+## Owner / Allowed files
+소유 pricing, 관련 product(기존 상품 읽기), organization(권한/작성자 경계).
+허용: domains/pricing/document.ts, application/pricing/documents.ts, lib/pricing/document-client.ts 및 documents-repository.ts, app/api/pricing-documents/route.ts, app/revenue/pricing/documents/page.tsx, components/pricing-document*.tsx, docs/sql-drafts/20261030-pricing-p1.sql, tests/pricing-p1*.test.ts, tests/sql/pricing-p1*.sql, scripts/test-pricing-p1*.mjs, 이 문서.
+
+## P1 흐름
+- 단가표/작성자 전용 견적서: 새로 작성, 현재 가격의 품목 선택, 노출명/과세 확인, 직접 단가 및 대표·관리자의 일괄/개별 마진, 순서/숨김/표시, 초안 저장, 버전 확정, 버전 선택, 견적서로 복사.
+- 버전은 공개에 안전한 필드만 화이트리스트로 저장하고 수정할 수 없다. 회사·문서·초안 수정 번호로 중복 확정 및 저장 충돌을 방지한다.
+- 견적은 같은 회사 대표·관리자라도 다른 작성자의 문서를 볼 수 없다. 단가표는 회사 내부에서 공용이며 대표·관리자만 편집한다. 영업직원은 판매가만 조회하고 자기 견적·개인 묶음을 작성한다.
+- 행사/임박: 일반 상품 연결, 직원 관리명과 매장 노출명 분리, 매입가 대비 마진, 날짜, 선택 재고·매장별 한도, 단가표 표시 허용. 확정 판매가는 보존하고 잔여 수량은 조회/출력 시 현재 값으로 갱신한다. 종료·재고 0 및 삭제된 행사 줄은 버전 출력에서도 제외한다.
+- 묶음/템플릿: 품목 번호·순서만 저장, 공용/개인, 생성·수정·복사·삭제. 상품 코드 첫 열(선택 머리글 상품코드)의 xlsx 가져오기. 불러올 때 현재 가격을 재계산한다.
+- 회사 인쇄 기본값(회사명·담당/연락처·하단 안내)을 새 문서에 복사한다. 기존 확정본은 변경하지 않는다.
+- 하나의 안전한 출력 모델로 온라인 휴대폰/오프라인 A4, 3테마, 카드/표/자동, 브랜드/규격/가격 표시, 페이지별 PNG 및 PDF·인쇄를 제공한다. 만료 후 가격은 숨기고 품목명은 유지한다.
+
+## 배포 및 보존
+PRICE_SHEETS_ENABLED 기본 OFF + 보류 회사 허용 필요. 보류 메뉴 링크 추가 없음. 운영 DB/기존 견적·계약/공개 견적 API 수정 없음.
+SQL은 새 폐기용 로컬 PG16 DB에 한 번 적용하는 초안이다. P0 초안 선행 필요. 운영 적용 금지, 기존 DB에 덧붙여 재실행하지 않는다. RLS direct deny, RPC service_role 전용, 회사 FK·회사 삭제 cascade.
+매장별 공개 링크/주문·재고 차감·결제는 P2 이후이며 이번 P1에서 가짜 링크나 주문 기능을 노출하지 않는다. 행사 매장별 한도는 P1에서 저장하며 주문 확정 시 적용은 주문 도메인 단계에서 연결한다.
+
+
+## P1 검증 (2026-10-30)
+- 최신 main e5e049b 기준 기능 브랜치 codex/09-pricing-p1. 시작/커밋 전 확인에서 충돌 없음. 사용자 백업·P0 작업 폴더 소스 보존.
+- 전체 테스트: 92 files / 500 tests PASS. P1 화이트리스트·만료·행사·페이지·과세 미확정·출처/권한 회귀 포함.
+- npx tsc --noEmit, npm run lint, npm run build PASS. 기존 파일 경고는 유지하고 새 파일 오류 없음.
+- API 인증 경계: 141 routes PASS.
+- 로컬 PG16 새 DB: P0+P1 초안 생성, 회사/작성자 경계, 판매가·노출명 화이트리스트, 변경 전 버전 보존, 중복 확정, 동시 확정/저장 충돌, 공용/개인 묶음·템플릿 수정/삭제, 행사 품절/삭제, 인쇄 기본값과 회사 삭제 cascade PASS.
+- 실제 브라우저→API→로컬 PG16→응답: 단가표 저장/확정/버전 1 보존, 영업직원 견적/다른 작성자 404, 원가·관리명 비노출, 묶음/템플릿 생성·복사·현재 가격 불러오기, 행사 등록/견적 삽입/품절 후 PNG 제외 PASS.
+- 실제 브라우저: 과세 미확정 확인 전 저장 차단 및 확인 후 진행, XLSX 상품 코드 읽기, 390px 화면, 1588×2246 PNG 및 A4 PDF 생성 PASS.
+- 긴 제목·품목명·하단 안내와 21개 품목을 사용한 A4 11쪽: 내용 넘침 없음, PDF 실제 쪽 수 일치 PASS. 출력 모델과 실제 PNG를 시각 확인.
+- 브라우저 스크립트는 합성 계정/상품·loopback RPC 어댑터만 사용하며 운영 Supabase/메일·메시지 전송을 호출하지 않는다. 실행 명령: PRICING_P1_LOCAL_DATABASE_URL을 새 pricing_p1_test* DB로 지정해 scripts/test-pricing-p1-local.mjs, 그 초기화된 DB에서 scripts/test-pricing-p1-browser.mjs 실행. 산출물은 저장소 밖 ../outputs/pricing-p1-browser에 생성.
+- 확인한 문제와 보완: PG16 임시 리소스/한글 경로 제한은 영문 전용 테스트 경로로 해결. Next 내부 localhost 정규화에 따른 출처 검사 불일치는 실제 Host 기준으로 보완하고 회귀 테스트. 테스트 XLSX는 메모리 버퍼→Node 파일 저장으로 경로 의존을 제거.
+- PR #98 리뷰 보완: publish/versions는 공통 SQL 응답 함수로 현재 행사 가능 여부·수량을 제공한다. 과거 버전 버튼은 다시 조회하고 같은 버전의 상태가 달라지면 미리보기를 재생성한다. 저장 후 품절→확정 및 수량 변경→과거 버전 열기에서 내보내기 전 화면 일치를 브라우저로 검증한다.
