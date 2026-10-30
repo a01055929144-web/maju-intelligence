@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
+import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; brand: string; spec: string; unit: string;
@@ -221,7 +221,9 @@ export function StorefrontWorkspace() {
         <p className="mt-1 text-slate-600">{order.lines.map((line) => `${line.product_name} ${line.quantity}`).join(" · ")}</p>
         <p>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</p>
         <div className="mt-2 flex gap-2"><button className="min-h-11 rounded border px-3" onClick={() => fromOrder(order, false)}>다시 담기</button>
-          {order.status === "submitted" && <button className="min-h-11 rounded border px-3" onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div>
+          {order.status === "submitted" && store.priceAvailable && store.policy.weekdays.length > 0 &&
+            canOrderForDelivery(order.deliveryDate, store.policy) &&
+            <button className="min-h-11 rounded border px-3" onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div>
       </article>)}
       {store.priceAvailable && <div className="flex items-center justify-between gap-2 text-sm">
         <button disabled={data?.historyPage === 1 || busy} className="min-h-11 rounded border px-3 disabled:opacity-50"
