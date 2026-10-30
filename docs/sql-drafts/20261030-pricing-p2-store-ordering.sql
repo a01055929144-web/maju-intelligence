@@ -417,6 +417,9 @@ begin
         v_includes_tax := false;
       end if;
     end if;
+    if not v_market and v_price * v_quantity > 9007199254740991 then
+      raise exception 'Order amount too large';
+    end if;
     insert into public.store_order_lines(company_id,order_id,product_id,promotion_id,
       product_name,specification,sales_unit,quantity,unit_price,tax_type,
       price_includes_tax,is_market_price)
@@ -435,6 +438,9 @@ begin
     and v_market_count = 0 then raise exception 'Minimum order not met'; end if;
   if v_policy <> 'fee' or v_taxable + v_exempt + v_tax >= v_minimum then
     v_fee := 0;
+  end if;
+  if v_taxable + v_exempt + v_tax + v_fee > 9007199254740991 then
+    raise exception 'Order amount too large';
   end if;
   update public.store_orders set
     delivery_date = p_delivery_date, request_memo = p_memo,

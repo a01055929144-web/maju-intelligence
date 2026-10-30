@@ -116,8 +116,11 @@ export function summarizeOrder(lines: readonly OrderLineInput[], policy: Deliver
     } else exemptSupply += supply;
   }
   const knownSubtotal = taxableSupply + exemptSupply + tax;
+  if (!Number.isSafeInteger(knownSubtotal)) throw new Error("주문 금액이 너무 큽니다.");
   const belowMinimum = knownSubtotal < policy.minimumAmount;
   const deliveryFee = belowMinimum && policy.minimumPolicy === "fee" ? policy.deliveryFee : 0;
+  if (!Number.isSafeInteger(knownSubtotal + deliveryFee))
+    throw new Error("주문 금액이 너무 큽니다.");
   return {
     taxableSupply, exemptSupply, tax, knownSubtotal, deliveryFee,
     knownTotal: knownSubtotal + deliveryFee,

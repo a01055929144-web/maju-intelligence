@@ -75,4 +75,11 @@ describe("postpay order totals", () => {
     ], { ...policy, minimumPolicy: "block" });
     expect(result.canSubmit).toBe(false);
   });
+
+  it("rejects an aggregate above the browser's exact integer range", () => {
+    expect(() => summarizeOrder([
+      { productId: "a", quantity: 5000, unitPrice: 1e12, taxType: "exempt" },
+      { productId: "b", quantity: 5000, unitPrice: 1e12, taxType: "exempt" },
+    ], policy)).toThrow("주문 금액이 너무 큽니다.");
+  });
 });
