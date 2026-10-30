@@ -41,8 +41,25 @@
 
 ### 격리된 PG16 검증 절차
 
-`scripts/test-pricing-p2-local.mjs`는 빈 `pricing_p2_test*` 이름의 로컬 PG16 데이터베이스에만 접속한다. P0→P1→P2 SQL 초안을 차례로 적용한 뒤 두 회사를 만들고, 교차 회사 링크 FK 거부, 공개 역할의 주문 RPC 실행 거부, 같은 요청 재시도 멱등, 마지막 행사 재고 1개를 두 요청이 동시에 주문할 때 1건만 성공하는지, 발행 가격 스냅샷과 회사별 주문 격리를 검증한다. 운영 DB에서 실행하지 않는다. 현재 개발 환경에는 작동하는 로컬 PostgreSQL 서비스가 없어 스크립트 실행 결과는 아직 없다. SQL 승인 전 이 검증을 통과시켜야 한다.
+`scripts/test-pricing-p2-local.mjs`는 빈 `pricing_p2_test*` 이름의 로컬 PG16 데이터베이스에만 접속한다. P0→P1→P2 SQL 초안을 차례로 적용한 뒤 두 회사를 만들고, 교차 회사 링크 FK 거부, 공개 역할의 주문 RPC 실행 거부, 같은 요청 재시도 멱등, 마지막 행사 재고 1개를 두 요청이 동시에 주문할 때 1건만 성공하는지, 발행 가격 스냅샷과 회사별 주문 격리를 검증한다. 운영 DB에서 실행하지 않는다. 2026-10-30 별도 loopback PG16 임시 서버와 새 폐기용 DB에서 실제 실행을 완료했다. 아래 회귀도 모두 통과했으며 운영 DB 검증이나 적용을 뜻하지 않는다.
 
 ## 뒤 단계
 
 P3가 주문 접수·출고·시세 단가 확정과 전표 생성을 담당한다. P4가 선결제와 PG 웹훅을 담당한다. P2 코드와 스키마는 이 기능을 미리 켜지 않는다.
+
+
+## 2026-10-30 보안·동시성 리뷰 보완
+
+Owner: pricing/order, Related: organization/product. 이번 보완 허용 파일: app/api/pricing-store-links/route.ts, app/api/storefront/route.ts, lib/pricing/storefront.ts, docs/sql-drafts/20261030-pricing-p2-store-ordering.sql, scripts/test-pricing-p2-local.mjs, tests/store-links-company-batch.test.ts, tests/storefront-route.test.ts, tests/storefront-contract.test.ts, 이 문서.
+
+- 주문 PUT도 서명 링크에서 회사 허용 여부를 확인한다. 호출자가 보낸 회사·금액은 사용하지 않는다.
+- 작성자 전용 견적의 링크 목록·상세·관리·발급은 작성자 키로 제한하고 SQL 발급도 같은 경계를 재검증한다. 단가표는 회사 공용을 유지한다.
+- 주문 수정은 변경할 배송일과 기존 배송일의 마감을 모두 확인한다. 링크 잠금을 기다린 뒤의 현재 KST 시각으로 마감·유효기간을 판단한다.
+- 계약 단가는 상품+판매 단위별 최신 적용일/id 순으로 선택해 화면과 SQL을 맞춘다. 계약이 없으면 발행 가격·과세 스냅샷을 보존한다.
+- PG16: 회사 전체 101곳을 50/50/1로 발급 후 재개, 동시 링크 발급 1개 생성, 서로 다른 매장의 마지막 행사 재고 1건만 성공, 다른 회사 FK·다른 매장 수정 거부, 다른 작성자 견적 발급 거부 및 본인 허용, 기존 주문 마감, 계약 단가 우선, 발행 가격·멱등 결과 보존 PASS.
+
+진행률은 P2 전체 요구사항 기준 약 60%로 본다. 링크·설정·후결제 기반의 검증이 진전됐으나, 첫 주문 본인 확인(SMS 제공사 미정), 사업자등록증/사진 저장·접근 통제, 출입 정보 암호화·열람 감사, 공개 주문 화면의 전체 브라우저 검증과 세부 UX는 남았다. 주문 접수 이후 재고 차감·출고·전표 연결은 P3와의 명시적 전환 규약이 필요하며, 현재 행사 예약량은 submitted 상태를 기준으로 한다. P3 전환 전 이 규약 없이 상태를 수동 변경하거나 플래그를 켜지 않는다. 선결제는 P4 범위다.
+
+PRICE_SHEETS_ENABLED 및 STORE_ORDERING_ENABLED 기본 OFF 유지. 운영 SQL 적용·main 병합·배포는 하지 않는다.
+
+최종 검증: 99 files / 524 tests, tsc, lint, production build PASS(기존 경고 유지). API 인증 경계 144 routes PASS. PG16에서 동시 주문 재시도·수정 충돌 및 행사 잠금 대기 후 링크 만료 거부도 PASS. 최신 main 75e7c2a 기준 충돌 없음. 공개 P2 화면의 브라우저 전체 검증은 미실시이며 위 로컬 검증과 구분한다.

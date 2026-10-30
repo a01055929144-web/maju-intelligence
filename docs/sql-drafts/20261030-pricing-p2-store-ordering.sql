@@ -134,7 +134,7 @@ create index if not exists storefront_link_events_link_idx
 -- company-wide run can resume at page 1 without sending duplicate links.
 create or replace function public.issue_storefront_links(
   p_company uuid, p_document_version uuid, p_links jsonb,
-  p_expires_at timestamptz, p_actor_user_id uuid default null
+  p_expires_at timestamptz, p_actor_user_id uuid default null, p_actor_key text default null
 ) returns table(issued_customer_id uuid, issued_link_id uuid,
   issued_token_nonce text, issued_token_hash text, was_created boolean)
 language plpgsql security invoker set search_path = public, pg_temp as $$
@@ -157,7 +157,9 @@ begin
   end if;
   perform 1 from public.companies c where c.id = p_company for update;
   if not found or not exists(select 1 from public.pricing_document_versions v
-    where v.company_id = p_company and v.id = p_document_version) then
+    join public.pricing_documents d on d.company_id=v.company_id and d.id=v.document_id
+    where v.company_id = p_company and v.id = p_document_version
+      and (d.kind='sheet' or d.owner_key=p_actor_key)) then
     raise exception 'Company or published version unavailable';
   end if;
   for v_item in select value from jsonb_array_elements(p_links) loop
@@ -197,9 +199,9 @@ begin
     end if;
   end loop;
 end $$;
-revoke all on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid)
+revoke all on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid)
+grant execute on function public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text)
   to service_role;
 
 create table if not exists public.store_orders (
@@ -336,7 +338,7 @@ declare
   v_minimum bigint;
   v_policy text;
   v_fee bigint;
-  v_day date := (now() at time zone 'Asia/Seoul')::date;
+  v_day date;
   v_fingerprint text;
   v_line jsonb;
   v_print_line jsonb;
@@ -369,6 +371,7 @@ begin
   select * into v_link from public.storefront_links
     where token_hash = p_token_hash for update;
   if not found then raise exception 'Link unavailable'; end if;
+  v_day := (clock_timestamp() at time zone 'Asia/Seoul')::date;
   v_fingerprint := md5(p_delivery_date::text || ':' || p_memo || ':' || p_lines::text || ':' || coalesce(p_order_id::text,''));
   select * into v_request from public.store_order_requests
     where company_id = v_link.company_id and link_id = v_link.id
@@ -377,7 +380,7 @@ begin
     if v_request.request_fingerprint <> v_fingerprint then raise exception 'Idempotency conflict'; end if;
     return v_request.result;
   end if;
-  if v_link.revoked_at is not null or v_link.expires_at <= now()
+  if v_link.revoked_at is not null or v_link.expires_at <= clock_timestamp()
     or not v_link.can_order then raise exception 'Link unavailable'; end if;
   select * into v_version from public.pricing_document_versions
     where company_id = v_link.company_id and id = v_link.document_version_id;
@@ -403,7 +406,7 @@ begin
   v_policy := coalesce(v_customer_rule.minimum_policy,v_territory.minimum_policy,v_company.minimum_policy);
   v_fee := coalesce(v_customer_rule.delivery_fee,v_territory.delivery_fee,v_company.delivery_fee);
   if v_weekdays is null or not extract(dow from p_delivery_date)::smallint = any(v_weekdays)
-    or (now() at time zone 'Asia/Seoul') >= (p_delivery_date - v_days)::timestamp + v_time
+    or (clock_timestamp() at time zone 'Asia/Seoul') >= (p_delivery_date - v_days)::timestamp + v_time
     or exists(select 1 from public.store_order_holidays h
       where h.company_id = v_link.company_id
         and (h.territory_id is null or h.territory_id = v_customer_territory)
@@ -425,6 +428,10 @@ begin
     if not found or v_order.status <> 'submitted' or p_expected_revision is null
       or v_order.revision is distinct from p_expected_revision
       then raise exception 'Order cannot be edited'; end if;
+    if (clock_timestamp() at time zone 'Asia/Seoul') >=
+      (v_order.delivery_date - v_days)::timestamp + v_time then
+      raise exception 'Order cannot be edited';
+    end if;
     delete from public.store_order_lines
       where company_id = v_link.company_id and order_id = v_order.id;
   end if;
@@ -434,6 +441,15 @@ begin
       and p.id in (select (value->>'promotionId')::uuid
         from jsonb_array_elements(p_lines) where value->>'promotionId' is not null)
     order by p.id for update;
+  -- A promotional row lock can wait past a link expiry or order cutoff.
+  v_day := (clock_timestamp() at time zone 'Asia/Seoul')::date;
+  if v_link.expires_at <= clock_timestamp() then raise exception 'Link unavailable'; end if;
+  if (v_version.content->>'validUntil')::date < v_day then raise exception 'Document prices expired'; end if;
+  if (clock_timestamp() at time zone 'Asia/Seoul') >= (p_delivery_date-v_days)::timestamp+v_time
+    or (p_order_id is not null and (clock_timestamp() at time zone 'Asia/Seoul') >=
+      (v_order.delivery_date-v_days)::timestamp+v_time) then
+    raise exception 'Delivery date unavailable';
+  end if;
   for v_line in select * from jsonb_array_elements(p_lines) loop
     v_product_id := (v_line->>'productId')::uuid;
     v_qty_raw := (v_line->>'quantity')::numeric;
@@ -460,7 +476,8 @@ begin
         and a.product_catalog_id = v_product_id and a.status = 'active'
         and a.effective_from <= p_delivery_date
         and (a.effective_until is null or a.effective_until >= p_delivery_date)
-        and a.sales_unit = v_print_line->>'unit' limit 1;
+        and a.sales_unit = v_print_line->>'unit'
+        order by a.effective_from desc,a.id desc limit 1;
     if found then
       v_price := v_agreement.unit_price;
       v_tax_type := v_agreement.tax_type;
@@ -623,7 +640,7 @@ commit;
 -- begin;
 -- drop table if exists public.store_product_preferences;
 -- drop function if exists public.place_store_order(text,date,jsonb,uuid,uuid,integer,text);
--- drop function if exists public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid);
+-- drop function if exists public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text);
 -- drop function if exists public.record_storefront_view(text,text);
 -- drop function if exists public.store_recent_dispatch_prices(uuid,uuid,uuid[]);
 -- drop function if exists public.storefront_link_metrics(uuid,uuid[]);
