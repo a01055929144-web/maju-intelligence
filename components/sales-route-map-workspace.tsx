@@ -74,6 +74,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
+import { MobileMapSummary } from "@/components/mobile-map-summary";
 import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
@@ -2595,38 +2596,17 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         ref={mapHeaderRef}
       >
         {activeView === "map" ? (
-          <div className="flex min-h-11 items-center justify-between gap-2 lg:hidden">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black text-slate-950">지도 현황 · 거래처 {visibleMapLayerCounts.customers}곳</p>
-              <p className="truncate text-[11px] font-semibold text-slate-500">
-                {mapSalesRegionsConfigured === false
-                  ? "영업 지역 미설정 · 기존 리드 전체 표시"
-                  : showAllLeadsOnMap
-                    ? `리드 ${visibleMapLayerCounts.newLeads + visibleMapLayerCounts.salesLeads}곳 표시`
-                    : "리드 숨김 · 거래처 중심"}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                className="h-9 rounded-lg bg-amber-100 px-3 text-xs font-black text-amber-900"
-                onClick={() => setMobileSalesAreaOpen(true)}
-                type="button"
-              >
-                지역 선택
-              </button>
-              <button
-                aria-expanded={mobileMapControlsOpen}
-                className="flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"
-                onClick={() => setMobileMapControlsOpen((open) => !open)}
-                type="button"
-              >
-                필터
-                <ChevronDown className={`h-3.5 w-3.5 transition ${mobileMapControlsOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-          </div>
+          <MobileMapSummary
+            controlsOpen={mobileMapControlsOpen}
+            customerCount={visibleMapLayerCounts.customers}
+            leadCount={visibleMapLayerCounts.newLeads + visibleMapLayerCounts.salesLeads}
+            leadsVisible={showAllLeadsOnMap}
+            onOpenSalesArea={() => setMobileSalesAreaOpen(true)}
+            onToggleControls={() => setMobileMapControlsOpen((open) => !open)}
+            salesRegionsConfigured={mapSalesRegionsConfigured}
+          />
         ) : null}
-        <div className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
+        <div id="map-mobile-filters" className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
         <div className="grid gap-1.5 lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)] lg:items-center xl:gap-2">
           <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
