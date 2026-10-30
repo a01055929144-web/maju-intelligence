@@ -107,8 +107,9 @@ begin
          revoked_at = case when existing.session_hash is distinct from excluded.session_hash
            then null else existing.revoked_at end
    where existing.session_hash is distinct from excluded.session_hash
-      or (existing.revoked_at is null and existing.expires_at > v_now
-        and existing.last_seen_at <= v_now - interval '5 minutes')
+      or (existing.revoked_at is null
+        and (existing.expires_at <= v_now
+          or existing.last_seen_at <= v_now - interval '5 minutes'))
   returning true into v_recorded;
 
   -- 판정만 반환한다. 알림/차단 행은 만들지 않는다.
