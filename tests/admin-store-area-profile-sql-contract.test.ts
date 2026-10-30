@@ -60,6 +60,8 @@ describe("admin store-area SQL draft contract", () => {
     const sql = readFileSync("docs/sql-drafts/admin-store-area-profile-rpc.sql", "utf8");
     expect(sql.match(/company_id = p_company_id/g)).toHaveLength(2);
     expect(sql).toContain("security invoker");
+    expect(sql).toContain("replace(btrim(coalesce(source_record.raw_payload ->> 'storeAreaSqm', '')), ',', '')");
+    expect(sql).toContain("round(abs(government_area - seoul_area), 2) <= 0.01");
     expect(sql).toContain("revoke all on function public.admin_store_area_profile(uuid) from public, anon, authenticated");
     expect(sql).toContain("grant execute on function public.admin_store_area_profile(uuid) to service_role");
   });

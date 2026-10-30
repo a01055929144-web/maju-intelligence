@@ -72,4 +72,15 @@ describe("store area source profile", () => {
       missingAreaOnEitherSourceCount: 1
     });
   });
+
+  it("rounds source areas before applying the 0.01 equality tolerance", () => {
+    expect(compareStoredStoreAreaSources([
+      { leadId: "rounding-boundary", source: "gov_restaurant_api", areaRaw: " 30.005 " },
+      { leadId: "rounding-boundary", source: "seoul_opendata_api", areaRaw: "30.00" }
+    ])).toMatchObject({
+      comparableAreaCount: 1,
+      equalWithinPrecisionCount: 1,
+      medianAbsoluteDifferenceSqm: 0.01
+    });
+  });
 });

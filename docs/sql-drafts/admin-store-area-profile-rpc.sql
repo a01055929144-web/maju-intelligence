@@ -11,7 +11,7 @@ as $function$
 with lead_base as (
   select
     coalesce(nullif(btrim(lead.industry_raw), ''), '미분류') as industry,
-    lead.store_area_sqm::double precision as area_sqm
+    round(lead.store_area_sqm::numeric, 2) as area_sqm
   from public.business_permit_leads lead
   where lead.company_id = p_company_id
 ),
@@ -50,9 +50,9 @@ source_raw as (
     source_record.lead_id,
     source_record.source,
     case
-      when replace(coalesce(source_record.raw_payload ->> 'storeAreaSqm', ''), ',', '')
+      when replace(btrim(coalesce(source_record.raw_payload ->> 'storeAreaSqm', '')), ',', '')
         ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
-      then replace(source_record.raw_payload ->> 'storeAreaSqm', ',', '')::double precision
+      then round(replace(btrim(source_record.raw_payload ->> 'storeAreaSqm'), ',', '')::numeric, 2)
       else null
     end as area_sqm
   from public.business_permit_lead_source_records source_record
@@ -85,8 +85,8 @@ pair_summary as (
     count(*) filter (where has_government and has_seoul and government_area is not null and seoul_area is not null)::bigint as comparable_area_count,
     count(*) filter (where has_government and has_seoul and (government_area is null or seoul_area is null))::bigint as missing_area_on_either_source_count,
     count(*) filter (where has_government and has_seoul and government_area is not null and seoul_area is not null
-      and abs(government_area - seoul_area) <= 0.01)::bigint as equal_within_precision_count,
-    round((percentile_cont(0.5) within group (order by abs(government_area - seoul_area))
+      and round(abs(government_area - seoul_area), 2) <= 0.01)::bigint as equal_within_precision_count,
+    round((percentile_cont(0.5) within group (order by round(abs(government_area - seoul_area), 2))
       filter (where has_government and has_seoul and government_area is not null and seoul_area is not null))::numeric, 2)
       as median_absolute_difference_sqm
   from source_per_lead
