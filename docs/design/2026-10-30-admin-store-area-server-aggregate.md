@@ -24,19 +24,25 @@
 
 2026-10-30 WSL `docker-desktop` 내부 메모리 기반 임시 PostgreSQL 16.14에서 함수 생성과 `docs/sql-drafts/admin-store-area-profile-rpc.verify.sql`을 실행했다. 경계값·업종 중앙값·두 원천 비교·다른 회사 제외·함수 권한·`service_role` 호출이 통과했다. 이 검증은 운영 DB와 무관하며 트랜잭션을 롤백했다.
 
-- 표본: 회사 A 리드 7건·원천 6건, 회사 B 리드 1건·원천 1건
+- 표본: 회사 A 리드 7건·원천 7건, 회사 B 리드 1건·원천 1건. 같은 리드·정부 원천의 과거 99㎡보다 최신 30.005㎡가 선택되는지 포함
 - 권한: `anon=false`, `authenticated=false`, `service_role=true`; 실제 `set local role service_role` 호출 성공
 - 격리: 회사 A 결과에 회사 B의 77㎡ 및 원천 1건이 포함되지 않음
 - 롤백: 검증 후 두 테이블 잔존 행 `0|0`
-- 표본 EXPLAIN: `Result`, shared buffer hit 4, planning 0.025ms, execution 3.082ms
+- 최신 관측 중복 포함 표본 EXPLAIN: `Result`, shared buffer hit 4, planning 0.021ms, execution 3.264ms
 
 위 실행 계획은 8개 리드뿐인 문법·정합성 검증이며 운영 규모 인덱스 결정을 대신하지 않는다. 2.2만 건 상당의 비운영 복제본에서 아래 EXPLAIN을 다시 확인하기 전에는 두 기능 플래그를 켜지 않는다.
 
-`docs/sql-drafts/admin-store-area-profile-rpc.scale-verify.sql`은 빈 임시 PostgreSQL DB에서 개인정보 없이 가짜 리드 22,754행·원천 기록 1,133행을 만들고 현재 운영과 같은 기본 인덱스 구성에서 함수의 실행 계획을 출력한다. `psql -v ON_ERROR_STOP=1 -f docs/sql-drafts/admin-store-area-profile-rpc.scale-verify.sql`로 실행한다. 마지막 `rollback`으로 자료와 역할을 남기지 않는다. 이 검증은 아직 실행하지 못했다. 현재 Windows 환경에는 `psql`·Docker 실행 파일이 없고 WSL 접근이 거부된다. 실제 운영 데이터 분포의 skew와 디스크 상태까지 재현하지는 못하므로, 실행 결과도 인덱스 승인 전 판단 자료로만 사용한다.
+`docs/sql-drafts/admin-store-area-profile-rpc.scale-verify.sql`은 빈 임시 PostgreSQL DB에서 개인정보 없이 가짜 리드 22,754행·원천 기록 1,133행을 만들고 현재 운영과 같은 기본 인덱스 구성에서 함수의 실행 계획을 출력한다. `psql -v ON_ERROR_STOP=1 -f docs/sql-drafts/admin-store-area-profile-rpc.scale-verify.sql`로 실행하며 마지막 `rollback`으로 자료와 역할을 남기지 않는다. 2026-10-30 WSL `docker-desktop` 메모리 기반 PostgreSQL 16.14에서 실행한 결과 회사 리드 22,754건·원천 1,133건을 확인했고, shared buffer hit 385, planning 0.055ms, execution 715.575ms였다. 롤백 뒤 두 테이블과 세 역할이 모두 사라진 것도 확인했다. 실제 운영 데이터 분포의 skew와 디스크 I/O를 재현하지는 않으므로 인덱스 승인 전 판단 자료로만 사용한다.
 
 원천 면적은 TypeScript와 동일하게 문자열 양끝 공백 제거 → 콤마 제거 → 숫자 판정 순서로 처리한다. 음수·100,000㎡ 초과·정확한 0 분류는 반올림 전 원본 숫자로 판정하고, 유효 양수의 중앙값과 두 원천 비교에만 소수 둘째 자리 반올림값을 사용한다. 따라서 `-0.004`와 `100000.004`는 이상치, `0.004`는 반올림 결과가 0이어도 유효 양수다. 두 원천 일치 여부는 각각 반올림된 값의 차이를 다시 둘째 자리로 반올림한 뒤 0.01㎡ 이하인지 판단한다. 위 비운영 PostgreSQL 검증에 이 경계값을 포함했다.
 
 같은 리드·출처에 여러 원천 기록이 있으면 유효한 면적 가운데 `last_seen_at`이 가장 최근인 값을 비교한다. UUID 정렬로 임의의 과거 값을 고르지 않는다.
+
+## 서울 원천·중복 비교·파일 연결 경계
+
+- 서울 원천은 인증키를 포함하는 HTTPS 경로가 확인되지 않았으므로 `LEAD_SEOUL_SOURCE_ENABLED=false`를 유지한다. 이번 작업에서는 외부 API를 다시 호출하지 않았다. 기본 수집은 정부 HTTPS 원천이다.
+- 두 원천은 행 수를 합산하지 않는다. 회사가 같은 canonical `lead_id`로 묶은 기록만 비교하고, 각 원천의 최신 유효 관측값을 사용한다. `source_record_key`, 원문 JSON, 키, URL은 집계 응답에 포함하지 않는다.
+- 파일 연결은 면적 RPC와 분리한다. 이 RPC는 첨부 메타데이터나 Storage 경로를 읽지 않는다. 후속 승인 시에도 `docs/design/2026-10-29-lead-attachment-customer-link.md`의 private 객체·동일 `storage_path` 참조·짧은 signed URL·회사/전환 관계 재검증 원칙을 유지하며, 03 소유 파일 탭 코드는 이 PR에서 수정하지 않는다.
 
 ## 인덱스와 실행 계획 검토
 

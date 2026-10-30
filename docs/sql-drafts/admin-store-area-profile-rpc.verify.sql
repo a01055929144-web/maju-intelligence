@@ -13,14 +13,15 @@ insert into public.business_permit_leads (id, company_id, industry_raw, store_ar
   ('00000000-0000-4000-8000-000000000008', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '격리표본', 77);
 
 insert into public.business_permit_lead_source_records
-  (id, company_id, lead_id, source, source_record_key, raw_payload) values
-  ('10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000003', 'gov_restaurant_api', 'a-gov-same', '{"storeAreaSqm":" 30.005 "}'),
-  ('10000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000003', 'seoul_opendata_api', 'a-seoul-same', '{"storeAreaSqm":"30.00"}'),
-  ('10000000-0000-4000-8000-000000000003', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000004', 'gov_restaurant_api', 'a-gov-missing', '{"storeAreaSqm":""}'),
-  ('10000000-0000-4000-8000-000000000004', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000004', 'seoul_opendata_api', 'a-seoul-missing', '{"storeAreaSqm":"20"}'),
-  ('10000000-0000-4000-8000-000000000005', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000005', 'gov_restaurant_api', 'a-gov-invalid', '{"storeAreaSqm":"-0.004"}'),
-  ('10000000-0000-4000-8000-000000000006', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000005', 'seoul_opendata_api', 'a-seoul-small', '{"storeAreaSqm":"0.004"}'),
-  ('10000000-0000-4000-8000-000000000007', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '00000000-0000-4000-8000-000000000008', 'gov_restaurant_api', 'b-gov', '{"storeAreaSqm":"77"}');
+  (id, company_id, lead_id, source, source_record_key, raw_payload, last_seen_at) values
+  ('10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000003', 'gov_restaurant_api', 'a-gov-same-old', '{"storeAreaSqm":"99"}', '2026-01-01T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000008', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000003', 'gov_restaurant_api', 'a-gov-same-new', '{"storeAreaSqm":" 30.005 "}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000003', 'seoul_opendata_api', 'a-seoul-same', '{"storeAreaSqm":"30.00"}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000003', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000004', 'gov_restaurant_api', 'a-gov-missing', '{"storeAreaSqm":""}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000004', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000004', 'seoul_opendata_api', 'a-seoul-missing', '{"storeAreaSqm":"20"}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000005', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000005', 'gov_restaurant_api', 'a-gov-invalid', '{"storeAreaSqm":"-0.004"}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000006', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '00000000-0000-4000-8000-000000000005', 'seoul_opendata_api', 'a-seoul-small', '{"storeAreaSqm":"0.004"}', '2026-01-02T00:00:00Z'),
+  ('10000000-0000-4000-8000-000000000007', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '00000000-0000-4000-8000-000000000008', 'gov_restaurant_api', 'b-gov', '{"storeAreaSqm":"77"}', '2026-01-02T00:00:00Z');
 
 do $verify$
 declare
@@ -40,7 +41,7 @@ begin
     raise exception 'industry median mismatch: %', result;
   end if;
 
-  if (result #>> '{sourceComparison,governmentSourceRecords}')::integer <> 3
+  if (result #>> '{sourceComparison,governmentSourceRecords}')::integer <> 4
     or (result #>> '{sourceComparison,seoulSourceRecords}')::integer <> 3
     or (result #>> '{sourceComparison,matchedLeadCount}')::integer <> 3
     or (result #>> '{sourceComparison,comparableAreaCount}')::integer <> 1
