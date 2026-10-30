@@ -162,17 +162,21 @@ export async function POST(request: NextRequest) {
         return { id, customerId, ...issueStoreLinkToken(id) };
       });
       const issued = await supabaseRequest<{ issued_customer_id: string; issued_link_id: string;
-        issued_token_nonce: string; was_created: boolean }[]>("rpc/issue_storefront_links", {
+        issued_token_nonce: string; issued_token_hash: string; was_created: boolean }[]>("rpc/issue_storefront_links", {
         method: "POST", body: JSON.stringify({ p_company: company,
           p_document_version: body.documentVersionId,
           p_links: generated.map((item) => ({ customerId: item.customerId,
             id: item.id, nonce: item.nonce, hash: item.hash })),
           p_expires_at: expires, p_actor_user_id: isId(actorUserId) ? actorUserId : null }),
       });
-      const links = issued.map((item) => ({ id: item.issued_link_id,
-        customerId: item.issued_customer_id, created: item.was_created,
-        url: `${publicBase}/store#${issueStoreLinkToken(item.issued_link_id,
-          item.issued_token_nonce).token}` }));
+      const links = issued.map((item) => {
+        const token = issueStoreLinkToken(item.issued_link_id, item.issued_token_nonce);
+        if (token.hash !== item.issued_token_hash)
+          throw new Error("기존 링크 서명 설정이 변경됐습니다. 이전 링크를 회수한 뒤 다시 발급해 주세요.");
+        return { id: item.issued_link_id,
+          customerId: item.issued_customer_id, created: item.was_created,
+          url: `${publicBase}/store#${token.token}` };
+      });
       return NextResponse.json(body.action === "create" ? { ...links[0] } : { links });
     }
     if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");

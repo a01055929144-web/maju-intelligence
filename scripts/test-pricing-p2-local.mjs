@@ -90,7 +90,8 @@ try {
   [ids.companyA, ids.version, JSON.stringify([{ ...linkInput[0], id: randomUUID(),
     nonce: "d".repeat(32), hash: "e".repeat(64) }]), linkExpiry]);
   if (issued.rows[0]?.issued_link_id !== ids.link || !issued.rows[0]?.was_created ||
-    reused.rows[0]?.issued_link_id !== ids.link || reused.rows[0]?.was_created)
+    reused.rows[0]?.issued_link_id !== ids.link || reused.rows[0]?.was_created ||
+    reused.rows[0]?.issued_token_hash !== tokenHash)
     throw new Error("Company-wide retry did not reuse an active store link");
 
   let rejectedTenant = false;

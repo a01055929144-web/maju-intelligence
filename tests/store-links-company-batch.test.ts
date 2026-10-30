@@ -21,7 +21,7 @@ vi.mock("@/lib/pricing/store-link-token", async () =>
   import("../lib/pricing/store-link-token"));
 
 import { GET, POST } from "../app/api/pricing-store-links/route";
-import { verifyStoreLinkToken } from "../lib/pricing/store-link-token";
+import { issueStoreLinkToken, verifyStoreLinkToken } from "../lib/pricing/store-link-token";
 
 const company = "00000000-0000-4000-8000-000000000001";
 const version = "00000000-0000-4000-8000-000000000002";
@@ -70,7 +70,8 @@ it("issues through the atomic RPC and rebuilds a reusable existing link", async 
     if (path.startsWith("normalized_customers?")) return [{ id: customer }];
     if (path.startsWith("pricing_document_versions?")) return [{ id: version }];
     if (path === "rpc/issue_storefront_links") return [{ issued_customer_id: customer,
-      issued_link_id: existingId, issued_token_nonce: nonce, was_created: false }];
+      issued_link_id: existingId, issued_token_nonce: nonce,
+      issued_token_hash: issueStoreLinkToken(existingId, nonce).hash, was_created: false }];
     throw new Error(`Unexpected query ${path}`);
   });
   const response = await POST(new NextRequest("http://localhost/api/pricing-store-links", {
@@ -96,4 +97,22 @@ it("rejects a customer outside the company before issuing any link", async () =>
   }));
   expect(response.status).toBe(400);
   expect(mocks.db.mock.calls.some(([path]) => path === "rpc/issue_storefront_links")).toBe(false);
+});
+
+it("does not return a broken link after the signing secret changes", async () => {
+  mocks.db.mockImplementation(async (path: string) => {
+    if (path.startsWith("normalized_customers?")) return [{ id: customer }];
+    if (path.startsWith("pricing_document_versions?")) return [{ id: version }];
+    if (path === "rpc/issue_storefront_links") return [{ issued_customer_id: customer,
+      issued_link_id: customer, issued_token_nonce: "a".repeat(32),
+      issued_token_hash: "b".repeat(64), was_created: false }];
+    throw new Error(`Unexpected query ${path}`);
+  });
+  const response = await POST(new NextRequest("http://localhost/api/pricing-store-links", {
+    method: "POST", headers: { origin: "http://localhost" },
+    body: JSON.stringify({ companyId: company, action: "create",
+      customerId: customer, documentVersionId: version }),
+  }));
+  expect(response.status).toBe(400);
+  expect((await response.json() as { message: string }).message).toContain("서명 설정이 변경");
 });
