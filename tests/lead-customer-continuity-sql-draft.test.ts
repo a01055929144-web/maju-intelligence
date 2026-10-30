@@ -12,6 +12,11 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/lead\.company_id = p_company_id/i);
     expect(sql).toMatch(/customer\.company_id = p_company_id/i);
     expect(sql).toMatch(/security invoker/i);
+    expect(sql).toContain("common_revision_history_prerequisite_not_applied");
+    expect(sql).toMatch(/foreign key \(company_id, matched_customer_id\)/i);
+    expect(sql).toMatch(/on delete set null \(matched_customer_id\)/i);
+    expect(sql).toMatch(/validate constraint business_permit_leads_company_matched_customer_fk/i);
+    expect(pg16Test).toContain("cross_company_matched_customer_should_be_forbidden");
   });
 
   it("fills only empty customer fields and preserves the matched customer link", () => {
@@ -52,9 +57,11 @@ describe("lead to customer continuity SQL draft", () => {
     expect(sql).toMatch(/grant execute on function maju_private\.anonymize_customer_revision_values_for_request.*maju_revision_redaction_operator/i);
     expect(pg16Test).toContain("100_day_landline_not_redacted");
     expect(pg16Test).toContain("100_day_mobile_was_redacted");
+    expect(pg16Test).toContain("exactly_90_day_landline_was_redacted");
     expect(pg16Test).toContain("89_day_landline_was_redacted");
     expect(pg16Test).toContain("other_company_was_redacted");
     expect(pg16Test).toContain("mixed_mobile_landline_row_was_redacted");
+    expect(pg16Test).toContain("mobile_without_leading_zero_was_redacted");
     expect(pg16Test).toContain("member_should_be_forbidden");
     expect(pg16Test).toContain("service_role_spoofed_owner_should_be_forbidden");
     expect(pg16Test).toContain("legacy_owner_downgraded_to_staff_should_be_forbidden");

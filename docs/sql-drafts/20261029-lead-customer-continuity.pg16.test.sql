@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- 로컬 PostgreSQL 16 전용 실행 테스트. 운영 DB 실행 금지.
+-- 로컬 PostgreSQL 16+ 실행 테스트. 운영 DB 실행 금지. 운영 적용 전 PostgreSQL 17에서도 재실행한다.
 create extension if not exists pgcrypto;
 
 do $$ begin
@@ -32,7 +32,8 @@ create table public.normalized_customers (
   naver_place_url text,
   kakao_place_url text,
   google_map_url text,
-  business_hours text
+  business_hours text,
+  constraint normalized_customers_company_id_id_unique unique (company_id, id)
 );
 create table public.business_permit_leads (
   id uuid primary key,
@@ -110,13 +111,29 @@ insert into public.normalized_customers(id, company_id) values
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
   ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002');
 
--- 100일 유선, 100일 010, 89일 유선, 타 회사 100일 유선, 유선→010 혼합 행.
+insert into public.business_permit_leads(id, company_id) values
+  ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001');
+
+-- matched_customer_id는 대상 UUID뿐 아니라 회사까지 일치해야 한다.
+do $$
+begin
+  update public.business_permit_leads
+     set matched_customer_id='40000000-0000-0000-0000-000000000002'
+   where id='60000000-0000-0000-0000-000000000001';
+  raise exception 'cross_company_matched_customer_should_be_forbidden';
+exception
+  when foreign_key_violation then null;
+end $$;
+
+-- 100일 유선, 100일 010, 정확히 90일 유선, 89일 유선, 타 회사, 유선→010 혼합, 앞자리 0 누락 휴대폰.
 insert into public.common_revision_history(id, company_id, target_type, target_id, field_key, old_value, new_value, created_at) values
   ('50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-111-2222'::text), to_jsonb('02-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
   ('50000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('010-1111-2222'::text), to_jsonb('010-3333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-555-6666'::text), to_jsonb('02-777-8888'::text), timestamptz '2026-08-01 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000002', 'customer', '40000000-0000-0000-0000-000000000002', 'phone', to_jsonb('031-111-2222'::text), to_jsonb('031-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
-  ('50000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-999-0000'::text), to_jsonb('010-9999-0000'::text), timestamptz '2026-07-21 00:00:00+00');
+  ('50000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-555-6666'::text), to_jsonb('02-777-8888'::text), timestamptz '2026-07-31 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-444-5555'::text), to_jsonb('02-666-7777'::text), timestamptz '2026-08-01 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000002', 'customer', '40000000-0000-0000-0000-000000000002', 'phone', to_jsonb('031-111-2222'::text), to_jsonb('031-333-4444'::text), timestamptz '2026-07-21 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('02-999-0000'::text), to_jsonb('010-9999-0000'::text), timestamptz '2026-07-21 00:00:00+00'),
+  ('50000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000001', 'customer', '40000000-0000-0000-0000-000000000001', 'phone', to_jsonb('1011112222'::text), to_jsonb('1033334444'::text), timestamptz '2026-07-21 00:00:00+00');
 
 do $$
 declare v_count integer;
@@ -128,9 +145,11 @@ begin
   if v_count <> 1 then raise exception 'expected_one_automatic_redaction_got_%', v_count; end if;
   if not exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000001' and redaction_reason='retention_expired') then raise exception '100_day_landline_not_redacted'; end if;
   if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000002' and redacted_at is not null) then raise exception '100_day_mobile_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000003' and redacted_at is not null) then raise exception '89_day_landline_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000004' and redacted_at is not null) then raise exception 'other_company_was_redacted'; end if;
-  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000005' and redacted_at is not null) then raise exception 'mixed_mobile_landline_row_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000003' and redacted_at is not null) then raise exception 'exactly_90_day_landline_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000004' and redacted_at is not null) then raise exception '89_day_landline_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000005' and redacted_at is not null) then raise exception 'other_company_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000006' and redacted_at is not null) then raise exception 'mixed_mobile_landline_row_was_redacted'; end if;
+  if exists (select 1 from public.common_revision_history where id='50000000-0000-0000-0000-000000000007' and redacted_at is not null) then raise exception 'mobile_without_leading_zero_was_redacted'; end if;
 end $$;
 
 -- 일반 service_role은 owner UUID를 가장해도 함수 자체를 실행할 수 없어야 한다.
