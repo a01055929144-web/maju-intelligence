@@ -11,26 +11,27 @@ as $function$
 with lead_base as (
   select
     coalesce(nullif(btrim(lead.industry_raw), ''), '미분류') as industry,
-    round(lead.store_area_sqm::numeric, 2) as area_sqm
+    lead.store_area_sqm::numeric as raw_area_sqm,
+    round(lead.store_area_sqm::numeric, 2) as rounded_area_sqm
   from public.business_permit_leads lead
   where lead.company_id = p_company_id
 ),
 lead_summary as (
   select
     count(*)::bigint as total_rows,
-    count(*) filter (where area_sqm is null)::bigint as blank_count,
-    count(*) filter (where area_sqm = 0)::bigint as zero_count,
-    count(*) filter (where area_sqm < 0 or area_sqm > 100000)::bigint as invalid_count,
-    count(*) filter (where area_sqm > 0 and area_sqm <= 100000)::bigint as positive_count
+    count(*) filter (where raw_area_sqm is null)::bigint as blank_count,
+    count(*) filter (where raw_area_sqm = 0)::bigint as zero_count,
+    count(*) filter (where raw_area_sqm < 0 or raw_area_sqm > 100000)::bigint as invalid_count,
+    count(*) filter (where raw_area_sqm > 0 and raw_area_sqm <= 100000)::bigint as positive_count
   from lead_base
 ),
 industry_stats as (
   select
     industry,
     count(*)::bigint as sampled_rows,
-    count(*) filter (where area_sqm > 0 and area_sqm <= 100000)::bigint as positive_rows,
-    round((percentile_cont(0.5) within group (order by area_sqm)
-      filter (where area_sqm > 0 and area_sqm <= 100000))::numeric, 2) as median_sqm
+    count(*) filter (where raw_area_sqm > 0 and raw_area_sqm <= 100000)::bigint as positive_rows,
+    round((percentile_cont(0.5) within group (order by rounded_area_sqm)
+      filter (where raw_area_sqm > 0 and raw_area_sqm <= 100000))::numeric, 2) as median_sqm
   from lead_base
   group by industry
 ),
@@ -44,7 +45,7 @@ industry_json as (
   from industry_stats
   where positive_rows > 0
 ),
-source_raw as (
+source_parsed as (
   select
     source_record.id,
     source_record.lead_id,
@@ -52,12 +53,21 @@ source_raw as (
     case
       when replace(btrim(coalesce(source_record.raw_payload ->> 'storeAreaSqm', '')), ',', '')
         ~ '^[+-]?([0-9]+([.][0-9]+)?|[.][0-9]+)$'
-      then round(replace(btrim(source_record.raw_payload ->> 'storeAreaSqm'), ',', '')::numeric, 2)
+      then replace(btrim(source_record.raw_payload ->> 'storeAreaSqm'), ',', '')::numeric
       else null
-    end as area_sqm
+    end as raw_area_sqm
   from public.business_permit_lead_source_records source_record
   where source_record.company_id = p_company_id
     and source_record.source in ('gov_restaurant_api', 'seoul_opendata_api')
+),
+source_raw as (
+  select
+    id,
+    lead_id,
+    source,
+    raw_area_sqm,
+    round(raw_area_sqm, 2) as rounded_area_sqm
+  from source_parsed
 ),
 source_counts as (
   select
@@ -70,11 +80,11 @@ source_per_lead as (
     lead_id,
     count(*) filter (where source = 'gov_restaurant_api') > 0 as has_government,
     count(*) filter (where source = 'seoul_opendata_api') > 0 as has_seoul,
-    (array_agg(area_sqm order by id) filter (
-      where source = 'gov_restaurant_api' and area_sqm > 0 and area_sqm <= 100000
+    (array_agg(rounded_area_sqm order by id) filter (
+      where source = 'gov_restaurant_api' and raw_area_sqm > 0 and raw_area_sqm <= 100000
     ))[1] as government_area,
-    (array_agg(area_sqm order by id) filter (
-      where source = 'seoul_opendata_api' and area_sqm > 0 and area_sqm <= 100000
+    (array_agg(rounded_area_sqm order by id) filter (
+      where source = 'seoul_opendata_api' and raw_area_sqm > 0 and raw_area_sqm <= 100000
     ))[1] as seoul_area
   from source_raw
   group by lead_id

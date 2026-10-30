@@ -83,4 +83,16 @@ describe("store area source profile", () => {
       medianAbsoluteDifferenceSqm: 0.01
     });
   });
+
+  it("classifies validity and exact zero before rounding positive values", () => {
+    expect(parseRawStoreArea(-0.004)).toEqual({ kind: "invalid", value: -0.004 });
+    expect(parseRawStoreArea(100_000.004)).toEqual({ kind: "invalid", value: 100_000.004 });
+    expect(parseRawStoreArea(0.004)).toEqual({ kind: "positive", value: 0 });
+
+    expect(profileStoreAreaSource([
+      { areaRaw: -0.004, source: "boundary" },
+      { areaRaw: 100_000.004, source: "boundary" },
+      { areaRaw: 0.004, source: "boundary" }
+    ]).actual).toMatchObject({ invalid: 2, positive: 1, zero: 0 });
+  });
 });

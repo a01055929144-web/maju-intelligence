@@ -61,6 +61,9 @@ describe("admin store-area SQL draft contract", () => {
     expect(sql.match(/company_id = p_company_id/g)).toHaveLength(2);
     expect(sql).toContain("security invoker");
     expect(sql).toContain("replace(btrim(coalesce(source_record.raw_payload ->> 'storeAreaSqm', '')), ',', '')");
+    expect(sql).toContain("raw_area_sqm < 0 or raw_area_sqm > 100000");
+    expect(sql).toContain("raw_area_sqm = 0");
+    expect(sql).toContain("array_agg(rounded_area_sqm order by id)");
     expect(sql).toContain("round(abs(government_area - seoul_area), 2) <= 0.01");
     expect(sql).toContain("revoke all on function public.admin_store_area_profile(uuid) from public, anon, authenticated");
     expect(sql).toContain("grant execute on function public.admin_store_area_profile(uuid) to service_role");
