@@ -61,6 +61,8 @@ try {
     "docs/sql-drafts/20261030-pricing-p2-store-ordering.sql",
     "docs/sql-drafts/20261030-pricing-p2-onboarding-vault.sql",
     "tests/sql/pricing-p2-vault.sql",
+    "docs/sql-drafts/20261030-pricing-p2-vault-access.sql",
+    "tests/sql/pricing-p2-vault-access.sql",
   ]) {
     await setup.query(
       (await readFile(new URL(`../${file}`, import.meta.url), "utf8")).replace(
@@ -218,14 +220,12 @@ try {
     "insert into normalized_customers(id,company_id,customer_name) select x,$1,'batch fixture' from unnest($2::uuid[]) x",
     [ids.companyA, batchCustomers],
   );
-  const batchRows = batchCustomers
-    .sort()
-    .map((customerId) => ({
-      customerId,
-      id: randomUUID(),
-      nonce: randomUUID().replaceAll("-", ""),
-      hash: randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", ""),
-    }));
+  const batchRows = batchCustomers.sort().map((customerId) => ({
+    customerId,
+    id: randomUUID(),
+    nonce: randomUUID().replaceAll("-", ""),
+    hash: randomUUID().replaceAll("-", "") + randomUUID().replaceAll("-", ""),
+  }));
   for (let pass = 0; pass < 2; pass++)
     for (let offset = 0; offset < 101; offset += 50) {
       const r = await setup.query(
@@ -282,14 +282,32 @@ try {
   if (original.id !== retry.id || count.rows[0].n !== 1)
     throw new Error("Idempotent retry duplicated an order");
   console.log("PASS idempotent retry");
-  await setup.query("insert into customer_price_agreements(id,company_id,customer_id,product_catalog_id,sales_unit,unit_price,tax_type,status,effective_from) values($1,$2,$3,$4,'개',900,'exempt','active','2020-01-01'),($5,$2,$3,$4,'박스',50000,'taxable','active','2021-01-01')",[randomUUID(),ids.companyA,ids.customerA,ids.plainProduct,randomUUID()]);
-  const contractOrder=await callOrder(setup,plainLines);
-  if(contractOrder.knownTotal!==900) throw new Error("Contract did not override published price by matching sales unit");
-  await setup.query("delete from customer_price_agreements where company_id=$1",[ids.companyA]);
-  let otherStoreRejected=false;
-  try { await setup.query("select place_store_order($1,$2,$3::jsonb,$4,$5,1,'')",["b".repeat(64),orderDate,JSON.stringify(plainLines),randomUUID(),original.id]); }
-  catch(error) { otherStoreRejected=/Order cannot be edited/.test(error.message); }
-  if(!otherStoreRejected) throw new Error("Other store edited order");
+  await setup.query(
+    "insert into customer_price_agreements(id,company_id,customer_id,product_catalog_id,sales_unit,unit_price,tax_type,status,effective_from) values($1,$2,$3,$4,'개',900,'exempt','active','2020-01-01'),($5,$2,$3,$4,'박스',50000,'taxable','active','2021-01-01')",
+    [randomUUID(), ids.companyA, ids.customerA, ids.plainProduct, randomUUID()],
+  );
+  const contractOrder = await callOrder(setup, plainLines);
+  if (contractOrder.knownTotal !== 900)
+    throw new Error(
+      "Contract did not override published price by matching sales unit",
+    );
+  await setup.query(
+    "delete from customer_price_agreements where company_id=$1",
+    [ids.companyA],
+  );
+  let otherStoreRejected = false;
+  try {
+    await setup.query("select place_store_order($1,$2,$3::jsonb,$4,$5,1,'')", [
+      "b".repeat(64),
+      orderDate,
+      JSON.stringify(plainLines),
+      randomUUID(),
+      original.id,
+    ]);
+  } catch (error) {
+    otherStoreRejected = /Order cannot be edited/.test(error.message);
+  }
+  if (!otherStoreRejected) throw new Error("Other store edited order");
   console.log("PASS contract override and cross-store edit denial");
 
   // Editing must respect the original delivery cutoff, not only the replacement date.
@@ -330,8 +348,18 @@ try {
     quoteRejected = /published version unavailable/.test(error.message);
   }
   if (!quoteRejected) throw new Error("Another author's quote link issued");
-  const ownQuote=await setup.query("select * from issue_storefront_links($1,$2,$3::jsonb,$4,null,$5)",[ids.companyA,ids.version,JSON.stringify(linkInput),linkExpiry,"b".repeat(64)]);
-  if(ownQuote.rows[0]?.issued_link_id!==ids.link) throw new Error("Own quote link unavailable");
+  const ownQuote = await setup.query(
+    "select * from issue_storefront_links($1,$2,$3::jsonb,$4,null,$5)",
+    [
+      ids.companyA,
+      ids.version,
+      JSON.stringify(linkInput),
+      linkExpiry,
+      "b".repeat(64),
+    ],
+  );
+  if (ownQuote.rows[0]?.issued_link_id !== ids.link)
+    throw new Error("Own quote link unavailable");
   await setup.query("update pricing_documents set kind='sheet' where id=$1", [
     ids.document,
   ]);
@@ -377,12 +405,29 @@ try {
     )
       throw new Error("Concurrent issuance duplicated a link");
     console.log("PASS concurrent link issuance");
-    const editSeed=await callOrder(setup,plainLines);
-    const edits=await Promise.allSettled(competing.map(client=>client.query("select place_store_order($1,$2,$3::jsonb,$4,$5,1,'')",[tokenHash,orderDate,JSON.stringify(plainLines),randomUUID(),editSeed.id])));
-    if(edits.filter(r=>r.status==='fulfilled').length!==1||edits.filter(r=>r.status==='rejected').length!==1) throw new Error("Concurrent edits did not enforce revision");
-    const duplicateKey=randomUUID();
-    const retries=await Promise.all(competing.map(client=>callOrder(client,plainLines,duplicateKey)));
-    if(retries[0].id!==retries[1].id) throw new Error("Concurrent retry duplicated order");
+    const editSeed = await callOrder(setup, plainLines);
+    const edits = await Promise.allSettled(
+      competing.map((client) =>
+        client.query("select place_store_order($1,$2,$3::jsonb,$4,$5,1,'')", [
+          tokenHash,
+          orderDate,
+          JSON.stringify(plainLines),
+          randomUUID(),
+          editSeed.id,
+        ]),
+      ),
+    );
+    if (
+      edits.filter((r) => r.status === "fulfilled").length !== 1 ||
+      edits.filter((r) => r.status === "rejected").length !== 1
+    )
+      throw new Error("Concurrent edits did not enforce revision");
+    const duplicateKey = randomUUID();
+    const retries = await Promise.all(
+      competing.map((client) => callOrder(client, plainLines, duplicateKey)),
+    );
+    if (retries[0].id !== retries[1].id)
+      throw new Error("Concurrent retry duplicated order");
     console.log("PASS concurrent order retry and stale-edit conflict");
     const results = await Promise.allSettled(
       competing.map((client, index) =>
@@ -420,18 +465,113 @@ try {
     if (tenantOrders.rows[0].n !== 0)
       throw new Error("Company B received Company A orders");
     console.log("PASS concurrent stock, published price, and tenant isolation");
-    await setup.query("update storefront_links set expires_at=clock_timestamp()+interval '1 second' where id=$1",[ids.link]);
-    await competing[0].query('begin');
-    await competing[0].query("select 1 from pricing_promotions where id=$1 for update",[ids.promotion]);
-    const waiting=callOrder(competing[1],[{productId:ids.promoProduct,promotionId:ids.promotion,quantity:1}]).then(()=>null,error=>error);
-    await new Promise(resolve=>setTimeout(resolve,1200));
-    await competing[0].query('commit');
-    const expiredError=await waiting;
-    if(!expiredError||!/Link unavailable/.test(expiredError.message)) throw new Error("Order accepted after lock wait crossed link expiry");
+    await setup.query(
+      "update storefront_links set expires_at=clock_timestamp()+interval '1 second' where id=$1",
+      [ids.link],
+    );
+    await competing[0].query("begin");
+    await competing[0].query(
+      "select 1 from pricing_promotions where id=$1 for update",
+      [ids.promotion],
+    );
+    const waiting = callOrder(competing[1], [
+      { productId: ids.promoProduct, promotionId: ids.promotion, quantity: 1 },
+    ]).then(
+      () => null,
+      (error) => error,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await competing[0].query("commit");
+    const expiredError = await waiting;
+    if (!expiredError || !/Link unavailable/.test(expiredError.message))
+      throw new Error("Order accepted after lock wait crossed link expiry");
     console.log("PASS link expiry after promotional lock wait");
-
   } finally {
     await Promise.all(competing.map((client) => client.end()));
+  }
+  // Exercise real row-lock ordering against permission/assignment revocation.
+  const vaultMember = randomUUID(),
+    vaultUser = randomUUID(),
+    vaultRecord = randomUUID();
+  await setup.query(
+    "insert into company_members(id,company_id,user_id,role,permission_role,duties) values($1,$2,$3,'driver','staff',array['delivery'])",
+    [vaultMember, ids.companyA, vaultUser],
+  );
+  await setup.query(
+    "insert into store_onboarding_vault(id,company_id,customer_id,kind,state,expires_at,object_key,content_type,byte_size,sha256,scan_status,sanitized) values($1,$2,$3,'loading-photo','available',clock_timestamp()+interval '1 day',$4,'image/png',100,$5,'clean',true)",
+    [
+      vaultRecord,
+      ids.companyA,
+      ids.customerA,
+      `${ids.companyA}/${ids.customerA}/${vaultRecord}`,
+      "a".repeat(64),
+    ],
+  );
+  await setup.query(
+    "insert into store_onboarding_delivery_grants(company_id,customer_id,staff_member_id,delivery_date,source_confirmation_id,valid_until) select $1,$2,$3,(clock_timestamp() at time zone 'Asia/Seoul')::date,$4,(((clock_timestamp() at time zone 'Asia/Seoul')::date+1)::timestamp at time zone 'Asia/Seoul')",
+    [ids.companyA, ids.customerA, vaultMember, randomUUID()],
+  );
+  const writer = new pg.Client({ connectionString: url }),
+    reader = new pg.Client({ connectionString: url });
+  await Promise.all([writer.connect(), reader.connect()]);
+  try {
+    await reader.query("set role service_role");
+    const pid = (await reader.query("select pg_backend_pid() pid")).rows[0].pid;
+    for (const [mutation, restore] of [
+      [
+        "update store_onboarding_delivery_grants set revoked_at=clock_timestamp() where staff_member_id=$1",
+        "update store_onboarding_delivery_grants set revoked_at=null where staff_member_id=$1",
+      ],
+      [
+        "update company_members set status='inactive' where id=$1",
+        "update company_members set status='active' where id=$1",
+      ],
+    ]) {
+      await writer.query("begin");
+      await writer.query(mutation, [vaultMember]);
+      const pending = reader
+        .query(
+          "select authorize_store_onboarding_read($1,$2,$3,'delivery-location')",
+          [ids.companyA, vaultUser, vaultRecord],
+        )
+        .then(
+          () => null,
+          (error) => error,
+        );
+      let blocked = false;
+      for (let n = 0; n < 100; n++) {
+        const r = await setup.query(
+          "select cardinality(pg_blocking_pids($1))>0 blocked",
+          [pid],
+        );
+        if (r.rows[0].blocked) {
+          blocked = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await writer.query("commit");
+      const error = await pending;
+      if (
+        !blocked ||
+        !error ||
+        !/Protected record unavailable/.test(error.message)
+      )
+        throw new Error("Vault read bypassed concurrent revocation");
+      await setup.query(restore, [vaultMember]);
+    }
+    const count = await setup.query(
+      "select count(*)::integer n from store_onboarding_audit where record_id=$1",
+      [vaultRecord],
+    );
+    if (count.rows[0].n !== 0)
+      throw new Error("Revoked read produced successful audit");
+    console.log(
+      "PASS vault authorization waits for assignment/member revocation and denies without payload",
+    );
+  } finally {
+    await writer.query("rollback");
+    await Promise.all([writer.end(), reader.end()]);
   }
 } finally {
   await setup.end();

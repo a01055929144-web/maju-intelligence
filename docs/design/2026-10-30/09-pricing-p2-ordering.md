@@ -99,3 +99,32 @@ SQL은 비공개 메타데이터·암호문·감사 모델의 새 로컬 DB 전�
 SQL 보호 회귀: 교차 회사 FK, 미검사/미정리 사진 차단, null 암호문 거부, 30일 초안 상한, 삭제 확인 전 레코드/회사 삭제 차단, 감사 수정 거부, 공개 역할 권한 회수 PASS. 첫 주문 보호 기반과 공개 주문 검증을 포함해 P2 전체 진행률은 약 70%로 본다. SMS와 실제 보호 저장소/인증/키/배정/보존 어댑터 및 P3 전환 규약, 운영 승인·적용은 잔여 관문이다.
 
 후속 최종 검사: 100 files / 531 tests PASS, tsc/lint/production build PASS(기존 경고 유지), 인증 경계 144 routes PASS. 모바일 캡처를 직접 확인했으며 390px 가로 넘침 없음. 비운영 PG16/로컬 브라우저 검증 완료. 자료 열람 어댑터·삭제 작업자·보존 운영 정책은 아직 미연결이며 기본 OFF 유지.
+
+
+## 기사 배정·서버 열람 경계 구체화
+
+Owner order, Related delivery/organization. 추가 허용 파일: application/order/authorized-vault.ts, lib/pricing/onboarding-repository.ts, docs/sql-drafts/20261030-pricing-p2-vault-access.sql, tests/onboarding-authorized-vault.test.ts, tests/sql/pricing-p2-vault-access.sql, tests/sql/pricing-p2-fixture.sql, scripts/test-pricing-p2-local.mjs 및 이 문서.
+
+기존 route_plan_confirmations는 기사 이름과 JSON 매장 목록을 사용하고 호차는 기본 기사만 지정한다. 동일 이름·기본 호차·차량 표시값을 민감 자료 열람 권한의 근거로 쓰지 않는다. 기존 배송 도메인을 수정하거나 이름을 직원 ID로 자동 변환하지 않는다. 대신 미연결 SQL 초안의 delivery grant에 회사/매장/company_member ID/실제 배송일/확정 근거 UUID를 명시한다. 확정 배송 계획을 안정된 ID로 검증해 grant를 발급·회수하는 배송 어댑터와 운영 절차는 아직 필요하다. 임의로 grant를 생성하는 공개/직원 API는 만들지 않는다.
+
+서버 열람 RPC는 역할 문자열을 입력받지 않는다. 인증된 서버의 company ID와 auth user ID로 company_members의 활성 상태·권한·업무·유효기간을 조회한다. permission_role을 우선하며 미설정 구형 계정은 owner/manager/driver만 명시적으로 해석한다. temporary와 영업 전용 계정은 민감 자료 열람에서 제외한다. 기사는 당일 KST의 미회수 grant가 있어야 하며 등록증은 볼 수 없다. 다른 회사·다른 매장·다른 날·퇴사/만료/권한 강등·회수·만료 자료는 거부한다.
+
+회원·자료·배정 행을 잠근 동일 트랜잭션에서 권한/수명 재검사와 감사 INSERT를 수행한 뒤 내부 payload를 반환한다. 감사 저장 실패 시 payload도 반환하지 않는다. 읽기 승인은 이 트랜잭션 시점에 선형화되고, 직후 회수는 다음 열람부터 적용된다. 승인 결과는 외부에 전달하거나 캐시하지 않으며 최대 5초(자료/회원/배정 유효기간이 더 빠르면 그때까지)만 서버 내에서 사용한다. 서버는 비공개 파일 읽기 전후와 복호화 후 기한을 확인하고 지나면 결과를 버린다. 감사 ID·회사·사용자·레코드가 맞지 않는 응답은 거부한다.
+
+실제 HTTP 입력/열람 API, 비공개 저장소·파일 검사·키 저장소 연결과 플래그 활성화는 하지 않는다. 준비 여부가 기본 false인 독립 서버 유스케이스/저장소 팩터리만 추가한다. 운영 진행률은 0%다.
+
+### P3 예약→출고 전환 규약 (문서 전용)
+
+- 현재 P2 submitted 주문의 행사 수량은 예약으로 취급한다. received/in_delivery로 상태만 바꾸면 예약이 사라질 수 있으므로 현재 코드에서 수동 상태 전환을 운영에 사용하지 않는다.
+- P3는 별도 예약 원장과 주문 수정번호, 상태 전이, 실제 재고 이동을 하나의 회사 범위 트랜잭션으로 묶어야 한다. 제출→접수는 예약을 유지하고, 취소는 1회 해제, 출고 확정은 예약을 실제 차감으로 1회 전환한다. delivered는 재차 차감하지 않는다.
+- 주문/행사/재고/예약 잠금 순서를 통일하고 전환 idempotency key를 저장한다. 중복 웹훅·출고 재시도·동시 취소/수정·분할 출고·재입고/반품을 명시적으로 모델링한다. 품목·가격·과세 스냅샷을 보존하고 시세 확정은 별도 승인 이벤트로 기록한다.
+- P2 예약 집계와 P3 차감을 동시에 더해 이중 차감하지 않도록 cutover 상태·대사·복구 절차를 검토한 뒤에만 연결한다. 실패 시 전표만 생기거나 예약만 풀리지 않도록 outbox/재시도와 오류 상태가 필요하다. 이번 후속은 P3 코드나 운영 테이블을 바꾸지 않는다.
+
+
+서버 어댑터 추가 허용 파일: lib/pricing/onboarding-staff-access.ts, tests/onboarding-staff-access.test.ts. 어댑터는 요청 본문의 회사/사용자/역할/배정값을 읽지 않고 중앙 getRequestAuthScope의 인증된 사용자 ID만 사용한다. 승인된 리소스 연결이 없거나 기존 기능 플래그가 OFF면 인증/SQL 전에 닫히며, 공개 매장 토큰은 직원 인증이 아니다. 이 어댑터를 호출하는 HTTP 경로는 추가하지 않는다.
+
+이번 후속 결과: P2 약 75%, 운영 0%. 새 PG16에서 service_role 실제 RPC 실행, 당일 배정과 다른 회사/매장/날짜·회수·퇴사·만료·임시·영업·권한 강등·중복 회원 거부, 기사 등록증 차단, 감사 실패 원자성 PASS. 실제 잠금 대기와 배정/회원 회수 경합도 PASS. 서버 인증·응답 범위·승인 기한 테스트를 포함해 102 files / 541 tests PASS. 기존 policy 포트 예시는 실연결 경로로 쓰지 않고 중앙 인증 어댑터→원자적 SQL 승인/감사→기한 확인 리소스 읽기만 검토 대상이다. 실제 확정 배송 계획→grant 동기화와 회수 어댑터, 저장소/검사/키/보존 승인은 여전히 미연결이다.
+
+감사에는 열람 당시 member ID·권한·grant ID·확정 근거 UUID도 원문 없이 보존한다. 이후 배정 회수/삭제로 근거가 사라져도 어떤 배정으로 열람을 허용했는지 추적할 수 있도록 감사 행에는 삭제 연쇄 FK를 추가하지 않는다.
+
+최신 main 9f4c61f를 기능 브랜치에 충돌 없이 통합한 뒤 103 files / 547 tests, tsc/lint/production build, 인증 경계 144 routes PASS. PG16 보호 SQL/회수 경합도 PASS. 보호 HTTP 경로·실제 업로드/저장소/검사/키 연결·운영 SQL·main 병합·배포는 없음. PRICE_SHEETS_ENABLED/STORE_ORDERING_ENABLED 기본 OFF 유지.
