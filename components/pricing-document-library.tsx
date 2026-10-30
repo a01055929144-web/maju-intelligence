@@ -5,6 +5,7 @@ import {
   koreaDay,
   lineFromCatalog,
   parseDocument,
+  withLivePromotions,
   type CatalogChoice,
   type DocumentVersion,
   type ProductSet,
@@ -50,21 +51,27 @@ export function PricingDocumentLibrary(p: Props) {
     setShared(copy ? false : s?.shared || false);
   }
   async function preview(x: Promotion) {
+    const latest = await documentRequest<Promotion[]>(
+      p.companyId,
+      "promotions",
+    );
+    const current = latest.result.find((promotion) => promotion.id === x.id);
+    if (!current) throw new Error("행사 상품을 다시 불러와 주세요.");
     const r = await documentRequest<{ items: CatalogChoice[] }>(
       p.companyId,
       "catalog",
-      { productIds: [x.productId] },
+      { productIds: [current.productId] },
     );
     const item = r.result.items[0];
     if (!item) throw new Error("상품을 확인해 주세요.");
     const content = parseDocument({
       kind: "quote",
-      title: `${x.badge} 상품`,
+      title: `${current.badge} 상품`,
       companyName: p.profile.companyName || "행사 안내",
       contact: p.profile.contact,
       footer: p.profile.footer,
       recipient: "",
-      validUntil: x.endsOn,
+      validUntil: current.endsOn,
       theme: "blue",
       layout: "cards",
       showPrice: true,
@@ -73,26 +80,31 @@ export function PricingDocumentLibrary(p: Props) {
       lines: [
         {
           ...lineFromCatalog(item),
-          displayName: x.displayName,
-          price: x.price,
-          promotionId: x.id,
-          startsOn: x.startsOn,
-          endsOn: x.endsOn,
-          remaining: x.stock,
-          badge: x.badge,
-          taxType: x.taxType,
+          displayName: current.displayName,
+          price: current.price,
+          promotionId: current.id,
+          startsOn: current.startsOn,
+          endsOn: current.endsOn,
+          remaining: current.stock,
+          badge: current.badge,
+          taxType: current.taxType,
         },
       ],
     });
-    p.previewPromotion({
-      id: `preview-${x.id}`,
-      documentId: x.id,
-      version: 0,
-      revision: x.revision,
-      publishedAt: new Date().toISOString(),
-      content,
-      unavailablePromotions: active(x) ? [] : [x.id],
-    });
+    p.previewPromotion(
+      withLivePromotions(
+        {
+          id: `preview-${current.id}`,
+          documentId: current.id,
+          version: 0,
+          revision: current.revision,
+          publishedAt: new Date().toISOString(),
+          content,
+          unavailablePromotions: [],
+        },
+        [current],
+      ),
+    );
   }
   const visible = p.promotions.filter(
     (x) =>
