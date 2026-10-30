@@ -1,0 +1,80 @@
+begin;
+insert into companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
+insert into product_catalog(id,company_id,product_code,canonical_name,purchase_product_name,sales_product_name,purchase_price,tax_type) values
+('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','A','INTERNAL-MANAGEMENT','INTERNAL-PURCHASE','공개 상품',18910,'exempt'),
+('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002','B','OTHER-MANAGEMENT','OTHER-PURCHASE','다른 회사 상품',100,'taxable');
+set local role service_role;
+do $$
+declare c uuid:='00000000-0000-4000-8000-000000000001';other uuid:='00000000-0000-4000-8000-000000000002';a text:=repeat('a',64);b text:=repeat('b',64);
+ product uuid:='10000000-0000-4000-8000-000000000001';doc uuid:='20000000-0000-4000-8000-000000000001';sheet uuid:='20000000-0000-4000-8000-000000000002';promo uuid:='30000000-0000-4000-8000-000000000001';bundle uuid:='40000000-0000-4000-8000-000000000001';
+ content jsonb;line jsonb;r jsonb;v1 jsonb;v2 jsonb;today date:=(now() at time zone 'Asia/Seoul')::date;
+begin
+ line:=jsonb_build_object('productId',product,'displayName','공개 상품','brand','','spec','','unit','개','price',21180,'taxType','exempt','visible',true,'promotionId',null,'cost',18910,'margin',12,'managementName','INTERNAL-MANAGEMENT');
+ content:=jsonb_build_object('kind','quote','title','작성자 A 견적','companyName','합성 회사','contact','','recipient','받는 매장','footer','배송 안내','validUntil',(today+14)::text,'theme','blue','layout','table','showPrice',true,'showBrand',true,'showSpec',true,'lines',jsonb_build_array(line),'supplier','PRIVATE-SUPPLIER');
+ r:=pricing_p1(c,a,false,'save',jsonb_build_object('id',doc,'expected',0,'content',content));
+ if r::text like '%INTERNAL%' or r::text like '%PRIVATE-SUPPLIER%' or r->'content'->'lines'->0 ? 'cost' then raise exception 'Private fields in draft';end if;
+ perform pricing_p1(c,a,false,'save',jsonb_build_object('id',doc,'expected',0,'content',content)); -- same request retry
+ v1:=pricing_p1(c,a,false,'publish',jsonb_build_object('id',doc,'expected',1));
+ if pricing_p1(c,a,false,'publish',jsonb_build_object('id',doc,'expected',1))->>'id'<>v1->>'id' then raise exception 'Duplicate publish';end if;
+ if jsonb_array_length(pricing_p1(c,b,true,'list','{}')->'items')<>0 then raise exception 'Other author quote leak';end if;
+ begin perform pricing_p1(c,b,true,'versions',jsonb_build_object('id',doc));raise exception 'Other author read allowed';exception when raise_exception then if SQLERRM='Other author read allowed' then raise;end if;end;
+ begin perform pricing_p1(other,a,true,'save',jsonb_build_object('id',sheet,'expected',0,'content',content));raise exception 'Company product leak';exception when raise_exception then if SQLERRM='Company product leak' then raise;end if;end;
+ content:=jsonb_set(content,'{lines,0,price}','22000');
+ perform pricing_p1(c,a,false,'save',jsonb_build_object('id',doc,'expected',1,'content',content));
+ v2:=pricing_p1(c,a,false,'publish',jsonb_build_object('id',doc,'expected',2));
+ if v2->>'version'<>'2' or (select (x->'content'->'lines'->0->>'price')::bigint from jsonb_array_elements(pricing_p1(c,a,false,'versions',jsonb_build_object('id',doc))) x where x->>'version'='1')<>21180 then raise exception 'Snapshot changed';end if;
+ begin perform pricing_p1(c,a,false,'publish',jsonb_build_object('id',doc,'expected',1));raise exception 'Stale publish accepted';exception when raise_exception then if SQLERRM='Stale publish accepted' then raise;end if;end;
+ content:=jsonb_set(content,'{kind}','"sheet"');
+ begin perform pricing_p1(c,a,false,'save',jsonb_build_object('id',sheet,'expected',0,'content',content));raise exception 'Sales sheet write allowed';exception when raise_exception then if SQLERRM='Sales sheet write allowed' then raise;end if;end;
+ perform pricing_p1(c,a,true,'save',jsonb_build_object('id',sheet,'expected',0,'content',content));
+ perform pricing_p1(c,a,true,'publish',jsonb_build_object('id',sheet,'expected',1));
+ if jsonb_array_length(pricing_p1(c,b,false,'versions',jsonb_build_object('id',sheet)))<>1 then raise exception 'Shared sheet unavailable';end if;
+ r:=pricing_p1(c,b,false,'catalog','{}');if r::text like '%INTERNAL%' or r->'items'->0 ? 'cost' then raise exception 'Sales catalog cost leak';end if;
+ if (pricing_p1(c,a,true,'catalog',jsonb_build_object('productIds',jsonb_build_array(product)))->>'total')::integer<>1 then raise exception 'ID total mismatch';end if;
+ if (pricing_p1(c,a,true,'catalog',jsonb_build_object('productCodes',jsonb_build_array('MISSING')))->>'total')::integer<>0 then raise exception 'Code total mismatch';end if;
+ if (pricing_p1(c,a,true,'catalog',jsonb_build_object('productCodes',jsonb_build_array('B')))->>'total')::integer<>0 then raise exception 'Cross-company code count';end if;
+ update product_catalog set tax_type=null where company_id=c and id=product;
+ if pricing_p1(c,a,true,'catalog',jsonb_build_object('productIds',jsonb_build_array(product)))->'items'->0->>'taxType'<>'unknown' then raise exception 'Unknown tax assumed';end if;
+ update product_catalog set tax_type='exempt' where company_id=c and id=product;
+ perform pricing_p1(c,a,false,'save-set',jsonb_build_object('id',bundle,'expected',0,'content',jsonb_build_object('name','내 묶음','kind','bundle','shared',false,'productIds',jsonb_build_array(product))));
+ if pricing_p1(c,b,true,'sets','{}')<>'[]'::jsonb then raise exception 'Private bundle leak';end if;
+ if pricing_p1(c,a,false,'sets','{}')->0 ? 'price' then raise exception 'Set stored price';end if;
+ perform pricing_p1(c,a,true,'save-promotion',jsonb_build_object('id',promo,'expected',0,'content',jsonb_build_object('productId',product,'name','INTERNAL-EVENT','displayName','공개 행사','startsOn',today,'endsOn',today+7,'cost',100,'margin',12,'stock',10,'perStoreLimit',2,'allowSheet',false,'badge','행사','taxType','exempt')));
+ r:=pricing_p1(c,b,false,'promotions','{}');if r::text like '%INTERNAL%' or r->0 ? 'cost' or r->0 ? 'margin' then raise exception 'Sales promo cost leak';end if;
+ content:=jsonb_set(content,'{kind}','"quote"');content:=jsonb_set(content,'{lines,0,promotionId}',to_jsonb(promo));
+ perform pricing_p1(c,a,true,'save',jsonb_build_object('id',doc,'expected',2,'content',content));
+ v2:=pricing_p1(c,a,true,'publish',jsonb_build_object('id',doc,'expected',3));if v2->'content'->'lines'->0->>'displayName'<>'공개 행사' or (v2->'content'->'lines'->0->>'price')::integer<>120 then raise exception 'Promotion not sanitized';end if;
+ update pricing_promotions set stock=5 where company_id=c and id=promo;
+ if (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'promotionStock'->>promo::text)::integer<>5 then raise exception 'Current stock not returned';end if;
+ if (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'content'->'lines'->0->>'remaining')::integer<>10 then raise exception 'Stock update mutated snapshot';end if;
+ if (pricing_p1(c,a,true,'publish',jsonb_build_object('id',doc,'expected',3))->'promotionStock'->>promo::text)::integer<>5 then raise exception 'Publish retry stock stale';end if;
+ update pricing_promotions set stock=0 where company_id=c and id=promo;
+ if not (pricing_p1(c,a,true,'publish',jsonb_build_object('id',doc,'expected',3))->'unavailablePromotions' ? promo::text) then raise exception 'Publish sold-out still available';end if;
+ update pricing_promotions set stock=2,ends_on=today-1,starts_on=today-2 where company_id=c and id=promo;
+ if not (pricing_p1(c,a,true,'publish',jsonb_build_object('id',doc,'expected',3))->'unavailablePromotions' ? promo::text) then raise exception 'Publish expired still available';end if;
+ update pricing_promotions set stock=0,starts_on=today,ends_on=today+7 where company_id=c and id=promo;
+
+ if not (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'unavailablePromotions' ? promo::text) then raise exception 'Sold-out version still available';end if;
+ -- Private set updates/deletes, common set permission, profile CAS and price-at-use.
+ perform pricing_p1(c,a,false,'save-set',jsonb_build_object('id',bundle,'expected',1,'content',jsonb_build_object('name','개인 템플릿 수정','kind','template','shared',false,'productIds',jsonb_build_array(product))));
+ begin perform pricing_p1(c,b,true,'delete-set',jsonb_build_object('id',bundle,'expected',2));raise exception 'Other author deleted private set';exception when raise_exception then if SQLERRM='Other author deleted private set' then raise;end if;end;
+ perform pricing_p1(c,a,false,'delete-set',jsonb_build_object('id',bundle,'expected',2));
+ perform pricing_p1(c,a,true,'save-set',jsonb_build_object('id',bundle,'expected',0,'content',jsonb_build_object('name','공용 묶음','kind','bundle','shared',true,'productIds',jsonb_build_array(product))));
+ if pricing_p1(c,b,false,'sets','{}')->0->>'editable'<>'false' then raise exception 'Sales common edit flag';end if;
+ begin perform pricing_p1(c,b,false,'delete-set',jsonb_build_object('id',bundle,'expected',1));raise exception 'Sales deleted common set';exception when raise_exception then if SQLERRM='Sales deleted common set' then raise;end if;end;
+ update product_catalog set purchase_price=20000 where company_id=c and id=product;
+ if (pricing_p1(c,a,true,'catalog',jsonb_build_object('productIds',jsonb_build_array(product)))->'items'->0->>'price')::bigint<>20000 then raise exception 'Current price not resolved at set use';end if;
+ if (pricing_p1(c,a,true,'catalog',jsonb_build_object('productIds','[]'::jsonb))->>'total')::integer<>0 then raise exception 'Empty ID filter returned everything';end if;
+ perform pricing_p1(c,b,true,'delete-set',jsonb_build_object('id',bundle,'expected',1));
+ perform pricing_p1(c,a,true,'save-profile',jsonb_build_object('id',c,'expected',0,'content',jsonb_build_object('companyName','새 회사명','contact','문의 안내','footer','배송 안내','cost','SECRET')));
+ if pricing_p1(c,a,false,'profile','{}')->'content' ? 'cost' then raise exception 'Profile field leak';end if;
+ begin perform pricing_p1(c,b,false,'save-profile',jsonb_build_object('id',c,'expected',1,'content',jsonb_build_object('companyName','바꾸기')));raise exception 'Sales edited common profile';exception when raise_exception then if SQLERRM='Sales edited common profile' then raise;end if;end;
+ if (select x->'content'->>'companyName' from jsonb_array_elements(pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))) x where x->>'version'='1')<>'합성 회사' then raise exception 'Version header changed with defaults';end if;
+ perform pricing_p1(c,a,true,'delete-promotion',jsonb_build_object('id',promo,'expected',1));
+ if not (pricing_p1(c,a,true,'versions',jsonb_build_object('id',doc))->0->'unavailablePromotions' ? promo::text) then raise exception 'Deleted promotion available';end if;
+ if has_table_privilege('service_role','pricing_document_versions','update') or has_function_privilege('anon','pricing_p1(uuid,text,boolean,text,jsonb)','execute') then raise exception 'Role grants';end if;
+end $$;
+reset role;
+delete from companies where id='00000000-0000-4000-8000-000000000001';
+do $$ begin if exists(select from pricing_documents) or exists(select from pricing_document_versions) or exists(select from pricing_promotions) or exists(select from pricing_product_sets) or exists(select from pricing_print_profiles) then raise exception 'Company cascade';end if;end $$;
+rollback;
