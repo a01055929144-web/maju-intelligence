@@ -5,6 +5,7 @@ import {
   printPages,
   koreaDay,
   withMargin,
+  withLivePromotions,
   lineFromCatalog,
   type DocumentContent,
   type DocumentVersion,
@@ -149,6 +150,52 @@ describe("pricing P1 documents", () => {
     expect(
       documentOutput({ ...v, promotionStock: { [id]: 0 } }, "2026-10-30").lines,
     ).toHaveLength(0);
+  });
+  it("shows live stock when a draft preview first opens and after stock changes", () => {
+    const draft = {
+      ...version,
+      version: 0,
+      content: {
+        ...content,
+        lines: [
+          {
+            ...content.lines[0],
+            promotionId: id,
+            startsOn: "2026-10-30",
+            endsOn: "2026-11-01",
+            remaining: 10,
+            badge: "행사" as const,
+          },
+        ],
+      },
+    };
+    const promotion = {
+      id,
+      productId: id,
+      name: "관리명",
+      displayName: "행사명",
+      startsOn: "2026-10-30",
+      endsOn: "2026-11-01",
+      price: 21180,
+      stock: 1,
+      perStoreLimit: null,
+      allowSheet: true,
+      badge: "행사" as const,
+      revision: 1,
+      taxType: "exempt" as const,
+    };
+    const first = withLivePromotions(draft, [promotion], "2026-10-30");
+    expect(documentOutput(first, "2026-10-30").lines[0]).toMatchObject({
+      remaining: 1,
+      price: 21180,
+    });
+    const soldOut = withLivePromotions(
+      first,
+      [{ ...promotion, stock: 0 }],
+      "2026-10-30",
+    );
+    expect(documentOutput(soldOut, "2026-10-30").lines).toHaveLength(0);
+    expect(draft.content.lines[0].remaining).toBe(10);
   });
   it("retains order and all long names across conservative A4 pages", () => {
     const lines = Array.from({ length: 100 }, (_, i) => ({

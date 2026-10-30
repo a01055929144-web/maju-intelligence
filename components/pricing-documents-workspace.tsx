@@ -14,6 +14,7 @@ import {
   type PrintLine,
   type ProductSet,
   type Promotion,
+  withLivePromotions,
 } from "@/domains/pricing/document";
 import { PricingDocumentPreview } from "./pricing-document-preview";
 import { PricingDocumentLibrary } from "./pricing-document-library";
@@ -556,27 +557,20 @@ export function PricingDocumentsWorkspace({
                       void task(async () => {
                         const content = parseDocument(draft.content),
                           p = await read<Promotion[]>("promotions");
-                        setPreview({
-                          id: `preview-${draft.id}`,
-                          documentId: draft.id,
-                          version: 0,
-                          revision: draft.revision,
-                          publishedAt: new Date().toISOString(),
-                          content,
-                          unavailablePromotions: content.lines
-                            .filter(
-                              (l) =>
-                                l.promotionId &&
-                                !p.some(
-                                  (x) =>
-                                    x.id === l.promotionId &&
-                                    x.stock !== 0 &&
-                                    koreaDay() >= x.startsOn &&
-                                    koreaDay() <= x.endsOn,
-                                ),
-                            )
-                            .map((l) => l.promotionId!),
-                        });
+                        setPreview(
+                          withLivePromotions(
+                            {
+                              id: `preview-${draft.id}`,
+                              documentId: draft.id,
+                              version: 0,
+                              revision: draft.revision,
+                              publishedAt: new Date().toISOString(),
+                              content,
+                              unavailablePromotions: [],
+                            },
+                            p,
+                          ),
+                        );
                       })
                     }
                   >
@@ -1065,25 +1059,7 @@ export function PricingDocumentsWorkspace({
           refresh={async () => {
             if (preview.id.startsWith("preview-")) {
               const promos = await read<Promotion[]>("promotions");
-              return {
-                ...preview,
-                promotionStock: Object.fromEntries(
-                  promos.map((p) => [p.id, p.stock]),
-                ),
-                unavailablePromotions: preview.content.lines
-                  .filter(
-                    (l) =>
-                      l.promotionId &&
-                      !promos.some(
-                        (p) =>
-                          p.id === l.promotionId &&
-                          p.stock !== 0 &&
-                          koreaDay() >= p.startsOn &&
-                          koreaDay() <= p.endsOn,
-                      ),
-                  )
-                  .map((l) => l.promotionId!),
-              };
+              return withLivePromotions(preview, promos);
             }
             const list = await read<DocumentVersion[]>("versions", {
               id: preview.documentId,

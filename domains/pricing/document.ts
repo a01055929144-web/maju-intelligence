@@ -88,6 +88,32 @@ export type ProductSet = {
 export function koreaDay(now = new Date()) {
   return new Date(now.getTime() + 32400000).toISOString().slice(0, 10);
 }
+/** Refresh availability and stock while keeping the draft's selected prices. */
+export function withLivePromotions(
+  version: DocumentVersion,
+  promotions: readonly Promotion[],
+  day = koreaDay(),
+): DocumentVersion {
+  const byId = new Map(promotions.map((promotion) => [promotion.id, promotion]));
+  const promotionIds = version.content.lines
+    .map((line) => line.promotionId)
+    .filter((id): id is string => id !== null);
+  return {
+    ...version,
+    promotionStock: Object.fromEntries(
+      promotions.map((promotion) => [promotion.id, promotion.stock]),
+    ),
+    unavailablePromotions: promotionIds.filter((id) => {
+      const promotion = byId.get(id);
+      return (
+        !promotion ||
+        promotion.stock === 0 ||
+        day < promotion.startsOn ||
+        day > promotion.endsOn
+      );
+    }),
+  };
+}
 export function isId(value: unknown): value is string {
   return (
     typeof value === "string" &&
