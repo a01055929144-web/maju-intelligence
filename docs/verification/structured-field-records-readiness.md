@@ -41,6 +41,16 @@
 
 ## 이번 초안 검증의 제한
 
-- SQL은 운영에 실행하지 않았다. 로컬 `psql`은 없고 Docker Desktop 엔진도 실행 중이 아니어서 실제 PostgreSQL 실행 검증은 남아 있다.
-- 로컬 또는 격리된 PostgreSQL에서 위 재요청 시나리오와 회사별 접근 권한을 검증한 뒤 SQL 승인을 요청한다.
+- SQL은 운영에 실행하지 않았다. `tests/sql/structured-field-record-rpc.pg16.verify.mjs`는 loopback 55432 포트와 `PG_VERIFY_CONFIRM=isolated-structured-rpc-fixture`를 모두 요구하며, 운영 연결 문자열을 거부한다.
+- 격리 DB에서 동시 재요청, 전체 롤백, 회사별 actor 경계, 함수 실행 권한, `completed`/`resolved_at` 일관성을 검증한 뒤 SQL 승인을 요청한다.
 - 정적 회귀 테스트는 함수 권한, 고정 search path, 회사 소유권, actor 소속, null 품목 거부, 영업 멱등 UNIQUE 제약을 확인한다.
+
+## 격리 PostgreSQL 16 실행 결과
+
+- 2026-10-30 KST에 PostgreSQL 16.14 Windows 바이너리와 별도 임시 데이터 디렉터리, `127.0.0.1:55432` loopback만 사용했다. 운영 Supabase 연결 문자열은 사용하지 않았다.
+- Windows 로캘의 UTF-8 `initdb`가 `invalid byte sequence 0xb9`로 실패해, 데이터 의미가 없는 fixture 전용 클러스터를 `SQL_ASCII`로 다시 초기화했다.
+- 배송·영업 각각 두 연결의 동일 멱등키 동시 호출에서 헤더와 item이 한 세트만 남고 두 응답이 같은 ID를 반환했다.
+- 잘못된 배송 item으로 실패시킨 호출은 앞서 삽입한 note/event까지 모두 롤백됐다. 명시적 `null` 견적 items도 action을 남기지 않았다.
+- `anon`과 `authenticated`의 함수 실행은 `42501`로 거부됐고, `service_role`만 fixture 권한 범위에서 실행됐다.
+- 다른 회사의 actor ID는 거부됐으며, `completed`는 `resolved_at`이 채워지고 `in_progress`는 `null`을 유지했다.
+- 출력 `structured field record RPC PG16 assertions passed`를 확인한 뒤 임시 서버와 데이터 디렉터리를 제거했다.
