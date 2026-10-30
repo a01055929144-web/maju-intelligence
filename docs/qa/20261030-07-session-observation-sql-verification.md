@@ -26,6 +26,8 @@
 10. `anon`, `authenticated`, `PUBLIC`은 테이블/함수 접근이 거절되고 `service_role`만 필요한 권한을 가진다.
 11. 회사 삭제와 사용자 계정 삭제 시 기존 cascade FK가 관찰 행을 삭제한다.
 12. 실행 전후 `staff_security_alerts` 행 수와 정의가 동일하다.
+13. 각 필수 인자(`company_id`, `user_id`, 두 해시, source, expiry)를 하나씩 `NULL`로 호출하면 기록 없이 `22023`으로 거절된다.
+14. 트랜잭션 A가 활성 멤버 행을 `FOR SHARE`로 잠근 채 관찰을 진행하는 동안 트랜잭션 B의 `status`, `permission_role`, `membership_expires_at` 변경은 대기한다. A 커밋 후 B가 비활성화하면 다음 관찰은 `42501`이고 기존 행의 `last_seen_at`은 바뀌지 않는다.
 
 ## 정적·회귀 확인
 

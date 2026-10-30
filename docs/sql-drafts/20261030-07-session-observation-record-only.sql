@@ -52,9 +52,15 @@ declare
   v_recorded boolean := false;
   v_active_device_count integer := 0;
 begin
-  if p_device_hash !~ '^[0-9a-f]{64}$'
+  if p_company_id is null
+     or p_user_id is null
+     or p_device_hash is null
+     or p_device_hash !~ '^[0-9a-f]{64}$'
+     or p_session_hash is null
      or p_session_hash !~ '^[0-9a-f]{64}$'
+     or p_session_source is null
      or p_session_source not in ('supabase_auth', 'application_cookie')
+     or p_expires_at is null
      or p_expires_at <= v_now then
     raise exception using errcode = '22023', message = 'invalid session observation';
   end if;
@@ -66,7 +72,7 @@ begin
      and (coalesce(member.permission_role,
        case when member.role = 'owner' then 'owner' else 'staff' end) <> 'temporary'
        or member.membership_expires_at > v_now)
-   for key share;
+   for share;
   if not found then
     raise exception using errcode = '42501', message = 'active company membership required';
   end if;
