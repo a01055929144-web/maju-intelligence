@@ -340,13 +340,18 @@ try {
   await expect(
     page.getByText("초안을 저장했습니다.", { exact: true }),
   ).toBeVisible();
+  // Stock can change after the draft was saved but before publication.
+  await pool.query(
+    "update pricing_promotions set stock=0 where company_id=$1",
+    [company],
+  );
   await page
     .getByRole("button", { name: "판매가 버전 확정", exact: true })
     .click();
   await expect(
     page.getByText("버전 1을 확정했습니다.", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator("#pricing-print-root")).toContainText(
+  await expect(page.locator("#pricing-print-root")).not.toContainText(
     "공개 행사 A",
   );
   const promoList = await (
@@ -363,6 +368,10 @@ try {
   });
   if (!reduced.ok()) throw new Error("Promotion stock reduction failed");
   promo.revision += 1;
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  await expect(page.locator("#pricing-print-root")).toContainText(
+    "남은 수량 1",
+  );
   const stockDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
   await (await stockDownload).saveAs(resolve(artifacts, "live-stock-page.png"));
@@ -378,6 +387,10 @@ try {
     },
   });
   if (!changed.ok()) throw new Error("Promotion stock update failed");
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  await expect(page.locator("#pricing-print-root")).not.toContainText(
+    "공개 행사 A",
+  );
   const soldDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
   await (await soldDownload).saveAs(resolve(artifacts, "sold-out-page.png"));

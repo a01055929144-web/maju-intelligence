@@ -1033,7 +1033,20 @@ export function PricingDocumentsWorkspace({
                     <button
                       key={v.id}
                       disabled={busy}
-                      onClick={() => setPreview(v)}
+                      onClick={() =>
+                        void task(async () => {
+                          const current = await read<DocumentVersion[]>(
+                            "versions",
+                            { id: v.documentId },
+                          );
+                          const selected = current.find(
+                            (item) => item.id === v.id,
+                          );
+                          if (!selected)
+                            throw new Error("버전을 찾을 수 없습니다.");
+                          setPreview(selected);
+                        })
+                      }
                       className={box}
                     >
                       버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
@@ -1047,7 +1060,7 @@ export function PricingDocumentsWorkspace({
       )}
       {preview && (
         <PricingDocumentPreview
-          key={`${preview.id}-${preview.publishedAt}`}
+          key={`${preview.id}-${preview.publishedAt}-${JSON.stringify(preview.promotionStock)}-${preview.unavailablePromotions.join(",")}`}
           version={preview}
           refresh={async () => {
             if (preview.id.startsWith("preview-")) {

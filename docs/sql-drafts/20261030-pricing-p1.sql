@@ -62,6 +62,9 @@ begin
  if not exists(select from jsonb_array_elements(result) x where (x->>'visible')::boolean) then raise exception 'No visible products'; end if;
  return jsonb_build_object('kind',p_content->>'kind','title',trim(p_content->>'title'),'companyName',trim(p_content->>'companyName'),'contact',coalesce(p_content->>'contact',''),'recipient',coalesce(p_content->>'recipient',''),'footer',coalesce(p_content->>'footer',''),'validUntil',p_content->>'validUntil','theme',p_content->>'theme','layout',p_content->>'layout','showPrice',p_content->'showPrice','showBrand',p_content->'showBrand','showSpec',p_content->'showSpec','lines',result);
 end $$;
+create function public.pricing_p1_version(p_company uuid,p_version public.pricing_document_versions) returns jsonb language sql stable security invoker set search_path=public,pg_temp as $$
+ select jsonb_build_object('id',p_version.id,'documentId',p_version.document_id,'version',p_version.version,'revision',p_version.revision,'content',p_version.content,'publishedAt',p_version.published_at,'promotionStock',coalesce((select jsonb_object_agg(p.id::text,p.stock) from pricing_promotions p where p.company_id=p_company and exists(select from jsonb_array_elements(p_version.content->'lines') l where l->>'promotionId'=p.id::text)),'{}'::jsonb),'unavailablePromotions',coalesce((select jsonb_agg(l->>'promotionId') from jsonb_array_elements(p_version.content->'lines') l where l->>'promotionId' is not null and not exists(select from pricing_promotions p where p.company_id=p_company and p.id=(l->>'promotionId')::uuid and (current_timestamp at time zone 'Asia/Seoul')::date between p.starts_on and p.ends_on and p.stock is distinct from 0)),'[]'::jsonb)) where p_version.company_id=p_company;
+$$;
 create function public.pricing_p1(p_company uuid,p_actor text,p_manager boolean,p_action text,p_payload jsonb default '{}') returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare v_id uuid:=(p_payload->>'id')::uuid; expected integer:=(p_payload->>'expected')::integer;
  d pricing_documents; v pricing_document_versions; pr pricing_promotions; st pricing_product_sets;
@@ -87,7 +90,7 @@ begin
  elsif p_action='versions' then
    select * into d from pricing_documents a where a.company_id=p_company and a.id=v_id and (a.kind='sheet' or a.owner_key=p_actor);
    if not found then raise exception 'Document not found'; end if;
-   select coalesce(jsonb_agg(jsonb_build_object('id',x.id,'documentId',x.document_id,'version',x.version,'revision',x.revision,'content',x.content,'publishedAt',x.published_at,'promotionStock',coalesce((select jsonb_object_agg(p.id::text,p.stock) from pricing_promotions p where p.company_id=p_company and exists(select from jsonb_array_elements(x.content->'lines') l where l->>'promotionId'=p.id::text)),'{}'::jsonb),'unavailablePromotions',coalesce((select jsonb_agg(l->>'promotionId') from jsonb_array_elements(x.content->'lines') l where l->>'promotionId' is not null and not exists(select from pricing_promotions p where p.company_id=p_company and p.id=(l->>'promotionId')::uuid and today between p.starts_on and p.ends_on and p.stock is distinct from 0)),'[]'::jsonb)) order by x.version desc),'[]'::jsonb) into result from (select * from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id order by a.version desc limit 50 offset (page-1)*50) x;
+   select coalesce(jsonb_agg(pricing_p1_version(p_company,x) order by x.version desc),'[]'::jsonb) into result from (select * from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id order by a.version desc limit 50 offset (page-1)*50) x;
    return result;
  elsif p_action='promotions' then
    select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'productId',p.product_id,'name',case when p_manager then p.name else p.display_name end,'displayName',p.display_name,'startsOn',p.starts_on,'endsOn',p.ends_on,'price',p.price,'stock',p.stock,'perStoreLimit',p.per_store_limit,'allowSheet',p.allow_sheet,'badge',p.badge,'taxType',p.tax_type,'revision',p.revision) || case when p_manager then jsonb_build_object('cost',p.purchase_cost,'regularCost',c.purchase_price,'margin',p.margin_bp/100.0) else '{}'::jsonb end order by p.ends_on,p.id),'[]'::jsonb) into result from pricing_promotions p join product_catalog c on c.company_id=p.company_id and c.id=p.product_id where p.company_id=p_company and (p_manager or (today between p.starts_on and p.ends_on and p.stock is distinct from 0));return result;
@@ -126,7 +129,7 @@ begin
        select coalesce(max(a.version),0)+1 into n from pricing_document_versions a where a.company_id=p_company and a.document_id=v_id;
        insert into pricing_document_versions(company_id,document_id,version,revision,content) values(p_company,v_id,n,expected,clean) returning * into v;
      end if;
-     return jsonb_build_object('id',v.id,'documentId',v.document_id,'version',v.version,'revision',v.revision,'content',v.content,'publishedAt',v.published_at,'unavailablePromotions','[]'::jsonb);
+     return pricing_p1_version(p_company,v);
    end if;
  elsif p_action='save-promotion' then
    if not p_manager then raise exception 'Manager required'; end if;
@@ -170,6 +173,6 @@ begin
  end if;
  raise exception 'Unknown P1 action';
 end $$;
-revoke all on function public.pricing_p1_clean(uuid,jsonb),public.pricing_p1(uuid,text,boolean,text,jsonb),public.pricing_version_immutable() from public,anon,authenticated,service_role;
-grant execute on function public.pricing_p1_clean(uuid,jsonb),public.pricing_p1(uuid,text,boolean,text,jsonb) to service_role;
+revoke all on function public.pricing_p1_version(uuid,public.pricing_document_versions),public.pricing_p1_clean(uuid,jsonb),public.pricing_p1(uuid,text,boolean,text,jsonb),public.pricing_version_immutable() from public,anon,authenticated,service_role;
+grant execute on function public.pricing_p1_version(uuid,public.pricing_document_versions),public.pricing_p1_clean(uuid,jsonb),public.pricing_p1(uuid,text,boolean,text,jsonb) to service_role;
 commit;

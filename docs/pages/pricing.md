@@ -98,3 +98,4 @@ SQL은 새 폐기용 로컬 PG16 DB에 한 번 적용하는 초안이다. P0 초
 - 긴 제목·품목명·하단 안내와 21개 품목을 사용한 A4 11쪽: 내용 넘침 없음, PDF 실제 쪽 수 일치 PASS. 출력 모델과 실제 PNG를 시각 확인.
 - 브라우저 스크립트는 합성 계정/상품·loopback RPC 어댑터만 사용하며 운영 Supabase/메일·메시지 전송을 호출하지 않는다. 실행 명령: PRICING_P1_LOCAL_DATABASE_URL을 새 pricing_p1_test* DB로 지정해 scripts/test-pricing-p1-local.mjs, 그 초기화된 DB에서 scripts/test-pricing-p1-browser.mjs 실행. 산출물은 저장소 밖 ../outputs/pricing-p1-browser에 생성.
 - 확인한 문제와 보완: PG16 임시 리소스/한글 경로 제한은 영문 전용 테스트 경로로 해결. Next 내부 localhost 정규화에 따른 출처 검사 불일치는 실제 Host 기준으로 보완하고 회귀 테스트. 테스트 XLSX는 메모리 버퍼→Node 파일 저장으로 경로 의존을 제거.
+- PR #98 리뷰 보완: publish/versions는 공통 SQL 응답 함수로 현재 행사 가능 여부·수량을 제공한다. 과거 버전 버튼은 다시 조회하고 같은 버전의 상태가 달라지면 미리보기를 재생성한다. 저장 후 품절→확정 및 수량 변경→과거 버전 열기에서 내보내기 전 화면 일치를 브라우저로 검증한다.
