@@ -14,7 +14,7 @@ PR #84의 보존·권한 원칙은 유지할 수 있지만, `docs/sql-drafts/202
 
 | 항목 | 운영 상태 | #84 가정 | 판정·조치 |
 |---|---|---|---|
-| PostgreSQL | 17.6 | 로컬 실행 테스트 파일명이 PG16 | 적용 전 PG17 동일 테스트 필수. SQL은 PG15+ 문법을 명시한다. |
+| PostgreSQL | 17.6 | 로컬 실행 테스트 파일명이 PG16 | PR CI의 PostgreSQL 17 service에서 동일 fixture를 실행한다. SQL은 PG15+ 문법을 명시한다. |
 | `common_revision_history` | 없음 | 선행 적용 필요 | **차단 조건**. 초안 상단에서 부재 시 즉시 중단한다. |
 | `maju_private` / redaction audit | 없음 | #84가 생성 | 예상과 일치. 단, 선행 테이블 적용 뒤에만 생성한다. |
 | 거래처 연락 채널 4개 컬럼 | 없음 | #84가 `ADD COLUMN IF NOT EXISTS` | 예상과 일치. `fax`, `instagram_url`, `naver_talktalk_url`, `contact_channels_updated_at` 추가 대상이다. |
@@ -50,8 +50,8 @@ PR #84의 보존·권한 원칙은 유지할 수 있지만, `docs/sql-drafts/202
 ## 적용 승인 전에 남은 일
 
 1. `20261029-common-revision-history.sql`을 운영용 migration으로 승격할지 별도 승인한다.
-2. common history 선행 migration을 PostgreSQL 17 임시 DB에서 실행하고 append-only·회사 cascade·사용자 SET NULL을 재검증한다.
-3. #84 연속성 SQL을 별도 migration으로 정리하고, 정확히 90일·90일 초과·010·앞자리 0 누락 10자리·혼합 old/new를 포함한 현재 fixture를 PG17에서 재실행한다.
+2. PR CI의 PostgreSQL 17 fixture 결과를 유지하고, migration 승격본에서도 append-only·회사 cascade·사용자 SET NULL을 재검증한다.
+3. #84 연속성 SQL을 별도 migration으로 정리할 때 정확히 90일·90일 초과·010·앞자리 0 누락 10자리·혼합 old/new fixture를 그대로 유지한다.
 4. 자동 90일 작업의 실행 주체와 스케줄을 승인한다. 현재 초안은 owner 전용 함수만 정의하며 운영 스케줄은 만들지 않는다.
 5. 수동 익명화의 서버 API가 서명된 세션에서 승인자 ID를 결정하기 전까지 operator 역할을 로그인 역할에 grant하지 않는다.
 6. migration별 rollback과 test company 1곳의 플래그 활성화 순서를 별도로 승인한다.
