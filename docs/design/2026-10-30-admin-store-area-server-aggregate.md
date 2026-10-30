@@ -73,3 +73,22 @@ select public.admin_store_area_profile('검증용-회사-UUID'::uuid);
 3. 실제 규모 회사로 EXPLAIN ANALYZE 검토
 4. 운영 적용 후 스키마 캐시 반영 확인
 5. `ADMIN_LEAD_STORE_AREA_RPC_ENABLED=true`, 이후 별도 승인으로 상위 기능 플래그 활성화
+
+## 승인 검토 자료 확정 (2026-10-30)
+
+| 항목 | 확인 결과 | 승인 전 상태 |
+|---|---|---|
+| 범위 | 관리자 인증 후 필수 `companyId` 한 곳만 `security invoker` RPC로 집계 | 유지 |
+| 응답 | 건수·비율·업종 중앙값·동일 canonical lead의 원천 비교만 반환 | 원문·키·URL 비노출 |
+| 정합성 | 경계값, 최신 `last_seen_at` 관측, 회사 A/B 격리, 권한 검증 통과 | PostgreSQL 16.14 실측 |
+| 규모 | 가짜 리드 22,754건·원천 1,133건, 실행 715.575ms, shared hit 385 | 운영 분포·디스크 I/O는 미재현 |
+| 인덱스 | 현재 회사 선두 인덱스로 1초 미만. 후보 인덱스는 운영 유사 EXPLAIN에서 병목 확인 전 추가하지 않음 | 별도 승인 필요 |
+| 롤백 | 규모 스크립트 전체 rollback 후 임시 테이블·역할 부재 확인 | 재현 SQL 포함 |
+| 기능 플래그 | `ADMIN_LEAD_STORE_AREA_PROFILE_ENABLED=false`, `ADMIN_LEAD_STORE_AREA_RPC_ENABLED=false`, `LEAD_SEOUL_SOURCE_ENABLED=false` | 계속 OFF |
+| CI | PR #96 최신 Linux `build` 성공 | 완료 |
+
+준비도는 코드·초안·비운영 검증 기준 약 95%이며 운영 적용은 0%다. 남은 5%는 정식 migration 승인, 운영 유사 복제본 EXPLAIN, 운영 적용·스키마 캐시 확인이다.
+
+### 서울 HTTPS 읽기 재확인
+
+2026-10-30 인증키 없는 공식 `sample` HTTPS 경로를 1회만 재시도했다. 응답 본문을 읽거나 저장·로그하지 않았고 키도 사용하지 않았다. HTTP 상태를 받기 전 전송 단계에서 `HttpRequestException`으로 실패해 HTTPS 지원을 확인하지 못했다. 지시대로 추가 재시도·HTTP 인증키 경로 우회는 하지 않으며 서울 원천 플래그를 OFF로 유지한다.
