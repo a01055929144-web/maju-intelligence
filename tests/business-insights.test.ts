@@ -12,6 +12,26 @@ describe("resolveInsightsDateRange", () => {
 });
 
 describe("buildBusinessInsights", () => {
+  it("keeps accepted quotes as the current operational contract metric, not a financial metric", () => {
+    const range = resolveInsightsDateRange("month", new Date("2026-10-26T12:00:00+09:00"));
+    const result = buildBusinessInsights({
+      churnRisks: [],
+      deliveries: [],
+      leads: [],
+      ledger: [],
+      quotes: [
+        { createdAt: "2026-10-10T00:00:00Z", id: "accepted", status: "accepted", validUntil: "2026-11-01T00:00:00Z" },
+        { createdAt: "2026-10-11T00:00:00Z", id: "sent", status: "sent", validUntil: "2026-11-01T00:00:00Z" },
+        { createdAt: "2026-10-12T00:00:00Z", id: "draft", status: "draft", validUntil: "2026-11-01T00:00:00Z" }
+      ] as SalesQuoteListItem[]
+    }, range);
+
+    expect(result.current).toMatchObject({ contracts: 1, quotes: 2 });
+    expect(result.current).not.toHaveProperty("confirmedSales");
+    expect(result.current).not.toHaveProperty("ledgerBalance");
+    expect(result.current).not.toHaveProperty("salesTransactions");
+  });
+
   it("returns a safe empty dashboard without exposing internal cost fields", () => {
     const range = resolveInsightsDateRange("month", new Date("2026-10-26T12:00:00+09:00"));
     const result = buildBusinessInsights({
