@@ -53,17 +53,25 @@ const labels: Record<CatalogField, string> = {
 };
 const money = (value?: number) =>
   value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
+const importTargets = [
+  ["상품 마스터", "매입처 단가표를 적재한 뒤 확인 품목을 상품 마스터로 전환합니다.", true],
+  ["매출처 · 매입처", "거래처 기본정보 가져오기 · SQL 승인 대기", false],
+  ["거래처 원장", "거래처별 품목 · 단가 가져오기 · SQL 승인 대기", false],
+  ["재고", "기준일 재고와 위치 가져오기 · 재고 원장 승인 대기", false],
+] as const;
 
 export function ProductCatalogWorkspace({
   categoriesEnabled = false,
   companyId = "",
   importAuditV2Enabled = false,
+  importTargetsEnabled = false,
   initialTab = "catalog",
   tableSettingsKey = "products:current",
 }: {
   categoriesEnabled?: boolean;
   companyId?: string;
   importAuditV2Enabled?: boolean;
+  importTargetsEnabled?: boolean;
   initialTab?: Tab;
   tableSettingsKey?: string;
 }) {
@@ -179,7 +187,7 @@ export function ProductCatalogWorkspace({
           type="button"
         >
           <Upload className="h-4 w-4" />
-          매입 단가표 업로드
+          {importTargetsEnabled ? "데이터 가져오기" : "매입 단가표 업로드"}
         </button>
       </div>
       {message ? (
@@ -323,6 +331,7 @@ export function ProductCatalogWorkspace({
         <ImportDrawer
           auditV2Enabled={importAuditV2Enabled}
           companyId={companyId}
+          importTargetsEnabled={importTargetsEnabled}
           onClose={() => setDrawer(false)}
           onSaved={async (m) => {
             setMessage(m);
@@ -493,11 +502,13 @@ function ImportAuditPanel({
 function ImportDrawer({
   auditV2Enabled,
   companyId,
+  importTargetsEnabled,
   onClose,
   onSaved,
 }: {
   auditV2Enabled: boolean;
   companyId: string;
+  importTargetsEnabled: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -601,6 +612,25 @@ function ImportDrawer({
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
           {step === 1 ? (
             <>
+              {importTargetsEnabled ? (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-bold">가져올 대상</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {importTargets.map(([label, description, enabled]) => (
+                      <label
+                        className={`rounded-xl border p-3 text-left ${enabled ? "border-teal-600 bg-teal-50" : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500"}`}
+                        key={label}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-black">
+                          <input checked={enabled} disabled={!enabled} name="import-target" readOnly type="radio" />
+                          {label}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5">{description}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
               <label className="space-y-2">
                 <span className="text-sm font-bold">유통사명</span>
                 <input
