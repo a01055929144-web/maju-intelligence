@@ -68,7 +68,6 @@ jobs:
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-03-maju-category-match.pg17.test.sql
 
       - name: Verify WO-21 login account draft on PostgreSQL 17
-        working-directory: docs/sql-drafts
         env:
           PGHOST: 127.0.0.1
           PGPORT: 5432
