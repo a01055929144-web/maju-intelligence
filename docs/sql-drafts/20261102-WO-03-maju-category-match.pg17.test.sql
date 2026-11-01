@@ -16,6 +16,3 @@ do $$ begin
   end if;
   if not has_table_privilege('service_role', 'public.maju_categories', 'select') then raise exception 'service role cannot read maju categories'; end if;
 end $$;
-drop table public.product_categories;
-drop table public.maju_categories;
-drop table public.companies;
