@@ -21,17 +21,20 @@ type RoleMember = {
   userId: string;
 };
 
-export function RoleSettingsPanel() {
-  const [members, setMembers] = useState<RoleMember[]>([]);
-  const [currentUserId, setCurrentUserId] = useState("");
+type RoleSettingsInitialData = { currentUserId: string; members: RoleMember[] };
+
+export function RoleSettingsPanel({ initialData }: { initialData?: RoleSettingsInitialData } = {}) {
+  const [members, setMembers] = useState<RoleMember[]>(initialData?.members ?? []);
+  const [currentUserId, setCurrentUserId] = useState(initialData?.currentUserId ?? "");
   const [selected, setSelected] = useState<string[]>([]);
   const [groupKey, setGroupKey] = useState<RoleGroupKey>("sales");
   const [permissions, setPermissions] = useState<RolePermissionKey[]>(ROLE_GROUPS.sales.permissions);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (initialData) return;
     fetch("/api/customer/role-settings", { cache: "no-store" })
       .then(async (response) => ({ ok: response.ok, payload: await response.json().catch(() => null) }))
       .then(({ ok, payload }) => {
@@ -41,7 +44,7 @@ export function RoleSettingsPanel() {
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : "권한 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [initialData]);
 
   const selectedMembers = useMemo(() => members.filter((member) => selected.includes(member.userId)), [members, selected]);
   const currentMember = members.find((member) => member.userId === currentUserId);
