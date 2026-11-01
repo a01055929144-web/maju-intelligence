@@ -95,6 +95,16 @@ jobs:
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-03-unit-conversion-bplus.pg17.test.sql
 
+      - name: Verify WO-25 product base prices draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-25-product-base-prices.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
