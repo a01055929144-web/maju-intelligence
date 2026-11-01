@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
         })
       : undefined;
     return NextResponse.json({ completions, events, locations });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "차량 위치를 불러오지 못했습니다." }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "차량 위치를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." }, { status: 400 });
   }
 }
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       userId: session.userId
     });
     return NextResponse.json(result);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "모바일 위치를 저장하지 못했습니다." }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "위치를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }, { status: 400 });
   }
 }

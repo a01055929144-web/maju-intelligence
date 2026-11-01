@@ -25,6 +25,7 @@ import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from ".
 import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
 import { getStoreAreaSqmFilterBounds, mergePendingInsertStoreArea, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
+import { resolveStaffWorkWindow } from "../domains/delivery/staff-location";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -4170,8 +4171,9 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
       current_customer_id: string | null; delivery_vehicle: string | null; driver_name: string | null; id: string;
       last_accuracy_m: number | string | null; last_lat: number | string | null; last_lng: number | string | null;
       last_location_at: string | null; last_seen_at: string | null; location_status: string | null; user_id: string;
+      work_auto_ends_at: string | null; work_ended_at: string | null; work_started_at: string | null;
     }>>(
-      `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&platform=eq.mobile_web&limit=1`
+      `staff_mobile_devices?select=id,user_id,driver_name,delivery_vehicle,last_lat,last_lng,last_accuracy_m,last_location_at,last_seen_at,location_status,current_customer_id,work_started_at,work_ended_at,work_auto_ends_at&company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(input.userId)}&platform=eq.mobile_web&limit=1`
     ).catch(() => []);
     const existing = existingRows[0];
     const previousPoint = existing?.last_location_at && existing.last_lat !== null && existing.last_lng !== null
@@ -4189,15 +4191,11 @@ export async function upsertStaffMobileLocation(input: StaffMobileLocationInput)
     }
     const elapsedMs = previousPoint ? Math.max(0, new Date(recordedAt).getTime() - new Date(previousPoint.recordedAt).getTime()) : Number.POSITIVE_INFINITY;
     const persistence = resolveStaffLocationPersistence(decision, Boolean(previousPoint), elapsedMs);
-    const workFields = input.workActive === undefined
-      ? {}
-      : input.workActive
-        ? {
-            work_started_at: existing?.last_seen_at && existing.location_status === "active" ? undefined : now,
-            work_ended_at: null,
-            work_auto_ends_at: new Date(receivedAt.getTime() + 12 * 60 * 60 * 1000).toISOString()
-          }
-        : { work_ended_at: now, work_auto_ends_at: null };
+    const workFields = resolveStaffWorkWindow(input.workActive, {
+      autoEndsAt: existing?.work_auto_ends_at,
+      endedAt: existing?.work_ended_at,
+      startedAt: existing?.work_started_at
+    }, receivedAt.getTime());
     const rowPayload = {
       company_id: input.companyId,
       current_customer_id: input.currentCustomerId || existing?.current_customer_id || null,
