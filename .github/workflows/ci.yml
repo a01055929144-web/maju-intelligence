@@ -114,6 +114,15 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-25-product-base-prices.pg17.test.sql
+      - name: Verify WO-25 customer items and down on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb customer_items_test
+          psql --dbname=customer_items_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items.pg17.test.sql
 
   build:
     runs-on: ubuntu-latest
