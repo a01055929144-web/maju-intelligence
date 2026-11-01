@@ -19,7 +19,7 @@ export const workspaceRoleLabels: Record<WorkspaceRole, string> = {
   member: "직원",
   owner: "대표/소유자",
   sales: "영업직원",
-  temporary: "알바(임시)"
+  temporary: "임시 직원"
 };
 
 export const workspaceTypeLabels: Record<WorkspaceType, string> = {

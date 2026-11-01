@@ -13,7 +13,7 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermissionRole, string> = {
   owner: "대표",
   manager: "관리자",
   staff: "직원",
-  temporary: "알바(임시)"
+  temporary: "임시 직원"
 };
 
 export function normalizeStaffDuties(value: unknown): StaffDuty[] {
@@ -49,7 +49,7 @@ export function validateStaffAccess(input: {
   expiresOn?: string | null;
 }) {
   if (!input.duties.length) return "영업 또는 배송 업무를 하나 이상 선택해주세요.";
-  if (input.permissionRole === "temporary" && !input.expiresOn) return "알바(임시)는 만료일이 필요합니다.";
+  if (input.permissionRole === "temporary" && !input.expiresOn) return "임시 직원은 만료일이 필요합니다.";
   return null;
 }
 

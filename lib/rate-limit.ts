@@ -20,7 +20,7 @@ type AttemptRecord = {
 
 const MAX_FAILURES = 5;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_MS = 10 * 60 * 1000; // WO-21: 5회 실패 시 10분 잠금
 
 const memoryAttempts = new Map<string, AttemptRecord>();
 const memoryRequestAttempts = new Map<string, AttemptRecord>();

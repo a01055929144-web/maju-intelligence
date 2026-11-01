@@ -3,8 +3,9 @@ import { clearCustomerSession, setAdminSession, validateAdminCredentials } from 
 import { checkLoginThrottle, clearLoginThrottle, recordLoginFailure } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
-  const identifier = `admin:${body?.email || "unknown"}`;
+  const body = (await request.json().catch(() => null)) as { email?: string; identifier?: string; password?: string } | null;
+  const loginId = body?.identifier || body?.email || "";
+  const identifier = `admin:${loginId || "unknown"}`;
 
   const throttle = await checkLoginThrottle(identifier);
   if (!throttle.allowed) {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const session = await validateAdminCredentials(body?.email || "", body?.password || "");
+  const session = await validateAdminCredentials(loginId, body?.password || "");
 
   if (!session) {
     await recordLoginFailure(identifier);
@@ -24,5 +25,5 @@ export async function POST(request: NextRequest) {
   await clearLoginThrottle(identifier);
   await clearCustomerSession();
   await setAdminSession(session);
-  return NextResponse.json({ ok: true, session });
+  return NextResponse.json({ ok: true, mustChangePassword: Boolean(session.mustChangePassword), session });
 }

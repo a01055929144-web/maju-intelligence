@@ -511,6 +511,30 @@ export type AuthCredentials = {
   customerCompanyId: string;
   updatedAt?: string;
 };
+export type AppUserLoginCredential = {
+  email: string;
+  id: string;
+  loginId: string;
+  loginLockedUntil?: string;
+  mustChangePassword: boolean;
+  name: string;
+  passwordHash: string;
+  role: "maju_super_admin" | "maju_operator" | "customer_owner" | "customer_member";
+  sessionVersion: number;
+  status: string;
+};
+export type ManagedLoginAccount = Omit<AppUserLoginCredential, "passwordHash"> & {
+  companyId?: string;
+  companyName?: string;
+  workspaceRole?: string;
+};
+export type ManagedLoginAccountInput = {
+  companyId?: string;
+  loginId: string;
+  name: string;
+  role: AppUserLoginCredential["role"];
+  workspaceRole?: StaffInvitation["role"] | "owner" | "member";
+};
 export type ManagedCompanyAccount = {
   id: string;
   name: string;
@@ -1555,8 +1579,8 @@ export async function deleteExcelMappingPreset(
 
 export function getFallbackAuthCredentials(): AuthCredentials {
   return {
-    adminEmail: process.env.ADMIN_EMAIL || "admin@maju.local",
-    adminPassword: process.env.ADMIN_PASSWORD || "maju-admin-2026",
+    adminEmail: process.env.ADMIN_EMAIL || "",
+    adminPassword: process.env.ADMIN_PASSWORD || "",
     customerEmail: process.env.CUSTOMER_EMAIL || "owner@maju.local",
     customerPassword: process.env.CUSTOMER_PASSWORD || "maju-owner-2026",
     customerCompanyId: getDefaultCompanyId()
@@ -1594,6 +1618,183 @@ export async function getAuthCredentials(): Promise<AuthCredentials> {
     console.error("Auth credentials fallback:", error);
     return fallback;
   }
+}
+
+export async function getAppUserLoginCredential(identifier: string): Promise<AppUserLoginCredential | null> {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized || !isProductionStoreConfigured()) return null;
+  const rows = await supabaseRequest<Array<{
+    email: string | null;
+    id: string;
+    login_id: string | null;
+    login_locked_until: string | null;
+    must_change_password: boolean | null;
+    name: string;
+    password_hash: string | null;
+    role: AppUserLoginCredential["role"];
+    session_version: number | null;
+    status: string | null;
+  }>>(
+    `app_users?select=id,email,login_id,login_locked_until,name,password_hash,role,status,session_version,must_change_password&or=(login_id.eq.${encodeURIComponent(normalized)},email.eq.${encodeURIComponent(normalized)})&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  if (!row?.login_id || !row.password_hash) return null;
+  return {
+    email: row.email || "",
+    id: row.id,
+    loginId: row.login_id,
+    loginLockedUntil: row.login_locked_until || undefined,
+    mustChangePassword: Boolean(row.must_change_password),
+    name: row.name,
+    passwordHash: row.password_hash,
+    role: row.role,
+    sessionVersion: row.session_version || 1,
+    status: row.status || "active"
+  };
+}
+
+export async function getAppUserAccountState(userId: string): Promise<Pick<AppUserLoginCredential, "mustChangePassword" | "sessionVersion" | "status"> | null> {
+  if (!userId || !isProductionStoreConfigured()) return null;
+  const rows = await supabaseRequest<Array<{ must_change_password: boolean | null; session_version: number | null; status: string | null }>>(
+    `app_users?select=status,session_version,must_change_password&id=eq.${encodeURIComponent(userId)}&limit=1`
+  ).catch(() => []);
+  const row = rows[0];
+  return row ? { mustChangePassword: Boolean(row.must_change_password), sessionVersion: row.session_version || 1, status: row.status || "active" } : null;
+}
+
+export async function getManagedAdminAccountCount(): Promise<number> {
+  if (!isProductionStoreConfigured()) return 0;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    "app_users?select=id&role=in.(maju_super_admin,maju_operator)&status=eq.active"
+  ).catch(() => []);
+  return rows.length;
+}
+
+export async function listManagedLoginAccounts(): Promise<ManagedLoginAccount[]> {
+  if (!isProductionStoreConfigured()) return [];
+  const rows = await supabaseRequest<Array<{
+    email: string | null;
+    id: string;
+    login_id: string | null;
+    must_change_password: boolean | null;
+    name: string;
+    role: AppUserLoginCredential["role"];
+    session_version: number | null;
+    status: string | null;
+    company_members: Array<{ company_id: string; role: string; companies: { name: string | null } | null }> | null;
+  }>>("app_users?select=id,email,login_id,name,role,status,session_version,must_change_password,company_members(company_id,role,companies(name))&login_id=not.is.null&order=name.asc");
+  return rows.map((row) => ({
+    email: row.email || "",
+    id: row.id,
+    loginId: row.login_id || "",
+    mustChangePassword: Boolean(row.must_change_password),
+    name: row.name,
+    role: row.role,
+    sessionVersion: row.session_version || 1,
+    status: row.status || "active",
+    companyId: row.company_members?.[0]?.company_id,
+    companyName: row.company_members?.[0]?.companies?.name || undefined,
+    workspaceRole: row.company_members?.[0]?.role
+  }));
+}
+
+export async function createManagedLoginAccount(input: ManagedLoginAccountInput): Promise<{ account: ManagedLoginAccount; temporaryPassword: string }> {
+  const loginId = input.loginId.trim().toLowerCase();
+  const temporaryPassword = generateTemporaryPassword();
+  const userId = randomUUID();
+  const now = new Date().toISOString();
+  if (!isProductionStoreConfigured()) throw new Error("계정 DB가 준비되지 않았습니다.");
+  await appUsersRequest("app_users", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify([{
+      id: userId,
+      login_id: loginId,
+      name: input.name.trim(),
+      password_hash: await hashPassword(temporaryPassword),
+      role: input.role,
+      auth_provider: "password",
+      status: "active",
+      session_version: 1,
+      must_change_password: true
+    }])
+  });
+  if (input.companyId) {
+    try {
+      await supabaseRequest("company_members", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify([{ company_id: input.companyId, user_id: userId, role: input.workspaceRole || "member", status: "active", updated_at: now }])
+      });
+    } catch (error) {
+      await appUsersRequest(`app_users?id=eq.${encodeURIComponent(userId)}`, { method: "DELETE" }).catch(() => undefined);
+      throw error;
+    }
+  }
+  return {
+    account: {
+      email: "",
+      id: userId,
+      loginId,
+      mustChangePassword: true,
+      name: input.name.trim(),
+      role: input.role,
+      sessionVersion: 1,
+      status: "active",
+      companyId: input.companyId,
+      workspaceRole: input.workspaceRole
+    },
+    temporaryPassword
+  };
+}
+
+export async function updateManagedLoginAccount(input: {
+  action: "change_login_id" | "disable" | "reset_password" | "unlock";
+  loginId?: string;
+  userId: string;
+}): Promise<{ temporaryPassword?: string }> {
+  if (!isProductionStoreConfigured()) throw new Error("계정 DB가 준비되지 않았습니다.");
+  const patch: Record<string, unknown> = {};
+  let temporaryPassword: string | undefined;
+  if (input.action === "change_login_id") {
+    patch.login_id = input.loginId?.trim().toLowerCase();
+    patch.session_version = await nextAppUserSessionVersion(input.userId);
+  } else if (input.action === "disable") {
+    patch.status = "inactive";
+    patch.session_version = await nextAppUserSessionVersion(input.userId);
+  } else if (input.action === "reset_password") {
+    temporaryPassword = generateTemporaryPassword();
+    patch.password_hash = await hashPassword(temporaryPassword);
+    patch.must_change_password = true;
+    patch.session_version = await nextAppUserSessionVersion(input.userId);
+  } else {
+    patch.login_locked_until = null;
+  }
+  await appUsersRequest(`app_users?id=eq.${encodeURIComponent(input.userId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify(patch)
+  });
+  return { temporaryPassword };
+}
+
+export async function changeAppUserPassword(userId: string, password: string): Promise<void> {
+  if (!isProductionStoreConfigured()) throw new Error("계정 DB가 준비되지 않았습니다.");
+  await appUsersRequest(`app_users?id=eq.${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      password_hash: await hashPassword(password),
+      must_change_password: false,
+      session_version: await nextAppUserSessionVersion(userId)
+    })
+  });
+}
+
+async function nextAppUserSessionVersion(userId: string) {
+  const state = await getAppUserAccountState(userId);
+  if (!state) throw new Error("계정을 찾을 수 없습니다.");
+  return state.sessionVersion + 1;
 }
 
 /**
@@ -2662,10 +2863,10 @@ export async function createStaffInvitation(input: StaffInvitationInput, auditCo
       company_id: string;
       employee_name: string | null;
       employee_phone: string | null;
+      expires_at: string | null;
       invite_code: string;
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
-      expires_at: string | null;
       created_at: string;
     }>
   >("staff_invitations", {
@@ -3274,15 +3475,26 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
       company_id: string;
       employee_name: string | null;
       employee_phone: string | null;
+      expires_at: string | null;
       role: StaffInvitation["role"];
       status: StaffInvitation["status"];
       assigned_manager_name: string | null;
       assigned_vehicle: string | null;
     }>
-  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status,assigned_manager_name,assigned_vehicle&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
+  >(`staff_invitations?select=id,company_id,employee_name,employee_phone,role,status,expires_at,assigned_manager_name,assigned_vehicle&invite_code=eq.${encodeURIComponent(inviteCode)}&limit=1`));
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
+  if (process.env.ACCOUNT_LOGIN_V2_ENABLED === "true") {
+    if (!invitation.expires_at || new Date(invitation.expires_at).getTime() <= Date.now()) {
+      throw new Error("초대 링크가 만료되었습니다. 관리자에게 새 링크를 요청해주세요.");
+    }
+    const expectedLastFour = (invitation.employee_phone || "").replace(/\D/g, "").slice(-4);
+    const actualLastFour = (input.phoneNumber || "").replace(/\D/g, "").slice(-4);
+    if (expectedLastFour && expectedLastFour !== actualLastFour) {
+      throw new Error("초대 연락처 끝 4자리와 카카오 계정 연락처가 일치하지 않습니다.");
+    }
+  }
 
   const company = await getCompanySettings(invitation.company_id);
   if (isCompanyClosedStatus(company.status)) {
