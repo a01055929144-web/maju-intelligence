@@ -276,7 +276,7 @@ export default async function RevenueTransactionsPage({
           </div>
         </div>
 
-        {section === "table" ? <SalesTransactionTable companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} initialItems={sales.items} initialTruncated={sales.truncated} /> : null}
+        {section === "table" ? <SalesTransactionTable companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} initialItems={sales.items} initialTruncated={sales.truncated} settingsKey={`revenue-transactions:${customerSession?.userId || adminSession?.email || "unknown"}`} /> : null}
         </div>
       </section>
     </CustomerAppShell>

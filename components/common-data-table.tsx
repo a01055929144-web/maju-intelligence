@@ -9,6 +9,7 @@ export type CommonTableColumn<Row> = {
   label: string;
   value: (row: Row) => string | number | null | undefined;
   render?: (row: Row, index: number) => React.ReactNode;
+  sortable?: boolean;
   align?: "left" | "center" | "right";
   defaultHidden?: boolean;
   total?: boolean;
@@ -113,7 +114,7 @@ export function CommonDataTable<Row>({
     </div> : null}
     <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
       <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
-        <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : ""}`} key={item.key} onClick={() => toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.column.width || 160), 0), minWidth: item.column.width || 160 } : { minWidth: item.column.width }}><button type="button">{item.column.label}{sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button></th>)}</tr></thead>
+        <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : ""}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.column.width || 160), 0), minWidth: item.column.width || 160 } : { minWidth: item.column.width }}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button></th>)}</tr></thead>
         <tbody>{pageRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
           return [groupRow, <tr className="odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 py-2.5 ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.column.width || 160), 0), minWidth: item.column.width || 160 } : undefined}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</td>)}</tr>];

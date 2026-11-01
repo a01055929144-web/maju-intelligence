@@ -3,71 +3,43 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { SortableTh } from "@/components/sortable-th";
+import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { SalesTransactionItem } from "@/lib/store";
-import { useTableSort } from "@/lib/use-table-sort";
 
-const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
-type ListPageSize = (typeof LIST_PAGE_SIZE_OPTIONS)[number];
-
-export function SalesTransactionTable({
-  companyId,
-  dateFrom,
-  dateTo,
-  initialItems,
-  initialTruncated
-}: {
+export function SalesTransactionTable({ companyId, dateFrom, dateTo, initialItems, initialTruncated, settingsKey }: {
   readonly companyId?: string;
   readonly dateFrom?: string;
   readonly dateTo?: string;
   readonly initialItems: SalesTransactionItem[];
   readonly initialTruncated: boolean;
+  readonly settingsKey: string;
 }) {
   const [items, setItems] = useState<SalesTransactionItem[]>(initialItems);
   const [truncated, setTruncated] = useState(initialTruncated);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<ListPageSize>(30);
   const [query, setQuery] = useState("");
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("ko");
     if (!normalizedQuery) return items;
-    return items.filter((item) =>
-      [item.customerName, item.productName, item.businessRegistrationNumber, item.salesDate]
-        .filter(Boolean)
-        .some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery))
-    );
+    return items.filter((item) => [item.customerName, item.productName, item.businessRegistrationNumber, item.salesDate]
+      .filter(Boolean).some((value) => String(value).toLocaleLowerCase("ko").includes(normalizedQuery)));
   }, [items, query]);
-  // 2026-09-01 피드백: "서비스 내에 모든 표헤더들은 클릭하면 오름차순/내림차순으로 정렬되도록 만들어"
-  type TransactionSortKey = "businessRegistrationNumber" | "createdAt" | "customerName" | "productName" | "quantity" | "salesAmount" | "salesDate";
-  const { sortDirection, sortKey, sortedRows: sortedItems, toggleSort } = useTableSort<SalesTransactionItem, TransactionSortKey>(filteredItems, {
-    businessRegistrationNumber: (a, b) => (a.businessRegistrationNumber || "").localeCompare(b.businessRegistrationNumber || ""),
-    createdAt: (a, b) => a.createdAt.localeCompare(b.createdAt),
-    customerName: (a, b) => a.customerName.localeCompare(b.customerName, "ko"),
-    productName: (a, b) => (a.productName || "").localeCompare(b.productName || "", "ko"),
-    quantity: (a, b) => a.quantity - b.quantity,
-    salesAmount: (a, b) => a.salesAmount - b.salesAmount,
-    salesDate: (a, b) => (a.salesDate || "").localeCompare(b.salesDate || "")
-  });
-  const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pagedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return sortedItems.slice(start, start + pageSize);
-  }, [currentPage, sortedItems, pageSize]);
-  const pageStart = sortedItems.length ? (currentPage - 1) * pageSize + 1 : 0;
-  const pageEnd = Math.min(sortedItems.length, currentPage * pageSize);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query]);
+  const columns = useMemo<CommonTableColumn<SalesTransactionItem>[]>(() => [
+    { key: "number", label: "No", sortable: false, align: "center", width: 72, value: () => "", render: (_row, index) => index + 1 },
+    { key: "salesDate", label: "매출일", width: 120, value: (row) => row.salesDate || "-" },
+    { key: "customerName", label: "거래처", width: 180, value: (row) => row.customerName },
+    { key: "businessRegistrationNumber", label: "사업자번호", width: 150, value: (row) => row.businessRegistrationNumber || "-" },
+    { key: "productName", label: "품목", width: 180, value: (row) => row.productName || "-" },
+    { key: "quantity", label: "수량", align: "right", total: true, width: 100, value: (row) => row.quantity, render: (row) => row.quantity.toLocaleString("ko-KR") },
+    { key: "salesAmount", label: "매출금액", align: "right", total: true, width: 140, value: (row) => row.salesAmount, render: (row) => `${Math.round(row.salesAmount).toLocaleString("ko-KR")}원` },
+    { key: "createdAt", label: "적재시각", width: 180, value: (row) => row.createdAt }
+  ], []);
 
   useEffect(() => {
     setItems(initialItems);
     setTruncated(initialTruncated);
-    setPage(1);
     setLoadMoreError("");
   }, [initialItems, initialTruncated]);
 
@@ -75,7 +47,6 @@ export function SalesTransactionTable({
     if (isLoadingMore || !truncated) return;
     setIsLoadingMore(true);
     setLoadMoreError("");
-
     try {
       const params = new URLSearchParams({ offset: String(items.length) });
       if (companyId) params.set("companyId", companyId);
@@ -97,144 +68,24 @@ export function SalesTransactionTable({
   return (
     <section className="maju-section-card scroll-mt-28" id="ledger-table">
       <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-950">원장 테이블</h2>
-          <p className="mt-1 text-sm text-slate-500">최근 업로드 행</p>
-        </div>
-        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
-          {query ? `${filteredItems.length.toLocaleString()} / ${items.length.toLocaleString()}행` : `${items.length.toLocaleString()}행 표시`}
-        </Badge>
+        <div><h2 className="text-lg font-semibold text-slate-950">원장 테이블</h2><p className="mt-1 text-sm text-slate-500">최근 업로드 행</p></div>
+        <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{query ? `${filteredItems.length.toLocaleString()} / ${items.length.toLocaleString()}행` : `${items.length.toLocaleString()}행 표시`}</Badge>
       </div>
-      <div className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 px-3 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+      <div className="border-b border-slate-200/80 bg-slate-50/70 px-3 py-3">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <label className="relative min-w-[220px] flex-1 sm:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="거래처·사업자번호·품목·매출일 검색"
-              type="search"
-              value={query}
-            />
+            <input className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" onChange={(event) => setQuery(event.target.value)} placeholder="거래처·사업자번호·품목·매출일 검색" type="search" value={query} />
           </label>
-          {query ? (
-            <button className="maju-button-secondary min-h-10 justify-center" onClick={() => setQuery("")} type="button">
-              <X className="h-3.5 w-3.5" /> 검색 초기화
-            </button>
-          ) : null}
-          <label className="flex h-10 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500">
-            보기
-            <select
-              className="h-7 border-0 bg-transparent p-0 text-xs font-semibold text-slate-900 outline-none focus:ring-0"
-              onChange={(event) => {
-                setPageSize(Number(event.target.value) as ListPageSize);
-                setPage(1);
-              }}
-              value={pageSize}
-            >
-              {LIST_PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}개
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="rounded-full bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">
-            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredItems.length.toLocaleString()}행
-          </span>
-        </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex sm:gap-1">
-          <button
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={currentPage <= 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
-            type="button"
-          >
-            이전
-          </button>
-          <span className="text-xs font-semibold text-slate-400">
-            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
-          </span>
-          <button
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={currentPage >= totalPages}
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
-            type="button"
-          >
-            다음
-          </button>
+          {query ? <button className="maju-button-secondary min-h-10 justify-center" onClick={() => setQuery("")} type="button"><X className="h-3.5 w-3.5" /> 검색 초기화</button> : null}
+          <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">검색 결과 {filteredItems.length.toLocaleString()}행</span>
         </div>
       </div>
-      <p className="border-b border-slate-100 px-4 py-2 text-xs font-medium text-slate-500 sm:hidden">표를 좌우로 밀어 전체 항목을 확인하세요.</p>
-      <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
-        <table className="w-full min-w-[920px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-50/95 shadow-[0_1px_0_#e2e8f0]">
-            <tr className="text-left text-xs font-black text-slate-500">
-              <th className="border-b border-slate-200 px-3 py-3 text-center">No</th>
-              <SortableTh active={sortKey === "salesDate"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="매출일" onClick={() => toggleSort("salesDate")} />
-              <SortableTh active={sortKey === "customerName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="거래처" onClick={() => toggleSort("customerName")} />
-              <SortableTh
-                active={sortKey === "businessRegistrationNumber"}
-                className="border-b border-slate-200 px-3 py-3"
-                direction={sortDirection}
-                label="사업자번호"
-                onClick={() => toggleSort("businessRegistrationNumber")}
-              />
-              <SortableTh active={sortKey === "productName"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="품목" onClick={() => toggleSort("productName")} />
-              <SortableTh
-                active={sortKey === "quantity"}
-                className="border-b border-slate-200 px-3 py-3 text-right"
-                direction={sortDirection}
-                label="수량"
-                onClick={() => toggleSort("quantity")}
-              />
-              <SortableTh
-                active={sortKey === "salesAmount"}
-                className="border-b border-slate-200 px-3 py-3 text-right"
-                direction={sortDirection}
-                label="매출금액"
-                onClick={() => toggleSort("salesAmount")}
-              />
-              <SortableTh active={sortKey === "createdAt"} className="border-b border-slate-200 px-3 py-3" direction={sortDirection} label="적재시각" onClick={() => toggleSort("createdAt")} />
-            </tr>
-          </thead>
-          <tbody>
-            {pagedItems.map((item, index) => (
-              <tr key={item.id} className="font-semibold text-slate-700 odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/70">
-                <td className="border-b border-slate-100 px-3 py-2.5 text-center text-xs text-slate-400">{(currentPage - 1) * pageSize + index + 1}</td>
-                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{item.salesDate || "-"}</td>
-                <td className="max-w-[220px] truncate border-b border-slate-100 px-3 py-2.5 font-bold text-slate-900" title={item.customerName}>{item.customerName}</td>
-                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{item.businessRegistrationNumber || "-"}</td>
-                <td className="max-w-[220px] truncate border-b border-slate-100 px-3 py-2.5" title={item.productName}>{item.productName || "-"}</td>
-                <td className="border-b border-slate-100 px-3 py-2.5 text-right tabular-nums">{item.quantity.toLocaleString()}</td>
-                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5 text-right font-bold tabular-nums text-primary">{Math.round(item.salesAmount).toLocaleString()}원</td>
-                <td className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5 text-xs text-slate-500">{item.createdAt}</td>
-              </tr>
-            ))}
-            {!filteredItems.length ? (
-              <tr>
-                <td className="px-3 py-12 text-center text-sm font-bold text-slate-500" colSpan={8}>
-                  {items.length ? "검색 조건과 일치하는 거래내역이 없습니다. 검색어를 초기화해 다시 확인하세요." : "아직 업로드된 매출 원장이 없습니다. 매출 원장을 업로드하면 이곳에 누적됩니다."}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      <CommonDataTable columns={columns} emptyMessage={items.length ? "검색 조건과 일치하는 거래내역이 없습니다." : "아직 업로드된 매출 원장이 없습니다."} filename="매출_원장.csv" rowKey={(row) => row.id} rows={filteredItems} settingsKey={settingsKey} />
       {truncated ? (
         <div aria-live="polite" className="space-y-1.5 border-t border-slate-100 p-3">
-          <button
-            className="maju-button-secondary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isLoadingMore}
-            onClick={() => void loadMore()}
-            type="button"
-          >
-            {isLoadingMore ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                거래내역을 불러오는 중입니다.
-              </>
-            ) : "더 불러오기"}
+          <button className="maju-button-secondary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60" disabled={isLoadingMore} onClick={loadMore} type="button">
+            {isLoadingMore ? <><Loader2 className="h-4 w-4 animate-spin" /> 거래내역을 불러오는 중입니다.</> : "더 불러오기"}
           </button>
           {loadMoreError ? <p className="text-center text-xs font-bold text-rose-600">{loadMoreError}</p> : null}
         </div>
