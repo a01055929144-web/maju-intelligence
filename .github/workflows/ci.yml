@@ -79,6 +79,7 @@ jobs:
         run: npm run build
         env:
           CI_LAYOUT_FIXTURES: enabled
+          HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Install Playwright browser
         # GitHub's Ubuntu image already contains Chromium's system libraries.
@@ -89,6 +90,7 @@ jobs:
         run: npm run test:e2e:layout
         env:
           CI_LAYOUT_FIXTURES: enabled
+          HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Upload responsive layout report
         if: always()
