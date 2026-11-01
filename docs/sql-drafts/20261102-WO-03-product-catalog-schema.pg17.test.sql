@@ -43,12 +43,13 @@ begin
     raise exception 'category assignment failed';
   end if;
 
+  rejected := false;
   begin
     insert into public.product_categories(company_id, parent_id, level, name)
       values (company_b, root_a, 2, '교차 회사');
-    raise exception 'cross-company parent accepted';
-  exception when foreign_key_violation then null;
+  exception when foreign_key_violation or raise_exception then rejected := true;
   end;
+  if not rejected then raise exception 'cross-company parent accepted'; end if;
 
   begin
     insert into public.product_catalog(company_id, product_code, category_id)
