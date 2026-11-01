@@ -12,7 +12,24 @@ export type PriceState = {
   total: number; page: number; pageSize: number; lastBatch: string | null; restored: boolean;
 };
 export type PriceQuery = { search: string; page: number };
+export type PriceBasis = "purchase_markup" | "legacy_sales_gross_margin";
+
+/** Compatibility facade: P0/P1 rates are purchase-cost markup, never sales gross margin. */
 export function calculatePrice(cost: number, margin: number, rounding = 10, directPrice: number | null = null) {
+  return calculatePriceForBasis(cost, margin, "purchase_markup", rounding, directPrice);
+}
+
+/** Explicit internal basis; no request/DB value is allowed to choose it implicitly. */
+export function calculatePriceForBasis(cost: number, margin: number, basis: PriceBasis, rounding = 10, directPrice: number | null = null) {
+  if (basis === "legacy_sales_gross_margin") {
+    if (directPrice !== null) throw new Error("기존 견적 계산에는 직접 단가를 함께 적용할 수 없습니다.");
+    // Preserve the legacy facade's integer-cost sanitization and rate clamp exactly.
+    const legacyCost = Number.isFinite(cost) && cost > 0 ? Math.round(cost) : 0;
+    const legacyRate = Math.min(99, Math.max(0, Number.isFinite(margin) ? margin : 0));
+    if (!legacyCost) return 0;
+    return Math.ceil((legacyCost / (1 - legacyRate / 100)) / rounding) * rounding;
+  }
+  if (basis !== "purchase_markup") throw new Error("가격 계산 기준을 확인해 주세요.");
   if (directPrice !== null) {
     if (!Number.isSafeInteger(directPrice) || directPrice < 0 || directPrice > 1e12) throw new Error("직접 단가 범위를 확인해 주세요.");
     return directPrice;
