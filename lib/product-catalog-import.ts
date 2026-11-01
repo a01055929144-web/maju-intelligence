@@ -5,6 +5,7 @@ import {
   type CatalogMapping,
   type ParsedProduct,
 } from "../domains/product/catalog-import";
+import type { ImportPreviewRow } from "../domains/product/import-row-editor";
 import { supabaseRequest as db } from "./store";
 import { ciLayoutProductImports, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
@@ -193,6 +194,7 @@ export async function saveProductCatalogImport(input: {
   products: ParsedProduct[];
   excludedCount: number;
   warnings: string[];
+  editedRows?: ImportPreviewRow[];
 }) {
   const supplierName = input.supplierName.trim();
   if (!supplierName) throw new Error("유통사명을 입력해 주세요.");
@@ -240,7 +242,39 @@ export async function saveProductCatalogImport(input: {
   );
   const importId = importRows[0]?.id;
   if (!importId) throw new Error("업로드 이력을 만들지 못했습니다.");
+  let auditJobId = "";
   try {
+    if (input.editedRows?.length) {
+      const jobs = await db<Array<{ id: string }>>("import_jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          company_id: input.companyId,
+          target_type: "product",
+          file_name: input.fileName,
+          idempotency_key: `product:${importId}`,
+          status: "validated",
+          total_rows: input.editedRows.length,
+          valid_rows: input.editedRows.length,
+          created_by_name: input.createdByName,
+        }),
+      });
+      auditJobId = jobs[0]?.id || "";
+      if (!auditJobId) throw new Error("행별 감사 이력을 만들지 못했습니다.");
+      await db("import_rows", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(input.editedRows.map((row) => ({
+          company_id: input.companyId,
+          job_id: auditJobId,
+          source_row_number: row.sourceRowNumber,
+          raw_values: row.originalValues,
+          normalized_values: row.values,
+          match_key: row.id,
+          match_method: "manual",
+          status: "valid",
+        }))),
+      });
+    }
     const payload = input.products.map((product) =>
       buildSupplierProductWrite(input.companyId, supplierId, product),
     );
@@ -401,6 +435,18 @@ export async function saveProductCatalogImport(input: {
         }),
       },
     );
+    if (auditJobId) {
+      await db(`import_rows?company_id=eq.${enc(input.companyId)}&job_id=eq.${enc(auditJobId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "applied", applied_at: new Date().toISOString() }),
+      });
+      await db(`import_jobs?company_id=eq.${enc(input.companyId)}&id=eq.${enc(auditJobId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "completed", applied_rows: input.editedRows!.length, completed_at: new Date().toISOString() }),
+      });
+    }
     return {
       importId,
       supplierId,
@@ -418,6 +464,11 @@ export async function saveProductCatalogImport(input: {
     const message = (
       error instanceof Error ? error.message : "저장 실패"
     ).slice(0, 2000);
+    if (auditJobId) await db(`import_jobs?company_id=eq.${enc(input.companyId)}&id=eq.${enc(auditJobId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "failed", error_message: message, completed_at: new Date().toISOString() }),
+    }).catch(() => undefined);
     await db<Array<{ id: string }>>(
       `product_catalog_imports?id=eq.${enc(importId)}&company_id=eq.${enc(input.companyId)}&select=id`,
       {

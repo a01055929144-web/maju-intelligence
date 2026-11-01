@@ -24,6 +24,8 @@ import {
   type RawCatalogRow,
 } from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
+import { ImportRowEditor } from "@/components/import-row-editor";
+import type { ImportPreviewField, ImportPreviewRow } from "@/domains/product/import-row-editor";
 import type {
   ProductImportAuditItem,
   SupplierProductAdminItem,
@@ -53,6 +55,13 @@ const labels: Record<CatalogField, string> = {
 };
 const money = (value?: number) =>
   value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
+const importPreviewFields: ImportPreviewField[] = [
+  { key: "rawName", label: "상품명" },
+  { key: "rawSpec", label: "규격" },
+  { key: "unit", label: "단위" },
+  { key: "cost", label: "확정 원가" },
+  { key: "salesMedian", label: "판매가" },
+];
 const importTargets = [
   ["상품 마스터", "매입처 단가표를 적재한 뒤 확인 품목을 상품 마스터로 전환합니다.", true],
   ["매출처 · 매입처", "거래처 기본정보 가져오기 · SQL 승인 대기", false],
@@ -65,6 +74,7 @@ export function ProductCatalogWorkspace({
   companyId = "",
   importAuditV2Enabled = false,
   importTargetsEnabled = false,
+  rowEditorEnabled = false,
   initialTab = "catalog",
   tableSettingsKey = "products:current",
 }: {
@@ -72,6 +82,7 @@ export function ProductCatalogWorkspace({
   companyId?: string;
   importAuditV2Enabled?: boolean;
   importTargetsEnabled?: boolean;
+  rowEditorEnabled?: boolean;
   initialTab?: Tab;
   tableSettingsKey?: string;
 }) {
@@ -332,6 +343,7 @@ export function ProductCatalogWorkspace({
           auditV2Enabled={importAuditV2Enabled}
           companyId={companyId}
           importTargetsEnabled={importTargetsEnabled}
+          rowEditorEnabled={rowEditorEnabled}
           onClose={() => setDrawer(false)}
           onSaved={async (m) => {
             setMessage(m);
@@ -503,12 +515,14 @@ function ImportDrawer({
   auditV2Enabled,
   companyId,
   importTargetsEnabled,
+  rowEditorEnabled,
   onClose,
   onSaved,
 }: {
   auditV2Enabled: boolean;
   companyId: string;
   importTargetsEnabled: boolean;
+  rowEditorEnabled: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -517,6 +531,7 @@ function ImportDrawer({
     [rows, setRows] = useState<RawCatalogRow[]>([]),
     [headers, setHeaders] = useState<string[]>([]),
     [mapping, setMapping] = useState<CatalogMapping>({}),
+    [editedRows, setEditedRows] = useState<ImportPreviewRow[]>([]),
     [step, setStep] = useState(1),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -530,6 +545,19 @@ function ImportDrawer({
       };
     }
   }, [mapping, rows, step, supplier]);
+  const previewRows = useMemo<ImportPreviewRow[]>(() => {
+    if (!preview || "error" in preview) return [];
+    return preview.products.map((product, index) => {
+      const values = {
+        rawName: product.rawName,
+        rawSpec: product.rawSpec || "",
+        unit: product.unit,
+        cost: String(product.cost),
+        salesMedian: product.salesMedian == null ? "" : String(product.salesMedian),
+      };
+      return { id: product.sourceFingerprint, sourceRowNumber: index + 2, originalValues: values, values };
+    });
+  }, [preview]);
   async function read(next: File) {
     setError("");
     try {
@@ -554,6 +582,21 @@ function ImportDrawer({
   }
   async function save() {
     if (!file || !preview || "error" in preview) return;
+    const activeRows = rowEditorEnabled && auditV2Enabled ? (editedRows.length ? editedRows : previewRows) : [];
+    const editedById = new Map(activeRows.map((row) => [row.id, row.values]));
+    const products = preview.products.map((product) => {
+      const values = editedById.get(product.sourceFingerprint);
+      if (!values) return product;
+      return {
+        ...product,
+        rawName: values.rawName.trim(),
+        name: values.rawName.trim(),
+        rawSpec: values.rawSpec.trim() || undefined,
+        unit: values.unit.trim() || "미정",
+        cost: Number(values.cost.replaceAll(",", "")),
+        salesMedian: values.salesMedian ? Number(values.salesMedian.replaceAll(",", "")) : undefined,
+      };
+    });
     setSaving(true);
     setError("");
     try {
@@ -566,7 +609,8 @@ function ImportDrawer({
           fileName: file.name,
           supplierName: supplier,
           mapping,
-          products: preview.products,
+          products,
+          editedRows: activeRows,
           excludedCount: preview.excludedCount,
           warnings: preview.warnings,
         }),
@@ -707,7 +751,9 @@ function ImportDrawer({
                   {w}
                 </div>
               ))}
-              <div className="overflow-x-auto rounded-xl border">
+              {rowEditorEnabled && auditV2Enabled ? (
+                <ImportRowEditor fields={importPreviewFields} initialRows={previewRows} onRowsChange={setEditedRows} />
+              ) : <div className="overflow-x-auto rounded-xl border">
                 <table className="w-full min-w-[700px] text-sm">
                   <thead className="bg-slate-50 text-left text-xs">
                     <tr>
@@ -732,7 +778,7 @@ function ImportDrawer({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </div>}
               <p className="text-xs text-slate-500">
                 표준 품목이 없으면 저장 후 ‘유통사 상품’ 탭에서 확인한 품목을
                 일괄 생성할 수 있습니다.

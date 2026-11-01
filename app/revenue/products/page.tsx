@@ -34,6 +34,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
           companyId={isAdminPreview ? companyId : ""}
           importAuditV2Enabled={process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"}
           importTargetsEnabled={process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true"}
+          rowEditorEnabled={process.env.IMPORT_ROW_EDITOR_ENABLED === "true"}
           initialTab={initialTab}
           tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
         />
