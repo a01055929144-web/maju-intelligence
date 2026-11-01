@@ -50,8 +50,8 @@ begin
        or (r->>'last_date')::date < date '1900-01-01'
        or (r->>'last_date')::date > (statement_timestamp() at time zone 'Asia/Seoul')::date
        or jsonb_typeof(r->'tax_type') <> 'string' or (r->>'tax_type') not in ('taxable','exempt','unknown')
-       or case when r->>'tax_type' = 'unknown' then jsonb_typeof(r->'price_includes_tax') <> 'null'
-               else jsonb_typeof(r->'price_includes_tax') <> 'boolean' end then
+       or (case when r->>'tax_type' = 'unknown' then jsonb_typeof(r->'price_includes_tax') <> 'null'
+               else jsonb_typeof(r->'price_includes_tax') <> 'boolean' end) then
       raise exception 'Invalid actual price row' using errcode = '22023';
     end if;
   end loop;
