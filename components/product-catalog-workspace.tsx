@@ -3,12 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
+  Clock3,
   FileSpreadsheet,
+  History,
   Loader2,
   PackagePlus,
   Upload,
   X,
 } from "lucide-react";
+import {
+  CommonDataTable,
+  type CommonTableColumn,
+} from "@/components/common-data-table";
 import {
   buildCatalogPreview,
   catalogFields,
@@ -18,13 +24,18 @@ import {
   type RawCatalogRow,
 } from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
-import type { SupplierProductAdminItem } from "@/lib/product-catalog-import";
+import type {
+  ProductImportAuditItem,
+  SupplierProductAdminItem,
+} from "@/lib/product-catalog-import";
 
 type Workspace = {
   catalogCount: number;
+  imports: ProductImportAuditItem[];
   items: SupplierProductAdminItem[];
   suppliers: Array<{ id: string; name: string }>;
 };
+type Tab = "catalog" | "supplier" | "mapping" | "imports";
 const labels: Record<CatalogField, string> = {
   productName: "상품명",
   spec: "규격",
@@ -46,15 +57,17 @@ const money = (value?: number) =>
 export function ProductCatalogWorkspace({
   categoriesEnabled = false,
   companyId = "",
+  importAuditV2Enabled = false,
   initialTab = "catalog",
   tableSettingsKey = "products:current",
 }: {
   categoriesEnabled?: boolean;
   companyId?: string;
+  importAuditV2Enabled?: boolean;
   initialTab?: "catalog" | "supplier" | "mapping";
   tableSettingsKey?: string;
 }) {
-  const [tab, setTab] = useState<"catalog" | "supplier" | "mapping">(initialTab);
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -147,6 +160,7 @@ export function ProductCatalogWorkspace({
               ["catalog", "마스터 상품"],
               ["supplier", "매입처 상품·업로드"],
               ["mapping", "표준 품목 연결"],
+              ["imports", "가져오기 감사"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -178,6 +192,12 @@ export function ProductCatalogWorkspace({
           categoriesEnabled={categoriesEnabled}
           companyId={companyId}
           settingsKey={tableSettingsKey}
+        />
+      ) : tab === "imports" ? (
+        <ImportAuditPanel
+          auditV2Enabled={importAuditV2Enabled}
+          imports={workspace?.imports || []}
+          loading={loading && !workspace}
         />
       ) : (
         <section className="maju-section-card">
@@ -301,6 +321,7 @@ export function ProductCatalogWorkspace({
       )}
       {drawer ? (
         <ImportDrawer
+          auditV2Enabled={importAuditV2Enabled}
           companyId={companyId}
           onClose={() => setDrawer(false)}
           onSaved={async (m) => {
@@ -315,11 +336,167 @@ export function ProductCatalogWorkspace({
   );
 }
 
+const importStatus: Record<string, string> = {
+  processing: "처리 중",
+  completed: "완료",
+  failed: "실패",
+};
+
+function ImportAuditPanel({
+  auditV2Enabled,
+  imports,
+  loading,
+}: {
+  auditV2Enabled: boolean;
+  imports: ProductImportAuditItem[];
+  loading: boolean;
+}) {
+  const columns = useMemo<CommonTableColumn<ProductImportAuditItem>[]>(
+    () => [
+      {
+        key: "createdAt",
+        label: "실행 시각",
+        width: 150,
+        value: (item) => item.createdAt,
+        render: (item) =>
+          new Date(item.createdAt).toLocaleString("ko-KR", {
+            timeZone: "Asia/Seoul",
+          }),
+      },
+      {
+        key: "supplier",
+        label: "매입처",
+        width: 130,
+        value: (item) => item.supplierName,
+      },
+      {
+        key: "file",
+        label: "파일",
+        width: 220,
+        value: (item) => item.fileName,
+      },
+      {
+        key: "status",
+        label: "상태",
+        width: 90,
+        value: (item) => importStatus[item.status] || item.status,
+        render: (item) => (
+          <span
+            className={
+              item.status === "completed"
+                ? "font-bold text-emerald-700"
+                : item.status === "failed"
+                  ? "font-bold text-rose-700"
+                  : "font-bold text-amber-700"
+            }
+          >
+            {importStatus[item.status] || item.status}
+          </span>
+        ),
+      },
+      {
+        key: "total",
+        label: "전체",
+        align: "right",
+        total: true,
+        width: 70,
+        value: (item) => item.totalRows,
+      },
+      {
+        key: "created",
+        label: "신규",
+        align: "right",
+        total: true,
+        width: 70,
+        value: (item) => item.createdCount,
+      },
+      {
+        key: "updated",
+        label: "갱신",
+        align: "right",
+        total: true,
+        width: 70,
+        value: (item) => item.updatedCount,
+      },
+      {
+        key: "excluded",
+        label: "제외",
+        align: "right",
+        total: true,
+        width: 70,
+        value: (item) => item.excludedCount,
+      },
+      {
+        key: "warnings",
+        label: "경고",
+        align: "right",
+        total: true,
+        width: 70,
+        value: (item) => item.warningCount,
+      },
+      {
+        key: "actor",
+        label: "실행자",
+        width: 110,
+        value: (item) => item.createdByName || "-",
+      },
+      {
+        key: "error",
+        label: "오류",
+        defaultHidden: true,
+        width: 260,
+        value: (item) => item.errorMessage || "-",
+      },
+    ],
+    [],
+  );
+
+  return (
+    <section className="maju-section-card">
+      <div className="maju-card-header flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-teal-700" />
+            <h2 className="maju-section-title">가져오기 감사</h2>
+          </div>
+          <p className="mt-1 maju-muted-label">
+            파일별 처리 결과와 실행자를 기존 승인 이력에서 확인합니다.
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+          <Clock3 className="h-3.5 w-3.5" /> 최근 {imports.length.toLocaleString()}건
+        </span>
+      </div>
+      {!auditV2Enabled ? (
+        <p className="border-y border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          행별 이전값·오류 상세 감사 OFF · WO-25 SQL 승인 대기
+        </p>
+      ) : null}
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : (
+        <CommonDataTable
+          columns={columns}
+          emptyMessage="가져오기 이력이 없습니다."
+          filename="상품_가져오기_감사.csv"
+          rowKey={(item) => item.id}
+          rows={imports}
+          settingsKey="product-import-audit"
+        />
+      )}
+    </section>
+  );
+}
+
 function ImportDrawer({
+  auditV2Enabled,
   companyId,
   onClose,
   onSaved,
 }: {
+  auditV2Enabled: boolean;
   companyId: string;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -410,7 +587,7 @@ function ImportDrawer({
       >
         <header className="flex items-center justify-between border-b p-5">
           <div>
-            <p className="text-xs font-black text-teal-700">STEP {step} / 3</p>
+            <p className="text-xs font-black text-teal-700">STEP {step} / 4</p>
             <h2 className="text-xl font-black">매입 단가표 업로드</h2>
           </div>
           <button
@@ -532,6 +709,29 @@ function ImportDrawer({
               </p>
             </>
           ) : null}
+          {step === 4 && preview && !("error" in preview) ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+                <p className="text-xs font-black text-teal-700">최종 적용 확인</p>
+                <h3 className="mt-1 text-lg font-black text-slate-950">{file?.name}</h3>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <Summary label="매입처" value={supplier} />
+                  <Summary label="정상 품목" value={`${preview.products.length.toLocaleString()}건`} />
+                  <Summary label="제외 행" value={`${preview.excludedCount.toLocaleString()}건`} />
+                  <Summary label="경고" value={`${preview.warnings.length.toLocaleString()}건`} />
+                </dl>
+              </div>
+              <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                적용하면 기존 상품은 갱신되고 새 상품은 추가됩니다. 파일명, 열 매핑,
+                처리 건수와 실행자는 기존 업로드 이력에 기록됩니다.
+              </p>
+              {!auditV2Enabled ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+                  행별 이전값·오류 상세 감사 OFF · WO-25 SQL 승인 대기
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {preview && "error" in preview ? (
             <p className="text-sm font-semibold text-rose-700">
               {preview.error}
@@ -556,6 +756,10 @@ function ImportDrawer({
               미리보기
             </button>
           ) : step === 3 ? (
+            <button className="maju-button-primary" onClick={() => setStep(4)}>
+              검토 완료
+            </button>
+          ) : step === 4 ? (
             <button
               className="maju-button-primary inline-flex items-center gap-2"
               disabled={saving || !preview || "error" in preview}
@@ -581,6 +785,15 @@ function Metric({ label, value }: { label: string; value: number }) {
     <div className="rounded-xl border bg-slate-50 p-4">
       <div className="text-xs font-bold text-slate-500">{label}</div>
       <div className="mt-1 text-xl font-black">{value.toLocaleString()}건</div>
+    </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-bold text-slate-500">{label}</dt>
+      <dd className="mt-1 font-bold text-slate-950">{value}</dd>
     </div>
   );
 }

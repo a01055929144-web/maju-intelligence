@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { supabaseRequest } = vi.hoisted(() => ({ supabaseRequest: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest }));
 
-import { createCatalogFromSupplierProducts } from "../lib/product-catalog-import";
+import {
+  createCatalogFromSupplierProducts,
+  listProductImportWorkspace,
+} from "../lib/product-catalog-import";
 
 describe("product catalog import data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
@@ -46,5 +49,45 @@ describe("product catalog import data access", () => {
     expect(supabaseRequest.mock.calls[4][0]).toContain(
       "supplier_product_matches?on_conflict=",
     );
+  });
+
+  it("reuses the approved product import history for the audit list", async () => {
+    supabaseRequest
+      .mockResolvedValueOnce([{ id: "supplier-1", name: "샘플상사" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "import-1",
+          supplier_id: "supplier-1",
+          file_name: "sample.xlsx",
+          status: "completed",
+          total_rows: 10,
+          created_count: 6,
+          updated_count: 3,
+          excluded_count: 1,
+          warning_count: 2,
+          created_by_name: "테스트 관리자",
+          created_at: "2026-11-02T00:00:00.000Z",
+          completed_at: "2026-11-02T00:01:00.000Z",
+          error_message: null,
+        },
+      ]);
+
+    const workspace = await listProductImportWorkspace("company-1");
+
+    expect(workspace.imports).toEqual([
+      expect.objectContaining({
+        id: "import-1",
+        supplierName: "샘플상사",
+        totalRows: 10,
+        warningCount: 2,
+      }),
+    ]);
+    expect(supabaseRequest.mock.calls[4][0]).toContain(
+      "product_catalog_imports?select=",
+    );
+    expect(supabaseRequest.mock.calls[4][0]).not.toContain("import_jobs");
   });
 });
