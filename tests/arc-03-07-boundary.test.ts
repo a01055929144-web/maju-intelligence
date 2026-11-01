@@ -7,6 +7,7 @@ const legacyStore = read("lib/store.ts");
 const continuitySql = read("docs/sql-drafts/20261029-lead-customer-continuity.sql");
 const boundary = read("docs/specs/2026-11-01-arc-03-07-customer-ledger-boundary.md");
 const conversionFinalizeDraft = read("docs/sql-drafts/20261101-lead-customer-conversion-finalize.sql");
+const documentWorkspace = read("components/business-document-workspace.tsx");
 
 describe("ARC-03 / ARC-07 ownership boundary", () => {
   it("keeps lead-to-customer continuity on the company-scoped matched_customer_id link", () => {
@@ -47,5 +48,13 @@ describe("ARC-03 / ARC-07 ownership boundary", () => {
     expect(conversionFinalizeDraft).toContain("lead_already_linked_to_another_customer");
     expect(conversionFinalizeDraft).toContain("from public, anon, authenticated");
     expect(conversionFinalizeDraft).toMatch(/rollback;[\s\S]*재현 시나리오 A/);
+  });
+
+  it("reuses a pending payment payload until success or explicit reset", () => {
+    expect(documentWorkspace).toContain("let attempt = pendingPayment.current");
+    expect(documentWorkspace).toContain("pendingPayment.current = attempt");
+    expect(documentWorkspace).toMatch(/await api\("\/api\/partner-ledger"[\s\S]*startNewPayment\(\);[\s\S]*await load\(\)/);
+    expect(documentWorkspace).toContain("이 등록을 취소하고 새로 시작");
+    expect(documentWorkspace).not.toMatch(/idempotencyKey:\s*crypto\.randomUUID\(\)/);
   });
 });
