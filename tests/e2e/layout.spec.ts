@@ -20,6 +20,7 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/insights", slug: "insights" },
   { auth: "customer", path: "/map", slug: "map" },
   { auth: "customer", path: "/dashboard", slug: "dashboard" },
+  { auth: "customer", path: "/revenue/products", slug: "products" },
   { auth: "customer", path: "/settings/billing", slug: "settings-billing" },
   { auth: "customer", path: "/dashboard/settings/company", slug: "settings-company" },
   { auth: "customer", path: "/dashboard/settings/staff", slug: "settings-staff" },
@@ -181,6 +182,9 @@ for (const viewport of viewports) {
         }
         if (route.path === "/map") {
           await expect(page.getByText(/거래처 20곳/).filter({ visible: true }).first()).toBeVisible();
+        }
+        if (route.path === "/revenue/products") {
+          await expect(page.getByText("깐양파").first()).toBeVisible();
         }
         if (route.slug === "lead-detail") {
           await expect(page.getByText("테스트 매장 01").first()).toBeVisible();

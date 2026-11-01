@@ -1,5 +1,6 @@
 import { convertedUnitCost } from "../domains/product/catalog-import";
 import { supabaseRequest as request } from "./store";
+import { ciLayoutProducts, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
 export type ProductTaxType = "taxable" | "exempt";
 export type ProductCatalogAdminItem = {
@@ -99,6 +100,16 @@ export async function listProductCatalogForAdmin(
   companyId: string,
   query = "",
 ) {
+  if (isCiLayoutFixturesEnabled()) {
+    const normalized = query.trim().toLocaleLowerCase("ko");
+    return normalized
+      ? ciLayoutProducts.filter((item) =>
+          `${item.productCode || ""} ${item.name} ${item.managementName || ""}`
+            .toLocaleLowerCase("ko")
+            .includes(normalized),
+        )
+      : ciLayoutProducts;
+  }
   const search = query.trim()
     ? `&or=(canonical_name.ilike.*${enc(query.trim())}*,purchase_product_name.ilike.*${enc(query.trim())}*,product_code.ilike.*${enc(query.trim())}*)`
     : "";
