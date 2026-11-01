@@ -76,24 +76,34 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
 
 export const holdNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "보류 모듈",
+    label: "주문·단가",
     items: [
       { active: "revenue", description: "영업 현황과 견적 원장", href: "/revenue/pipeline", icon: FileSpreadsheet, label: "견적 관리" },
-      { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
-      { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" },
       { active: "customers-summary", description: "거래처 데이터 현황", href: "/crm/summary", icon: LayoutDashboard, label: "거래처 현황" },
       { active: "customers", description: "거래처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처" },
+      { active: "product-catalog", description: "마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" }
+    ]
+  },
+  {
+    label: "ERP",
+    items: [
       { active: "suppliers", description: "매입처와 원가", href: "/purchasing/suppliers", icon: Truck, label: "매입처" },
       { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "전표" },
       { active: "revenue-ledger", description: "기존 거래 자료", href: "/revenue/transactions", icon: History, label: "이전 거래 자료" },
-      { active: "product-catalog", description: "마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" },
       { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고관리" }
     ]
   }
 ];
 
+const holdSalesItems: CustomerNavigationItem[] = [
+  { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
+  { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" }
+];
+
 export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string) {
-  const groups = includeHoldModules ? [...customerNavigationGroups, ...holdNavigationGroups] : customerNavigationGroups;
+  const groups = includeHoldModules
+    ? [{ ...customerNavigationGroups[0], items: [...customerNavigationGroups[0].items, ...holdSalesItems] }, customerNavigationGroups[1], ...holdNavigationGroups, customerNavigationGroups[2]]
+    : customerNavigationGroups;
   if (!workspaceRole) return groups;
   return groups.map((group) => ({
     ...group,

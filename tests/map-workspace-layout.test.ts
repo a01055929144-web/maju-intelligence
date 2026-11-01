@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
 const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
+const sidebarSource = readFileSync("components/app-sidebar.tsx", "utf8");
 const deliveryProofSource = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
 const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
 const mapControlsSource = readFileSync("components/map-corner-controls.tsx", "utf8");
@@ -17,7 +18,7 @@ describe("PC map workspace layout", () => {
   });
 
   it("keeps settings at the bottom of the sidebar instead of duplicating a footer shortcut", () => {
-    expect(shellSource).toContain('group.label === "설정" ? "mt-auto');
+    expect(sidebarSource).toContain('group.label === "설정" ? "mt-auto');
     expect(shellSource).not.toContain("const settingsHref");
   });
 

@@ -76,7 +76,7 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-screen maju-app-bg">
-      <AdminPageHeader active="overview" badge="BIV Admin" session={session} subtitle="고객사 사용과 운영 이상을 한곳에서 확인합니다" title="운영 현황" />
+      <AdminPageHeader active="overview" badge="MAJU Admin" session={session} subtitle="고객사 사용과 운영 이상을 한곳에서 확인합니다" title="관리자 홈" />
 
       <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-4">
         <Card className="overflow-hidden border-slate-200 shadow-none">

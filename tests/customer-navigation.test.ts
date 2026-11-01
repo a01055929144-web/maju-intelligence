@@ -22,7 +22,9 @@ describe("customer navigation", () => {
 
   it("exposes held destinations only through the explicit module switch", () => {
     expect(getCustomerNavigationGroups(false)).toEqual(customerNavigationGroups);
-    expect(getCustomerNavigationGroups(true)).toEqual([...customerNavigationGroups, ...holdNavigationGroups]);
+    const expanded = getCustomerNavigationGroups(true);
+    expect(expanded.map((group) => group.label)).toEqual(["영업", "동선", "주문·단가", "ERP", "설정"]);
+    expect(flattenCustomerNavigationItems(expanded)).toEqual(expect.arrayContaining(flattenCustomerNavigationItems(holdNavigationGroups)));
   });
 
   it("shows management insights only to owners and managers", () => {

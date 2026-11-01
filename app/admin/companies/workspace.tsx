@@ -809,7 +809,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
                 </div>
                 <Badge className="bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">즉시 발급</Badge>
               </div>
-              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.2fr)_minmax(150px,0.8fr)_150px_auto] xl:items-end">
+              <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.2fr)_minmax(150px,0.8fr)_150px_auto] 2xl:items-end">
                 <Field label="직원명" required value={directForm.employeeName} onChange={(value) => setDirectForm((prev) => ({ ...prev, employeeName: value }))} />
                 <Field
                   help="비워 두면 로그인용 이메일을 자동으로 만듭니다."
@@ -832,7 +832,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
                     <option value="member">일반직원</option>
                   </select>
                 </label>
-                <Button className="h-11 w-full sm:col-span-2 xl:col-span-1" disabled={creatingDirect} onClick={createDirectAccount} type="button">
+                <Button className="h-11 w-full sm:col-span-2 2xl:col-span-1" disabled={creatingDirect} onClick={createDirectAccount} type="button">
                   <UserPlus className="h-4 w-4" />
                   {creatingDirect ? "생성 중" : "계정 생성"}
                 </Button>
@@ -1482,7 +1482,7 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
   });
 
   return (
-    <div className="max-w-full overflow-x-auto">
+    <div className="w-full min-w-0 max-w-full overflow-x-auto">
       <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
         <thead>
           <tr className="text-left text-xs font-black text-slate-500">
