@@ -99,3 +99,8 @@ SQL은 새 폐기용 로컬 PG16 DB에 한 번 적용하는 초안이다. P0 초
 - 브라우저 스크립트는 합성 계정/상품·loopback RPC 어댑터만 사용하며 운영 Supabase/메일·메시지 전송을 호출하지 않는다. 실행 명령: PRICING_P1_LOCAL_DATABASE_URL을 새 pricing_p1_test* DB로 지정해 scripts/test-pricing-p1-local.mjs, 그 초기화된 DB에서 scripts/test-pricing-p1-browser.mjs 실행. 산출물은 저장소 밖 ../outputs/pricing-p1-browser에 생성.
 - 확인한 문제와 보완: PG16 임시 리소스/한글 경로 제한은 영문 전용 테스트 경로로 해결. Next 내부 localhost 정규화에 따른 출처 검사 불일치는 실제 Host 기준으로 보완하고 회귀 테스트. 테스트 XLSX는 메모리 버퍼→Node 파일 저장으로 경로 의존을 제거.
 - PR #98 리뷰 보완: publish/versions는 공통 SQL 응답 함수로 현재 행사 가능 여부·수량을 제공한다. 과거 버전 버튼은 다시 조회하고 같은 버전의 상태가 달라지면 미리보기를 재생성한다. 저장 후 품절→확정 및 수량 변경→과거 버전 열기에서 내보내기 전 화면 일치를 브라우저로 검증한다.
+
+
+## ARC-05·06 대조·연결 계약 (2026-11-01)
+
+[대조와 모듈 연결 계약](../design/2026-11-01-09-arc05-06-contracts.md). PR #106은 미병합 제안이며 최신 7/8/9차 와이어프레임과 main, Draft #99를 구분해 검토한다. 이번 추가 허용 파일은 해당 문서·이 연결 항목·tests/pricing-arc05-contract.test.ts다. 상품/환산은 04, 전표/원장/재고는 03 소유를 유지한다. 대조/계약 초안 완료는 ARC-05·06 구현 완료나 운영 활성화 승인이 아니다. 관련 기능은 OFF를 유지한다.
