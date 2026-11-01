@@ -13,12 +13,24 @@ export const catalogFields = [
   "supplyAmount",
   "vat",
 ] as const;
+export const supplierExtraFields = [
+  "category",
+  "extra1",
+  "extra2",
+  "extra3",
+  "extra4",
+  "extra5",
+] as const;
 export type CatalogField = (typeof catalogFields)[number];
-export type CatalogMapping = Partial<Record<CatalogField, string>>;
+export type SupplierExtraField = (typeof supplierExtraFields)[number];
+export type CatalogMapping = Partial<
+  Record<CatalogField | SupplierExtraField, string>
+>;
 export type RawCatalogRow = Record<string, unknown>;
 export type ParsedProduct = {
   barcode?: string;
   brand?: string;
+  category?: string;
   cost: number;
   costConfirmed: boolean;
   date?: string;
@@ -35,6 +47,9 @@ export type ParsedProduct = {
   specValue?: number;
   unit: string;
   usageTags: string[];
+  extraAttributes?: Partial<
+    Record<Exclude<(typeof supplierExtraFields)[number], "category">, string>
+  >;
   parsedTaxType?: "taxable" | "exempt";
   salesMin?: number;
   salesMedian?: number;
@@ -48,7 +63,7 @@ export type ParsedProduct = {
   }>;
 };
 
-const aliases: Record<CatalogField, string[]> = {
+const aliases: Record<CatalogField | SupplierExtraField, string[]> = {
   productName: ["상품명", "품명", "제품명"],
   spec: ["규격", "상품규격"],
   unit: ["단위", "판매단위"],
@@ -62,6 +77,12 @@ const aliases: Record<CatalogField, string[]> = {
   quantity: ["수량", "출고수량"],
   supplyAmount: ["공급가액", "공급액", "과세표준"],
   vat: ["부가세", "세액", "VAT"],
+  category: ["분류", "카테고리", "상품분류"],
+  extra1: ["추가1", "추가항목1"],
+  extra2: ["추가2", "추가항목2"],
+  extra3: ["추가3", "추가항목3"],
+  extra4: ["추가4", "추가항목4"],
+  extra5: ["추가5", "추가항목5"],
 };
 
 export function inferTaxType(vat?: number, supplyAmount?: number) {
@@ -104,6 +125,17 @@ export function suggestCatalogMapping(headers: string[]): CatalogMapping {
     );
     if (h) m[f] = h;
     return m;
+  }, {});
+}
+export function suggestSupplierExtraMapping(headers: string[]): CatalogMapping {
+  return supplierExtraFields.reduce<CatalogMapping>((mapping, field) => {
+    const header = headers.find((candidate) =>
+      aliases[field].some(
+        (alias) => normalizeHeader(alias) === normalizeHeader(candidate),
+      ),
+    );
+    if (header) mapping[field] = header;
+    return mapping;
   }, {});
 }
 const origins = [
@@ -186,7 +218,11 @@ export function parseProductText(rawName: string, rawSpec = "") {
       .map(([tag]) => tag),
   };
 }
-const val = (r: RawCatalogRow, m: CatalogMapping, f: CatalogField) =>
+const val = (
+  r: RawCatalogRow,
+  m: CatalogMapping,
+  f: CatalogField | SupplierExtraField,
+) =>
   m[f] ? r[m[f]!] : undefined;
 const median = (a: number[]) => {
   if (!a.length) return undefined;
@@ -235,6 +271,7 @@ export function buildCatalogPreview(
     products.push({
       barcode: text(val(latest, mapping, "barcode")) || undefined,
       brand: p.brand,
+      category: text(val(latest, mapping, "category")) || undefined,
       cost,
       costConfirmed: true,
       date: text(val(latest, mapping, "date")) || undefined,
@@ -251,6 +288,12 @@ export function buildCatalogPreview(
       specValue: p.specValue,
       unit: text(val(latest, mapping, "unit")) || "미정",
       usageTags: p.usageTags,
+      extraAttributes: Object.fromEntries(
+        supplierExtraFields
+          .filter((field) => field !== "category")
+          .map((field) => [field, text(val(latest, mapping, field))])
+          .filter(([, value]) => value),
+      ),
       parsedTaxType: inferTaxType(
         num(val(latest, mapping, "vat")),
         num(val(latest, mapping, "supplyAmount")),
@@ -378,7 +421,16 @@ export function buildSupplierProductWrite(
   companyId: string,
   supplierId: string,
   product: ParsedProduct,
+  includeExtraMapping = false,
 ) {
+  const extraAttributes = Object.fromEntries(
+    supplierExtraFields
+      .filter((field) => field !== "category")
+      .map((field) => [field, product.extraAttributes?.[field]])
+      .filter((entry): entry is [string, string] =>
+        Boolean(typeof entry[1] === "string" && entry[1]),
+      ),
+  );
   return {
     barcode: product.barcode || null,
     company_id: companyId,
@@ -393,7 +445,16 @@ export function buildSupplierProductWrite(
     parsed_spec_unit: product.specUnit || null,
     parsed_spec_value: product.specValue || null,
     parsed_tax_type: product.parsedTaxType || null,
-    parser_metadata: { usage_tags: product.usageTags },
+    parser_metadata: {
+      usage_tags: product.usageTags,
+      ...(includeExtraMapping && product.category
+        ? { category: product.category }
+        : {}),
+      ...(includeExtraMapping &&
+      Object.keys(extraAttributes).length
+        ? { extra_attributes: extraAttributes }
+        : {}),
+    },
     raw_name: product.rawName,
     raw_spec: product.rawSpec || null,
     raw_unit: product.rawUnit || null,

@@ -58,6 +58,13 @@ function validateImportBody(body: {
     )
       return "상품 코드·규격·단위는 200자를 넘을 수 없습니다.";
     if (
+      [product.category, ...Object.values(product.extraAttributes || {})].some(
+        (value) =>
+          value != null && (typeof value !== "string" || value.length > 200),
+      )
+    )
+      return "상품 분류·추가 항목은 200자를 넘을 수 없습니다.";
+    if (
       !Number.isFinite(product.cost) ||
       product.cost < 0 ||
       product.cost > MAX_PRICE
@@ -183,6 +190,8 @@ export async function POST(request: NextRequest) {
         products: body.products,
         excludedCount: Number(body.excludedCount) || 0,
         warnings: Array.isArray(body.warnings) ? body.warnings : [],
+        includeExtraMapping:
+          process.env.COMPANY_FIELD_DEFINITIONS_ENABLED === "true",
         editedRows:
           process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true" &&
           process.env.IMPORT_ROW_EDITOR_ENABLED === "true" &&

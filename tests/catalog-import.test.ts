@@ -9,6 +9,7 @@ import {
   rankProductCandidates,
   scoreProductMatch,
   suggestCatalogMapping,
+  suggestSupplierExtraMapping,
 } from "../domains/product/catalog-import";
 describe("catalog import", () => {
   it("maps spaced ERP headers", () =>
@@ -19,6 +20,62 @@ describe("catalog import", () => {
       spec: "규  격",
       cost: "매입가",
     }));
+  it("maps supplier category and five optional fields", () => {
+    expect(
+      suggestSupplierExtraMapping([
+        "상품분류",
+        "추가1",
+        "추가2",
+        "추가3",
+        "추가4",
+        "추가5",
+      ]),
+    ).toEqual({
+      category: "상품분류",
+      extra1: "추가1",
+      extra2: "추가2",
+      extra3: "추가3",
+      extra4: "추가4",
+      extra5: "추가5",
+    });
+  });
+  it("parses and feature-gates supplier extra metadata", () => {
+    const parsed = buildCatalogPreview(
+      [
+        {
+          상품명: "두부",
+          매입가: 1000,
+          상품분류: "냉장",
+          추가1: "국산콩",
+          추가5: "박스",
+        },
+      ],
+      {
+        productName: "상품명",
+        cost: "매입가",
+        category: "상품분류",
+        extra1: "추가1",
+        extra5: "추가5",
+      },
+      "supplier",
+    ).products[0];
+    expect(parsed).toMatchObject({
+      category: "냉장",
+      extraAttributes: { extra1: "국산콩", extra5: "박스" },
+    });
+    expect(
+      buildSupplierProductWrite("company", "supplier", parsed)
+        .parser_metadata,
+    ).toEqual({ usage_tags: [] });
+    expect(
+      buildSupplierProductWrite("company", "supplier", parsed, true)
+        .parser_metadata,
+    ).toEqual({
+      usage_tags: [],
+      category: "냉장",
+      extra_attributes: { extra1: "국산콩", extra5: "박스" },
+    });
+  });
   it("parses attributes and usage", () =>
     expect(
       parseProductText("**돼지(대패삼겹/네덜란드산)", "1.4kg(b/6)"),
