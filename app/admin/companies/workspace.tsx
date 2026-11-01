@@ -998,11 +998,15 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
           ) : null}
 
           {selectedCompany ? (
-            <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="rounded-lg border border-slate-200 bg-white" id="company-import-history">
+              <nav aria-label="고객사 상세 탭" className="flex gap-1 border-b border-slate-200 px-4 pt-3">
+                <a className="rounded-t-md px-3 py-2 text-xs font-black text-slate-500 hover:bg-slate-50" href="#company-editor">기본 정보</a>
+                <a aria-current="page" className="rounded-t-md border border-b-white border-slate-200 bg-white px-3 py-2 text-xs font-black text-primary" href="#company-import-history">가져오기 이력</a>
+              </nav>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
                 <div>
-                  <p className="font-black">최근 업로드 이력</p>
-                  <p className="mt-1 text-xs font-bold text-muted-foreground">회사별 엑셀 업로드 성공/실패와 처리 품질을 확인합니다.</p>
+                  <p className="font-black">가져오기 이력</p>
+                  <p className="mt-1 text-xs font-bold text-muted-foreground">고객사가 직접 올린 파일과 MAJU 관리자가 대신 올린 파일을 회사 범위로 함께 확인합니다.</p>
                 </div>
                 <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
                   최근 {selectedCompany.recentUploads.length}건
@@ -1483,10 +1487,11 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
 
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-auto">
-      <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
+      <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
         <thead>
           <tr className="text-left text-xs font-black text-slate-500">
             <SortableTh active={sortKey === "filename"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="파일명" onClick={() => toggleSort("filename")} />
+            <th className="border-b border-slate-100 px-4 py-3">올린 사람</th>
             <SortableTh active={sortKey === "status"} className="border-b border-slate-100 px-4 py-3" direction={sortDirection} label="상태" onClick={() => toggleSort("status")} />
             <SortableTh
               active={sortKey === "rows"}
@@ -1517,6 +1522,11 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
             <tr key={upload.id} className="font-bold text-slate-800">
               <td className="border-b border-slate-100 px-4 py-3">{upload.filename}</td>
               <td className="border-b border-slate-100 px-4 py-3">
+                <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.uploadSource === "admin" ? "bg-indigo-100 text-indigo-800" : "bg-sky-100 text-sky-800"}`}>
+                  {upload.uploadSource === "admin" ? upload.actorName || "MAJU 관리자" : "고객사 직접"}
+                </span>
+              </td>
+              <td className="border-b border-slate-100 px-4 py-3">
                 <span className={`rounded-md px-2 py-1 text-xs font-black ${upload.status === "completed" ? "bg-emerald-100 text-emerald-800" : upload.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
                   {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
                 </span>
@@ -1529,7 +1539,7 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
           ))}
           {!uploads.length ? (
             <tr>
-              <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={6}>
+              <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={7}>
                 아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
               </td>
             </tr>

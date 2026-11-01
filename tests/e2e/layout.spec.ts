@@ -245,6 +245,12 @@ for (const viewport of viewports) {
 
         const screenshotPath = testInfo.outputPath(`${route.slug}-${viewport.width}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: false });
+        if (route.slug === "admin-companies" && (viewport.width === 1440 || viewport.width === 390)) {
+          const history = page.locator("#company-import-history");
+          await expect(history).toBeVisible();
+          await history.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: testInfo.outputPath(`admin-company-import-history-${viewport.width}.png`), fullPage: false });
+        }
         const problems = await collectLayoutProblems(page);
         const { owner, known, unexpected } = splitKnownLayoutDebt(route.path, viewport.width, problems);
         if (known.length > 0) {

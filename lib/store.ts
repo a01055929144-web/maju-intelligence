@@ -89,6 +89,10 @@ export type UploadHistoryItem = {
   duplicateCount: number;
   healthScore: number;
   createdAt: string;
+  createdAtIso?: string;
+  uploadSource?: "customer" | "admin";
+  actorName?: string;
+  targetType?: string;
 };
 export type AdminAuditLogItem = {
   id: string;
@@ -2245,7 +2249,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
   }
 
   try {
-    const [companies, credentialRows, customerRows, salesRows, importRows, invitationRows, leadImportRows, subscriptionRows] = await Promise.all([
+    const [companies, credentialRows, customerRows, salesRows, importRows, invitationRows, leadImportRows, subscriptionRows, auditImportRows] = await Promise.all([
       supabaseRequest<
         Array<{
           id: string;
@@ -2295,7 +2299,23 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         }>
       >("staff_invitations?select=id,company_id,employee_name,employee_phone,invite_code,role,status,expires_at,created_at&order=created_at.desc").catch(() => []),
       supabaseRequest<Array<{ company_id: string }>>("lead_import_batches?select=company_id").catch(() => []),
-      supabaseRequest<Array<{ company_id: string; status: string }>>("subscriptions?select=company_id,status").catch(() => [])
+      supabaseRequest<Array<{ company_id: string; status: string }>>("subscriptions?select=company_id,status").catch(() => []),
+      process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"
+        ? supabaseRequest<
+            Array<{
+              id: string;
+              company_id: string;
+              target_type: string;
+              file_name: string;
+              status: "uploaded" | "mapped" | "validated" | "applying" | "completed" | "failed" | "cancelled";
+              total_rows: number;
+              valid_rows: number;
+              error_rows: number;
+              created_by_name: string | null;
+              created_at: string;
+            }>
+          >("import_jobs?select=id,company_id,target_type,file_name,status,total_rows,valid_rows,error_rows,created_by_name,created_at&order=created_at.desc").catch(() => [])
+        : Promise.resolve([])
     ]);
 
     const credentialsByCompany = new Map(
@@ -2324,6 +2344,13 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
       });
       return map;
     }, new Map());
+    auditImportRows.forEach((row) => {
+      const current = uploadStatsByCompany.get(row.company_id) || { count: 0 };
+      uploadStatsByCompany.set(row.company_id, {
+        count: current.count + 1,
+        latest: !current.latest || row.created_at > current.latest ? row.created_at : current.latest
+      });
+    });
     const recentUploadsByCompany = importRows.reduce<Map<string, UploadHistoryItem[]>>((map, row) => {
       const uploads = map.get(row.company_id) || [];
       if (uploads.length < 5) {
@@ -2338,12 +2365,38 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           qualityScore: row.quality_score,
           duplicateCount: row.duplicate_count,
           healthScore: row.ai_reports?.[0]?.health_score || 0,
-          createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+          createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+          createdAtIso: row.created_at,
+          uploadSource: "customer"
         });
       }
       map.set(row.company_id, uploads);
       return map;
     }, new Map());
+    auditImportRows.forEach((row) => {
+      const uploads = recentUploadsByCompany.get(row.company_id) || [];
+      uploads.push({
+        id: `audit-${row.id}`,
+        company: "",
+        companyId: row.company_id,
+        filename: row.file_name,
+        reportId: "",
+        rows: row.total_rows,
+        status: row.status === "completed" ? "completed" : row.status === "failed" || row.status === "cancelled" ? "failed" : "running",
+        qualityScore: row.total_rows ? Math.round((row.valid_rows / row.total_rows) * 100) : 0,
+        duplicateCount: 0,
+        healthScore: row.total_rows ? Math.round(((row.total_rows - row.error_rows) / row.total_rows) * 100) : 0,
+        createdAt: new Date(row.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+        createdAtIso: row.created_at,
+        uploadSource: "admin",
+        actorName: row.created_by_name || "MAJU 관리자",
+        targetType: row.target_type
+      });
+      recentUploadsByCompany.set(
+        row.company_id,
+        uploads.sort((a, b) => (b.createdAtIso || "").localeCompare(a.createdAtIso || "")).slice(0, 5)
+      );
+    });
     const invitationsByCompany = invitationRows.reduce<Map<string, StaffInvitation[]>>((map, row) => {
       const invitations = map.get(row.company_id) || [];
       if (invitations.length < 5) {
