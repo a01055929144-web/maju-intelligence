@@ -6,6 +6,7 @@ import {
   type ParsedProduct,
 } from "../domains/product/catalog-import";
 import { supabaseRequest as db } from "./store";
+import { ciLayoutProductImports, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
 type Json = Record<string, unknown>;
 const enc = encodeURIComponent;
@@ -61,6 +62,17 @@ export type ProductImportAuditItem = {
 };
 
 export async function listProductImportWorkspace(companyId: string) {
+  if (isCiLayoutFixturesEnabled()) {
+    return {
+      suppliers: [
+        { id: "supplier-1", name: "한빛유통" },
+        { id: "supplier-2", name: "새봄푸드" },
+      ],
+      catalogCount: 428,
+      imports: ciLayoutProductImports,
+      items: [],
+    };
+  }
   const [suppliers, products, matches, catalog, imports] = await Promise.all([
     db<Array<{ id: string; name: string }>>(
       `product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&order=name`,

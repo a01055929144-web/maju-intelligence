@@ -13,7 +13,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const initialTab = params?.tab === "mapping" || params?.tab === "supplier" ? params.tab : "catalog";
+  const initialTab = params?.tab === "mapping" || params?.tab === "supplier" || params?.tab === "imports" ? params.tab : "catalog";
   const standardsView = initialTab === "mapping";
 
   return (

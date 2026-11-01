@@ -64,7 +64,7 @@ export function ProductCatalogWorkspace({
   categoriesEnabled?: boolean;
   companyId?: string;
   importAuditV2Enabled?: boolean;
-  initialTab?: "catalog" | "supplier" | "mapping";
+  initialTab?: Tab;
   tableSettingsKey?: string;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
