@@ -3,6 +3,8 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ProductCatalogWorkspace } from "@/components/product-catalog-workspace";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
 import { getAdminSession, getCustomerSession, customerHasCapability, resolvePageCompanyId } from "@/lib/auth";
+import { customerItemsFileImportEnabled } from "../../../lib/customer-items-import";
+import { areHoldModulesEnabled } from "../../../lib/feature-modules";
 
 export default async function ProductCatalogPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; tab?: string }> }) {
   const params = await searchParams;
@@ -30,10 +32,12 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
         <SalesWorkspaceNav active="products" companyId={companyId} />
         <ProductCatalogWorkspace
+          key={companyId}
           categoriesEnabled={process.env.PRODUCT_CATEGORIES_ENABLED === "true"}
           companyId={isAdminPreview ? companyId : ""}
           importAuditV2Enabled={process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"}
           importTargetsEnabled={process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true"}
+          customerItemsEnabled={customerItemsFileImportEnabled() && areHoldModulesEnabled(companyId)}
           rowEditorEnabled={process.env.IMPORT_ROW_EDITOR_ENABLED === "true"}
           initialTab={initialTab}
           tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
