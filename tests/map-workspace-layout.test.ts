@@ -136,6 +136,11 @@ describe("시안 ⑫ 지도 기본 배치", () => {
     expect(source).toContain('label: "코스"');
     expect(source).toContain('workspaceViews.filter((item) => item.value !== "leads")');
   });
+
+  it("preselects the requested lead list on the shared map screen", () => {
+    expect(dashboardSource).toContain('initialLeadType={params.type === "keyword" ? "sales" : "new"}');
+    expect(workspaceSource).toContain('useState<"all" | PermitLeadType>(initialLeadType)');
+  });
 });
 
 describe("시안 ⑫ 필터 줄 · 격자", () => {

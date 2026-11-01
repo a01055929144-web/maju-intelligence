@@ -18,6 +18,16 @@ export function buildSalesHomeSummary(leads: PermitLeadItem[], ledger: SalesCont
   const todayKey = new Intl.DateTimeFormat("sv-SE", { day: "2-digit", month: "2-digit", timeZone: "Asia/Seoul", year: "numeric" }).format(now);
   const monthActions = ledger.filter((item) => item.createdAt.slice(0, 7) === monthKey);
   const active = leads.filter((lead) => lead.isActive && lead.status !== "제외" && !lead.matchedCustomerId);
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const newThisWeek = active.filter((lead) => new Date(lead.createdAt).getTime() >= sevenDaysAgo);
+  const newThisWeekIds = new Set(newThisWeek.map((lead) => lead.id));
+  const salesLeads = active.filter((lead) => !newThisWeekIds.has(lead.id));
+  const leadPreview = (lead: PermitLeadItem) => ({
+    businessName: lead.businessName,
+    id: lead.id,
+    scoreTotal: lead.scoreTotal,
+    status: lead.status
+  });
   const contactedLeadIds = new Set(monthActions.map((item) => item.leadId));
   const channelCounts = Object.entries(CHANNEL_LABELS).map(([key, label]) => ({
     key,
@@ -39,6 +49,14 @@ export function buildSalesHomeSummary(leads: PermitLeadItem[], ledger: SalesCont
       followUpToday: active.filter((lead) => lead.status === "재연락 예정" && ledger.some((item) => item.leadId === lead.id && Boolean(item.followUpAt && item.followUpAt.slice(0, 10) <= todayKey))).length,
       newToday: active.filter((lead) => lead.leadPeriod === "today").length,
       smsReady: active.filter((lead) => /^010\D*\d{3,4}\D*\d{4}$/.test(lead.phone || "") && !contactedLeadIds.has(lead.id)).length
+    },
+    leadOverview: {
+      newThisWeek: newThisWeek.length,
+      sales: salesLeads.length
+    },
+    leadPreviews: {
+      highInterest: [...salesLeads].sort((a, b) => b.scoreTotal - a.scoreTotal).slice(0, 3).map(leadPreview),
+      newest: [...newThisWeek].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 3).map(leadPreview)
     },
     totals: {
       active: active.length,
