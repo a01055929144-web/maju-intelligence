@@ -1,10 +1,15 @@
 "use client";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit3, Loader2, PackagePlus, Search, X } from "lucide-react";
-import type {
-  ProductCatalogAdminItem,
-  ProductTaxType,
+import { useEffect, useMemo, useState } from "react";
+import { Edit3, Loader2, PackagePlus, X } from "lucide-react";
+import {
+  CommonDataTable,
+  type CommonTableColumn,
+} from "@/components/common-data-table";
+import {
+  type ProductCatalogAdminItem,
+  type ProductTaxType,
 } from "@/lib/product-catalog-admin";
+import { productCatalogMargin } from "@/lib/product-catalog-presentation";
 const blank: ProductCatalogAdminItem = {
   id: "",
   name: "",
@@ -16,28 +21,36 @@ const blank: ProductCatalogAdminItem = {
   matchStatus: "matched",
   linkedSupplierCount: 0,
   hasUnconfirmedConversion: false,
+  barcodes: [],
 };
 const money = (v?: number) =>
   v == null ? "-" : `${Math.round(v).toLocaleString("ko-KR")}원`;
+const margin = productCatalogMargin;
+type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo";
 export function ProductCatalogAdmin({
+  categoriesEnabled = false,
   companyId = "",
+  settingsKey = "products:current",
 }: {
+  categoriesEnabled?: boolean;
   companyId?: string;
+  settingsKey?: string;
 }) {
   const [items, setItems] = useState<ProductCatalogAdminItem[]>([]),
-    [query, setQuery] = useState(""),
+    [search, setSearch] = useState({ code: "", name: "", spec: "", unit: "", barcode: "" }),
     [tax, setTax] = useState<"all" | ProductTaxType>("all"),
     [active, setActive] = useState<"all" | "active" | "inactive">("active"),
     [mapped, setMapped] = useState<"all" | "mapped" | "unmapped">("all"),
+    [view, setView] = useState<View>("all"),
+    [sideTab, setSideTab] = useState<"category" | "supplier">("category"),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null);
-  async function load(q = "") {
+  async function load() {
     setLoading(true);
     setError("");
     try {
       const p = new URLSearchParams();
-      if (q) p.set("q", q);
       if (companyId) p.set("companyId", companyId);
       const r = await fetch(`/api/product-catalog?${p}`, { cache: "no-store" }),
         j = await r.json();
@@ -53,22 +66,76 @@ export function ProductCatalogAdmin({
     void load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = useMemo(
-    () =>
-      items.filter(
-        (i) =>
+    () => {
+      const codeCounts = new Map<string, number>();
+      for (const item of items) if (item.productCode) codeCounts.set(item.productCode, (codeCounts.get(item.productCode) || 0) + 1);
+      const recentCutoff = Date.now() - 7 * 86400000;
+      return items.filter((i) => {
+        const spec = `${i.specValue || ""}${i.specUnit || ""} ${i.salesSpec || ""}`.toLowerCase();
+        const matchesSearch =
+          (!search.code || i.productCode?.toLowerCase().includes(search.code.toLowerCase())) &&
+          (!search.name || `${i.name} ${i.managementName || ""}`.toLowerCase().includes(search.name.toLowerCase())) &&
+          (!search.spec || spec.includes(search.spec.toLowerCase())) &&
+          (!search.unit || `${i.salesUnit || ""} ${i.purchaseUnit}`.toLowerCase().includes(search.unit.toLowerCase())) &&
+          (!search.barcode || (i.barcodes || []).some((x) => x.includes(search.barcode)));
+        const matchesView =
+          view === "all" ||
+          (view === "recent" && Boolean(i.createdAt && Date.parse(i.createdAt) >= recentCutoff)) ||
+          (view === "negative" && (margin(i) ?? 0) < 0) ||
+          (view === "no-price" && i.salesPrice == null) ||
+          (view === "no-code" && !i.productCode) ||
+          (view === "duplicate-code" && Boolean(i.productCode && (codeCounts.get(i.productCode) || 0) > 1)) ||
+          (view === "no-photo" && !i.photoUrl);
+        return matchesSearch && matchesView &&
           (tax === "all" || i.taxType === tax) &&
           (active === "all" || (active === "active") === i.isActive) &&
           (mapped === "all" ||
-            (mapped === "mapped") === i.linkedSupplierCount > 0),
-      ),
-    [items, tax, active, mapped],
+            (mapped === "mapped") === i.linkedSupplierCount > 0);
+      });
+    },
+    [items, search, tax, active, mapped, view],
   );
+  const sideItems = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const names = sideTab === "category" ? [item.category || "미분류"] : item.supplierNames?.length ? item.supplierNames : ["매입처 없음"];
+      for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  }, [items, sideTab]);
+  const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
+    { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
+    { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span></button> },
+    { key: "spec", label: "규격", width: 75, value: (i) => i.spec || "-" },
+    { key: "unit", label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
+    { key: "supplier", label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
+    { key: "stockMode", label: "재고 방식", width: 75, value: (i) => i.trackingEnabled == null ? "미설정" : i.trackingEnabled ? "재고" : "사입" },
+    { key: "purchase", label: "매입가", align: "right", width: 90, value: (i) => i.purchasePrice, render: (i) => i.hasUnconfirmedConversion ? <span className="text-amber-700">환산 미확인</span> : money(i.purchasePrice) },
+    { key: "margin", label: "마진", align: "right", width: 65, value: (i) => margin(i), render: (i) => margin(i) == null ? "-" : <span className={(margin(i) || 0) < 0 ? "font-black text-rose-700" : ""}>{margin(i)!.toFixed(1)}%</span> },
+    { key: "sales", label: "판매가", align: "right", width: 90, value: (i) => i.salesPrice, render: (i) => <span className={(margin(i) || 0) < 0 ? "font-black text-rose-700" : ""}>{money(i.salesPrice)}</span> },
+    { key: "stock", label: "재고", align: "right", width: 60, value: (i) => i.onHand, render: (i) => i.onHand?.toLocaleString("ko-KR") || "-" },
+    { key: "status", label: "상태", width: 65, value: (i) => i.isActive ? "판매중" : "중지" },
+    { key: "barcode", label: "바코드", defaultHidden: true, width: 150, value: (i) => i.barcodes?.join(", ") || "-" },
+    { key: "tax", label: "과세", defaultHidden: true, width: 80, value: (i) => i.taxType === "taxable" ? "과세" : i.taxType === "exempt" ? "면세" : "미정" },
+    { key: "storage", label: "보관", defaultHidden: true, width: 80, value: () => "미설정" },
+    { key: "brand", label: "브랜드", defaultHidden: true, width: 120, value: (i) => i.brand || "-" },
+    { key: "edit", label: "수정", defaultHidden: true, sortable: false, width: 60, value: () => "", render: (i) => <button aria-label={`${i.name} 편집`} className="maju-button-secondary" onClick={() => setEditing(i)} type="button"><Edit3 className="h-4 w-4" /></button> },
+  ], []);
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
+        <div className="grid grid-cols-2 border-b p-2">
+          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("category")} type="button">구분</button>
+          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("supplier")} type="button">매입처</button>
+        </div>
+        {sideTab === "category" && !categoriesEnabled ? <p className="border-b bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">트리 편집 OFF · SQL 승인 대기</p> : null}
+        <div className="max-h-[70vh] overflow-y-auto p-2">{sideItems.map((item) => <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50" key={item.name}><span className="truncate font-semibold">{item.name}</span><span className="text-xs text-slate-500">{item.count}</span></div>)}</div>
+      </aside>
+      <div className="min-w-0 space-y-4">
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="maju-section-title">표준 품목</h2>
+              <h2 className="maju-section-title">상품관리</h2>
             <p className="mt-1 maju-muted-label">
               판매 단위와 공급 상품의 원가·환산을 한 곳에서 관리합니다.
             </p>
@@ -78,26 +145,14 @@ export function ProductCatalogAdmin({
             onClick={() => setEditing({ ...blank })}
           >
             <PackagePlus className="h-4 w-4" />
-            품목 추가
+            상품 등록
           </button>
         </div>
+        <div className="grid gap-2 border-b p-4 sm:grid-cols-2 xl:grid-cols-5">
+          {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <input aria-label={`${label} 검색`} className="maju-input w-full" key={key} onChange={(e) => setSearch((value) => ({ ...value, [key]: e.target.value }))} placeholder={`${label} 검색`} value={search[key]} />)}
+        </div>
         <div className="flex flex-wrap gap-2 border-b p-4">
-          <form
-            className="relative min-w-64 flex-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void load(query);
-            }}
-          >
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <input
-              aria-label="품목 검색"
-              className="maju-input w-full pl-9"
-              placeholder="품목코드·품목명 검색"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </form>
+          {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
           <Filter
             value={tax}
             onChange={(v) => setTax(v as typeof tax)}
@@ -138,67 +193,7 @@ export function ProductCatalogAdmin({
           </p>
         ) : null}
         {!loading ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">품목코드</th>
-                  <th>품목명</th>
-                  <th>규격</th>
-                  <th>판매 단위</th>
-                  <th>과세</th>
-                  <th>공급 연결</th>
-                  <th>최저 환산 원가</th>
-                  <th>상태</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {shown.map((i) => (
-                  <tr key={i.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {i.productCode || "-"}
-                    </td>
-                    <td className="font-bold">
-                      {i.name}
-                      <p className="text-xs font-normal text-slate-500">
-                        {[i.brand, i.origin].filter(Boolean).join(" · ")}
-                      </p>
-                    </td>
-                    <td>
-                      {i.specValue ? `${i.specValue}${i.specUnit || ""}` : "-"}
-                    </td>
-                    <td>{i.salesUnit || "-"}</td>
-                    <td>
-                      {i.taxType === "taxable"
-                        ? "과세"
-                        : i.taxType === "exempt"
-                          ? "면세"
-                          : "미정"}
-                    </td>
-                    <td>{i.linkedSupplierCount}개</td>
-                    <td>
-                      {i.hasUnconfirmedConversion ? (
-                        <span className="text-amber-700">환산 미확인</span>
-                      ) : (
-                        money(i.minimumUnitCost)
-                      )}
-                    </td>
-                    <td>{i.isActive ? "판매중" : "중지"}</td>
-                    <td className="pr-4 text-right">
-                      <button
-                        aria-label={`${i.name} 편집`}
-                        className="maju-button-secondary"
-                        onClick={() => setEditing(i)}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" groupBy={(item) => ({ key: item.category || "uncategorized", label: item.category || "미분류" })} rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
         ) : null}
       </section>
       {editing ? (
@@ -206,16 +201,17 @@ export function ProductCatalogAdmin({
           companyId={companyId}
           item={editing}
           onClose={() => setEditing(null)}
-          onSaved={(saved) => {
+          onSaved={(saved, keepOpen) => {
             setItems((cur) =>
               saved.id && cur.some((i) => i.id === saved.id)
                 ? cur.map((i) => (i.id === saved.id ? saved : i))
                 : [saved, ...cur],
             );
-            setEditing(null);
+            setEditing(keepOpen ? { ...blank } : null);
           }}
         />
       ) : null}
+      </div>
     </div>
   );
 }
@@ -251,15 +247,14 @@ function Editor({
   companyId: string;
   item: ProductCatalogAdminItem;
   onClose: () => void;
-  onSaved: (i: ProductCatalogAdminItem) => void;
+  onSaved: (i: ProductCatalogAdminItem, keepOpen: boolean) => void;
 }) {
   const [d, setD] = useState(item),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const put = (k: keyof ProductCatalogAdminItem, v: unknown) =>
     setD((x) => ({ ...x, [k]: v }));
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  async function save(keepOpen: boolean) {
     setSaving(true);
     setError("");
     try {
@@ -270,7 +265,7 @@ function Editor({
         }),
         j = await r.json();
       if (!r.ok || !j.item) throw new Error(j.message);
-      onSaved(j.item);
+      onSaved(j.item, keepOpen);
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했습니다.");
     } finally {
@@ -278,15 +273,18 @@ function Editor({
     }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45">
       <form
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white"
-        onSubmit={save}
+        className="h-full w-full max-w-[440px] overflow-y-auto bg-white shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save(false);
+        }}
       >
         <header className="sticky top-0 flex items-center justify-between border-b bg-white px-5 py-4">
           <div>
             <h2 className="text-lg font-black">
-              {d.id ? "표준 품목 편집" : "표준 품목 추가"}
+              {d.id ? "상품 편집" : "상품 등록"}
             </h2>
             {d.productCode ? (
               <p className="font-mono text-xs text-slate-500">
@@ -302,14 +300,23 @@ function Editor({
             <X />
           </button>
         </header>
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <Field label="품목명">
+        <div className="grid gap-4 p-5">
+          <Field label="노출명 *">
             <input
               className="maju-input w-full"
               required
               value={d.name}
               onChange={(e) => put("name", e.target.value)}
             />
+          </Field>
+          <Field label="관리명">
+            <input className="maju-input w-full" value={d.managementName || ""} onChange={(e) => put("managementName", e.target.value)} />
+          </Field>
+          <Field label="ERP 코드 (자동)">
+            <input className="maju-input w-full" disabled placeholder="저장 시 자동 발급" value={d.productCode || ""} />
+          </Field>
+          <Field label="바코드">
+            <input className="maju-input w-full" value={d.barcodes?.[0] || ""} onChange={(e) => put("barcodes", e.target.value ? [e.target.value] : [])} />
           </Field>
           <Field label="분류">
             <input
@@ -396,6 +403,9 @@ function Editor({
               }
             />
           </Field>
+          <Field label="매입가 *">
+            <input className="maju-input w-full" min="0" required type="number" value={d.purchasePrice} onChange={(e) => put("purchasePrice", Number(e.target.value) || 0)} />
+          </Field>
           <Field label="판매가">
             <input
               className="maju-input w-full"
@@ -410,6 +420,9 @@ function Editor({
               }
             />
           </Field>
+          <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
+            계산 마진 · {margin(d) == null ? "판매가를 입력해 주세요" : `${margin(d)!.toFixed(1)}%`}
+          </div>
           <Field label="사진 URL">
             <input
               className="maju-input w-full"
@@ -428,7 +441,7 @@ function Editor({
             </select>
           </Field>
           {error ? (
-            <p className="sm:col-span-2 text-sm font-semibold text-rose-700">
+            <p className="text-sm font-semibold text-rose-700">
               {error}
             </p>
           ) : null}
@@ -441,6 +454,7 @@ function Editor({
           >
             취소
           </button>
+          {!d.id ? <button className="maju-button-secondary" disabled={saving} onClick={(event) => { event.preventDefault(); void save(true); }} type="button">저장하고 새로</button> : null}
           <button className="maju-button-primary" disabled={saving}>
             {saving ? "저장 중…" : "저장"}
           </button>

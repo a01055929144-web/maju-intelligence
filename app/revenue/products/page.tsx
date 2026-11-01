@@ -29,7 +29,12 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
         <SalesWorkspaceNav active="products" companyId={companyId} />
-        <ProductCatalogWorkspace companyId={isAdminPreview ? companyId : ""} initialTab={initialTab} />
+        <ProductCatalogWorkspace
+          categoriesEnabled={process.env.PRODUCT_CATEGORIES_ENABLED === "true"}
+          companyId={isAdminPreview ? companyId : ""}
+          initialTab={initialTab}
+          tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
+        />
       </section>
     </CustomerAppShell>
   );

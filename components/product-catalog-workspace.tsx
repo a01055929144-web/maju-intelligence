@@ -44,11 +44,15 @@ const money = (value?: number) =>
   value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
 
 export function ProductCatalogWorkspace({
+  categoriesEnabled = false,
   companyId = "",
   initialTab = "catalog",
+  tableSettingsKey = "products:current",
 }: {
+  categoriesEnabled?: boolean;
   companyId?: string;
   initialTab?: "catalog" | "supplier" | "mapping";
+  tableSettingsKey?: string;
 }) {
   const [tab, setTab] = useState<"catalog" | "supplier" | "mapping">(initialTab);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -170,7 +174,11 @@ export function ProductCatalogWorkspace({
         </div>
       ) : null}
       {tab === "catalog" ? (
-        <ProductCatalogAdmin companyId={companyId} />
+        <ProductCatalogAdmin
+          categoriesEnabled={categoriesEnabled}
+          companyId={companyId}
+          settingsKey={tableSettingsKey}
+        />
       ) : (
         <section className="maju-section-card">
           <div className="maju-card-header flex items-center justify-between">
