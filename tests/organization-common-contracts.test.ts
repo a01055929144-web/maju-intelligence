@@ -61,8 +61,12 @@ describe("ARC-02 organization access contracts", () => {
     const publicQuoteSource = between(storeSource, "export async function getPublicSalesQuote", "export type CustomerContractPrice");
 
     expect(routeSource).not.toContain("getRequestAuthScope");
+    expect(routeSource).not.toContain("getCustomerSession");
+    expect(routeSource).not.toContain("getAdminSession");
+    expect(routeSource).not.toContain("getCustomerAssignmentKeys");
     expect(routeSource).not.toContain("scopeHasCapability");
     expect(routeSource).not.toContain("workspaceRole");
+    expect(routeSource).not.toContain("companyMemberId");
     expect(routeSource).toContain('"Cache-Control": "private, no-store"');
 
     expect(publicQuoteSource).toContain("public_token=eq.${encodeURIComponent(publicToken)}");
