@@ -9,7 +9,7 @@ create table if not exists public.product_categories(id uuid primary key default
 
 insert into public.companies(id) values ('10000000-0000-4000-8000-000000000001');
 insert into public.maju_categories(name, industry_keys) values ('채소', array['식자재']) returning id \gset
-insert into public.product_categories(company_id, maju_category_id) values ('10000000-0000-4000-8000-000000000001', :'id');
+insert into public.product_categories(company_id, level, name, maju_category_id) values ('10000000-0000-4000-8000-000000000001', 1, '신선 채소', :'id');
 do $$ begin
   if has_table_privilege('anon', 'public.maju_categories', 'select') or has_table_privilege('authenticated', 'public.maju_categories', 'select') then
     raise exception 'maju categories exposed to public roles';
