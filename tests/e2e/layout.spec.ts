@@ -71,7 +71,7 @@ for (const viewport of [
       const response = await page.goto("/import-row-editor/preview", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByText("가져오기 값 확인")).toBeVisible();
-      await expect(page.getByText("원본: 1kg")).toBeVisible();
+      await expect(page.getByText("원본: 1kg").filter({ visible: true }).first()).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`wo-25-import-row-editor-${viewport.width}.png`), fullPage: true });
       expect(await collectLayoutProblems(page)).toEqual([]);
     } finally {
