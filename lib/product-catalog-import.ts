@@ -195,6 +195,7 @@ export async function saveProductCatalogImport(input: {
   excludedCount: number;
   warnings: string[];
   editedRows?: ImportPreviewRow[];
+  includeExtraMapping?: boolean;
 }) {
   const supplierName = input.supplierName.trim();
   if (!supplierName) throw new Error("유통사명을 입력해 주세요.");
@@ -276,7 +277,12 @@ export async function saveProductCatalogImport(input: {
       });
     }
     const payload = input.products.map((product) =>
-      buildSupplierProductWrite(input.companyId, supplierId, product),
+      buildSupplierProductWrite(
+        input.companyId,
+        supplierId,
+        product,
+        input.includeExtraMapping,
+      ),
     );
     let saved: Array<Record<string, unknown>> = [];
     for (const part of chunks(payload)) {
