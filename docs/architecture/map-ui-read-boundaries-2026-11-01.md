@@ -26,7 +26,7 @@
 - 확인됨: `/api/staff/location`은 요청 본문의 회사 ID를 받지 않고 인증 scope의 `companyId`를 사용하며, 제한 직원은 자기 `userId`와 배정 차량/기사 범위로 축소된다.
 - 확인됨: 최신 차량 위치는 원시 이벤트 전체가 아니라 `list_latest_operational_staff_locations` RPC 결과에서 읽는다.
 - 보류(TMS 02): RPC가 “업무 중 위치만” 반환한다는 DB 함수 본문 및 운영 적용 상태, 차량 교체·기사 대타 회귀는 이 PR에서 판정하지 않는다.
-- 충돌(TMS 02): 지도 폴링의 `localDateKey()`는 브라우저 로컬 시간대를 사용하지만 PR #106은 업무 날짜를 Asia/Seoul로 고정한다. 날짜 규칙 소유 PR에서 API·서버 KST 처리와 함께 고친다.
+- 해결(TMS 02 계약 연동): PR #116의 `getTmsServiceDateKey()`를 지도 폴링과 운행 기록 기본 날짜에 적용해 브라우저 시간대와 무관하게 Asia/Seoul 업무 날짜를 보낸다.
 - 충돌 가능성 없음: PR #106은 문서 1개, PR #99·#100은 지도 파일 비변경이다. PR #103은 `lib/store.ts`를 수정하므로 이번 PR은 해당 파일을 건드리지 않는다.
 
 ## 회귀·롤백

@@ -103,6 +103,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
@@ -526,7 +527,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     loading: boolean;
     vehicle: StaffVehicleLocation | null;
   }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
-  const [vehicleAnalysisDate, setVehicleAnalysisDate] = useState(() => localDateKey());
+  const [vehicleAnalysisDate, setVehicleAnalysisDate] = useState(() => getTmsServiceDateKey());
   // 2026-09-07 피드백: "분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도 구현할 수
   // 있도록해줘" — 팝업(VehicleAnalysisModal)을 열지 않아도, 라이브 차량 목록에서 "경로" 버튼으로
   // 같은 실제 GPS 이동 경로를 메인 지도에 바로 겹쳐 볼 수 있게 합니다. 한 번에 한 대만 표시합니다
@@ -1209,7 +1210,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     let toastTimer: number | undefined;
     const load = async () => {
       try {
-        const params = new URLSearchParams({ completions: "true", date: localDateKey() });
+        const params = new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() });
         if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
         const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
         const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
@@ -1290,7 +1291,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [liveVehicleLocations]);
   const openVehicleAnalysis = useCallback(
-    async (vehicle: StaffVehicleLocation, date = localDateKey()) => {
+    async (vehicle: StaffVehicleLocation, date = getTmsServiceDateKey()) => {
       setVehicleAnalysisDate(date);
       setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
       try {
@@ -6246,7 +6247,7 @@ function VehicleAnalysisModal({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <input aria-label="운행 기록 날짜" className="h-9 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" max={localDateKey()} onChange={(event) => onDateChange(event.target.value)} type="date" value={date} />
+            <input aria-label="운행 기록 날짜" className="h-9 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" max={getTmsServiceDateKey()} onChange={(event) => onDateChange(event.target.value)} type="date" value={date} />
             <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onOpenHistory} type="button">전체 기간 기록</button>
             <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">닫기</button>
           </div>
@@ -11426,11 +11427,4 @@ const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
 
 function getAccessMethodIcon(type?: string): LucideIcon {
   return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
-}
-
-function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

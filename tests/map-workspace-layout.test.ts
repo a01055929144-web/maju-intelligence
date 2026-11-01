@@ -70,6 +70,12 @@ describe("PC map workspace layout", () => {
     expect(mapVehicleConnectionToastSource).not.toContain("fetch(");
     expect(mapVehicleConnectionToastSource).not.toContain("useState(");
   });
+
+  it("polls vehicle locations with the KST TMS service date contract", () => {
+    expect(workspaceSource).toContain('import { getTmsServiceDateKey } from "@/domains/delivery/service-date"');
+    expect(workspaceSource).toContain('new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() })');
+    expect(workspaceSource).not.toContain("function localDateKey(");
+  });
 });
 
 describe("시안 ⑫ 남은 지도 상호작용", () => {
