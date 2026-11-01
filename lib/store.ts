@@ -8345,6 +8345,7 @@ type PermitLeadRow = {
   industry_tags: string[] | null;
   is_target_industry: boolean;
   matched_customer_id: string | null;
+  matched_customer_method?: string | null;
   is_duplicate: boolean;
   status: string;
   next_action: string | null;
