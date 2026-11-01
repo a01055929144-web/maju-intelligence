@@ -22,7 +22,26 @@ describe("lead to customer conversion flow", () => {
     expect(store).toContain("if (existing[0]?.id) {");
     expect(store).toContain('event_type: "lead_customer_conversion"');
     expect(store).toContain('throw new Error("거래처 전환 이력 저장을 확인하지 못했습니다.")');
-    expect(store.match(/await ensurePermitLeadConversionAction\(/g)).toHaveLength(2);
+    expect(store.match(/await ensurePermitLeadConversionAction\(/g)).toHaveLength(1);
+    expect(store.match(/await completePermitLeadConversionAfterLink\(/g)).toHaveLength(3);
+  });
+
+  it("reuses the already linked customer before duplicate matching or customer upsert on retry", () => {
+    const conversion = store.slice(store.indexOf("export async function convertPermitLeadToCustomer"));
+    const linkedRetry = conversion.indexOf('if (lead.matched_customer_id && lead.matched_customer_method === "conversion")');
+    const duplicateSearch = conversion.indexOf("const duplicateMatch = findLeadCustomerDuplicate");
+    const customerUpsert = conversion.indexOf("const created = await upsertCustomerMaster");
+    expect(linkedRetry).toBeGreaterThan(-1);
+    expect(linkedRetry).toBeLessThan(duplicateSearch);
+    expect(linkedRetry).toBeLessThan(customerUpsert);
+    expect(conversion).toContain("id=eq.${encodeURIComponent(lead.matched_customer_id)}&company_id=eq.${encodeURIComponent(companyId)}");
+    expect(conversion).toContain("연결된 거래처를 같은 회사에서 찾을 수 없습니다.");
+  });
+
+  it("retries conversion history and accepted quote pricing through one completion step", () => {
+    expect(store).toMatch(/async function completePermitLeadConversionAfterLink[\s\S]*ensurePermitLeadConversionAction[\s\S]*applyAcceptedLeadQuotesAfterCustomerConversion/);
+    expect(store).toContain("pricingAppliedCount: completion.pricingAppliedCount");
+    expect(store).toContain("pricingFailedCount: completion.pricingFailedCount");
   });
 
   it("does not hide a split between the linked customer and recorded conversion customer", () => {
