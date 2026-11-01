@@ -71,12 +71,15 @@ export type KakaoSalesAreaStat = {
   readonly administrativeArea: string;
   readonly customerCount: number;
   readonly recentLeadCount: number;
+  readonly salesCount?: number;
+  readonly territoryCount?: number;
   readonly totalLeadCount: number;
 };
 
 export type KakaoSalesAreaBoundarySelection = {
   readonly canManage: boolean;
-  readonly metric: "customers" | "recentLeads";
+  readonly inspectOnly?: boolean;
+  readonly metric: "customers" | "recentLeads" | "sales" | "territory";
   readonly onLoadTiming?: (milliseconds: number) => void;
   readonly onToggle: (administrativeArea: string) => void;
   readonly province: string;
@@ -694,7 +697,11 @@ export function KakaoAddressMap({
 
     const selectedAreas = new Set(boundary.selectedAreas);
     const stats = new Map(boundary.stats.map((item) => [item.administrativeArea, item]));
-    const maximum = Math.max(1, ...boundary.stats.map((item) => boundary.metric === "customers" ? item.customerCount : item.recentLeadCount));
+    const metricValue = (item?: KakaoSalesAreaStat) => boundary.metric === "customers" ? item?.customerCount || 0
+      : boundary.metric === "recentLeads" ? item?.recentLeadCount || 0
+      : boundary.metric === "sales" ? item?.salesCount || 0
+      : item?.territoryCount || 0;
+    const maximum = Math.max(1, ...boundary.stats.map(metricValue));
     const isSelected = (feature: SalesAreaBoundaryFeature) => selectedAreas.has(feature.properties.province)
       || selectedAreas.has(feature.properties.administrativeArea)
       || selectedAreas.has(feature.properties.parentAdministrativeArea);
@@ -702,7 +709,7 @@ export function KakaoAddressMap({
       const administrativeArea = feature.properties.administrativeArea;
       if (isSelected(feature)) return { fill: "#0f766e", opacity: 0.5, stroke: "#0f766e", weight: 3 };
       const stat = stats.get(administrativeArea);
-      const value = boundary.metric === "customers" ? stat?.customerCount || 0 : stat?.recentLeadCount || 0;
+      const value = metricValue(stat);
       const ratio = value / maximum;
       if (ratio >= 0.66) return { fill: "#14b8a6", opacity: 0.34, stroke: "#64748b", weight: 1 };
       if (ratio >= 0.33) return { fill: "#5eead4", opacity: 0.28, stroke: "#94a3b8", weight: 1 };
@@ -742,8 +749,10 @@ export function KakaoAddressMap({
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mt-2 h-8 w-full rounded-lg bg-teal-700 px-3 font-black text-white disabled:bg-slate-200 disabled:text-slate-500";
-        button.disabled = !boundary.canManage || boundary.province === "세종특별자치시" || parentSelected || provinceSelected;
-        button.textContent = boundary.province === "세종특별자치시"
+        button.disabled = !boundary.inspectOnly && (!boundary.canManage || boundary.province === "세종특별자치시" || parentSelected || provinceSelected);
+        button.textContent = boundary.inspectOnly
+          ? "이 지역 요약 보기"
+          : boundary.province === "세종특별자치시"
           ? "세종은 현재 선택 대상이 아닙니다"
           : !boundary.canManage
             ? "조회 권한만 있습니다"
@@ -841,6 +850,7 @@ export function KakaoAddressMap({
   }, [
     mapBootId,
     salesAreaBoundary?.canManage,
+    salesAreaBoundary?.inspectOnly,
     salesAreaBoundary?.metric,
     salesAreaBoundary?.province,
     salesAreaSelectedSignature,

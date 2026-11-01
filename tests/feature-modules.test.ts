@@ -4,6 +4,7 @@ import {
   areHoldModulesEnabled,
   areStructuredFieldRecordsEnabled,
   CORE_LEADS_HREF,
+  isAdminMapOverviewEnabled,
   isHoldModulePath,
   isLeadNativeAttachmentsEnabled,
   isMapFilterPersistenceEnabled,
@@ -13,6 +14,13 @@ import {
 } from "../lib/feature-modules";
 
 describe("hold feature modules", () => {
+  it("keeps the admin map off unless explicitly enabled", () => {
+    expect(isAdminMapOverviewEnabled("")).toBe(false);
+    expect(isAdminMapOverviewEnabled("false")).toBe(false);
+    expect(isAdminMapOverviewEnabled("true")).toBe(true);
+    expect(isAdminMapOverviewEnabled("1")).toBe(true);
+  });
+
   it("keeps map filter persistence disabled unless explicitly enabled", () => {
     expect(isMapFilterPersistenceEnabled("")).toBe(false);
     expect(isMapFilterPersistenceEnabled("false")).toBe(false);

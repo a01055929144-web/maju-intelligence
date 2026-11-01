@@ -9992,12 +9992,13 @@ export type CompanySalesAreaMapStat = {
 };
 
 /** 지도 색칠용 집계를 시·도 한 번에 반환합니다. 개별 polygon이 API를 호출하지 않도록 서버에서 묶습니다. */
-export async function getCompanySalesAreaMapStats(companyId: string, province: string): Promise<CompanySalesAreaMapStat[]> {
+export async function getCompanySalesAreaMapStats(companyId: string, province: string, industry = ""): Promise<CompanySalesAreaMapStat[]> {
   const districts = KOREAN_ADMINISTRATIVE_AREAS[province] || [];
   if (!districts.length || !isProductionStoreConfigured()) return [];
   const areas = getSelectableSalesAreaKeys(province);
+  const industryFilter = industry ? `&industry=eq.${encodeURIComponent(industry)}` : "";
   const customers = await supabaseRequest<Array<{ address: string | null }>>(
-    `normalized_customers?select=address&company_id=eq.${encodeURIComponent(companyId)}&limit=5000`
+    `normalized_customers?select=address&company_id=eq.${encodeURIComponent(companyId)}${industryFilter}&limit=5000`
   ).catch(() => []);
   const customerCounts = new Map<string, number>();
   for (const customer of customers) {
@@ -10014,7 +10015,8 @@ export async function getCompanySalesAreaMapStats(companyId: string, province: s
       const isSubarea = Boolean(extractCustomerAdministrativeSubarea(administrativeArea));
       const filters = [
         `company_id=eq.${encodeURIComponent(companyId)}`,
-        `${isSubarea ? "administrative_subarea" : "administrative_area"}=eq.${encodeURIComponent(administrativeArea)}`
+        `${isSubarea ? "administrative_subarea" : "administrative_area"}=eq.${encodeURIComponent(administrativeArea)}`,
+        ...(industry ? [`industry_primary=eq.${encodeURIComponent(industry)}`] : [])
       ];
       const [totalLeadCount, recentLeadCount] = await Promise.all([
         supabasePermitLeadCount(filters),
