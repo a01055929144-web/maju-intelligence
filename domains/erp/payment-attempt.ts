@@ -12,6 +12,14 @@ type PaymentAttemptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" 
 
 const PAYMENT_ATTEMPT_PREFIX = "maju:partner-payment:v1:";
 
+export function getPaymentAttemptStorage(getStorage: () => Storage = () => window.sessionStorage) {
+  try {
+    return getStorage();
+  } catch {
+    return null;
+  }
+}
+
 export function createPartnerPaymentAttempt(
   input: Omit<PartnerPaymentAttempt, "idempotencyKey">,
   createKey: () => string = () => crypto.randomUUID(),

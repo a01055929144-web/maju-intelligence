@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPartnerPaymentAttempt, findCompanyPartnerPaymentAttempt, loadPartnerPaymentAttempt, partnerPaymentAttemptStorageKey, removePartnerPaymentAttempt, savePartnerPaymentAttempt } from "../domains/erp/payment-attempt";
+import { createPartnerPaymentAttempt, findCompanyPartnerPaymentAttempt, getPaymentAttemptStorage, loadPartnerPaymentAttempt, partnerPaymentAttemptStorageKey, removePartnerPaymentAttempt, savePartnerPaymentAttempt } from "../domains/erp/payment-attempt";
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>();
@@ -56,5 +56,11 @@ describe("partner payment idempotency", () => {
     const blocked = new MemoryStorage();
     blocked.setItem = () => { throw new Error("blocked"); };
     expect(savePartnerPaymentAttempt(blocked, attempt)).toBe(false);
+  });
+
+  it("catches a SecurityError thrown while reading the sessionStorage getter", () => {
+    const getStorage = vi.fn((): Storage => { throw new DOMException("blocked", "SecurityError"); });
+    expect(getPaymentAttemptStorage(getStorage)).toBeNull();
+    expect(getStorage).toHaveBeenCalledTimes(1);
   });
 });
