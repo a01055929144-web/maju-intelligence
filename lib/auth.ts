@@ -10,7 +10,7 @@ import { isValidObservationDeviceId, shouldRefreshSessionObservation } from "../
 import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
 import { accountLoginV2Enabled } from "./account-login-feature";
-import { rolePermissionsAllowCapability, type RoleGroupKey, type RolePermissionKey } from "@/domains/organization/role-settings";
+import { rolePermissionsAllowCapability, type RoleGroupKey, type RolePermissionKey } from "../domains/organization/role-settings";
 
 export type AdminSession = {
   email: string;
