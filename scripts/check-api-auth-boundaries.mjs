@@ -22,7 +22,8 @@ const publicRoutes = new Map([
   ["health/route.ts", "returns aggregate readiness counts without tenant data"],
   ["leads/permits/sync/route.ts", "retired endpoint that always returns HTTP 410"],
   ["public/quotes/[token]/route.ts", "token-based public quote lookup validates UUID and expiry while excluding cost and margin fields"],
-  ["staff/invite-preview/route.ts", "rate-limited invite preview required before sign-in"]
+  ["staff/invite-preview/route.ts", "rate-limited invite preview required before sign-in"],
+  ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"]
 ]);
 
 const sessionGuardPatterns = [
