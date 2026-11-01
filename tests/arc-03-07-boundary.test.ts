@@ -53,7 +53,9 @@ describe("ARC-03 / ARC-07 ownership boundary", () => {
   it("reuses a pending payment payload until success or explicit reset", () => {
     expect(documentWorkspace).toContain("let attempt = pendingPayment.current");
     expect(documentWorkspace).toContain("pendingPayment.current = attempt");
-    expect(documentWorkspace).toMatch(/await api\("\/api\/partner-ledger"[\s\S]*startNewPayment\(\);[\s\S]*await load\(\)/);
+    expect(documentWorkspace).toContain("findCompanyPartnerPaymentAttempt(window.sessionStorage, companyId)");
+    expect(documentWorkspace).toContain("savePartnerPaymentAttempt(window.sessionStorage, attempt)");
+    expect(documentWorkspace).toMatch(/await api\("\/api\/partner-ledger"[\s\S]*discardPayment\(\);[\s\S]*await load\(\)/);
     expect(documentWorkspace).toContain("이 등록을 취소하고 새로 시작");
     expect(documentWorkspace).not.toMatch(/idempotencyKey:\s*crypto\.randomUUID\(\)/);
   });
