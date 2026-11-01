@@ -124,6 +124,16 @@ jobs:
           createdb customer_items_test
           psql --dbname=customer_items_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items.pg17.test.sql
 
+      - name: Verify WO-25 customer item file audit on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb customer_items_test_ui
+          psql --dbname=customer_items_test_ui --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items-audit.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -164,7 +174,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001

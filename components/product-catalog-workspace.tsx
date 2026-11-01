@@ -25,6 +25,7 @@ import {
 } from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
 import { ImportRowEditor } from "@/components/import-row-editor";
+import { CustomerItemsImportDrawer } from "./customer-items-import-drawer";
 import type { ImportPreviewField, ImportPreviewRow } from "@/domains/product/import-row-editor";
 import type {
   ProductImportAuditItem,
@@ -74,6 +75,7 @@ export function ProductCatalogWorkspace({
   companyId = "",
   importAuditV2Enabled = false,
   importTargetsEnabled = false,
+  customerItemsEnabled = false,
   rowEditorEnabled = false,
   initialTab = "catalog",
   tableSettingsKey = "products:current",
@@ -82,6 +84,7 @@ export function ProductCatalogWorkspace({
   companyId?: string;
   importAuditV2Enabled?: boolean;
   importTargetsEnabled?: boolean;
+  customerItemsEnabled?: boolean;
   rowEditorEnabled?: boolean;
   initialTab?: Tab;
   tableSettingsKey?: string;
@@ -343,12 +346,13 @@ export function ProductCatalogWorkspace({
           auditV2Enabled={importAuditV2Enabled}
           companyId={companyId}
           importTargetsEnabled={importTargetsEnabled}
+          customerItemsEnabled={customerItemsEnabled}
           rowEditorEnabled={rowEditorEnabled}
           onClose={() => setDrawer(false)}
-          onSaved={async (m) => {
+          onSaved={async (m, target) => {
             setMessage(m);
             setDrawer(false);
-            setTab("supplier");
+            if (target !== "customer_items") setTab("supplier");
             await load();
           }}
         />
@@ -515,6 +519,7 @@ function ImportDrawer({
   auditV2Enabled,
   companyId,
   importTargetsEnabled,
+  customerItemsEnabled,
   rowEditorEnabled,
   onClose,
   onSaved,
@@ -522,10 +527,12 @@ function ImportDrawer({
   auditV2Enabled: boolean;
   companyId: string;
   importTargetsEnabled: boolean;
+  customerItemsEnabled: boolean;
   rowEditorEnabled: boolean;
   onClose: () => void;
-  onSaved: (message: string) => void;
+  onSaved: (message: string, target?: "customer_items") => void;
 }) {
+  const [target, setTarget] = useState("product");
   const [file, setFile] = useState<File | null>(null),
     [supplier, setSupplier] = useState(""),
     [rows, setRows] = useState<RawCatalogRow[]>([]),
@@ -634,6 +641,9 @@ function ImportDrawer({
       setSaving(false);
     }
   }
+  if (target === "customer_items" && customerItemsEnabled && importTargetsEnabled) {
+    return <CustomerItemsImportDrawer companyId={companyId} onClose={onClose} onSaved={message => onSaved(message, "customer_items")} onBack={() => setTarget("product")} />;
+  }
   return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/45">
       <section
@@ -660,18 +670,21 @@ function ImportDrawer({
                 <fieldset className="space-y-2">
                   <legend className="text-sm font-bold">가져올 대상</legend>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {importTargets.map(([label, description, enabled]) => (
+                    {importTargets.map(([label, description, ready]) => {
+                      const isCustomerItems = label === "거래처 원장";
+                      const enabled = ready || (isCustomerItems && customerItemsEnabled);
+                      return (
                       <label
                         className={`rounded-xl border p-3 text-left ${enabled ? "border-teal-600 bg-teal-50" : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500"}`}
                         key={label}
                       >
                         <span className="flex items-center gap-2 text-sm font-black">
-                          <input checked={enabled} disabled={!enabled} name="import-target" readOnly type="radio" />
+                          <input checked={isCustomerItems ? target === "customer_items" : ready} disabled={!enabled} name="import-target" onChange={() => setTarget(isCustomerItems ? "customer_items" : "product")} type="radio" />
                           {label}
                         </span>
-                        <span className="mt-1 block text-xs leading-5">{description}</span>
+                        <span className="mt-1 block text-xs leading-5">{isCustomerItems && customerItemsEnabled ? "거래처별 품목과 최근 실제 단가를 확인하고 가져옵니다." : description}</span>
                       </label>
-                    ))}
+                    ); })}
                   </div>
                 </fieldset>
               ) : null}

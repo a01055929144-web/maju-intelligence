@@ -111,5 +111,33 @@ Fresh loopback PostgreSQL 17.11: SQL up, latest-date/duplicate/unit rules, cross
 whole-batch conflict rejection, public grants/RLS deny and down preserving existing parents PASS.
 CI is pending PR creation; local PG17 evidence is not a green CI claim. No production SQL was executed.
 
+### WO-25 file UI follow-up
+
+Allowed: `components/customer-items-import-drawer.tsx`, CI-only preview route and `docs/evidence/wo25-customer-items-*.png`,
+`components/product-catalog-workspace.tsx` customer_items target branch only, `app/revenue/products/page.tsx` flag prop,
+`application/customer/prepare-customer-item-file.ts`, existing customer-items import route/repository,
+`tests/customer-items-file.test.ts`, `tests/e2e/customer-items-import.spec.ts`, customer-items-audit SQL/up/down/PG17 and CI.
+Reuse the existing import row editor, preserving mapped original values and user edits separately.
+Names and ERP product codes must match exactly one existing company-owned record; no automatic creation/guessing.
+Reads use bounded pagination, up to 10,000 customer/product references each; incomplete sets block import.
+File input: first sheet/header row, up to 1,000 rows/5MB; body limit remains 512KB. Unknown columns are not stored in this scoped flow.
+All of CUSTOMER_ITEMS_IMPORT_ENABLED, PRODUCT_IMPORT_TARGETS_ENABLED, IMPORT_ROW_EDITOR_ENABLED,
+PRODUCT_IMPORT_AUDIT_V2_ENABLED must be true plus existing company allowlist; defaults remain OFF.
+The original `{rows}` API remains compatible; the UI submits only `{fileName,editedRows}` to the audited path.
+Server derives canonical prices/IDs, uses authenticated company/actor, and hashes content for retry identity.
+Audit wrapper stores import_jobs(target_type=customer_items), import_rows raw/normalized/previous values and actual prices atomically.
+Audit failure rolls back price changes. Same content retry does not duplicate rows/history.
+Schema down refuses while customer_items audit jobs remain; archival/export requires explicit approval.
+No per-file undo UI, base/fixed-price changes, other target activation, production SQL or money/login activation.
+The shared workspace change is limited to the customer-items target hook; existing product/customer/inventory paths are preserved.
+Empty source rows retain actual worksheet row numbers. Company changes reset the workspace to prevent stale cross-company edits.
+Verification: 129 files / 672 tests, 148 auth-boundary routes, lint/build/tsc PASS; 24 file/API checks included.
+Fresh PostgreSQL 17.11: 59 SQL statements including source row 1002, original/edited/previous values,
+duplicate retry, audit failure rolling back actual prices, cross-company rejection and empty-history down PASS.
+An additional local check confirmed down refuses existing audit history without deleting records.
+Synthetic browser → actual Next API → loopback REST adapter → service_role PG17 → response verified at 1440/390,
+including exact existing-name/code matching, history and price persistence, and idempotent retry. No operating service was used.
+Evidence: `docs/evidence/wo25-customer-items-1440.png`, `docs/evidence/wo25-customer-items-390.png` (synthetic records only).
+
 ## KNOWN ISSUES
 - **거래처 0건 표시 버그 — 원인 확정 및 수정 완료(2026-09-11, Claude 분석+구현)**: 실제 companyId 불일치로 0건이 조회되는 것이 아니라, `app/crm/timeline/page.tsx`의 `/api/customers` 호출부가 "API 실패"와 "진짜 0건"을 구분하지 않고 둘 다 동일하게 `customers=[]`로 접어버리는 것이 원인이었다. 실패 경로 3가지: (1) admin 프리뷰 모드는 세션 쿠키 없이 URL의 `?companyId=` 쿼리 하나로만 테넌트를 구분하는데(`lib/auth.ts` `getRequestAuthScope` admin 분기), 이 파라미터가 없으면 API가 401을 반환 (2) `app/api/customers/route.ts` GET에 try/catch가 없어서 `lib/store.ts`의 `getCustomerMaster`가 컬럼 누락이 아닌 다른 이유(네트워크 순단, Supabase 일시 오류 등)로 던지는 예외가 그대로 500으로 노출 (3) `fetchWithTimeout`의 12초 타임아웃 초과. 세 경우 모두 프런트에서 `response.ok`만 보고 `payload=null` → `customers=[]`로 귀결되어 실제 데이터가 있는 회사도 화면엔 "거래처 원장 비어 있음/미연결"과 동일하게 0건으로 보였다. **수정**: `route.ts` GET을 try/catch로 감싸 실패 시 `{source:"error", message}`를 502로 명시적으로 반환하도록 하고, `page.tsx`는 목록 fetch를 재사용 가능한 `loadCustomers()`로 리팩터링해 API 실패 시 재시도 버튼이 있는 빨간 에러 배너(`CustomerLoadErrorBanner`)를 띄우며, 상태 스트립/빈 목록 문구도 "불러오기 실패"로 정확히 구분해 표시하도록 변경. 상세 분석·구현 내역은 `qa-report-customers-zero-count.md` 참고. **남은 일**: 실제 `npx tsc --noEmit` / `npm run lint` / `npm run build`는 Claude Cowork 세션에서 `npm install`이 막혀 있어 실행하지 못했으므로 사용자/Codex가 로컬에서 확인 필요.
