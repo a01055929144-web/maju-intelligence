@@ -1,3 +1,5 @@
+import { calculatePriceForBasis } from "../pricing/price-rules";
+
 export const QUOTE_MARGIN_PRESETS = [10, 12, 15] as const;
 export type QuoteMarginPreset = (typeof QUOTE_MARGIN_PRESETS)[number];
 export type QuoteTaxType = "taxable" | "exempt";
@@ -35,11 +37,8 @@ export function sanitizeMoney(value: number) {
 }
 
 export function calculateSalesPrice(purchasePrice: number, marginRate: number, roundingUnit = 10) {
-  const cost = sanitizeMoney(purchasePrice);
-  const rate = Math.min(99, Math.max(0, Number.isFinite(marginRate) ? marginRate : 0));
-  if (!cost) return 0;
-  const raw = cost / (1 - rate / 100);
-  return Math.ceil(raw / roundingUnit) * roundingUnit;
+  // Existing quote records retain sales-gross-margin semantics until an explicit migration.
+  return calculatePriceForBasis(purchasePrice, marginRate, "legacy_sales_gross_margin", roundingUnit);
 }
 
 export function calculateQuoteLine(line: QuoteLine) {

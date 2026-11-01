@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePrice } from "../domains/pricing/price-rules";
+import { calculatePrice, calculatePriceForBasis } from "../domains/pricing/price-rules";
 import {
   documentOutput,
   lineFromCatalog,
@@ -131,5 +131,35 @@ describe("ARC-05 current cross-module contracts", () => {
       expect(publicJson).toContain("21180");
     }
     expect(JSON.stringify(version)).toBe(before);
+  });
+});
+
+
+describe("ARC-05 explicit basis calculation entry", () => {
+  it.each([
+    {cost:18910,rate:12,rounding:10,markup:21180,legacy:21490},
+    {cost:8000,rate:20,rounding:10,markup:9600,legacy:10000},
+    {cost:800.01,rate:12,rounding:10,markup:900,legacy:910},
+    {cost:123.45,rate:0,rounding:1,markup:124,legacy:123},
+    {cost:0,rate:12,rounding:10,markup:0,legacy:0},
+    {cost:10,rate:100,rounding:10,markup:20,legacy:1000},
+  ])("routes both compatibility facades without changing $cost / $rate semantics", ({cost,rate,rounding,markup,legacy}) => {
+    expect(calculatePriceForBasis(cost,rate,"purchase_markup",rounding)).toBe(markup);
+    expect(calculatePrice(cost,rate,rounding)).toBe(markup);
+    expect(calculatePriceForBasis(cost,rate,"legacy_sales_gross_margin",rounding)).toBe(legacy);
+    expect(calculateSalesPrice(cost,rate,rounding)).toBe(legacy);
+  });
+  it("keeps legacy input normalization separate from markup validation",()=>{
+    expect(calculateSalesPrice(-100,12)).toBe(0);
+    expect(calculateSalesPrice(Number.NaN,12)).toBe(0);
+    expect(calculateSalesPrice(8000,-12)).toBe(8000);
+    expect(calculateSalesPrice(8000,Number.NaN)).toBe(8000);
+    expect(()=>calculatePrice(-100,12)).toThrow();
+    expect(calculatePrice(Number.NaN,Number.NaN,10,0)).toBe(0);
+  });
+  it("never guesses a missing/unknown basis or combines legacy margin with a direct override",()=>{
+    expect(()=>Reflect.apply(calculatePriceForBasis,null,[100,12,"guess"])).toThrow("가격 계산 기준");
+    expect(()=>Reflect.apply(calculatePriceForBasis,null,[100,12])).toThrow("가격 계산 기준");
+    expect(()=>calculatePriceForBasis(100,12,"legacy_sales_gross_margin",10,0)).toThrow("직접 단가");
   });
 });

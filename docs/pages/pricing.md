@@ -104,3 +104,6 @@ SQL은 새 폐기용 로컬 PG16 DB에 한 번 적용하는 초안이다. P0 초
 ## ARC-05·06 대조·연결 계약 (2026-11-01)
 
 [대조와 모듈 연결 계약](../design/2026-11-01-09-arc05-06-contracts.md). PR #106은 미병합 제안이며 최신 7/8/9차 와이어프레임과 main, Draft #99를 구분해 검토한다. 이번 추가 허용 파일은 해당 문서·이 연결 항목·tests/pricing-arc05-contract.test.ts다. 상품/환산은 04, 전표/원장/재고는 03 소유를 유지한다. 대조/계약 초안 완료는 ARC-05·06 구현 완료나 운영 활성화 승인이 아니다. 관련 기능은 OFF를 유지한다.
+
+
+ARC-05 후속 작은 단위: `domains/pricing/price-rules.ts`의 명시적 basis 계산 진입점과 `domains/quote/quote.ts` 호환 facade를 허용한다. 새 P0/P1은 purchase markup, legacy quote는 sales gross margin을 고정해 기존 결과를 유지한다. 기존 데이터 의미/발행본/인증 이관을 완료했다고 간주하지 않는다.
