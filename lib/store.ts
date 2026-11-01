@@ -11651,10 +11651,16 @@ async function ensurePermitLeadConversionAction(
   customerId: string,
   actorName?: string
 ): Promise<void> {
-  const existing = await supabaseRequest<Array<{ id: string }>>(
-    `lead_actions?select=id&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&action_type=eq.convert&limit=1`
+  const existing = await supabaseRequest<Array<{ id: string; metadata: Record<string, unknown> | null }>>(
+    `lead_actions?select=id,metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&action_type=eq.convert&limit=1`
   );
-  if (existing[0]?.id) return;
+  if (existing[0]?.id) {
+    const recordedCustomerId = String(existing[0].metadata?.customer_id || "");
+    if (recordedCustomerId && recordedCustomerId !== customerId) {
+      throw new Error("리드 연결 거래처와 기존 전환 이력의 거래처가 일치하지 않습니다.");
+    }
+    return;
+  }
 
   const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
     method: "POST",
