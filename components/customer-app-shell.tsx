@@ -1,20 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import {
-  Building2,
-  LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Smartphone
-} from "lucide-react";
+import { Building2, LogOut, Smartphone } from "lucide-react";
+import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
-import { workspaceRoleLabels, normalizeWorkspaceRole } from "@/lib/workspace";
 import { CustomerWorkspaceKey, getCustomerNavigationGroups, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
+import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 type CustomerAppShellProps = {
   readonly active: CustomerWorkspaceKey;
@@ -33,303 +27,42 @@ type CustomerAppShellProps = {
 };
 
 export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
-  const [currentSearch, setCurrentSearch] = useState("");
-  const pathname = usePathname();
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
   const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
-  const activeWorkspaceLabel = getActiveWorkspaceLabel(active);
   const compactMapHome = fullBleed && hidePageTitle;
-  const scopedHref = (href: string) => {
-    if (mode !== "admin-preview" || !previewCompanyId) return href;
-    if (href.startsWith("/dashboard/settings")) return "/admin/companies";
-
-    const [hrefWithoutHash, hash = ""] = href.split("#");
-    const [path, query = ""] = hrefWithoutHash.split("?");
-    const params = new URLSearchParams(query);
-    params.set("companyId", previewCompanyId);
-    const nextQuery = params.toString();
-
-    return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`;
-  };
-  const visibleNavigationGroups = getCustomerNavigationGroups(showHoldModules, normalizedRole);
-
-  useEffect(() => {
-    const syncSearch = () => setCurrentSearch(window.location.search);
-    syncSearch();
-    window.addEventListener("popstate", syncSearch);
-    return () => window.removeEventListener("popstate", syncSearch);
-  }, [pathname]);
 
   useEffect(() => {
     if (workspaceRole || mode !== "customer") return;
-
     let mounted = true;
     fetch("/api/customer/me", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
-        if (mounted && payload?.session?.workspaceRole) setResolvedWorkspaceRole(payload.session.workspaceRole);
-      })
+      .then((payload) => { if (mounted && payload?.session?.workspaceRole) setResolvedWorkspaceRole(payload.session.workspaceRole); })
       .catch(() => null);
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [mode, workspaceRole]);
 
-  // xl:overflow-y-auto(hidden 대신) — 내부 패널들이 각자 자기 높이를 정확히 계산해 스크롤하는 게
-  // 기본이지만, 콘텐츠가 예상보다 늘어나는 경우(새 버튼 줄 추가, 검색 결과가 많을 때 등)에 대비한
-  // 안전망입니다. overflow-hidden이면 내부 계산이 어긋났을 때 그 초과분이 어떤 스크롤로도 닿지
-  // 않는 채로 화면 밖에 잘려나가는데, auto로 두면 평소엔 티 안 나다가(내용이 딱 맞으면 스크롤바
-  // 자체가 안 생김) 예외적으로 넘칠 때만 페이지 스크롤로 마지막 탈출구가 생깁니다(2026-08-23,
-  // "스크롤이 안 되는 경우가 있다" 피드백 대응).
   return (
     <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-y-auto" : ""}`}>
-      {/* xl:grid-rows-[minmax(0,1fr)] — CSS Grid의 암묵적 행은 기본이 auto(내용 기준) 높이라, h-full을
-          줘도 자식(section)의 내용이 부모보다 크면 행 자체가 늘어나 버립니다(2026-08-23, "스크롤이
-          안 되는 경우가 있다" 피드백 — main의 overflow-hidden이 그 초과분을 화면 밖으로 그냥
-          잘라버려서 어떤 스크롤로도 닿지 않는 영역이 생겼던 원인). minmax(0,1fr)로 행을 컨테이너
-          높이에 고정해야 section이 실제로 h-full만큼만 받고, 그 안의 xl:overflow-y-auto가 넘치는
-          내용을 스크롤로 보여줄 수 있습니다. */}
-      <div className={`grid min-h-screen grid-cols-[minmax(0,1fr)] transition-[grid-template-columns] duration-75 ${fullBleed ? "xl:h-full xl:grid-rows-[minmax(0,1fr)]" : ""} ${collapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}>
-        <aside className="border-b border-slate-800 bg-[#111827] text-white lg:sticky lg:top-0 lg:h-dvh lg:overflow-hidden lg:border-b-0 lg:border-r lg:border-slate-800">
-          <div className="flex h-full flex-col">
-            <div className={`border-b border-white/10 ${collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "px-4 py-4 xl:flex xl:h-[72px] xl:items-center xl:py-0"}`}>
-              {collapsed ? (
-                <>
-                  <Link className="flex items-center justify-center" href={scopedHref("/dashboard")} title="MAJU Intelligence">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
-                  </Link>
-                  <button
-                    aria-label="사이드바 펼치기"
-                    className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:inline-flex"
-                    onClick={() => setCollapsed((value) => !value)}
-                    type="button"
-                  >
-                    <PanelLeftOpen className="h-4 w-4" />
-                  </button>
-                </>
-              ) : (
-                <div className="flex w-full items-center justify-between gap-2">
-                  <Link className="flex min-w-0 items-center gap-3" href={scopedHref("/dashboard")}>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-sm font-semibold text-white">M</span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold">MAJU Intelligence</span>
-                      <span className="block truncate text-xs font-medium text-slate-400">{companyName}</span>
-                    </span>
-                  </Link>
-                  <button
-                    aria-label="사이드바 접기"
-                    className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:inline-flex"
-                    onClick={() => setCollapsed((value) => !value)}
-                    type="button"
-                  >
-                    <PanelLeftClose className="h-4 w-4" />
-                  </button>
-                  <button
-                    aria-expanded={mobileMenuOpen}
-                    aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
-                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/15 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
-                    onClick={() => setMobileMenuOpen((value) => !value)}
-                    type="button"
-                  >
-                    {mobileMenuOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <nav
-              aria-label="주요 작업공간"
-              className={`${mobileMenuOpen ? "flex" : "hidden"} maju-sidebar-scroll min-h-0 max-h-[min(60dvh,32rem)] flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:flex lg:max-h-none`}
-            >
-              {visibleNavigationGroups.map((group, groupIndex) => (
-                <div
-                  className={`${group.label === "설정" ? "mt-auto border-t border-white/10 pt-4" : groupIndex === 0 ? "pb-4" : "border-t border-white/10 py-4"}`}
-                  key={group.label}
-                >
-                  {!collapsed ? (
-                    <div className="mb-2 flex items-center gap-2.5 px-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{group.label}</p>
-                      <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-white/10" />
-                    </div>
-                  ) : null}
-                  <div className="space-y-1">
-                    {group.items.map((item) => {
-                      if (item.children && item.children.length) {
-                        const groupSelected = item.children.some((child) => isCurrentNavItem(pathname, child.href, currentSearch) || (!pathname && active === child.active));
-                        if (collapsed) {
-                          const firstChild = item.children[0];
-                          return (
-                            <Link
-                              key={`${group.label}-${item.label}`}
-                              className={`maju-nav-item relative justify-center ${groupSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
-                              href={scopedHref(firstChild.href)}
-                              aria-current={groupSelected ? "page" : undefined}
-                              title={item.label}
-                            >
-                              {groupSelected ? <span className="absolute left-0 top-2 h-6 w-1 rounded-r-full bg-white/80" /> : null}
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-white" : "text-slate-400"}`} />
-                            </Link>
-                          );
-                        }
-                        return (
-                          <div key={`${group.label}-${item.label}`}>
-                            <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold ${groupSelected ? "text-white" : "text-slate-300"}`}>
-                              <item.icon className={`h-4 w-4 ${groupSelected ? "text-lime-300" : "text-slate-500"}`} />
-                              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                            </div>
-                            <div className="ml-[26px] space-y-1 border-l border-white/10 pl-2.5">
-                              {item.children.map((child) => {
-                                const childSelected = isCurrentNavItem(pathname, child.href, currentSearch) || (!pathname && active === child.active);
-                                return (
-                                  <Link
-                                    key={`${group.label}-${item.label}-${child.label}`}
-                                    className={`maju-nav-item relative py-1.5 text-[13px] ${childSelected ? "maju-nav-item-active" : "maju-nav-item-idle"}`}
-                                    href={scopedHref(child.href)}
-                                    aria-current={childSelected ? "page" : undefined}
-                                  >
-                                    {childSelected ? <span className="absolute left-0 top-1.5 h-5 w-1 rounded-r-full bg-white/80" /> : null}
-                                    <span className="min-w-0 flex-1 truncate">{child.label}</span>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const selected = isCurrentNavItem(pathname, item.href, currentSearch) || (!pathname && active === item.active);
-                      const itemHref = scopedHref(item.href);
-                      return (
-                        <Link
-                          key={`${group.label}-${item.label}`}
-                          className={`maju-nav-item relative ${collapsed ? "justify-center" : ""} ${
-                            selected ? "maju-nav-item-active" : "maju-nav-item-idle"
-                          }`}
-                          href={itemHref}
-                          aria-current={selected ? "page" : undefined}
-                          onClick={(event) => {
-                            setCurrentSearch(itemHref.includes("?") ? `?${itemHref.split("?")[1]}` : "");
-                            // 신규 리드와 영업 리드는 같은 지도 작업공간을 공유하지만 초기 데이터 정렬
-                            // 모드가 다릅니다. 동일 pathname의 client navigation은 하위 상태를 유지하므로,
-                            // 이 두 메뉴 사이에서는 명시적으로 새 문서를 열어 URL 기준 초기화를 보장합니다.
-                            if (itemHref.startsWith("/leads?")) {
-                              event.preventDefault();
-                              window.location.assign(itemHref);
-                            }
-                          }}
-                          title={collapsed ? item.label : undefined}
-                        >
-                          <item.icon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-400"}`} />
-                          {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.label}</span> : null}
-                          {!collapsed && item.badge ? <Badge className={selected ? "bg-white/95 px-1.5 py-0 text-xs text-slate-950 ring-1 ring-inset ring-white/70" : "bg-slate-100 px-1.5 py-0 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"}>{item.badge}</Badge> : null}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </nav>
-
-            <div className={`${mobileMenuOpen ? "block" : "hidden"} border-t border-white/10 bg-[#111827] lg:block ${collapsed ? "flex flex-col items-center gap-2 p-2" : "p-3"}`}>
-              {collapsed ? (
-                <>
-                  {mode === "customer" ? (
-                    <Link aria-label="작업공간 전환" className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
-                      <Building2 className="h-4 w-4" />
-                    </Link>
-                  ) : null}
-                  {mode === "customer" ? <CustomerAccountActions compact sidebar /> : null}
-                </>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-white">{userName || "로그인 사용자"}</p>
-                    <p className="truncate text-[11px] font-semibold text-slate-400">{roleLabel}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {mode === "customer" ? (
-                      // 2026-08-31 완성도 감사 대응: 다중 워크스페이스 계정이 로그인 직후가 아니면
-                      // 다른 회사/개인 공간으로 전환할 방법이 없어(로그아웃 후 재로그인해야 함) 추가.
-                      // /workspaces는 워크스페이스가 1개뿐이면 자동으로 지도 홈으로 돌려보내므로,
-                      // 항상 노출해도 안전합니다.
-                      <Link aria-label="작업공간 전환" className="maju-icon-btn grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" href="/workspaces" title="작업공간 전환">
-                        <Building2 className="h-4 w-4" />
-                      </Link>
-                    ) : null}
-                    {mode === "customer" ? <CustomerAccountActions sidebar /> : null}
-                  </div>
-                </div>
-              )}
-            </div>
+      <div className={`flex min-h-screen flex-col ${fullBleed ? "xl:h-full" : ""} lg:flex-row`}>
+        <AppSidebar active={active} brand="MAJU Intelligence" context={companyName} groups={getCustomerNavigationGroups(showHoldModules, normalizedRole)} homeHref="/dashboard" previewCompanyId={mode === "admin-preview" ? previewCompanyId : undefined} renderFooter={(collapsed) => (
+          <div className={collapsed ? "flex flex-col items-center gap-2" : "flex items-center justify-between gap-2"}>
+            {!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{userName || "로그인 사용자"}</p><p className="truncate text-[11px] font-semibold text-white/60">{roleLabel}</p></div> : null}
+            {mode === "customer" ? <div className={`flex shrink-0 ${collapsed ? "flex-col" : "items-center"} gap-1`}><Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link><CustomerAccountActions compact={collapsed} sidebar /></div> : null}
           </div>
-        </aside>
+        )} variant="customer" />
 
-        <section className={`min-w-0 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
+        <section className={`min-w-0 flex-1 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
           <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
-              {!hidePageTitle ? (
-                <div className="min-w-0">
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
-                    {mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>
-                    {subtitle ? <InfoTooltip text={subtitle} /> : null}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                  <Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>
-                  <span className="text-sm font-semibold text-slate-900">{activeWorkspaceLabel}</span>
-                </div>
-              )}
-              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>
-                {mode === "customer" ? (
-                  <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="기사 화면 열기">
-                    <Smartphone className="h-4 w-4" />
-                    <span className="hidden xl:inline">기사 화면</span>
-                  </Link>
-                ) : null}
-                {rightAction}
-                {mode === "customer" ? <CustomerAccountActions /> : null}
-              </div>
+              {!hidePageTitle ? <div className="min-w-0"><div className="mb-1 flex flex-wrap items-center gap-2"><Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>{mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}</div><div className="flex min-w-0 items-center gap-1.5"><h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>{subtitle ? <InfoTooltip text={subtitle} /> : null}</div></div> : <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge><span className="text-sm font-semibold text-slate-900">{getCustomerWorkspaceLabel(active)}</span></div>}
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>{mode === "customer" ? <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="기사 화면 열기"><Smartphone className="h-4 w-4" /><span className="hidden xl:inline">기사 화면</span></Link> : null}{rightAction}{mode === "customer" ? <CustomerAccountActions /> : null}</div>
             </div>
           </header>
 
-          {mode === "admin-preview" ? (
-            <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-4 ${fullBleed ? "shrink-0" : ""}`}>
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p>
-                  <p className="mt-0.5 text-xs font-bold leading-5 text-amber-800">
-                    현재 화면은 고객사 운영 화면을 관리자 권한으로 확인하는 모드입니다. 계정, 권한, 고객사 생성·수정은 어드민에서 관리하세요.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    className="inline-flex min-h-11 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950"
-                    href="/admin/companies"
-                  >
-                    고객사 관리로 돌아가기
-                  </Link>
-                  <Link
-                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-amber-900 transition hover:bg-amber-100"
-                    href="/admin"
-                  >
-                    어드민 홈
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
+          {mode === "admin-preview" ? <div className={`border-b border-amber-200 bg-amber-50/80 px-4 py-2.5 sm:px-4 ${fullBleed ? "shrink-0" : ""}`}><div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"><div className="min-w-0"><p className="text-xs font-black text-amber-900">관리자 미리보기 모드</p><p className="mt-0.5 text-xs font-bold leading-5 text-amber-800">현재 화면은 고객사 운영 화면을 관리자 권한으로 확인하는 모드입니다. 계정, 권한, 고객사 생성·수정은 어드민에서 관리하세요.</p></div><div className="flex flex-wrap gap-2"><Link className="inline-flex min-h-11 items-center justify-center rounded-md bg-amber-900 px-3 text-xs font-black text-white transition hover:bg-amber-950" href="/admin/companies">고객사 관리로 돌아가기</Link><Link className="inline-flex min-h-11 items-center justify-center rounded-md border border-amber-200 bg-white px-3 text-xs font-black text-amber-900 transition hover:bg-amber-100" href="/admin">관리자 홈</Link></div></div></div> : null}
           <div className={fullBleed ? "flex w-full flex-col px-3 py-2 sm:px-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:py-2" : "w-full px-4 py-4 sm:px-5 lg:px-6 lg:py-5 2xl:px-7"}>{children}</div>
         </section>
       </div>
@@ -338,40 +71,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
 }
 
 function CustomerAccountActions({ compact = false, sidebar = false }: { readonly compact?: boolean; readonly sidebar?: boolean }) {
-  async function logout() {
-    await fetch("/api/customer/logout", { method: "POST" });
-    window.location.href = "/dashboard/login";
-  }
-
-  return (
-    <button
-      aria-label="로그아웃"
-      className={`${sidebar ? "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-white/15 px-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white" : "maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"} ${compact ? "w-9 px-0" : ""}`}
-      onClick={logout}
-      title="로그아웃"
-      type="button"
-    >
-      <LogOut className="h-4 w-4" />
-      <span className={compact ? "sr-only" : sidebar ? "" : "hidden 2xl:inline"}>로그아웃</span>
-    </button>
-  );
-}
-
-function isCurrentNavItem(pathname: string | null, href: string, currentSearch = "") {
-  if (!pathname) return false;
-  const [hrefWithoutHash] = href.split("#");
-  const [hrefPath = "/", hrefQuery = ""] = hrefWithoutHash.split("?");
-  if (hrefPath === "/") return pathname === "/";
-  if (!(pathname === hrefPath || pathname.startsWith(`${hrefPath}/`))) return false;
-
-  const expected = new URLSearchParams(hrefQuery);
-  const current = new URLSearchParams(currentSearch);
-  if (expected.size) {
-    return Array.from(expected.entries()).every(([key, value]) => current.get(key) === value);
-  }
-  return true;
-}
-
-function getActiveWorkspaceLabel(active: CustomerAppShellProps["active"]) {
-  return getCustomerWorkspaceLabel(active);
+  async function logout() { await fetch("/api/customer/logout", { method: "POST" }); window.location.href = "/dashboard/login"; }
+  return <button aria-label="로그아웃" className={`${sidebar ? "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-white/15 px-2 text-xs font-bold text-white/70 transition hover:bg-white/10 hover:text-white" : "maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"} ${compact ? "w-9 px-0" : ""}`} onClick={logout} title="로그아웃" type="button"><LogOut className="h-4 w-4" /><span className={compact ? "sr-only" : sidebar ? "" : "hidden 2xl:inline"}>로그아웃</span></button>;
 }
