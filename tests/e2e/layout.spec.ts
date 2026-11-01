@@ -60,6 +60,25 @@ for (const viewport of [
   });
 }
 
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 }
+]) {
+  test(`WO-21 role settings stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport });
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/role-settings/preview", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByText("직원 · 권한 일괄 설정")).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`wo-21-role-settings-${viewport.width}.png`), fullPage: true });
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
   const entry = knownLayoutDebt[`${path}@${width}`];
   const allowedPrefixes = entry?.prefixes ?? [];
