@@ -399,8 +399,10 @@ export async function createCatalogFromSupplierProducts(
   );
   const sourceKeys = products.map((p) => `standard:${p.id}`);
   const existing = sourceKeys.length
-    ? await db<Array<{ id: string; source_key: string }>>(
-        `product_catalog?select=id,source_key&company_id=eq.${enc(companyId)}&source=eq.supplier&source_key=in.(${sourceKeys.map(enc).join(",")})`,
+    ? await collectInChunks(sourceKeys, (part) =>
+        db<Array<{ id: string; source_key: string }>>(
+          `product_catalog?select=id,source_key&company_id=eq.${enc(companyId)}&source=eq.supplier&source_key=in.(${part.map(enc).join(",")})`,
+        ),
       )
     : [];
   const existingBySource = new Map(
