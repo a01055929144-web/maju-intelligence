@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export default function AdminLoginPage() {
+  const accountLoginEnabled = process.env.NEXT_PUBLIC_ACCOUNT_LOGIN_V2_ENABLED === "true";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export default function AdminLoginPage() {
       const response = await fetchWithTimeout("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(accountLoginEnabled ? { identifier: email, password } : { email, password })
       });
 
       if (!response.ok) {
@@ -34,7 +35,8 @@ export default function AdminLoginPage() {
         return;
       }
 
-      window.location.href = "/admin";
+      const payload = await response.json().catch(() => null);
+      window.location.href = payload?.mustChangePassword ? "/change-password" : "/admin";
     } catch (error) {
       setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
     } finally {
@@ -56,7 +58,7 @@ export default function AdminLoginPage() {
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <label className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">이메일</span>
+              <span className="text-xs font-bold text-muted-foreground">{accountLoginEnabled ? "아이디" : "이메일"}</span>
               <input
                 autoComplete="username"
                 className="h-11 w-full rounded-lg border border-input bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -64,7 +66,7 @@ export default function AdminLoginPage() {
                 name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                type="email"
+                type={accountLoginEnabled ? "text" : "email"}
               />
             </label>
             <label className="space-y-1.5">

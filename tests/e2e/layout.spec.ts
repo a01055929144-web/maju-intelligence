@@ -36,6 +36,29 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 // The current populated CI layout has no known exceptions.
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 }
+]) {
+  test(`WO-21 login stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({
+      baseURL: "http://127.0.0.1:3100",
+      viewport
+    });
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/login/preview", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByPlaceholder("아이디")).toBeVisible();
+      await expect(page.getByRole("link", { name: /카카오로 계속/ })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`wo-21-login-${viewport.width}.png`), fullPage: true });
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 function splitKnownLayoutDebt(path: string, width: number, problems: string[]) {
   const entry = knownLayoutDebt[`${path}@${width}`];
   const allowedPrefixes = entry?.prefixes ?? [];

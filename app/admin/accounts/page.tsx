@@ -3,13 +3,25 @@ import Link from "next/link";
 import { ArrowRight, Building2, CheckCircle2, KeyRound, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
-import { getAuthCredentials } from "@/lib/store";
+import { getAuthCredentials, listManagedLoginAccounts } from "@/lib/store";
+import { accountLoginV2Enabled } from "@/lib/account-login-feature";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminAccountsForm } from "./accounts-form";
+import { ManagedAccountsPanel } from "./managed-accounts-panel";
 
 export default async function AdminAccountsPage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
+  if (accountLoginV2Enabled()) {
+    return (
+      <main className="min-h-screen maju-app-bg">
+        <AdminPageHeader active="accounts" badge="WO-21 · 기본 OFF" session={session} subtitle="아이디, 임시 비밀번호, 잠금과 세션을 한 곳에서 관리합니다" title="계정 관리" />
+        <section className="mx-auto max-w-6xl px-4 py-8">
+          <ManagedAccountsPanel initialAccounts={await listManagedLoginAccounts()} />
+        </section>
+      </main>
+    );
+  }
 
   const credentials = await getAuthCredentials();
 

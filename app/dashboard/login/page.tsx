@@ -29,7 +29,7 @@ async function resolvePostLoginPath() {
   return data?.workspaces && data.workspaces.length > 1 ? "/workspaces" : CORE_LEADS_HREF;
 }
 
-export default function CustomerLoginPage() {
+export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -54,7 +54,7 @@ export default function CustomerLoginPage() {
       const response = await fetchWithTimeout("/api/customer/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: nextEmail, password: nextPassword, remember })
+        body: JSON.stringify(accountLoginEnabled ? { identifier: nextEmail, password: nextPassword, remember } : { email: nextEmail, password: nextPassword, remember })
       });
 
       if (!response.ok) {
@@ -62,13 +62,14 @@ export default function CustomerLoginPage() {
         return;
       }
 
+      const payload = await response.json().catch(() => null);
       try {
         window.localStorage.setItem(RECENT_LOGIN_STORAGE_KEY, nextEmail);
       } catch {
         // 시크릿 모드 등에서 localStorage 접근이 막혀도 로그인 자체는 계속 진행합니다.
       }
       setRecentLoginEmail(nextEmail);
-      window.location.href = await resolvePostLoginPath();
+      window.location.href = payload?.mustChangePassword ? "/change-password" : await resolvePostLoginPath();
     } catch (error) {
       setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
     } finally {
@@ -120,20 +121,22 @@ export default function CustomerLoginPage() {
           </div>
         </section>
 
-        <div className="min-w-0 space-y-4 p-4 sm:p-8 lg:p-10">
-        <Card className="min-w-0 overflow-hidden rounded-2xl border-slate-200 shadow-none">
+        <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-8 lg:p-10">
+        <Card className={`min-w-0 overflow-hidden rounded-2xl border-slate-200 shadow-none ${accountLoginEnabled ? "order-2" : ""}`}>
           <CardHeader>
             <Badge className="mb-3 w-fit bg-lime-100 text-slate-900 ring-1 ring-inset ring-lime-200">
               <Building2 className="mr-1 h-3.5 w-3.5" />
-              회사 계정
+              {accountLoginEnabled ? "보조 로그인" : "회사 계정"}
             </Badge>
-            <CardTitle className="text-2xl font-bold tracking-[-0.03em]">MAJU 로그인</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">회사 운영자·관리자는 이메일로 로그인하세요.</p>
+            <CardTitle className="text-2xl font-bold tracking-[-0.03em]">{accountLoginEnabled ? "아이디로 로그인" : "MAJU 로그인"}</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">
+              {accountLoginEnabled ? "카카오 연결이 어려울 때 회사에서 발급한 아이디를 사용하세요." : "회사 운영자·관리자는 이메일로 로그인하세요."}
+            </p>
           </CardHeader>
           <CardContent>
             {recentLoginEmail ? (
               <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="mb-2 text-xs font-semibold leading-5 text-slate-500">최근 입력한 이메일입니다. 선택해도 자동 로그인되지는 않습니다.</p>
+                <p className="mb-2 text-xs font-semibold leading-5 text-slate-500">최근 입력한 {accountLoginEnabled ? "아이디" : "이메일"}입니다. 선택해도 자동 로그인되지는 않습니다.</p>
                 <button
                   aria-label={`최근 사용 이메일 ${recentLoginEmail} 입력`}
                   className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-lime-100 hover:text-slate-950"
@@ -141,7 +144,7 @@ export default function CustomerLoginPage() {
                   type="button"
                 >
                   <Clock3 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="shrink-0">이메일 채우기</span>
+                  <span className="shrink-0">{accountLoginEnabled ? "아이디" : "이메일"} 채우기</span>
                   <span className="truncate">{recentLoginEmail}</span>
                 </button>
               </div>
@@ -149,16 +152,16 @@ export default function CustomerLoginPage() {
             <form className="space-y-2.5" onSubmit={handleSubmit}>
               <input
                 autoComplete="username"
-                autoFocus
+                autoFocus={!accountLoginEnabled}
                 className="h-12 w-full rounded-xl border border-input bg-white px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
                 id="customer-login-email"
                 name="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                type="email"
-                inputMode="email"
+                type={accountLoginEnabled ? "text" : "email"}
+                inputMode={accountLoginEnabled ? "text" : "email"}
                 enterKeyHint="next"
-                placeholder="회사 이메일"
+                placeholder={accountLoginEnabled ? "아이디" : "회사 이메일"}
                 disabled={loading}
                 required
               />
@@ -195,15 +198,12 @@ export default function CustomerLoginPage() {
               </label>
               <Button aria-busy={loading} className="mt-1.5 h-12 w-full rounded-lg" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-                {loading ? "접속 권한 확인 중…" : "회사 운영 화면으로 이동"}
+                {loading ? "접속 권한 확인 중…" : accountLoginEnabled ? "아이디로 로그인" : "회사 운영 화면으로 이동"}
                 {!loading ? <ArrowRight className="ml-auto h-4 w-4" /> : null}
               </Button>
               {loading ? <p aria-live="polite" className="text-center text-xs font-medium text-slate-500">로그인이 완료되면 운영 화면으로 자동 이동합니다.</p> : null}
               <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/forgot-password">
                 비밀번호를 잊으셨나요?
-              </Link>
-              <Link className="block text-center text-sm font-bold text-muted-foreground underline-offset-4 hover:text-primary hover:underline" href="/admin/login">
-                플랫폼 관리자 로그인
               </Link>
               <Link className="block text-center text-sm font-bold text-primary underline-offset-4 hover:underline" href="/signup">
                 처음이신가요? 회사 가입하기
@@ -212,14 +212,16 @@ export default function CustomerLoginPage() {
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden rounded-2xl border-slate-200 bg-slate-50/70 shadow-none">
+        <Card className={`min-w-0 overflow-hidden rounded-2xl border-slate-200 bg-slate-50/70 shadow-none ${accountLoginEnabled ? "order-1" : ""}`}>
           <CardHeader>
             <Badge className="mb-3 w-fit bg-[#FEE500]/30 text-[#7a5c00]">
               <Smartphone className="mr-1 h-3.5 w-3.5" />
-              직원용
+              {accountLoginEnabled ? "대표 · 직원 모두" : "직원용"}
             </Badge>
-            <CardTitle className="text-xl font-bold tracking-[-0.025em]">직원으로 접속</CardTitle>
-            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">배송·영업 직원은 회사에서 연결한 소셜 계정으로 접속하세요.</p>
+            <CardTitle className="text-xl font-bold tracking-[-0.025em]">{accountLoginEnabled ? "카카오로 로그인" : "직원으로 접속"}</CardTitle>
+            <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">
+              {accountLoginEnabled ? "대표·관리자·영업·배송 모두 연결된 카카오 계정으로 접속할 수 있습니다." : "배송·영업 직원은 회사에서 연결한 소셜 계정으로 접속하세요."}
+            </p>
           </CardHeader>
           <CardContent className="space-y-3">
             <OAuthLoginButtons />
@@ -228,7 +230,7 @@ export default function CustomerLoginPage() {
               href="/mobile/join"
             >
               <Smartphone className="h-4 w-4" />
-              직원용 모바일 화면 열기
+              {accountLoginEnabled ? "초대 링크로 카카오 연결" : "직원용 모바일 화면 열기"}
             </Link>
             <p className="break-keep text-center text-xs font-medium leading-5 text-slate-500">
               처음 한 번은 관리자가 보낸 초대 링크가 필요합니다.
@@ -239,4 +241,8 @@ export default function CustomerLoginPage() {
       </div>
     </main>
   );
+}
+
+export default function CustomerLoginPage() {
+  return <CustomerLoginForm accountLoginEnabled={process.env.NEXT_PUBLIC_ACCOUNT_LOGIN_V2_ENABLED === "true"} />;
 }

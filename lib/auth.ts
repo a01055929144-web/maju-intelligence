@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { after, NextRequest } from "next/server";
-import { getActiveCustomerMembership, getAuthCredentials, getCustomerLoginCredentials, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
+import { getActiveCustomerMembership, getAppUserAccountState, getAppUserLoginCredential, getAuthCredentials, getCustomerLoginCredentials, getCustomerWorkspaces, getManagedAdminAccountCount, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
 import { hashPassword, isHashedPassword, verifyPassword } from "./password";
 import { AppUserRole, canUseWorkspaceFeature, WorkspaceCapability, WorkspaceRole, WorkspaceType, normalizeWorkspaceRole } from "./workspace";
 import { getStaffAccessState } from "./store/07-staff-access";
@@ -9,12 +9,16 @@ import { observeStaffSession } from "../application/organization/observe-staff-s
 import { isValidObservationDeviceId, shouldRefreshSessionObservation } from "../domains/organization/session-observation";
 import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
+import { accountLoginV2Enabled } from "./account-login-feature";
 
 export type AdminSession = {
   email: string;
   role: "super_admin" | "operator";
   appRole: Extract<AppUserRole, "maju_super_admin" | "maju_operator">;
   name: string;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
+  userId?: string;
 };
 
 export type CustomerSession = {
@@ -26,6 +30,8 @@ export type CustomerSession = {
   role: "owner" | "member";
   name: string;
   userId?: string;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
   duties?: StaffDuty[];
@@ -57,8 +63,6 @@ const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
 const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
 const sessionObservationThrottle = new Map<string, number>();
-const DEFAULT_ADMIN_EMAIL = "admin@maju.local";
-const DEFAULT_ADMIN_PASSWORD = "maju-admin-2026";
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
 const DEFAULT_CUSTOMER_PASSWORD = "maju-owner-2026";
 const DEFAULT_CUSTOMER_COMPANY_ID = "00000000-0000-4000-8000-000000000001";
@@ -70,10 +74,6 @@ function getSecret() {
 
 function sessionObservationEnabled() {
   return process.env.STAFF_SESSION_OBSERVATION_ENABLED === "true";
-}
-
-function isDevelopmentAdminCredential(email: string, password: string) {
-  return email === DEFAULT_ADMIN_EMAIL || password === DEFAULT_ADMIN_PASSWORD;
 }
 
 function isDevelopmentCustomerCredential(email: string, password: string) {
@@ -109,17 +109,28 @@ function decodeSession<TSession>(value?: string): TSession | null {
   }
 }
 
-export async function getAdminSession() {
+export async function getAdminSession(options: { allowPasswordChange?: boolean } = {}) {
   const cookieStore = await cookies();
-  return decodeSession<AdminSession>(cookieStore.get(ADMIN_COOKIE_NAME)?.value);
+  const session = decodeSession<AdminSession>(cookieStore.get(ADMIN_COOKIE_NAME)?.value);
+  if (!accountLoginV2Enabled() || !session) return session;
+  if (!session.userId) return (await getManagedAdminAccountCount()) === 0 ? session : null;
+  const state = await getAppUserAccountState(session.userId);
+  if (!state || state.status !== "active" || state.sessionVersion !== session.sessionVersion) return null;
+  if (state.mustChangePassword && !options.allowPasswordChange) return null;
+  return { ...session, mustChangePassword: state.mustChangePassword };
 }
 
-export async function getCustomerSession() {
+export async function getCustomerSession(options: { allowPasswordChange?: boolean } = {}) {
   const cookieStore = await cookies();
   const session = decodeSession<CustomerSession>(cookieStore.get(CUSTOMER_COOKIE_NAME)?.value);
   if (!session?.userId) return session;
 
   try {
+    if (accountLoginV2Enabled()) {
+      const state = await getAppUserAccountState(session.userId);
+      if (!state || state.status !== "active" || state.sessionVersion !== session.sessionVersion) return null;
+      if (state.mustChangePassword && !options.allowPasswordChange) return null;
+    }
     const membership = await getActiveCustomerMembership({ companyId: session.companyId, userId: session.userId });
     if (!membership.active) return null;
     const staffAccess = await getStaffAccessState({ companyId: session.companyId, userId: session.userId });
@@ -294,13 +305,30 @@ export function getCustomerOperationalName(session: CustomerSession | null) {
 }
 
 export async function validateAdminCredentials(email: string, password: string): Promise<AdminSession | null> {
-  const credentials = await getAuthCredentials();
-  const adminEmail = credentials.adminEmail || DEFAULT_ADMIN_EMAIL;
-  const adminPassword = credentials.adminPassword || DEFAULT_ADMIN_PASSWORD;
-
-  if (process.env.NODE_ENV === "production" && (!process.env.ADMIN_SESSION_SECRET || isDevelopmentAdminCredential(adminEmail, adminPassword))) {
-    return null;
+  if (accountLoginV2Enabled()) {
+    const account = await getAppUserLoginCredential(email);
+    if (account) {
+      if (!["maju_super_admin", "maju_operator"].includes(account.role) || account.status !== "active") return null;
+      if (account.loginLockedUntil && new Date(account.loginLockedUntil).getTime() > Date.now()) return null;
+      if (!(await verifyPassword(password, account.passwordHash))) return null;
+      return {
+        appRole: account.role as AdminSession["appRole"],
+        email: account.email || account.loginId,
+        mustChangePassword: account.mustChangePassword,
+        name: account.name,
+        role: account.role === "maju_super_admin" ? "super_admin" : "operator",
+        sessionVersion: account.sessionVersion,
+        userId: account.id
+      };
+    }
+    if ((await getManagedAdminAccountCount()) > 0) return null;
   }
+  const credentials = await getAuthCredentials();
+  const adminEmail = credentials.adminEmail;
+  const adminPassword = credentials.adminPassword;
+
+  if (!adminEmail || !adminPassword) return null;
+  if (process.env.NODE_ENV === "production" && !process.env.ADMIN_SESSION_SECRET) return null;
 
   if (email.trim().toLowerCase() !== adminEmail.toLowerCase()) return null;
   if (!(await verifyPassword(password, adminPassword))) return null;
@@ -320,6 +348,29 @@ export async function validateAdminCredentials(email: string, password: string):
 }
 
 export async function validateCustomerCredentials(email: string, password: string): Promise<CustomerSession | null> {
+  if (accountLoginV2Enabled()) {
+    const account = await getAppUserLoginCredential(email);
+    if (!account || !["customer_owner", "customer_member"].includes(account.role) || account.status !== "active") return null;
+    if (account.loginLockedUntil && new Date(account.loginLockedUntil).getTime() > Date.now()) return null;
+    if (!(await verifyPassword(password, account.passwordHash))) return null;
+    const workspace = (await getCustomerWorkspaces({ userId: account.id }))[0];
+    if (!workspace) return null;
+    await updateCustomerUserLastLogin(account.id, "password").catch(() => null);
+    const workspaceRole = normalizeWorkspaceRole(workspace.role || (account.role === "customer_owner" ? "owner" : "member"));
+    return {
+      appRole: "customer_user",
+      companyId: workspace.companyId,
+      companyName: workspace.companyName,
+      email: account.email || account.loginId,
+      mustChangePassword: account.mustChangePassword,
+      name: account.name,
+      role: workspaceRole === "owner" ? "owner" : "member",
+      sessionVersion: account.sessionVersion,
+      userId: account.id,
+      workspaceRole,
+      workspaceType: workspace.workspaceType
+    };
+  }
   const credentials = await getCustomerLoginCredentials(email);
   if (!credentials) return null;
 
@@ -377,6 +428,12 @@ export async function setAdminSession(session: AdminSession) {
 export async function setCustomerSession(session: CustomerSession, options?: { remember?: boolean }) {
   const cookieStore = await cookies();
   let sessionToStore = session;
+  if (accountLoginV2Enabled() && session.userId && !session.sessionVersion) {
+    const state = await getAppUserAccountState(session.userId);
+    if (state) {
+      sessionToStore = { ...sessionToStore, mustChangePassword: state.mustChangePassword, sessionVersion: state.sessionVersion };
+    }
+  }
   if (sessionObservationEnabled() && session.userId) {
     const cookieDeviceId = cookieStore.get(CUSTOMER_DEVICE_COOKIE_NAME)?.value;
     const existingDeviceId = isValidObservationDeviceId(cookieDeviceId) ? cookieDeviceId : undefined;
