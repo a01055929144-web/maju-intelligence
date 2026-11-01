@@ -17,4 +17,9 @@ describe("product common category tab", () => {
     expect(source).toContain("연결 편집은 SQL 승인 후 제공합니다.");
     expect(source).not.toContain("CategoryMatch 시작");
   });
+
+  it("connects the flagged match panel to the real save route", () => {
+    expect(source).toContain('fetch("/api/product-categories/matches"');
+    expect(source).toContain("추천 {item.suggestion.score}%");
+  });
 });

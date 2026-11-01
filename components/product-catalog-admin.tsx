@@ -28,6 +28,8 @@ const money = (v?: number) =>
 const margin = productCatalogMargin;
 type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo";
 type SideTab = "category" | "supplier" | "maju-category";
+const units = ["박스", "kg", "g", "개", "단", "봉", "판", "통"];
+const origins = ["국내산", "중국산", "미국산", "호주산", "수입산"];
 export function ProductCatalogAdmin({
   categoriesEnabled = false,
   companyId = "",
@@ -139,6 +141,7 @@ export function ProductCatalogAdmin({
         <div className="max-h-[70vh] overflow-y-auto p-2">{sideItems.map((item) => <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50" key={item.name}><span className="truncate font-semibold">{item.name}</span><span className="text-xs text-slate-500">{item.count}</span></div>)}</div>
       </aside>
       <div className="min-w-0 space-y-4">
+      {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -222,6 +225,62 @@ export function ProductCatalogAdmin({
     </div>
   );
 }
+type MatchWorkspace = {
+  businessType: string;
+  options: Array<{ id: string; name: string }>;
+  categories: Array<{ id: string; name: string; majuCategoryId: string; suggestion: null | { id: string; name: string; score: number } }>;
+};
+function CategoryMatchPanel({ companyId }: { companyId: string }) {
+  const [workspace, setWorkspace] = useState<MatchWorkspace | null>(null),
+    [error, setError] = useState(""),
+    [saving, setSaving] = useState("");
+  useEffect(() => {
+    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    void fetch(`/api/product-categories/matches${query}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message);
+        setWorkspace(payload);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "카테고리 연결을 불러오지 못했습니다."));
+  }, [companyId]);
+  async function save(categoryId: string, majuCategoryId: string) {
+    if (!majuCategoryId) return;
+    setSaving(categoryId);
+    setError("");
+    try {
+      const response = await fetch("/api/product-categories/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId, companyId, majuCategoryId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message);
+      setWorkspace((current) => current && ({ ...current, categories: current.categories.map((item) => item.id === categoryId ? { ...item, majuCategoryId } : item) }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "카테고리 연결을 저장하지 못했습니다.");
+    } finally {
+      setSaving("");
+    }
+  }
+  return <section className="maju-section-card p-4">
+    <h2 className="maju-section-title">마주 공통 카테고리 맞추기</h2>
+    <p className="mt-1 text-sm text-slate-600">회사 업종 {workspace?.businessType || "미설정"} · 이름과 업종으로 자동 추천합니다.</p>
+    {error ? <p className="mt-3 text-sm font-bold text-rose-700" role="alert">{error}</p> : null}
+    {workspace ? <div className="mt-4 space-y-2">{workspace.categories.map((item) => <CategoryMatchRow item={item} key={item.id} onSave={save} options={workspace.options} saving={saving === item.id} />)}</div> : <p className="mt-4 text-sm text-slate-500">카테고리 연결을 불러오는 중입니다.</p>}
+  </section>;
+}
+function CategoryMatchRow({ item, onSave, options, saving }: { item: MatchWorkspace["categories"][number]; onSave: (categoryId: string, majuCategoryId: string) => Promise<void>; options: MatchWorkspace["options"]; saving: boolean }) {
+  const [selected, setSelected] = useState(item.majuCategoryId || item.suggestion?.id || "");
+  return <div className="grid items-center gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_minmax(180px,1fr)_80px]">
+    <div><b>{item.name}</b>{item.suggestion ? <span className="ml-2 text-xs text-teal-700">추천 {item.suggestion.score}%</span> : null}</div>
+    <select className="maju-input w-full" onChange={(event) => setSelected(event.target.value)} value={selected}>
+      <option value="">연결 안 함</option>
+      {options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+    </select>
+    <button className="maju-button-secondary" disabled={saving || !selected} onClick={() => void onSave(item.id, selected)} type="button">저장</button>
+  </div>;
+}
 function Filter({
   value,
   onChange,
@@ -257,6 +316,7 @@ function Editor({
   onSaved: (i: ProductCatalogAdminItem, keepOpen: boolean) => void;
 }) {
   const [d, setD] = useState(item),
+    [marginRate, setMarginRate] = useState(item.purchasePrice && item.salesPrice != null ? String(Math.round(((item.salesPrice / item.purchasePrice) - 1) * 1000) / 10) : ""),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const put = (k: keyof ProductCatalogAdminItem, v: unknown) =>
@@ -353,6 +413,7 @@ function Editor({
           <Field label="원산지">
             <input
               className="maju-input w-full"
+              list="product-origin-options"
               value={d.origin || ""}
               onChange={(e) => put("origin", e.target.value)}
             />
@@ -373,6 +434,7 @@ function Editor({
               />
               <input
                 className="maju-input w-24"
+                list="product-unit-options"
                 placeholder="g/ml"
                 value={d.specUnit || ""}
                 onChange={(e) => put("specUnit", e.target.value)}
@@ -393,6 +455,7 @@ function Editor({
           <Field label="매입 단위">
             <input
               className="maju-input w-full"
+              list="product-unit-options"
               required
               value={d.purchaseUnit}
               onChange={(e) => put("purchaseUnit", e.target.value)}
@@ -401,6 +464,7 @@ function Editor({
           <Field label="판매 단위">
             <input
               className="maju-input w-full"
+              list="product-unit-options"
               required
               value={d.salesUnit || ""}
               onChange={(e) => put("salesUnit", e.target.value)}
@@ -423,7 +487,10 @@ function Editor({
           </Field>
           <h3 className="mt-2 border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">가격</h3>
           <Field label="매입가 *">
-            <input className="maju-input w-full" min="0" required type="number" value={d.purchasePrice} onChange={(e) => put("purchasePrice", Number(e.target.value) || 0)} />
+            <input className="maju-input w-full" min="0" required type="number" value={d.purchasePrice} onChange={(e) => { const purchasePrice = Number(e.target.value) || 0; setD((current) => ({ ...current, purchasePrice, salesPrice: marginRate === "" ? current.salesPrice : Math.round(purchasePrice * (1 + Number(marginRate) / 100)) })); }} />
+          </Field>
+          <Field label="기본 마진 (%)">
+            <input className="maju-input w-full" min="-100" step="0.1" type="number" value={marginRate} onChange={(e) => { const value = e.target.value; setMarginRate(value); if (value !== "") put("salesPrice", Math.round(d.purchasePrice * (1 + Number(value) / 100))); }} />
           </Field>
           <Field label="판매가">
             <input
@@ -432,10 +499,11 @@ function Editor({
               type="number"
               value={d.salesPrice ?? ""}
               onChange={(e) =>
-                put(
-                  "salesPrice",
-                  e.target.value ? Number(e.target.value) : undefined,
-                )
+                setD((current) => {
+                  const salesPrice = e.target.value ? Number(e.target.value) : undefined;
+                  if (salesPrice != null && current.purchasePrice) setMarginRate(String(Math.round(((salesPrice / current.purchasePrice) - 1) * 1000) / 10));
+                  return { ...current, salesPrice };
+                })
               }
             />
           </Field>
@@ -464,6 +532,8 @@ function Editor({
               {error}
             </p>
           ) : null}
+          <datalist id="product-unit-options">{units.map((value) => <option key={value} value={value} />)}</datalist>
+          <datalist id="product-origin-options">{origins.map((value) => <option key={value} value={value} />)}</datalist>
         </div>
         <footer className="flex shrink-0 justify-end gap-2 border-t bg-white p-4">
           <button
