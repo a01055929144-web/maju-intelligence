@@ -96,7 +96,7 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
           {groups.map((group) => {
             const groupSelected = group.items.some((item) => isItemSelected(item, pathname, currentSearch, active));
             return (
-              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} defaultOpen={groupSelected} key={group.label} open={collapsed ? true : undefined}>
+              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || groupSelected ? true : undefined}>
                 {!collapsed ? (
                   <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
                     <span>{group.label}</span><span className="h-px min-w-0 flex-1 bg-white/10" /><ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
