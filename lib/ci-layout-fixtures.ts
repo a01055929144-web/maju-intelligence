@@ -91,8 +91,12 @@ export const ciLayoutCompany: ManagedCompanyAccount = {
   hasPassword: true,
   customerCount: ciLayoutCustomers.length,
   salesTransactionCount: 0,
-  uploadCount: 0,
-  recentUploads: [],
+  uploadCount: 2,
+  lastUploadAt: "2026. 11. 2. 오후 2:30:00",
+  recentUploads: [
+    { id: "ci-customer-import", company: "CI 반응형 식자재", companyId, filename: "거래처_기초자료.xlsx", reportId: "", rows: 128, status: "completed", qualityScore: 96, duplicateCount: 3, healthScore: 94, createdAt: "2026. 11. 2. 오후 2:30:00", createdAtIso: "2026-11-02T05:30:00.000Z", uploadSource: "customer" },
+    { id: "ci-admin-import", company: "CI 반응형 식자재", companyId, filename: "상품_초기등록.xlsx", reportId: "", rows: 74, status: "completed", qualityScore: 100, duplicateCount: 0, healthScore: 100, createdAt: "2026. 11. 2. 오후 1:15:00", createdAtIso: "2026-11-02T04:15:00.000Z", uploadSource: "admin", actorName: "MAJU 운영팀", targetType: "product" }
+  ],
   salesAreaCount: 1,
   vehicleCount: 0,
   leadCount: ciLayoutLeads.length,
