@@ -13,6 +13,7 @@ const viewports = [
 const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "admin", path: "/admin", slug: "admin" },
   { auth: "admin", path: "/admin/companies", slug: "admin-companies" },
+  { auth: "admin", path: "/admin/companies/new", slug: "admin-company-new" },
   { auth: "admin", path: "/admin/companies/00000000-0000-4000-8000-000000000001/setup", slug: "admin-company-setup" },
   { auth: "admin", path: "/admin/billing", slug: "admin-billing" },
   { auth: "customer", path: "/leads", slug: "leads" },
