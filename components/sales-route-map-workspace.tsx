@@ -74,6 +74,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
+import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
 import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
@@ -102,6 +103,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
@@ -525,7 +527,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     loading: boolean;
     vehicle: StaffVehicleLocation | null;
   }>({ completions: [], events: [], error: "", loading: false, vehicle: null });
-  const [vehicleAnalysisDate, setVehicleAnalysisDate] = useState(() => localDateKey());
+  const [vehicleAnalysisDate, setVehicleAnalysisDate] = useState(() => getTmsServiceDateKey());
   // 2026-09-07 피드백: "분석 버튼을 눌러야 이런 경로가 나오는데 메인 지도 화면에서도 구현할 수
   // 있도록해줘" — 팝업(VehicleAnalysisModal)을 열지 않아도, 라이브 차량 목록에서 "경로" 버튼으로
   // 같은 실제 GPS 이동 경로를 메인 지도에 바로 겹쳐 볼 수 있게 합니다. 한 번에 한 대만 표시합니다
@@ -1208,7 +1210,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     let toastTimer: number | undefined;
     const load = async () => {
       try {
-        const params = new URLSearchParams({ completions: "true", date: localDateKey() });
+        const params = new URLSearchParams({ completions: "true", date: getTmsServiceDateKey() });
         if (churnRiskCompanyId) params.set("companyId", churnRiskCompanyId);
         const response = await fetchWithTimeout(`/api/staff/location?${params.toString()}`, { cache: "no-store" }, 8000);
         const payload = (await response.json().catch(() => null)) as { completions?: DeliveryCompletionEvent[]; error?: string; locations?: StaffVehicleLocation[] } | null;
@@ -1289,7 +1291,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [liveVehicleLocations]);
   const openVehicleAnalysis = useCallback(
-    async (vehicle: StaffVehicleLocation, date = localDateKey()) => {
+    async (vehicle: StaffVehicleLocation, date = getTmsServiceDateKey()) => {
       setVehicleAnalysisDate(date);
       setVehicleAnalysis({ completions: [], events: [], error: "", loading: true, vehicle });
       try {
@@ -2293,15 +2295,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 2026-09-07 피드백("접속하면 아래에서 팝업이 뜨거나, 접속하는 화면이 조금 강하게
         // 보여졌으면 좋겠어"): 직원이 새로 접속(위치 보고 시작)하면 화면 하단 중앙에 눈에 띄는
         // 배너를 몇 초간 띄웁니다. 새로고침 없이도 바로 알 수 있도록 8초 폴링과 함께 동작합니다.
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(5,150,105,0.35)]">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-            </span>
-            {justConnectedVehicle.label} 기사님이 접속했습니다
-          </div>
-        </div>
+        <MapVehicleConnectionToast driverLabel={justConnectedVehicle.label} />
       ) : null}
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         {sourceReady ? null : (
@@ -6253,7 +6247,7 @@ function VehicleAnalysisModal({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <input aria-label="운행 기록 날짜" className="h-9 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" max={localDateKey()} onChange={(event) => onDateChange(event.target.value)} type="date" value={date} />
+            <input aria-label="운행 기록 날짜" className="h-9 rounded-md border border-slate-200 px-2 text-xs font-black text-slate-700" max={getTmsServiceDateKey()} onChange={(event) => onDateChange(event.target.value)} type="date" value={date} />
             <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onOpenHistory} type="button">전체 기간 기록</button>
             <button className="maju-button-secondary h-9 px-3 text-xs" onClick={onClose} type="button">닫기</button>
           </div>
@@ -11433,11 +11427,4 @@ const ACCESS_METHOD_TYPE_OPTIONS: Array<{ icon: LucideIcon; label: string }> = [
 
 function getAccessMethodIcon(type?: string): LucideIcon {
   return ACCESS_METHOD_TYPE_OPTIONS.find((option) => option.label === type)?.icon || KeyRound;
-}
-
-function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
