@@ -27,6 +27,7 @@ const money = (v?: number) =>
   v == null ? "-" : `${Math.round(v).toLocaleString("ko-KR")}원`;
 const margin = productCatalogMargin;
 type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo";
+type SideTab = "category" | "supplier" | "maju-category";
 export function ProductCatalogAdmin({
   categoriesEnabled = false,
   companyId = "",
@@ -42,7 +43,7 @@ export function ProductCatalogAdmin({
     [active, setActive] = useState<"all" | "active" | "inactive">("active"),
     [mapped, setMapped] = useState<"all" | "mapped" | "unmapped">("all"),
     [view, setView] = useState<View>("all"),
-    [sideTab, setSideTab] = useState<"category" | "supplier">("category"),
+    [sideTab, setSideTab] = useState<SideTab>("category"),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null);
@@ -98,7 +99,11 @@ export function ProductCatalogAdmin({
   const sideItems = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of items) {
-      const names = sideTab === "category" ? [item.category || "미분류"] : item.supplierNames?.length ? item.supplierNames : ["매입처 없음"];
+      const names = sideTab === "category"
+        ? [item.category || "미분류"]
+        : sideTab === "supplier"
+          ? item.supplierNames?.length ? item.supplierNames : ["매입처 없음"]
+          : ["공통 카테고리 미연결"];
       for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
     }
     return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
@@ -124,11 +129,13 @@ export function ProductCatalogAdmin({
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
-        <div className="grid grid-cols-2 border-b p-2">
+        <div className={`grid border-b p-2 ${categoriesEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
           <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("category")} type="button">구분</button>
           <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("supplier")} type="button">매입처</button>
+          {categoriesEnabled ? <button className={`rounded-lg px-2 py-2 text-xs font-bold ${sideTab === "maju-category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("maju-category")} type="button">마주 공통 카테고리</button> : null}
         </div>
         {sideTab === "category" && !categoriesEnabled ? <p className="border-b bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">트리 편집 OFF · SQL 승인 대기</p> : null}
+        {sideTab === "maju-category" ? <p className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600">CategoryMatch 연결 전 상품은 미연결로 모아 봅니다. 연결 편집은 SQL 승인 후 제공합니다.</p> : null}
         <div className="max-h-[70vh] overflow-y-auto p-2">{sideItems.map((item) => <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50" key={item.name}><span className="truncate font-semibold">{item.name}</span><span className="text-xs text-slate-500">{item.count}</span></div>)}</div>
       </aside>
       <div className="min-w-0 space-y-4">
