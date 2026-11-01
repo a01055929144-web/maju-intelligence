@@ -85,6 +85,13 @@ describe("organization data exposure policy", () => {
     expect(source).toContain("driverName: isScopedStaffView");
   });
 
+  it("does not expose database location errors or coordinates to mobile staff", () => {
+    const source = readFileSync(resolve(process.cwd(), "app/api/staff/location/route.ts"), "utf8");
+    const postHandler = source.slice(source.indexOf("export async function POST"));
+    expect(postHandler).not.toContain("error.message");
+    expect(postHandler).toContain("잠시 후 다시 시도해 주세요.");
+  });
+
   it("blocks field staff from company-wide dated delivery history", () => {
     const source = readFileSync(resolve(process.cwd(), "app/api/routes/history/route.ts"), "utf8");
     expect(source).toContain("shouldScopeCustomerData(scope.customerSession)");

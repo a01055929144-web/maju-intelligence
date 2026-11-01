@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateStaffLocation, getStaffLocationDisplayState, getStaffLocationPostIntervalMs, getStaffLocationVisibilityCutoff, resolveStaffLocationPersistence, shouldExposeOperationalLocation, shouldStoreStaffLocationHistory, STAFF_LOCATION_VISIBILITY_HOURS } from "../lib/staff-location";
+import { evaluateStaffLocation, getStaffLocationDisplayState, getStaffLocationPostIntervalMs, getStaffLocationVisibilityCutoff, resolveStaffLocationPersistence, resolveStaffWorkWindow, shouldExposeOperationalLocation, shouldStoreStaffLocationHistory, STAFF_LOCATION_VISIBILITY_HOURS } from "../lib/staff-location";
 
 describe("staff live-location visibility", () => {
   it("keeps the live snapshot window separate from long-term GPS history", () => {
@@ -20,6 +20,45 @@ describe("staff live-location visibility", () => {
 
   it("does not expose an inactive driver's location", () => {
     expect(shouldExposeOperationalLocation({ currentCustomerId: "customer-1", memberActive: false, userActive: true })).toBe(false);
+  });
+});
+
+describe("staff work window", () => {
+  const now = Date.parse("2026-11-02T00:00:00.000Z");
+
+  it("starts legacy active devices with a complete 12-hour window", () => {
+    expect(resolveStaffWorkWindow(true, {}, now)).toEqual({
+      work_started_at: "2026-11-02T00:00:00.000Z",
+      work_ended_at: null,
+      work_auto_ends_at: "2026-11-02T12:00:00.000Z"
+    });
+  });
+
+  it("does not extend an existing work window on every location ping", () => {
+    expect(resolveStaffWorkWindow(true, {
+      startedAt: "2026-11-01T22:52:34.000Z",
+      autoEndsAt: "2026-11-02T10:52:34.000Z"
+    }, now)).toEqual({});
+  });
+
+  it("starts a new window after manual or automatic work end", () => {
+    for (const existing of [
+      { startedAt: "2026-11-01T00:00:00.000Z", endedAt: "2026-11-01T08:00:00.000Z", autoEndsAt: null },
+      { startedAt: "2026-11-01T00:00:00.000Z", endedAt: null, autoEndsAt: "2026-11-01T12:00:00.000Z" }
+    ]) {
+      expect(resolveStaffWorkWindow(true, existing, now)).toMatchObject({
+        work_started_at: "2026-11-02T00:00:00.000Z",
+        work_ended_at: null,
+        work_auto_ends_at: "2026-11-02T12:00:00.000Z"
+      });
+    }
+  });
+
+  it("ends work without creating an invalid automatic window", () => {
+    expect(resolveStaffWorkWindow(false, {}, now)).toEqual({
+      work_ended_at: "2026-11-02T00:00:00.000Z",
+      work_auto_ends_at: null
+    });
   });
 });
 

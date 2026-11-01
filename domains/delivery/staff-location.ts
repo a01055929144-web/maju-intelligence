@@ -6,6 +6,24 @@ export const STAFF_LOCATION_MAX_SPEED_KPH = 150;
 export type StaffLocationDisplayState = "realtime" | "delayed" | "last_operation";
 export type StaffLocationPoint = { accuracyMeters?: number; lat: number; lng: number; recordedAt: string };
 export type StaffLocationDecision = { accept: boolean; distanceMeters: number; reason?: "inaccurate" | "stationary" | "too_fast" | "older"; speedKph?: number };
+export type StaffWorkWindow = { work_started_at?: string; work_ended_at?: string | null; work_auto_ends_at?: string | null };
+
+export function resolveStaffWorkWindow(
+  active: boolean | undefined,
+  existing: { autoEndsAt?: string | null; endedAt?: string | null; startedAt?: string | null },
+  nowMs: number
+): StaffWorkWindow {
+  if (active === undefined) return {};
+  const now = new Date(nowMs).toISOString();
+  if (!active) return { work_ended_at: now, work_auto_ends_at: null };
+  const autoEndsAt = existing.autoEndsAt ? new Date(existing.autoEndsAt).getTime() : Number.NaN;
+  if (existing.startedAt && !existing.endedAt && Number.isFinite(autoEndsAt) && autoEndsAt > nowMs) return {};
+  return {
+    work_started_at: now,
+    work_ended_at: null,
+    work_auto_ends_at: new Date(nowMs + 12 * 60 * 60 * 1000).toISOString()
+  };
+}
 
 export function evaluateStaffLocation(next: StaffLocationPoint, previous?: StaffLocationPoint): StaffLocationDecision {
   const accuracy = Number(next.accuracyMeters || 0);
