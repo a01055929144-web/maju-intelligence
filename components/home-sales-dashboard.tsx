@@ -30,6 +30,24 @@ export function HomeSalesDashboard({ delivery, summary }: { delivery: DeliverySu
         </div>
       </header>
 
+      <section className="grid gap-3 sm:grid-cols-2" aria-label="리드 현황">
+        <Link className="rounded-2xl bg-violet-700 p-5 text-white shadow-sm transition hover:bg-violet-800" href="/leads?type=permit">
+          <p className="text-sm font-semibold text-violet-100">신규 리드 · 최근 7일</p>
+          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.newThisWeek}곳</p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">새로 들어온 매장 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
+        </Link>
+        <Link className="rounded-2xl bg-teal-800 p-5 text-white shadow-sm transition hover:bg-teal-900" href="/leads?type=keyword">
+          <p className="text-sm font-semibold text-teal-100">영업 리드</p>
+          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.sales}곳</p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">영업 후보 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
+        </Link>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <LeadPreviewList empty="최근 들어온 리드가 없습니다." items={summary.leadPreviews.newest} title="새로 들어옴" type="permit" />
+        <LeadPreviewList empty="확인할 영업 리드가 없습니다." items={summary.leadPreviews.highInterest} title="관심 높음" type="keyword" />
+      </div>
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="오늘 할 일 요약">
         {taskMeta.map(({ description, href, icon: Icon, key, label }) => (
           <Link className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md" href={href} key={key}>
@@ -64,5 +82,21 @@ export function HomeSalesDashboard({ delivery, summary }: { delivery: DeliverySu
         <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-900" href="/routes/today">오늘 코스 보기 <ArrowRight className="h-4 w-4" /></Link>
       </section>
     </div>
+  );
+}
+
+function LeadPreviewList({ empty, items, title, type }: { empty: string; items: SalesHomeSummary["leadPreviews"]["newest"]; title: string; type: "keyword" | "permit" }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between"><h2 className="text-base font-bold">{title}</h2><span className="text-xs font-semibold text-slate-400">최대 3곳</span></div>
+      {items.length ? <ul className="mt-3 divide-y divide-slate-100">{items.map((lead) => (
+        <li key={lead.id}>
+          <Link className="flex min-h-14 items-center justify-between gap-3 py-2 text-sm transition hover:text-teal-700" href={`/leads?type=${type}&lead=${encodeURIComponent(lead.id)}`}>
+            <span className="min-w-0"><strong className="block truncate text-slate-900">{lead.businessName}</strong><span className="text-xs text-slate-500">{lead.status}</span></span>
+            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{lead.scoreTotal}점</span>
+          </Link>
+        </li>
+      ))}</ul> : <p className="mt-3 rounded-xl bg-slate-50 px-3 py-4 text-sm text-slate-500">{empty}</p>}
+    </section>
   );
 }

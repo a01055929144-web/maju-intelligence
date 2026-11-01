@@ -129,6 +129,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           holdModulesEnabled={showHoldModules}
           initialView={initialView}
           initialLeadId={params.lead}
+          initialLeadType={params.type === "keyword" ? "sales" : "new"}
           initialCustomerId={params.customer}
           leadDetailMode={params.detailMode === "page" ? "page" : "drawer"}
           canManageStaff={canManageStaff}

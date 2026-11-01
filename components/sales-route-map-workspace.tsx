@@ -357,6 +357,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly holdModulesEnabled?: boolean;
   readonly initialCustomerId?: string;
   readonly initialLeadId?: string;
+  readonly initialLeadType?: PermitLeadType;
   readonly leadDetailMode?: "drawer" | "page";
   /** 2026-08-24 피드백: "전반적으로 속도가 더뎌" — 서버 컴포넌트가 이미 계산한 이탈 위험 거래처
    * 목록을 그대로 내려받아, ChurnRiskAlert가 마운트되자마자 같은 데이터를 다시 fetch하는 중복
@@ -470,7 +471,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -675,7 +676,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapLeadStageFilter, setMapLeadStageFilter] = useState("");
   const [mapLeadAreaRange, setMapLeadAreaRange] = useState<StoreAreaRange | "">("");
   const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
-  const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>("new");
+  const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>(initialLeadType);
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에

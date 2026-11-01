@@ -20,4 +20,18 @@ describe("sales home summary", () => {
     expect(summary.totals.contactedThisMonth).toBe(1);
     expect(summary.tasks.smsReady).toBe(0);
   });
+
+  it("builds the seven-day lead overview and three-item previews", () => {
+    const leads = [
+      { ...baseLead, businessName: "오늘 매장", createdAt: "2026-10-25T00:00:00Z", id: "today", scoreTotal: 75 },
+      { ...baseLead, businessName: "관심 매장", createdAt: "2026-10-10T00:00:00Z", id: "hot", scoreTotal: 95 },
+      { ...baseLead, businessName: "보통 매장", createdAt: "2026-10-09T00:00:00Z", id: "warm", scoreTotal: 60 },
+      { ...baseLead, businessName: "낮은 매장", createdAt: "2026-10-08T00:00:00Z", id: "cold", scoreTotal: 20 }
+    ] satisfies PermitLeadItem[];
+    const summary = buildSalesHomeSummary(leads, [], new Date("2026-10-25T10:00:00+09:00"));
+
+    expect(summary.leadOverview).toEqual({ newThisWeek: 1, sales: 3 });
+    expect(summary.leadPreviews.newest.map((lead) => lead.id)).toEqual(["today"]);
+    expect(summary.leadPreviews.highInterest.map((lead) => lead.id)).toEqual(["hot", "warm", "cold"]);
+  });
 });
