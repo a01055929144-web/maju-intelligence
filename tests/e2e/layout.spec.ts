@@ -64,6 +64,21 @@ for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 }
 ]) {
+  test(`WO-25 import row editor stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport });
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/import-row-editor/preview", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByText("가져오기 값 확인")).toBeVisible();
+      await expect(page.getByText("원본: 1kg").filter({ visible: true }).first()).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`wo-25-import-row-editor-${viewport.width}.png`), fullPage: true });
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   test(`WO-21 role settings stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
     const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport });
     try {
