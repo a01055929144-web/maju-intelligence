@@ -273,17 +273,26 @@ function Editor({
     }
   }
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-0 sm:p-4">
       <form
-        className="h-full w-full max-w-[440px] overflow-y-auto bg-white shadow-2xl"
+        aria-labelledby="product-editor-title"
+        aria-modal="true"
+        className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100vh-2rem)] sm:max-w-[920px] sm:rounded-2xl"
+        role="dialog"
+        onKeyDown={(event) => {
+          if (event.ctrlKey && event.key === "Enter") {
+            event.preventDefault();
+            void save(false);
+          }
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           void save(false);
         }}
       >
-        <header className="sticky top-0 flex items-center justify-between border-b bg-white px-5 py-4">
+        <header className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-4">
           <div>
-            <h2 className="text-lg font-black">
+            <h2 className="text-lg font-black" id="product-editor-title">
               {d.id ? "상품 편집" : "상품 등록"}
             </h2>
             {d.productCode ? (
@@ -296,11 +305,12 @@ function Editor({
               </p>
             )}
           </div>
-          <button type="button" onClick={onClose}>
+          <button aria-label="상품 편집 닫기" type="button" onClick={onClose}>
             <X />
           </button>
         </header>
-        <div className="grid gap-4 p-5">
+        <div className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <h3 className="border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">기본</h3>
           <Field label="노출명 *">
             <input
               className="maju-input w-full"
@@ -318,6 +328,7 @@ function Editor({
           <Field label="바코드">
             <input className="maju-input w-full" value={d.barcodes?.[0] || ""} onChange={(e) => put("barcodes", e.target.value ? [e.target.value] : [])} />
           </Field>
+          <h3 className="mt-2 border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">분류 · 매입처 · 보관</h3>
           <Field label="분류">
             <input
               className="maju-input w-full"
@@ -403,6 +414,7 @@ function Editor({
               }
             />
           </Field>
+          <h3 className="mt-2 border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">가격</h3>
           <Field label="매입가 *">
             <input className="maju-input w-full" min="0" required type="number" value={d.purchasePrice} onChange={(e) => put("purchasePrice", Number(e.target.value) || 0)} />
           </Field>
@@ -441,12 +453,12 @@ function Editor({
             </select>
           </Field>
           {error ? (
-            <p className="text-sm font-semibold text-rose-700">
+            <p className="text-sm font-semibold text-rose-700 sm:col-span-2 lg:col-span-4" role="alert">
               {error}
             </p>
           ) : null}
         </div>
-        <footer className="flex justify-end gap-2 border-t p-4">
+        <footer className="flex shrink-0 justify-end gap-2 border-t bg-white p-4">
           <button
             className="maju-button-secondary"
             type="button"
@@ -455,7 +467,7 @@ function Editor({
             취소
           </button>
           {!d.id ? <button className="maju-button-secondary" disabled={saving} onClick={(event) => { event.preventDefault(); void save(true); }} type="button">저장하고 새로</button> : null}
-          <button className="maju-button-primary" disabled={saving}>
+          <button className="maju-button-primary" disabled={saving} title="Ctrl+Enter">
             {saving ? "저장 중…" : "저장"}
           </button>
         </footer>
