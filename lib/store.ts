@@ -11645,6 +11645,35 @@ export async function enrichAllCompaniesLeadsMissingContactInfo(): Promise<LeadC
   );
 }
 
+async function ensurePermitLeadConversionAction(
+  companyId: string,
+  leadId: string,
+  customerId: string,
+  actorName?: string
+): Promise<void> {
+  const existing = await supabaseRequest<Array<{ id: string }>>(
+    `lead_actions?select=id&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&action_type=eq.convert&limit=1`
+  );
+  if (existing[0]?.id) return;
+
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "convert",
+      result: "거래처 전환",
+      actor_name: actorName || null,
+      metadata: {
+        customer_id: customerId,
+        event_type: "lead_customer_conversion"
+      }
+    })
+  });
+  if (!rows[0]?.id) throw new Error("거래처 전환 이력 저장을 확인하지 못했습니다.");
+}
+
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */
 export async function convertPermitLeadToCustomer(
   companyId: string,
@@ -11702,6 +11731,12 @@ export async function convertPermitLeadToCustomer(
         updated_at: new Date().toISOString()
       })
     });
+    await ensurePermitLeadConversionAction(
+      companyId,
+      leadId,
+      duplicateMatch.customerId,
+      auditContext.actorName
+    );
     return {
       ok: true,
       customerId: duplicateMatch.customerId,
@@ -11755,17 +11790,7 @@ export async function convertPermitLeadToCustomer(
     }
   );
 
-  await supabaseRequest("lead_actions", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      company_id: companyId,
-      lead_id: leadId,
-      action_type: "convert",
-      result: "거래처 전환",
-      actor_name: auditContext.actorName || null
-    })
-  }).catch(() => null);
+  await ensurePermitLeadConversionAction(companyId, leadId, created.customer.id, auditContext.actorName);
 
   let pricingResult = { pricingAppliedCount: 0, pricingFailedCount: 0 };
   try {
