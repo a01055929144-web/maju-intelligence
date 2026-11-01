@@ -158,7 +158,7 @@ function SidebarLink({ collapsed, href, item, onClick, selected, variant }: { re
   );
 }
 
-function isItemSelected(item: AppSidebarItem, pathname: string | null, currentSearch: string, activeFallback?: string) {
+function isItemSelected(item: AppSidebarItem, pathname: string | null, currentSearch: string, activeFallback?: string): boolean {
   if (item.children?.length) return item.children.some((child) => isItemSelected(child, pathname, currentSearch, activeFallback));
   if (!pathname) return activeFallback === item.active;
   const [hrefWithoutHash] = item.href.split("#");
