@@ -8345,6 +8345,7 @@ type PermitLeadRow = {
   industry_tags: string[] | null;
   is_target_industry: boolean;
   matched_customer_id: string | null;
+  matched_customer_method?: string | null;
   is_duplicate: boolean;
   status: string;
   next_action: string | null;
@@ -11645,6 +11646,63 @@ export async function enrichAllCompaniesLeadsMissingContactInfo(): Promise<LeadC
   );
 }
 
+async function ensurePermitLeadConversionAction(
+  companyId: string,
+  leadId: string,
+  customerId: string,
+  actorName?: string
+): Promise<void> {
+  const existing = await supabaseRequest<Array<{ id: string; metadata: Record<string, unknown> | null }>>(
+    `lead_actions?select=id,metadata&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(leadId)}&action_type=eq.convert&limit=1`
+  );
+  if (existing[0]?.id) {
+    const recordedCustomerId = String(existing[0].metadata?.customer_id || "");
+    if (recordedCustomerId && recordedCustomerId !== customerId) {
+      throw new Error("리드 연결 거래처와 기존 전환 이력의 거래처가 일치하지 않습니다.");
+    }
+    return;
+  }
+
+  const rows = await supabaseRequest<Array<{ id: string }>>("lead_actions?select=id", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      company_id: companyId,
+      lead_id: leadId,
+      action_type: "convert",
+      result: "거래처 전환",
+      actor_name: actorName || null,
+      metadata: {
+        customer_id: customerId,
+        event_type: "lead_customer_conversion"
+      }
+    })
+  });
+  if (!rows[0]?.id) throw new Error("거래처 전환 이력 저장을 확인하지 못했습니다.");
+}
+
+async function completePermitLeadConversionAfterLink(
+  companyId: string,
+  leadId: string,
+  customerId: string,
+  actorName?: string
+): Promise<{ message?: string; pricingAppliedCount: number; pricingFailedCount: number }> {
+  await ensurePermitLeadConversionAction(companyId, leadId, customerId, actorName);
+
+  let pricingResult = { pricingAppliedCount: 0, pricingFailedCount: 0 };
+  try {
+    pricingResult = await applyAcceptedLeadQuotesAfterCustomerConversion(companyId, leadId, customerId, actorName);
+  } catch (error) {
+    console.error("accepted quote lookup failed after customer conversion", error);
+    pricingResult.pricingFailedCount = 1;
+  }
+
+  const message = pricingResult.pricingFailedCount
+    ? `수락된 견적 ${pricingResult.pricingFailedCount}건의 계약 단가를 반영하지 못했습니다. 영업관리의 견적 원장 또는 거래처 상세의 계약 단가에서 다시 반영해 주세요.`
+    : undefined;
+  return { message, ...pricingResult };
+}
+
 /** 신규 리드를 실제 거래처 원장(normalized_customers)으로 전환합니다. */
 export async function convertPermitLeadToCustomer(
   companyId: string,
@@ -11666,6 +11724,32 @@ export async function convertPermitLeadToCustomer(
   ).catch(() => []);
   const lead = rows[0];
   if (!lead) return { ok: false, message: "리드를 찾을 수 없습니다." };
+
+  // 고객 생성·lead 연결 뒤 convert 이력 저장이 실패한 재시도라면, 전체 고객을 다시 매칭하지 않고
+  // 이미 회사 범위로 저장된 정확한 연결 ID부터 복구합니다. 이 경로도 견적 후처리를 다시 실행합니다.
+  if (lead.matched_customer_id && lead.matched_customer_method === "conversion") {
+    const linkedCustomers = await supabaseRequest<Array<{ id: string; customer_name: string }>>(
+      `normalized_customers?select=id,customer_name&id=eq.${encodeURIComponent(lead.matched_customer_id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    ).catch(() => []);
+    const linkedCustomer = linkedCustomers[0];
+    if (!linkedCustomer) {
+      return { ok: false, message: "연결된 거래처를 같은 회사에서 찾을 수 없습니다." };
+    }
+    const completion = await completePermitLeadConversionAfterLink(
+      companyId,
+      leadId,
+      linkedCustomer.id,
+      auditContext.actorName
+    );
+    return {
+      ok: true,
+      customerId: linkedCustomer.id,
+      existingCustomer: true,
+      message: completion.message || `${linkedCustomer.customer_name} 연결을 이어서 완료했습니다.`,
+      pricingAppliedCount: completion.pricingAppliedCount,
+      pricingFailedCount: completion.pricingFailedCount
+    };
+  }
 
   // 수집 이후 거래처가 새로 등록됐을 수 있으므로 전환 직전에 동일한 규칙으로 다시 검사합니다.
   const customerRows = await supabaseRequest<
@@ -11702,11 +11786,19 @@ export async function convertPermitLeadToCustomer(
         updated_at: new Date().toISOString()
       })
     });
+    const completion = await completePermitLeadConversionAfterLink(
+      companyId,
+      leadId,
+      duplicateMatch.customerId,
+      auditContext.actorName
+    );
     return {
       ok: true,
       customerId: duplicateMatch.customerId,
       existingCustomer: true,
-      message: `${duplicateMatch.customerName} 기존 거래처와 연결했습니다. (${duplicateMatch.reason})`
+      message: completion.message || `${duplicateMatch.customerName} 기존 거래처와 연결했습니다. (${duplicateMatch.reason})`,
+      pricingAppliedCount: completion.pricingAppliedCount,
+      pricingFailedCount: completion.pricingFailedCount
     };
   }
 
@@ -11755,35 +11847,13 @@ export async function convertPermitLeadToCustomer(
     }
   );
 
-  await supabaseRequest("lead_actions", {
-    method: "POST",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      company_id: companyId,
-      lead_id: leadId,
-      action_type: "convert",
-      result: "거래처 전환",
-      actor_name: auditContext.actorName || null
-    })
-  }).catch(() => null);
-
-  let pricingResult = { pricingAppliedCount: 0, pricingFailedCount: 0 };
-  try {
-    pricingResult = await applyAcceptedLeadQuotesAfterCustomerConversion(
-      companyId,
-      leadId,
-      created.customer.id,
-      auditContext.actorName
-    );
-  } catch (error) {
-    console.error("accepted quote lookup failed after customer conversion", error);
-    pricingResult.pricingFailedCount = 1;
-  }
-
-  const message = pricingResult.pricingFailedCount
-    ? `수락된 견적 ${pricingResult.pricingFailedCount}건의 계약 단가를 반영하지 못했습니다. 영업관리의 견적 원장 또는 거래처 상세의 계약 단가에서 다시 반영해 주세요.`
-    : undefined;
-  return { ok: true, customerId: created.customer.id, message, ...pricingResult };
+  const completion = await completePermitLeadConversionAfterLink(
+    companyId,
+    leadId,
+    created.customer.id,
+    auditContext.actorName
+  );
+  return { ok: true, customerId: created.customer.id, ...completion };
 }
 
 export async function getPermitLeadConversionPreview(companyId: string, leadId: string) {
