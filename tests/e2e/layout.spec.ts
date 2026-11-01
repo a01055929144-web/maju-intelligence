@@ -64,6 +64,19 @@ for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 }
 ]) {
+  test(`WO-25 base price import mapping stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport });
+    try {
+      const page = await context.newPage();
+      const response = await page.goto("/base-price-import/preview", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByText("기준 단가 열 맞추기")).toBeVisible();
+      await expect(page.getByText("깐양파 10kg").filter({ visible: true }).first()).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`wo-25-base-price-import-${viewport.width}.png`), fullPage: true });
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally { await context.close(); }
+  });
+
   test(`WO-25 import row editor stays responsive at ${viewport.width}px`, async ({ browser }, testInfo) => {
     const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport });
     try {
