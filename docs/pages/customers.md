@@ -88,5 +88,23 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 ## TODO
 - [ ] (없음, 새 요청 시 추가)
 
+## WO-25 B+ 거래처별 품목 가져오기 (2026-11-02)
+
+Owner customer, related product(read-only IDs), organization(existing capability guard).
+Allowed additions: `domains/customer/customer-item-import.ts`, `application/customer/import-customer-items.ts`,
+`lib/customer-items-import.ts`, `app/api/customers/items/import/route.ts`, `tests/customer-items-import.test.ts`,
+`docs/sql-drafts/20261102-WO-25-customer-items*.sql`, `.github/workflows/ci.yml` PG17 step.
+UI and existing import endpoints are unchanged. POST body is `{rows:[{customerId,productId,salesUnit,lastPrice,lastDate,taxType,priceIncludesTax}]}`.
+Only resolved existing IDs are accepted; no name-based automatic creation/matching. Known tax requires explicit inclusion boolean; unknown tax requires null.
+`CUSTOMER_ITEMS_IMPORT_ENABLED` defaults OFF; OFF returns 404 before auth/SQL.
+When enabled, existing company allowlist and `manage_sales` capability are required. Customer company comes from session;
+admins select company in query. Body scope/unknown fields rejected. One request supports 1–1000 rows and at most 512KB.
+Historical actual sales prices are stored separately by customer/product/sales unit. Newer dates replace older dates;
+identical retries skip, same-date disagreements reject the entire batch. Date is KST, no future dates.
+No changes to base prices, fixed agreements, vouchers, balances, public link exposure or pricing resolver.
+SQL/down are drafts only, production unapplied. Down requires flag OFF and export/approval before dropping imported data;
+it preserves existing parent tables and composite keys. This is schema rollback, not per-file import undo.
+The shared import job/raw-row audit and UI/undo connection remain with the import workflow owner and are not claimed complete here.
+
 ## KNOWN ISSUES
 - **거래처 0건 표시 버그 — 원인 확정 및 수정 완료(2026-09-11, Claude 분석+구현)**: 실제 companyId 불일치로 0건이 조회되는 것이 아니라, `app/crm/timeline/page.tsx`의 `/api/customers` 호출부가 "API 실패"와 "진짜 0건"을 구분하지 않고 둘 다 동일하게 `customers=[]`로 접어버리는 것이 원인이었다. 실패 경로 3가지: (1) admin 프리뷰 모드는 세션 쿠키 없이 URL의 `?companyId=` 쿼리 하나로만 테넌트를 구분하는데(`lib/auth.ts` `getRequestAuthScope` admin 분기), 이 파라미터가 없으면 API가 401을 반환 (2) `app/api/customers/route.ts` GET에 try/catch가 없어서 `lib/store.ts`의 `getCustomerMaster`가 컬럼 누락이 아닌 다른 이유(네트워크 순단, Supabase 일시 오류 등)로 던지는 예외가 그대로 500으로 노출 (3) `fetchWithTimeout`의 12초 타임아웃 초과. 세 경우 모두 프런트에서 `response.ok`만 보고 `payload=null` → `customers=[]`로 귀결되어 실제 데이터가 있는 회사도 화면엔 "거래처 원장 비어 있음/미연결"과 동일하게 0건으로 보였다. **수정**: `route.ts` GET을 try/catch로 감싸 실패 시 `{source:"error", message}`를 502로 명시적으로 반환하도록 하고, `page.tsx`는 목록 fetch를 재사용 가능한 `loadCustomers()`로 리팩터링해 API 실패 시 재시도 버튼이 있는 빨간 에러 배너(`CustomerLoadErrorBanner`)를 띄우며, 상태 스트립/빈 목록 문구도 "불러오기 실패"로 정확히 구분해 표시하도록 변경. 상세 분석·구현 내역은 `qa-report-customers-zero-count.md` 참고. **남은 일**: 실제 `npx tsc --noEmit` / `npm run lint` / `npm run build`는 Claude Cowork 세션에서 `npm install`이 막혀 있어 실행하지 못했으므로 사용자/Codex가 로컬에서 확인 필요.
