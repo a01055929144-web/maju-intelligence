@@ -14,6 +14,7 @@ const statusLabels = {
   fallback: "점검 필요",
   missing: "누락"
 };
+const AUDIT_QUERY_LIMIT = 50;
 const AUDIT_PAGE_SIZE = 10;
 
 function formatBytes(bytes: number) {
@@ -59,7 +60,7 @@ export default async function AdminSystemPage({
   const environmentStatus = ["missing", "optional", "ready"].includes(requestedEnvironmentStatus) ? requestedEnvironmentStatus : "";
   const [system, auditResult] = await Promise.all([
     getSystemDiagnostics(),
-    getAdminAuditLogs(undefined, 50)
+    getAdminAuditLogs(undefined, AUDIT_QUERY_LIMIT)
       .then((logs) => ({ error: "", logs }))
       .catch((error: unknown) => ({ error: error instanceof Error ? error.message : "감사 로그를 불러오지 못했습니다.", logs: [] }))
   ]);
@@ -546,11 +547,11 @@ export default async function AdminSystemPage({
                   최근 감사 로그
                 </CardTitle>
                 <p className="mt-2 text-sm font-semibold text-muted-foreground">
-                  고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
+                  최근 {AUDIT_QUERY_LIMIT}건 조회 범위에서 고객사 계정, 직원 초대, 거래처 원장, 메모, 첨부자료처럼 운영 데이터에 영향을 주는 작업을 시간순으로 확인합니다.
                 </p>
               </div>
               <Badge className={filteredAuditLogs.length ? "bg-primary/10 text-primary" : "bg-amber-100 text-amber-800"}>
-                {filteredAuditLogs.length ? `${filteredAuditLogs.length}/${auditLogs.length}건 표시` : "조건에 맞는 기록 없음"}
+                {filteredAuditLogs.length ? `${filteredAuditLogs.length}/${auditLogs.length}건 표시 · 최대 ${AUDIT_QUERY_LIMIT}건 조회` : "최근 조회 범위에서 조건에 맞는 기록 없음"}
               </Badge>
             </div>
           </CardHeader>
@@ -595,9 +596,9 @@ export default async function AdminSystemPage({
             {filteredAuditLogs.length ? (
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-3">
-                  <AuditSummaryTile label="계정/권한 작업" tone="account" value={accountAuditCount} />
-                  <AuditSummaryTile label="데이터 변경 작업" tone="data" value={dataAuditCount} />
-                  <AuditSummaryTile label="민감 변경 작업" tone="danger" value={sensitiveAuditCount} />
+                  <AuditSummaryTile label="조회 범위 · 계정/권한" tone="account" value={accountAuditCount} />
+                  <AuditSummaryTile label="조회 범위 · 데이터 변경" tone="data" value={dataAuditCount} />
+                  <AuditSummaryTile label="조회 범위 · 민감 변경" tone="danger" value={sensitiveAuditCount} />
                 </div>
 
                 <div className="overflow-hidden rounded-md border border-border">
