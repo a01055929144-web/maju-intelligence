@@ -13,7 +13,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const initialTab = params?.tab === "mapping" || params?.tab === "supplier" ? params.tab : "catalog";
+  const initialTab = params?.tab === "mapping" || params?.tab === "supplier" || params?.tab === "imports" ? params.tab : "catalog";
   const standardsView = initialTab === "mapping";
 
   return (
@@ -32,6 +32,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
         <ProductCatalogWorkspace
           categoriesEnabled={process.env.PRODUCT_CATEGORIES_ENABLED === "true"}
           companyId={isAdminPreview ? companyId : ""}
+          importAuditV2Enabled={process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"}
           initialTab={initialTab}
           tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
         />

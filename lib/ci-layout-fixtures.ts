@@ -1,5 +1,6 @@
 import type { CustomerMapSummaryItem, ManagedCompanyAccount, PermitLeadItem } from "@/lib/store";
 import type { ProductCatalogAdminItem } from "@/lib/product-catalog-admin";
+import type { ProductImportAuditItem } from "@/lib/product-catalog-import";
 
 // CI production-build screenshots need populated pages without connecting to an operating database.
 // This flag is set only by the layout-test workflow and is never exposed to the browser.
@@ -70,6 +71,13 @@ export const ciLayoutProducts: ProductCatalogAdminItem[] = Array.from(
     createdAt: `2026-10-${String(10 + (index % 18)).padStart(2, "0")}T09:00:00.000Z`,
   }),
 );
+
+export const ciLayoutProductImports: ProductImportAuditItem[] = [
+  { id: "import-1", supplierName: "한빛유통", fileName: "한빛유통_11월_단가표.xlsx", status: "completed", totalRows: 286, createdCount: 32, updatedCount: 248, excludedCount: 6, warningCount: 3, createdByName: "김관리", createdAt: "2026-11-02T00:14:00.000Z", completedAt: "2026-11-02T00:15:18.000Z" },
+  { id: "import-2", supplierName: "새봄푸드", fileName: "새봄푸드_냉동식품.csv", status: "completed", totalRows: 154, createdCount: 18, updatedCount: 134, excludedCount: 2, warningCount: 0, createdByName: "박운영", createdAt: "2026-11-01T06:22:00.000Z", completedAt: "2026-11-01T06:22:42.000Z" },
+  { id: "import-3", supplierName: "동해수산", fileName: "동해수산_단가_수정.xlsx", status: "failed", totalRows: 97, createdCount: 0, updatedCount: 0, excludedCount: 0, warningCount: 12, createdByName: "김관리", createdAt: "2026-10-31T02:08:00.000Z", errorMessage: "원가 열에서 숫자가 아닌 값이 발견되었습니다." },
+  { id: "import-4", supplierName: "우리농산", fileName: "우리농산_채소_주간.xlsx", status: "completed", totalRows: 412, createdCount: 5, updatedCount: 401, excludedCount: 6, warningCount: 1, createdByName: "이담당", createdAt: "2026-10-30T23:40:00.000Z", completedAt: "2026-10-30T23:42:11.000Z" },
+];
 
 export const ciLayoutCompany: ManagedCompanyAccount = {
   id: companyId,

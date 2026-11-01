@@ -6,6 +6,7 @@ import {
   type ParsedProduct,
 } from "../domains/product/catalog-import";
 import { supabaseRequest as db } from "./store";
+import { ciLayoutProductImports, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
 type Json = Record<string, unknown>;
 const enc = encodeURIComponent;
@@ -43,8 +44,36 @@ export type SupplierProductAdminItem = {
   suggestedRatio?: number;
   conversionConfirmed: boolean;
 };
+
+export type ProductImportAuditItem = {
+  id: string;
+  supplierName: string;
+  fileName: string;
+  status: string;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  excludedCount: number;
+  warningCount: number;
+  createdByName?: string;
+  createdAt: string;
+  completedAt?: string;
+  errorMessage?: string;
+};
+
 export async function listProductImportWorkspace(companyId: string) {
-  const [suppliers, products, matches, catalog] = await Promise.all([
+  if (isCiLayoutFixturesEnabled()) {
+    return {
+      suppliers: [
+        { id: "supplier-1", name: "한빛유통" },
+        { id: "supplier-2", name: "새봄푸드" },
+      ],
+      catalogCount: 428,
+      imports: ciLayoutProductImports,
+      items: [],
+    };
+  }
+  const [suppliers, products, matches, catalog, imports] = await Promise.all([
     db<Array<{ id: string; name: string }>>(
       `product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&order=name`,
     ),
@@ -66,6 +95,9 @@ export async function listProductImportWorkspace(companyId: string) {
     db<Array<Record<string, unknown>>>(
       `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
     ),
+    db<Array<Record<string, unknown>>>(
+      `product_catalog_imports?select=id,supplier_id,file_name,status,total_rows,created_count,updated_count,excluded_count,warning_count,created_by_name,created_at,completed_at,error_message&company_id=eq.${enc(companyId)}&order=created_at.desc&limit=1000`,
+    ).catch(() => []),
   ]);
   const supplierNames = new Map(suppliers.map((x) => [x.id, x.name]));
   const catalogNames = new Map(
@@ -82,6 +114,21 @@ export async function listProductImportWorkspace(companyId: string) {
   return {
     suppliers,
     catalogCount: catalog.length,
+    imports: imports.map((row) => ({
+      id: String(row.id),
+      supplierName: supplierNames.get(String(row.supplier_id)) || "매입처 미확인",
+      fileName: String(row.file_name || "-"),
+      status: String(row.status || "unknown"),
+      totalRows: Number(row.total_rows) || 0,
+      createdCount: Number(row.created_count) || 0,
+      updatedCount: Number(row.updated_count) || 0,
+      excludedCount: Number(row.excluded_count) || 0,
+      warningCount: Number(row.warning_count) || 0,
+      createdByName: row.created_by_name ? String(row.created_by_name) : undefined,
+      createdAt: String(row.created_at),
+      completedAt: row.completed_at ? String(row.completed_at) : undefined,
+      errorMessage: row.error_message ? String(row.error_message) : undefined,
+    }) satisfies ProductImportAuditItem),
     items: products.map((p) => {
       const m = matchMap.get(String(p.id));
       return {
