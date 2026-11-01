@@ -53,6 +53,10 @@ export function isMapFilterPersistenceEnabled(value = process.env.MAP_FILTER_PER
   return value === "true" || value === "1";
 }
 
+export function isAdminMapOverviewEnabled(value = process.env.ADMIN_MAP_OVERVIEW_ENABLED || "") {
+  return isExplicitlyEnabled(value);
+}
+
 export function getStructuredFieldRecordsEnabledCompanyIds(value = process.env.STRUCTURED_FIELD_RECORDS_ENABLED_COMPANY_IDS || "") {
   return new Set(value.split(",").map((item) => item.trim()).filter(Boolean));
 }

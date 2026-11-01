@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { AdminSession } from "@/lib/auth";
 
-type AdminNavKey = "accounts" | "billing" | "companies" | "overview" | "system" | "uploads";
+type AdminNavKey = "accounts" | "billing" | "companies" | "map" | "overview" | "system" | "uploads";
 
 type AdminPageHeaderProps = {
   readonly active: AdminNavKey;
