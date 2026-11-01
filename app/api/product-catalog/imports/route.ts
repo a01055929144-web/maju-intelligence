@@ -10,6 +10,7 @@ import type {
   CatalogMapping,
   ParsedProduct,
 } from "@/domains/product/catalog-import";
+import type { ImportPreviewRow } from "@/domains/product/import-row-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ function validateImportBody(body: {
   fileName?: string;
   supplierName?: string;
   products?: ParsedProduct[];
+  editedRows?: ImportPreviewRow[];
 }) {
   const supplierName = body.supplierName?.trim() || "";
   if (!supplierName || supplierName.length > 120)
@@ -32,6 +34,13 @@ function validateImportBody(body: {
   )
     return `한 번에 1~${MAX_PRODUCTS_PER_IMPORT.toLocaleString()}개 품목만 저장할 수 있습니다.`;
   let observationCount = 0;
+  if (body.editedRows && (
+    body.editedRows.length > body.products.length ||
+    body.editedRows.some((row) =>
+      !Number.isInteger(row.sourceRowNumber) || row.sourceRowNumber < 1 ||
+      Object.values({ ...row.originalValues, ...row.values }).some((value) => typeof value !== "string" || value.length > 500)
+    )
+  )) return "수정한 행 정보를 확인해 주세요.";
   for (const product of body.products) {
     if (
       !product.rawName?.trim() ||
@@ -122,6 +131,7 @@ export async function POST(request: NextRequest) {
     supplierProductIds?: string[];
     supplierProductId?: string;
     ratio?: number;
+    editedRows?: ImportPreviewRow[];
   };
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok)
@@ -173,6 +183,12 @@ export async function POST(request: NextRequest) {
         products: body.products,
         excludedCount: Number(body.excludedCount) || 0,
         warnings: Array.isArray(body.warnings) ? body.warnings : [],
+        editedRows:
+          process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true" &&
+          process.env.IMPORT_ROW_EDITOR_ENABLED === "true" &&
+          Array.isArray(body.editedRows)
+            ? body.editedRows
+            : undefined,
       }),
     );
   } catch (error) {
