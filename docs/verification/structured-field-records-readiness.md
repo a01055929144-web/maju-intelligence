@@ -15,6 +15,9 @@
 - 플래그 OFF에서는 요청 body를 읽거나 Supabase를 호출하지 않는다.
 - 배송 사고와 리드 견적 payload를 각각 원자 RPC 서명으로 매핑하는 단위 테스트를 준비했다.
 - RPC SQL 초안은 회사 소유권, 멱등키, 헤더+items 동시 저장, 예외 시 전체 롤백을 포함한다.
+- 배송 기록 재요청은 같은 멱등키의 기존 note/event를 그대로 반환한다. 다른 payload로 재요청해도 기존 메모·사고·품목을 갱신하지 않는다.
+- 리드 견적 멱등키는 RPC의 advisory lock뿐 아니라 `lead_actions` 부분 UNIQUE 인덱스로도 보호한다.
+- 명시적 `null` 품목 배열과 다른 회사 소속 actor ID는 쓰기 전에 거부한다.
 
 ## 현재 오류·불편 목록
 
@@ -28,8 +31,26 @@
 1. Claude 검토와 대표 승인 후 RPC 마이그레이션 적용 여부·권한을 SELECT로 확인한다.
 2. 테스트 회사 하나만 `STRUCTURED_FIELD_RECORDS_ENABLED_COMPANY_IDS`에 추가한다.
 3. 배송 사고 1건을 저장하고 동일 멱등키 재요청 시 note/event/items가 각각 1세트인지 확인한다.
+   같은 키에 다른 메모·품목을 담아 재요청해도 최초 저장 내용이 유지되는지 확인한다.
+   처리 상태를 `completed`로 저장하면 `resolved_at`이 채워지고, `received` 또는 `in_progress`이면 비어 있는지 확인한다.
 4. 앱을 닫았다 다시 열어 원인·단계·조치·품목·수량·공급처가 동일하게 복원되는지 확인한다.
 5. 견적 1건을 저장하고 동일 멱등키 재요청, 가격·유효기간·샘플 품목 복원을 확인한다.
 6. 고의로 잘못된 item을 보내 전체 저장이 롤백되는지 테스트 전용 데이터로 확인한다.
 7. 사진·카카오 공유 실패를 재현해 저장 성공과 공유 실패가 분리 안내되고 재시도 중복이 없는지 확인한다.
 8. 결과가 확인되기 전 다른 회사로 플래그를 확대하지 않는다.
+
+## 이번 초안 검증의 제한
+
+- SQL은 운영에 실행하지 않았다. `tests/sql/structured-field-record-rpc.pg16.verify.mjs`는 loopback 55432 포트와 `PG_VERIFY_CONFIRM=isolated-structured-rpc-fixture`를 모두 요구하며, 운영 연결 문자열을 거부한다.
+- 격리 DB에서 동시 재요청, 전체 롤백, 회사별 actor 경계, 함수 실행 권한, `completed`/`resolved_at` 일관성을 검증한 뒤 SQL 승인을 요청한다.
+- 정적 회귀 테스트는 함수 권한, 고정 search path, 회사 소유권, actor 소속, null 품목 거부, 영업 멱등 UNIQUE 제약을 확인한다.
+
+## 격리 PostgreSQL 16 실행 결과
+
+- 2026-10-30 KST에 PostgreSQL 16.14 Windows 바이너리와 별도 임시 데이터 디렉터리, `127.0.0.1:55432` loopback만 사용했다. 운영 Supabase 연결 문자열은 사용하지 않았다.
+- Windows 로캘의 UTF-8 `initdb`가 `invalid byte sequence 0xb9`로 실패해, 데이터 의미가 없는 fixture 전용 클러스터를 `SQL_ASCII`로 다시 초기화했다.
+- 배송·영업 각각 두 연결의 동일 멱등키 동시 호출에서 헤더와 item이 한 세트만 남고 두 응답이 같은 ID를 반환했다.
+- 잘못된 배송 item으로 실패시킨 호출은 앞서 삽입한 note/event까지 모두 롤백됐다. 명시적 `null` 견적 items도 action을 남기지 않았다.
+- `anon`과 `authenticated`의 함수 실행은 `42501`로 거부됐고, `service_role`만 fixture 권한 범위에서 실행됐다.
+- 다른 회사의 actor ID는 거부됐으며, `completed`는 `resolved_at`이 채워지고 `in_progress`는 `null`을 유지했다.
+- 출력 `structured field record RPC PG16 assertions passed`를 확인한 뒤 임시 서버와 데이터 디렉터리를 제거했다.
