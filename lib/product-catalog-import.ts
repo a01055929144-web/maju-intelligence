@@ -13,6 +13,18 @@ const chunks = <T>(rows: T[], size = 300) =>
   Array.from({ length: Math.ceil(rows.length / size) }, (_, i) =>
     rows.slice(i * size, (i + 1) * size),
   );
+const FILTER_CHUNK_SIZE = 100;
+
+async function collectInChunks<T>(
+  values: string[],
+  read: (part: string[]) => Promise<T[]>,
+) {
+  const rows: T[] = [];
+  for (const part of chunks(values, FILTER_CHUNK_SIZE)) {
+    rows.push(...(await read(part)));
+  }
+  return rows;
+}
 
 export type SupplierProductAdminItem = {
   id: string;
@@ -254,14 +266,16 @@ export async function saveProductCatalogImport(input: {
       );
     const supplierProductIds = Array.from(idByKey.values());
     const existingMatches = supplierProductIds.length
-      ? await db<
-          Array<{
-            match_status: "auto" | "candidate" | "confirmed" | "rejected";
-            product_catalog_id: string;
-            supplier_product_id: string;
-          }>
-        >(
-          `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status&company_id=eq.${enc(input.companyId)}&supplier_product_id=in.(${supplierProductIds.map(enc).join(",")})`,
+      ? await collectInChunks(supplierProductIds, (part) =>
+          db<
+            Array<{
+              match_status: "auto" | "candidate" | "confirmed" | "rejected";
+              product_catalog_id: string;
+              supplier_product_id: string;
+            }>
+          >(
+            `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status&company_id=eq.${enc(input.companyId)}&supplier_product_id=in.(${part.map(enc).join(",")})`,
+          ),
         )
       : [];
     const { protectedSupplierIds, rejectedCatalogIds, unresolvedSupplierIds } =
@@ -274,10 +288,12 @@ export async function saveProductCatalogImport(input: {
         })),
       );
     if (unresolvedSupplierIds.length) {
-      await db(
-        `supplier_product_matches?company_id=eq.${enc(input.companyId)}&supplier_product_id=in.(${unresolvedSupplierIds.map(enc).join(",")})&match_status=eq.candidate`,
-        { method: "DELETE", headers: { Prefer: "return=minimal" } },
-      );
+      for (const part of chunks(unresolvedSupplierIds, FILTER_CHUNK_SIZE)) {
+        await db(
+          `supplier_product_matches?company_id=eq.${enc(input.companyId)}&supplier_product_id=in.(${part.map(enc).join(",")})&match_status=eq.candidate`,
+          { method: "DELETE", headers: { Prefer: "return=minimal" } },
+        );
+      }
     }
     const catalog = await db<Array<Record<string, unknown>>>(
       `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,barcodes&company_id=eq.${enc(input.companyId)}&is_active=eq.true`,
@@ -376,8 +392,10 @@ export async function createCatalogFromSupplierProducts(
   ids: string[],
 ) {
   if (!ids.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
-  const products = await db<Array<Record<string, unknown>>>(
-    `supplier_products?select=*&company_id=eq.${enc(companyId)}&id=in.(${ids.map(enc).join(",")})`,
+  const products = await collectInChunks(ids, (part) =>
+    db<Array<Record<string, unknown>>>(
+      `supplier_products?select=*&company_id=eq.${enc(companyId)}&id=in.(${part.map(enc).join(",")})`,
+    ),
   );
   const sourceKeys = products.map((p) => `standard:${p.id}`);
   const existing = sourceKeys.length
