@@ -12,10 +12,10 @@ export async function GET(request: NextRequest) {
   catch (e) { return NextResponse.json({ message: e instanceof Error ? e.message : "원장을 불러오지 못했습니다." }, { status: 500 }); }
 }
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { companyId?: string; partnerType: "customer" | "supplier"; partnerId: string; entryDate: string; amount: number; paymentMethod: "cash" | "bank" | "card"; memo?: string; idempotencyKey?: string } | null;
+  const body = await request.json().catch(() => null) as { companyId?: string; partnerType: "customer" | "supplier"; partnerId: string; entryDate: string; amount: number; paymentMethod: "cash" | "bank" | "card"; memo?: string; idempotencyKey: string } | null;
   const scope = await getRequestAuthScope(request, body?.companyId); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!allowed(scope)) return NextResponse.json({ message: "입금·지급을 등록할 권한이 없습니다." }, { status: 403 });
-  if (!body) return NextResponse.json({ message: "입금·지급 정보를 확인해 주세요." }, { status: 400 });
+  if (!body || !body.idempotencyKey?.trim()) return NextResponse.json({ message: "입금·지급 정보와 재시도 키를 확인해 주세요." }, { status: 400 });
   try { return NextResponse.json({ entry: await recordPartnerPayment(scope.companyId!, body, { userId: scope.customerSession?.userId, name: scope.customerSession?.name || scope.adminSession?.name || "운영자" }) }); }
   catch (e) { return NextResponse.json({ message: e instanceof Error ? e.message : "입금·지급을 등록하지 못했습니다." }, { status: 400 }); }
 }

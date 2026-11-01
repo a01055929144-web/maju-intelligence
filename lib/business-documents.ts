@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { calculateErpTotals, type ErpTaxType } from "../domains/erp/business-document";
 import { supabaseRequest } from "./store";
 
@@ -333,9 +332,11 @@ export async function getPartnerLedger(companyId: string, input: { partnerType: 
   return { openingBalance, entries, closingBalance: runningBalance };
 }
 
-export async function recordPartnerPayment(companyId: string, input: { partnerType: "customer" | "supplier"; partnerId: string; entryDate: string; amount: number; paymentMethod: "cash" | "bank" | "card"; memo?: string; idempotencyKey?: string }, actor: ErpActor) {
+export async function recordPartnerPayment(companyId: string, input: { partnerType: "customer" | "supplier"; partnerId: string; entryDate: string; amount: number; paymentMethod: "cash" | "bank" | "card"; memo?: string; idempotencyKey: string }, actor: ErpActor) {
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("입금·지급 금액을 확인해 주세요.");
-  return supabaseRpc("record_partner_payment", { p_company_id: companyId, p_partner_type: input.partnerType, p_partner_id: input.partnerId, p_entry_date: input.entryDate, p_amount: Math.round(input.amount), p_payment_method: input.paymentMethod, p_idempotency_key: input.idempotencyKey || randomUUID(), p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_memo: input.memo?.trim() || null });
+  const idempotencyKey = input.idempotencyKey?.trim();
+  if (!idempotencyKey) throw new Error("입금·지급 재시도 키를 확인해 주세요.");
+  return supabaseRpc("record_partner_payment", { p_company_id: companyId, p_partner_type: input.partnerType, p_partner_id: input.partnerId, p_entry_date: input.entryDate, p_amount: Math.round(input.amount), p_payment_method: input.paymentMethod, p_idempotency_key: idempotencyKey, p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_memo: input.memo?.trim() || null });
 }
 
 export function toKoreanErpError(error: unknown) {

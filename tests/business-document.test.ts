@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calculateErpLine, calculateErpTotals, calculateLedgerBalance } from "../domains/erp/business-document";
 import {
   buildBusinessDocumentLineRows,
+  recordPartnerPayment,
   shouldRenumberDraftDocument,
 } from "../lib/business-documents";
 
@@ -66,5 +67,16 @@ describe("ERP 전표 금액", () => {
     expect(shouldRenumberDraftDocument({ status: "draft", documentNumber: "S-2026-000001" }, "2027-01-02")).toBe(true);
     expect(shouldRenumberDraftDocument({ status: "draft", documentNumber: "S-2026-000001" }, "2026-12-31")).toBe(false);
     expect(shouldRenumberDraftDocument({ status: "confirmed", documentNumber: "S-2026-000001" }, "2027-01-02")).toBe(false);
+  });
+
+  it("입금·지급은 호출자가 만든 안정적인 멱등키 없이는 DB에 쓰지 않는다", async () => {
+    await expect(recordPartnerPayment("company-1", {
+      partnerType: "customer",
+      partnerId: "customer-1",
+      entryDate: "2026-11-01",
+      amount: 1000,
+      paymentMethod: "bank",
+      idempotencyKey: "",
+    }, { name: "테스트" })).rejects.toThrow("입금·지급 재시도 키를 확인해 주세요.");
   });
 });
