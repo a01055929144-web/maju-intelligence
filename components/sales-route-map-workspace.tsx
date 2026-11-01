@@ -74,6 +74,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
+import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
 import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
@@ -2293,15 +2294,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 2026-09-07 피드백("접속하면 아래에서 팝업이 뜨거나, 접속하는 화면이 조금 강하게
         // 보여졌으면 좋겠어"): 직원이 새로 접속(위치 보고 시작)하면 화면 하단 중앙에 눈에 띄는
         // 배너를 몇 초간 띄웁니다. 새로고침 없이도 바로 알 수 있도록 8초 폴링과 함께 동작합니다.
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-2.5 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(5,150,105,0.35)]">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-            </span>
-            {justConnectedVehicle.label} 기사님이 접속했습니다
-          </div>
-        </div>
+        <MapVehicleConnectionToast driverLabel={justConnectedVehicle.label} />
       ) : null}
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         {sourceReady ? null : (

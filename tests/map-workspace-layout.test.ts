@@ -8,6 +8,7 @@ const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
 const mapControlsSource = readFileSync("components/map-corner-controls.tsx", "utf8");
 const mapDrawerSource = readFileSync("components/map-store-detail-drawer.tsx", "utf8");
 const mapLeadChannelsSource = readFileSync("components/map-lead-channel-icons.tsx", "utf8");
+const mapVehicleConnectionToastSource = readFileSync("components/map-vehicle-connection-toast.tsx", "utf8");
 
 describe("PC map workspace layout", () => {
   it("uses the finalized C3 labels without a duplicate map title", () => {
@@ -59,6 +60,15 @@ describe("PC map workspace layout", () => {
     expect(workspaceSource).toContain("runMapLeadStageBulk(");
     expect(workspaceSource).toContain("setSelectedLeadIds(new Set(failed.map");
     expect(workspaceSource).toContain('body: JSON.stringify({ actionType: "status", memo, result: status })');
+  });
+
+  it("announces a newly connected vehicle without moving TMS state into the toast", () => {
+    expect(workspaceSource).toContain("<MapVehicleConnectionToast driverLabel={justConnectedVehicle.label} />");
+    expect(mapVehicleConnectionToastSource).toContain('role="status"');
+    expect(mapVehicleConnectionToastSource).toContain('aria-live="polite"');
+    expect(mapVehicleConnectionToastSource).toContain('aria-atomic="true"');
+    expect(mapVehicleConnectionToastSource).not.toContain("fetch(");
+    expect(mapVehicleConnectionToastSource).not.toContain("useState(");
   });
 });
 
