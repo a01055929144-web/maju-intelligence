@@ -66,6 +66,15 @@ jobs:
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=tests/sql/wo21-login-accounts.pg17.sql
 
+      - name: Verify WO-21 role settings draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=tests/sql/wo21-role-settings.pg17.sql
+
   build:
     runs-on: ubuntu-latest
     steps:

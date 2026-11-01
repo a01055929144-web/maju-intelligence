@@ -10,6 +10,7 @@ import { isValidObservationDeviceId, shouldRefreshSessionObservation } from "../
 import { staffSessionObservationRepository } from "./store/07-session-observation";
 import type { StaffDuty } from "@/domains/organization/staff-access";
 import { accountLoginV2Enabled } from "./account-login-feature";
+import { rolePermissionsAllowCapability, type RoleGroupKey, type RolePermissionKey } from "@/domains/organization/role-settings";
 
 export type AdminSession = {
   email: string;
@@ -35,6 +36,8 @@ export type CustomerSession = {
   workspaceRole: WorkspaceRole;
   workspaceType: WorkspaceType;
   duties?: StaffDuty[];
+  rolePermissionGroup?: RoleGroupKey | null;
+  rolePermissions?: RolePermissionKey[];
   /** 기록 전용 단계의 서버 발급 세션·기기 식별자. 기능 플래그 OFF에서는 생성하지 않는다. */
   appSessionId?: string;
   observationDeviceHash?: string;
@@ -140,6 +143,8 @@ export async function getCustomerSession(options: { allowPasswordChange?: boolea
     return {
       ...session,
       duties: staffAccess.duties.length ? staffAccess.duties : session.duties,
+      rolePermissionGroup: staffAccess.rolePermissionGroup,
+      rolePermissions: staffAccess.rolePermissions,
       companyMemberId: membership.companyMemberId,
       assignedManagerName: membership.assignedManagerName,
       assignedVehicle: membership.assignedVehicle,
@@ -257,6 +262,9 @@ async function recordCustomerSessionObservation(session: CustomerSession) {
 /** Checks a customer session against the workspace capability matrix. */
 export function customerHasCapability(session: CustomerSession | null, capability: WorkspaceCapability) {
   if (!session) return false;
+  if (process.env.ROLE_PERMISSIONS_ENABLED === "true" && session.rolePermissionGroup) {
+    return rolePermissionsAllowCapability(session.rolePermissions ?? [], capability);
+  }
   return canUseWorkspaceFeature(session.workspaceRole, capability);
 }
 
