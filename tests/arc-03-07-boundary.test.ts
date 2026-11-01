@@ -6,6 +6,7 @@ const erpStore = read("lib/business-documents.ts");
 const legacyStore = read("lib/store.ts");
 const continuitySql = read("docs/sql-drafts/20261029-lead-customer-continuity.sql");
 const boundary = read("docs/specs/2026-11-01-arc-03-07-customer-ledger-boundary.md");
+const conversionFinalizeDraft = read("docs/sql-drafts/20261101-lead-customer-conversion-finalize.sql");
 
 describe("ARC-03 / ARC-07 ownership boundary", () => {
   it("keeps lead-to-customer continuity on the company-scoped matched_customer_id link", () => {
@@ -37,5 +38,14 @@ describe("ARC-03 / ARC-07 ownership boundary", () => {
   it("records the overlapping ARC-03 implementation without duplicating it", () => {
     expect(boundary).toContain("미병합 PR #109와의 관계");
     expect(boundary).toContain("#111은 해당 코드를 중복 수정하지 않는다");
+  });
+
+  it("keeps the atomic conversion proposal as a non-applying, company-scoped draft", () => {
+    expect(conversionFinalizeDraft).toContain("운영 DB 적용 금지");
+    expect(conversionFinalizeDraft).toMatch(/where lead\.company_id = p_company_id[\s\S]*for update/i);
+    expect(conversionFinalizeDraft).toMatch(/customer\.company_id = p_company_id[\s\S]*for key share/i);
+    expect(conversionFinalizeDraft).toContain("lead_already_linked_to_another_customer");
+    expect(conversionFinalizeDraft).toContain("from public, anon, authenticated");
+    expect(conversionFinalizeDraft).toMatch(/rollback;[\s\S]*재현 시나리오 A/);
   });
 });

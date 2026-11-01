@@ -36,6 +36,8 @@
 
 **미병합 PR #109와의 관계:** #109는 기존·신규 거래처 전환 모두에서 누락된 `convert` 활동을 재시도로 복구하는 ARC-03 구현을 추가한다. 이 문서의 리드/거래처 소유권과 일치하지만 같은 `convertPermitLeadToCustomer` 흐름을 다루므로, #109가 먼저 병합되면 이 문서의 “활동 INSERT” 판정은 “멱등 복구됨”으로 갱신해야 한다. 다만 customer 생성·lead 연결·활동 기록의 다중 요청과 DB 직렬화 미완료는 그대로 남는다. #111은 해당 코드를 중복 수정하지 않는다.
 
+검토 전용 `20261101-lead-customer-conversion-finalize.sql`은 그 남은 경계를 재현한다. #109의 `convert` 존재 조회와 INSERT는 별도 HTTP 요청이며 `(company_id, lead_id, action_type)` 고유 제약도 없어 동시 요청이 둘 다 0행을 읽고 중복 활동을 만들 수 있다. 또한 lead PATCH 성공 직후 action POST가 실패하면 부분 성공이 남는다. 초안 함수는 같은 lead를 `FOR UPDATE`로 직렬화하고 회사 범위 customer를 확인한 뒤 연결과 활동 INSERT를 한 transaction으로 묶는다. 운영 적용·앱 연결은 금지하며, 신규 customer 생성 중복은 customer 모듈의 별도 자연키/멱등 계약으로 남긴다.
+
 ## ARC-07 실제 규칙과 문서 충돌
 
 | 쟁점 | 오래된 문서 | 실제 코드/migration 판정 |
@@ -59,6 +61,7 @@
 
 - **ARC-03:** 전환 전체를 하나의 승인된 RPC/use-case로 묶고, 기존 거래처 연결·신규 생성·활동 기록·견적 후처리의 재시도 결과를 검증해야 한다.
 - **ARC-03 / PR #109:** #109 병합 순서에 따라 문서 판정을 재대조한다. #109의 활동 이력 복구는 수용하되, 회사 복합 FK 초안 적용이나 전환 전체 원자성 완료로 확대 해석하지 않는다.
+- **ARC-03 SQL 초안:** `finalize_lead_customer_conversion_draft`의 권한, 잠금 순서, 3초 lock timeout, 동시 호출 결과를 임시 PostgreSQL에서 검증한 뒤에만 migration 승격을 검토한다. 현재 파일은 `rollback`으로 끝나는 비적용 초안이다.
 - **ARC-07:** `save_business_document_draft` 또는 동등한 신규 생성 RPC 초안이 필요하다. 헤더·번호·상대방 스냅샷·라인을 한 transaction에서 만들고 source idempotency를 강제해야 한다.
 - **ARC-07:** v2의 발행 전표 수정·삭제를 UI에서 어디까지 허용할지 제품/회계 승인이 필요하다. 세금계산서 잠금 전이라도 권한·사유·감사 event를 검증해야 한다.
 - **ARC-06/07:** 주문 확정의 안정 ID, 전표 `source_type/source_key`, 재시도 멱등 계약이 승인되기 전 주문→전표 자동 생성은 OFF다.
