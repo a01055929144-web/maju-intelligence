@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { salesWorkspaceNavItems } from "../components/sales-workspace-nav";
+import { salesWorkspaceNavItems } from "../components/sales-workspace-nav-items";
 import { isHoldModulePath } from "../lib/feature-modules";
 
 describe("영업 관리 탭", () => {
