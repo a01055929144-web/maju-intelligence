@@ -1,6 +1,8 @@
 -- LOCAL ISOLATED PG17 ONLY. Requires #180's synthetic pg17.test.sql fixtures.
 -- Requires the review-hold proposal applied in an isolated database; never run in production.
 begin;
+-- The original #180 synthetic fixture predates the existing canonical-lead column.
+alter table business_permit_leads add column if not exists merged_into_lead_id uuid;
 insert into business_permit_leads(id,company_id,business_name,matched_customer_id)
 values('20000000-0000-4000-8000-000000000090','00000000-0000-4000-8000-000000000001','mismatched synthetic lead','10000000-0000-4000-8000-000000000001');
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content)
@@ -84,15 +86,52 @@ end $$;
 insert into normalized_customers(id,company_id,import_id,customer_name,address,phone,normalized_key) values
 ('10000000-0000-4000-8000-000000000091','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','ambiguous target','local target','01077778888','hold-test-customer-1'),
 ('10000000-0000-4000-8000-000000000092','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','ambiguous target','local target','01077778888','hold-test-customer-2');
-do $$ declare held jsonb; customer_count integer; agreement_count integer; begin
+do $$ declare held jsonb; customer_count integer; agreement_count integer; lead_count integer; import_count integer; begin
   select count(*) into customer_count from normalized_customers;
   select count(*) into agreement_count from customer_price_agreements;
+  select count(*) into lead_count from business_permit_leads;
+  select count(*) into import_count from customer_imports;
   held:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000090',
-    '70000000-0000-4000-8000-000000000094',repeat('b',64),'staff',null,'20000000-0000-4000-8000-000000000001',null,false,null,null,'{"businessName":"ambiguous target","phone":"01077778888","address":"local target"}');
+    '70000000-0000-4000-8000-000000000094',repeat('b',64),'staff',null,null,null,false,null,null,'{"businessName":"ambiguous target","phone":"01077778888","address":"local target"}');
   if not (held->>'needsReview')::boolean or (held->>'orderEnabled')::boolean or held->>'customerId' is not null
-    or (select count(*) from normalized_customers)<>customer_count or (select count(*) from customer_price_agreements)<>agreement_count then
+    or (select count(*) from normalized_customers)<>customer_count or (select count(*) from customer_price_agreements)<>agreement_count
+    or (select count(*) from business_permit_leads)<>lead_count or (select count(*) from customer_imports)<>import_count then
     raise exception 'ambiguous customer hold failed';
   end if;
+end $$;
+
+-- Ambiguous leads and a unique new customer profile must not create an import/customer.
+do $$ declare held jsonb; before_counts jsonb; after_counts jsonb; begin
+  select jsonb_build_array((select count(*) from business_permit_leads),(select count(*) from normalized_customers),(select count(*) from customer_imports)) into before_counts;
+  held:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000090',
+    '70000000-0000-4000-8000-000000000095',repeat('c',64),'staff',null,null,null,false,null,null,'{"businessName":"new ambiguous target","phone":"01077779999","address":"new local address"}');
+  select jsonb_build_array((select count(*) from business_permit_leads),(select count(*) from normalized_customers),(select count(*) from customer_imports)) into after_counts;
+  if not (held->>'needsReview')::boolean or held->>'customerId' is not null or before_counts<>after_counts then
+    raise exception 'ambiguous lead created business rows';
+  end if;
+end $$;
+
+-- An explicit review hold must not mark a valid unconverted lead as converted.
+insert into business_permit_leads(id,company_id,business_name)
+values('20000000-0000-4000-8000-000000000093','00000000-0000-4000-8000-000000000001','manual review lead');
+do $$ declare held jsonb; before_lead jsonb; after_lead jsonb; begin
+  select to_jsonb(l) into before_lead from business_permit_leads l where id='20000000-0000-4000-8000-000000000093';
+  held:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000090',
+    '70000000-0000-4000-8000-000000000096',repeat('d',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000093',null,true,'manual_review',null,'{}');
+  select to_jsonb(l) into after_lead from business_permit_leads l where id='20000000-0000-4000-8000-000000000093';
+  if not (held->>'needsReview')::boolean or before_lead<>after_lead then raise exception 'explicit review converted lead'; end if;
+end $$;
+
+-- A merged lead is rejected before a request or business row is written.
+insert into business_permit_leads(id,company_id,business_name,merged_into_lead_id)
+values('20000000-0000-4000-8000-000000000094','00000000-0000-4000-8000-000000000001','merged lead','20000000-0000-4000-8000-000000000001');
+do $$ begin
+  begin
+    perform record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000090',
+      '70000000-0000-4000-8000-000000000097',repeat('e',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000094',null,false,null,null,'{}');
+    raise exception 'merged lead was accepted';
+  exception when others then if sqlerrm<>'lead_not_found' then raise; end if; end;
+  if exists(select from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000097') then raise exception 'merged lead wrote request'; end if;
 end $$;
 do $$ begin
   if has_function_privilege('anon','public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)','EXECUTE')
@@ -101,5 +140,17 @@ do $$ begin
     raise exception 'function grants changed';
   end if;
 end $$;
-select jsonb_build_object('heldRetry',true,'normalQuote',true,'normalSheet',true,'ambiguousLeadHold',true,'ambiguousCustomerHold',true,'grantsPreserved',true) as regression_checks;
+-- A merged duplicate must not turn one canonical candidate into an ambiguous match.
+insert into business_permit_leads(id,company_id,business_name,phone,merged_into_lead_id) values
+('20000000-0000-4000-8000-000000000095','00000000-0000-4000-8000-000000000001','canonical candidate','01088889999',null),
+('20000000-0000-4000-8000-000000000096','00000000-0000-4000-8000-000000000001','merged candidate','01088889999','20000000-0000-4000-8000-000000000095');
+do $$ declare accepted jsonb; before_merged jsonb; after_merged jsonb; begin
+  select to_jsonb(l) into before_merged from business_permit_leads l where id='20000000-0000-4000-8000-000000000096';
+  accepted:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000098',repeat('f',64),'staff','10000000-0000-4000-8000-000000000001',null,null,false,null,null,'{"businessName":"canonical candidate","phone":"01088889999","address":"local canonical"}');
+  select to_jsonb(l) into after_merged from business_permit_leads l where id='20000000-0000-4000-8000-000000000096';
+  if (accepted->>'needsReview')::boolean or accepted->>'leadId'<>'20000000-0000-4000-8000-000000000095'
+    or before_merged<>after_merged then raise exception 'merged candidate polluted canonical matching'; end if;
+end $$;
+select jsonb_build_object('heldRetry',true,'normalQuote',true,'normalSheet',true,'ambiguousLeadHold',true,'ambiguousCustomerHold',true,'noReviewBusinessWrites',true,'canonicalLead',true,'mergedDuplicateIgnored',true,'grantsPreserved',true) as regression_checks;
 rollback;

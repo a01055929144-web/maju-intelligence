@@ -8,7 +8,7 @@ do $$ begin
 end $$;
 create or replace function public.record_pricing_document_acceptance(p_company_id uuid,p_document_id uuid,p_document_version_id uuid,p_idempotency_key uuid,p_request_fingerprint text,p_accepted_via text,p_customer_id uuid,p_lead_id uuid default null,p_send_id uuid default null,p_needs_review boolean default false,p_review_reason text default null,p_storefront_link_id uuid default null,p_customer_profile jsonb default '{}')
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare r public.pricing_document_acceptance_requests%rowtype; d public.pricing_documents%rowtype; v_version public.pricing_document_versions%rowtype; v_price_link uuid; l jsonb; v_customer uuid:=p_customer_id; v_import uuid; v_lead uuid:=p_lead_id; v_match_count integer:=0; v_customer_match_count integer:=0; v_name text:=nullif(btrim(p_customer_profile->>'businessName'),''); v_phone text:=regexp_replace(coalesce(p_customer_profile->>'phone',''),'\D','','g'); v_business_number text:=regexp_replace(coalesce(p_customer_profile->>'businessRegistrationNumber',''),'\D','','g'); v_address text:=nullif(btrim(p_customer_profile->>'address'),''); v_needs_review boolean:=p_needs_review; v_review_reason text:=p_review_reason;
+declare r public.pricing_document_acceptance_requests%rowtype; d public.pricing_documents%rowtype; v_version public.pricing_document_versions%rowtype; v_price_link uuid; l jsonb; v_customer uuid:=p_customer_id; v_import uuid; v_lead uuid:=p_lead_id; v_match_count integer:=0; v_customer_match_count integer:=0; v_existing_lead_customer uuid; v_name text:=nullif(btrim(p_customer_profile->>'businessName'),''); v_phone text:=regexp_replace(coalesce(p_customer_profile->>'phone',''),'\D','','g'); v_business_number text:=regexp_replace(coalesce(p_customer_profile->>'businessRegistrationNumber',''),'\D','','g'); v_address text:=nullif(btrim(p_customer_profile->>'address'),''); v_needs_review boolean:=p_needs_review; v_review_reason text:=p_review_reason;
 begin
   if p_idempotency_key is null or length(coalesce(p_request_fingerprint,'')) not between 16 and 200 or p_accepted_via not in ('store','staff','kakao_start','kakao_login') then raise exception 'invalid_acceptance_request'; end if;
   select * into r from public.pricing_document_acceptance_requests where company_id=p_company_id and idempotency_key=p_idempotency_key for update;
@@ -22,34 +22,52 @@ begin
     or (v_version.content->>'validUntil')::date < (clock_timestamp() at time zone 'Asia/Seoul')::date then
     raise exception 'document_version_not_acceptable';
   end if;
-  if v_lead is null and p_send_id is not null then select lead_id into v_lead from public.pricing_document_sends where company_id=p_company_id and id=p_send_id for share; end if;
+  -- Pure candidate reads and row locks precede every business-data write.
+  if v_lead is null and p_send_id is not null then
+    select lead_id into v_lead from public.pricing_document_sends where company_id=p_company_id and id=p_send_id for share;
+  end if;
   if v_lead is null and (v_phone<>'' or (v_name is not null and v_address is not null)) then
     select count(*),(array_agg(id order by id))[1] into v_match_count,v_lead from public.business_permit_leads
-      where company_id=p_company_id and is_active and (
+      where company_id=p_company_id and is_active and merged_into_lead_id is null and (
         (v_phone<>'' and regexp_replace(coalesce(phone,''),'\D','','g')=v_phone)
         or (v_name is not null and v_address is not null and lower(btrim(business_name))=lower(v_name) and lower(btrim(coalesce(address,'')))=lower(v_address))
       );
     if v_match_count>1 then v_lead:=null; v_needs_review:=true; v_review_reason:='ambiguous_lead_match'; end if;
   end if;
-  if v_lead is null and not v_needs_review then
-    if v_name is null or v_phone='' or v_address is null then raise exception 'public_acceptance_profile_required'; end if;
-    insert into public.business_permit_leads(company_id,business_name,address,phone,source)
-      values(p_company_id,v_name,v_address,v_phone,'pricing_sheet_acceptance') returning id into v_lead;
+  if v_lead is not null then
+    select matched_customer_id into v_existing_lead_customer from public.business_permit_leads
+      where company_id=p_company_id and id=v_lead and is_active and merged_into_lead_id is null for update;
+    if not found then raise exception 'lead_not_found'; end if;
   end if;
-  if v_customer is null then
-    if v_name is null or v_phone='' or v_address is null then raise exception 'customer_profile_required'; end if;
+  if v_customer is null and (v_business_number<>'' or (v_name is not null and v_address is not null)) then
     select count(*),(array_agg(id order by id))[1] into v_customer_match_count,v_customer
       from public.normalized_customers where company_id=p_company_id and (
         (v_business_number<>'' and regexp_replace(coalesce(business_registration_number,''),'\D','','g')=v_business_number)
-        or (lower(btrim(customer_name))=lower(v_name) and lower(btrim(coalesce(address,'')))=lower(v_address))
+        or (v_name is not null and v_address is not null and lower(btrim(customer_name))=lower(v_name) and lower(btrim(coalesce(address,'')))=lower(v_address))
       );
     if v_customer_match_count>1 then v_customer:=null; v_needs_review:=true; v_review_reason:='ambiguous_customer_match'; end if;
   end if;
-  if v_customer is null and v_customer_match_count>1 then
+  if v_customer is not null then
+    perform 1 from public.normalized_customers where company_id=p_company_id and id=v_customer for key share;
+    if not found then raise exception 'customer_not_found'; end if;
+  end if;
+  if not v_needs_review and v_existing_lead_customer is not null and (v_customer is null or v_existing_lead_customer<>v_customer) then
+    v_needs_review:=true; v_review_reason:='lead_customer_mismatch';
+  end if;
+  if v_needs_review then
     insert into public.pricing_document_acceptance_requests(company_id,idempotency_key,request_fingerprint,document_id,document_version_id,send_id,lead_id,customer_id,document_kind,accepted_via,needs_review,review_reason,result)
-    values(p_company_id,p_idempotency_key,p_request_fingerprint,p_document_id,p_document_version_id,p_send_id,v_lead,null,d.kind,p_accepted_via,true,v_review_reason,
-      jsonb_build_object('customerId',null,'leadId',v_lead,'documentVersionId',p_document_version_id,'kind',d.kind,'needsReview',true,'orderEnabled',false)) returning * into r;
+    values(p_company_id,p_idempotency_key,p_request_fingerprint,p_document_id,p_document_version_id,p_send_id,v_lead,v_customer,d.kind,p_accepted_via,true,v_review_reason,
+      jsonb_build_object('customerId',v_customer,'leadId',v_lead,'documentVersionId',p_document_version_id,'kind',d.kind,'needsReview',true,'pricingDocumentLinkId',null,'storefrontLinkId',null,'orderEnabled',false)) returning * into r;
     return r.result;
+  end if;
+
+  -- Only a resolved request may create or convert business records.
+  if (v_lead is null or v_customer is null) and (v_name is null or v_phone='' or v_address is null) then
+    raise exception 'customer_profile_required';
+  end if;
+  if v_lead is null then
+    insert into public.business_permit_leads(company_id,business_name,address,phone,source)
+      values(p_company_id,v_name,v_address,v_phone,'pricing_sheet_acceptance') returning id into v_lead;
   end if;
   if v_customer is null then
     insert into public.customer_imports(company_id,source,row_count,status,quality_score,completed_at)
@@ -63,18 +81,9 @@ begin
         where company_id=p_company_id and normalized_key=coalesce(nullif(v_business_number,''),'pricing_acceptance:'||encode(extensions.digest(lower(v_name)||'|'||lower(v_address)||'|'||v_phone,'sha256'),'hex'));
     end if;
   end if;
-  if v_lead is not null then
-    update public.business_permit_leads set matched_customer_id=v_customer,is_duplicate=true,status='거래처 전환',updated_at=clock_timestamp()
-      where company_id=p_company_id and id=v_lead and (matched_customer_id is null or matched_customer_id=v_customer);
-    if not found then v_needs_review:=true; v_review_reason:='lead_customer_mismatch'; end if;
-  end if;
-  -- Hold every review result before customer profile, price-link, agreement or ordering-link writes.
-  if v_needs_review then
-    insert into public.pricing_document_acceptance_requests(company_id,idempotency_key,request_fingerprint,document_id,document_version_id,send_id,lead_id,customer_id,document_kind,accepted_via,needs_review,review_reason,result)
-    values(p_company_id,p_idempotency_key,p_request_fingerprint,p_document_id,p_document_version_id,p_send_id,v_lead,v_customer,d.kind,p_accepted_via,true,v_review_reason,
-      jsonb_build_object('customerId',v_customer,'leadId',v_lead,'documentVersionId',p_document_version_id,'kind',d.kind,'needsReview',true,'pricingDocumentLinkId',null,'storefrontLinkId',null,'orderEnabled',false)) returning * into r;
-    return r.result;
-  end if;
+  update public.business_permit_leads set matched_customer_id=v_customer,is_duplicate=true,status='거래처 전환',updated_at=clock_timestamp()
+    where company_id=p_company_id and id=v_lead and (matched_customer_id is null or matched_customer_id=v_customer);
+  if not found then raise exception 'lead_customer_changed_retry'; end if;
   update public.normalized_customers set
     address=coalesce(nullif(address,''),v_address), phone=coalesce(nullif(phone,''),nullif(v_phone,'')),
     delivery_recipient_name=coalesce(nullif(delivery_recipient_name,''),nullif(btrim(p_customer_profile->>'deliveryRecipientName'),'')),
