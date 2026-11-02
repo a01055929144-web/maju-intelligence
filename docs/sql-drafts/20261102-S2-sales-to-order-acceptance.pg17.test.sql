@@ -7,7 +7,8 @@ end $$;
 
 drop schema if exists public cascade; create schema public;
 grant usage on schema public to public;
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 create table companies(id uuid primary key);
 create table customer_imports(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies(id),source text not null default 'excel',row_count integer not null default 0,status text not null default 'completed',quality_score integer not null default 0,completed_at timestamptz);
 create table normalized_customers(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies(id),import_id uuid not null references customer_imports(id),customer_name text not null,address text,phone text,business_registration_number text,normalized_key text not null,unique(company_id,id),unique(company_id,normalized_key));
