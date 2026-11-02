@@ -17,7 +17,7 @@ describe("customer navigation", () => {
       "/map", "/routes/today", "/map?view=history", "/dashboard/settings/routes",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
     ]));
-    expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 기록", "배송 이력"]));
+    expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 관리", "배송 이력"]));
     expect(customerNavigationGroups.find((group) => group.label === "설정")?.items.map((item) => item.label)).toContain("데이터 가져오기");
     expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["새로 가져오기", "업로드 이력"]));
     expect(flattened.map((item) => item.label)).not.toContain("연락 기록");

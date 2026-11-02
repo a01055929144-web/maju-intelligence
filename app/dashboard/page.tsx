@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { HomeSalesDashboard } from "@/components/home-sales-dashboard";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
@@ -123,6 +124,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       : marker
   );
   const timelineHref = isAdminPreview && companyId ? `/crm/timeline?companyId=${encodeURIComponent(companyId)}` : "/crm/timeline";
+  const companyQuery = isAdminPreview && companyId ? `&companyId=${encodeURIComponent(companyId)}` : "";
+  // 지도에서 리드 목록으로 돌아가는 입구(리드 목록 → 지도 버튼과 짝). 0033 지시서 3절.
+  const mapLeadListActions = initialView === "map" ? (
+    <>
+      <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href={`/leads?type=permit${companyQuery}`}>신규 리드 목록</Link>
+      <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href={`/leads?type=keyword${companyQuery}`}>영업 리드 목록</Link>
+    </>
+  ) : undefined;
   timing.log("/dashboard");
 
   return (
@@ -133,6 +142,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       hidePageTitle
       mode={customerSession ? "customer" : "admin-preview"}
       previewCompanyId={customerSession ? undefined : companyId}
+      rightAction={mapLeadListActions}
       showHoldModules={showHoldModules}
       subtitle="거래처 위치, 배송차 배정, 경유 코스 계산을 지도에서 바로 처리합니다"
       title={initialView === "leads" ? "영업 리드" : "지도 홈"}

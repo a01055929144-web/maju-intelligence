@@ -4,11 +4,11 @@ import { BellRing, CalendarClock, CheckCircle2, FileText, History, Phone, Search
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
-import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { listSalesContactLedger, type SalesContactLedgerItem } from "@/lib/store";
 
-type DueFilter = "all" | "overdue" | "today" | "upcoming" | "none";
+type DueFilter = "all" | "overdue" | "today" | "upcoming" | "none" | "action";
 type StageFilter = "all" | "contacted" | "quoted" | "conversion-pending" | "converted";
 
 export default async function SalesContactsPage({
@@ -61,7 +61,8 @@ export default async function SalesContactsPage({
       || (due === "none" && !followUpDate)
       || (due === "overdue" && Boolean(followUpDate && followUpDate < today))
       || (due === "today" && followUpDate === today)
-      || (due === "upcoming" && Boolean(followUpDate && followUpDate > today));
+      || (due === "upcoming" && Boolean(followUpDate && followUpDate > today))
+      || (due === "action" && Boolean(followUpDate && followUpDate <= today));
     return matchesQuery && matchesAction && matchesAssignee && matchesRegion && matchesDate && matchesStage && matchesDue;
   });
   const overdueCount = items.filter((item) => item.followUpAt?.slice(0, 10) && item.followUpAt.slice(0, 10) < today).length;
@@ -83,16 +84,16 @@ export default async function SalesContactsPage({
       previewCompanyId={isAdminPreview ? companyId : undefined}
       showHoldModules={showHoldModules}
       subtitle="모바일 영업에서 남긴 컨택과 후속 연락일을 한곳에서 관리합니다."
-      title="컨택·리마인드 원장"
+      title={due === "action" ? "후속 대상" : "컨택 기록"}
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
         <SalesWorkspaceNav
-          active="contacts"
+          active={due === "action" ? "followup" : "contacts"}
           companyId={companyId}
           contactCount={items.length}
-          showProducts={showHoldModules && Boolean(adminSession || (customerSession && customerHasCapability(customerSession, "manage_sales")))}
+          followUpCount={overdueCount + todayCount}
         />
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -189,7 +190,7 @@ function FilterSelect({ emptyLabel, label, name, options, value }: { emptyLabel:
   return <label><span className="maju-muted-label">{label}</span><select className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold" defaultValue={value} name={name}><option value="">{emptyLabel}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
 }
 
-function isDueFilter(value?: string): value is DueFilter { return value === "all" || value === "overdue" || value === "today" || value === "upcoming" || value === "none"; }
+function isDueFilter(value?: string): value is DueFilter { return value === "all" || value === "overdue" || value === "today" || value === "upcoming" || value === "none" || value === "action"; }
 function isStageFilter(value?: string): value is StageFilter { return value === "all" || value === "contacted" || value === "quoted" || value === "conversion-pending" || value === "converted"; }
 function isDateKey(value?: string): value is string { return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value)); }
 function getRegion(address?: string) { return address?.trim().split(/\s+/).slice(0, 2).join(" ") || undefined; }
