@@ -42,3 +42,15 @@ down 초안도 폐기 가능한 PG17 복제 DB에서 실행·검증했다. P0/P1
 | `STORE_PUBLIC_BASE_URL` | 공개 링크 기준 주소 |
 
 운영 DB 승인 전에는 기능 플래그를 켜지 않는다. `HOLD_MODULES_ENABLED_COMPANY_IDS`는 사용하지 않는다.
+
+## 백엔드 계약서 후속 묶음 (이번 최소 DB 승인 범위 밖)
+
+| 순서 | 계약 규칙 | 필요한 초안·확인 | 상태 |
+|---|---|---|---|
+| B | I-1 · I-11 | 상품 단위 환산과 `product_base_prices`의 회사 복합 FK·날짜 유일성 | 별도 SQL 검토 대기 |
+| D 최소 | I-2 · I-5 · I-7 | 기존 `business_documents`·`partner_ledger_entries`를 사용해 매출전표와 입금의 원자성 확인 | 별도 SQL 검토 대기 |
+| E | I-4 · I-9 | 단일 가격 결정 함수, 링크 주문 회사 범위·토큰 검증, `store_orders.closed` | 별도 SQL 검토 대기 |
+| F · 재고 | I-3 · I-8 | `purchase_orders`와 발주당 매입전표 1건, 출고 예정 계산 뷰 | 별도 SQL 검토 대기 |
+| D 나머지 | I-6 | 기존 `partner_ledger_entries`의 예치금 유형과 0 미만 방지 | 별도 SQL 검토 대기 |
+
+이 표는 미래 작업 순서만 기록한다. 이번 승인 요청은 위 1~3번 P0/P1/P2 초안에 한정한다.
