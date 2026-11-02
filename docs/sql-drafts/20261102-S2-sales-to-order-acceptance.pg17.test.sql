@@ -105,15 +105,19 @@ end $$;
 -- 동시 같은 멱등 키는 unique 오류를 노출하지 않고 한 저장 결과로 수렴한다.
 create function public.test_s2_delay_remote() returns trigger language plpgsql as $$ begin if current_setting('application_name')='idem_remote' and new.idempotency_key='70000000-0000-4000-8000-000000000007' then perform pg_sleep(1); end if; return new; end $$;
 create trigger test_s2_delay_remote before insert on pricing_document_acceptance_requests for each row execute function public.test_s2_delay_remote();
+create temporary table test_s2_concurrent_results(source text primary key,result jsonb not null);
 select extensions.dblink_connect('idem','dbname='||current_database()||' user='||current_user||' application_name=idem_remote');
 select extensions.dblink_send_query('idem',$q$select record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000007',repeat('9',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}')$q$);
 select pg_sleep(0.1);
-select record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000007',repeat('9',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}');
-select * from extensions.dblink_get_result('idem') as t(result jsonb);
+insert into test_s2_concurrent_results values('local',record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000007',repeat('9',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}'));
+insert into test_s2_concurrent_results select 'remote',result from extensions.dblink_get_result('idem') as t(result jsonb);
 select extensions.dblink_disconnect('idem');
 drop trigger test_s2_delay_remote on pricing_document_acceptance_requests;
 drop function public.test_s2_delay_remote();
-do $$ begin if (select count(*) from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000007')<>1 then raise exception 'concurrent idempotency duplicated'; end if; end $$;
+do $$ begin
+  if (select count(*) from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000007')<>1 then raise exception 'concurrent idempotency duplicated'; end if;
+  if (select count(*) from test_s2_concurrent_results)<>2 or (select count(distinct result::text) from test_s2_concurrent_results)<>1 then raise exception 'concurrent idempotency result mismatch'; end if;
+end $$;
 do $$ declare a jsonb; begin
   a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000003',repeat('d',64),'store',null,null,null,false,null,null,'{"businessName":"new shop","phone":"010-9999-8888","address":"new address","deliveryDropLocation":"side door"}');
   if a->>'customerId' is null or a->>'leadId' is null then raise exception 'new lead/customer conversion failed'; end if;
