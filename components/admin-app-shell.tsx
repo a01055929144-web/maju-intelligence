@@ -29,7 +29,7 @@ export function AdminAppShell({ adminMapEnabled, children, session }: { readonly
 
   return (
     <div className="maju-app-bg flex min-h-screen flex-col lg:flex-row">
-      <AppSidebar brand="MAJU 관리자" context={session.name} groups={navigation} homeHref="/admin" renderFooter={(collapsed) => <div className={collapsed ? "flex justify-center" : "flex items-center justify-between gap-2"}>{!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{session.name}</p><p className="truncate text-[11px] font-semibold text-white/60">{session.role}</p></div> : null}<AdminLogoutButton compact={collapsed} sidebar /></div>} variant="admin" />
+      <AppSidebar brand="MAJU 관리자" context={session.name} groups={navigation} homeHref="/admin" storageScope={session.userId || session.email} renderFooter={(collapsed) => <div className={collapsed ? "flex justify-center" : "flex items-center justify-between gap-2"}>{!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{session.name}</p><p className="truncate text-[11px] font-semibold text-white/60">{session.role}</p></div> : null}<AdminLogoutButton compact={collapsed} sidebar /></div>} variant="admin" />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

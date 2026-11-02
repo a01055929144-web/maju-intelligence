@@ -29,6 +29,7 @@ type CustomerAppShellProps = {
 export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
   const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
   const [features, setFeatures] = useState({ pricing: false, storeOrdering: false });
+  const [sidebarScope, setSidebarScope] = useState("");
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
@@ -43,6 +44,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
       .then((payload) => {
         if (!mounted) return;
         if (payload?.session?.workspaceRole) setResolvedWorkspaceRole(payload.session.workspaceRole);
+        if (payload?.session?.companyId && (payload.session.userId || payload.session.email)) setSidebarScope(`${payload.session.companyId}:${payload.session.userId || payload.session.email}`);
         setFeatures({ pricing: payload?.features?.pricing === true, storeOrdering: payload?.features?.storeOrdering === true });
       })
       .catch(() => null);
@@ -52,7 +54,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   return (
     <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-y-auto" : ""}`}>
       <div className={`flex min-h-screen flex-col ${fullBleed ? "xl:h-full" : ""} lg:flex-row`}>
-        <AppSidebar active={active} brand="MAJU Intelligence" context={companyName} groups={getCustomerNavigationGroups(showHoldModules, normalizedRole, features.pricing, features.storeOrdering)} homeHref="/dashboard" previewCompanyId={mode === "admin-preview" ? previewCompanyId : undefined} renderFooter={(collapsed) => (
+        <AppSidebar active={active} brand="MAJU Intelligence" context={companyName} groups={getCustomerNavigationGroups(showHoldModules, normalizedRole, features.pricing, features.storeOrdering)} homeHref="/dashboard" previewCompanyId={mode === "admin-preview" ? previewCompanyId : undefined} storageScope={sidebarScope} renderFooter={(collapsed) => (
           <div className={collapsed ? "flex flex-col items-center gap-2" : "flex items-center justify-between gap-2"}>
             {!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{userName || "로그인 사용자"}</p><p className="truncate text-[11px] font-semibold text-white/60">{roleLabel}</p></div> : null}
             {mode === "customer" ? <div className={`flex shrink-0 ${collapsed ? "flex-col" : "items-center"} gap-1`}><Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link><CustomerAccountActions compact={collapsed} sidebar /></div> : null}
