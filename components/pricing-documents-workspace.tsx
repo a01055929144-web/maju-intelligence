@@ -375,7 +375,7 @@ export function PricingDocumentsWorkspace({
     onCreate={(kind) => create(kind)} onOpen={select}
     onCopy={(document) => create(document.content.kind, document.content)} />;
   return (
-    <div className="space-y-5" aria-busy={busy}>
+    <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
       <header className="pricing-no-print">
         <button className={box} onClick={() => { if (discard()) { setView("list"); void loadList(); } }} type="button">← 문서 목록</button>
         <h1 className="text-2xl font-bold">견적서·단가표</h1>
@@ -487,8 +487,8 @@ export function PricingDocumentsWorkspace({
         />
       )}
       {tab === "documents" && (
-        <div className="pricing-no-print grid items-start gap-4 lg:grid-cols-[270px_minmax(0,1fr)]">
-          <aside className="space-y-3 lg:sticky lg:top-4">
+        <div className="pricing-no-print grid min-w-0 items-start gap-4 lg:grid-cols-[270px_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-3 lg:sticky lg:top-4">
             <div className="flex flex-wrap gap-2">
               <button
                 disabled={busy}
