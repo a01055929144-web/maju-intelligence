@@ -84,7 +84,9 @@ for (const width of [1440, 390]) {
       await page.route("**/api/pricing-documents?*", async (route) => {
         await route.fulfill({ json: { result: { items: [], total: 0 }, manager: true } });
       });
+      const catalogReady = page.waitForResponse(response => response.url().includes("/api/price-sheets/costs?") && response.ok());
       const response = await page.goto("/revenue/pricing", { waitUntil: "domcontentloaded" });
+      await catalogReady;
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByRole("heading", { name: "매입가 반영" }).last()).toBeVisible();
       await page.getByRole("button", { name: "엑셀 올리기" }).click();

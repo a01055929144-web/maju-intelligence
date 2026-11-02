@@ -27,6 +27,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [products, setProducts] = useState<CostProduct[]>([]);
   const [pricing, setPricing] = useState<PriceState | null>(null);
   const [documents, setDocuments] = useState<DocumentDraft[]>([]);
+  const [documentError, setDocumentError] = useState("");
   const [candidates, setCandidates] = useState<Record<string, Candidate>>({});
   const [selected, setSelected] = useState<string[]>([]);
   const [unmatched, setUnmatched] = useState<CostImportRow[]>([]);
@@ -43,7 +44,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [catalogReady, setCatalogReady] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string; at: number } | null>(null);
+  const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   useUnsavedChangesWarning(Object.keys(candidates).length > 0 || rows.length > 0);
 
@@ -60,6 +61,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setProducts(catalog.products);
     setPricing(price);
     setCatalogReady(true);
+    setDocumentError("");
     try {
       const all: DocumentDraft[] = [];
       for (let page = 1; page <= 200; page++) {
@@ -67,8 +69,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         all.push(...result.result.items);
         if (all.length >= result.result.total) break;
       }
+      if (all.some(document => !document.recalculation)) throw new Error("문서 가격 상태를 확인하지 못했습니다.");
       setDocuments(all);
-    } catch { setMessage("문서 영향은 지금 조회하지 못했습니다. 저장 전 문서 목록을 확인해 주세요."); }
+    } catch { setDocuments([]); setDocumentError("문서 영향을 조회하지 못했습니다. 다시 불러와 주세요."); }
   }, [companyId]);
   useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "매입가를 불러오지 못했습니다.")); }, [load]);
 
@@ -85,7 +88,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     }
     return map;
   }, [documents]);
-  const affected = useMemo(() => documents.map((document) => ({ document, count: document.content.lines.filter((line) => candidates[line.productId]?.cost !== undefined).length })).filter((entry) => entry.count > 0), [candidates, documents]);
+  const affected = useMemo(() => documents.map((document) => ({ document, count: new Set(document.content.lines.filter((line) => candidates[line.productId]?.cost !== undefined).map(line => line.productId)).size, changed: document.recalculation?.changedProductCount || 0 })).filter((entry) => entry.count > 0 || entry.changed > 0), [candidates, documents]);
   const displayed = unique.filter((product) => {
     const candidate = candidates[product.id];
     if (supplier && !products.some((entry) => entry.id === product.id && entry.supplierName === supplier)) return false;
@@ -203,9 +206,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       let batchId: string | undefined;
       try { const updated = await command("recalculate"); if (updated.lastBatch && updated.lastBatch !== previousBatch) batchId = updated.lastBatch; }
       catch (cause) { setError(`매입가 ${changes.length}건은 저장됐지만 판매가 재계산은 실패했습니다. 마진 그룹에서 다시 계산해 주세요. ${cause instanceof Error ? cause.message : ""}`); }
-      const at = Date.now();
-      try { localStorage.setItem(`maju:pricing-cost-changes:${companyId}`, JSON.stringify({ at, ids: changes.map((change) => change.productId) })); } catch { /* private browsing */ }
-      setUndo({ changes: changes.map((change) => ({ productId: change.productId, supplierProductId: change.supplierProductId, expectedCost: change.cost, cost: change.expectedCost })), batchId, at });
+      setUndo({ changes: changes.map((change) => ({ productId: change.productId, supplierProductId: change.supplierProductId, expectedCost: change.cost, cost: change.expectedCost })), batchId });
       setCandidates({}); setSelected([]); await load();
       setMessage(`매입가 ${changes.length}건 저장${batchId ? " · 판매가 재계산 완료" : " · 재계산 상태 확인 필요"}. 이 화면에서 직전 저장을 되돌릴 수 있습니다.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "저장하지 못했습니다."); await load().catch(() => undefined); }
@@ -220,10 +221,6 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, changes: undo.changes.map((change) => ({ ...change, fileName: "직전 저장 복구" })) }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "매입가 복구에 실패했습니다.");
-      try {
-        const saved = JSON.parse(localStorage.getItem(`maju:pricing-cost-changes:${companyId}`) || "null") as { at?: number } | null;
-        if (saved?.at === undo.at) localStorage.removeItem(`maju:pricing-cost-changes:${companyId}`);
-      } catch { /* private browsing */ }
       setUndo(null); await load(); setMessage("직전 매입가 변경을 복구했습니다.");
     } catch (cause) { setError(`복구가 끝나지 않았습니다. 가격을 확인해 주세요. ${cause instanceof Error ? cause.message : ""}`); }
     finally { setBusy(false); }
@@ -255,7 +252,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">다시 시도</button></p> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
     {rows.length ? <section className="maju-section-card space-y-3 p-3"><ExcelHeaderMappingPreview fieldMap={mapping} fields={fields} headers={headers} onMap={setMapping} rows={rows as Array<Record<string, string | number | boolean | null | undefined>>} /><div className="flex gap-2"><button className="maju-button-primary" disabled={!catalogReady} onClick={applyFile} type="button">열 맞추기 적용</button><button className="maju-button-secondary" onClick={() => setRows([])} type="button">취소</button></div></section> : null}
-    <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장 후 기존 확정 문서는 다시 계산 필요로 확인해 주세요.</p><div className="flex flex-wrap gap-2">{affected.length ? affected.map(({ document, count }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {count}개 품목</Link>) : <span className="text-sm text-slate-500">변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
+    <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장된 변경은 서버 이력으로 확인합니다. 다시 계산한 초안도 새 버전을 게시할 때까지 표시를 유지합니다.</p><div className="flex flex-wrap gap-2">{documentError ? <span role="alert">{documentError} <button className="underline" type="button" onClick={() => void load().catch(cause => setError(String(cause)))}>다시 시도</button></span> : affected.length ? affected.map(({ document, count, changed }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {changed ? `${changed}개 품목 다시 계산 필요` : `${count}개 품목 변경 후보`}{changed && count ? ` · 후보 ${count}개` : ""}</Link>) : <span className="text-sm text-slate-500">다시 계산할 문서나 변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
     <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /></div>
     {tab === "신규" ? <section className="maju-section-card p-4"><h2 className="font-semibold">새 상품·확인 필요 {unmatched.length}개</h2><p className="text-sm text-slate-600">일치하는 상품이 없는 행은 아직 저장하지 않았습니다. 매입처 상품을 저장한 뒤 마스터 상품으로 일괄 생성·연결합니다.</p><div className="mt-3 flex flex-wrap gap-2"><input aria-label="새 상품 매입처명" className="maju-input" onChange={(event) => setNewSupplier(event.target.value)} placeholder="파일에 매입처가 없으면 입력" value={newSupplier} /><button className="maju-button-primary" disabled={!unmatched.length || busy} onClick={() => void createNewProducts()} type="button">상품으로 만들기</button><Link className="maju-button-secondary" href="/revenue/products?tab=supplier">기존 상품 업로드 보기</Link></div>{unmatched.map((row, index) => <p className="border-t py-2 text-sm" key={`${row.code}-${index}`}>{row.code || "코드 없음"} · {row.name} · {money(row.cost)}</p>)}</section> : <CommonDataTable columns={columns} emptyMessage="상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요." filename="매입가_변경후보.csv" rowKey={(row) => row.id} rows={displayed} settingsKey={`purchase-cost:${companyId}`} />}
     <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {displayed.length}개 · 현재 합 {money(displayed.reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money(displayed.reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span><button className="maju-button-secondary" disabled={busy || !undo} onClick={() => void restore()} type="button">직전 저장 되돌리기</button><Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>

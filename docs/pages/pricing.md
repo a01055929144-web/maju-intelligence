@@ -6,7 +6,7 @@
 
 P0 `restore`는 판매가 계산 실행만 복구하므로 매입가 복구는 같은 화면에서 이전 원가를 다시 저장한다. 원가·판매가가 여러 요청에 걸치는 현재 스키마의 한계로 저장/복구가 일부만 끝날 수 있고, 해당 건수와 확인 안내를 숨기지 않는다. 새 상품 생성은 기존 `save-import` → `create-standards` 경로를 사용한다.
 
-`/revenue/pricing/documents`는 Sheets 목록을 먼저 열고 기존 P1 편집기는 문서 선택 후 연다. 편집기 품목 엑셀에는 ERP 코드·품목명·판매가만 사용하며 원가·마진은 내보내지 않는다. P1 스키마에 작성일·주문 집계·평균 마진/할인율이 없어 작성일 칸은 마지막 수정일을 표시하고 나머지는 `–`로 표시한다. 매입가 변경 후 재검토 표시도 운영 스키마 변경 없이 같은 브라우저의 저장 기록을 사용하므로 다른 기기까지 공유되지는 않는다. 이번 추가 허용 파일: `components/pricing-document-sheets.tsx`, `components/pricing-documents-workspace.tsx`, `app/revenue/pricing/documents/page.tsx`, `domains/pricing/document-excel.ts`, `tests/pricing-document-excel.test.ts`, `tests/e2e/layout.spec.ts`.
+`/revenue/pricing/documents`는 Sheets 목록을 먼저 열고 기존 P1 편집기는 문서 선택 후 연다. 편집기 품목 엑셀에는 ERP 코드·품목명·판매가만 사용하며 원가·마진은 내보내지 않는다. P1 스키마에 작성일·주문 집계·평균 마진/할인율이 없어 작성일 칸은 마지막 수정일을 표시하고 나머지는 `–`로 표시한다. 문서 재계산 필요 상태와 변경 품목 수는 게시 버전 이후의 서버 이력으로 계산하며, 기기·직원과 관계없이 같은 상태를 조회한다. 이번 추가 허용 파일: `components/pricing-document-sheets.tsx`, `components/pricing-documents-workspace.tsx`, `app/revenue/pricing/documents/page.tsx`, `domains/pricing/document-excel.ts`, `tests/pricing-document-excel.test.ts`, `tests/e2e/layout.spec.ts`.
 
 Owner Domain: pricing. Related: product (원장 매입가 읽기), organization (대표 권한/회사 격리).
 
@@ -130,3 +130,20 @@ U-1 finding: P2 issue_storefront_links accepts a sheet or the matching document 
 It does not create/accept sales_quotes or invoke quote acceptance: store ordering writes store_orders. P1 document APIs expose no acceptance bridge.
 Today's existing alternative is sales_quotes -> /quote/{public_token} for sharing, then authenticated staff POST /api/sales-quotes/{id}/accept for contract prices.
 PublicQuoteActions provides sharing/export/print, not customer acceptance. Legacy staff page access still needs separate review; no new acceptance/exposure is implemented here.
+
+## M-1 server document recalculation status
+
+Owner pricing; catalog cost history is read-only. Allowed: domains/pricing/document-recalculation.ts, document.ts DTO,
+lib/pricing/document-recalculation.ts and documents-repository.ts, pricing-document-sheets.tsx, purchase-cost-workspace.tsx status consumers, scoped unit/E2E tests, the existing CI browser command, synthetic M-1 evidence PNGs and this document.
+Existing authorized P1 list is enriched with latest publication time, needsRecalculation and distinct changedProductCount.
+Use only existing version/recalculation/supplier cost history tables; no schema changes or operating writes.
+Draft recalculation does not acknowledge a published version. Republishing is the only acknowledgement.
+Remove browser persistence for pricing-cost-changes/reviewed; local unsaved candidates and undo controls remain.
+History read errors/over-limit prevent an unverified clean status. Existing company/author permissions and all dormant flags are preserved.
+
+M-1 verification: 140 files, 728 unit tests PASS / 4 existing skips; auth boundaries 149 routes PASS; lint/build PASS.
+Playwright covered 23 scenarios: 22 passed in the suite, with the existing 390px upload readiness race fixed and its retry passing separately.
+The new two M-1 scenarios pass at 1440/390: cost save -> fresh browser sees state -> draft recalculation retains state -> publish clears -> error retry.
+The pre-existing upload test now waits for the initial catalog response before setting a file, preventing a pre-hydration lost input event.
+Evidence: docs/evidence/m1-document-recalculation-1440.png and m1-document-recalculation-390.png (synthetic records).
+History is complete up to 10,000 rows per 100-product/supplier batch; exceeding that limit fails visibly rather than clearing status.
