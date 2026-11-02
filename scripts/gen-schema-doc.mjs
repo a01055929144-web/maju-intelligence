@@ -53,6 +53,10 @@ for (const [root, status] of roots) {
       for (const part of topLevelParts(match[2])) {
         const column = /\badd\s+column\s+(?:if\s+not\s+exists\s+)?([a-z_][\w]*)/i.exec(part)?.[1];
         if (column) { item.sources.add(`${status}: ${path}`); item.columns.add(column); }
+        for (const fk of part.matchAll(/\breferences\s+((?:public\.)?[a-z_][\w]*)/gi)) {
+          item.sources.add(`${status}: ${path}`);
+          item.fks.add(fk[1]);
+        }
       }
     }
     for (const match of sql.matchAll(/\balter\s+table\s+((?:public\.)?[a-z_][\w]*)\s+enable\s+row\s+level\s+security/gi)) table(match[1]).rls.add(status);
