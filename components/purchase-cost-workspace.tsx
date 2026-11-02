@@ -108,7 +108,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setError("");
     try {
       const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const buffer = await file.arrayBuffer();
+      const workbook = file.name.toLocaleLowerCase().endsWith(".csv")
+        ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
+        : XLSX.read(buffer, { type: "array", cellDates: true });
       const parsed = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false });
       if (!parsed.length) throw new Error("파일에 품목이 없습니다.");
       const columns = Object.keys(parsed[0]);
