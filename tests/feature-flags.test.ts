@@ -23,4 +23,12 @@ describe("company pricing gates", () => {
     expect(isFeatureEnabled("STORE_ORDERING", "company-a")).toBe(true);
     expect(isFeatureEnabled("STORE_ORDERING", "company-b")).toBe(false);
   });
+
+  it("prefers a global feature switch over a company allowlist", () => {
+    process.env.FEATURE_INVENTORY_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("INVENTORY", "company-b")).toBe(false);
+    process.env.FEATURE_INVENTORY = "true";
+    expect(isFeatureEnabled("INVENTORY", "company-b")).toBe(true);
+    expect(isFeatureEnabled("INVENTORY")).toBe(true);
+  });
 });
