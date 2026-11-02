@@ -119,28 +119,42 @@ export function ProductCatalogWorkspace({
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   async function createStandards() {
     if (!selected.length) return;
+    if (
+      !window.confirm(
+        `선택한 ${selected.length}개를 표준 품목으로 생성하고 연결할까요?`,
+      )
+    ) return;
     setLoading(true);
     setMessage("");
+    let processed = 0;
+    let created = 0;
     try {
-      const r = await fetch("/api/product-catalog/imports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create-standards",
-          companyId,
-          supplierProductIds: selected,
-        }),
-      });
-      const p = (await r.json()) as { createdCount?: number; message?: string };
-      if (!r.ok) throw new Error(p.message || "표준 품목 생성 실패");
-      setMessage(
-        `${p.createdCount || 0}개를 표준 품목으로 생성하고 연결했습니다.`,
-      );
+      for (let index = 0; index < selected.length; index += 25) {
+        const r = await fetch("/api/product-catalog/imports", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create-standards",
+            companyId,
+            supplierProductIds: selected.slice(index, index + 25),
+          }),
+        });
+        const p = (await r.json()) as {
+          createdCount?: number;
+          message?: string;
+        };
+        if (!r.ok) throw new Error(p.message || "표준 품목 생성 실패");
+        processed += Math.min(25, selected.length - index);
+        created += p.createdCount || 0;
+        setMessage(`${processed}/${selected.length}개 처리 중`);
+      }
+      setMessage(`${created}개를 표준 품목으로 생성하고 연결했습니다.`);
       setSelected([]);
       await load();
     } catch (e) {
+      setSelected(selected.slice(processed));
       setMessage(
-        e instanceof Error ? e.message : "표준 품목을 만들지 못했습니다.",
+        `앞 ${processed}개 완료. 남은 품목을 다시 저장해 주세요. ${e instanceof Error ? e.message : "표준 품목을 만들지 못했습니다."}`,
       );
     } finally {
       setLoading(false);
@@ -173,6 +187,9 @@ export function ProductCatalogWorkspace({
     await load();
   }
   const items = workspace?.items || [];
+  const readyToCreate = items
+    .filter((item) => !item.matchedCatalogId && item.costConfirmed)
+    .map((item) => item.id);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -235,16 +252,28 @@ export function ProductCatalogWorkspace({
                 {workspace?.catalogCount || 0}개
               </p>
             </div>
-            {tab === "supplier" && selected.length ? (
-              <button
-                className="maju-button-primary inline-flex items-center gap-2"
-                disabled={loading}
-                onClick={createStandards}
-                type="button"
-              >
-                <PackagePlus className="h-4 w-4" />
-                선택 {selected.length}개 표준 품목 생성
-              </button>
+            {tab === "supplier" ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="maju-button-secondary"
+                  disabled={loading || !readyToCreate.length}
+                  onClick={() => setSelected(readyToCreate)}
+                  type="button"
+                >
+                  원가 확정·미연결 {readyToCreate.length}개 전체 선택
+                </button>
+                {selected.length ? (
+                  <button
+                    className="maju-button-primary inline-flex items-center gap-2"
+                    disabled={loading}
+                    onClick={createStandards}
+                    type="button"
+                  >
+                    <PackagePlus className="h-4 w-4" />
+                    선택 {selected.length}개 표준 품목 생성
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
           {loading && !workspace ? (
@@ -274,6 +303,7 @@ export function ProductCatalogWorkspace({
                           <input
                             aria-label={`${item.rawName} 선택`}
                             checked={selected.includes(item.id)}
+                            disabled={loading || !!item.matchedCatalogId}
                             onChange={(e) =>
                               setSelected((v) =>
                                 e.target.checked
