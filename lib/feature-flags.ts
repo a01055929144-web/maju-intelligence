@@ -1,5 +1,5 @@
-import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
+import { priceSheetsEnabled } from "./pricing/feature";
+import { storeOrderingEnabled } from "./pricing/store-order-feature";
 
 export type CompanyFeature = "PRICING" | "STORE_ORDERING";
 
