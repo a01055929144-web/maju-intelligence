@@ -13,7 +13,6 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   if (!customerSession && !adminSession) redirect("/dashboard/login");
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
-  if (!isFeatureEnabled("PRICING", companyId)) notFound();
   if (customerSession && !customerHasCapability(customerSession, "manage_sales")) notFound();
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const initialTab = params?.tab === "mapping" || params?.tab === "supplier" || params?.tab === "imports" ? params.tab : "catalog";

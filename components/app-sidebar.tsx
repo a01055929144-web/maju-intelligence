@@ -114,6 +114,15 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
         <nav aria-label={admin ? "관리자 메뉴" : "주요 작업공간"} className={`${mobileMenuOpen ? "flex" : "hidden"} maju-sidebar-scroll min-h-0 max-h-[min(60dvh,32rem)] flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-3 pt-3 lg:flex lg:max-h-none`}>
           {groups.map((group) => {
             const groupSelected = group.items.some((item) => isItemSelected(item, pathname, currentSearch, active));
+            if (variant === "customer" && group.label === "오늘") {
+              return (
+                <div className="border-b border-white/10 pb-3" key={group.label}>
+                  {group.items.map((item) => (
+                    <SidebarItem activeFallback={active} collapsed={collapsed} currentSearch={currentSearch} item={item} key={item.href} pathname={pathname} scopedHref={scopedHref} setCurrentSearch={setCurrentSearch} variant={variant} />
+                  ))}
+                </div>
+              );
+            }
             return (
               <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || groupSelected || !closedGroups.includes(group.label)}>
                 {!collapsed ? (

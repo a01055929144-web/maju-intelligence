@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, Building2, CreditCard, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
+import { BarChart3, Boxes, Building2, CreditCard, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
 
 export type CustomerWorkspaceKey =
   | "dashboard"
@@ -43,9 +43,14 @@ export type CustomerNavigationGroup = {
 
 export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
+    label: "오늘",
+    items: [
+      { active: "dashboard", description: "오늘 확인할 영업·배송 업무", href: "/dashboard", icon: LayoutDashboard, label: "오늘 할 일" }
+    ]
+  },
+  {
     label: "영업",
     items: [
-      { active: "dashboard", description: "오늘 확인할 영업·배송 업무", href: "/dashboard", icon: LayoutDashboard, label: "오늘 현황" },
       { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
       { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
       { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 기록" },
@@ -65,10 +70,19 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     label: "설정",
     items: [
       { active: "settings", description: "회사, 출발지와 알림 기준", href: "/dashboard/settings/company", icon: Settings, label: "회사 정보" },
-      { active: "settings-staff", description: "직원 이름, 권한과 담당 업무", href: "/dashboard/settings/staff", icon: Users, label: "직원 관리" },
+      { active: "settings-staff", description: "직원 이름, 권한과 담당 업무", href: "/dashboard/settings/staff", icon: Users, label: "직원·권한" },
+      {
+        active: "data",
+        children: [
+          { active: "data", description: "상품·거래처·거래 자료 등록", href: "/", icon: FileSpreadsheet, label: "새로 가져오기" },
+          { active: "data-management", description: "가져오기 이력과 오류 확인", href: "/customers/data", icon: Database, label: "업로드 이력" }
+        ],
+        description: "자료 가져오기와 처리 이력",
+        href: "/",
+        icon: FileSpreadsheet,
+        label: "데이터 가져오기"
+      },
       { active: "billing", description: "요금제, 등록 카드와 결제 내역", href: "/settings/billing", icon: CreditCard, label: "구독·결제" },
-      { active: "data", description: "거래처·매출·매입 데이터 등록", href: "/", icon: FileSpreadsheet, label: "엑셀 업로드" },
-      { active: "data-management", description: "업로드, 저장, 누락 확인", href: "/customers/data", icon: Database, label: "업로드 이력" }
     ]
   }
   // 단체메시지는 카카오 연동 범위가 확정될 때까지 메뉴에도 "준비 중" 항목을 만들지 않습니다.
@@ -76,49 +90,50 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
 
 export const holdNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "주문·단가",
-    items: [
-      { active: "revenue", description: "영업 현황과 견적 원장", href: "/revenue/pipeline", icon: FileSpreadsheet, label: "견적 관리" },
-      { active: "customers-summary", description: "거래처 데이터 현황", href: "/crm/summary", icon: LayoutDashboard, label: "거래처 현황" },
-      { active: "customers", description: "거래처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처" },
-      { active: "product-catalog", description: "마스터 상품", href: "/revenue/products", icon: PackageSearch, label: "상품관리" }
-    ]
-  },
-  {
     label: "ERP",
     items: [
-      { active: "suppliers", description: "매입처와 원가", href: "/purchasing/suppliers", icon: Truck, label: "매입처" },
-      { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "전표" },
-      { active: "revenue-ledger", description: "기존 거래 자료", href: "/revenue/transactions", icon: History, label: "이전 거래 자료" },
-      { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고관리" }
+      { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고", workspaceRoles: ["owner", "manager"] },
+      { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "매입·매출관리", workspaceRoles: ["owner", "manager"] },
+      { active: "revenue-ledger", description: "기존 매출 거래 자료", href: "/revenue/transactions", icon: History, label: "매출 자료", workspaceRoles: ["owner", "manager"] }
     ]
   }
+];
+
+const coreErpItems: CustomerNavigationItem[] = [
+  { active: "product-catalog", description: "전체 상품과 가져오기 이력", href: "/revenue/products", icon: PackageSearch, label: "상품관리", workspaceRoles: ["owner", "manager", "sales"] },
+  { active: "customers", description: "매출처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처", workspaceRoles: ["owner", "manager", "sales"] },
+  { active: "suppliers", description: "매입처와 원가", href: "/purchasing/suppliers", icon: Truck, label: "매입처", workspaceRoles: ["owner", "manager"] }
 ];
 
 const pricingNavigationGroup: CustomerNavigationGroup = {
-  label: "주문·단가",
+  label: "단가",
   items: [
-    { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표", workspaceRoles: ["owner", "manager", "sales"] },
     { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영", workspaceRoles: ["owner", "manager"] },
-    { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 그룹", workspaceRoles: ["owner", "manager"] },
-    { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] },
-    { active: "product-catalog", description: "상품과 매입가 파일", href: "/revenue/products", icon: PackageSearch, label: "상품관리", workspaceRoles: ["owner", "manager", "sales"] }
+    { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 설정", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표", workspaceRoles: ["owner", "manager", "sales"] }
   ]
 };
 
-const holdSalesItems: CustomerNavigationItem[] = [
-  { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
-  { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" }
-];
+const orderNavigationGroup: CustomerNavigationGroup = {
+  label: "주문",
+  items: [
+    { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "마감·배송일·최소 주문 조건", href: "/revenue/pricing/order-settings", icon: Settings, label: "주문 설정", workspaceRoles: ["owner", "manager"] }
+  ]
+};
 
 export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string, pricingEnabled = false, storeOrderingEnabled = false) {
-  const groups = includeHoldModules
-    ? [{ ...customerNavigationGroups[0], items: [...customerNavigationGroups[0].items, ...holdSalesItems] }, customerNavigationGroups[1], ...holdNavigationGroups.filter((group) => !pricingEnabled || group.label !== "주문·단가"), customerNavigationGroups[2]]
-    : [...customerNavigationGroups];
-  if (pricingEnabled) {
-    const pricingItems = storeOrderingEnabled ? pricingNavigationGroup.items : pricingNavigationGroup.items.filter((item) => item.href !== "/revenue/pricing/links");
-    groups.splice(2, 0, { ...pricingNavigationGroup, items: pricingItems });
-  }
+  const [today, sales, routes, settings] = customerNavigationGroups;
+  const groups = [today, sales];
+  if (pricingEnabled && storeOrderingEnabled) groups.push(orderNavigationGroup);
+  if (pricingEnabled) groups.push(pricingNavigationGroup);
+  groups.push(routes);
+  const erpItems = [
+    ...coreErpItems,
+    ...(includeHoldModules ? holdNavigationGroups[0].items : [])
+  ];
+  if (erpItems.length) groups.push({ label: "ERP", items: erpItems });
+  groups.push(settings);
   if (!workspaceRole) return groups;
   return groups.map((group) => ({
     ...group,
