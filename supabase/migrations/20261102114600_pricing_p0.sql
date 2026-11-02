@@ -1,4 +1,4 @@
--- Approved for project fcmdvveqmcgtioelzqun on 2026-11-02; apply in P0, P1, P2 order.
+-- 운영 적용 완료(2026-11-02). 재실행 금지. P0 → P1 → P2 순서.
 -- DRAFT ONLY. Never run against production. Local PostgreSQL 16 verification required.
 -- One-time draft for a fresh local test DB; NOT a rerunnable migration/upgrade script.
 -- Older draft already applied? Use a new disposable DB and apply the full current draft once.

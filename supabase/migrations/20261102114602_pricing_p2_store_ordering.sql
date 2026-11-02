@@ -1,4 +1,4 @@
--- Approved for project fcmdvveqmcgtioelzqun on 2026-11-02; apply in P0, P1, P2 order.
+-- 운영 적용 완료(2026-11-02). 재실행 금지. P0 → P1 → P2 순서.
 -- REVIEW ONLY. 운영 적용 금지. P0/P1 pricing SQL 적용 및 별도 승인 후 실행.
 -- P2: 매장 주문 설정, 매장별 링크, 후결제 주문. 기존 데이터 백필 없음.
 begin;

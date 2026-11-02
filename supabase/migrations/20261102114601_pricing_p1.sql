@@ -1,4 +1,4 @@
--- Approved for project fcmdvveqmcgtioelzqun on 2026-11-02; apply in P0, P1, P2 order.
+-- 운영 적용 완료(2026-11-02). 재실행 금지. P0 → P1 → P2 순서.
 -- DRAFT ONLY: never execute in production. Apply once to a NEW disposable local PG16 DB.
 -- Requires approved/applied pricing P0 and product_catalog. Flag remains OFF until review.
 begin;
