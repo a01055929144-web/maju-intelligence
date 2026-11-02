@@ -11,7 +11,7 @@
 | <a id="g5"></a>G5 | I-2 · I-6 | `partner_ledger_entries`는 기존 원장이다. `deposit`/`deposit_apply`/`deposit_refund` 유형과 거래처별 행 잠금·0 미만 차단은 없다. | D-나머지, 돈 기능 승인 후 |
 | <a id="g6"></a>G6 | 가격 0순위 | `customer_price_agreements`와 기존 `sales_quotes` 수락 경로는 있지만 새 `pricing_documents` 견적 수락 → 협의 단가 생성은 없다. 새 견적 ID를 기존 수락 API에 전달할 수 없다. | E |
 | <a id="g7"></a>G7 | 9절 권한 | `lib/workspace.ts`는 driver/member/temporary에도 `manage_sales`를 주며, 전표·원장 API가 이를 사용한다. 경리 역할과 돈 조회/변경 분리가 목표와 다르다. | D-최소 전 권한 설계 |
-| <a id="g8"></a>G8 | I-1 · I-11 | `product_base_prices`, `category_unit_rules.is_default_purchase` 등 B 단계 객체는 SQL 초안이다. 기준 단가의 회사 복합 FK·상품/날짜 유일성은 운영 적용 전이다. | B |
+| <a id="g8"></a>G8 | I-1 · I-11 | B 단계 `20261102-WO-03-unit-conversion-bplus.sql`과 `20261102-WO-25-product-base-prices.sql`은 회사 복합 FK·상품/날짜 유일성까지 PG17을 통과했지만 여전히 SQL 초안이며 운영 미적용이다. | B 운영 승인 대기 |
 | <a id="g9"></a>G9 | I-12 | 홀수·짝수·빈 관측의 중앙값 순수 함수/테스트는 있다. 매입가 제안에서 실제로 단일 함수를 쓰는지 통합 검증이 필요하다. | B |
 | <a id="g10"></a>G10 | I-10 | CI는 신규 `supabase/migrations` 파일 PR에 승인 줄을 요구한다. 기존 파일 수정·운영 SQL 수동 실행 자체는 CI가 증명하지 못하므로 운영 이력은 별도 읽기 검증이 필요하다. | 매 단계 |
 
@@ -19,7 +19,7 @@
 
 | 규칙 | 기존 증거 / 새 테스트 상태 |
 |---|---|
-| I-1 | 회사 복합 FK의 PG 초안 테스트가 일부 있다. 모든 신설 테이블은 단계별 PG 검증 필요. |
+| I-1 | 적용된 P0~P2와 B 단계 단위 환산·가져오기 감사·회사별 칸·기준 단가 초안의 `company_id`를 계약 테스트가 확인한다. 초안의 운영 적용 여부는 별도다. |
 | I-2 | ERP 1단계 PG 검증은 있으나 예치금 유형은 G5로 보류. |
 | I-3 | 재고 1단계 SQL의 멱등 구조가 있지만 주문 출고 연결은 G2. |
 | I-4 | 단일 `resolve_price`가 없어 G1로 skip. |
@@ -28,8 +28,8 @@
 | I-7 | P2 주문 멱등과 기존 지급 RPC는 각각 검증. 신규 발주·가져오기 적용은 G3/G4로 skip. |
 | I-8 | G3로 skip. |
 | I-9 | `tests/storefront-contract.test.ts` 및 P2 경로 테스트; 매장 외 노출이 없는지 유지. |
-| I-10 | `.github/workflows/ci.yml`의 migration-approval; 승인 줄 정규식 검증을 추가한다. |
-| I-11 | B SQL 초안 PG 테스트는 있지만 운영 미적용(G8). |
+| I-10 | `.github/workflows/ci.yml`의 migration-approval과 프로젝트별 `DB-APPROVED` 접두사를 계약 테스트가 고정한다. |
+| I-11 | 기준 단가 초안의 회사 복합 FK·상품/날짜 유일성과 PG17 검증은 통과했다. 운영 미적용은 G8로 유지한다. |
 | I-12 | `tests/unit-conversion.test.ts`의 홀수·짝수·fallback 검증. |
 
 ## 승인 표 추가 대상
