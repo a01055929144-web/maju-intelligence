@@ -37,6 +37,28 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 // The current populated CI layout has no known exceptions.
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
+for (const width of [1440, 390]) {
+  test(`sidebar groups open by default and remember a closed group at ${width}px`, async ({ browser }) => {
+    const context = await authenticatedContext(browser, "customer", width, 844);
+    try {
+      const page = await context.newPage();
+      await page.goto("/map", { waitUntil: "domcontentloaded" });
+      if (width === 390) await page.getByRole("button", { name: "메뉴 열기" }).click();
+      const groups = page.locator('nav[aria-label="주요 작업공간"] > details');
+      await expect(groups.first()).toBeVisible();
+      expect(await groups.count()).toBeGreaterThan(1);
+      for (const group of await groups.all()) await expect(group).toHaveAttribute("open", "");
+      const otherGroup = groups.last();
+      await otherGroup.locator("summary").click();
+      await expect(otherGroup).not.toHaveAttribute("open", "");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      if (width === 390) await page.getByRole("button", { name: "메뉴 열기" }).click();
+      await expect(groups.last()).not.toHaveAttribute("open", "");
+      await expect(groups.first()).toHaveAttribute("open", "");
+    } finally { await context.close(); }
+  });
+}
+
 for (const viewport of [
   { width: 1440, height: 900 },
   { width: 390, height: 844 }

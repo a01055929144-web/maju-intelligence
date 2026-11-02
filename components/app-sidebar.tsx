@@ -30,17 +30,36 @@ type AppSidebarProps = {
   readonly homeHref: string;
   readonly previewCompanyId?: string;
   readonly renderFooter?: (collapsed: boolean) => ReactNode;
+  readonly storageScope?: string;
   readonly variant: "admin" | "customer";
 };
 
-export function AppSidebar({ active, brand, context, groups, homeHref, previewCompanyId, renderFooter, variant }: AppSidebarProps) {
+export function AppSidebar({ active, brand, context, groups, homeHref, previewCompanyId, renderFooter, storageScope, variant }: AppSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentSearch, setCurrentSearch] = useState("");
   const pathname = usePathname();
   const admin = variant === "admin";
   const asideTone = admin ? "border-violet-950 bg-[#2E1065]" : "border-slate-800 bg-[#111827]";
   const accentTone = admin ? "bg-violet-300 text-violet-950" : "bg-teal-600 text-white";
+  const groupStorageKey = storageScope ? `maju:sidebar-groups:v1:${variant}:${storageScope}` : "";
+
+  useEffect(() => {
+    if (!groupStorageKey) return;
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(groupStorageKey) || "[]");
+      setClosedGroups(Array.isArray(saved) ? saved.filter((value): value is string => typeof value === "string") : []);
+    } catch { setClosedGroups([]); }
+  }, [groupStorageKey]);
+
+  const toggleGroup = (label: string) => {
+    setClosedGroups((current) => {
+      const next = current.includes(label) ? current.filter((value) => value !== label) : [...current, label];
+      if (groupStorageKey) try { localStorage.setItem(groupStorageKey, JSON.stringify(next)); } catch { /* Storage can be unavailable. */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const syncSearch = () => setCurrentSearch(window.location.search);
@@ -96,9 +115,9 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
           {groups.map((group) => {
             const groupSelected = group.items.some((item) => isItemSelected(item, pathname, currentSearch, active));
             return (
-              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || groupSelected ? true : undefined}>
+              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || groupSelected || !closedGroups.includes(group.label)}>
                 {!collapsed ? (
-                  <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                  <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60" onClick={(event) => { event.preventDefault(); if (!groupSelected) toggleGroup(group.label); }}>
                     <span>{group.label}</span><span className="h-px min-w-0 flex-1 bg-white/10" /><ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
                   </summary>
                 ) : null}
