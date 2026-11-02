@@ -19,7 +19,7 @@
 
 | 결과 | 저장 위치 | 규칙 |
 |---|---|---|
-| 월간 검색수 | `business_permit_leads.keyword_volume` | PC+모바일 절대 검색수. 기존 데이터랩 상대값을 새 절대값으로 바꾸기 전 출처를 감사 이벤트에 기록 |
+| 기존 검색 관심도 | `business_permit_leads.keyword_volume` | **변경하지 않음.** 네이버 데이터랩 90일 값을 고정 앵커 `커피=100`으로 정규화한 상대지수이며 현재 정렬·점수 계산이 이 단위를 전제로 함 |
 | 업종 | `business_permit_leads.industry_primary`, `industry_tags` | 공식 상가정보와 기존 분류가 일치하거나 신뢰도 기준을 통과할 때만 빈값 보강. 운영자 입력은 덮어쓰지 않음 |
 | 폐업 확인 | 기존 `permit_status`, `is_active`, `exclude_reason` | 상가정보 한 소스만으로 자동 폐업 처리하지 않음. 교차 확인 결과만 감사 이벤트에 남기고 자동 제외는 별도 승인 |
 | 호출·매칭 이력 | `lead_enrichment_events` | 공급자, 조회 시각, 상태, 매칭 신뢰도, 재시도 가능 시각, 값 존재 여부를 `metadata`에 기록 |
@@ -30,12 +30,21 @@
 
 | 칸 | 형식·제약 | 용도 |
 |---|---|---|
+| `monthly_search_volume` | `integer`, `NULL or 0 <= value <= 2000000000` | 네이버 검색광고 PC+모바일 월간 검색수 절대값. 기존 `keyword_volume`과 섞지 않음 |
+| `monthly_search_volume_checked_at` | `timestamptz` | 절대 검색수를 조회한 시각 |
 | `employee_count` | `integer`, `NULL or 0 <= value <= 100000` | 국민연금 가입자 수. 미조회·미매칭은 NULL |
 | `employee_count_checked_at` | `timestamptz` | 해당 값의 공식 조회 시각 |
 | `building_floor_area_sqm` | `numeric(14,2)`, `NULL or 0 < value <= 10000000` | 건축물대장 건물 단위 연면적. 매장 면적과 구분 |
 | `building_floor_area_checked_at` | `timestamptz` | 해당 값의 공식 조회 시각 |
 
-출처·원문·매칭 신뢰도는 중복 칸을 만들지 않고 `lead_enrichment_events.metadata`에 둔다. API 원문 전체, 인증값, 개인 식별 정보는 저장하지 않는다.
+절대 검색수의 공급자는 `naver_searchad`로 고정하고, PC·모바일 구성값과 조회 키워드는 `lead_enrichment_events.metadata`에 둔다. 출처·원문·매칭 신뢰도는 중복 칸을 만들지 않고 같은 이벤트에 기록한다. API 원문 전체, 인증값, 개인 식별 정보는 저장하지 않는다.
+
+### 검색량 단위 보존
+
+- `keyword_volume`: 데이터랩 상대지수. 기존 `fetchKeywordVolumeScores`, 정렬, `computePermitLeadScoreBreakdown` 경로를 그대로 둔다.
+- `monthly_search_volume`: 검색광고 키워드 도구의 절대 월간 검색수. 신규 화면·점수 경로가 명시적으로 이 칸을 선택할 때만 사용한다.
+- 두 값 사이의 자동 변환·덮어쓰기·혼합 정렬은 금지한다.
+- 이번 승인 묶음에서는 `monthly_search_volume`을 기존 점수에 연결하거나 `keyword_volume`을 재계산하지 않는다.
 
 ## 호출 계약
 
@@ -50,7 +59,8 @@
 
 ## 점수 반영 경계
 
-- `keyword_volume`은 값이 있을 때만 활성도 근거로 사용한다.
+- 기존 점수는 종전대로 `keyword_volume` 상대지수만 사용한다.
+- `monthly_search_volume` 절대값은 저장·표시 준비까지만 하며, 점수 반영은 분포 dry-run과 별도 승인 뒤 진행한다.
 - `employee_count`, `store_area_sqm`, `building_floor_area_sqm`은 존재하는 신호만 규모 근거로 사용한다.
 - 값 없음은 0점이 아니며 등급을 낮추지 않는다.
 - 이 승인 묶음은 기존 리드 점수·등급을 운영에서 일괄 재계산하지 않는다. 별도 dry-run으로 전후 분포를 보고한 뒤 승인한다.
@@ -68,7 +78,8 @@
 
 | 항목 | 전 | 후 | 채움 기준 |
 |---|---:|---:|---|
-| 월간 검색수 | 측정 대기 | 측정 대기 | `keyword_volume is not null` |
+| 데이터랩 상대 검색 관심도 | 측정 대기 | 동일 | `keyword_volume is not null`; 이번 연결로 변경하지 않음 |
+| 검색광고 절대 월간 검색수 | 컬럼 승인 전 | 측정 대기 | `monthly_search_volume is not null` |
 | 직원 수 | 컬럼 승인 전 | 측정 대기 | `employee_count is not null` |
 | 인허가 매장 면적 | 기존 집계 재사용 | 측정 대기 | `store_area_sqm is not null` |
 | 건물 연면적 | 컬럼 승인 전 | 측정 대기 | `building_floor_area_sqm is not null` |
@@ -95,7 +106,7 @@
 아래 문구가 없으면 SQL·운영 데이터 변경·대표 회사 기능 활성화를 하지 않는다.
 
 ```text
-DB-APPROVED: fcmdvveqmcgtioelzqun / 리드 보강 employee_count·building_floor_area_sqm 및 조회시각 칸 추가
+DB-APPROVED: fcmdvveqmcgtioelzqun / 리드 보강 monthly_search_volume·employee_count·building_floor_area_sqm 및 조회시각 칸 추가
 ```
 
 ## 현재 승인 상태
