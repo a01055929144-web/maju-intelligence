@@ -1,4 +1,4 @@
--- 초안 전용. 운영 DB 실행 금지. 대표 승인·비운영 검증·EXPLAIN 검토 후 정식 migration으로 옮긴다.
+-- 운영 적용 완료(2026-11-02). 재실행 금지. 규모 플래그는 별도 결정.
 -- 목적: 2만 건 이상의 원문을 PostgREST로 페이지 조회하지 않고 회사 범위 집계 JSON 한 건만 반환한다.
 
 create or replace function public.admin_store_area_profile(p_company_id uuid)
