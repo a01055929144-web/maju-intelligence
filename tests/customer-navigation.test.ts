@@ -27,6 +27,18 @@ describe("customer navigation", () => {
     expect(flattenCustomerNavigationItems(expanded)).toEqual(expect.arrayContaining(flattenCustomerNavigationItems(holdNavigationGroups)));
   });
 
+  it("shows only approved pricing links without opening other held modules", () => {
+    const pricing = getCustomerNavigationGroups(false, "owner", true, false);
+    const hrefs = flattenCustomerNavigationItems(pricing).map((item) => item.href);
+    expect(hrefs).toContain("/revenue/pricing/documents");
+    expect(hrefs).toContain("/revenue/pricing");
+    expect(hrefs).toContain("/revenue/products");
+    expect(hrefs).not.toContain("/revenue/pricing/links");
+    expect(hrefs).not.toContain("/crm/summary");
+    expect(flattenCustomerNavigationItems(getCustomerNavigationGroups(false, "owner", true, true)).map((item) => item.href)).toContain("/revenue/pricing/links");
+    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("주문·단가");
+  });
+
   it("shows management insights only to owners and managers", () => {
     const labelsFor = (role: string) => flattenCustomerNavigationItems(getCustomerNavigationGroups(false, role)).map((item) => item.label);
 

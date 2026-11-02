@@ -3,15 +3,16 @@ import { supabaseRequest } from "./store";
 import { createHash } from "node:crypto";
 import { prepareCustomerItemFile, type CustomerItemReferences } from "../application/customer/prepare-customer-item-file";
 import { CustomerItemImportError } from "../domains/customer/customer-item-import";
+import { isFeatureEnabled } from "./feature-flags";
 
 /** Enable only after approved schema application and readiness verification. */
-export function customerItemsImportEnabled() {
-  return process.env.CUSTOMER_ITEMS_IMPORT_ENABLED === "true";
+export function customerItemsImportEnabled(companyId?: string | null) {
+  return isFeatureEnabled("CUSTOMER_ITEMS_IMPORT", companyId);
 }
 
-export function customerItemsFileImportEnabled() {
-  return customerItemsImportEnabled() && process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"
-    && process.env.IMPORT_ROW_EDITOR_ENABLED === "true" && process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true";
+export function customerItemsFileImportEnabled(companyId?: string | null) {
+  return customerItemsImportEnabled(companyId) && isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", companyId)
+    && isFeatureEnabled("IMPORT_ROW_EDITOR", companyId) && isFeatureEnabled("PRODUCT_IMPORT_TARGETS", companyId);
 }
 
 export async function customerItemReferences(companyId: string): Promise<CustomerItemReferences> {

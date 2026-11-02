@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomerOperationalName, getRequestAuthScope } from "@/lib/auth";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
@@ -51,7 +51,7 @@ async function scope(request: NextRequest, companyId?: string) {
       { message: "로그인이 필요합니다." },
       { status: 401 },
     );
-  if (!auth.companyId || !areHoldModulesEnabled(auth.companyId))
+  if (!auth.companyId || !(isFeatureEnabled("PRICING", auth.companyId) && isFeatureEnabled("STORE_ORDERING", auth.companyId)))
     return NextResponse.json(
       { message: "사용할 수 없는 기능입니다." },
       { status: 404 },

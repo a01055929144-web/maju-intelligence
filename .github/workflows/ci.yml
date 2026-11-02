@@ -189,6 +189,8 @@ jobs:
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          PRICE_SHEETS_ENABLED: "true"
+          FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Install Playwright browser
         # GitHub's Ubuntu image already contains Chromium's system libraries.
@@ -200,6 +202,8 @@ jobs:
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          PRICE_SHEETS_ENABLED: "true"
+          FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Upload responsive layout report
         if: always()

@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getAdminSession } from "@/lib/auth";
-import { getAdminAuditLogs, getSystemDiagnostics } from "@/lib/store";
+import { getAdminAuditLogs, getManagedCompanyAccounts, getSystemDiagnostics } from "@/lib/store";
+import { companyFeatures, isFeatureEnabled } from "@/lib/feature-flags";
 import { AdminPageHeader } from "../admin-page-header";
 import { IndustryBackfillPreview } from "./industry-backfill-preview";
 
@@ -50,6 +51,7 @@ export default async function AdminSystemPage({
   if (!session) redirect("/admin/login");
 
   const params = await searchParams;
+  const showFeatureFlags = singleParam(params.featureFlags) === "1";
   const auditCompany = singleParam(params.auditCompany);
   const requestedAuditPage = Math.max(1, Number.parseInt(singleParam(params.auditPage), 10) || 1);
   const auditQuery = singleParam(params.auditQuery).trim().toLowerCase();
@@ -58,11 +60,16 @@ export default async function AdminSystemPage({
   const issueTone = ["blocking", "warning"].includes(requestedIssueTone) ? requestedIssueTone : "";
   const requestedEnvironmentStatus = singleParam(params.environmentStatus);
   const environmentStatus = ["missing", "optional", "ready"].includes(requestedEnvironmentStatus) ? requestedEnvironmentStatus : "";
-  const [system, auditResult] = await Promise.all([
+  const [system, auditResult, featureCompanyResult] = await Promise.all([
     getSystemDiagnostics(),
     getAdminAuditLogs(undefined, AUDIT_QUERY_LIMIT)
       .then((logs) => ({ error: "", logs }))
-      .catch((error: unknown) => ({ error: error instanceof Error ? error.message : "감사 로그를 불러오지 못했습니다.", logs: [] }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error.message : "감사 로그를 불러오지 못했습니다.", logs: [] })),
+    showFeatureFlags
+      ? getManagedCompanyAccounts()
+        .then(({ companies }) => ({ companies, error: "" }))
+        .catch(() => ({ companies: [], error: "회사별 기능 상태를 불러오지 못했습니다. 다시 시도해 주세요." }))
+      : Promise.resolve(null)
   ]);
   const auditLogs = auditResult.logs;
   const auditCompanies = Array.from(new Map(auditLogs.filter((log) => log.companyId).map((log) => [log.companyId, log.company])).entries()).sort((a, b) => a[1].localeCompare(b[1], "ko"));
@@ -218,6 +225,28 @@ export default async function AdminSystemPage({
       <AdminPageHeader active="system" badge="System Check" session={session} subtitle="DB 용량, 인증, 환경변수와 운영 증적을 확인합니다" title="시스템 점검" />
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
+        <Card id="feature-flags">
+          <CardHeader><CardTitle>회사별 기능 플래그</CardTitle></CardHeader>
+          <CardContent>
+            {!showFeatureFlags ? (
+              <Link href="/admin/system?featureFlags=1#feature-flags">회사별 활성 상태 보기</Link>
+            ) : featureCompanyResult?.error ? (
+              <p>{featureCompanyResult.error} <Link href="/admin/system?featureFlags=1#feature-flags">다시 시도</Link></p>
+            ) : featureCompanyResult?.companies.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead><tr><th className="py-2">회사</th><th className="py-2">켜진 기능</th></tr></thead>
+                  <tbody>{featureCompanyResult.companies.map((company) => (
+                    <tr key={company.id} className="border-t">
+                      <td className="py-2">{company.name}</td>
+                      <td className="py-2">{companyFeatures.filter((feature) => isFeatureEnabled(feature, company.id)).join(", ") || "없음"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : <p>표시할 회사가 없습니다. 고객사 등록 상태를 확인해 주세요.</p>}
+          </CardContent>
+        </Card>
         <Card id="operation-issues" className={system.readyForOperations ? "border-primary/20 bg-primary/5" : "border-amber-200 bg-amber-50/70"}>
           <CardContent className="p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">

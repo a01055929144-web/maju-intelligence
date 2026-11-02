@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
@@ -79,7 +79,7 @@ async function authorize(request: NextRequest, write: boolean, companyId?: strin
     return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
   const auth = await getRequestAuthScope(request, companyId);
   if (!auth.ok) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  if (!auth.companyId || !areHoldModulesEnabled(auth.companyId)) return unavailable();
+  if (!auth.companyId || !(isFeatureEnabled("PRICING", auth.companyId) && isFeatureEnabled("STORE_ORDERING", auth.companyId))) return unavailable();
   if (auth.customerSession && !canManagePriceSheets(auth.customerSession))
     return NextResponse.json({ message: "설정 권한이 없습니다." }, { status: 403 });
   return auth.companyId;

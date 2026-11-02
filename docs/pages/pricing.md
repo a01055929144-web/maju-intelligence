@@ -107,3 +107,18 @@ SQL은 새 폐기용 로컬 PG16 DB에 한 번 적용하는 초안이다. P0 초
 
 
 ARC-05 후속 작은 단위: `domains/pricing/price-rules.ts`의 명시적 basis 계산 진입점과 `domains/quote/quote.ts` 호환 facade를 허용한다. 새 P0/P1은 purchase markup, legacy quote는 sales gross margin을 고정해 기존 결과를 유지한다. 기존 데이터 의미/발행본/인증 이관을 완료했다고 간주하지 않는다.
+
+## U-2 company feature gates (2026-11-02)
+
+Allowed: the four pricing pages and four pricing APIs, `lib/pricing/storefront.ts`, scoped pricing/storefront tests and this document.
+Use controller-owned `lib/feature-flags.ts` (`isFeatureEnabled`) without editing central feature/navigation/shell/middleware files.
+P0/P1 require PRICING; link/settings/public storefront require both PRICING and STORE_ORDERING for the authenticated or signed-link company.
+Deployment gates, existing role/author boundaries, origin checks, token validation and price selection remain unchanged.
+HOLD allowlisting cannot grant pricing or order access. Public POST/PATCH/PUT share `readStorefront`, which checks issuing-company flags immediately after verified link lookup and before document, customer or price reads.
+The token stays in the URL fragment: GET /store can only gate deployment-wide availability; the company-specific 404 is returned by the token-resolving API, and no company data is sent to a disabled company.
+No SQL execution, production flag changes or deployment in U-2. Central route/menu exceptions belong to the controller and are an integration dependency.
+
+U-1 finding: P2 issue_storefront_links accepts a sheet or the matching document owner, so a P1 quote version can have a store link.
+It does not create/accept sales_quotes or invoke quote acceptance: store ordering writes store_orders. P1 document APIs expose no acceptance bridge.
+Today's existing alternative is sales_quotes -> /quote/{public_token} for sharing, then authenticated staff POST /api/sales-quotes/{id}/accept for contract prices.
+PublicQuoteActions provides sharing/export/print, not customer acceptance. Legacy staff page access still needs separate review; no new acceptance/exposure is implemented here.

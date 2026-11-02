@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "../../../lib/auth";
-import { areHoldModulesEnabled } from "../../../lib/feature-modules";
+import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { pricingDocuments } from "../../../application/pricing/documents";
@@ -37,7 +37,7 @@ async function handle(request: NextRequest, write: boolean) {
       { message: "로그인이 필요합니다." },
       { status: 401 },
     );
-  if (!auth.companyId || !areHoldModulesEnabled(auth.companyId))
+  if (!auth.companyId || !isFeatureEnabled("PRICING", auth.companyId))
     return NextResponse.json(
       { message: "사용할 수 없는 기능입니다." },
       { status: 404 },
