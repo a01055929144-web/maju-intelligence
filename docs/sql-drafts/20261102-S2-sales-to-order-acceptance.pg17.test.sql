@@ -91,3 +91,11 @@ update normalized_customers set delivery_drop_location='rear door' where id='100
 do $$ begin if (select delivery_drop_location from normalized_customers where id='10000000-0000-4000-8000-000000000001')<>'rear door' then raise exception 'delivery drop location missing'; end if; end $$;
 
 select 'S2 sales-to-order acceptance PG17 checks passed' as result;
+
+-- send/audit 등 어떤 신규 이력이라도 있으면 down은 전체 롤백되어야 한다.
+\set ON_ERROR_STOP off
+\ir 20261102-S2-sales-to-order-acceptance.down.sql
+\set ON_ERROR_STOP on
+do $$ begin
+  if to_regclass('public.pricing_document_sends') is null then raise exception 'destructive down was not refused'; end if;
+end $$;

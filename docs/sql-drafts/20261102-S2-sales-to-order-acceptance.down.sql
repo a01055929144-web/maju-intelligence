@@ -1,7 +1,16 @@
 -- REVIEW-ONLY DRAFT. 신규 운영 이력이 있으면 파괴적 down을 거부한다.
 begin;
 do $$ begin
-  if exists(select from public.pricing_document_acceptance_requests limit 1) or exists(select from public.store_accounts limit 1) then
+  if exists(select from public.pricing_document_sends limit 1)
+    or exists(select from public.pricing_document_acceptance_requests limit 1)
+    or exists(select from public.pricing_public_request_audit limit 1)
+    or exists(select from public.customer_pricing_document_links limit 1)
+    or exists(select from public.store_accounts limit 1)
+    or exists(select from public.store_account_members limit 1)
+    or exists(select from public.store_account_member_events limit 1)
+    or exists(select from public.store_orders where store_account_id is not null or ordered_by_member_id is not null limit 1)
+    or exists(select from public.customer_price_agreements where source_pricing_document_version_id is not null limit 1)
+    or exists(select from public.normalized_customers where delivery_recipient_name is not null or delivery_contact_phone is not null or preferred_delivery_time is not null or delivery_drop_location is not null limit 1) then
     raise exception 'S2_down_refused_data_exists';
   end if;
 end $$;
