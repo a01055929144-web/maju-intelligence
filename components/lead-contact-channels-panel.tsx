@@ -28,6 +28,7 @@ import {
   SALES_OUTREACH_RULES
 } from "@/domains/lead/outreach-governance";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { LeadDocumentActions } from "@/components/lead-document-actions";
 import type { PermitLeadItem } from "@/lib/store";
 import {
   buildLeadDmScript,
@@ -344,6 +345,8 @@ export function LeadContactChannelsPanel({
 
   return (
     <section aria-label="영업 채널" className="rounded-xl border border-slate-200 bg-white p-3">
+      <LeadDocumentActions key={lead.id} leadId={lead.id} recipient={lead.businessName}
+        companyId={typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("companyId") || ""} />
       {policyState !== "acknowledged" ? (
         <div aria-labelledby="sales-outreach-policy-title" aria-modal="true" className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-3 sm:items-center" role="dialog">
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">

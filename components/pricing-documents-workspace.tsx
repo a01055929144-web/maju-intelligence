@@ -28,16 +28,23 @@ type Profile = {
 export function PricingDocumentsWorkspace({
   companyId,
   manager,
+  initialQuote,
+  onPublished,
 }: {
   companyId: string;
   manager: boolean;
+  initialQuote?: DocumentContent;
+  onPublished?: (version: DocumentVersion) => void;
 }) {
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
     [search, setSearch] = useState("");
-  const [draft, setDraft] = useState<DocumentDraft | null>(null),
-    [dirty, setDirty] = useState(false),
+  const [draft, setDraft] = useState<DocumentDraft | null>(() => initialQuote ? {
+    id: crypto.randomUUID(), revision: 0, updatedAt: "",
+    content: { ...structuredClone(initialQuote), kind: "quote" },
+  } : null),
+    [dirty, setDirty] = useState(Boolean(initialQuote)),
     [versions, setVersions] = useState<DocumentVersion[]>([]),
     [preview, setPreview] = useState<DocumentVersion | null>(null);
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]),
@@ -55,7 +62,7 @@ export function PricingDocumentsWorkspace({
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
-  const [view, setView] = useState<"list" | "editor">("list");
+  const [view, setView] = useState<"list" | "editor">(initialQuote ? "editor" : "list");
   const [bulkMargin, setBulkMargin] = useState("12"),
     [baselines, setBaselines] = useState<Record<string, number>>({});
   const excelInput = useRef<HTMLInputElement>(null);
@@ -209,6 +216,7 @@ export function PricingDocumentsWorkspace({
     setPreview(r.result);
     setVersions(await read<DocumentVersion[]>("versions", { id: draft.id }));
     setMessage(`버전 ${r.result.version}을 확정했습니다.`);
+    onPublished?.(r.result);
   }
   useEffect(() => {
     let active = true;
@@ -377,7 +385,7 @@ export function PricingDocumentsWorkspace({
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
       <header className="pricing-no-print">
-        <button className={box} onClick={() => { if (discard()) { setView("list"); void loadList(); } }} type="button">← 문서 목록</button>
+        {!initialQuote && <button className={box} onClick={() => { if (discard()) { setView("list"); void loadList(); } }} type="button">← 문서 목록</button>}
         <h1 className="text-2xl font-bold">견적서·단가표</h1>
         <p className="text-sm text-slate-600">
           초안을 저장한 뒤 버전을 확정해 온라인·오프라인 미리보기에서
