@@ -19,7 +19,7 @@ create table public.app_users (
   status text not null default 'active'
 );
 
-\ir ../../supabase/migrations/20261101165122_wo21_login_accounts.sql
+\ir 20261101165122_wo21_login_accounts.sql
 
 insert into public.app_users (id, name, role, login_id)
 values ('00000000-0000-0000-0000-000000000001', '대표', 'customer_owner', 'owner_01');

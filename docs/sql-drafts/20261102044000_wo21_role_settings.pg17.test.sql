@@ -29,7 +29,7 @@ create table public.admin_audit_logs (
   id uuid primary key default gen_random_uuid(), actor_user_id uuid, company_id uuid, action text, target_type text, target_id uuid, metadata jsonb, created_at timestamptz default now()
 );
 
-\ir ../../supabase/migrations/20261102044000_wo21_role_settings.sql
+\ir 20261102044000_wo21_role_settings.sql
 
 insert into public.companies(id,name) values ('10000000-0000-4000-8000-000000000001','테스트 회사');
 insert into public.app_users(id,name) values
