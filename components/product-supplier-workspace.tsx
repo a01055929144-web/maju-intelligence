@@ -22,7 +22,7 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
   const products = useMemo(() => data.products.filter((item) => item.supplierId === selectedId && item.rawName.toLocaleLowerCase("ko").includes(query.trim().toLocaleLowerCase("ko"))), [data.products, query, selectedId]);
   const history = data.costHistory.filter((item) => item.supplierId === selectedId).slice(0, 100);
   const imports = data.imports.filter((item) => item.supplierId === selectedId);
-  const uploadHref = companyId ? `/revenue/products?tab=supplier&companyId=${encodeURIComponent(companyId)}` : "/revenue/products?tab=supplier";
+  const uploadHref = companyId ? `/revenue/pricing?companyId=${encodeURIComponent(companyId)}` : "/revenue/pricing"; // 매입처 가격 파일은 매입가 반영에서 올린다(2149)
 
   return (
     <div className="space-y-4">
