@@ -43,7 +43,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [catalogReady, setCatalogReady] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
+  const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string; at: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   useUnsavedChangesWarning(Object.keys(candidates).length > 0 || rows.length > 0);
 
@@ -203,7 +203,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       let batchId: string | undefined;
       try { const updated = await command("recalculate"); if (updated.lastBatch && updated.lastBatch !== previousBatch) batchId = updated.lastBatch; }
       catch (cause) { setError(`매입가 ${changes.length}건은 저장됐지만 판매가 재계산은 실패했습니다. 마진 그룹에서 다시 계산해 주세요. ${cause instanceof Error ? cause.message : ""}`); }
-      setUndo({ changes: changes.map((change) => ({ productId: change.productId, supplierProductId: change.supplierProductId, expectedCost: change.cost, cost: change.expectedCost })), batchId });
+      const at = Date.now();
+      try { localStorage.setItem(`maju:pricing-cost-changes:${companyId}`, JSON.stringify({ at, ids: changes.map((change) => change.productId) })); } catch { /* private browsing */ }
+      setUndo({ changes: changes.map((change) => ({ productId: change.productId, supplierProductId: change.supplierProductId, expectedCost: change.cost, cost: change.expectedCost })), batchId, at });
       setCandidates({}); setSelected([]); await load();
       setMessage(`매입가 ${changes.length}건 저장${batchId ? " · 판매가 재계산 완료" : " · 재계산 상태 확인 필요"}. 이 화면에서 직전 저장을 되돌릴 수 있습니다.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "저장하지 못했습니다."); await load().catch(() => undefined); }
@@ -218,6 +220,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, changes: undo.changes.map((change) => ({ ...change, fileName: "직전 저장 복구" })) }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "매입가 복구에 실패했습니다.");
+      try {
+        const saved = JSON.parse(localStorage.getItem(`maju:pricing-cost-changes:${companyId}`) || "null") as { at?: number } | null;
+        if (saved?.at === undo.at) localStorage.removeItem(`maju:pricing-cost-changes:${companyId}`);
+      } catch { /* private browsing */ }
       setUndo(null); await load(); setMessage("직전 매입가 변경을 복구했습니다.");
     } catch (cause) { setError(`복구가 끝나지 않았습니다. 가격을 확인해 주세요. ${cause instanceof Error ? cause.message : ""}`); }
     finally { setBusy(false); }

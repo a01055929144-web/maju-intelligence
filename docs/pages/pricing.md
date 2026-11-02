@@ -6,6 +6,8 @@
 
 P0 `restore`는 판매가 계산 실행만 복구하므로 매입가 복구는 같은 화면에서 이전 원가를 다시 저장한다. 원가·판매가가 여러 요청에 걸치는 현재 스키마의 한계로 저장/복구가 일부만 끝날 수 있고, 해당 건수와 확인 안내를 숨기지 않는다. 새 상품 생성은 기존 `save-import` → `create-standards` 경로를 사용한다.
 
+`/revenue/pricing/documents`는 Sheets 목록을 먼저 열고 기존 P1 편집기는 문서 선택 후 연다. 편집기 품목 엑셀에는 ERP 코드·품목명·판매가만 사용하며 원가·마진은 내보내지 않는다. P1 스키마에 작성일·주문 집계·평균 마진/할인율이 없어 작성일 칸은 마지막 수정일을 표시하고 나머지는 `–`로 표시한다. 매입가 변경 후 재검토 표시도 운영 스키마 변경 없이 같은 브라우저의 저장 기록을 사용하므로 다른 기기까지 공유되지는 않는다. 이번 추가 허용 파일: `components/pricing-document-sheets.tsx`, `components/pricing-documents-workspace.tsx`, `app/revenue/pricing/documents/page.tsx`, `domains/pricing/document-excel.ts`, `tests/pricing-document-excel.test.ts`, `tests/e2e/layout.spec.ts`.
+
 Owner Domain: pricing. Related: product (원장 매입가 읽기), organization (대표 권한/회사 격리).
 
 ## Allowed Files

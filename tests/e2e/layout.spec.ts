@@ -38,6 +38,29 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`pricing sheets can start a document and import a catalog item at ${width}px`, async ({ browser }, testInfo) => {
+    const context = await authenticatedContext(browser, "customer", width, 844);
+    try {
+      const page = await context.newPage();
+      await page.route("**/api/pricing-documents?*", async (route) => {
+        const action = new URL(route.request().url()).searchParams.get("action");
+        const product = { id: "30000000-0000-4000-8000-000000000001", productCode: "P-1", name: "양파", displayName: "양파", brand: "", spec: "10kg", unit: "박스", price: 12000, taxType: "exempt" };
+        const result = action === "list" ? { items: [], total: 0 } : action === "sets" || action === "promotions" ? [] : action === "profile" ? { revision: 0, content: { companyName: "테스트 회사", contact: "", footer: "" } } : action === "catalog" ? { items: [product], total: 1 } : [];
+        await route.fulfill({ json: { result, manager: true } });
+      });
+      const response = await page.goto("/revenue/pricing/documents", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByText("아직 문서가 없습니다.")).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`pricing-sheets-${width}.png`), fullPage: false });
+      await page.getByRole("button", { name: "+ 단가표" }).first().click();
+      await page.locator('input[type="file"]').setInputFiles({ name: "품목.csv", mimeType: "text/csv", buffer: Buffer.from("ERP 코드,품목명,판매가\nP-1,양파,13000\n") });
+      await expect(page.getByLabel("품목 1 노출 상품명")).toHaveValue("양파");
+      expect((await collectLayoutProblems(page)).filter((problem) => problem.startsWith("horizontal-overflow"))).toEqual([]);
+    } finally { await context.close(); }
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`purchase cost upload stays a candidate until save at ${width}px`, async ({ browser }, testInfo) => {
     const context = await authenticatedContext(browser, "customer", width, 844);
     const saved: Array<Record<string, unknown>> = [];
