@@ -140,13 +140,14 @@ alter table public.store_orders add constraint store_orders_actor_fk foreign key
 alter table public.store_orders add constraint store_orders_actor_pair_check check(num_nonnulls(store_account_id,ordered_by_member_id) in (0,2));
 
 create function public.pricing_s2_validate_published_version() returns trigger language plpgsql set search_path=public,pg_temp as $$
-declare l jsonb; p public.product_catalog%rowtype; seen uuid[] := '{}'; product_id uuid;
+declare l jsonb; p public.product_catalog%rowtype; seen uuid[] := '{}'; product_id uuid; document_kind text;
 begin
+  select kind into document_kind from public.pricing_documents where company_id=new.company_id and id=new.document_id;
   if jsonb_typeof(new.content->'lines') is distinct from 'array' then raise exception 'published_lines_required'; end if;
   for l in select * from jsonb_array_elements(new.content->'lines') loop
     if coalesce((l->>'visible')::boolean,false) then
       product_id := (l->>'productId')::uuid;
-      if product_id=any(seen) then raise exception 'published_duplicate_product'; end if;
+      if document_kind='quote' and product_id=any(seen) then raise exception 'published_quote_duplicate_product'; end if;
       seen:=array_append(seen,product_id);
       select * into p from public.product_catalog where company_id=new.company_id and id=product_id and is_active;
       if not found then raise exception 'published_product_unconfirmed'; end if;

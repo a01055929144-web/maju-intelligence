@@ -30,6 +30,7 @@ insert into normalized_customers(id,company_id,import_id,customer_name,normalize
 insert into business_permit_leads values('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','ambiguous shop');
 insert into product_catalog values('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','BOX','taxable',true);
 insert into pricing_documents values('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',repeat('a',64),'sheet',1,'{}');
+insert into pricing_documents values('40000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001',repeat('c',64),'quote',1,'{}');
 -- 작성 중 문서는 pricing_documents에 저장되며 게시 검증 트리거 대상이 아니다.
 insert into pricing_documents values('40000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',repeat('b',64),'sheet',1,'{"lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"EA","taxType":"unknown"}]}');
 
@@ -41,7 +42,7 @@ do $$ begin
 end $$;
 do $$ begin
   begin
-    insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',8,8,'{"lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"},{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
+    insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003',8,8,'{"lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"},{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
     raise exception 'duplicate product validation did not fail';
   exception when others then if sqlerrm='duplicate product validation did not fail' then raise; end if; end;
 end $$;
