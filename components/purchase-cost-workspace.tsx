@@ -120,7 +120,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const columns = Object.keys(parsed[0]);
       setRows(parsed);
       setHeaders(columns);
-      setMapping(Object.fromEntries(fields.map((field) => [field.key, columns.find((column) => field.aliases.some((alias) => alias.replaceAll(" ", "") === column.replaceAll(" ", ""))) || ""])));
+      setMapping(Object.fromEntries(fields.map((field) => [field.key, columns.find((column) => [field.label, ...field.aliases].some((alias) => alias.replaceAll(" ", "") === column.replaceAll(" ", ""))) || ""])));
       setFileName(file.name);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "엑셀을 읽지 못했습니다."); }
   }
