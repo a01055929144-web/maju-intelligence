@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
-import { CORE_LEADS_HREF } from "@/lib/feature-modules";
+import { CORE_HOME_HREF } from "@/lib/feature-modules";
 
 const RECENT_LOGIN_STORAGE_KEY = "maju_recent_customer_login";
 
@@ -24,9 +24,9 @@ function readRecentLoginEmail() {
 
 async function resolvePostLoginPath() {
   const response = await fetchWithTimeout("/api/customer/workspaces").catch(() => null);
-  if (!response?.ok) return CORE_LEADS_HREF;
+  if (!response?.ok) return CORE_HOME_HREF;
   const data = (await response.json().catch(() => null)) as { workspaces?: unknown[] } | null;
-  return data?.workspaces && data.workspaces.length > 1 ? "/workspaces" : CORE_LEADS_HREF;
+  return data?.workspaces && data.workspaces.length > 1 ? "/workspaces" : CORE_HOME_HREF;
 }
 
 export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled: boolean }) {
