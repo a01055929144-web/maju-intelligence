@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
   koreaDay,
@@ -18,6 +18,8 @@ import {
 } from "@/domains/pricing/document";
 import { PricingDocumentPreview } from "./pricing-document-preview";
 import { PricingDocumentLibrary } from "./pricing-document-library";
+import { PricingDocumentSheets } from "./pricing-document-sheets";
+import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -53,8 +55,10 @@ export function PricingDocumentsWorkspace({
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
+  const [view, setView] = useState<"list" | "editor">("list");
   const [bulkMargin, setBulkMargin] = useState("12"),
     [baselines, setBaselines] = useState<Record<string, number>>({});
+  const excelInput = useRef<HTMLInputElement>(null);
   const read = useCallback(
     <T,>(action: string, payload: Record<string, unknown> = {}) =>
       documentRequest<T>(companyId, action, payload).then((r) => r.result),
@@ -164,6 +168,7 @@ export function PricingDocumentsWorkspace({
     setPreview(null);
     setVersions([]);
     setTab("documents");
+    setView("editor");
   }
   async function select(d: DocumentDraft) {
     if (!discard()) return;
@@ -177,6 +182,7 @@ export function PricingDocumentsWorkspace({
     const basis: Record<string, number> = {};
     for (const p of products.items) basis[p.id] = p.price;
     setBaselines(basis);
+    setView("editor");
   }
   async function save() {
     if (!draft) return;
@@ -319,12 +325,59 @@ export function PricingDocumentsWorkspace({
     [next[i], next[j]] = [next[j], next[i]];
     rows(next);
   }
+  async function exportLines() {
+    if (!draft) return;
+    const ids = Array.from(new Set(draft.content.lines.map((line) => line.productId)));
+    const current = ids.length ? await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids }) : { items: [] };
+    const codes = new Map(current.items.map((item) => [item.id, item.productCode || ""]));
+    const XLSX = await import("xlsx");
+    const sheet = XLSX.utils.json_to_sheet(draft.content.lines.map((line) => ({
+      "ERP 코드": codes.get(line.productId) || "", "품목명": line.displayName,
+      "규격": line.spec, "단위": line.unit, "판매가": line.price,
+      "과세": line.taxType === "taxable" ? "과세" : line.taxType === "exempt" ? "면세" : "확인 필요",
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "품목");
+    const data = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+    const url = URL.createObjectURL(new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = `${draft.content.title || "품목"}.xlsx`; anchor.click();
+    URL.revokeObjectURL(url);
+  }
+  async function importLines(file: File) {
+    if (!draft) return;
+    const XLSX = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = file.name.toLocaleLowerCase().endsWith(".csv")
+      ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
+      : XLSX.read(buffer, { type: "array" });
+    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false });
+    const imported = parseDocumentExcelRows(raw);
+    const codes = imported.map((row) => row.code).filter(Boolean);
+    const found = new Map(catalog.map((item) => [item.id, item]));
+    if (codes.length) {
+      const result = await read<{ items: CatalogChoice[] }>("catalog", { productCodes: codes });
+      for (const item of result.items) found.set(item.id, item);
+    }
+    const names = Array.from(new Set(imported.map((row) => row.name).filter(Boolean)));
+    for (const name of names) {
+      const result = await read<{ items: CatalogChoice[] }>("catalog", { search: name, page: 1 });
+      for (const item of result.items) found.set(item.id, item);
+    }
+    const result = importDocumentExcelRows(imported, Array.from(found.values()), draft.content.lines);
+    if (result.added.length) rows([...draft.content.lines, ...result.added]);
+    setMessage(`${result.added.length}개 품목을 담았습니다.${result.unmatched.length ? ` 연결되지 않은 ${result.unmatched.length}개: ${result.unmatched.slice(0, 5).join(", ")}` : ""}`);
+  }
   const editable = Boolean(
     draft && (draft.content.kind === "quote" || manager),
   );
+  if (view === "list") return <PricingDocumentSheets companyId={companyId} manager={manager}
+    onCreate={(kind) => create(kind)} onOpen={select}
+    onCopy={(document) => create(document.content.kind, document.content)} />;
   return (
     <div className="space-y-5" aria-busy={busy}>
       <header className="pricing-no-print">
+        <button className={box} onClick={() => { if (discard()) { setView("list"); void loadList(); } }} type="button">← 문서 목록</button>
         <h1 className="text-2xl font-bold">견적서·단가표</h1>
         <p className="text-sm text-slate-600">
           초안을 저장한 뒤 버전을 확정해 온라인·오프라인 미리보기에서
@@ -583,6 +636,13 @@ export function PricingDocumentsWorkspace({
                   >
                     견적서로 복사
                   </button>
+                  <button disabled={busy} onClick={() => void task(exportLines)} className={box} type="button">품목 엑셀 내보내기</button>
+                  <button disabled={busy || !editable} onClick={() => excelInput.current?.click()} className={box} type="button">품목 엑셀로 담기</button>
+                  <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void task(() => importLines(file));
+                    event.target.value = "";
+                  }} />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   {(
