@@ -51,7 +51,8 @@
 | 칸·제약 | 내용 |
 |---|---|
 | `company_id`, `id` | 회사 격리 복합 키 |
-| `lead_id`, `document_id`, `document_version_id` | 모두 회사 복합 FK |
+| `lead_id` 또는 `customer_id`, `document_id`, `document_version_id` | 대상은 정확히 하나만 허용하고 모두 회사 복합 FK |
+| `template_id`, `layout` | 실제 전송 템플릿과 `auto/table/cards` 레이아웃을 감사 가능하게 보존 |
 | `document_kind` | `sheet/quote`, 실제 문서 kind와 일치해야 함 |
 | `channel` | `link/kakao/qr/print/staff` |
 | `sent_by_key`, `sent_at` | 보낸 사람과 시각 |
@@ -98,7 +99,7 @@
 - 서명 링크에 검증된 `pricing_document_sends.id`가 있으면 그 행의 같은 회사 `lead_id`에 즉시 연결한다.
 - send ID가 없는 공용 단가표는 매장명·연락처·주소를 필수로 받아 같은 회사 활성 리드를 찾는다.
 - 매칭 순서는 정규화 전화번호 완전 일치, 그다음 정규화 매장명+주소 완전 일치다.
-- 강한 후보가 하나면 연결한다. 후보가 여러 개면 임의 선택하지 않고 `Lead match ambiguous`로 전체 중단한다.
+- 강한 후보가 하나면 연결한다. 후보가 여러 개면 임의 리드를 선택하지 않되, 서버가 확인한 거래처로 수락·주문 흐름은 계속 진행하고 요청에 `needs_review=true`, `review_reason='ambiguous_lead_match'`를 남긴다.
 - 후보가 없으면 `source='pricing_sheet_acceptance'`인 신규 리드를 만들고 acceptance request와 연결한다.
 - 멱등 요청 행 잠금 안에서 매칭·생성을 수행해 재시도나 동시 수락이 신규 리드를 중복 생성하지 않게 한다.
 
@@ -116,6 +117,7 @@
 - `delivery_recipient_name text`
 - `delivery_contact_phone text`
 - `preferred_delivery_time text`
+- `delivery_drop_location text`
 
 수락·첫 주문 입력은 기존 값이 비어 있을 때만 자동 반영한다. 이미 저장된 운영자 값을 바꾸려면 별도 명시적 수정 요청이 필요하다. 사업자등록증 사진과 비밀금고 데이터는 받지 않는다.
 
@@ -199,7 +201,7 @@
 - `p_document_version_id uuid`
 - `p_idempotency_key uuid`
 - `p_request_fingerprint text`
-- `p_accepted_via text`
+- `p_accepted_via text` (`store/staff/kakao_start/kakao_login`)
 - `p_actor_key text`
 - `p_send_id uuid default null`
 - `p_customer_profile jsonb default '{}'`
@@ -209,7 +211,7 @@
 1. 멱등 요청 행 조회. 같은 지문이면 저장 결과 반환, 다른 지문이면 `Idempotency conflict`.
 2. 회사 행, 문서, 게시 버전, 선택한 보낸 기록을 안정된 순서로 잠근다.
 3. `kind in ('sheet','quote')`, 게시본, 유효기간, 문서와 버전의 회사·소유 관계를 검증한다.
-4. 리드 표시 링크면 같은 회사 send 행의 리드를 사용한다. 공용 단가표면 입력 정보로 기존 리드를 매칭하고 없으면 신규 리드를 한 번만 만든다.
+4. 리드 표시 링크면 같은 회사 send 행의 리드를 사용한다. 공용 단가표면 입력 정보로 기존 리드를 매칭하고 없으면 신규 리드를 한 번만 만든다. 다중 후보는 `needs_review`로 감사하고 수락 자체는 막지 않는다.
 5. 연결된 기존 거래처 또는 같은 회사 리드를 검증한다.
 6. 거래처 연결/전환 Use Case를 호출하고 회사 범위 고객 ID를 얻는다.
 7. 거래처 기본정보의 빈 칸만 보완한다.
@@ -252,6 +254,7 @@
 - 리드 표시 send ID와 공용 단가표 매장 정보는 07이 신뢰하지 않고 서명·형식만 검증해 03 Use Case에 전달한다. 회사·리드 매칭은 03 RPC가 다시 검증한다.
 - 비활성 회사, 만료·회수 링크, `QUOTE_ACCEPTANCE` OFF는 자료 조회 전에 404 처리한다.
 - 공개 요청에서 `company_id`, `customer_id`, `lead_id`, 가격, 행위자 키를 신뢰하지 않는다.
+- 공개 수락 요청은 크기·형식 검증, 회사·경로·요청자 해시별 분당 제한, `allowed/rate_limited/invalid` 감사를 통과해야 한다.
 - 07은 DB 함수나 `customer_price_agreements`를 수정하지 않고 권한 결과만 03 소유 Use Case에 전달한다.
 
 ## 접근 제어
@@ -272,7 +275,10 @@
 - [ ] 리드 표시 단가표 수락은 표시된 같은 회사 리드에 즉시 연결
 - [ ] 공용 단가표 수락의 전화번호 또는 매장명+주소 단일 후보 매칭
 - [ ] 공용 단가표 매칭 후보가 없으면 신규 리드 하나만 생성
-- [ ] 공용 단가표 다중 후보는 임의 연결 없이 전체 롤백
+- [ ] 공용 단가표 다중 후보는 임의 리드 연결 없이 `needs_review`로 남고 수락·주문은 계속 진행
+- [ ] 카카오 시작·로그인 경로가 수락 주체로 기록되고 정상 수락 가능
+- [ ] 전송 기록에 `template_id`, `layout`, 리드/거래처 정확히 하나가 보존
+- [ ] 공개 요청 형식·크기 검증, 속도 제한, 허용·제한·거부 감사
 - [ ] 단가표 수락은 우선순위 2 문서 연결만 만들고 협의 단가를 만들지 않음
 - [ ] 견적 수락은 우선순위 1 문서 연결과 우선순위 0 협의 단가를 함께 생성
 - [ ] 단가표 보낸 기록은 리드·게시 버전·행위자·채널을 회사 범위로 보존
@@ -295,7 +301,7 @@
 - [ ] 게시 버전 가격 스냅샷 그대로 계약 단가 생성
 - [ ] 기준가·문서 초안 변경이 이미 수락한 계약 단가를 바꾸지 않음
 - [ ] 기존 활성 계약 기간을 안전하게 종료하고 기간 중복 없음
-- [ ] 연결되지 않은 상품·과세 미확정·잘못된 단위는 전체 롤백
+- [ ] 게시 시 연결되지 않은 상품·과세 미확정·잘못된 단위는 전체 롤백
 - [ ] 기존 거래처 정보 비덮어쓰기와 빈 칸 보완
 - [ ] 기존 `sales_quotes` 수락·출처 FK 회귀 없음
 - [ ] `anon/authenticated` 직접 접근 및 RPC 실행 거부

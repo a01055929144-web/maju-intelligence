@@ -136,6 +136,16 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-25-product-base-prices.pg17.test.sql
+
+      - name: Verify S-2 sales-to-order acceptance draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=20261102-S2-sales-to-order-acceptance.pg17.test.sql
       - name: Verify WO-25 customer items and down on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
