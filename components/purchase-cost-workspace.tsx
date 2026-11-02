@@ -40,6 +40,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [method, setMethod] = useState("");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
@@ -47,6 +48,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   useUnsavedChangesWarning(Object.keys(candidates).length > 0 || rows.length > 0);
 
   const load = useCallback(async () => {
+    setCatalogReady(false);
     const q = new URLSearchParams({ companyId });
     const [catalogResponse, pricingResponse] = await Promise.all([
       fetch(`/api/price-sheets/costs?${q}`, { cache: "no-store" }),
@@ -57,6 +59,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (!catalogResponse.ok || !pricingResponse.ok) throw new Error(catalog.message || price.message || "매입가를 불러오지 못했습니다.");
     setProducts(catalog.products);
     setPricing(price);
+    setCatalogReady(true);
     try {
       const all: DocumentDraft[] = [];
       for (let page = 1; page <= 200; page++) {
@@ -123,6 +126,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   function applyFile() {
+    if (!catalogReady) { setError("상품 목록을 불러온 뒤 다시 시도해 주세요."); return; }
     try {
       const parsed = parseCostImportRows(rows, mapping as Record<ImportField, string>);
       const next: Record<string, Candidate> = {};
@@ -244,7 +248,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     <input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); event.target.value = ""; }} ref={fileInput} type="file" />
     {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">다시 시도</button></p> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
-    {rows.length ? <section className="maju-section-card space-y-3 p-3"><ExcelHeaderMappingPreview fieldMap={mapping} fields={fields} headers={headers} onMap={setMapping} rows={rows as Array<Record<string, string | number | boolean | null | undefined>>} /><div className="flex gap-2"><button className="maju-button-primary" onClick={applyFile} type="button">열 맞추기 적용</button><button className="maju-button-secondary" onClick={() => setRows([])} type="button">취소</button></div></section> : null}
+    {rows.length ? <section className="maju-section-card space-y-3 p-3"><ExcelHeaderMappingPreview fieldMap={mapping} fields={fields} headers={headers} onMap={setMapping} rows={rows as Array<Record<string, string | number | boolean | null | undefined>>} /><div className="flex gap-2"><button className="maju-button-primary" disabled={!catalogReady} onClick={applyFile} type="button">열 맞추기 적용</button><button className="maju-button-secondary" onClick={() => setRows([])} type="button">취소</button></div></section> : null}
     <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장 후 기존 확정 문서는 다시 계산 필요로 확인해 주세요.</p><div className="flex flex-wrap gap-2">{affected.length ? affected.map(({ document, count }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {count}개 품목</Link>) : <span className="text-sm text-slate-500">변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
     <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /></div>
     {tab === "신규" ? <section className="maju-section-card p-4"><h2 className="font-semibold">새 상품·확인 필요 {unmatched.length}개</h2><p className="text-sm text-slate-600">일치하는 상품이 없는 행은 아직 저장하지 않았습니다. 매입처 상품을 저장한 뒤 마스터 상품으로 일괄 생성·연결합니다.</p><div className="mt-3 flex flex-wrap gap-2"><input aria-label="새 상품 매입처명" className="maju-input" onChange={(event) => setNewSupplier(event.target.value)} placeholder="파일에 매입처가 없으면 입력" value={newSupplier} /><button className="maju-button-primary" disabled={!unmatched.length || busy} onClick={() => void createNewProducts()} type="button">상품으로 만들기</button><Link className="maju-button-secondary" href="/revenue/products?tab=supplier">기존 상품 업로드 보기</Link></div>{unmatched.map((row, index) => <p className="border-t py-2 text-sm" key={`${row.code}-${index}`}>{row.code || "코드 없음"} · {row.name} · {money(row.cost)}</p>)}</section> : <CommonDataTable columns={columns} emptyMessage="상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요." filename="매입가_변경후보.csv" rowKey={(row) => row.id} rows={displayed} settingsKey={`purchase-cost:${companyId}`} />}
