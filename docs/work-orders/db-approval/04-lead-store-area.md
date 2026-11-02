@@ -1,6 +1,6 @@
 # 04 DB 승인 초안 — L-2 리드 매장 면적
 
-> 상태: **승인 대기 · 운영 실행 금지**  
+> 상태: **대표 승인(2026-11-02) · PG17 검증 후 운영 적용**  
 > 프로젝트: `fcmdvveqmcgtioelzqun`  
 > 기능 플래그: `LEAD_STORE_AREA_ENABLED=false`, `NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED=false` 유지
 
@@ -19,6 +19,13 @@
    - 최신 원천 기록 우선
    - 기존 비어 있지 않은 면적은 덮어쓰지 않음
    - 회사 범위를 명시하고 재실행해도 같은 결과가 되도록 구성
+
+적용 SQL:
+
+- [`20261102-L2-store-area.sql`](../../sql-drafts/20261102-L2-store-area.sql)
+- [`admin-store-area-profile-rpc.sql`](../../sql-drafts/admin-store-area-profile-rpc.sql)
+- [`20261102-L2-store-area-backfill.sql`](../../sql-drafts/20261102-L2-store-area-backfill.sql)
+- [`20261102-L2-store-area.pg17.test.sql`](../../sql-drafts/20261102-L2-store-area.pg17.test.sql)
 
 기존 초안:
 
@@ -63,7 +70,7 @@
 
 ## 승인 문구
 
-운영 적용은 대표가 아래 형식으로 프로젝트와 범위를 명시해 승인하기 전까지 금지한다.
+대표가 아래 범위를 승인했다. 규모 기능 플래그는 적용 결과를 보고한 뒤 별도로 결정한다.
 
 ```text
 DB-APPROVED: fcmdvveqmcgtioelzqun / L-2 리드 매장 면적 컬럼·서버 집계 RPC·대표 회사 제한 백필
