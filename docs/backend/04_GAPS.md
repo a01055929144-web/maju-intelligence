@@ -9,7 +9,7 @@
 | <a id="g3"></a>G3 | I-7 · I-8 | 정식 `purchase_orders`/`purchase_order_items`와 CreatePurchaseVoucher RPC·API가 없다. 일부 과거 초안 이름은 계약 2절과 다르다. | F |
 | <a id="g4"></a>G4 | I-7 | 기존 상품 가져오기는 `product_catalog_imports`·`supplier_products` 경로다. 계약의 `import_jobs/import_rows` + 이전 값 기반 원자 적용·되돌리기는 SQL 초안 단계다. | B 마무리 |
 | <a id="g5"></a>G5 | I-2 · I-6 | `partner_ledger_entries`는 기존 원장이다. `deposit`/`deposit_apply`/`deposit_refund` 유형과 거래처별 행 잠금·0 미만 차단은 없다. | D-나머지, 돈 기능 승인 후 |
-| <a id="g6"></a>G6 | 가격 0순위 | `customer_price_agreements`와 기존 `sales_quotes` 수락 경로는 있지만 새 `pricing_documents` 견적 수락 → 협의 단가 생성은 없다. 새 견적 ID를 기존 수락 API에 전달할 수 없다. | E |
+| <a id="g6"></a>G6 | 가격 0·1·2순위 | `customer_price_agreements`와 기존 `sales_quotes` 수락 경로는 있지만 새 `pricing_documents`의 `sheet`/`quote` 단일 수락 RPC가 없다. 새 문서 ID를 기존 수락 API에 전달할 수 없으며, 견적의 협의 단가·우선순위 1 연결과 단가표의 우선순위 2 연결도 미구현이다. | E |
 | <a id="g7"></a>G7 | 9절 권한 | `lib/workspace.ts`는 driver/member/temporary에도 `manage_sales`를 주며, 전표·원장 API가 이를 사용한다. 경리 역할과 돈 조회/변경 분리가 목표와 다르다. | D-최소 전 권한 설계 |
 | <a id="g8"></a>G8 | I-1 · I-11 | B 단계 `20261102-WO-03-unit-conversion-bplus.sql`과 `20261102-WO-25-product-base-prices.sql`은 회사 복합 FK·상품/날짜 유일성까지 PG17을 통과했지만 여전히 SQL 초안이며 운영 미적용이다. | B 운영 승인 대기 |
 | <a id="g9"></a>G9 | I-12 | 홀수·짝수·빈 관측의 중앙값 순수 함수/테스트는 있다. 매입가 제안에서 실제로 단일 함수를 쓰는지 통합 검증이 필요하다. | B |

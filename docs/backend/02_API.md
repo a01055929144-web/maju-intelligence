@@ -5,11 +5,12 @@
 | Use Case | 현재 경로 · 입력 | 출력 · 오류 | 권한 · 계약과 차이 |
 |---|---|---|---|
 | PlaceStoreOrder | `PUT /api/storefront`: token, idempotencyKey, deliveryDate, lines, memo, 선택적 orderId·expectedRevision | 주문 결과; 400 입력, 403 다른 Origin, 404 링크/플래그, 409 충돌 | 발급 회사·거래처 토큰 확인 후 `place_store_order` RPC. 단일 `resolve_price`와 `closed` 흐름은 미완료([G1](04_GAPS.md#g1)). |
+| AcceptPricingDocument | 현재 새 `pricing_documents`용 API/RPC 없음. 목표 입력: 게시 version, 문서 종류(`sheet`/`quote`), 리드·매장 정보, idempotencyKey | 거래처 전환 + 문서 연결. `quote`만 협의 단가 생성; 같은 요청 재시도는 같은 결과 | 단일 RPC가 서버에서 문서 종류·회사·게시 상태를 확인한다. `quote`는 가격 우선순위 0 협의 단가 + 1 견적 연결, `sheet`는 협의 단가 없이 2 단가표 연결([G6](04_GAPS.md#g6)). |
 | ConfirmSaleDocument | `POST /api/business-documents/[id]/actions`: action=confirm, companyId | `{document}`; 401 인증, 403 권한, 400 상태·DB 오류 | 현재 `manage_sales` → `confirm_business_document` RPC. 주문 출고 확정과 `customer_items` 갱신은 미연결([G2](04_GAPS.md#g2)). |
 | CreatePurchaseVoucher | 현재 API 없음. 목표 입력: companyId, purchaseOrderId, received lines, idempotencyKey, 선택적 지급·기준 단가 반영 | 목표: 매입전표·원장·재고·발주 상태를 단일 결과로 반환 | 미구현([G3](04_GAPS.md#g3)). 승인된 발주 SQL 뒤에 RPC·API가 필요하다. |
 | ApplyImport | `POST /api/product-catalog/imports`: action=save-import/confirm-conversion/create-standards, 파일·매입처·상품 행 | 가져오기 결과; 400 입력·상한, 401 인증, 403 권한, 404 플래그 | 현재 `manage_sales`와 회사별 PRICING 플래그. `import_jobs/import_rows` 원자 적용·되돌리기는 별도 단계([G4](04_GAPS.md#g4)). |
 | RecordPayment | `POST /api/partner-ledger`: partnerType, partnerId, entryDate, amount, paymentMethod, idempotencyKey | `{entry}`; 400 입력·DB 오류, 401 인증, 403 권한 | 현재 `manage_sales` → `record_partner_payment` RPC. 예치금 잔액 잠금·0 미만 차단은 미구현([G5](04_GAPS.md#g5)). |
 
-견적·단가표의 현재 경로는 `GET/POST /api/pricing-documents`, 링크 관리는 `/api/pricing-store-links`다. 기존 `sales_quotes` 수락 API에 새 `pricing_documents` ID를 전달하지 않는다([G6](04_GAPS.md#g6)).
+견적·단가표의 현재 경로는 `GET/POST /api/pricing-documents`, 링크 관리는 `/api/pricing-store-links`다. 기존 `sales_quotes` 수락 API에 새 `pricing_documents` ID를 전달하지 않는다. 목표는 별도 API 두 개가 아니라 `AcceptPricingDocument` 하나다([G6](04_GAPS.md#g6)).
 
 응답의 세부 필드는 각 경로 타입과 테스트가 현재 근거다. 목표 API 구현 시 회사 ID와 멱등 키를 서버와 RPC 양쪽에서 검증한다.
