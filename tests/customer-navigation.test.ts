@@ -36,6 +36,7 @@ describe("customer navigation", () => {
     expect(hrefs).not.toContain("/revenue/pricing/links");
     expect(hrefs).not.toContain("/crm/summary");
     expect(flattenCustomerNavigationItems(getCustomerNavigationGroups(false, "owner", true, true)).map((item) => item.href)).toContain("/revenue/pricing/links");
+    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("주문·단가");
   });
 
   it("shows management insights only to owners and managers", () => {
