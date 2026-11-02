@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Map, MessageSquareText, Route, Store, TriangleAlert } from "lucide-react";
+import { ArrowRight, CalendarClock, FileWarning, Map, MessageSquareText, MousePointerClick, Route, Store, TriangleAlert } from "lucide-react";
 import type { SalesHomeSummary } from "@/application/analytics/sales-home-summary";
+import type { TodayTaskCounts } from "@/application/dashboard/today-task-counts";
 
 type DeliverySummary = {
   groups: number;
@@ -15,7 +16,17 @@ const taskMeta = [
   { key: "closureReview", label: "폐업 확인 필요", description: "상태를 확인해야 하는 매장", icon: TriangleAlert, href: "/leads?type=permit" }
 ] as const;
 
-export function HomeSalesDashboard({ delivery, summary }: { delivery: DeliverySummary; summary: SalesHomeSummary }) {
+export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }: {
+  delivery: DeliverySummary;
+  summary: SalesHomeSummary;
+  taskAccess: "limited" | "manager" | "sales";
+  todayTasks: TodayTaskCounts;
+}) {
+  const urgentTasks = [
+    ...(taskAccess === "manager" && todayTasks.highInterest > 0 ? [{ count: todayTasks.highInterest, description: "최근 열람이 3회 이상이지만 아직 주문하지 않은 매장", href: "/revenue/pricing/links", icon: MousePointerClick, label: "관심 높음" }] : []),
+    ...((taskAccess === "manager" || taskAccess === "sales") && summary.tasks.followUpToday > 0 ? [{ count: summary.tasks.followUpToday, description: "약속한 연락일이 오늘이거나 이미 지난 매장", href: "/mobile/sales#reminders", icon: CalendarClock, label: "오늘 다시 연락할 곳" }] : []),
+    ...(taskAccess === "manager" && todayTasks.documentRecalculation > 0 ? [{ count: todayTasks.documentRecalculation, description: "매입가 변경을 반영해 다시 확인해야 하는 문서", href: "/revenue/pricing/documents", icon: FileWarning, label: "다시 계산 필요 문서" }] : []),
+  ];
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -30,7 +41,25 @@ export function HomeSalesDashboard({ delivery, summary }: { delivery: DeliverySu
         </div>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2" aria-label="리드 현황">
+      <section aria-labelledby="today-tasks-title" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-end justify-between gap-3">
+          <div><h2 className="text-lg font-bold text-slate-950" id="today-tasks-title">오늘 할 일</h2><p className="mt-1 text-sm text-slate-500">급한 업무만 모았습니다. 완료되면 목록에서 자동으로 사라집니다.</p></div>
+          {urgentTasks.length ? <span className="shrink-0 text-sm font-bold tabular-nums text-teal-700">{urgentTasks.length}개 업무</span> : null}
+        </div>
+        {todayTasks.unavailable ? <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900" role="status">일부 업무를 불러오지 못했습니다. 다른 업무는 그대로 진행할 수 있습니다. 잠시 뒤 새로고침해 주세요.</p> : null}
+        {urgentTasks.length ? <div className="mt-4 divide-y divide-slate-100">{urgentTasks.map(({ count, description, href, icon: Icon, label }) => (
+          <Link className="group flex min-h-16 items-center gap-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2" href={href} key={label}>
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-700"><Icon aria-hidden="true" className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-950">{label} <span className="tabular-nums text-teal-700">{count}건</span></strong><span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span></span>
+            <ArrowRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-teal-700" />
+          </Link>
+        ))}</div> : <div className="mt-4 rounded-xl bg-slate-50 px-4 py-5 text-center"><p className="text-sm font-semibold text-slate-800">지금 바로 확인할 급한 업무가 없습니다.</p><p className="mt-1 text-xs text-slate-500">새 업무가 생기면 이곳에 표시됩니다.</p></div>}
+        {taskAccess === "limited" ? <p className="mt-3 text-xs font-semibold text-slate-500">현재 역할에서 확인할 수 있는 업무만 표시합니다.</p> : null}
+      </section>
+
+      <section aria-labelledby="today-numbers-title">
+        <h2 className="mb-3 text-base font-bold text-slate-950" id="today-numbers-title">오늘 숫자</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
         <Link className="rounded-2xl bg-violet-700 p-5 text-white shadow-sm transition hover:bg-violet-800" href="/leads?type=permit">
           <p className="text-sm font-semibold text-violet-100">신규 리드 · 최근 7일</p>
           <p className="mt-2 text-3xl font-bold">{summary.leadOverview.newThisWeek}곳</p>
@@ -41,6 +70,7 @@ export function HomeSalesDashboard({ delivery, summary }: { delivery: DeliverySu
           <p className="mt-2 text-3xl font-bold">{summary.leadOverview.sales}곳</p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">영업 후보 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
         </Link>
+        </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">

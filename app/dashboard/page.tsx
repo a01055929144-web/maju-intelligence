@@ -1,13 +1,19 @@
+import { createHash } from "crypto";
 import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { HomeSalesDashboard } from "@/components/home-sales-dashboard";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { buildSalesHomeSummary } from "@/application/analytics/sales-home-summary";
+import { loadTodayTaskCounts } from "@/application/dashboard/today-task-counts";
+import { canManagePriceSheets } from "@/domains/pricing/access";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
 import { RequestTiming } from "@/lib/performance-timing";
 import { areHoldModulesEnabled, resolveLegacyDashboardHref } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { priceSheetsEnabled } from "@/lib/pricing/feature";
+import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, getCustomerMapSummaries, getDeliveryVehicleFuelTypes, getStaffVehicleLocations, getTodayRoutePlan, listPermitLeads, listSalesContactLedger, vehicleMasterRepository } from "@/lib/store";
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
@@ -39,6 +45,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   const companyId = resolvePageCompanyId(customerSession, adminSession, resolvedSearchParams?.companyId);
   if (!companyId) redirect("/admin/companies");
+  if (customerSession?.workspaceRole === "driver") redirect("/mobile/today");
   const showHoldModules = areHoldModulesEnabled(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
@@ -46,11 +53,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
 
   if (!params?.routeMode) {
-    const [homeCompany, leadResult, ledger, homeRoutePlan] = await timing.measure("db_home_parallel_total", () => Promise.all([
+    const identity = customerSession?.userId || customerSession?.companyMemberId || customerSession?.email || adminSession?.email || "dashboard";
+    const actor = createHash("sha256").update(`${companyId}:${customerSession ? "customer" : "admin"}:${identity}`).digest("hex");
+    const manager = !customerSession || canManagePriceSheets(customerSession);
+    const includeDocuments = priceSheetsEnabled() && isFeatureEnabled("PRICING", companyId);
+    const includeLinks = includeDocuments && storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId);
+    const [homeCompany, leadResult, ledger, homeRoutePlan, todayTasks] = await timing.measure("db_home_parallel_total", () => Promise.all([
       getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
       listPermitLeads(companyId, { excludeExcluded: true, limit: 3000 }),
       listSalesContactLedger(companyId, 5000),
-      getTodayRoutePlan(companyId, { assignmentKeys })
+      getTodayRoutePlan(companyId, { assignmentKeys }),
+      loadTodayTaskCounts({ actor, companyId, includeDocuments, includeLinks, manager })
     ]));
     const summary = buildSalesHomeSummary(leadResult.leads, ledger);
     timing.log("/dashboard");
@@ -62,11 +75,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         previewCompanyId={customerSession ? undefined : companyId}
         showHoldModules={showHoldModules}
         subtitle="신규 리드, 후속 연락, 방문과 배송 운영을 오늘 기준으로 정리합니다"
-        title="영업 홈"
+        title="오늘 할 일"
         userName={customerSession?.name || adminSession?.email || "관리자"}
         workspaceRole={customerSession?.workspaceRole}
       >
-        <HomeSalesDashboard delivery={{ groups: homeRoutePlan.groups.length, stops: homeRoutePlan.totalStops }} summary={summary} />
+        <HomeSalesDashboard
+          delivery={{ groups: homeRoutePlan.groups.length, stops: homeRoutePlan.totalStops }}
+          summary={summary}
+          taskAccess={manager ? "manager" : customerSession?.workspaceRole === "sales" ? "sales" : "limited"}
+          todayTasks={todayTasks}
+        />
       </CustomerAppShell>
     );
   }
