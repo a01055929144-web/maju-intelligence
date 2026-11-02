@@ -16,12 +16,24 @@ const taskMeta = [
   { key: "closureReview", label: "폐업 확인 필요", description: "상태를 확인해야 하는 매장", icon: TriangleAlert, href: "/leads?type=permit" }
 ] as const;
 
-export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }: {
+export type HomeTab = "today" | "status" | "performance";
+export function isHomeTab(value?: string): value is HomeTab { return value === "today" || value === "status" || value === "performance"; }
+
+// 0033 지시서 1절: 홈 = 한 화면, 탭 3개. 같은 숫자는 한 탭에만 둔다.
+// 오늘 할 일 = 지금 처리할 일 · 현황판 = 운영 숫자 · 성과 = 영업 흐름/전환. 현황판 · 성과는 대표 · 관리자만.
+export function HomeSalesDashboard({ companyQuery = "", delivery, summary, tab = "today", taskAccess, todayTasks }: {
+  companyQuery?: string;
   delivery: DeliverySummary;
   summary: SalesHomeSummary;
+  tab?: HomeTab;
   taskAccess: "limited" | "manager" | "sales";
   todayTasks: TodayTaskCounts;
 }) {
+  const canSeeBoards = taskAccess === "manager";
+  const activeTab: HomeTab = canSeeBoards ? tab : "today";
+  const tabs: { id: HomeTab; label: string }[] = canSeeBoards
+    ? [{ id: "today", label: "오늘 할 일" }, { id: "status", label: "현황판" }, { id: "performance", label: "성과" }]
+    : [];
   const urgentTasks = [
     ...(taskAccess === "manager" && todayTasks.highInterest > 0 ? [{ count: todayTasks.highInterest, description: "최근 열람이 3회 이상이지만 아직 주문하지 않은 매장", href: "/revenue/pricing/links", icon: MousePointerClick, label: "관심 높음" }] : []),
     ...((taskAccess === "manager" || taskAccess === "sales") && summary.tasks.followUpToday > 0 ? [{ count: summary.tasks.followUpToday, description: "약속한 연락일이 오늘이거나 이미 지난 매장", href: "/mobile/sales#reminders", icon: CalendarClock, label: "오늘 다시 연락할 곳" }] : []),
@@ -31,9 +43,9 @@ export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-sm font-semibold text-teal-700">오늘의 영업 운영</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">오늘 할 일</h1>
-          <p className="mt-2 text-sm text-slate-500">신규 리드부터 재연락, 방문, 배송 코스까지 한곳에서 확인하세요.</p>
+          <p className="text-sm font-semibold text-teal-700">홈</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{activeTab === "status" ? "현황판" : activeTab === "performance" ? "성과" : "오늘 할 일"}</h1>
+          {tabs.length ? <nav aria-label="홈 보기" className="mt-3 inline-flex gap-1 rounded-xl border border-slate-200 bg-white p-1">{tabs.map((item) => <Link aria-current={activeTab === item.id ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm font-bold ${activeTab === item.id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`} href={`/dashboard?tab=${item.id}${companyQuery}`} key={item.id}>{item.label}</Link>)}</nav> : null}
         </div>
         <div className="flex gap-2">
           <Link className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700" href="/map"><Map className="h-4 w-4" />지도</Link>
@@ -41,6 +53,7 @@ export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }
         </div>
       </header>
 
+      {activeTab === "today" ? <>
       <section aria-labelledby="today-tasks-title" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-950" id="today-tasks-title">오늘 할 일</h2><p className="mt-1 text-sm text-slate-500">급한 업무만 모았습니다. 완료되면 목록에서 자동으로 사라집니다.</p></div>
@@ -57,21 +70,6 @@ export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }
         {taskAccess === "limited" ? <p className="mt-3 text-xs font-semibold text-slate-500">현재 역할에서 확인할 수 있는 업무만 표시합니다.</p> : null}
       </section>
 
-      <section aria-labelledby="today-numbers-title">
-        <h2 className="mb-3 text-base font-bold text-slate-950" id="today-numbers-title">오늘 숫자</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-        <Link className="rounded-2xl bg-violet-700 p-5 text-white shadow-sm transition hover:bg-violet-800" href="/leads?type=permit">
-          <p className="text-sm font-semibold text-violet-100">신규 리드 · 최근 7일</p>
-          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.newThisWeek}곳</p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">새로 들어온 매장 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
-        </Link>
-        <Link className="rounded-2xl bg-teal-800 p-5 text-white shadow-sm transition hover:bg-teal-900" href="/leads?type=keyword">
-          <p className="text-sm font-semibold text-teal-100">영업 리드</p>
-          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.sales}곳</p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">영업 후보 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
-        </Link>
-        </div>
-      </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <LeadPreviewList empty="최근 들어온 리드가 없습니다." items={summary.leadPreviews.newest} title="새로 들어옴" type="permit" />
@@ -88,7 +86,32 @@ export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }
           </Link>
         ))}
       </section>
+      </> : null}
 
+      {activeTab === "status" ? <>
+      <section aria-labelledby="today-numbers-title">
+        <h2 className="mb-3 text-base font-bold text-slate-950" id="today-numbers-title">오늘 숫자</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+        <Link className="rounded-2xl bg-violet-700 p-5 text-white shadow-sm transition hover:bg-violet-800" href="/leads?type=permit">
+          <p className="text-sm font-semibold text-violet-100">신규 리드 · 최근 7일</p>
+          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.newThisWeek}곳</p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">새로 들어온 매장 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
+        </Link>
+        <Link className="rounded-2xl bg-teal-800 p-5 text-white shadow-sm transition hover:bg-teal-900" href="/leads?type=keyword">
+          <p className="text-sm font-semibold text-teal-100">영업 리드</p>
+          <p className="mt-2 text-3xl font-bold">{summary.leadOverview.sales}곳</p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">영업 후보 보기 <ArrowRight className="h-3.5 w-3.5" /></span>
+        </Link>
+        </div>
+      </section>
+
+      <section className="flex flex-col justify-between gap-4 rounded-2xl bg-slate-900 p-5 text-white sm:flex-row sm:items-center">
+        <div><p className="text-sm font-semibold text-teal-300">오늘 배송 운영</p><p className="mt-1 text-xl font-bold">{delivery.groups}개 권역 · {delivery.stops}곳 코스</p><p className="mt-1 text-xs text-slate-300">배송 코스는 영업 홈과 분리되어 기존 운영 흐름을 그대로 유지합니다.</p></div>
+        <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-900" href="/routes/today">오늘 코스 보기 <ArrowRight className="h-4 w-4" /></Link>
+      </section>
+      </> : null}
+
+      {activeTab === "performance" ? <>
       <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between"><div><h2 className="text-base font-bold">영업 흐름</h2><p className="mt-1 text-xs text-slate-500">현재 리드 상태 기준</p></div><span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">활성 {summary.totals.active}곳</span></div>
@@ -106,11 +129,13 @@ export function HomeSalesDashboard({ delivery, summary, taskAccess, todayTasks }
           </div>
         </section>
       </div>
+      <p className="text-sm text-slate-500">담당자별 목표 · 실적과 자세한 분석은 <Link className="font-semibold text-teal-700 underline" href={`/insights${companyQuery ? `?${companyQuery.slice(1)}` : ""}`}>성과 자세히 보기</Link>에서 확인합니다.</p>
+      </> : null}
 
-      <section className="flex flex-col justify-between gap-4 rounded-2xl bg-slate-900 p-5 text-white sm:flex-row sm:items-center">
-        <div><p className="text-sm font-semibold text-teal-300">오늘 배송 운영</p><p className="mt-1 text-xl font-bold">{delivery.groups}개 권역 · {delivery.stops}곳 코스</p><p className="mt-1 text-xs text-slate-300">배송 코스는 영업 홈과 분리되어 기존 운영 흐름을 그대로 유지합니다.</p></div>
-        <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-900" href="/routes/today">오늘 코스 보기 <ArrowRight className="h-4 w-4" /></Link>
-      </section>
+
+
+
+
     </div>
   );
 }

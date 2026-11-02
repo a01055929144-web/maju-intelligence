@@ -5,7 +5,7 @@ import { customerNavigationGroups, flattenCustomerNavigationItems, getCustomerNa
 describe("customer navigation", () => {
   it("keeps today separate above the core groups", () => {
     expect(customerNavigationGroups.map((group) => group.label)).toEqual(["오늘", "영업", "동선", "설정"]);
-    expect(customerNavigationGroups[0].items.map((item) => item.label)).toEqual(["오늘 할 일"]);
+    expect(customerNavigationGroups[0].items.map((item) => item.label)).toEqual(["홈"]);
   });
 
   it("keeps the focused sales and logistics destinations reachable", () => {
@@ -54,13 +54,11 @@ describe("customer navigation", () => {
     expect(erp?.items.map((item) => item.href)).toEqual(["/revenue/products", "/crm/timeline", "/purchasing/suppliers"]);
   });
 
-  it("shows management insights only to owners and managers", () => {
+  it("moves performance into the home tabs instead of a separate sales menu", () => {
     const labelsFor = (role: string) => flattenCustomerNavigationItems(getCustomerNavigationGroups(false, role)).map((item) => item.label);
 
-    expect(labelsFor("owner")).toContain("성과");
-    expect(labelsFor("manager")).toContain("성과");
-    expect(labelsFor("sales")).not.toContain("성과");
-    expect(labelsFor("driver")).not.toContain("성과");
+    for (const role of ["owner", "manager", "sales", "driver"]) expect(labelsFor(role)).not.toContain("성과");
+    expect(labelsFor("owner")).toContain("홈");
   });
 
   it("does not duplicate an exact navigation destination", () => {
