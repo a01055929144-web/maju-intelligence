@@ -72,6 +72,8 @@ export function areStructuredFieldRecordsEnabled(companyId?: string | null, valu
 }
 
 export const CORE_LEADS_HREF = "/leads?type=permit";
+/** 로그인 · 작업공간 선택 뒤 첫 화면 = 오늘 할 일 (2026-11-03 대표 결정) */
+export const CORE_HOME_HREF = "/dashboard";
 
 export function resolveLegacyDashboardHref(params: { companyId?: string; leadType?: string; view?: string }) {
   const companyQuery = params.companyId ? `companyId=${encodeURIComponent(params.companyId)}` : "";
