@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
-import { koreaDay, type CatalogChoice, type DocumentDraft, type DocumentKind, type DocumentVersion } from "@/domains/pricing/document";
+import { koreaDay, type CatalogChoice, type DocumentDraft, type DocumentKind } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
 
 type SheetRow = DocumentDraft & { published: boolean; stale: boolean; status: string };
@@ -20,10 +20,7 @@ const addDays = (value: string, days: number) => koreaDay(new Date(new Date(`${v
 export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, onCopy }: Props) {
   const today = koreaDay();
   const [documents, setDocuments] = useState<DocumentDraft[]>([]);
-  const [published, setPublished] = useState<Record<string, boolean>>({});
   const [selected, setSelected] = useState<string[]>([]);
-  const [changed, setChanged] = useState<{ at: number; ids: string[] }>({ at: 0, ids: [] });
-  const [reviewed, setReviewed] = useState<string[]>([]);
   const [kind, setKind] = useState("전체");
   const [status, setStatus] = useState("전체");
   const [scope, setScope] = useState("전체");
@@ -38,6 +35,7 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    setError("");
     const all: DocumentDraft[] = [];
     let total = 0;
     for (let page = 1; page <= 20; page++) {
@@ -48,30 +46,17 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
     }
     // ponytail: P1 lists 50 rows per call; add a bulk summary endpoint if companies exceed 1,000 documents.
     if (all.length < total) setMessage(`최근 ${all.length}개 문서만 표시합니다. 전체 ${total}개 중 이전 문서는 다음 조회 범위 확장이 필요합니다.`);
+    if (all.some(document => !document.recalculation)) throw new Error("문서 가격 상태를 확인하지 못했습니다. 다시 불러와 주세요.");
     setDocuments(all);
-    const versions: Record<string, boolean> = {};
-    for (let index = 0; index < all.length; index += 5) {
-      await Promise.all(all.slice(index, index + 5).map(async (document) => {
-        const response = await documentRequest<DocumentVersion[]>(companyId, "versions", { id: document.id });
-        versions[document.id] = response.result.length > 0;
-      }));
-    }
-    setPublished(versions);
-    try {
-      const saved = JSON.parse(localStorage.getItem(`maju:pricing-cost-changes:${companyId}`) || "null") as { at?: number; ids?: string[] } | null;
-      if (saved?.at && Array.isArray(saved.ids)) setChanged({ at: saved.at, ids: saved.ids });
-      const acknowledged = JSON.parse(localStorage.getItem(`maju:pricing-reviewed:${companyId}:${saved?.at || 0}`) || "[]") as string[];
-      setReviewed(Array.isArray(acknowledged) ? acknowledged : []);
-    } catch { /* private browsing */ }
   }, [companyId]);
   useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다.")).finally(() => setLoading(false)); }, [load]);
 
-  const staleIds = useMemo(() => new Set(changed.ids), [changed.ids]);
   const rows = useMemo<SheetRow[]>(() => documents.map((document) => {
-    const stale = !reviewed.includes(document.id) && document.content.lines.some((line) => staleIds.has(line.productId));
-    const state = stale ? "다시 계산 필요" : day(document.content.validUntil) < today ? "만료" : published[document.id] ? "게시 중" : "작성중";
-    return { ...document, published: Boolean(published[document.id]), stale, status: state };
-  }), [documents, published, reviewed, staleIds, today]);
+    const stale = document.recalculation!.needsRecalculation;
+    const published = Boolean(document.recalculation!.publishedAt);
+    const state = stale ? "다시 계산 필요" : day(document.content.validUntil) < today ? "만료" : published ? "게시 중" : "작성중";
+    return { ...document, published, stale, status: state };
+  }), [documents, today]);
   const visible = rows.filter((row) => {
     if (kind === "단가표" && row.content.kind !== "sheet") return false;
     if (kind === "견적서" && row.content.kind !== "quote") return false;
@@ -113,7 +98,6 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
   async function recalculateDocuments() {
     if (!selectedRows.length) return;
     let done = 0;
-    const acknowledged = new Set(reviewed);
     for (const document of selectedRows) {
       try {
         const ids = Array.from(new Set(document.content.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
@@ -122,17 +106,10 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
         const content = { ...document.content, lines: document.content.lines.map((line) => ({ ...line, price: !line.promotionId && prices.has(line.productId) ? prices.get(line.productId)! : line.price })) };
         await documentRequest(companyId, "save", { id: document.id, expected: document.revision, content }, true);
         done++;
-        acknowledged.add(document.id);
       } catch (cause) {
-        const partial = Array.from(acknowledged);
-        setReviewed(partial);
-        try { localStorage.setItem(`maju:pricing-reviewed:${companyId}:${changed.at}`, JSON.stringify(partial)); } catch { /* private browsing */ }
         throw new Error(`${done}개 문서 갱신됨 · ${selectedRows.length - done}개 미갱신. ${cause instanceof Error ? cause.message : "다시 시도해 주세요."}`);
       }
     }
-    const next = Array.from(acknowledged);
-    setReviewed(next);
-    try { localStorage.setItem(`maju:pricing-reviewed:${companyId}:${changed.at}`, JSON.stringify(next)); } catch { /* private browsing */ }
     setMessage(`${done}개 문서 초안을 현재 판매가로 갱신했습니다. 공개하려면 각 문서에서 버전을 확정해 주세요.`);
   }
   async function extend() {
@@ -166,16 +143,16 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
     { key: "discount", label: "평균 할인율", value: () => "–" },
     { key: "monthlyCost", label: "이번 달 주문 매입가", value: () => "–" },
     { key: "monthlySales", label: "이번 달 주문 판매가", value: () => "–" },
-    { key: "status", label: "상태", value: (row) => row.status },
+    { key: "status", label: "상태", value: (row) => row.status, render: (row) => <span>{row.status}{row.stale ? ` · ${row.recalculation?.changedProductCount}개 품목` : ""}</span> },
     { key: "created", label: "작성일", value: (row) => day(row.updatedAt) },
     { key: "expires", label: "유효기간", value: (row) => row.content.validUntil },
     { key: "links", label: "매장 링크(곳·주문·열람)", value: () => "–" },
   ], [onOpen, selected]);
   return <div className="space-y-4" aria-busy={busy}>
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-semibold">견적서·단가표</h1><p className="text-sm text-slate-600">작성한 문서를 고르고 편집하거나 새로 만드세요.</p></div><div className="flex flex-wrap gap-2"><Link className="maju-button-secondary" href="/revenue/pricing/order-settings">주문 설정</Link><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("restore"))} type="button">직전 변동분 복구</button><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("recalculate"))} type="button">변동분 일괄 계산</button><button className="maju-button-primary" onClick={() => onCreate("quote")} type="button">+ 견적서</button>{manager ? <button className="maju-button-primary" onClick={() => onCreate("sheet")} type="button">+ 단가표</button> : null}</div></header>
-    {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error} <button className="underline" onClick={() => void load()} type="button">다시 시도</button></p> : null}
+    {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error} <button className="underline" onClick={() => void load().catch(cause => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))} type="button">다시 시도</button></p> : null}
     {message ? <p role="status" className="rounded bg-teal-50 p-3">{message}</p> : null}
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{[["게시 중", rows.filter((row) => row.status === "게시 중").length], ["다시 계산 필요", `${rows.filter((row) => row.stale).length}건 · ${rows.filter((row) => row.stale).reduce((n, row) => n + row.content.lines.filter((line) => staleIds.has(line.productId)).length, 0)}개 품목`], ["이번 주 링크 주문", "–"], ["만료 7일 이내", rows.filter((row) => row.content.validUntil >= today && row.content.validUntil <= addDays(today, 7)).length]].map(([label, value]) => <div className="maju-section-card p-3" key={label}><p className="text-sm text-slate-600">{label}</p><strong>{value}</strong></div>)}</div>
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{[["게시 중", rows.filter((row) => row.status === "게시 중").length], ["다시 계산 필요", `${rows.filter((row) => row.stale).length}건 · ${rows.filter((row) => row.stale).reduce((n, row) => n + (row.recalculation?.changedProductCount || 0), 0)}개 품목`], ["이번 주 링크 주문", "–"], ["만료 7일 이내", rows.filter((row) => row.content.validUntil >= today && row.content.validUntil <= addDays(today, 7)).length]].map(([label, value]) => <div className="maju-section-card p-3" key={label}><p className="text-sm text-slate-600">{label}</p><strong>{value}</strong></div>)}</div>
     <div className="flex flex-wrap gap-2">{["전체", "단가표", "견적서", "행사", "임박"].map((item) => <button aria-pressed={kind === item} className={kind === item ? "maju-button-primary" : "maju-button-secondary"} key={item} onClick={() => setKind(item)} type="button">{item}</button>)}<select aria-label="문서 상태" className="maju-input" value={status} onChange={(event) => setStatus(event.target.value)}>{["전체", "작성중", "게시 중", "다시 계산 필요", "만료"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="공개 범위" className="maju-input" value={scope} onChange={(event) => setScope(event.target.value)}>{["전체", "회사 공용", "작성자 전용"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="날짜 기준" className="maju-input" value={dateBasis} onChange={(event) => setDateBasis(event.target.value)}><option>작성일</option><option>유효기간</option></select><select aria-label="날짜 범위" className="maju-input" value={dateRange} onChange={(event) => setDateRange(event.target.value)}>{["전체", "오늘", "7일", "30일", "이번 달", "기간 지정"].map((item) => <option key={item}>{item}</option>)}</select>{dateRange === "기간 지정" ? <><input aria-label="시작일" className="maju-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /><input aria-label="종료일" className="maju-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></> : null}<input aria-label="이름·매장 검색" className="maju-input" placeholder="이름·매장 검색" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
     <div className="flex flex-wrap items-center gap-2"><span>선택 {selected.length}건</span><button className="maju-button-secondary" disabled={!selected.length || busy} onClick={() => void run(exportSelected)} type="button">엑셀 내보내기</button><button className="maju-button-secondary" disabled={!selected.length || busy} onClick={() => void run(recalculateDocuments)} type="button">다시 계산</button><button className="maju-button-secondary" disabled={!selected.length || busy} onClick={() => void run(extend)} type="button">기간 연장</button><button className="maju-button-secondary" disabled={selected.length !== 1} onClick={() => onCopy(selectedRows[0])} type="button">복사</button></div>
     {loading ? <p role="status" className="maju-section-card p-6">문서를 불러오는 중입니다.</p> : documents.length ? <CommonDataTable columns={columns} rows={visible} rowKey={(row) => row.id} settingsKey={`pricing-documents:${companyId}`} emptyMessage="조건에 맞는 문서가 없습니다. 필터를 바꾸거나 새 문서를 작성해 주세요." /> : <div className="maju-section-card p-6">아직 문서가 없습니다. <button className="text-teal-700 underline" onClick={() => onCreate(manager ? "sheet" : "quote")} type="button">{manager ? "+ 단가표" : "+ 견적서"}</button>부터 작성해 보세요.</div>}

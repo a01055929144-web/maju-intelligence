@@ -35,6 +35,7 @@ export type DocumentDraft = {
   revision: number;
   content: DocumentContent;
   updatedAt: string;
+  recalculation?: import("./document-recalculation").DocumentRecalculation;
 };
 export type DocumentVersion = {
   id: string;
