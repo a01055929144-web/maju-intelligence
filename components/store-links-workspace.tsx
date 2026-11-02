@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 type Draft = { id: string; content: { title: string }; revision: number };
 type Version = { id: string; version: number; content: { title: string }; publishedAt: string };
@@ -12,7 +13,11 @@ type Link = { id: string; customerName: string; documentTitle: string; documentV
 type Event = { id: string; event_type: string; occurred_at: string;
   device_class: string | null; actor_name: string | null };
 
-export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
+export function StoreLinksWorkspace({ companyId, acceptanceEnabled = false, initialLead }: { companyId: string; acceptanceEnabled?: boolean;
+  initialLead?: { id: string; name: string; phone: string; address: string } }) {
+  const acceptanceRetry = useRef<{ target: string; key: string } | null>(null);
+  const [newStore, setNewStore] = useState(Boolean(initialLead));
+  const [storeProfile, setStoreProfile] = useState({ businessName: initialLead?.name || "", phone: initialLead?.phone || "", address: initialLead?.address || "" });
   const [documents, setDocuments] = useState<Draft[]>([]);
   const [documentId, setDocumentId] = useState("");
   const [versions, setVersions] = useState<Version[]>([]);
@@ -37,16 +42,16 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   }, [base, page]);
   useEffect(() => { void loadLinks().catch((error) => setMessage(String(error))); }, [loadLinks]);
   useEffect(() => {
-    void fetch(`/api/pricing-documents?${base}&action=list`, { cache: "no-store" })
-      .then((response) => response.json()).then((result: { result?: { items?: Draft[] } }) =>
+    void fetch(acceptanceEnabled ? `/api/pricing-document-acceptance?${base}` : `/api/pricing-documents?${base}&action=list`, { cache: "no-store" })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.message || "문서를 불러오지 못했습니다."); return body; }).then((result: { result?: { items?: Draft[] } }) =>
         setDocuments(result.result?.items ?? [])).catch(() => setMessage("발행 문서를 불러오지 못했습니다."));
-  }, [base]);
+  }, [base, acceptanceEnabled]);
   useEffect(() => {
     if (!documentId) { setVersions([]); return; }
-    void fetch(`/api/pricing-documents?${base}&action=versions&id=${encodeURIComponent(documentId)}`, { cache: "no-store" })
-      .then((response) => response.json()).then((result: { result?: Version[] }) =>
+    void fetch(acceptanceEnabled ? `/api/pricing-document-acceptance?${base}&documentId=${encodeURIComponent(documentId)}` : `/api/pricing-documents?${base}&action=versions&id=${encodeURIComponent(documentId)}`, { cache: "no-store" })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.message || "버전을 불러오지 못했습니다."); return body; }).then((result: { result?: Version[] }) =>
         setVersions(result.result ?? [])).catch(() => setMessage("문서 버전을 불러오지 못했습니다."));
-  }, [base, documentId]);
+  }, [base, documentId, acceptanceEnabled]);
   async function searchCustomers() {
     try {
       const response = await fetch(`/api/pricing-order-settings?${base}&customerQuery=${encodeURIComponent(customerQuery)}`);
@@ -143,6 +148,27 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       setDetail({ id, events: result.events ?? [] });
     } catch (error) { setMessage(error instanceof Error ? error.message : "열람 기록을 불러오지 못했습니다."); }
   }
+  async function acceptDocument() {
+    if (busy || !versionId || (!newStore && !customerId)) return;
+    const payload = { documentVersionId: versionId, customerId: newStore ? null : customerId,
+      leadId: initialLead?.id, ...(newStore ? { customerProfile: storeProfile } : {}) };
+    const target = JSON.stringify(payload);
+    if (acceptanceRetry.current?.target !== target) acceptanceRetry.current = { target, key: crypto.randomUUID() };
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`/api/pricing-document-acceptance?${base}`, { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, idempotencyKey: acceptanceRetry.current.key }) });
+      const result = await response.json() as { message?: string; result?: { customerId?: string | null; needsReview?: boolean } };
+      if (!response.ok) throw new Error(result.message || "수락을 처리하지 못했습니다. 같은 선택으로 다시 시도해 주세요.");
+      setMessage(result.message || "수락 처리했습니다.");
+      if (newStore && result.result?.customerId && !result.result.needsReview) {
+        const id = result.result.customerId;
+        setCustomers(old => old.some(item => item.id === id) ? old : [...old, { id, customer_name: storeProfile.businessName }]);
+        setCustomerId(id);
+      }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "수락을 처리하지 못했습니다."); }
+    finally { setBusy(false); }
+  }
   return <div className="space-y-6">
     <header><h1 className="text-xl font-semibold">공개 범위 · 매장 링크</h1>
       <p className="text-sm text-slate-600">매장마다 별도 링크를 만듭니다. 받은 매장만 해당 매장의 주문과 내역을 볼 수 있습니다.</p></header>
@@ -161,10 +187,16 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         onChange={(event) => setCustomerQuery(event.target.value)} placeholder="매장 이름 검색" />
         <button className="rounded border px-4" onClick={() => void searchCustomers()}>검색</button></div>
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
-        onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
+        onChange={(event) => { setCustomerId(event.target.value); setNewStore(false); }}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
       <button disabled={busy || !versionId || !customerId} className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
         onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</button>
+      {acceptanceEnabled && <div className="space-y-2">
+        <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={newStore} onChange={event => { setNewStore(event.target.checked); if (event.target.checked) setCustomerId(""); }} />기존 거래처 없이 매장·리드 수락</label>
+        {newStore && <div className="space-y-2">{([["businessName", "매장 이름"], ["phone", "매장 연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => <label key={key} className="block text-sm">{label}<input className="mt-1 min-h-11 w-full rounded border p-2" value={storeProfile[key]} disabled={busy} onChange={event => setStoreProfile(old => ({ ...old, [key]: event.target.value }))} /></label>)}</div>}
+        <Button type="button" variant="outline" disabled={busy || !versionId || (newStore ? Object.values(storeProfile).some(value => !value.trim()) : !customerId)}
+          onClick={() => void acceptDocument()}>직원 대신 수락</Button>
+      </div>}
       {customers.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
         <label className="flex min-h-11 items-center gap-2 font-semibold"><input type="checkbox"
           checked={selectedCustomerIds.length === customers.length}

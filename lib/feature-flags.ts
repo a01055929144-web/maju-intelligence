@@ -2,7 +2,7 @@ import { priceSheetsEnabled } from "./pricing/feature";
 import { storeOrderingEnabled } from "./pricing/store-order-feature";
 
 export const companyFeatures = [
-  "PRICING", "STORE_ORDERING", "ACCOUNT_LOGIN_V2",
+  "PRICING", "STORE_ORDERING", "QUOTE_ACCEPTANCE", "ACCOUNT_LOGIN_V2",
   "CUSTOMER_ITEMS_IMPORT", "PRODUCT_IMPORT_AUDIT_V2", "IMPORT_ROW_EDITOR",
   "PRODUCT_IMPORT_TARGETS", "COMPANY_FIELD_DEFINITIONS", "PRODUCT_CATEGORIES"
 ] as const;
@@ -20,6 +20,8 @@ const legacyGlobalFlags: Partial<Record<CompanyFeature, string>> = {
 
 /** Existing global switches keep their current behavior while company rollout is introduced. */
 export function isFeatureEnabled(feature: CompanyFeature, companyId?: string | null): boolean {
+  if (feature === "QUOTE_ACCEPTANCE") return process.env.QUOTE_ACCEPTANCE === "true" && !!companyId &&
+    (process.env.FEATURE_QUOTE_ACCEPTANCE_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
   if (feature === "PRICING" && !priceSheetsEnabled()) return false;
   if (feature === "STORE_ORDERING" && (!priceSheetsEnabled() || !storeOrderingEnabled())) return false;
   const legacy = legacyGlobalFlags[feature];
@@ -31,6 +33,7 @@ export function isFeatureEnabled(feature: CompanyFeature, companyId?: string | n
 }
 
 export function hasFeatureRollout(feature: CompanyFeature): boolean {
+  if (feature === "QUOTE_ACCEPTANCE" && process.env.QUOTE_ACCEPTANCE !== "true") return false;
   return isFeatureEnabled(feature) || Boolean((process.env[`FEATURE_${feature}_COMPANY_IDS`] || "")
     .split(",").some((id) => id.trim()));
 }

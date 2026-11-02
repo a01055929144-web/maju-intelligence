@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 3100;
+const port = Number(process.env.PLAYWRIGHT_PORT || 3100);
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -30,7 +30,14 @@ export default defineConfig({
       CUSTOMER_PASSWORD: "ci-owner-layout-password-2026",
       CUSTOMER_COMPANY_ID: "00000000-0000-4000-8000-000000000001",
       PRICE_SHEETS_ENABLED: "true",
-      FEATURE_PRICING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001"
+      FEATURE_PRICING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001",
+      // Synthetic test company only; these values never configure a deployment.
+      STORE_ORDERING_ENABLED: "true",
+      STORE_LINK_SECRET: "ci-store-link-secret-not-for-production-2026",
+      STORE_PUBLIC_BASE_URL: "https://example.test",
+      FEATURE_STORE_ORDERING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001",
+      QUOTE_ACCEPTANCE: "true",
+      FEATURE_QUOTE_ACCEPTANCE_COMPANY_IDS: "00000000-0000-4000-8000-000000000001"
     }
   }
 });
