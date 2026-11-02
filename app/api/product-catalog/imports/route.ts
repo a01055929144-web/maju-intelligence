@@ -11,6 +11,7 @@ import type {
   ParsedProduct,
 } from "@/domains/product/catalog-import";
 import type { ImportPreviewRow } from "@/domains/product/import-row-editor";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,8 @@ export async function GET(request: NextRequest) {
   );
   if (!scope.ok)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!isFeatureEnabled("PRICING", scope.companyId))
+    return NextResponse.json({ message: "Not Found" }, { status: 404 });
   if (!scopeHasCapability(scope, "manage_sales"))
     return NextResponse.json(
       { message: "상품 원장을 조회할 권한이 없습니다." },
@@ -143,6 +146,8 @@ export async function POST(request: NextRequest) {
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok)
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!isFeatureEnabled("PRICING", scope.companyId))
+    return NextResponse.json({ message: "Not Found" }, { status: 404 });
   if (!scopeHasCapability(scope, "manage_sales"))
     return NextResponse.json(
       { message: "상품 원장을 수정할 권한이 없습니다." },
