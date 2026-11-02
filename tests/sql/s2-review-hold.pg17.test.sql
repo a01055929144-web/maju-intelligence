@@ -122,6 +122,18 @@ do $$ declare held jsonb; before_lead jsonb; after_lead jsonb; begin
   if not (held->>'needsReview')::boolean or before_lead<>after_lead then raise exception 'explicit review converted lead'; end if;
 end $$;
 
+-- A missing manual review reason is normalized without changing the lead.
+do $$ declare held jsonb; before_lead jsonb; after_lead jsonb; begin
+  select to_jsonb(l) into before_lead from business_permit_leads l where id='20000000-0000-4000-8000-000000000093';
+  held:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000090',
+    '70000000-0000-4000-8000-000000000099',repeat('0',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000093',null,true,null,null,'{}');
+  select to_jsonb(l) into after_lead from business_permit_leads l where id='20000000-0000-4000-8000-000000000093';
+  if not (held->>'needsReview')::boolean or before_lead<>after_lead
+    or not exists(select from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000099' and review_reason='manual_review') then
+    raise exception 'null manual review reason failed';
+  end if;
+end $$;
+
 -- A merged lead is rejected before a request or business row is written.
 insert into business_permit_leads(id,company_id,business_name,merged_into_lead_id)
 values('20000000-0000-4000-8000-000000000094','00000000-0000-4000-8000-000000000001','merged lead','20000000-0000-4000-8000-000000000001');
@@ -152,5 +164,5 @@ do $$ declare accepted jsonb; before_merged jsonb; after_merged jsonb; begin
   if (accepted->>'needsReview')::boolean or accepted->>'leadId'<>'20000000-0000-4000-8000-000000000095'
     or before_merged<>after_merged then raise exception 'merged candidate polluted canonical matching'; end if;
 end $$;
-select jsonb_build_object('heldRetry',true,'normalQuote',true,'normalSheet',true,'ambiguousLeadHold',true,'ambiguousCustomerHold',true,'noReviewBusinessWrites',true,'canonicalLead',true,'mergedDuplicateIgnored',true,'grantsPreserved',true) as regression_checks;
+select jsonb_build_object('heldRetry',true,'normalQuote',true,'normalSheet',true,'ambiguousLeadHold',true,'ambiguousCustomerHold',true,'noReviewBusinessWrites',true,'manualReviewDefault',true,'canonicalLead',true,'mergedDuplicateIgnored',true,'grantsPreserved',true) as regression_checks;
 rollback;
