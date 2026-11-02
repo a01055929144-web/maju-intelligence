@@ -17,7 +17,8 @@ export function areHoldModulesEnabled(companyId?: string | null, value?: string)
 }
 
 export function isHoldModulePath(pathname: string) {
-  if (pathname === "/revenue/contacts") return false;
+  if (pathname === "/revenue/contacts" || pathname === "/revenue/products" ||
+    pathname === "/revenue/pricing" || pathname.startsWith("/revenue/pricing/")) return false;
   return HOLD_MODULE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 

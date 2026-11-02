@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCustomerSession } from "@/lib/auth";
 import { getWorkspaceCapabilities, workspaceRoleLabels, workspaceTypeLabels } from "@/lib/workspace";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export async function GET() {
   const session = await getCustomerSession();
@@ -20,6 +21,10 @@ export async function GET() {
       workspaceType,
       workspaceTypeLabel: workspaceTypeLabels[workspaceType]
     },
-    capabilities: getWorkspaceCapabilities(workspaceRole)
+    capabilities: getWorkspaceCapabilities(workspaceRole),
+    features: {
+      pricing: isFeatureEnabled("PRICING", session.companyId),
+      storeOrdering: isFeatureEnabled("STORE_ORDERING", session.companyId)
+    }
   });
 }

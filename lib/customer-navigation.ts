@@ -95,15 +95,29 @@ export const holdNavigationGroups: CustomerNavigationGroup[] = [
   }
 ];
 
+const pricingNavigationGroup: CustomerNavigationGroup = {
+  label: "주문·단가",
+  items: [
+    { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표" },
+    { active: "revenue", description: "매입가 반영과 마진 그룹", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영·마진" },
+    { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리" },
+    { active: "product-catalog", description: "상품과 매입가 파일", href: "/revenue/products", icon: PackageSearch, label: "상품관리" }
+  ]
+};
+
 const holdSalesItems: CustomerNavigationItem[] = [
   { active: "sales-performance", description: "담당자별 목표와 영업 실적", href: "/sales/performance", icon: BarChart3, label: "영업 성과" },
   { active: "assistant", description: "견적, 메모, 후속 액션", href: "/assistant", icon: Bot, label: "AI 영업 비서" }
 ];
 
-export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string) {
+export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string, pricingEnabled = false, storeOrderingEnabled = false) {
   const groups = includeHoldModules
-    ? [{ ...customerNavigationGroups[0], items: [...customerNavigationGroups[0].items, ...holdSalesItems] }, customerNavigationGroups[1], ...holdNavigationGroups, customerNavigationGroups[2]]
-    : customerNavigationGroups;
+    ? [{ ...customerNavigationGroups[0], items: [...customerNavigationGroups[0].items, ...holdSalesItems] }, customerNavigationGroups[1], ...holdNavigationGroups.filter((group) => !pricingEnabled || group.label !== "주문·단가"), customerNavigationGroups[2]]
+    : [...customerNavigationGroups];
+  if (pricingEnabled) {
+    const pricingItems = storeOrderingEnabled ? pricingNavigationGroup.items : pricingNavigationGroup.items.filter((item) => item.href !== "/revenue/pricing/links");
+    groups.splice(2, 0, { ...pricingNavigationGroup, items: pricingItems });
+  }
   if (!workspaceRole) return groups;
   return groups.map((group) => ({
     ...group,

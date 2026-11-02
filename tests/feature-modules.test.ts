@@ -50,6 +50,9 @@ describe("hold feature modules", () => {
     expect(isHoldModulePath("/revenue/pipeline")).toBe(true);
     expect(isHoldModulePath("/operations/inventory")).toBe(true);
     expect(isHoldModulePath("/revenue/contacts")).toBe(false);
+    expect(isHoldModulePath("/revenue/pricing/documents")).toBe(false);
+    expect(isHoldModulePath("/revenue/pricing/links")).toBe(false);
+    expect(isHoldModulePath("/revenue/products")).toBe(false);
     expect(isHoldModulePath("/settings/billing")).toBe(false);
     expect(isHoldModulePath("/quote/public-token")).toBe(false);
     expect(CORE_LEADS_HREF).toBe("/leads?type=permit");
