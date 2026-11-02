@@ -3,6 +3,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ProductCatalogWorkspace } from "@/components/product-catalog-workspace";
 import { getAdminSession, getCustomerSession, customerHasCapability, resolvePageCompanyId } from "@/lib/auth";
 import { customerItemsFileImportEnabled } from "../../../lib/customer-items-import";
+import { areHoldModulesEnabled } from "../../../lib/feature-modules";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
 
 export default async function ProductCatalogPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; tab?: string }> }) {
@@ -36,7 +37,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
           companyId={isAdminPreview ? companyId : ""}
           importAuditV2Enabled={process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"}
           importTargetsEnabled={process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true"}
-          customerItemsEnabled={customerItemsFileImportEnabled() && isFeatureEnabled("PRICING", companyId)}
+          customerItemsEnabled={customerItemsFileImportEnabled() && areHoldModulesEnabled(companyId)}
           rowEditorEnabled={process.env.IMPORT_ROW_EDITOR_ENABLED === "true"}
           initialTab={initialTab}
           tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
