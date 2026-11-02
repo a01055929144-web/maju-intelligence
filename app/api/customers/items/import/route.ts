@@ -4,10 +4,13 @@ import { areHoldModulesEnabled } from "../../../../../lib/feature-modules";
 import { customerItemsImportEnabled, customerItemsFileImportEnabled, customerItemReferences, writeCustomerItems, writeCustomerItemFile } from "../../../../../lib/customer-items-import";
 import { importCustomerItems } from "../../../../../application/customer/import-customer-items";
 import { CustomerItemImportError } from "../../../../../domains/customer/customer-item-import";
+import { hasFeatureRollout, type CompanyFeature } from "../../../../../lib/feature-flags";
 
 export const dynamic = "force-dynamic";
+const fileImportFeatures: CompanyFeature[] = ["CUSTOMER_ITEMS_IMPORT", "PRODUCT_IMPORT_AUDIT_V2", "IMPORT_ROW_EDITOR", "PRODUCT_IMPORT_TARGETS"];
 
 export async function GET(request: NextRequest) {
+  if (!fileImportFeatures.every(hasFeatureRollout)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   try {
     const scope = await getRequestAuthScope(request);
     if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
@@ -21,6 +24,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!hasFeatureRollout("CUSTOMER_ITEMS_IMPORT")) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   try {
     const scope = await getRequestAuthScope(request);
     if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });

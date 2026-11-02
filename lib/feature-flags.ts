@@ -29,3 +29,8 @@ export function isFeatureEnabled(feature: CompanyFeature, companyId?: string | n
   return !!companyId && (process.env[`FEATURE_${feature}_COMPANY_IDS`] || "")
     .split(",").some((id) => id.trim() === companyId);
 }
+
+export function hasFeatureRollout(feature: CompanyFeature): boolean {
+  return isFeatureEnabled(feature) || Boolean((process.env[`FEATURE_${feature}_COMPANY_IDS`] || "")
+    .split(",").some((id) => id.trim()));
+}

@@ -27,6 +27,15 @@ describe("actual customer item import boundary", () => {
     expect(mocks.auth).not.toHaveBeenCalled();
     expect(mocks.db).not.toHaveBeenCalled();
   });
+  it("authenticates only when a company rollout is configured", async () => {
+    delete process.env.CUSTOMER_ITEMS_IMPORT_ENABLED;
+    vi.stubEnv("FEATURE_CUSTOMER_ITEMS_IMPORT_COMPANY_IDS", company);
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.auth).toHaveBeenCalledOnce();
+    mocks.auth.mockResolvedValueOnce({ ok: true, companyId: "00000000-0000-4000-8000-000000000099" });
+    expect((await POST(request())).status).toBe(404);
+    expect(mocks.db).toHaveBeenCalledOnce();
+  });
   it("rejects anonymous, unauthorized and non-allowlisted companies", async () => {
     mocks.auth.mockResolvedValueOnce({ ok: false });
     expect((await POST(request())).status).toBe(401);
