@@ -63,7 +63,7 @@ for (const width of [1440, 390]) {
       });
       const response = await page.goto("/revenue/pricing", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
-      await expect(page.getByRole("heading", { name: "매입가 반영" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "매입가 반영" }).last()).toBeVisible();
       await page.getByRole("button", { name: "엑셀 올리기" }).click();
       await page.locator('input[type="file"]').setInputFiles({ name: "매입가.csv", mimeType: "text/csv", buffer: Buffer.from("ERP 코드,품목,규격,단위,매입처,매입가\nERP-1,양파,10kg,박스,한빛유통,12000\n") });
       await page.getByRole("button", { name: "열 맞추기 적용" }).click();
