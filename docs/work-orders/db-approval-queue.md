@@ -42,6 +42,7 @@ down 초안도 폐기 가능한 PG17 복제 DB에서 실행·검증했다. P0/P1
 | `STORE_PUBLIC_BASE_URL` | 공개 링크 기준 주소 |
 
 운영 DB 승인 전에는 기능 플래그를 켜지 않는다. `HOLD_MODULES_ENABLED_COMPANY_IDS`는 사용하지 않는다.
+현재 회사별 전환은 `PRICING`·`STORE_ORDERING`에 적용됐다. 기존 로그인·재고·가져오기·기준 단가 등의 글로벌 플래그와 관리자 읽기 전용 플래그 표는 decisions-0824 P0-2의 남은 범위다. 이 작업 전에는 해당 플래그를 활성화하지 않는다.
 
 ## 백엔드 계약서 후속 묶음 (이번 최소 DB 승인 범위 밖)
 
