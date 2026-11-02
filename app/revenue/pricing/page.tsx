@@ -3,7 +3,8 @@ import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { PriceSheetsWorkspace } from "@/components/price-sheets-workspace";
+import { PurchaseCostWorkspace } from "@/components/purchase-cost-workspace";
+import { CustomerAppShell } from "@/components/customer-app-shell";
 export const dynamic = "force-dynamic";
 export default async function PricingPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
   if (!priceSheetsEnabled()) notFound();
@@ -12,5 +13,8 @@ export default async function PricingPage({ searchParams }: { searchParams?: Pro
   if (!customer && !admin) redirect("/dashboard/login");
   const companyId = resolvePageCompanyId(customer, admin, (await searchParams)?.companyId);
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && !canManagePriceSheets(customer))) notFound();
-  return <main className="mx-auto max-w-6xl space-y-4 p-4"><h1 className="text-xl font-bold">①-2 가격표 · 마진 그룹</h1><PriceSheetsWorkspace companyId={companyId} /></main>;
+  const preview = Boolean(admin && !customer);
+  return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="매입가 반영" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
+    <section className="mx-auto max-w-[1560px] space-y-4 p-4"><PurchaseCostWorkspace companyId={companyId} /></section>
+  </CustomerAppShell>;
 }

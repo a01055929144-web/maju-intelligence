@@ -28,7 +28,9 @@ export default defineConfig({
       ADMIN_SESSION_SECRET: "ci-layout-session-secret-not-for-production",
       CUSTOMER_EMAIL: "ci-owner@example.test",
       CUSTOMER_PASSWORD: "ci-owner-layout-password-2026",
-      CUSTOMER_COMPANY_ID: "00000000-0000-4000-8000-000000000001"
+      CUSTOMER_COMPANY_ID: "00000000-0000-4000-8000-000000000001",
+      PRICE_SHEETS_ENABLED: "true",
+      FEATURE_PRICING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001"
     }
   }
 });

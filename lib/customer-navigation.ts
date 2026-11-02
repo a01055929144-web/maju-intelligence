@@ -99,7 +99,8 @@ const pricingNavigationGroup: CustomerNavigationGroup = {
   label: "주문·단가",
   items: [
     { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표", workspaceRoles: ["owner", "manager", "sales"] },
-    { active: "revenue", description: "매입가 반영과 마진 그룹", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영·마진", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 그룹", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] },
     { active: "product-catalog", description: "상품과 매입가 파일", href: "/revenue/products", icon: PackageSearch, label: "상품관리", workspaceRoles: ["owner", "manager", "sales"] }
   ]

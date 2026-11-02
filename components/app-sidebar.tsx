@@ -182,6 +182,7 @@ function isItemSelected(item: AppSidebarItem, pathname: string | null, currentSe
   if (!pathname) return activeFallback === item.active;
   const [hrefWithoutHash] = item.href.split("#");
   const [hrefPath = "/", hrefQuery = ""] = hrefWithoutHash.split("?");
+  if (hrefPath === "/revenue/pricing" && pathname !== hrefPath) return false;
   if (hrefPath === "/" ? pathname !== "/" : pathname !== hrefPath && !pathname.startsWith(`${hrefPath}/`)) return false;
   const expected = new URLSearchParams(hrefQuery);
   const current = new URLSearchParams(currentSearch);
