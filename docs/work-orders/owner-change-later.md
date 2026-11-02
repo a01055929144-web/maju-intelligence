@@ -11,6 +11,8 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `PRICE_SHEETS_ENABLED` · `STORE_ORDERING_ENABLED` | Vercel Production | 2026-11-02 12:11 KST · Codex | `false`로 바꾸면 전체 꺼짐 | 재배포 |
 | `FEATURE_PRICING_COMPANY_IDS` · `FEATURE_STORE_ORDERING_COMPANY_IDS` | Vercel Production | 2026-11-02 12:11 KST · Codex | 회사 ID를 쉼표로 추가 · 비우면 꺼짐 | 재배포 |
 
+| `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
+
 ## 대표 확인 (개발은 기본값으로 진행 중)
 
 | 항목 | 지금 쓰는 기본값 | 상태 |
