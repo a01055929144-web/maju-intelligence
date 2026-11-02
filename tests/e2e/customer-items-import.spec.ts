@@ -14,7 +14,7 @@ for (const width of [1440,390]) {
     const page=await context.newPage();
     try {
       await page.goto("/customer-items-import/preview");
-      await page.getByRole("button",{name:"데이터 가져오기",exact:true}).click();
+      await page.getByRole("button",{name:"전체 상품 업로드",exact:true}).click();
       await page.getByRole("radio",{name:/^거래처 원장/}).click();
       const upload=page.getByLabel("거래처 품목 파일");
       await expect(upload).toBeEnabled();

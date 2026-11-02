@@ -8,7 +8,6 @@ import {
   History,
   Loader2,
   PackagePlus,
-  Upload,
   X,
 } from "lucide-react";
 import {
@@ -213,14 +212,6 @@ export function ProductCatalogWorkspace({
             </button>
           ))}
         </div>
-        <button
-          className="maju-button-primary inline-flex items-center gap-2"
-          onClick={() => setDrawer(true)}
-          type="button"
-        >
-          <Upload className="h-4 w-4" />
-          전체 상품 업로드
-        </button>
       </div>
       {message ? (
         <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
