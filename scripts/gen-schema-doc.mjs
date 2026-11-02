@@ -74,5 +74,5 @@ for (const [name, item] of [...tables].sort(([a], [b]) => a.localeCompare(b))) {
 const output = `${lines.join("\n")}\n`;
 const target = "docs/backend/01_SCHEMA.md";
 if (process.argv.includes("--check")) {
-  if ((await readFile(target, "utf8")) !== output) throw new Error(`${target} is stale; run node scripts/gen-schema-doc.mjs`);
+  if ((await readFile(target, "utf8")).replaceAll("\r\n", "\n") !== output) throw new Error(`${target} is stale; run node scripts/gen-schema-doc.mjs`);
 } else await writeFile(target, output);
