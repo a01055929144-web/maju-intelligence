@@ -8,7 +8,6 @@ import {
   History,
   Loader2,
   PackagePlus,
-  Upload,
   X,
 } from "lucide-react";
 import {
@@ -195,31 +194,24 @@ export function ProductCatalogWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         <div className="flex max-w-full gap-1 overflow-x-auto">
           {(
+            // 2149 지시서: 탭은 전체 상품 · 전체 상품 업로드 · 업로드 이력 3개만. 매입처 상품·표준 품목 연결 탭은 두지 않는다
+            // (매입처 가격 파일은 매입가 반영, 품목 맞추기는 업로드 미리보기에서).
             [
-              ["catalog", "마스터 상품"],
-              ["supplier", "매입처 상품·업로드"],
-              ["mapping", "표준 품목 연결"],
-              ["imports", "가져오기 감사"],
+              ["catalog", "전체 상품"],
+              ["upload", "전체 상품 업로드"],
+              ["imports", "업로드 이력"],
             ] as const
           ).map(([id, label]) => (
             <button
               className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold ${tab === id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => (id === "upload" ? setDrawer(true) : setTab(id))}
               type="button"
             >
               {label}
             </button>
           ))}
         </div>
-        <button
-          className="maju-button-primary inline-flex items-center gap-2"
-          onClick={() => setDrawer(true)}
-          type="button"
-        >
-          <Upload className="h-4 w-4" />
-          {importTargetsEnabled ? "데이터 가져오기" : "매입 단가표 업로드"}
-        </button>
       </div>
       {message ? (
         <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
@@ -677,13 +669,13 @@ function ImportDrawer({
   return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/45">
       <section
-        aria-label="매입 단가표 업로드"
+        aria-label="전체 상품 업로드"
         className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       >
         <header className="flex items-center justify-between border-b p-5">
           <div>
             <p className="text-xs font-black text-teal-700">STEP {step} / 4</p>
-            <h2 className="text-xl font-black">매입 단가표 업로드</h2>
+            <h2 className="text-xl font-black">전체 상품 업로드</h2>
           </div>
           <button
             aria-label="닫기"

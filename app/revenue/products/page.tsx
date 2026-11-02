@@ -15,17 +15,17 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   if (customerSession && !customerHasCapability(customerSession, "manage_sales")) notFound();
   const isAdminPreview = Boolean(adminSession && !customerSession);
-  const initialTab = params?.tab === "mapping" || params?.tab === "supplier" || params?.tab === "imports" ? params.tab : "catalog";
-  const standardsView = initialTab === "mapping";
+  // 매입처 상품 · 표준 품목 연결 탭은 없앴다(2149). 예전 주소(?tab=supplier|mapping)는 전체 상품으로 연다.
+  const initialTab = params?.tab === "imports" ? "imports" : "catalog";
 
   return (
     <CustomerAppShell
-      active={standardsView ? "product-standards" : "product-catalog"}
+      active="product-catalog"
       companyName={customerSession?.companyName || "선택 고객사"}
       mode={isAdminPreview ? "admin-preview" : "customer"}
       previewCompanyId={isAdminPreview ? companyId : undefined}
-      subtitle={standardsView ? "회사 상품과 표준 품목의 연결을 확인합니다." : "회사가 판매하는 마스터 상품과 매입처 상품을 관리합니다."}
-      title={standardsView ? "표준 품목 관리" : "상품관리"}
+      subtitle="단가표 · 견적서 · 행사 · 임박에 쓰는 회사의 전체 상품을 관리합니다."
+      title="상품관리"
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
