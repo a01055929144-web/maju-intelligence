@@ -56,3 +56,14 @@ down 초안도 폐기 가능한 PG17 복제 DB에서 실행·검증했다. P0/P1
 | D 나머지 | I-6 | 기존 `partner_ledger_entries`의 예치금 유형과 0 미만 방지 | 별도 SQL 검토 대기 |
 
 이 표는 미래 작업 순서만 기록한다. 이번 승인 요청은 위 1~3번 P0/P1/P2 초안에 한정한다.
+
+## 백엔드 계약 10절 후속 승인 묶음 (아직 실행 승인 없음)
+
+| 순서 | 계약 규칙 | 대상 · 필요한 초안 | 운영 변경 |
+|---|---|---|---|
+| B | I-1 · I-11 · I-12 | 기존 `product_unit_conversions` 확장, `product_base_prices`의 회사 복합 FK·날짜 유일성. 관련 WO-03·WO-25 초안과 down·PG17 결과를 다시 묶는다. | 승인 전 실행 금지 |
+| D-최소 | I-2 · I-5 · I-7 | 기존 `business_documents`·`partner_ledger_entries`로 주문 출고 전표 1건과 입금 멱등을 보장한다. 새 `ledger_entries`는 만들지 않는다. | 승인 전 실행 금지 |
+| E | I-4 · I-9 | 새 `pricing_documents` 견적 수락 → `customer_price_agreements`, 단일 가격 결정, 주문 `closed`·`channel` 추가. | 승인 전 실행 금지 |
+| F | I-3 · I-8 | `purchase_orders`·줄과 출고 예정 뷰, 발주당 매입전표 1건. 재고 원장은 기존 테이블을 재사용한다. | 승인 전 실행 금지 |
+
+이 표는 승인 요청이 아니다. 각 묶음의 정확한 SQL·down·PG17 검증을 준비해 별도로 승인받는다. 예치금·지급과 보류 WO-17/19는 포함하지 않는다.
