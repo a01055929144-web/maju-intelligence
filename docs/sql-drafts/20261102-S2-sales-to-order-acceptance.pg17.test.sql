@@ -1,5 +1,4 @@
 \set ON_ERROR_STOP on
-create extension if not exists pgcrypto;
 do $$ begin
   if not exists(select from pg_roles where rolname='anon') then create role anon; end if;
   if not exists(select from pg_roles where rolname='authenticated') then create role authenticated; end if;
@@ -8,8 +7,10 @@ end $$;
 
 drop schema if exists public cascade; create schema public;
 grant usage on schema public to public;
+create extension if not exists pgcrypto;
 create table companies(id uuid primary key);
-create table normalized_customers(id uuid primary key,company_id uuid not null references companies(id),address text,phone text,business_registration_number text,unique(company_id,id));
+create table customer_imports(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies(id),source text not null default 'excel',row_count integer not null default 0,status text not null default 'completed',quality_score integer not null default 0,completed_at timestamptz);
+create table normalized_customers(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies(id),import_id uuid not null references customer_imports(id),customer_name text not null,address text,phone text,business_registration_number text,normalized_key text not null,unique(company_id,id),unique(company_id,normalized_key));
 create table business_permit_leads(id uuid primary key,company_id uuid not null references companies(id),business_name text not null,address text,phone text,source text not null default 'manual_upload',is_active boolean not null default true,matched_customer_id uuid,is_duplicate boolean not null default false,status text not null default '신규 수집',updated_at timestamptz not null default now(),unique(company_id,id));
 create table product_catalog(id uuid primary key,company_id uuid not null references companies(id),sales_unit text,tax_type text,is_active boolean not null default true,unique(company_id,id));
 create table pricing_documents(id uuid primary key,company_id uuid not null references companies(id),owner_key text not null,kind text not null,revision integer not null,content jsonb not null,unique(company_id,id));
@@ -23,7 +24,8 @@ create table store_orders(id uuid primary key default gen_random_uuid(),company_
 \ir 20261102-S2-sales-to-order-acceptance.sql
 
 insert into companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
-insert into normalized_customers(id,company_id) values('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
+insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
+insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key) values('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','existing','existing');
 insert into business_permit_leads values('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','ambiguous shop');
 insert into product_catalog values('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','BOX','taxable',true);
 insert into pricing_documents values('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',repeat('a',64),'sheet',1,'{}');
@@ -66,6 +68,11 @@ insert into business_permit_leads(id,company_id,business_name,address,phone) val
 do $$ declare a jsonb; begin
   a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000002',repeat('e',64),'kakao_start','10000000-0000-4000-8000-000000000001',null,null,false,null,null,'{"businessName":"ambiguous","phone":"010-1234-5678","address":"C"}');
   if a->>'needsReview'<>'true' or a->>'leadId' is not null then raise exception 'ambiguous lead did not continue for review'; end if;
+end $$;
+do $$ declare a jsonb; begin
+  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000003',repeat('d',64),'store',null,null,null,false,null,null,'{"businessName":"new shop","phone":"010-9999-8888","address":"new address","deliveryDropLocation":"side door"}');
+  if a->>'customerId' is null or a->>'leadId' is null then raise exception 'new lead/customer conversion failed'; end if;
+  if not exists(select from customer_imports where company_id='00000000-0000-4000-8000-000000000001' and source='pricing_acceptance') then raise exception 'acceptance import audit missing'; end if;
 end $$;
 
 do $$ declare h text:=repeat('a',64); begin
