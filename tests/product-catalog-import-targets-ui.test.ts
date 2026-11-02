@@ -21,7 +21,7 @@ describe("product import target selector", () => {
 
   it("keeps the target selector off unless the server flag is explicitly true", () => {
     expect(pageSource).toContain(
-      'importTargetsEnabled={process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true"}',
+      'importTargetsEnabled={isFeatureEnabled("PRODUCT_IMPORT_TARGETS", companyId)}',
     );
   });
 });

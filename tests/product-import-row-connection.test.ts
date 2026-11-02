@@ -9,10 +9,10 @@ const store = read("../lib/product-catalog-import.ts");
 
 describe("product import row editor connection", () => {
   it("keeps the editor behind both default-off server flags", () => {
-    expect(page).toContain('rowEditorEnabled={process.env.IMPORT_ROW_EDITOR_ENABLED === "true"}');
+    expect(page).toContain('rowEditorEnabled={isFeatureEnabled("IMPORT_ROW_EDITOR", companyId)}');
     expect(workspace).toContain("rowEditorEnabled && auditV2Enabled");
-    expect(route).toContain('process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"');
-    expect(route).toContain('process.env.IMPORT_ROW_EDITOR_ENABLED === "true"');
+    expect(route).toContain('isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", scope.companyId)');
+    expect(route).toContain('isFeatureEnabled("IMPORT_ROW_EDITOR", scope.companyId)');
   });
 
   it("sends edited values and stores original and normalized rows", () => {

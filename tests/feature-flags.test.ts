@@ -25,10 +25,26 @@ describe("company pricing gates", () => {
   });
 
   it("prefers a global feature switch over a company allowlist", () => {
-    process.env.FEATURE_INVENTORY_COMPANY_IDS = "company-a";
-    expect(isFeatureEnabled("INVENTORY", "company-b")).toBe(false);
-    process.env.FEATURE_INVENTORY = "true";
-    expect(isFeatureEnabled("INVENTORY", "company-b")).toBe(true);
-    expect(isFeatureEnabled("INVENTORY")).toBe(true);
+    process.env.FEATURE_PRODUCT_IMPORT_TARGETS_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("PRODUCT_IMPORT_TARGETS", "company-b")).toBe(false);
+    process.env.FEATURE_PRODUCT_IMPORT_TARGETS = "true";
+    expect(isFeatureEnabled("PRODUCT_IMPORT_TARGETS", "company-b")).toBe(true);
+    expect(isFeatureEnabled("PRODUCT_IMPORT_TARGETS")).toBe(true);
+  });
+
+  it("preserves existing global import switches while allowing a company rollout", () => {
+    process.env.IMPORT_ROW_EDITOR_ENABLED = "true";
+    expect(isFeatureEnabled("IMPORT_ROW_EDITOR", "company-b")).toBe(true);
+    delete process.env.IMPORT_ROW_EDITOR_ENABLED;
+    process.env.FEATURE_IMPORT_ROW_EDITOR_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("IMPORT_ROW_EDITOR", "company-a")).toBe(true);
+    expect(isFeatureEnabled("IMPORT_ROW_EDITOR", "company-b")).toBe(false);
+  });
+
+  it("keeps login global-only until a company can be identified before authentication", () => {
+    process.env.FEATURE_ACCOUNT_LOGIN_V2_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("ACCOUNT_LOGIN_V2", "company-a")).toBe(false);
+    process.env.ACCOUNT_LOGIN_V2_ENABLED = "true";
+    expect(isFeatureEnabled("ACCOUNT_LOGIN_V2", "company-a")).toBe(true);
   });
 });

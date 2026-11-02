@@ -28,7 +28,7 @@ describe("WO-21 account login rules", () => {
 
   it("enforces invite expiry and phone last-four verification only in WO-21 mode", () => {
     const store = readFileSync(resolve(process.cwd(), "lib/store.ts"), "utf8");
-    expect(store).toContain('process.env.ACCOUNT_LOGIN_V2_ENABLED === "true"');
+    expect(store).toContain("if (accountLoginV2Enabled())");
     expect(store).toContain("new Date(invitation.expires_at).getTime() <= Date.now()");
     expect(store).toContain("expectedLastFour !== actualLastFour");
   });

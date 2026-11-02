@@ -196,10 +196,10 @@ export async function POST(request: NextRequest) {
         excludedCount: Number(body.excludedCount) || 0,
         warnings: Array.isArray(body.warnings) ? body.warnings : [],
         includeExtraMapping:
-          process.env.COMPANY_FIELD_DEFINITIONS_ENABLED === "true",
+          isFeatureEnabled("COMPANY_FIELD_DEFINITIONS", scope.companyId),
         editedRows:
-          process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true" &&
-          process.env.IMPORT_ROW_EDITOR_ENABLED === "true" &&
+          isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", scope.companyId) &&
+          isFeatureEnabled("IMPORT_ROW_EDITOR", scope.companyId) &&
           Array.isArray(body.editedRows)
             ? body.editedRows
             : undefined,

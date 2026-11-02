@@ -8,10 +8,10 @@ import { CustomerItemImportError } from "../../../../../domains/customer/custome
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (!customerItemsFileImportEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   try {
     const scope = await getRequestAuthScope(request);
     if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    if (!customerItemsFileImportEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
     if (!areHoldModulesEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
     if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "가져오기 권한이 없습니다." }, { status: 403 });
     return NextResponse.json(await customerItemReferences(scope.companyId), { headers: { "Cache-Control": "no-store" } });
@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!customerItemsImportEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   try {
     const scope = await getRequestAuthScope(request);
     if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    if (!customerItemsImportEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
     if (!areHoldModulesEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
     if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "가져오기 권한이 없습니다." }, { status: 403 });
     const text = await request.text();
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     let body: unknown;
     try { body = JSON.parse(text); } catch { return NextResponse.json({ message: "요청 형식을 확인해 주세요." }, { status: 400 }); }
     if (body && typeof body === "object" && !Array.isArray(body) && "editedRows" in body) {
-      if (!customerItemsFileImportEnabled()) return NextResponse.json({ message: "파일 가져오기 준비가 완료되지 않았습니다." }, { status: 404 });
+      if (!customerItemsFileImportEnabled(scope.companyId)) return NextResponse.json({ message: "파일 가져오기 준비가 완료되지 않았습니다." }, { status: 404 });
       if (Object.keys(body).length !== 2 || !("fileName" in body)) return NextResponse.json({ message: "파일과 행 정보를 확인해 주세요." }, { status: 400 });
       return NextResponse.json(await writeCustomerItemFile(scope.companyId, body.fileName, body.editedRows,
         scope.customerSession?.name || scope.adminSession?.name || "운영자"), { headers: { "Cache-Control": "no-store" } });

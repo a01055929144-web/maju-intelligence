@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
@@ -3539,7 +3540,7 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
 
   const invitation = invitationRows[0];
   if (!invitation) throw new Error("유효하지 않은 초대 코드입니다.");
-  if (process.env.ACCOUNT_LOGIN_V2_ENABLED === "true") {
+  if (accountLoginV2Enabled()) {
     if (!invitation.expires_at || new Date(invitation.expires_at).getTime() <= Date.now()) {
       throw new Error("초대 링크가 만료되었습니다. 관리자에게 새 링크를 요청해주세요.");
     }

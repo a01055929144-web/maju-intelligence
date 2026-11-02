@@ -33,12 +33,12 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
         <ProductCatalogWorkspace
           key={companyId}
-          categoriesEnabled={process.env.PRODUCT_CATEGORIES_ENABLED === "true"}
+          categoriesEnabled={isFeatureEnabled("PRODUCT_CATEGORIES", companyId)}
           companyId={isAdminPreview ? companyId : ""}
-          importAuditV2Enabled={process.env.PRODUCT_IMPORT_AUDIT_V2_ENABLED === "true"}
-          importTargetsEnabled={process.env.PRODUCT_IMPORT_TARGETS_ENABLED === "true"}
-          customerItemsEnabled={customerItemsFileImportEnabled() && areHoldModulesEnabled(companyId)}
-          rowEditorEnabled={process.env.IMPORT_ROW_EDITOR_ENABLED === "true"}
+          importAuditV2Enabled={isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", companyId)}
+          importTargetsEnabled={isFeatureEnabled("PRODUCT_IMPORT_TARGETS", companyId)}
+          customerItemsEnabled={customerItemsFileImportEnabled(companyId) && areHoldModulesEnabled(companyId)}
+          rowEditorEnabled={isFeatureEnabled("IMPORT_ROW_EDITOR", companyId)}
           initialTab={initialTab}
           tableSettingsKey={`products:${customerSession?.userId || adminSession?.email || "unknown"}`}
         />
