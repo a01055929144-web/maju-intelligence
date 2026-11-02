@@ -156,6 +156,18 @@ jobs:
           createdb customer_items_test_ui
           psql --dbname=customer_items_test_ui --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261102-WO-25-customer-items-audit.pg17.test.sql
 
+      - name: Verify first supplier import to P0 recalculation on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb usable_now_first_import_test
+          psql --dbname=usable_now_first_import_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p0-fixture.sql
+          psql --dbname=usable_now_first_import_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p0.sql
+          psql --dbname=usable_now_first_import_test --set=ON_ERROR_STOP=1 --file=tests/sql/usable-now-first-import.pg17.sql
+
   build:
     runs-on: ubuntu-latest
     steps:

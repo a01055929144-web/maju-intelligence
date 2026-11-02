@@ -11,6 +11,27 @@ import {
 describe("product catalog import data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
 
+  it("creates the first standard product with imported cost and a confirmed match", async () => {
+    supabaseRequest
+      .mockResolvedValueOnce([{
+        id: "supplier-product-1", raw_name: "샘플", raw_unit: "EA",
+        latest_cost: 18_910, cost_confirmed: true, parsed_tax_type: "taxable",
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce("P-000001")
+      .mockResolvedValueOnce([{ id: "catalog-1", source_key: "standard:supplier-product-1" }])
+      .mockResolvedValueOnce(undefined);
+
+    await expect(createCatalogFromSupplierProducts("company-1", ["supplier-product-1"]))
+      .resolves.toEqual({ createdCount: 1 });
+    const catalog = JSON.parse(supabaseRequest.mock.calls[3][1].body);
+    expect(catalog[0]).toMatchObject({
+      product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
+    });
+    const matches = JSON.parse(supabaseRequest.mock.calls[4][1].body);
+    expect(matches[0]).toMatchObject({ product_catalog_id: "catalog-1", match_status: "confirmed" });
+  });
+
   it("splits supplier product and source key filters into bounded requests", async () => {
     const ids = Array.from({ length: 101 }, (_, index) => `product-${index}`);
     const products = ids.map((id) => ({ id }));
