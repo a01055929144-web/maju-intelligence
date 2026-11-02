@@ -10,7 +10,7 @@ drop schema if exists public cascade; create schema public;
 grant usage on schema public to public;
 create table companies(id uuid primary key);
 create table normalized_customers(id uuid primary key,company_id uuid not null references companies(id),address text,phone text,business_registration_number text,unique(company_id,id));
-create table business_permit_leads(id uuid primary key,company_id uuid not null references companies(id),business_name text not null,unique(company_id,id));
+create table business_permit_leads(id uuid primary key,company_id uuid not null references companies(id),business_name text not null,address text,phone text,source text not null default 'manual_upload',is_active boolean not null default true,matched_customer_id uuid,is_duplicate boolean not null default false,status text not null default '신규 수집',updated_at timestamptz not null default now(),unique(company_id,id));
 create table product_catalog(id uuid primary key,company_id uuid not null references companies(id),sales_unit text,tax_type text,is_active boolean not null default true,unique(company_id,id));
 create table pricing_documents(id uuid primary key,company_id uuid not null references companies(id),owner_key text not null,kind text not null,revision integer not null,content jsonb not null,unique(company_id,id));
 create table pricing_document_versions(id uuid primary key,company_id uuid not null references companies(id),document_id uuid not null,version integer not null,revision integer not null,content jsonb not null,published_at timestamptz not null default now(),unique(company_id,document_id,version),unique(company_id,document_id,revision),foreign key(company_id,document_id) references pricing_documents(company_id,id));
@@ -55,9 +55,17 @@ do $$ begin
 end $$;
 
 do $$ declare a jsonb; b jsonb; begin
-  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001',repeat('f',64),'kakao_login','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,true,'ambiguous_lead_match',null);
-  b:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001',repeat('f',64),'kakao_login','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,true,'ambiguous_lead_match',null);
+  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001',repeat('f',64),'kakao_login','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,true,'ambiguous_lead_match',null,'{"deliveryDropLocation":"rear door"}');
+  b:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001',repeat('f',64),'kakao_login','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,true,'ambiguous_lead_match',null,'{"deliveryDropLocation":"rear door"}');
   if a<>b or a->>'needsReview'<>'true' then raise exception 'acceptance idempotency/review failed'; end if;
+end $$;
+
+insert into business_permit_leads(id,company_id,business_name,address,phone) values
+('20000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','same one','A','01012345678'),
+('20000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','same two','B','01012345678');
+do $$ declare a jsonb; begin
+  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000002',repeat('e',64),'kakao_start','10000000-0000-4000-8000-000000000001',null,null,false,null,null,'{"businessName":"ambiguous","phone":"010-1234-5678","address":"C"}');
+  if a->>'needsReview'<>'true' or a->>'leadId' is not null then raise exception 'ambiguous lead did not continue for review'; end if;
 end $$;
 
 do $$ declare h text:=repeat('a',64); begin
@@ -68,7 +76,7 @@ end $$;
 
 do $$ begin
   if has_table_privilege('anon','pricing_document_sends','select') or has_table_privilege('authenticated','store_accounts','select') then raise exception 'direct access leaked'; end if;
-  if has_function_privilege('anon','record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid)','execute') then raise exception 'rpc access leaked'; end if;
+  if has_function_privilege('anon','record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)','execute') then raise exception 'rpc access leaked'; end if;
 end $$;
 
 update normalized_customers set delivery_drop_location='rear door' where id='10000000-0000-4000-8000-000000000001';

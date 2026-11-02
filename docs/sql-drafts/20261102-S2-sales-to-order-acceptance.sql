@@ -175,17 +175,44 @@ begin
   return 'allowed';
 end $$;
 
-create function public.record_pricing_document_acceptance(p_company_id uuid,p_document_id uuid,p_document_version_id uuid,p_idempotency_key uuid,p_request_fingerprint text,p_accepted_via text,p_customer_id uuid,p_lead_id uuid default null,p_send_id uuid default null,p_needs_review boolean default false,p_review_reason text default null,p_storefront_link_id uuid default null)
+create function public.record_pricing_document_acceptance(p_company_id uuid,p_document_id uuid,p_document_version_id uuid,p_idempotency_key uuid,p_request_fingerprint text,p_accepted_via text,p_customer_id uuid,p_lead_id uuid default null,p_send_id uuid default null,p_needs_review boolean default false,p_review_reason text default null,p_storefront_link_id uuid default null,p_customer_profile jsonb default '{}')
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare r public.pricing_document_acceptance_requests%rowtype; d public.pricing_documents%rowtype; v_price_link uuid; l jsonb;
+declare r public.pricing_document_acceptance_requests%rowtype; d public.pricing_documents%rowtype; v_price_link uuid; l jsonb; v_lead uuid:=p_lead_id; v_match_count integer:=0; v_name text:=nullif(btrim(p_customer_profile->>'businessName'),''); v_phone text:=regexp_replace(coalesce(p_customer_profile->>'phone',''),'\D','','g'); v_address text:=nullif(btrim(p_customer_profile->>'address'),''); v_needs_review boolean:=p_needs_review; v_review_reason text:=p_review_reason;
 begin
   if p_idempotency_key is null or length(coalesce(p_request_fingerprint,'')) not between 16 and 200 or p_accepted_via not in ('store','staff','kakao_start','kakao_login') or p_customer_id is null then raise exception 'invalid_acceptance_request'; end if;
   select * into r from public.pricing_document_acceptance_requests where company_id=p_company_id and idempotency_key=p_idempotency_key for update;
   if found then if r.request_fingerprint<>p_request_fingerprint then raise exception 'idempotency_conflict'; end if; return r.result; end if;
   select * into d from public.pricing_documents where company_id=p_company_id and id=p_document_id for share;
   if not found or not exists(select from public.pricing_document_versions where company_id=p_company_id and document_id=p_document_id and id=p_document_version_id) then raise exception 'document_version_not_found'; end if;
+  if v_lead is null and p_send_id is not null then select lead_id into v_lead from public.pricing_document_sends where company_id=p_company_id and id=p_send_id for share; end if;
+  if v_lead is null and (v_phone<>'' or (v_name is not null and v_address is not null)) then
+    select count(*),(array_agg(id order by id))[1] into v_match_count,v_lead from public.business_permit_leads
+      where company_id=p_company_id and is_active and (
+        (v_phone<>'' and regexp_replace(coalesce(phone,''),'\D','','g')=v_phone)
+        or (v_name is not null and v_address is not null and lower(btrim(business_name))=lower(v_name) and lower(btrim(coalesce(address,'')))=lower(v_address))
+      );
+    if v_match_count>1 then v_lead:=null; v_needs_review:=true; v_review_reason:='ambiguous_lead_match'; end if;
+  end if;
+  if v_lead is null and not v_needs_review then
+    if v_name is null or v_phone='' or v_address is null then raise exception 'public_acceptance_profile_required'; end if;
+    insert into public.business_permit_leads(company_id,business_name,address,phone,source)
+      values(p_company_id,v_name,v_address,v_phone,'pricing_sheet_acceptance') returning id into v_lead;
+  end if;
+  if v_lead is not null then
+    update public.business_permit_leads set matched_customer_id=p_customer_id,is_duplicate=true,status='거래처 전환',updated_at=clock_timestamp()
+      where company_id=p_company_id and id=v_lead and (matched_customer_id is null or matched_customer_id=p_customer_id);
+    if not found then raise exception 'lead_customer_mismatch'; end if;
+  end if;
+  update public.normalized_customers set
+    address=coalesce(nullif(address,''),v_address), phone=coalesce(nullif(phone,''),nullif(v_phone,'')),
+    delivery_recipient_name=coalesce(nullif(delivery_recipient_name,''),nullif(btrim(p_customer_profile->>'deliveryRecipientName'),'')),
+    delivery_contact_phone=coalesce(nullif(delivery_contact_phone,''),nullif(regexp_replace(coalesce(p_customer_profile->>'deliveryContactPhone',''),'\D','','g'),'')),
+    preferred_delivery_time=coalesce(nullif(preferred_delivery_time,''),nullif(btrim(p_customer_profile->>'preferredDeliveryTime'),'')),
+    delivery_drop_location=coalesce(nullif(delivery_drop_location,''),nullif(btrim(p_customer_profile->>'deliveryDropLocation'),''))
+    where company_id=p_company_id and id=p_customer_id;
+  if not found then raise exception 'customer_not_found'; end if;
   insert into public.pricing_document_acceptance_requests(company_id,idempotency_key,request_fingerprint,document_id,document_version_id,send_id,lead_id,customer_id,document_kind,accepted_via,needs_review,review_reason,result)
-  values(p_company_id,p_idempotency_key,p_request_fingerprint,p_document_id,p_document_version_id,p_send_id,p_lead_id,p_customer_id,d.kind,p_accepted_via,p_needs_review,p_review_reason,
+  values(p_company_id,p_idempotency_key,p_request_fingerprint,p_document_id,p_document_version_id,p_send_id,v_lead,p_customer_id,d.kind,p_accepted_via,v_needs_review,v_review_reason,
     '{}') returning * into r;
   update public.customer_pricing_document_links set active=false,ended_at=clock_timestamp()
     where company_id=p_company_id and customer_id=p_customer_id and document_kind=d.kind and active;
@@ -209,7 +236,7 @@ begin
       where company_id=p_company_id and id=p_storefront_link_id and customer_id=p_customer_id and document_version_id=p_document_version_id and revoked_at is null;
     if not found then raise exception 'storefront_link_not_found'; end if;
   end if;
-  r.result:=jsonb_build_object('customerId',p_customer_id,'documentVersionId',p_document_version_id,'kind',d.kind,'needsReview',p_needs_review,'pricingDocumentLinkId',v_price_link,'storefrontLinkId',p_storefront_link_id);
+  r.result:=jsonb_build_object('customerId',p_customer_id,'leadId',v_lead,'documentVersionId',p_document_version_id,'kind',d.kind,'needsReview',v_needs_review,'pricingDocumentLinkId',v_price_link,'storefrontLinkId',p_storefront_link_id);
   update public.pricing_document_acceptance_requests set result=r.result where company_id=p_company_id and id=r.id;
   if p_send_id is not null then update public.pricing_document_sends set acceptance_status='accepted',accepted_at=clock_timestamp() where company_id=p_company_id and id=p_send_id; end if;
   -- 모호한 리드 후보는 고객 수락을 막지 않는다. 서버가 선택한 고객으로 진행하고 사후 검토만 남긴다.
@@ -225,6 +252,6 @@ alter table public.store_account_members enable row level security;
 alter table public.store_account_member_events enable row level security;
 revoke all on public.pricing_document_sends, public.pricing_document_acceptance_requests, public.pricing_public_request_audit, public.customer_pricing_document_links, public.store_accounts, public.store_account_members, public.store_account_member_events from public,anon,authenticated;
 grant all on public.pricing_document_sends, public.pricing_document_acceptance_requests, public.pricing_public_request_audit, public.customer_pricing_document_links, public.store_accounts, public.store_account_members, public.store_account_member_events to service_role;
-revoke all on function public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer), public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid) from public,anon,authenticated;
-grant execute on function public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer), public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid) to service_role;
+revoke all on function public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer), public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer), public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb) to service_role;
 commit;
