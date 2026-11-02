@@ -140,12 +140,15 @@ alter table public.store_orders add constraint store_orders_actor_fk foreign key
 alter table public.store_orders add constraint store_orders_actor_pair_check check(num_nonnulls(store_account_id,ordered_by_member_id) in (0,2));
 
 create function public.pricing_s2_validate_published_version() returns trigger language plpgsql set search_path=public,pg_temp as $$
-declare l jsonb; p public.product_catalog%rowtype;
+declare l jsonb; p public.product_catalog%rowtype; seen uuid[] := '{}'; product_id uuid;
 begin
   if jsonb_typeof(new.content->'lines') is distinct from 'array' then raise exception 'published_lines_required'; end if;
   for l in select * from jsonb_array_elements(new.content->'lines') loop
     if coalesce((l->>'visible')::boolean,false) then
-      select * into p from public.product_catalog where company_id=new.company_id and id=(l->>'productId')::uuid and is_active;
+      product_id := (l->>'productId')::uuid;
+      if product_id=any(seen) then raise exception 'published_duplicate_product'; end if;
+      seen:=array_append(seen,product_id);
+      select * into p from public.product_catalog where company_id=new.company_id and id=product_id and is_active;
       if not found then raise exception 'published_product_unconfirmed'; end if;
       if nullif(btrim(l->>'unit'),'') is null or l->>'unit' is distinct from p.sales_unit then raise exception 'published_unit_unconfirmed'; end if;
       if coalesce(l->>'taxType','') not in ('taxable','exempt') or l->>'taxType' is distinct from p.tax_type then raise exception 'published_tax_unconfirmed'; end if;
@@ -153,7 +156,8 @@ begin
   end loop;
   return new;
 end $$;
-create trigger pricing_s2_validate_published_version before insert on public.pricing_document_versions for each row execute function public.pricing_s2_validate_published_version();
+create trigger pricing_s2_validate_published_version before insert on public.pricing_document_versions
+  for each row when (new.published_at is not null) execute function public.pricing_s2_validate_published_version();
 
 create function public.pricing_s2_public_request_guard(p_company_id uuid,p_route_key text,p_requester_hash text,p_payload jsonb,p_limit integer default 20)
 returns text language plpgsql security definer set search_path=public,pg_temp as $$
@@ -212,7 +216,13 @@ begin
   return r.result;
 end $$;
 
-alter table public.pricing_document_sends, public.pricing_document_acceptance_requests, public.pricing_public_request_audit, public.customer_pricing_document_links, public.store_accounts, public.store_account_members, public.store_account_member_events enable row level security;
+alter table public.pricing_document_sends enable row level security;
+alter table public.pricing_document_acceptance_requests enable row level security;
+alter table public.pricing_public_request_audit enable row level security;
+alter table public.customer_pricing_document_links enable row level security;
+alter table public.store_accounts enable row level security;
+alter table public.store_account_members enable row level security;
+alter table public.store_account_member_events enable row level security;
 revoke all on public.pricing_document_sends, public.pricing_document_acceptance_requests, public.pricing_public_request_audit, public.customer_pricing_document_links, public.store_accounts, public.store_account_members, public.store_account_member_events from public,anon,authenticated;
 grant all on public.pricing_document_sends, public.pricing_document_acceptance_requests, public.pricing_public_request_audit, public.customer_pricing_document_links, public.store_accounts, public.store_account_members, public.store_account_member_events to service_role;
 revoke all on function public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer), public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid) from public,anon,authenticated;
