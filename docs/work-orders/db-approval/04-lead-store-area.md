@@ -1,6 +1,6 @@
 # 04 DB 승인 초안 — L-2 리드 매장 면적
 
-> 상태: **대표 승인(2026-11-02) · PG17 검증 후 운영 적용**  
+> 상태: **운영 적용 완료(2026-11-02) · 규모 플래그 OFF**  
 > 프로젝트: `fcmdvveqmcgtioelzqun`  
 > 기능 플래그: `LEAD_STORE_AREA_ENABLED=false`, `NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED=false` 유지
 
@@ -67,6 +67,15 @@
 4. 다른 회사 행이 바뀌지 않았는지 확인
 5. 10평·20평·30평 경계와 390px 표시를 Playwright 합성 데이터로 검증
 6. 검증 완료 뒤에만 대표 회사 플래그 활성화를 별도 결정
+
+## 적용 결과
+
+- PG17 CI: 컬럼 제약, RPC 권한·회사 격리, 백필 재실행 멱등 통과
+- 적용 직전 대상: 대표 회사 48건
+- 적용 후: 대표 회사 48건 채움, 0·이상치 0건, 원천 유효값과 불일치 0건
+- 다른 회사: 면적이 채워진 리드 0건
+- 서버 집계 RPC: `security invoker`, `service_role`만 실행 가능 확인
+- `LEAD_STORE_AREA_ENABLED`, `NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED`는 변경하지 않음
 
 ## 승인 문구
 
