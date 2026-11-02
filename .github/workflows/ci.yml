@@ -7,6 +7,26 @@ on:
       - main
 
 jobs:
+  migration-approval:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Require approval for new migration files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | select(.status == "added" and (.filename | startswith("supabase/migrations/"))) | .filename')
+          if [ -n "$files" ] && ! printf '%s\n' "$PR_BODY" | grep -Eq '^DB-APPROVED: fcmdvveqmcgtioelzqun [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} (KST|UTC)$'; then
+            echo 'New migration requires a project-specific DB-APPROVED line with approval time in the PR body.'
+            exit 1
+          fi
+
   lead-customer-continuity-pg17:
     runs-on: ubuntu-latest
     services:
@@ -78,22 +98,24 @@ jobs:
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-25-company-field-definitions.pg17.test.sql
 
       - name: Verify WO-21 login account draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
         env:
           PGHOST: 127.0.0.1
           PGPORT: 5432
           PGDATABASE: maju_continuity_test
           PGUSER: postgres
           PGPASSWORD: postgres
-        run: psql --set=ON_ERROR_STOP=1 --file=tests/sql/wo21-login-accounts.pg17.sql
+        run: psql --set=ON_ERROR_STOP=1 --file=20261101165122_wo21_login_accounts.pg17.test.sql
 
       - name: Verify WO-21 role settings draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
         env:
           PGHOST: 127.0.0.1
           PGPORT: 5432
           PGDATABASE: maju_continuity_test
           PGUSER: postgres
           PGPASSWORD: postgres
-        run: psql --set=ON_ERROR_STOP=1 --file=tests/sql/wo21-role-settings.pg17.sql
+        run: psql --set=ON_ERROR_STOP=1 --file=20261102044000_wo21_role_settings.pg17.test.sql
 
       - name: Verify WO-03 unit conversion extension on PostgreSQL 17
         working-directory: docs/sql-drafts
