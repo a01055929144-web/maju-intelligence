@@ -456,6 +456,10 @@ export async function saveProductCatalogImport(input: {
     return {
       importId,
       supplierId,
+      unmatchedSupplierProductIds: supplierProductIds.filter((id) =>
+        !existingMatches.some((match) => match.supplier_product_id === id && ["auto", "confirmed"].includes(match.match_status)) &&
+        !matches.some((match) => match.supplier_product_id === id && match.match_status === "auto"),
+      ),
       createdCount: payload.filter(
         (p) => !existingKeys.has(String(p.source_fingerprint)),
       ).length,

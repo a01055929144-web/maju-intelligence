@@ -1,5 +1,11 @@
 # 가격표 ①-2 — P0
 
+## 2026-11-02 12:48 실사용 화면 구성
+
+`/revenue/pricing`은 매입가 반영, `/revenue/pricing/margins`는 기존 P0 마진 그룹 화면이다. 매입가 반영은 기존 상품 업로드 파서·열 맞추기·마스터 상품 일괄 생성과 P0 재계산·복구를 재사용한다. 새 운영 스키마는 추가하지 않는다. 이번 화면 범위에서 허용 파일: `domains/pricing/purchase-cost.ts`, `application/pricing/update-purchase-cost.ts`, `lib/pricing/purchase-cost-repository.ts`, `app/api/price-sheets/costs/route.ts`, `app/revenue/pricing/{page.tsx,margins/page.tsx}`, `components/purchase-cost-workspace.tsx`, `components/app-sidebar.tsx`, `lib/customer-navigation.ts`, `lib/product-catalog-import.ts`, `tests/purchase-cost.test.ts`.
+
+P0 `restore`는 판매가 계산 실행만 복구하므로 매입가 복구는 같은 화면에서 이전 원가를 다시 저장한다. 원가·판매가가 여러 요청에 걸치는 현재 스키마의 한계로 저장/복구가 일부만 끝날 수 있고, 해당 건수와 확인 안내를 숨기지 않는다. 새 상품 생성은 기존 `save-import` → `create-standards` 경로를 사용한다.
+
 Owner Domain: pricing. Related: product (원장 매입가 읽기), organization (대표 권한/회사 격리).
 
 ## Allowed Files

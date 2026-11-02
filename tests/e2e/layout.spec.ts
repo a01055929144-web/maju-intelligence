@@ -38,6 +38,48 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`purchase cost upload stays a candidate until save at ${width}px`, async ({ browser }, testInfo) => {
+    const context = await authenticatedContext(browser, "customer", width, 844);
+    const saved: Array<Record<string, unknown>> = [];
+    try {
+      const page = await context.newPage();
+      const product = { id: "30000000-0000-4000-8000-000000000001", code: "P-000001", name: "양파", spec: "10kg", unit: "박스", cost: 10000, supplierName: "한빛유통", supplierCode: "ERP-1", supplierProductId: "40000000-0000-4000-8000-000000000001" };
+      let currentCost = product.cost;
+      await page.route("**/api/price-sheets/costs?*", async (route) => {
+        await route.fulfill({ json: { products: [{ ...product, cost: currentCost }], suppliers: ["한빛유통"] } });
+      });
+      await page.route("**/api/price-sheets/costs", async (route) => {
+        const body = route.request().postDataJSON() as { changes: Array<Record<string, unknown>> };
+        saved.push(...body.changes);
+        currentCost = Number(body.changes[0].cost);
+        await route.fulfill({ json: { saved: body.changes.length } });
+      });
+      const priceState = { groups: [], categories: [], items: [], defaultMargin: 0, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 30, lastBatch: null, restored: false };
+      await page.route("**/api/price-sheets?*", async (route) => {
+        await route.fulfill({ json: route.request().method() === "POST" ? { ...priceState, lastBatch: "50000000-0000-4000-8000-000000000001" } : priceState });
+      });
+      await page.route("**/api/pricing-documents?*", async (route) => {
+        await route.fulfill({ json: { result: { items: [], total: 0 }, manager: true } });
+      });
+      const response = await page.goto("/revenue/pricing", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByRole("heading", { name: "매입가 반영" })).toBeVisible();
+      await page.getByRole("button", { name: "엑셀 올리기" }).click();
+      await page.locator('input[type="file"]').setInputFiles({ name: "매입가.csv", mimeType: "text/csv", buffer: Buffer.from("ERP 코드,품목,규격,단위,매입처,매입가\nERP-1,양파,10kg,박스,한빛유통,12000\n") });
+      await page.getByRole("button", { name: "열 맞추기 적용" }).click();
+      await expect(page.getByText("변경 후보 1개")).toBeVisible();
+      expect(saved).toHaveLength(0);
+      await page.getByRole("button", { name: "저장 (1건)" }).click();
+      await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
+      expect(saved).toHaveLength(1);
+      expect(saved[0].cost).toBe(12000);
+      await page.screenshot({ path: testInfo.outputPath(`purchase-cost-${width}.png`), fullPage: false });
+      expect((await collectLayoutProblems(page)).filter((problem) => problem.startsWith("horizontal-overflow"))).toEqual([]);
+    } finally { await context.close(); }
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`sidebar groups open by default and remember a closed group at ${width}px`, async ({ browser }) => {
     const context = await authenticatedContext(browser, "customer", width, 844);
     try {
