@@ -84,6 +84,7 @@
 | Use Case | 한 번에 처리하는 것 |
 |---|---|
 | `PlaceStoreOrder` | 주문 + 줄(가격은 6절 함수로 그 순간 값을 스냅샷) + 요청 기록 |
+| `AcceptPricingDocument` | 단일 RPC가 게시 문서의 `kind`를 확인해 거래처 전환 + 문서 연결을 멱등 처리. `quote`만 협의 단가를 만들고 `sheet`는 만들지 않는다 |
 | `ConfirmSaleDocument` | 전표 confirmed + 재고 sale_out + 원장 sale (+ 입금 시 receipt) + `customer_items` 갱신 |
 | `CreatePurchaseVoucher` | 전표 confirmed + 재고 purchase_in + 원장 purchase (+ 지급 시 payment / deposit_use) + 발주 상태 + `product_base_prices`(체크했을 때) + 덜 온 수량 다음 회차 |
 | `ApplyImport` | import_rows 적용 + 대상 테이블 + 되돌리기 정보(previous_values) |
@@ -104,6 +105,7 @@
 5. 시세 품목은 price null + `is_market_price`.
 
 - 단위가 다르면 `product_unit_conversions`로 환산한다.
+- 수락은 `sheet`와 `quote`가 `AcceptPricingDocument` RPC 하나를 쓴다. `quote` 수락은 우선순위 0 협의 단가를 만들고 우선순위 1 견적 version을 연결한다. `sheet` 수락은 협의 단가 없이 우선순위 2 단가표 version만 연결한다.
 
 ## 7. 재고 (기존 inventory_phase_1 기준)
 
@@ -145,4 +147,5 @@
 - Claude 검토: 이 계약과 다른지만 본다(체크리스트 = 2 · 3 · 5 · 6 · 7 · 8절).
 
 ## 변경 기록
+- v1.1 2026-11-02 17:19 A-0 반영: 단가표·견적 단일 수락 RPC와 가격 우선순위 0·1·2를 명시.
 - v1 2026-11-02 09:55 처음 작성(대표 지시: 프론트만 설계됐다는 지적 → 계약서는 Claude, 세부는 Codex).

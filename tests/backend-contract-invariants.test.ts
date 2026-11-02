@@ -8,11 +8,22 @@ const inventory = sql("supabase/migrations/20261016202000_inventory_phase_1.sql"
 const order = sql("supabase/migrations/20261102114602_pricing_p2_store_ordering.sql");
 
 describe("backend contract I-1..I-12 (docs/backend/04_GAPS.md)", () => {
-  it("I-1: applied pricing/order table definitions carry company_id", () => {
+  it("documents one acceptance RPC and sheet/quote price priorities", () => {
+    const contract = readFileSync("docs/backend/00_BACKEND_CONTRACT.md", "utf8");
+    expect(contract).toContain("`AcceptPricingDocument`");
+    expect(contract).toContain("`quote` 수락은 우선순위 0 협의 단가");
+    expect(contract).toContain("우선순위 1 견적 version");
+    expect(contract).toContain("우선순위 2 단가표 version");
+  });
+  it("I-1: applied and drafted contract tables carry company_id", () => {
     for (const file of [
       "supabase/migrations/20261102114600_pricing_p0.sql",
       "supabase/migrations/20261102114601_pricing_p1.sql",
       "supabase/migrations/20261102114602_pricing_p2_store_ordering.sql",
+      "docs/sql-drafts/20261102-WO-03-unit-conversion-bplus.sql",
+      "docs/sql-drafts/20261102-WO-25-import-audit-schema.sql",
+      "docs/sql-drafts/20261102-WO-25-company-field-definitions.sql",
+      "docs/sql-drafts/20261102-WO-25-product-base-prices.sql",
     ]) {
       const definitions = [...sql(file).matchAll(/create table (?:if not exists )?public\.\w+\s*\(([\s\S]*?)\);/g)];
       expect(definitions.length).toBeGreaterThan(0);
@@ -48,9 +59,13 @@ describe("backend contract I-1..I-12 (docs/backend/04_GAPS.md)", () => {
   it("I-10: CI requires project-specific approval for new migrations", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
     expect(workflow).toContain("Require approval for new migration files");
-    expect(workflow).toContain("DB-APPROVED:");
+    expect(workflow).toContain("^DB-APPROVED: fcmdvveqmcgtioelzqun");
   });
-  it.skip("I-11: dated base prices are only a SQL draft (G8)", () => {});
+  it("I-11: the dated base-price draft allows one row per product and date", () => {
+    const basePrices = sql("docs/sql-drafts/20261102-WO-25-product-base-prices.sql");
+    expect(basePrices).toContain("unique (company_id, product_id, effective_date)");
+    expect(basePrices).toContain("references public.product_catalog(company_id, id)");
+  });
   it("I-12: median handles odd, even, and no observation fallback", () => {
     expect(median([9, 11, 10])).toBe(10);
     expect(median([9, 11, 10, 12])).toBe(10.5);

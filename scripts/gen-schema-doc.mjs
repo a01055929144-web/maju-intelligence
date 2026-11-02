@@ -103,7 +103,7 @@ const output = [
 ].join("\n");
 const target = join(root, "docs/backend/01_SCHEMA.md");
 if (process.argv.includes("--check")) {
-  if (readFileSync(target, "utf8") !== output) {
+  if (readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== output) {
     console.error("01_SCHEMA.md is stale. Run node scripts/gen-schema-doc.mjs.");
     process.exitCode = 1;
   }
