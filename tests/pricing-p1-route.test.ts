@@ -1,3 +1,6 @@
+vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
+vi.mock("@/lib/pricing/feature",()=>import("../lib/pricing/feature"));
+vi.mock("@/lib/pricing/store-order-feature",()=>import("../lib/pricing/store-order-feature"));
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), request: vi.fn() }));
@@ -8,11 +11,11 @@ vi.mock("../lib/pricing/documents-repository", () => ({
 import { GET, POST } from "../app/api/pricing-documents/route";
 const c = "00000000-0000-4000-8000-000000000001",
   flag = process.env.PRICE_SHEETS_ENABLED,
-  hold = process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;
+  hold = process.env.FEATURE_PRICING_COMPANY_IDS;
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.PRICE_SHEETS_ENABLED = "true";
-  process.env.HOLD_MODULES_ENABLED_COMPANY_IDS = c;
+  process.env.FEATURE_PRICING_COMPANY_IDS = c;
   mocks.auth.mockResolvedValue({
     ok: true,
     companyId: c,
@@ -27,8 +30,8 @@ beforeEach(() => {
 afterEach(() => {
   if (flag === undefined) delete process.env.PRICE_SHEETS_ENABLED;
   else process.env.PRICE_SHEETS_ENABLED = flag;
-  if (hold === undefined) delete process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;
-  else process.env.HOLD_MODULES_ENABLED_COMPANY_IDS = hold;
+  if (hold === undefined) delete process.env.FEATURE_PRICING_COMPANY_IDS;
+  else process.env.FEATURE_PRICING_COMPANY_IDS = hold;
 });
 it("OFF performs no auth or SQL call", async () => {
   process.env.PRICE_SHEETS_ENABLED = "false";
@@ -99,13 +102,13 @@ it.each(["driver", "member", "temporary"])(
     expect(mocks.request).not.toHaveBeenCalled();
   },
 );
-it("denies anonymous, unscoped and held companies before SQL", async () => {
+it("denies anonymous, unscoped and disabled companies before SQL", async () => {
   mocks.auth.mockResolvedValueOnce({ ok: false });
   expect(
     (await GET(new NextRequest("http://localhost/api/pricing-documents")))
       .status,
   ).toBe(401);
-  process.env.HOLD_MODULES_ENABLED_COMPANY_IDS = "";
+  process.env.FEATURE_PRICING_COMPANY_IDS = "";
   expect(
     (await GET(new NextRequest("http://localhost/api/pricing-documents")))
       .status,
@@ -134,4 +137,12 @@ it("accepts actual incoming Host when Next normalizes the internal URL and rejec
     ).status,
   ).toBe(403);
   expect(mocks.request).not.toHaveBeenCalled();
+});
+
+it("HOLD allowlisting alone cannot grant pricing access",async()=>{
+ const previous=process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;
+ try {process.env.HOLD_MODULES_ENABLED_COMPANY_IDS="00000000-0000-4000-8000-000000000001";process.env.FEATURE_PRICING_COMPANY_IDS="";
+ expect((await GET(new NextRequest("http://localhost/api/pricing-documents"))).status).toBe(404);
+ expect(mocks.request).not.toHaveBeenCalled();
+ }finally{if(previous===undefined)delete process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;else process.env.HOLD_MODULES_ENABLED_COMPANY_IDS=previous;}
 });

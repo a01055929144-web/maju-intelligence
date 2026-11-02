@@ -1,3 +1,4 @@
+vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -7,7 +8,6 @@ vi.mock("@/lib/auth", () => ({
   getCustomerOperationalName: () => "대표",
 }));
 vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.db }));
-vi.mock("@/lib/feature-modules", () => ({ areHoldModulesEnabled: () => true }));
 vi.mock("@/domains/pricing/access", () => ({
   canManagePriceSheets: () => true,
 }));
@@ -44,7 +44,8 @@ const oldEnv = Object.fromEntries(
     "STORE_ORDERING_ENABLED",
     "STORE_LINK_SECRET",
     "STORE_PUBLIC_BASE_URL",
-    "HOLD_MODULES_ENABLED_COMPANY_IDS",
+    "FEATURE_PRICING_COMPANY_IDS",
+    "FEATURE_STORE_ORDERING_COMPANY_IDS",
   ].map((key) => [key, process.env[key]]),
 );
 
@@ -55,7 +56,8 @@ beforeEach(() => {
   process.env.STORE_LINK_SECRET =
     "synthetic-local-test-secret-longer-than-32-characters";
   process.env.STORE_PUBLIC_BASE_URL = "https://store.example.test";
-  process.env.HOLD_MODULES_ENABLED_COMPANY_IDS = company;
+  process.env.FEATURE_PRICING_COMPANY_IDS = company;
+  process.env.FEATURE_STORE_ORDERING_COMPANY_IDS = company;
   mocks.auth.mockResolvedValue({
     ok: true,
     companyId: company,
@@ -263,4 +265,11 @@ it("hides another author's quote links and denies their event details", async ()
   const detail = await GET(new NextRequest(`http://localhost/api/pricing-store-links?linkId=${customer}`));
   expect(detail.status).toBe(404);
   expect(mocks.db.mock.calls.some(([path]) => String(path).startsWith("storefront_link_events?"))).toBe(false);
+});
+
+it.each(["FEATURE_PRICING_COMPANY_IDS", "FEATURE_STORE_ORDERING_COMPANY_IDS"])("blocks link reads and issuance when %s excludes the session company",async flag=>{
+  process.env[flag]="other-company";
+  expect((await GET(new NextRequest("http://localhost/api/pricing-store-links"))).status).toBe(404);
+  expect((await POST(new NextRequest("http://localhost/api/pricing-store-links",{method:"POST",body:JSON.stringify({action:"create",companyId:"other-company",customerId:customer,documentVersionId:version})}))).status).toBe(404);
+  expect(mocks.db).not.toHaveBeenCalled();
 });

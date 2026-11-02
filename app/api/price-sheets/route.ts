@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "../../../lib/auth";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
-import { areHoldModulesEnabled } from "../../../lib/feature-modules";
+import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { managePriceSheets, type PricingCommand } from "../../../application/pricing/manage-price-sheets";
 import { priceSheetRepository } from "../../../lib/pricing/price-sheet-repository";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ async function handle(request: NextRequest, write: boolean) {
   if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   const scope = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (!scope.ok) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  if (!scope.companyId || !areHoldModulesEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (!scope.companyId || !isFeatureEnabled("PRICING", scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   if (scope.customerSession && !canManagePriceSheets(scope.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1);

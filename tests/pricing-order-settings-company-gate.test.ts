@@ -1,0 +1,16 @@
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {db,auth}=vi.hoisted(()=>({db:vi.fn(),auth:vi.fn()}));
+vi.mock("@/lib/auth",()=>({getRequestAuthScope:auth}));
+vi.mock("@/lib/store",()=>({supabaseRequest:db}));
+vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
+vi.mock("@/lib/pricing/feature",()=>import("../lib/pricing/feature"));
+vi.mock("@/lib/pricing/store-order-feature",()=>import("../lib/pricing/store-order-feature"));
+vi.mock("@/domains/pricing/access",()=>({canManagePriceSheets:()=>true}));
+vi.mock("@/domains/order/order-rules",()=>import("../domains/order/order-rules"));
+import {GET,POST} from "../app/api/pricing-order-settings/route";
+const company="00000000-0000-4000-8000-000000000001";
+beforeEach(()=>{vi.clearAllMocks();vi.stubEnv("PRICE_SHEETS_ENABLED","true");vi.stubEnv("STORE_ORDERING_ENABLED","true");vi.stubEnv("STORE_LINK_SECRET","synthetic-test-secret-longer-than-32-characters");vi.stubEnv("STORE_PUBLIC_BASE_URL","https://store.example.test");vi.stubEnv("FEATURE_PRICING_COMPANY_IDS",company);vi.stubEnv("FEATURE_STORE_ORDERING_COMPANY_IDS",company);vi.stubEnv("HOLD_MODULES_ENABLED_COMPANY_IDS","");auth.mockResolvedValue({ok:true,companyId:company,customerSession:{role:"owner"}});db.mockResolvedValue([])});
+afterEach(()=>vi.unstubAllEnvs());
+it.each(["FEATURE_PRICING_COMPANY_IDS","FEATURE_STORE_ORDERING_COMPANY_IDS"])("%s blocks reads and writes before data access",async flag=>{vi.stubEnv(flag,"");vi.stubEnv("HOLD_MODULES_ENABLED_COMPANY_IDS",company);expect((await GET(new NextRequest("https://test/api/pricing-order-settings"))).status).toBe(404);expect((await POST(new NextRequest("https://test/api/pricing-order-settings",{method:"POST",body:"{}"}))).status).toBe(404);expect(db).not.toHaveBeenCalled()});
+it("reads the session company with HOLD off",async()=>{expect((await GET(new NextRequest("https://test/api/pricing-order-settings?companyId=forged"))).status).toBe(200);expect(db.mock.calls.every(c=>String(c[0]).includes("company_id=eq."+company))).toBe(true)});

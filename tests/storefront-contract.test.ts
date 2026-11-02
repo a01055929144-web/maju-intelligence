@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 const db = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/store", () => ({ supabaseRequest: db }));
-vi.mock("@/lib/feature-modules", () => ({ areHoldModulesEnabled: () => true }));
+vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: () => true }));
 vi.mock(
   "@/domains/order/order-rules",
   () => import("../domains/order/order-rules"),

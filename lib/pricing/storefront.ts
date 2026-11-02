@@ -1,5 +1,5 @@
 import { supabaseRequest } from "@/lib/store";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { verifyStoreLinkToken } from "./store-link-token";
 import {
   canOrderForDelivery,
@@ -96,7 +96,8 @@ export async function readStorefront(
   const link = links[0];
   if (
     !link ||
-    !areHoldModulesEnabled(link.company_id) ||
+    !isFeatureEnabled("PRICING", link.company_id) ||
+    !isFeatureEnabled("STORE_ORDERING", link.company_id) ||
     link.revoked_at ||
     new Date(link.expires_at).getTime() <= Date.now()
   )

@@ -5,7 +5,7 @@ import {
   resolvePageCompanyId,
 } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { areHoldModulesEnabled } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { PricingDocumentsWorkspace } from "@/components/pricing-documents-workspace";
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function DocumentsPage({
   );
   if (
     !companyId ||
-    !areHoldModulesEnabled(companyId) ||
+    !isFeatureEnabled("PRICING", companyId) ||
     (customer &&
       !canManagePriceSheets(customer) &&
       customer.workspaceRole !== "sales")
