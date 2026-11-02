@@ -1,6 +1,6 @@
 # 04 DB 승인 초안 — L-2 리드 매장 면적
 
-> 상태: **운영 적용 완료(2026-11-02) · 규모 플래그 OFF**  
+> 상태: **운영 적용 완료(2026-11-02) · 규모 플래그 OFF**
 > 프로젝트: `fcmdvveqmcgtioelzqun`  
 > 기능 플래그: `LEAD_STORE_AREA_ENABLED=false`, `NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED=false` 유지
 
