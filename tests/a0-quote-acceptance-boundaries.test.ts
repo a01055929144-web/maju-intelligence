@@ -44,4 +44,10 @@ describe("A-0 quote acceptance access boundaries", () => {
   it.todo("matches or creates a lead only inside the token company");
   it.todo("uses one idempotent acceptance path for sheet and quote without duplicate customers");
   it.todo("records staff proxy acceptance with the authenticated company and actor");
+  it.todo("lets only an active store owner invite or export a store employee");
+  it.todo("lets an active store employee order but not change payment or store information");
+  it.todo("moves ownership only from the current owner or an authorized distributor actor after business-number verification");
+  it.todo("blocks an exported member immediately while preserving historical order attribution");
+  it.todo("records ordered_by_member_id only for an active member of the token store and company");
+  it.todo("accepts store signup only after required terms and an active NTS business-status result");
 });
