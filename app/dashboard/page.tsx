@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CustomerAppShell } from "@/components/customer-app-shell";
-import { HomeSalesDashboard } from "@/components/home-sales-dashboard";
+import { HomeSalesDashboard, isHomeTab } from "@/components/home-sales-dashboard";
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { buildSalesHomeSummary } from "@/application/analytics/sales-home-summary";
 import { loadTodayTaskCounts } from "@/application/dashboard/today-task-counts";
@@ -19,7 +19,7 @@ import { getChurnRiskCustomers, getCompanySettings, getCompanyStaffInvitations, 
 
 const CHURN_RISK_MARKER_COLOR = "#e11d48";
 
-type OperationsSearchParams = { companyId?: string; customer?: string; detailMode?: "page"; lead?: string; leadType?: string; routeMode?: string; type?: string; view?: string };
+type OperationsSearchParams = { companyId?: string; customer?: string; detailMode?: "page"; lead?: string; leadType?: string; routeMode?: string; tab?: string; type?: string; view?: string };
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<OperationsSearchParams> }) {
   const params = (await searchParams) || {};
@@ -76,12 +76,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         previewCompanyId={customerSession ? undefined : companyId}
         showHoldModules={showHoldModules}
         subtitle="신규 리드, 후속 연락, 방문과 배송 운영을 오늘 기준으로 정리합니다"
-        title="오늘 할 일"
+        title="홈"
         userName={customerSession?.name || adminSession?.email || "관리자"}
         workspaceRole={customerSession?.workspaceRole}
       >
         <HomeSalesDashboard
+          companyQuery={customerSession ? "" : `&companyId=${encodeURIComponent(companyId)}`}
           delivery={{ groups: homeRoutePlan.groups.length, stops: homeRoutePlan.totalStops }}
+          tab={isHomeTab(params.tab) ? params.tab : "today"}
           summary={summary}
           taskAccess={manager ? "manager" : customerSession?.workspaceRole === "sales" ? "sales" : "limited"}
           todayTasks={todayTasks}
