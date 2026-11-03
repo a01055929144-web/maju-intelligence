@@ -16,3 +16,10 @@ describe("kakao link to logged-in account (11/3)", () => {
     expect(store).toContain("아이디로 로그인하는 대표 계정은 여기서 연결 해제할 수 없습니다.");
   });
 });
+
+describe("kakao login on a linked id account", () => {
+  it("only touches login time instead of overwriting role/email", () => {
+    const store = readFileSync(resolve(process.cwd(), "lib/store.ts"), "utf8");
+    expect(store.match(/existingUsers\[0\]\?\.login_id \? await touchLinkedKakaoUser/g)?.length).toBe(2);
+  });
+});

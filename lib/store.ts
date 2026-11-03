@@ -3599,11 +3599,12 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
   const socialProfileName = input.name?.trim() || "모바일 직원";
   const loginEmail = input.email || `kakao-${kakaoUserId}@maju.local`;
   const now = new Date().toISOString();
-  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
-    `app_users?select=id,name&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null; login_id?: string | null }>>(
+    `app_users?select=id,name,login_id&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
   ).catch(() => []);
 
-  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
+  // 11/3: 아이디 계정에 연결된 카카오면 역할·이메일·로그인 방식을 덮어쓰지 않습니다(아이디 로그인이 깨지지 않게).
+  const userRows = existingUsers[0]?.login_id ? await touchLinkedKakaoUser(existingUsers[0].id, input.avatarUrl) : await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates,return=representation"
@@ -3769,10 +3770,11 @@ export async function createPersonalKakaoWorkspace(input: PersonalKakaoWorkspace
   }
 
   const now = new Date().toISOString();
-  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null }>>(
-    `app_users?select=id,name&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
+  const existingUsers = await supabaseRequest<Array<{ id: string; name: string | null; login_id?: string | null }>>(
+    `app_users?select=id,name,login_id&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&limit=1`
   ).catch(() => []);
-  const userRows = await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
+  // 11/3: 아이디 계정에 연결된 카카오면 역할·이메일·로그인 방식을 덮어쓰지 않습니다(아이디 로그인이 깨지지 않게).
+  const userRows = existingUsers[0]?.login_id ? await touchLinkedKakaoUser(existingUsers[0].id, input.avatarUrl) : await supabaseRequest<Array<{ id: string; email: string | null; name: string }>>("app_users?on_conflict=kakao_user_id", {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates,return=representation"
@@ -10817,6 +10819,17 @@ type SalesContactLedgerRow = {
   follow_up_at: string | null;
   created_at: string;
 };
+
+async function touchLinkedKakaoUser(userId: string, avatarUrl?: string | null) {
+  const rows = await supabaseRequest<Array<{ id: string; email: string | null; name: string; avatar_url: string | null }>>(
+    `app_users?id=eq.${encodeURIComponent(userId)}&select=id,email,name,avatar_url`,
+    { method: "PATCH", body: JSON.stringify({ last_login_at: new Date().toISOString(), last_auth_provider: "kakao" }) }
+  );
+  if (avatarUrl && rows[0] && !rows[0].avatar_url) {
+    await supabaseRequest(`app_users?id=eq.${encodeURIComponent(userId)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ avatar_url: avatarUrl }) }).catch(() => null);
+  }
+  return rows.map(({ email, id, name }) => ({ email, id, name }));
+}
 
 /** 로그인한 계정에 카카오를 연결합니다. 다른 계정이 이미 쓰는 카카오면 바꾸지 않습니다(병합은 관리자 처리). */
 export async function linkKakaoToAppUser(userId: string, kakaoUserId: string): Promise<"linked" | "already" | "in_use"> {
