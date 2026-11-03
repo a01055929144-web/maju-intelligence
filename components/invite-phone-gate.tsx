@@ -30,18 +30,21 @@ export function InvitePhoneGate({ inviteCode }: { inviteCode: string }) {
   if (verified) return <OAuthLoginButtons inviteCode={inviteCode} />;
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-bold text-slate-800" htmlFor="invite-last-four">초대받은 휴대폰 번호 끝 4자리</label>
-      <div className="flex gap-2">
+      <label className="block text-sm font-bold text-slate-800" htmlFor="invite-last-four">휴대폰 번호 뒷자리 4자리를 입력해 주세요</label>
+      <p className="text-xs font-medium text-slate-500">회사에 등록된 내 휴대폰 번호로 본인인지 확인합니다.</p>
+      <div className="flex items-center gap-2">
+        <span className="shrink-0 text-lg font-bold tracking-[0.15em] text-slate-500">010-****-</span>
         <input
           autoComplete="off"
-          className="h-12 min-w-0 flex-1 rounded-xl border border-slate-200 px-4 text-lg font-bold tracking-[0.3em]"
+          className="h-12 w-28 min-w-0 rounded-xl border border-slate-300 px-3 text-center text-lg font-bold tracking-[0.3em]"
+          placeholder="____"
           id="invite-last-four"
           inputMode="numeric"
           maxLength={4}
           onChange={(event) => setDigits(event.target.value.replace(/\D/g, "").slice(0, 4))}
           value={digits}
         />
-        <button className="h-12 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-50" disabled={busy || digits.length !== 4} onClick={() => void verify()} type="button">
+        <button className="ml-auto h-12 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-50" disabled={busy || digits.length !== 4} onClick={() => void verify()} type="button">
           {busy ? "확인 중" : "확인"}
         </button>
       </div>
