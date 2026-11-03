@@ -260,7 +260,9 @@ export function StaffManagementPanel({
 
   async function deleteStaff(invitation: StaffInvitation) {
     const confirmed = window.confirm(
-      invitation.status === "accepted"
+      invitation.membershipOnly
+        ? `${invitation.employeeName || "이 계정"}의 회사 연결을 해제하시겠습니까? 이 회사로 더 이상 로그인할 수 없습니다(카카오 포함).`
+        : invitation.status === "accepted"
         ? `${invitation.employeeName || "이 직원"}을(를) 삭제하시겠습니까? 이미 가입된 직원이라 로그인 권한도 함께 비활성화됩니다.`
         : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`
     );
@@ -282,7 +284,7 @@ export function StaffManagementPanel({
     }
 
     setInvitations((current) => current.filter((item) => item.id !== invitation.id));
-    setMessage("직원을 삭제했습니다.");
+    setMessage(invitation.membershipOnly ? "연결을 해제했습니다." : "직원을 삭제했습니다.");
   }
 
   async function saveAssignment(invitation: StaffInvitation, patch: { employeeName: string; assignedManagerName: string; assignedVehicle: string }) {
@@ -669,6 +671,17 @@ export function StaffManagementPanel({
                                 type="button"
                               >
                                 {expanded ? "연결 닫기" : "연결 복구"}
+                              </button>
+                            ) : null}
+                            {invitation.membershipOnly ? (
+                              <button
+                                className="ml-1 mt-1 inline-flex h-8 items-center rounded-md border border-rose-200 bg-white px-2.5 text-[11px] font-black text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={!canManageMembers || savingId === invitation.id}
+                                onClick={() => deleteStaff(invitation)}
+                                title="이 회사에서 계정 연결을 끊습니다(카카오 연결 포함)"
+                                type="button"
+                              >
+                                연결 해제
                               </button>
                             ) : (
                               <div className="flex justify-end gap-1">

@@ -21,13 +21,15 @@ export function ManagedAccountsPanel({ initialAccounts }: { initialAccounts: Man
     await applyResponse(response, true);
   }
 
-  async function runAction(account: ManagedLoginAccount, action: "change_login_id" | "disable" | "reset_password" | "unlock") {
+  async function runAction(account: ManagedLoginAccount, action: "change_login_id" | "change_name" | "disable" | "reset_password" | "unlock") {
     const loginId = action === "change_login_id" ? window.prompt("새 아이디", account.loginId)?.trim() : undefined;
     if (action === "change_login_id" && !loginId) return;
+    const name = action === "change_name" ? window.prompt("화면에 보일 이름", account.name)?.trim() : undefined;
+    if (action === "change_name" && !name) return;
     const response = await fetch("/api/admin/accounts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, loginId: loginId || account.loginId, targetRole: account.role, userId: account.id })
+      body: JSON.stringify({ action, loginId: loginId || account.loginId, name, targetRole: account.role, userId: account.id })
     });
     await applyResponse(response, action === "reset_password");
   }
@@ -72,6 +74,7 @@ export function ManagedAccountsPanel({ initialAccounts }: { initialAccounts: Man
               <div className="text-sm"><p>{account.companyName || "MAJU 플랫폼"}</p><p className={account.status === "active" ? "font-bold text-emerald-700" : "font-bold text-red-700"}>{account.status === "active" ? "사용 중" : "사용 중지"}{account.mustChangePassword ? " · 비밀번호 변경 필요" : ""}</p></div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => runAction(account, "change_login_id")} size="sm" type="button" variant="outline">아이디 변경</Button>
+                <Button onClick={() => runAction(account, "change_name")} size="sm" type="button" variant="outline">이름 변경</Button>
                 <Button onClick={() => runAction(account, "reset_password")} size="sm" type="button" variant="outline"><KeyRound className="h-4 w-4" />재설정</Button>
                 <Button onClick={() => runAction(account, "unlock")} size="sm" type="button" variant="outline"><LockOpen className="h-4 w-4" />잠금 풀기</Button>
                 <Button className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => runAction(account, "disable")} size="sm" type="button" variant="outline"><Power className="h-4 w-4" />끄기</Button>

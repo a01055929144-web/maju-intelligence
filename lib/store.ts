@@ -319,6 +319,7 @@ export type CustomerMasterAuditContext = {
 export type AuditActorContext = {
   actorName?: string;
   actorRole?: string;
+  actorUserId?: string;
 };
 export type CustomerNoteItem = {
   id: string;
@@ -1755,8 +1756,9 @@ export async function createManagedLoginAccount(input: ManagedLoginAccountInput)
 }
 
 export async function updateManagedLoginAccount(input: {
-  action: "change_login_id" | "disable" | "reset_password" | "unlock";
+  action: "change_login_id" | "change_name" | "disable" | "reset_password" | "unlock";
   loginId?: string;
+  name?: string;
   userId: string;
 }): Promise<{ temporaryPassword?: string }> {
   if (!isProductionStoreConfigured()) throw new Error("계정 DB가 준비되지 않았습니다.");
@@ -1765,6 +1767,8 @@ export async function updateManagedLoginAccount(input: {
   if (input.action === "change_login_id") {
     patch.login_id = input.loginId?.trim().toLowerCase();
     patch.session_version = await nextAppUserSessionVersion(input.userId);
+  } else if (input.action === "change_name") {
+    patch.name = input.name?.trim().slice(0, 40);
   } else if (input.action === "disable") {
     patch.status = "inactive";
     patch.session_version = await nextAppUserSessionVersion(input.userId);
@@ -3350,6 +3354,38 @@ export async function deleteStaffInvitation(
   if (!input.invitationId) throw new Error("직원 초대 ID가 필요합니다.");
 
   if (!isProductionStoreConfigured()) {
+    return { deleted: true };
+  }
+
+  // 11/3: 초대 없이 가입된 계정(카카오 연결 등, id "member:<userId>")도 연결 해제할 수 있게 합니다.
+  if (input.invitationId.startsWith("member:")) {
+    const userId = input.invitationId.slice("member:".length);
+    if (!userId) throw new Error("직원 정보를 찾을 수 없습니다.");
+    if (auditContext.actorUserId && auditContext.actorUserId === userId) throw new Error("지금 로그인한 본인 계정은 연결 해제할 수 없습니다.");
+    const members = await supabaseRequest<Array<{ user_id: string; role: string | null }>>(
+      `company_members?select=user_id,role&company_id=eq.${encodeURIComponent(input.companyId)}&status=eq.active`
+    );
+    const target = members.find((member) => member.user_id === userId);
+    if (!target) throw new Error("이미 연결 해제된 직원입니다.");
+    if (target.role === "owner" && members.filter((member) => member.role === "owner").length <= 1) {
+      throw new Error("마지막 대표 계정은 연결 해제할 수 없습니다.");
+    }
+    await supabaseRequest(`company_members?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "inactive", updated_at: new Date().toISOString() })
+    });
+    await supabaseRequest(`staff_location_events?company_id=eq.${encodeURIComponent(input.companyId)}&user_id=eq.${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" }
+    }).catch(() => null);
+    await writeAdminAuditLog({
+      companyId: input.companyId,
+      action: "company_member_disconnected",
+      targetType: "company_member",
+      targetId: userId,
+      metadata: { actorName: auditContext.actorName || "시스템", actorRole: auditContext.actorRole || "unknown" }
+    }).catch(() => null);
     return { deleted: true };
   }
 

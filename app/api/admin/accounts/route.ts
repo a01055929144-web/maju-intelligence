@@ -33,8 +33,9 @@ export async function PATCH(request: NextRequest) {
         customerCompanyId?: string;
         customerEmail?: string;
         customerPassword?: string;
-        action?: "change_login_id" | "disable" | "reset_password" | "unlock";
+        action?: "change_login_id" | "change_name" | "disable" | "reset_password" | "unlock";
         loginId?: string;
+        name?: string;
         targetRole?: string;
         userId?: string;
       }
@@ -50,7 +51,10 @@ export async function PATCH(request: NextRequest) {
     if (body.action === "change_login_id" && (!body.loginId || !isValidLoginId(body.loginId))) {
       return NextResponse.json({ message: "아이디는 영문 소문자·숫자·밑줄 4~20자여야 합니다." }, { status: 400 });
     }
-    const result = await updateManagedLoginAccount({ action: body.action, loginId: body.loginId, userId: body.userId });
+    if (body.action === "change_name" && (!body.name?.trim() || body.name.trim().length > 40)) {
+      return NextResponse.json({ message: "이름은 1~40자로 입력해 주세요." }, { status: 400 });
+    }
+    const result = await updateManagedLoginAccount({ action: body.action, loginId: body.loginId, name: body.name, userId: body.userId });
     if (body.action === "unlock" && body.loginId) {
       await Promise.all([clearLoginThrottle(body.loginId), clearLoginThrottle(`admin:${body.loginId}`)]);
     }

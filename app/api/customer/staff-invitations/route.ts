@@ -103,7 +103,8 @@ export async function DELETE(request: NextRequest) {
         { companyId: session.companyId, invitationId: body.invitationId },
         {
           actorName: session.name,
-          actorRole: session.workspaceRole
+          actorRole: session.workspaceRole,
+          actorUserId: session.userId
         }
       )
     );
