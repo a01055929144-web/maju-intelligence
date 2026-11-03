@@ -397,8 +397,8 @@ export function StaffManagementPanel({
   async function shareInvite(invitation: StaffInvitation) {
     // 11/3: 카카오톡 공유를 먼저 시도합니다(PC 브라우저의 기본 공유창에는 카카오톡이 없음).
     const kakaoShared = await shareToKakao({
-      buttonTitle: "초대 열기",
-      description: `${invitation.employeeName}님, 링크를 열어 휴대폰 번호 끝 4자리 확인 후 카카오로 가입해 주세요.`,
+      buttonTitle: "초대 수락하기",
+      description: `${invitation.employeeName}님을 초대합니다. 휴대폰 뒷자리 4자리 확인 후 카카오로 가입하세요.`,
       title: `${companyDisplayName || "회사"} 직원 초대`,
       url: invitation.inviteUrl
     });
