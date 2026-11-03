@@ -81,9 +81,54 @@ export function LeadContactChannelsPanel({
   }>({ canRelease: false, enabled: false, entries: [], loading: true });
   const [savingDnc, setSavingDnc] = useState<LeadContactChannel | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // 11/3 A3: 회사 기본 DM 문구·제외 품목
+  const [dmSettings, setDmSettings] = useState<{ canEdit: boolean; excluded: string; template: string } | null>(null);
+  const [dmSettingsOpen, setDmSettingsOpen] = useState(false);
+  const [dmSettingsDraft, setDmSettingsDraft] = useState({ excluded: "", template: "" });
+  const [dmSettingsSaving, setDmSettingsSaving] = useState(false);
+  const [messageEdited, setMessageEdited] = useState(false);
 
   useEffect(() => {
-    setMessage(buildLeadDmScript(lead));
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/dm-template"), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { canEdit?: boolean; excluded?: string; template?: string } | null;
+        if (!active || !response.ok || !payload) return;
+        setDmSettings({ canEdit: Boolean(payload.canEdit), excluded: payload.excluded || "", template: payload.template || "" });
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (dmSettings && !messageEdited) setMessage(buildLeadDmScript(lead, dmSettings));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dmSettings]);
+
+  async function saveDmSettings() {
+    setDmSettingsSaving(true);
+    try {
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/dm-template"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dmSettingsDraft)
+      }, 12000);
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) throw new Error(payload?.message || "기본 문구를 저장하지 못했습니다.");
+      setMessageEdited(false);
+      setDmSettings((current) => ({ canEdit: current?.canEdit ?? true, ...dmSettingsDraft }));
+      setDmSettingsOpen(false);
+      setNotice({ tone: "ok", text: "기본 문구를 저장했습니다. 모든 매장에 적용됩니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "기본 문구를 저장하지 못했습니다." });
+    } finally {
+      setDmSettingsSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    setMessage(buildLeadDmScript(lead, dmSettings || undefined));
+    setMessageEdited(false);
     setDrafts({ fax: lead.fax || "", email: lead.email || "", naverTalktalkUrl: lead.naverTalktalkUrl || "" });
     setEditing(null);
     setNotice(null);
@@ -369,11 +414,50 @@ export function LeadContactChannelsPanel({
         보낼 문구 (이번에만 고쳐도 됨)
         <textarea
           className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-800 outline-none focus:border-teal-400 focus:bg-white"
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => {
+            setMessage(event.target.value);
+            setMessageEdited(true);
+          }}
           rows={4}
           value={message}
         />
       </label>
+      {dmSettings?.canEdit ? (
+        <div className="mt-1.5">
+          <button
+            className="text-[11px] font-bold text-teal-700 underline-offset-2 hover:underline"
+            onClick={() => {
+              setDmSettingsDraft({ excluded: dmSettings.excluded, template: dmSettings.template });
+              setDmSettingsOpen((open) => !open);
+            }}
+            type="button"
+          >
+            {dmSettingsOpen ? "기본 문구 닫기" : "기본 문구·제외 품목 설정"}
+          </button>
+          {dmSettingsOpen ? (
+            <div className="mt-1.5 rounded-lg border border-slate-200 bg-white p-2">
+              <p className="text-[11px] font-semibold leading-4 text-slate-500">{"{상호} {업종} {품목}"}은 매장마다 자동으로 바뀝니다. 결제 조건은 &lsquo;협의&rsquo;로 쓰는 것을 권장합니다.</p>
+              <textarea
+                aria-label="기본 DM 문구"
+                className="mt-1 w-full resize-y rounded-md border border-slate-200 p-2 text-xs leading-5"
+                onChange={(event) => setDmSettingsDraft((draft) => ({ ...draft, template: event.target.value }))}
+                rows={4}
+                value={dmSettingsDraft.template}
+              />
+              <input
+                aria-label="제외 품목"
+                className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
+                onChange={(event) => setDmSettingsDraft((draft) => ({ ...draft, excluded: event.target.value }))}
+                placeholder="제외 품목 (쉼표로 구분, 예: 육류, 주류)"
+                value={dmSettingsDraft.excluded}
+              />
+              <button className="maju-button-primary mt-1.5 h-8 w-full justify-center text-xs" disabled={dmSettingsSaving || !dmSettingsDraft.template.trim()} onClick={() => void saveDmSettings()} type="button">
+                {dmSettingsSaving ? "저장 중" : "기본 문구 저장"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div aria-label="보낼 문구 미리보기" className="mt-2 flex justify-end rounded-xl bg-slate-100 p-3">
         <div className="max-w-[88%] whitespace-pre-line rounded-2xl rounded-br-sm bg-teal-700 px-3 py-2 text-xs font-semibold leading-5 text-white shadow-sm">
           {message || "보낼 문구를 입력하면 여기에 표시됩니다."}

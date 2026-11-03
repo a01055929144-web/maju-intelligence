@@ -174,7 +174,7 @@ describe("10-29 목록 정리", () => {
     const leadPanel = workspaceSource.slice(workspaceSource.indexOf("function LeadListPanel("));
     expect(leadPanel.indexOf("{tabs}")).toBeLessThan(leadPanel.indexOf('aria-label="정렬 기준"'));
     expect(workspaceSource).toContain('{ label: "상호명", value: "name" }');
-    expect(workspaceSource).toContain('{ label: "개업일", value: "openDate" }');
+    expect(workspaceSource).toContain('{ label: "인허가일", value: "openDate" }');
     expect(workspaceSource).toContain("openDateBadge");
   });
 });

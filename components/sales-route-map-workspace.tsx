@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DEFAULT_LEAD_DM_TEMPLATE, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -418,7 +419,7 @@ export const tmapWaypointLimit = 15;
 // v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
 const MAP_FILTER_POP_TITLES: Record<MapFilterPopKey, string> = {
-  date: "개업일",
+  date: "인허가일",
   industry: "업종",
   more: "더보기",
   region: "영업 지역",
@@ -1491,8 +1492,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       active: Boolean(mapOpenDatePreset),
       icon: CalendarDays,
       key: "date",
-      label: mapOpenDatePreset === "custom" ? "개업 기간 직접" : mapOpenDatePreset ? `개업 ${mapOpenDatePreset}일` : "개업일",
-      title: "개업일"
+      label: mapOpenDatePreset === "custom" ? "인허가 기간 직접" : mapOpenDatePreset ? `인허가 ${mapOpenDatePreset}일` : "인허가일",
+      title: "인허가일 — 대표자 변경·재허가 날짜일 수 있어 실제 개업일과 다를 수 있습니다"
     },
     { active: Boolean(mapLeadStageFilter), icon: ListFilter, key: "stage", label: summarizeMultiFilter(mapLeadStageFilter, "단계", stageLabelOf), title: "단계" }
   ];
@@ -1665,7 +1666,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     isVehicleFiltered ? `${selectedVehicleLabel} 담당만` : "",
     mapLeadRegionSigungu ? summarizeMultiFilter(mapLeadRegionSigungu, "") : "",
     mapLeadIndustryFilter ? summarizeMultiFilter(mapLeadIndustryFilter, "") : "",
-    mapOpenDatePreset === "custom" ? "개업 기간 직접" : mapOpenDatePreset ? `개업 최근 ${mapOpenDatePreset}일` : "",
+    mapOpenDatePreset === "custom" ? "인허가 기간 직접" : mapOpenDatePreset ? `인허가 최근 ${mapOpenDatePreset}일` : "",
     mapLeadStageFilter ? `단계 ${summarizeMultiFilter(mapLeadStageFilter, "", stageLabelOf)}` : "",
     mapLeadReminderOnly ? "리마인드만" : ""
   ].filter(Boolean).join(" · ") || "전체 조건";
@@ -2889,15 +2890,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       )}
                     </div>
                   ))}
+                  {/* 11/3 현장 피드백: 지역 설정이 좌측 하단 설정 메뉴에만 있는 줄 알았다 → 주색 버튼으로 눈에 띄게. 이 화면에서 바로 열리고 닫으면 그대로 복귀. */}
                   <button
-                    className="mt-2 h-8 w-full rounded-md border border-dashed border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    className="maju-button-primary mt-2 h-9 w-full justify-center text-xs"
                     onClick={() => {
                       setMapFilterPop("");
                       setMobileSalesAreaOpen(true);
                     }}
                     type="button"
                   >
-                    영업 지역 추가·변경
+                    영업 지역 설정
                   </button>
                 </div>
               ) : null}
@@ -2975,9 +2977,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   </div>
                   <p className="text-[11px] font-black text-slate-500">기간 직접</p>
                   <div className="flex items-center gap-1.5">
-                    <input aria-label="개업일 시작" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
+                    <input aria-label="인허가일 시작" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
                     <span className="text-xs text-slate-400">~</span>
-                    <input aria-label="개업일 끝" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
+                    <input aria-label="인허가일 끝" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
                   </div>
                   <button
                     className="h-8 w-full rounded-md border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
@@ -6518,7 +6520,7 @@ const LEAD_LIST_SORT_OPTIONS: Array<{ label: string; value: LeadListSortKey }> =
   { label: "기본 순", value: "default" },
   { label: "상호명", value: "name" },
   { label: "업종", value: "industry" },
-  { label: "개업일", value: "openDate" },
+  { label: "인허가일", value: "openDate" },
   { label: "등급", value: "grade" }
 ];
 
@@ -7679,9 +7681,10 @@ export function buildOutboundItemNotes(industry?: string) {
   return rows.slice(0, 5).map((row) => row.item);
 }
 
-export function buildLeadDmScript(lead: PermitLeadItem) {
-  const items = buildOutboundItemNotes(lead.industryPrimary).slice(0, 4).join(", ");
-  return `안녕하세요, ${lead.businessName} 대표님. 식자재 납품/단가 비교 제안드리고 싶어 연락드립니다. ${lead.industryPrimary} 업종 기준으로 ${items} 품목을 먼저 맞춰보고, 현재 사용 중인 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.`;
+/** 11/3 A3: 회사 기본 문구(placeholder {상호}{업종}{품목})와 제외 품목을 반영합니다. 결제 조건 기본값은 '협의'. */
+export function buildLeadDmScript(lead: PermitLeadItem, settings?: { excluded?: string; template?: string }) {
+  const items = filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
+  return renderLeadDm(settings?.template || DEFAULT_LEAD_DM_TEMPLATE, { businessName: lead.businessName, industry: lead.industryPrimary, items });
 }
 
 function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteLine[], menuNotes: string, total: number, validUntil?: string) {

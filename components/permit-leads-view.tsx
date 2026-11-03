@@ -3636,7 +3636,7 @@ function PermitLeadDetailPanel({
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
               {lead.industryPrimary}
               {lead.permitStatus ? ` · ${lead.permitStatus}` : ""}
-              {getPermitLeadOpenDate(lead) ? ` · 개업 ${getPermitLeadOpenDate(lead)}` : ""}
+              {getPermitLeadOpenDate(lead) ? ` · 인허가 ${getPermitLeadOpenDate(lead)}` : ""}
             </p>
             <div className="mt-2">
               <LeadStageSelect lead={lead} onAction={onAction} />
