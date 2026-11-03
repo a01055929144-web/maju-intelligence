@@ -13,7 +13,7 @@ describe("customer navigation", () => {
 
     expect(flattened.map((item) => item.href)).toEqual(expect.arrayContaining([
       "/dashboard",
-      "/leads?type=permit", "/leads?type=keyword", "/revenue/contacts",
+      "/leads", "/revenue/contacts",
       "/map", "/routes/today", "/map?view=history",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
     ]));

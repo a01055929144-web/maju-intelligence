@@ -152,7 +152,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       rightAction={mapLeadListActions}
       showHoldModules={showHoldModules}
       subtitle="거래처 위치, 배송차 배정, 경유 코스 계산을 지도에서 바로 처리합니다"
-      title={initialView === "leads" ? (params.type === "keyword" ? "영업 리드" : "신규 리드") : "지도 홈"}
+      title={initialView === "leads" ? "리드" : "지도 홈"}
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >

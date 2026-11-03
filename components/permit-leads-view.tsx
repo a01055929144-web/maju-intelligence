@@ -1,7 +1,6 @@
 "use client";
 
 import { LeadChangeHistory } from "@/components/lead-change-history";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -65,7 +64,6 @@ import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueue
 import {
   BulkLeadActionBusy,
   CompanyLeadSearchRegion,
-  DirectoryStat,
   GovSyncResult,
   KakaoKeywordLeadSweepResult,
   LIST_PAGE_SIZE_OPTIONS,
@@ -620,7 +618,6 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         .map(([value, count]) => ({ count, value }))
     };
   }, [leads]);
-  const quickOpenMonthOptions = useMemo(() => openDateOptions.months.slice(0, 6), [openDateOptions.months]);
   const openDateCoverageSummary = useMemo(() => {
     const withOpenDate = leads.filter((lead) => getPermitLeadOpenDate(lead)).length;
     return {
@@ -871,8 +868,20 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       showExistingCustomers ||
       showTemporaryOperations ||
       showNearbyOnly ||
-      tableSearch
+      tableSearch ||
+      regionFilter ||
+      sizeFilter ||
+      reminderOnly ||
+      businessHoursFilter ||
+      showOutsideSalesArea ||
+      showClosedOrNonTarget
   );
+
+  const openDateChoice = openDateFilterMode === "month" ? `month:${openDateMonth}`
+    : openDateFilterMode === "year" ? `year:${openDateYear}`
+    : openDateFilterMode !== "all" ? openDateFilterMode
+    : periodFilter !== "all" ? `period:${periodFilter}` : "all";
+  const advancedFilterCount = [hasTalktalkOnly, hasEmailOnly, hasFaxOnly, Boolean(kakaoMatchFilter), Boolean(actionFilter), Boolean(gradeFilter && gradeFilter !== "A"), showOutsideSalesArea, showExistingCustomers, !excludeExcluded, showTemporaryOperations, showClosedOrNonTarget].filter(Boolean).length;
 
   function clearLeadFilters() {
     setPeriodFilter("all");
@@ -898,6 +907,30 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     setShowTemporaryOperations(false);
     setShowNearbyOnly(false);
     setTableSearch("");
+    setRegionFilter("");
+    setSizeFilter("");
+    setReminderOnly(false);
+    setBusinessHoursFilter("");
+    setShowOutsideSalesArea(false);
+    setShowClosedOrNonTarget(false);
+  }
+
+  /** 11/4: 기간·월·연도·미확인·직접 입력을 '인허가일' 선택 하나로 합쳤습니다. */
+  function applyOpenDateChoice(value: string) {
+    const [kind, rest = ""] = value.split(":");
+    setPeriodFilter(kind === "period" ? (rest as PermitLeadPeriod) : "all");
+    if (kind === "period" || kind === "all") { setOpenDateFilterMode("all"); return; }
+    if (kind === "month") { setOpenDateFilterMode("month"); setOpenDateMonth(rest); return; }
+    if (kind === "year") { setOpenDateFilterMode("year"); setOpenDateYear(rest); return; }
+    setOpenDateFilterMode(kind as LeadOpenDateFilterMode);
+  }
+  function toggleActionChip(action: string) {
+    setStatusFilter("");
+    setActionFilter((value) => (value === action ? "" : action));
+  }
+  function toggleStatusChip(status: string) {
+    setActionFilter("");
+    setStatusFilter((value) => (value === status ? "" : status));
   }
 
   function toggleLeadSelection(leadId: string) {
@@ -1092,59 +1125,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     }
   }
 
-  // 2026-09-01 피드백: "해당 카드를 누르면, 아래 거래처들이 필터가 되면 좋을 것 같아" — 맨 위 KPI
-  // 카드(신규 리드/오늘 신규/A등급/전화 가능)도 카드 아래 큐 카드들과 같은 방식으로 목록을 필터합니다.
-  function focusTodayNewLeads() {
-    setShowNearbyOnly(false);
-    setTableSearch("");
-    setActionFilter("");
-    setStatusFilter("");
-    setGradeFilter("");
-    setHasPhoneOnly(false);
-    setLeadTypeFilter("all");
-    setPeriodFilter("today");
-  }
-  function focusGradeALeads() {
-    setShowNearbyOnly(false);
-    setTableSearch("");
-    setActionFilter("");
-    setStatusFilter("");
-    setPeriodFilter("all");
-    setHasPhoneOnly(false);
-    setLeadTypeFilter("all");
-    setGradeFilter("A");
-  }
-  function focusPhoneReadyLeads() {
-    setShowNearbyOnly(false);
-    setTableSearch("");
-    setActionFilter("");
-    setStatusFilter("");
-    setPeriodFilter("all");
-    setGradeFilter("");
-    setLeadTypeFilter("all");
-    setHasPhoneOnly(true);
-  }
-  // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응 카드입니다.
-  function focusNewLeads() {
-    setShowNearbyOnly(false);
-    setTableSearch("");
-    setActionFilter("");
-    setStatusFilter("");
-    setPeriodFilter("all");
-    setGradeFilter("");
-    setHasPhoneOnly(false);
-    setLeadTypeFilter("new");
-  }
-  function focusSalesLeads() {
-    setShowNearbyOnly(false);
-    setTableSearch("");
-    setActionFilter("");
-    setStatusFilter("");
-    setPeriodFilter("all");
-    setGradeFilter("");
-    setHasPhoneOnly(false);
-    setLeadTypeFilter("sales");
-  }
+
 
   async function handleFileUpload(file: File) {
     setUploadBusy(true);
@@ -1574,7 +1555,13 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     Boolean(kakaoMatchFilter),
     !excludeExcluded,
     showNearbyOnly,
-    Boolean(tableSearch)
+    Boolean(tableSearch),
+    Boolean(regionFilter),
+    Boolean(sizeFilter),
+    reminderOnly,
+    Boolean(businessHoursFilter),
+    showOutsideSalesArea,
+    showClosedOrNonTarget
   ].filter(Boolean).length;
   const leadPageCopy = isSalesLeadPage
     ? {
@@ -1626,74 +1613,29 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
 
   return (
     <section className="flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6">
-      <div className={`overflow-hidden rounded-xl border px-3 py-3 shadow-sm sm:px-4 ${isSalesLeadPage ? "border-violet-100 bg-gradient-to-r from-white via-white to-violet-50" : "border-teal-100 bg-gradient-to-r from-white via-white to-teal-50"}`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-2xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className={`text-[10px] font-black tracking-[0.16em] ${isSalesLeadPage ? "text-violet-600" : "text-teal-600"}`}>{leadPageCopy.eyebrow}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-violet-100 text-violet-700" : "bg-teal-100 text-teal-700"}`}>
-                {leadPageCopy.role}
-              </span>
-            </div>
-            <h2 className="mt-1 text-lg font-black tracking-tight text-slate-950 sm:text-xl">{leadPageCopy.title}</h2>
-            <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">{leadPageCopy.description}</p>
-          </div>
-          <nav aria-label="리드 업무 화면" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 sm:min-w-[340px]">
-            <Link aria-current={!isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${!isSalesLeadPage ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=permit">
-              <span className="block text-xs font-black">신규 리드</span>
-              <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">발견·검증</span>
-            </Link>
-            <Link aria-current={isSalesLeadPage ? "page" : undefined} className={`rounded-md px-3 py-2 text-left transition ${isSalesLeadPage ? "bg-white text-violet-800 shadow-sm ring-1 ring-inset ring-violet-100" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`} href="/leads?type=keyword">
-              <span className="block text-xs font-black">영업 리드</span>
-              <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">접촉·견적·후속</span>
-            </Link>
-          </nav>
-        </div>
-      </div>
-
-      <div className={`grid gap-1.5 sm:grid-cols-2 ${isSalesLeadPage ? "xl:grid-cols-6" : "xl:grid-cols-4"}`}>
-        <DirectoryStat
-          active
-          label={isSalesLeadPage ? "전체 영업 후보" : "전체 신규 개업"}
-          onClick={leadQualityMode === "keyword" ? focusSalesLeads : focusNewLeads}
-          title={isSalesLeadPage ? PERMIT_LEAD_TYPE_DESCRIPTION.sales : PERMIT_LEAD_TYPE_DESCRIPTION.new}
-          value={summary ? `${(leadQualityMode === "keyword" ? summary.salesLeadCount : summary.newLeadCount).toLocaleString()}곳` : "—"}
-        />
-        {!isSalesLeadPage ? <DirectoryStat
-          active={periodFilter === "today"}
-          label="오늘 신규"
-          onClick={focusTodayNewLeads}
-          title="오늘 개시된 신규 리드만 봅니다."
-          value={summary ? `${summary.todayNew.toLocaleString()}곳` : "—"}
-        /> : null}
-        <DirectoryStat
-          active={gradeFilter === "A"}
-          label="A등급"
-          onClick={focusGradeALeads}
-          title="A등급 리드만 봅니다."
-          value={summary ? `${summary.gradeA.toLocaleString()}곳` : "—"}
-        />
-        <DirectoryStat
-          active={hasPhoneOnly}
-          label="전화 가능"
-          onClick={focusPhoneReadyLeads}
-          title="전화번호가 확인된 리드만 봅니다."
-          value={summary ? `${summary.hasPhone.toLocaleString()}곳` : "—"}
-        />
-        {isSalesLeadPage ? <DirectoryStat
-          active={statusFilter === "견적 요청"}
-          label="견적 요청"
-          onClick={() => focusLeadStatus("견적 요청", queues?.quoteRequests || [])}
-          title="견적 요청 상태인 리드만 봅니다."
-          value={summary ? `${summary.quoteRequests.toLocaleString()}곳` : "—"}
-        /> : null}
-        {isSalesLeadPage ? <DirectoryStat
-          active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
-          label="견적 후속"
-          onClick={() => focusQuoteFollowUps(queues?.quoteFollowUps || [])}
-          title="견적 발송 후 후속 연락이 필요한 리드만 봅니다."
-          value={summary ? `${summary.quoteFollowUps.toLocaleString()}곳` : "—"}
-        /> : null}
+      {/* 11/4: 신규/영업 리드는 왼쪽 메뉴 하나(리드)로 합치고, 화면 왼쪽 위 스위치로 전환합니다. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <nav aria-label="리드 종류" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+          {([
+            { count: summary?.newLeadCount, label: "신규 리드", sales: false, type: "permit" },
+            { count: summary?.salesLeadCount, label: "영업 리드", sales: true, type: "keyword" }
+          ] as const).map((item) => {
+            const current = item.sales === isSalesLeadPage;
+            return (
+              <button
+                aria-current={current ? "page" : undefined}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-black transition ${current ? (item.sales ? "bg-violet-700 text-white" : "bg-teal-700 text-white") : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                key={item.type}
+                onClick={() => { if (!current) window.location.assign(withPermitLeadCompanyQuery(`/leads?type=${item.type}`)); }}
+                type="button"
+              >
+                {item.label}
+                {typeof item.count === "number" ? <span className={`text-[11px] font-bold ${current ? "text-white/80" : "text-slate-400"}`}>{item.count.toLocaleString()}</span> : null}
+              </button>
+            );
+          })}
+        </nav>
+        <p className="text-xs font-semibold text-slate-500">{leadPageCopy.description}</p>
       </div>
 
       {leadQualityMode === "keyword" ? <details className="maju-section-card group" open>
@@ -2181,9 +2123,11 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           </div>
         ) : null}
 
+        {/* 11/4: 필터 재정비 — ① 검색 + 핵심 5개(지역·업종·인허가일·단계·규모) ② 빠른 보기 칩 ③ 나머지는 '필터 더보기'.
+            업종 칩·인허가월 칩·현재 결과 줄·상단 숫자 카드는 같은 필터의 중복이라 이 두 줄로 합쳤습니다. */}
         <div className="flex min-w-0 flex-col gap-2 border-b border-slate-200 bg-slate-50/60 p-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
-            <label className="maju-search-field relative h-9 w-full min-w-0 basis-full sm:w-auto sm:min-w-[200px] sm:flex-1">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <label className="maju-search-field relative col-span-2 h-9 min-w-0 sm:min-w-[220px] sm:flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-xs font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
@@ -2192,280 +2136,107 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 value={tableSearch}
               />
             </label>
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap sm:flex-none">
-              <button className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${businessHoursFilter === "available" ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} type="button">지금 방문 가능</button>
-              <button className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${businessHoursFilter === "break" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} type="button">오늘 브레이크 있음</button>
-            </div>
+            <select aria-label="영업 지역" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setRegionFilter(event.target.value)} value={regionFilter}>
+              <option value="">영업 지역 전체</option>
+              {regionOptions.map(([label, count]) => <option key={label} value={label}>{label} ({count.toLocaleString()})</option>)}
+            </select>
+            <select aria-label="업종" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
+              <option value="">업종 전체</option>
+              {quickIndustryOptions.map(([industry, count]) => <option key={`top-${industry}`} value={industry}>{industry} ({count.toLocaleString()})</option>)}
+              {industryOptions.filter((industry) => !quickIndustryOptions.some(([top]) => top === industry)).map((industry) => <option key={industry} value={industry}>{industry}</option>)}
+            </select>
+            <select aria-label="인허가일" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => applyOpenDateChoice(event.target.value)} value={openDateChoice}>
+              <option value="all">인허가일 전체</option>
+              <optgroup label="기간">
+                {PERMIT_PERIOD_OPTIONS.filter((option) => option.value !== "all").map((option) => <option key={option.value} value={`period:${option.value}`}>{option.label}</option>)}
+              </optgroup>
+              {openDateOptions.months.length ? <optgroup label="월별">{openDateOptions.months.slice(0, 12).map((month) => <option key={month.value} value={`month:${month.value}`}>{month.value} ({month.count.toLocaleString()})</option>)}</optgroup> : null}
+              {openDateOptions.years.length ? <optgroup label="연도별">{openDateOptions.years.map((year) => <option key={year.value} value={`year:${year.value}`}>{year.value}년 ({year.count.toLocaleString()})</option>)}</optgroup> : null}
+              <option value="missing">인허가일 미확인{openDateCoverageSummary.missing ? ` (${openDateCoverageSummary.missing.toLocaleString()})` : ""}</option>
+              <option value="custom">직접 기간 입력</option>
+            </select>
+            <select aria-label="단계" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => { setStatusFilter(event.target.value); if (event.target.value) setActionFilter(""); }} value={statusFilter}>
+              <option value="">단계 전체</option><option value="검토 필요">검토 필요</option><option value="방문 대상">방문 대상</option><option value="DM 발송">DM 발송</option><option value="연락 완료">연락 완료</option><option value="미팅 예정">미팅 예정</option><option value="견적 요청">견적 요청</option><option value="견적 발송">견적 발송</option><option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option><option value="재연락 예정">재연락 예정</option>
+            </select>
+            <select aria-label="규모" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setSizeFilter(event.target.value as typeof sizeFilter)} value={sizeFilter}>
+              <option value="">규모 전체</option><option value="small">소형 (15평 미만)</option><option value="medium">중형 (15~40평)</option><option value="large">대형 (40평 이상)</option><option value="unknown">면적 미확인</option>
+            </select>
             <button
               aria-expanded={showAdvancedFilters}
-              className="flex shrink-0 items-center gap-1 rounded-md border border-transparent px-2 py-1.5 text-xs font-black text-slate-500 hover:bg-slate-100"
+              className={`flex h-9 shrink-0 items-center justify-center gap-1 rounded-md border px-2.5 text-xs font-black ${advancedFilterCount ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
               onClick={() => setShowAdvancedFilters((value) => !value)}
               type="button"
             >
               <ListFilter className="h-3.5 w-3.5" />
-              필터{activeFilterCount ? ` · ${activeFilterCount}` : ""}
+              필터 더보기{advancedFilterCount ? ` · ${advancedFilterCount}` : ""}
               <ChevronDown className={`h-3.5 w-3.5 transition ${showAdvancedFilters ? "rotate-180" : ""}`} />
             </button>
           </div>
-          {showAdvancedFilters ? (
-            <div className="flex flex-wrap items-center gap-3 border-t border-slate-200/80 pt-2">
-              <label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-600"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖 보기</label>
-              {leadQualityMode === "permit" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setPeriodFilter(event.target.value as "all" | PermitLeadPeriod); if (event.target.value !== "all") setOpenDateFilterMode("all"); }} value={periodFilter}>
-                {PERMIT_PERIOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select> : null}
-              {leadQualityMode === "permit" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { const mode = event.target.value as LeadOpenDateFilterMode; setOpenDateFilterMode(mode); if (mode !== "all") setPeriodFilter("all"); }} value={openDateFilterMode}>
-                <option value="all">개시일 전체</option><option value="year">연도별</option><option value="month">월별</option><option value="custom">직접 기간</option><option value="missing">개시일 미확인</option>
-              </select> : null}
-              {openDateFilterMode === "year" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateYear(event.target.value)} value={openDateYear}><option value="">연도 선택</option>{openDateOptions.years.map((year) => <option key={year.value} value={year.value}>{year.value}년 · {year.count.toLocaleString()}곳</option>)}</select> : null}
-              {openDateFilterMode === "month" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateMonth(event.target.value)} value={openDateMonth}><option value="">월 선택</option>{openDateOptions.months.map((month) => <option key={month.value} value={month.value}>{month.value} · {month.count.toLocaleString()}곳</option>)}</select> : null}
-              <select aria-label="영업 지역" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setRegionFilter(event.target.value)} value={regionFilter}>
-                <option value="">영업 지역 전체</option>
-                {regionOptions.map(([label, count]) => <option key={label} value={label}>{label} ({count.toLocaleString()})</option>)}
-              </select>
-              <select aria-label="규모" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setSizeFilter(event.target.value as typeof sizeFilter)} value={sizeFilter}>
-                <option value="">규모 전체</option><option value="small">소형 (15평 미만)</option><option value="medium">중형 (15~40평)</option><option value="large">대형 (40평 이상)</option><option value="unknown">면적 미확인</option>
-              </select>
-              <button aria-pressed={reminderOnly} className={`h-8 shrink-0 rounded-md border px-2.5 text-xs font-bold ${reminderOnly ? "border-amber-600 bg-amber-50 text-amber-800" : "border-amber-300 bg-white text-amber-800"}`} onClick={() => setReminderOnly((value) => !value)} type="button">리마인드</button>
-              <select aria-label="단계" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setStatusFilter(event.target.value); if (event.target.value) setActionFilter(""); }} value={statusFilter}>
-                <option value="">단계 전체</option><option value="견적 요청">견적 요청</option><option value="견적 발송">견적 발송</option><option value="재연락 예정">재연락 예정</option><option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option><option value="미팅 예정">미팅 예정</option><option value="연락 완료">연락 완료</option><option value="DM 발송">DM 발송</option><option value="방문 대상">방문 대상</option><option value="검토 필요">검토 필요</option>
-              </select>
-              <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
-                <option value="">업종 전체(상세)</option>
-                {industryOptions.map((industry) => (
-                  <option key={industry} value={industry}>
-                    {industry}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                onChange={(event) => {
-                  setActionFilter(event.target.value);
-                  if (event.target.value) setStatusFilter("");
-                }}
-                value={actionFilter}
-              >
-                <option value="">액션 전체</option>
-                {PERMIT_ACTION_OPTIONS.map((action) => (
-                  <option key={action} value={action}>
-                    {action}
-                  </option>
-                ))}
-              </select>
-              <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setGradeFilter(event.target.value)} value={gradeFilter}>
-                <option value="">추천 등급 전체</option>
-                <option value="A">A등급</option>
-                <option value="B">B등급</option>
-                <option value="C">C등급</option>
-              </select>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={hasPhoneOnly} onChange={(event) => setHasPhoneOnly(event.target.checked)} type="checkbox" />
-                휴대폰 있음
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={uncontactedOnly} onChange={(event) => setUncontactedOnly(event.target.checked)} type="checkbox" />
-                연락 안 한 곳
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={hasInstagramOnly} onChange={(event) => setHasInstagramOnly(event.target.checked)} type="checkbox" />
-                인스타 확인된 곳만
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={hasTalktalkOnly} onChange={(event) => setHasTalktalkOnly(event.target.checked)} type="checkbox" />
-                톡톡 있음
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={hasEmailOnly} onChange={(event) => setHasEmailOnly(event.target.checked)} type="checkbox" />
-                이메일 있음
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={hasFaxOnly} onChange={(event) => setHasFaxOnly(event.target.checked)} type="checkbox" />
-                팩스 있음
-              </label>
-              <select
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                onChange={(event) => setKakaoMatchFilter(event.target.value as typeof kakaoMatchFilter)}
-                value={kakaoMatchFilter}
-              >
-                <option value="">카카오 상태 전체</option>
-                <option value="matched_no_phone">연락처 없음 · 카카오 매칭됨</option>
-                <option value="unregistered">카카오 미등록</option>
-                <option value="needs_confirmation">확인 필요 · 상호명만</option>
-              </select>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />
-                제외 처리된 리드도 표시
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={showExistingCustomers} onChange={(event) => setShowExistingCustomers(event.target.checked)} type="checkbox" />
-                기존 거래처도 표시
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={showTemporaryOperations} onChange={(event) => setShowTemporaryOperations(event.target.checked)} type="checkbox" />
-                임시 영업도 표시
-              </label>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                <input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />
-                폐업·대상 외 업종도 표시
-              </label>
-              {openDateFilterMode === "custom" ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5">
-                  <span className="text-[11px] font-black text-slate-400">개시일</span>
-                  <input
-                    className="h-7 rounded border border-slate-200 px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                    onChange={(event) => setOpenDateStart(event.target.value)}
-                    type="date"
-                    value={openDateStart}
-                  />
-                  <span className="text-[11px] font-bold text-slate-400">~</span>
-                  <input
-                    className="h-7 rounded border border-slate-200 px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                    onChange={(event) => setOpenDateEnd(event.target.value)}
-                    type="date"
-                    value={openDateEnd}
-                  />
-                </div>
-              ) : null}
+          {openDateFilterMode === "custom" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-black text-slate-500">인허가일</span>
+              <input className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900" onChange={(event) => setOpenDateStart(event.target.value)} type="date" value={openDateStart} />
+              <span className="text-[11px] font-bold text-slate-400">~</span>
+              <input className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900" onChange={(event) => setOpenDateEnd(event.target.value)} type="date" value={openDateEnd} />
             </div>
           ) : null}
-          {quickIndustryOptions.length ? (
-            <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-200/80 pt-2">
-              <span className="shrink-0 text-[11px] font-black text-slate-400">업종</span>
-              <button
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset transition ${
-                  !industryFilter ? "bg-teal-700 text-white ring-teal-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-                }`}
-                onClick={() => setIndustryFilter("")}
-                type="button"
-              >
-                전체
-              </button>
-              {quickIndustryOptions.map(([industry, count]) => (
-                <button
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset transition ${
-                    industryFilter === industry ? "bg-teal-700 text-white ring-teal-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-                  }`}
-                  key={industry}
-                  onClick={() => setIndustryFilter(industry)}
-                  type="button"
-                >
-                  {industry} <span className="font-black opacity-70">{count.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {quickOpenMonthOptions.length ? (
-            <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-200/80 pt-2">
-              <span className="shrink-0 text-[11px] font-black text-slate-400">인허가월</span>
-              {quickOpenMonthOptions.map((month) => (
-                <button
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset transition ${
-                    openDateFilterMode === "month" && openDateMonth === month.value ? "bg-blue-700 text-white ring-blue-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-                  }`}
-                  key={month.value}
-                  onClick={() => {
-                    setPeriodFilter("all");
-                    setOpenDateFilterMode("month");
-                    setOpenDateMonth(month.value);
-                  }}
-                  type="button"
-                >
-                  {month.value} <span className="font-black opacity-70">{month.count.toLocaleString()}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {loadState === "ready" ? (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-            <span className="shrink-0 text-[11px] font-black text-slate-400">현재 결과</span>
-            {openDateFilterMode !== "all" ? (
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">
-                {openDateFilterLabel}
-              </span>
-            ) : null}
-            {openDateCoverageSummary.total ? (
-              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-black text-slate-500 ring-1 ring-inset ring-slate-200">
-                개시일 {openDateCoverageSummary.withOpenDate.toLocaleString()} · 미확인 {openDateCoverageSummary.missing.toLocaleString()}
-              </span>
-            ) : null}
-            {openDateCoverageSummary.missing ? (
-              <button
-                className={`rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset transition ${
-                  openDateFilterMode === "missing" ? "bg-amber-600 text-white ring-amber-600" : "bg-amber-50 text-amber-700 ring-amber-100 hover:bg-amber-100"
-                }`}
-                onClick={() => {
-                  setPeriodFilter("all");
-                  setOpenDateFilterMode(openDateFilterMode === "missing" ? "all" : "missing");
-                }}
-                type="button"
-              >
-                미확인만 보기
-              </button>
-            ) : null}
-            <button
-              className="rounded-full bg-teal-700 px-3 py-1 text-[11px] font-black text-white shadow-sm shadow-teal-900/10 hover:bg-teal-800"
-              onClick={clearLeadFilters}
-              type="button"
-            >
-              {visibleLeadSummary.total.toLocaleString()}곳 전체 보기
-            </button>
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={actionFilter === "오늘 문자"}
-              count={visibleLeadSummary.call}
-              label="문자"
-              onClick={() => {
-                setActionFilter("오늘 문자");
-                setStatusFilter("");
-              }}
-            /> : null}
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={hasPhoneOnly}
-              count={visibleLeadSummary.phone}
-              label="전화가능"
-              onClick={() => setHasPhoneOnly((value) => !value)}
-            /> : null}
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={actionFilter === "오늘 DM"}
-              count={visibleLeadSummary.dm}
-              label="DM"
-              onClick={() => {
-                setActionFilter("오늘 DM");
-                setStatusFilter("");
-              }}
-            /> : null}
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={hasInstagramOnly}
-              count={visibleLeadSummary.instagram}
-              label="인스타"
-              onClick={() => setHasInstagramOnly((value) => !value)}
-            /> : null}
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={actionFilter === "정보 보강"}
-              count={visibleLeadSummary.enrichment}
-              label="정보 보강"
-              onClick={() => {
-                setActionFilter("정보 보강");
-                setStatusFilter("");
-              }}
-            /> : null}
-            {isSalesLeadPage ? <LeadQuickFilterChip
-              active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER}
-              count={visibleLeadSummary.followup}
-              label="견적 후속"
-              onClick={() => {
-                setActionFilter("");
-                setStatusFilter(QUOTE_FOLLOW_UP_STATUS_FILTER);
-              }}
-            /> : null}
+          <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5">
+            <span className="shrink-0 text-[11px] font-black text-slate-400">빠른 보기</span>
+            {!isSalesLeadPage ? <LeadQuickFilterChip active={periodFilter === "today"} count={summary?.todayNew} label="오늘 신규" onClick={() => { setOpenDateFilterMode("all"); setPeriodFilter((value) => value === "today" ? "all" : "today"); }} /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip active={actionFilter === "오늘 문자"} count={visibleLeadSummary.call} label="오늘 문자" onClick={() => toggleActionChip("오늘 문자")} /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip active={actionFilter === "오늘 DM"} count={visibleLeadSummary.dm} label="오늘 DM" onClick={() => toggleActionChip("오늘 DM")} /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip active={statusFilter === "견적 요청"} count={summary?.quoteRequests} label="견적 요청" onClick={() => toggleStatusChip("견적 요청")} /> : null}
+            {isSalesLeadPage ? <LeadQuickFilterChip active={statusFilter === QUOTE_FOLLOW_UP_STATUS_FILTER} count={summary?.quoteFollowUps} label="견적 후속" onClick={() => toggleStatusChip(QUOTE_FOLLOW_UP_STATUS_FILTER)} /> : null}
+            <LeadQuickFilterChip active={gradeFilter === "A"} count={summary?.gradeA} label="A등급" onClick={() => setGradeFilter((value) => value === "A" ? "" : "A")} />
+            <LeadQuickFilterChip active={hasPhoneOnly} count={summary?.hasPhone} label="휴대폰 있음" onClick={() => setHasPhoneOnly((value) => !value)} />
+            <LeadQuickFilterChip active={hasInstagramOnly} label="인스타 있음" onClick={() => setHasInstagramOnly((value) => !value)} />
+            <LeadQuickFilterChip active={uncontactedOnly} label="연락 안 한 곳" onClick={() => setUncontactedOnly((value) => !value)} />
+            <LeadQuickFilterChip active={reminderOnly} label="리마인드" onClick={() => setReminderOnly((value) => !value)} />
+            <LeadQuickFilterChip active={businessHoursFilter === "available"} label="지금 방문 가능" onClick={() => setBusinessHoursFilter((value) => value === "available" ? "" : "available")} />
+            <LeadQuickFilterChip active={businessHoursFilter === "break"} label="오늘 브레이크" onClick={() => setBusinessHoursFilter((value) => value === "break" ? "" : "break")} />
             {hasActiveLeadFilters ? (
-              <button className="ml-auto rounded-md px-2 py-1 text-[11px] font-black text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={clearLeadFilters} type="button">
+              <button className="ml-auto shrink-0 rounded-md px-2 py-1 text-[11px] font-black text-slate-500 hover:bg-slate-100 hover:text-slate-800" onClick={clearLeadFilters} type="button">
                 필터 초기화
               </button>
             ) : null}
           </div>
-        ) : null}
+          {showAdvancedFilters ? (
+            <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 text-xs font-bold text-slate-600 md:grid-cols-3">
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400">연락 수단</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                  <label className="flex items-center gap-1.5"><input checked={hasTalktalkOnly} onChange={(event) => setHasTalktalkOnly(event.target.checked)} type="checkbox" />톡톡</label>
+                  <label className="flex items-center gap-1.5"><input checked={hasEmailOnly} onChange={(event) => setHasEmailOnly(event.target.checked)} type="checkbox" />이메일</label>
+                  <label className="flex items-center gap-1.5"><input checked={hasFaxOnly} onChange={(event) => setHasFaxOnly(event.target.checked)} type="checkbox" />팩스</label>
+                </div>
+                <select aria-label="카카오 상태" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 w-full" onChange={(event) => setKakaoMatchFilter(event.target.value as typeof kakaoMatchFilter)} value={kakaoMatchFilter}>
+                  <option value="">카카오 상태 전체</option>
+                  <option value="matched_no_phone">연락처 없음 · 카카오 매칭됨</option>
+                  <option value="unregistered">카카오 미등록</option>
+                  <option value="needs_confirmation">확인 필요 · 상호명만</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[11px] font-black text-slate-400">우선순위</p>
+                <select aria-label="추천 등급" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 w-full" onChange={(event) => setGradeFilter(event.target.value)} value={gradeFilter}>
+                  <option value="">추천 등급 전체</option><option value="A">A등급</option><option value="B">B등급</option><option value="C">C등급</option>
+                </select>
+                <select aria-label="다음 할 일" className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100 w-full" onChange={(event) => { setActionFilter(event.target.value); if (event.target.value) setStatusFilter(""); }} value={actionFilter}>
+                  <option value="">다음 할 일 전체</option>
+                  {PERMIT_ACTION_OPTIONS.map((action) => <option key={action} value={action}>{action}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-black text-slate-400">함께 표시</p>
+                <label className="flex items-center gap-1.5"><input checked={showOutsideSalesArea} onChange={(event) => setShowOutsideSalesArea(event.target.checked)} type="checkbox" />영업 지역 밖</label>
+                <label className="flex items-center gap-1.5"><input checked={showExistingCustomers} onChange={(event) => setShowExistingCustomers(event.target.checked)} type="checkbox" />기존 거래처</label>
+                <label className="flex items-center gap-1.5"><input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />제외 처리한 리드</label>
+                <label className="flex items-center gap-1.5"><input checked={showTemporaryOperations} onChange={(event) => setShowTemporaryOperations(event.target.checked)} type="checkbox" />임시 영업</label>
+                <label className="flex items-center gap-1.5"><input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />폐업·대상 외 업종</label>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {actionMessage ? <p aria-live="polite" className="mx-3 mt-3 rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{actionMessage}</p> : null}
         {bulkMessage ? <p aria-live="polite" className="mx-3 mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{bulkMessage}</p> : null}
@@ -4578,19 +4349,20 @@ function LeadQuickFilterChip({
   onClick
 }: {
   readonly active: boolean;
-  readonly count: number;
+  readonly count?: number;
   readonly label: string;
   readonly onClick: () => void;
 }) {
   return (
     <button
-      className={`rounded-full px-3 py-1 text-[11px] font-black ring-1 ring-inset transition ${
+      aria-pressed={active}
+      className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-black ring-1 ring-inset transition ${
         active ? "bg-teal-700 text-white ring-teal-700" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
       }`}
       onClick={onClick}
       type="button"
     >
-      {label} {count.toLocaleString()}
+      {label}{typeof count === "number" ? <span className="ml-1 opacity-70">{count.toLocaleString()}</span> : null}
     </button>
   );
 }
