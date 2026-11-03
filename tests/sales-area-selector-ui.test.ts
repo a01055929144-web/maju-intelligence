@@ -15,7 +15,7 @@ describe("sales area selector UI", () => {
 
   it("uses an immediately saved, scrollable checkbox list and disables inherited children", () => {
     expect(selectorSource).toContain('type="checkbox"');
-    expect(selectorSource).toContain("max-h-[min(48dvh,440px)]");
+    expect(selectorSource).toContain("max-h-[min(56dvh,520px)]");
     expect(selectorSource).toContain("provinceSelected || parentExplicit");
     expect(selectorSource).toContain("region.label.startsWith(`${administrativeArea} `)");
     expect(selectorSource).toContain("window.confirm");

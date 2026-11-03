@@ -2,7 +2,7 @@
  * 회사 정보 통합 (11/3 대표 선택). Owner Domain: organization.
  * 화면·API·저장이 같은 필드 정의를 씁니다. adminOnly 필드는 운영 계정에 보이지 않고 저장도 무시합니다.
  */
-export type CompanyProfileFieldType = "text" | "textarea" | "date" | "time" | "number" | "tags" | "checks" | "weekdays" | "boolean" | "select" | "file" | "contacts";
+export type CompanyProfileFieldType = "text" | "textarea" | "date" | "time" | "number" | "tags" | "checks" | "checksOther" | "weekdays" | "boolean" | "select" | "file" | "contacts" | "address" | "mobile";
 
 export type CompanyProfileField = {
   readonly key: string;
@@ -20,6 +20,10 @@ export type CompanyProfileField = {
 
 export type CompanyProfileSection = { readonly id: string; readonly title: string; readonly description?: string; readonly fields: readonly CompanyProfileField[] };
 
+export const BUSINESS_CONDITION_OPTIONS = ["도소매", "도매", "소매", "제조", "서비스"] as const;
+export const BUSINESS_ITEM_OPTIONS = ["식자재유통", "농산물", "수산물", "축산물", "공산품", "수입식자재", "주류·음료", "일회용품·소모품"] as const;
+export const MOBILE_PHONE_PATTERN = /^01[016789]-?\d{3,4}-?\d{4}$/;
+
 export const STORE_SEGMENT_OPTIONS = ["한식", "중식", "일식", "양식", "분식·김밥·도시락", "아시안", "카페·디저트·베이커리", "주점", "치킨·피자·패스트푸드", "뷔페·단체급식", "프랜차이즈"] as const;
 export const PAYMENT_CYCLE_OPTIONS = ["협의", "선결제", "당일", "7일", "10일", "15일", "월말"] as const;
 
@@ -28,21 +32,19 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
     id: "basic",
     title: "기본",
     fields: [
+      // 11/3 23:44: 종사업장번호(매장용)·연락 담당자 제거. 사업장 주소는 카카오 주소 검색, 대표 전화는 휴대폰.
       { key: "owner_name", label: "대표자", type: "text", locked: true },
-      { key: "sub_business_number", label: "종사업장번호", type: "text", locked: true },
-      { key: "business_conditions", label: "업태", type: "tags", locked: true, placeholder: "예: 도소매" },
-      { key: "business_items", label: "종목", type: "tags", locked: true, placeholder: "예: 농수산물, 식자재유통" },
+      { key: "main_phone", label: "대표 휴대폰", type: "mobile", required: true, hint: "카카오로 가입했다면 카카오 휴대폰 번호가 먼저 채워집니다." },
+      { key: "business_conditions", label: "업태", type: "checksOther", locked: true, options: BUSINESS_CONDITION_OPTIONS },
+      { key: "business_items", label: "종목", type: "checksOther", locked: true, options: BUSINESS_ITEM_OPTIONS },
       { key: "founded_on", label: "설립일", type: "date", locked: true },
-      { key: "business_postcode", label: "사업장 우편번호", type: "text", locked: true },
-      { key: "business_address", label: "사업장 주소", type: "text", locked: true },
+      { key: "business_address", label: "사업장 주소", type: "address", locked: true },
       { key: "business_address_detail", label: "사업장 상세주소", type: "text", locked: true },
-      { key: "main_phone", label: "대표 전화", type: "text", required: true },
-      { key: "fax", label: "팩스", type: "text" },
       { key: "email", label: "이메일", type: "text", hint: "세금계산서·연락용" },
-      { key: "contacts", label: "연락 담당자", type: "contacts", hint: "이름·연락처·상담 시간. 여러 명 등록할 수 있습니다." },
+      { key: "fax", label: "팩스", type: "text" },
       { key: "intro", label: "회사 소개", type: "textarea", hint: "DM·견적서·주문 링크 첫 화면에 쓰입니다." },
       { key: "representative_image_path", label: "대표 이미지", type: "file" },
-      { key: "business_certificate_path", label: "사업자등록증", type: "file", locked: true, hint: "비공개 보관. PDF·JPG·PNG, 10MB 이하." },
+      { key: "business_certificate_path", label: "사업자등록증", type: "file", locked: true },
       { key: "bankbook_path", label: "통장사본", type: "file", locked: true }
     ]
   },
@@ -173,6 +175,23 @@ export function sanitizeCompanyProfilePatch(input: CompanyProfileValues, isAdmin
         patch[field.key] = Array.from(new Set(list.map((item) => String(item).trim()).filter(Boolean))).slice(0, 20);
         break;
       }
+      case "mobile": {
+        const value = typeof raw === "string" ? raw.trim() : "";
+        if (value && !MOBILE_PHONE_PATTERN.test(value)) return { patch, error: `${field.label}는 010으로 시작하는 휴대폰 번호로 입력해 주세요.` };
+        patch[field.key] = value || null;
+        break;
+      }
+      case "address": {
+        const value = typeof raw === "string" ? raw.trim().slice(0, 200) : "";
+        patch[field.key] = value || null;
+        if ("business_postcode" in input) patch.business_postcode = String(input.business_postcode || "").replace(/[^\d]/g, "").slice(0, 6) || null;
+        break;
+      }
+      case "checksOther": {
+        const list = Array.isArray(raw) ? raw.map((item) => String(item).trim()).filter(Boolean) : [];
+        patch[field.key] = Array.from(new Set(list.map((item) => item.slice(0, 30)))).slice(0, 12);
+        break;
+      }
       case "checks": {
         const list = Array.isArray(raw) ? raw.map(String) : [];
         patch[field.key] = (field.options || []).filter((option) => list.includes(option));
@@ -209,7 +228,7 @@ export function redactCompanyProfile(values: CompanyProfileValues, isAdmin: bool
 }
 
 export const COMPANY_PROFILE_PROGRESS_KEYS = [
-  "main_phone", "contacts", "intro", "main_store_segments", "signature_items", "delivery_weekdays",
+  "main_phone", "business_address", "intro", "main_store_segments", "signature_items", "delivery_weekdays",
   "delivery_time_window", "delivery_regions", "payment_methods", "payment_cycle", "consult_hours", "representative_image_path"
 ] as const;
 

@@ -151,7 +151,17 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
               );
             }
             return (
-              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || !closedGroups.includes(group.label)}>
+              // 11/3: 좌우로 접은 상태에서 <details>에 summary가 없으면 브라우저가 "세부 정보"를 그려서, 접힘 상태는 div로 그립니다.
+              collapsed ? (
+                <div className={`border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label}>
+                  <div className="space-y-1">
+                    {group.items.map((item) => (
+                      <SidebarItem activeFallback={active} collapsed currentSearch={currentSearch} item={item} key={`${group.label}-${item.label}`} pathname={pathname} scopedHref={scopedHref} setCurrentSearch={setCurrentSearch} variant={variant} />
+                    ))}
+                  </div>
+                </div>
+              ) :
+              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={!closedGroups.includes(group.label)}>
                 {!collapsed ? (
                   <summary className={`mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${groupSelected ? "text-white/90" : "text-white/60"}`} onClick={(event) => { event.preventDefault(); toggleGroup(group.label); }}>
                     <span>{group.label}</span><span className="h-px min-w-0 flex-1 bg-white/10" /><ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />

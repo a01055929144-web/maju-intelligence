@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import type { CustomerSession } from "@/lib/auth";
+import { MyAccountLoginCard } from "@/components/my-account-login-card";
+import { getAppUserLoginMethods } from "@/lib/store";
 
 const SETTINGS_TABS = [
   ["/dashboard/settings/company", "회사 정보"],
@@ -14,7 +16,9 @@ const SETTINGS_TABS = [
   ["/dashboard/settings/messaging", "문자 발송"]
 ] as const;
 
-export function SettingsShell({ activePath, children, session, showHoldModules, subtitle, title }: {
+export async function SettingsShell({ accountStatus, activePath, children, session, showHoldModules, subtitle, title }: {
+  /** 카카오 연결 결과(linked/already/in_use) — 회사 정보 페이지에서만 넘깁니다. */
+  accountStatus?: string;
   activePath: string;
   children: ReactNode;
   session: CustomerSession;
@@ -23,9 +27,12 @@ export function SettingsShell({ activePath, children, session, showHoldModules, 
   title: string;
 }) {
   const workspaceActive = activePath === "/dashboard/settings/staff" ? "settings-staff" : "settings";
+  // 11/3: 내 계정 로그인 카드는 설정 탭 줄 위(회사 정보·영업 정보·직원 관리 공통).
+  const loginMethods = session.userId ? await getAppUserLoginMethods(session.userId) : null;
   return (
     <CustomerAppShell active={workspaceActive} companyName={session.companyName} rightAction={<Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href="/map"><ArrowLeft className="h-4 w-4" />지도</Link>} showHoldModules={showHoldModules} subtitle={subtitle} title={title} userName={session.operationalDisplayName || session.invitedEmployeeName || session.name} workspaceRole={session.workspaceRole}>
       <section className="mx-auto w-full min-w-0 max-w-[1560px] px-3 py-3 sm:px-4 sm:py-4">
+        {loginMethods ? <div className="mb-4"><MyAccountLoginCard kakao={loginMethods.kakao} loginId={loginMethods.loginId} status={accountStatus} /></div> : null}
         <nav aria-label="회사 설정 페이지" className="maju-toolbar-scroll mb-4 flex items-center gap-1 overflow-x-auto border-b border-slate-200">
           {SETTINGS_TABS.filter(([href]) => !["/dashboard/settings/advanced", "/dashboard/settings/security"].includes(href) || session.workspaceRole === "owner").map(([href, label]) => <Link className={`flex h-11 shrink-0 items-center border-b-2 px-3 text-sm font-semibold transition ${activePath === href ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500 hover:bg-slate-100/70 hover:text-slate-950"}`} href={href} key={href}>{label}</Link>)}
         </nav>

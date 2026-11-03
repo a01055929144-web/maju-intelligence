@@ -812,7 +812,8 @@ export function KakaoAddressMap({
             });
             kakao.maps.event.addListener(polygon, "mouseover", (event) => {
               polygon.setOptions({ fillOpacity: Math.max(colors.opacity, 0.45), strokeWeight: Math.max(colors.weight, 2) });
-              if (event.latLng) showInfo(feature, event.latLng, false);
+              // 11/3: 클릭으로 연 추가·해제 창이, 버튼으로 마우스를 옮기는 사이 옆 구역 hover에 덮여 사라지던 문제.
+              if (event.latLng && !salesAreaInfoPinnedRef.current) showInfo(feature, event.latLng, false);
             });
             kakao.maps.event.addListener(polygon, "mouseout", () => {
               polygon.setOptions({ fillOpacity: colors.opacity, strokeWeight: colors.weight });
