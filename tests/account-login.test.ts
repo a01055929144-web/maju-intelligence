@@ -11,9 +11,9 @@ describe("WO-21 account login rules", () => {
     expect(isValidLoginId("abc")).toBe(false);
   });
 
-  it("requires at least ten password characters", () => {
-    expect(validateAccountPassword("123456789")).toBe(false);
-    expect(validateAccountPassword("1234567890")).toBe(true);
+  it("requires at least four password characters (11/3 decision; lockout stays on)", () => {
+    expect(validateAccountPassword("123")).toBe(false);
+    expect(validateAccountPassword("1234")).toBe(true);
   });
 
   it("keeps login-id auth behind the default-off flag and revalidates session versions", () => {
@@ -33,12 +33,13 @@ describe("WO-21 account login rules", () => {
     expect(store).toContain("expectedLastFour !== actualLastFour");
   });
 
-  it("keeps Kakao primary for every linked company member and login id secondary", () => {
+  it("puts login id first, keeps Kakao as simple login, and drops the recent email fill", () => {
     const login = readFileSync(resolve(process.cwd(), "app/dashboard/login/page.tsx"), "utf8");
-    expect(login).toContain("대표 · 직원 모두");
-    expect(login).toContain("대표·관리자·영업·배송 모두 연결된 카카오 계정");
-    expect(login).toContain('accountLoginEnabled ? "order-1"');
-    expect(login).toContain("보조 로그인");
+    expect(login).toContain("운영 계정");
+    expect(login).toContain("카카오로 간편 로그인");
+    expect(login).toContain("<OAuthLoginButtons />");
+    expect(login).not.toContain("채우기");
+    expect(login).not.toContain("localStorage");
   });
 
   it("does not ship a default administrator id or password", () => {

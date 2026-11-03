@@ -33,7 +33,7 @@ export default function ChangePasswordPage() {
         <CardHeader>
           <KeyRound className="h-8 w-8 text-primary" />
           <CardTitle>새 비밀번호 설정</CardTitle>
-          <p className="text-sm text-muted-foreground">임시 비밀번호 대신 사용할 10자 이상의 비밀번호를 입력하세요.</p>
+          <p className="text-sm text-muted-foreground">임시 비밀번호 대신 사용할 4자 이상의 비밀번호를 입력하세요.</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={submit}>
