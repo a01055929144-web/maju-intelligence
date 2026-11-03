@@ -59,3 +59,13 @@ describe("WO-21 account login rules", () => {
     expect(staffAccess).toContain('temporary: "임시 직원"');
   });
 });
+
+describe("change password form (11/3 fix)", () => {
+  it("lets the browser accept 4-character passwords and routes back by account type", () => {
+    const page = readFileSync(resolve(process.cwd(), "app/change-password/page.tsx"), "utf8");
+    const route = readFileSync(resolve(process.cwd(), "app/api/auth/change-password/route.ts"), "utf8");
+    expect(page).toContain("minLength={4}");
+    expect(page).not.toContain("minLength={10}");
+    expect(route).toContain('"/admin/login"');
+  });
+});

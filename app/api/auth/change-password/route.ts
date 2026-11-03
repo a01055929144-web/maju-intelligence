@@ -18,5 +18,6 @@ export async function POST(request: NextRequest) {
   }
   await changeAppUserPassword(userId, body.password);
   await Promise.all([clearAdminSession(), clearCustomerSession()]);
-  return NextResponse.json({ ok: true });
+  // 관리자는 관리자 로그인으로, 고객사는 운영 로그인으로 돌려보냅니다.
+  return NextResponse.json({ ok: true, redirectTo: admin?.userId ? "/admin/login" : "/dashboard/login" });
 }

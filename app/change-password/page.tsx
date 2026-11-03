@@ -24,7 +24,7 @@ export default function ChangePasswordPage() {
       setSaving(false);
       return;
     }
-    window.location.href = "/login";
+    window.location.href = payload?.redirectTo || "/dashboard/login";
   }
 
   return (
@@ -37,7 +37,7 @@ export default function ChangePasswordPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={submit}>
-            <input autoComplete="new-password" className="maju-input w-full" minLength={10} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
+            <input autoComplete="new-password" className="maju-input w-full" minLength={4} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
             {message ? <p className="text-sm font-bold text-destructive" role="alert">{message}</p> : null}
             <Button className="w-full" disabled={saving}>{saving ? "변경 중" : "비밀번호 변경"}</Button>
           </form>
