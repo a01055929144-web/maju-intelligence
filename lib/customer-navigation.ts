@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Building2, CreditCard, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Sparkles, Store, Truck, Users } from "lucide-react";
+import { BarChart3, Boxes, Building2, CreditCard, Database, FileSpreadsheet, History, LayoutDashboard, LucideIcon, MapPinned, MessageSquareText, PackageSearch, Route, Settings, Store, Truck, Users } from "lucide-react";
 
 export type CustomerWorkspaceKey =
   | "dashboard"
@@ -51,8 +51,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
     label: "영업",
     items: [
-      { active: "dashboard", description: "최근 개업·인허가 기반 신규 매장", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
-      { active: "dashboard", description: "검색량·리뷰 기반 영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
+      { active: "dashboard", description: "신규 개업·영업 후보 (화면 위에서 전환)", href: "/leads", icon: Building2, label: "리드" },
       { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 관리" }
     ]
   },
@@ -151,8 +150,7 @@ export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
 export function getCustomerQuickActions() {
   return [
     { active: "dashboard" as const, helper: "오늘 할 일", href: "/dashboard", icon: LayoutDashboard, label: "오늘 현황" },
-    { active: "dashboard" as const, helper: "신규 후보", href: "/leads?type=permit", icon: Building2, label: "신규 리드" },
-    { active: "dashboard" as const, helper: "영업 후보", href: "/leads?type=keyword", icon: Sparkles, label: "영업 리드" },
+    { active: "dashboard" as const, helper: "신규·영업 후보", href: "/leads", icon: Building2, label: "리드" },
     { active: "dashboard" as const, helper: "통합 지도", href: "/map", icon: MapPinned, label: "지도" },
     { active: "routes-today" as const, helper: "배송 순서", href: "/routes/today", icon: Route, label: "오늘 코스" }
   ];

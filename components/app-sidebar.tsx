@@ -207,7 +207,7 @@ function SidebarItem({ activeFallback, collapsed, currentSearch, item, pathname,
   const href = scopedHref(item.href);
   return <SidebarLink collapsed={collapsed} href={href} item={item} onClick={(event) => {
     setCurrentSearch(href.includes("?") ? `?${href.split("?")[1]}` : "");
-    if (href.startsWith("/leads?")) { event.preventDefault(); window.location.assign(href); }
+    if (href === "/leads" || href.startsWith("/leads?")) { event.preventDefault(); window.location.assign(href); }
   }} selected={selected} variant={variant} />;
 }
 
