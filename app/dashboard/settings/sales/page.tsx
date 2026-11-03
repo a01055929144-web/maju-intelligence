@@ -4,6 +4,7 @@ import { areHoldModulesEnabled, isLeadWorkspaceV2Enabled } from "@/lib/feature-m
 import { getCompanySettings } from "@/lib/store";
 import { CompanySettingsForm } from "../settings-form";
 import { LeadWorkspaceSettings } from "../leads/workspace";
+import { SalesKitSettingsPanel } from "@/components/sales-kit-settings";
 import { SalesKpiSettingsPanel } from "../sales-kpi-settings-panel";
 import { SalesRegionSettings } from "../sales-region-settings";
 import { SettingsShell } from "../settings-shell";
@@ -16,8 +17,9 @@ export default async function SalesInformationSettingsPage() {
   const canManageLeads = isLeadWorkspaceV2Enabled(session.companyId) && customerHasCapability(session, "manage_customers");
   const company = showHoldModules ? await getCompanySettings(session.companyId, session.companyName) : null;
   return (
-    <SettingsShell activePath="/dashboard/settings/sales" session={session} showHoldModules={showHoldModules} subtitle="리드를 모을 영업 지역과 리드 관리 기준을 정합니다. 배송 지역을 저장하면 영업 지역에도 자동으로 추가됩니다." title="영업 정보">
+    <SettingsShell activePath="/dashboard/settings/sales" session={session} showHoldModules={showHoldModules} subtitle="영업 지역, 리드에게 보낼 단가표·명함·주문 링크, 리드 관리 기준을 정합니다." title="영업 정보">
       <SalesRegionSettings />
+      <SalesKitSettingsPanel />
       {canManageLeads ? <LeadWorkspaceSettings /> : null}
       {company ? <CompanySettingsForm hideAside initial={company} sections={["quote"]} showHoldModules={showHoldModules} /> : null}
       {showHoldModules ? <SalesKpiSettingsPanel canManage={customerHasCapability(session, "manage_company")} /> : null}
