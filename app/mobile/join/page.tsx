@@ -1,5 +1,6 @@
 import { AlertTriangle, Building2, CheckCircle2, UserRound } from "lucide-react";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
+import { InvitePhoneGate } from "@/components/invite-phone-gate";
 import { getStaffInvitationPreview } from "@/lib/store";
 
 export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
@@ -82,7 +83,7 @@ export default async function MobileStaffJoinPage({ searchParams }: { searchPara
             </section>
           ) : null}
 
-          {canContinue ? <OAuthLoginButtons inviteCode={inviteCode} /> : null}
+          {canContinue ? (inviteCode && invitePreview?.maskedPhone ? <InvitePhoneGate inviteCode={inviteCode} /> : <OAuthLoginButtons inviteCode={inviteCode} />) : null}
           <p className="text-center text-xs font-medium leading-5 text-slate-500">
             {inviteCode ? "카카오 인증 후 배정된 현장 업무로 이동합니다." : "최초 등록은 회사 관리자가 보낸 초대 링크에서 진행하세요."}
           </p>
@@ -129,5 +130,7 @@ function describeOAuthError(errorCode: string): string {
     missing_google_env: "현재 로그인을 사용할 수 없습니다. 관리자에게 문의해주세요."
   };
 
+  // 서버가 던진 한국어 안내(초대 만료·연락처 확인 등)는 그대로 보여줍니다.
+  if (!knownCodes[errorCode] && /[가-힣]/.test(errorCode) && errorCode.length <= 120) return errorCode;
   return knownCodes[errorCode] || "로그인 요청을 처리하지 못했습니다. 초대 링크에서 다시 시작해주세요.";
 }

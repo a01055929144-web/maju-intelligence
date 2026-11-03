@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeOAuthState, getCustomerSession, setCustomerSession } from "@/lib/auth";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, setCustomerSession } from "@/lib/auth";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
@@ -70,7 +70,8 @@ export async function GET(request: NextRequest) {
     const result = inviteCode
       ? await acceptStaffKakaoInvitation({
           ...kakaoProfile,
-          inviteCode
+          inviteCode,
+          phoneLastFourVerified: await consumeInvitePhoneProof(inviteCode)
         })
       : await createPersonalKakaoWorkspace(kakaoProfile);
 

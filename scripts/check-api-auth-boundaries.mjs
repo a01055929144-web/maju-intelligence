@@ -13,6 +13,7 @@ const publicRoutes = new Map([
   ["auth/google/start/route.ts", "OAuth authorization entry point"],
   ["auth/kakao/callback/route.ts", "OAuth provider callback"],
   ["auth/kakao/start/route.ts", "OAuth authorization entry point"],
+  ["auth/invite-phone/route.ts", "rate-limited invite phone last-four check before Kakao sign-in; sets a signed 15-minute cookie bound to the invite code"],
   ["auth/naver/callback/route.ts", "OAuth provider callback"],
   ["auth/naver/start/route.ts", "OAuth authorization entry point"],
   ["auth/reset-password/route.ts", "completes the token-protected password reset flow"],

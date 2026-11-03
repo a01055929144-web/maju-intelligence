@@ -87,6 +87,28 @@ function sign(value: string) {
   return createHash("sha256").update(`${value}.${getSecret()}`).digest("hex");
 }
 
+const INVITE_PHONE_COOKIE = "maju_invite_phone_ok";
+
+/** 초대 화면에서 끝 4자리를 확인했다는 표시(15분, 초대 코드에 묶인 서명). */
+export async function setInvitePhoneProof(inviteCode: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(INVITE_PHONE_COOKIE, `${inviteCode}.${sign(`invite-phone:${inviteCode}`)}`, {
+    httpOnly: true, maxAge: 60 * 15, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+}
+
+export async function consumeInvitePhoneProof(inviteCode: string) {
+  const cookieStore = await cookies();
+  const value = cookieStore.get(INVITE_PHONE_COOKIE)?.value || "";
+  cookieStore.delete(INVITE_PHONE_COOKIE);
+  const separator = value.lastIndexOf(".");
+  if (separator <= 0) return false;
+  const code = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  const expected = sign(`invite-phone:${inviteCode}`);
+  return code === inviteCode && signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
 function encodeSession(session: AdminSession | CustomerSession) {
   const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;

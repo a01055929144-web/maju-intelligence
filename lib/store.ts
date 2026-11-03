@@ -723,6 +723,8 @@ export type StaffKakaoAcceptInput = {
   kakaoUserId: string;
   name?: string;
   phoneNumber?: string;
+  /** 카카오가 휴대폰 번호를 주지 않을 때, 초대 화면에서 끝 4자리를 직접 확인했는지(서명 쿠키). */
+  phoneLastFourVerified?: boolean;
 };
 export type PersonalKakaoWorkspaceInput = {
   avatarUrl?: string;
@@ -3586,8 +3588,12 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     }
     const expectedLastFour = (invitation.employee_phone || "").replace(/\D/g, "").slice(-4);
     const actualLastFour = (input.phoneNumber || "").replace(/\D/g, "").slice(-4);
-    if (expectedLastFour && expectedLastFour !== actualLastFour) {
-      throw new Error("초대 연락처 끝 4자리와 카카오 계정 연락처가 일치하지 않습니다.");
+    // 11/3: 카카오가 번호를 주면 그 번호로, 주지 않으면 초대 화면에서 확인한 끝 4자리(서명 쿠키)로 본인 확인.
+    if (expectedLastFour && actualLastFour && expectedLastFour !== actualLastFour) {
+      throw new Error("카카오 계정 휴대폰 번호 끝 4자리가 초대 연락처와 다릅니다. 관리자에게 연락처 확인을 요청하세요.");
+    }
+    if (expectedLastFour && !actualLastFour && !input.phoneLastFourVerified) {
+      throw new Error("초대 화면에서 휴대폰 번호 끝 4자리를 먼저 확인해 주세요.");
     }
   }
 
@@ -3706,6 +3712,18 @@ export async function acceptStaffKakaoInvitation(input: StaffKakaoAcceptInput): 
     assignedVehicle: invitation.assigned_vehicle || undefined,
     invitedEmployeeName: normalizeInvitedEmployeeName(invitation.employee_name)
   };
+}
+
+/** 초대 연락처 끝 4자리 확인(카카오가 번호를 주지 않는 경우의 본인 확인). */
+export async function verifyInvitationPhoneLastFour(inviteCode: string, lastFour: string) {
+  const code = inviteCode.trim();
+  const digits = lastFour.replace(/\D/g, "");
+  if (!code || digits.length !== 4 || !isProductionStoreConfigured()) return false;
+  const rows = await supabaseRequest<Array<{ employee_phone: string | null; status: string }>>(
+    `staff_invitations?select=employee_phone,status&invite_code=eq.${encodeURIComponent(code)}&limit=1`
+  ).catch(() => []);
+  const expected = (rows[0]?.employee_phone || "").replace(/\D/g, "").slice(-4);
+  return Boolean(expected) && expected === digits && rows[0]?.status !== "revoked";
 }
 
 export async function getStaffInvitationPreview(inviteCode: string): Promise<StaffInvitationPreview | null> {
