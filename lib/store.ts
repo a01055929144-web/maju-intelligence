@@ -968,7 +968,7 @@ const STAFF_ASSIGNMENT_OVERRIDE_MIGRATION_MESSAGE =
 const SUPABASE_CONNECTION_KEY_MESSAGE =
   "Supabase 연결 키가 현재 프로젝트와 맞지 않습니다. Vercel 환경변수의 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 같은 Supabase 프로젝트 값으로 맞춘 뒤 재배포해주세요.";
 
-function getSupabaseConfig(): SupabaseConfig | null {
+export function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
@@ -1429,7 +1429,7 @@ function staffStoreRequest<T>(request: Promise<T>) {
   return request.catch(normalizeStaffStoreError);
 }
 
-async function supabaseStorageRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function supabaseStorageRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const config = getSupabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
 
@@ -15330,7 +15330,7 @@ function asNullableString(value: unknown) {
  * 원본 파일명(한글 포함)은 별도의 title 컬럼에 그대로 저장되므로 여기서는
  * storage key로만 쓰일 안전한 값을 만들면 됩니다.
  */
-function sanitizeStorageFilename(filename: string) {
+export function sanitizeStorageFilename(filename: string) {
   const fallback = "attachment";
   const normalized = filename.normalize("NFKC").trim();
   const lastDotIndex = normalized.lastIndexOf(".");
@@ -15348,7 +15348,7 @@ function sanitizeStorageFilename(filename: string) {
   return safeExtension ? `${safeBase}.${safeExtension}` : safeBase;
 }
 
-function encodeStoragePath(path: string) {
+export function encodeStoragePath(path: string) {
   return path
     .split("/")
     .map((part) => encodeURIComponent(part))
