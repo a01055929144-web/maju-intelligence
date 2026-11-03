@@ -15,10 +15,10 @@ const majuSans = Noto_Sans_KR({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "MAJU",
-  description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다.",
+  description: "식자재 유통사의 영업·주문·배송을 한 화면에서 관리하는 MAJU입니다.",
   openGraph: {
     title: "MAJU",
-    description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다.",
+    description: "식자재 유통사의 영업·주문·배송을 한 화면에서 관리하는 MAJU입니다.",
     siteName: "MAJU",
     locale: "ko_KR",
     type: "website"
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "MAJU",
-    description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다."
+    description: "식자재 유통사의 영업·주문·배송을 한 화면에서 관리하는 MAJU입니다."
   }
 };
 

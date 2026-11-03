@@ -1,7 +1,19 @@
+import type { Metadata } from "next";
 import { AlertTriangle, Building2, CheckCircle2, UserRound } from "lucide-react";
 import { OAuthLoginButtons } from "@/components/oauth-login-buttons";
 import { InvitePhoneGate } from "@/components/invite-phone-gate";
 import { getStaffInvitationPreview } from "@/lib/store";
+
+/** 11/3: 카카오톡·문자로 보낸 초대 링크 미리보기에 회사 이름이 보이게 합니다. */
+export async function generateMetadata({ searchParams }: { searchParams?: Promise<{ invite?: string }> }): Promise<Metadata> {
+  const inviteCode = (await searchParams)?.invite || "";
+  const preview = inviteCode ? await getStaffInvitationPreview(inviteCode).catch(() => null) : null;
+  const title = preview?.companyName ? `${preview.companyName} 직원 초대` : "MAJU 직원 로그인";
+  const description = preview?.companyName
+    ? `${preview.employeeName || "직원"}님, ${preview.companyName}에서 보낸 초대입니다. 휴대폰 번호 끝 4자리 확인 후 카카오로 가입하세요.`
+    : "회사에서 받은 초대 링크로 카카오 가입을 진행하세요.";
+  return { description, openGraph: { description, siteName: "MAJU", title }, title };
+}
 
 export default async function MobileStaffJoinPage({ searchParams }: { searchParams?: Promise<{ invite?: string; error?: string }> }) {
   const resolvedSearchParams = await searchParams;

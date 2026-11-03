@@ -1,13 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Fragment, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Copy, Link2, Loader2, Minus, Pencil, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Trash2, Users, X } from "lucide-react";
+import { Clock, Copy, Loader2, Minus, Plus, Search, Send, Share2, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DriverSelectField } from "@/components/driver-select-field";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatPhoneNumber } from "@/lib/phone";
+import { shareToKakao } from "@/lib/kakao-share";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
 import type { StaffInvitation } from "@/lib/store";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
@@ -62,6 +62,7 @@ async function requestStaffJson(input: RequestInfo | URL, init: RequestInit = {}
 
 export function StaffManagementPanel({
   canManageMembers,
+  companyDisplayName = "",
   initialInvitations,
   initialJobTitles,
   managerOptions,
@@ -69,6 +70,7 @@ export function StaffManagementPanel({
   vehicleOptions
 }: {
   canManageMembers: boolean;
+  companyDisplayName?: string;
   initialInvitations: StaffInvitation[];
   initialJobTitles: CompanyJobTitle[];
   managerOptions: string[];
@@ -106,9 +108,11 @@ export function StaffManagementPanel({
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
   const [searchQuery, setSearchQuery] = useState("");
   const [listFilter, setListFilter] = useState<StaffListFilter>("all");
-  const pendingCount = invitations.filter((invitation) => invitation.status === "pending").length;
+  // 11/3: 표 헤더를 눌러 오름차순·내림차순 정렬(공통 표 형식).
+  const [sort, setSort] = useState<{ key: StaffSortKey; direction: "asc" | "desc" }>({ direction: "asc", key: "name" });
+  const toggleSort = (key: StaffSortKey) => setSort((current) => ({ direction: current.key === key && current.direction === "asc" ? "desc" : "asc", key }));
+  const sortMark = (key: StaffSortKey) => (sort.key === key ? (sort.direction === "asc" ? " ▲" : " ▼") : "");
   const acceptedCount = invitations.filter((invitation) => invitation.status === "accepted").length;
-  const linkedCount = invitations.filter((invitation) => Boolean(invitation.acceptedBy)).length;
   const acceptedWithoutIdentityCount = invitations.filter((invitation) => invitation.status === "accepted" && !invitation.acceptedBy).length;
   const unmatchedAcceptedCount = invitations.filter((invitation) => invitation.status === "accepted" && invitation.matchedCustomerCount === 0).length;
   const invitationsNeedingAttention = invitations.filter(
@@ -138,7 +142,12 @@ export function StaffManagementPanel({
   const currentPage = Math.min(page, totalPages);
   const pageStart = filteredInvitations.length ? (currentPage - 1) * pageSize + 1 : 0;
   const pageEnd = Math.min(filteredInvitations.length, currentPage * pageSize);
-  const pagedInvitations = filteredInvitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const sortedInvitations = [...filteredInvitations].sort((left, right) => {
+    const value = (item: StaffInvitation) => sort.key === "name" ? item.employeeName : sort.key === "role" ? String(item.role) : sort.key === "status" ? item.status : sort.key === "phone" ? item.employeePhone || "" : item.expiresAt || "";
+    const result = value(left).localeCompare(value(right), "ko");
+    return sort.direction === "asc" ? result : -result;
+  });
+  const pagedInvitations = sortedInvitations.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   useEffect(() => {
     if (!staffAccessV2Enabled) return;
@@ -232,6 +241,27 @@ export function StaffManagementPanel({
       return;
     }
     setMessage(created.length ? `${created.length}명 생성 완료, 실패: ${failed.join(", ")}` : `초대 생성에 실패했습니다: ${failed.join(", ")}`);
+  }
+
+  async function updateStaffFields(invitation: StaffInvitation, patch: { employeeName?: string; employeePhone?: string }) {
+    if (patch.employeeName !== undefined && !patch.employeeName.trim()) {
+      setMessage("직원 이름은 비워둘 수 없습니다.");
+      return;
+    }
+    setSavingId(invitation.id);
+    const { payload, response } = await requestStaffJson("/api/customer/staff-invitations", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invitationId: invitation.id, ...patch })
+    });
+    setSavingId("");
+    if (!response?.ok) {
+      setMessage(payload?.message || "직원 정보 변경에 실패했습니다.");
+      return;
+    }
+    const updated = payload.invitation as StaffInvitation;
+    setInvitations((current) => current.map((item) => (item.id === invitation.id ? { ...item, ...updated } : item)));
+    setMessage("저장했습니다.");
   }
 
   async function updateStaff(invitation: StaffInvitation, patch: { role?: StaffInvitation["role"]; status?: "pending" | "revoked" }) {
@@ -365,9 +395,17 @@ export function StaffManagementPanel({
   // Web Share API를 지원하면 카카오톡/문자 등 원하는 앱으로 바로 공유하고, 지원하지 않는
   // 환경(대부분의 데스크톱 브라우저)에서는 기존 복사 동작으로 자연스럽게 대체합니다.
   async function shareInvite(invitation: StaffInvitation) {
+    // 11/3: 카카오톡 공유를 먼저 시도합니다(PC 브라우저의 기본 공유창에는 카카오톡이 없음).
+    const kakaoShared = await shareToKakao({
+      buttonTitle: "초대 열기",
+      description: `${invitation.employeeName}님, 링크를 열어 휴대폰 번호 끝 4자리 확인 후 카카오로 가입해 주세요.`,
+      title: `${companyDisplayName || "회사"} 직원 초대`,
+      url: invitation.inviteUrl
+    });
+    if (kakaoShared) return;
     const shareData = {
-      text: `${invitation.employeeName}님, 아래 링크로 MAJU 모바일 가입을 진행해주세요.`,
-      title: "MAJU 직원 초대",
+      text: `${invitation.employeeName}님, 아래 링크로 ${companyDisplayName || "회사"} 직원 가입을 진행해 주세요.`,
+      title: `${companyDisplayName || "회사"} 직원 초대`,
       url: invitation.inviteUrl
     };
     if (typeof navigator !== "undefined" && navigator.share) {
@@ -395,29 +433,8 @@ export function StaffManagementPanel({
         <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{invitations.length}명</Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-white p-3 sm:gap-4 sm:p-4 md:grid-cols-3 xl:grid-cols-5">
-        <StaffSignal icon={<Users className="h-4 w-4" />} label="등록 직원" value={`${invitations.length}명`} />
-        <StaffSignal icon={<Link2 className="h-4 w-4" />} label="초대 대기" value={`${pendingCount}명`} />
-        <StaffSignal icon={<Smartphone className="h-4 w-4" />} label="가입 완료" value={`${acceptedCount}명`} />
-        <StaffSignal icon={<CheckCircle2 className="h-4 w-4" />} label="고유ID 연결" value={`${linkedCount}명`} />
-        <StaffSignal
-          icon={<AlertCircle className="h-4 w-4" />}
-          label="매핑 확인"
-          tone={needsAttentionCount > 0 ? "warn" : "good"}
-          value={`${needsAttentionCount.toLocaleString()}건`}
-        />
-      </div>
-
       <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-950">
-            <span className="font-black">1. 링크 생성</span>
-            <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-black">2. 직원 가입</span>
-            <span aria-hidden="true" className="text-blue-300">→</span>
-            <span className="font-black">3. 배정 확인</span>
-          </div>
-
           {needsAttentionCount > 0 ? (
             <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="status">
               <div>
@@ -539,10 +556,11 @@ export function StaffManagementPanel({
               <table className="w-full min-w-[920px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2.5">직원</th>
-                    <th className="px-3 py-2.5">역할</th>
-                    <th className="px-3 py-2.5">상태</th>
-                    <th className="px-3 py-2.5">유효기간</th>
+                    <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("name")} type="button">직원{sortMark("name")}</button></th>
+                    <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("phone")} type="button">연락처{sortMark("phone")}</button></th>
+                    <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("role")} type="button">직책{sortMark("role")}</button></th>
+                    <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("status")} type="button">상태{sortMark("status")}</button></th>
+                    <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("expires")} type="button">유효기간{sortMark("expires")}</button></th>
                     <th className="px-3 py-2.5">배정 매칭</th>
                     <th className="px-3 py-2.5">초대 링크</th>
                     <th className="px-3 py-2.5 text-right">관리</th>
@@ -555,25 +573,28 @@ export function StaffManagementPanel({
                     return (
                       <Fragment key={invitation.id}>
                         <tr className="border-b border-slate-100 align-top hover:bg-slate-50/60">
-                          <td className="max-w-[180px] px-3 py-3">
-                            <div className="flex items-center gap-2">
-                              <p className="min-w-0 flex-1 truncate font-black text-slate-950">{invitation.employeeName}</p>
-                              <button
-                                aria-label={`${invitation.employeeName} 이름 수정`}
-                                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800 disabled:opacity-40"
-                                disabled={!canManageMembers}
-                                onClick={() => setExpandedId(expanded ? "" : invitation.id)}
-                                type="button"
-                              >
-                                <Pencil className="h-3 w-3" />
-                                수정
-                              </button>
-                            </div>
-                            <p className="mt-1 truncate text-xs font-bold text-slate-500">{formatPhoneNumber(invitation.employeePhone) || "연락처 미입력"}</p>
+                          {/* 11/3: 이름·연락처는 표에서 바로 고치고, 칸을 벗어나면 저장합니다. */}
+                          <td className="w-[180px] px-3 py-3">
+                            <InlineTextCell
+                              ariaLabel={`${invitation.employeeName} 이름`}
+                              disabled={!canManageMembers || invitation.membershipOnly || savingId === invitation.id}
+                              onSave={(next) => updateStaffFields(invitation, { employeeName: next })}
+                              value={invitation.employeeName}
+                            />
+                          </td>
+                          <td className="w-[160px] px-3 py-3">
+                            <InlineTextCell
+                              ariaLabel={`${invitation.employeeName} 연락처`}
+                              disabled={!canManageMembers || invitation.membershipOnly || savingId === invitation.id}
+                              inputMode="tel"
+                              onSave={(next) => updateStaffFields(invitation, { employeePhone: next })}
+                              placeholder="연락처 미입력"
+                              value={formatPhoneNumber(invitation.employeePhone) || ""}
+                            />
                           </td>
                           <td className="px-3 py-3">
                             <select
-                              aria-label={`${invitation.employeeName} 담당 업무`}
+                              aria-label={`${invitation.employeeName} 직책`}
                               className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={!canManageMembers || savingId === invitation.id}
                               value={invitation.role}
@@ -879,7 +900,7 @@ export function StaffManagementPanel({
                 {creating ? "초대 링크 만드는 중..." : inviteRows.filter((row) => row.employeeName.trim()).length > 1 ? "초대 링크 일괄 생성" : "초대 링크 생성"}
               </Button>
 
-              <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
+              {SHOW_JOB_TITLE_MANAGER ? <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-white p-3">
                 <p className="text-sm font-semibold text-slate-900">담당 업무 항목 관리</p>
                 <p className="mt-1 text-xs font-medium text-slate-500">기본 업무는 유지되며 필요한 항목만 추가할 수 있습니다.</p>
                 {jobTitles.length ? (
@@ -913,7 +934,7 @@ export function StaffManagementPanel({
                     {addingJobTitle ? "추가 중" : "추가"}
                   </Button>
                 </div>
-              </div>
+              </div> : null}
             </div>
           ) : (
             <p className="mt-4 rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-xs font-bold leading-5 text-slate-500">
@@ -1007,22 +1028,6 @@ function StaffAccessEditor({
         </label>
       ) : null}
       <Button className="h-10 w-fit bg-teal-700" disabled={!canEdit || saving} onClick={save} type="button">{saving ? "저장 중" : "권한·업무 저장"}</Button>
-    </div>
-  );
-}
-
-function StaffSignal({ icon, label, tone = "default", value }: { icon: ReactNode; label: string; tone?: "default" | "good" | "warn"; value: string }) {
-  const toneClassName =
-    tone === "warn"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
-      : tone === "good"
-        ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-        : "border-slate-200 bg-slate-50 text-teal-700";
-  return (
-    <div className={`rounded-lg border p-4 ${toneClassName}`}>
-      <div>{icon}</div>
-      <p className="mt-3 text-xs font-bold text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
     </div>
   );
 }
@@ -1123,4 +1128,34 @@ function getAssignmentLabel(invitation: StaffInvitation) {
   if (invitation.acceptedBy) return `카카오/소셜 고유 ID 연결 · ${invitation.acceptedBy}`;
   if (invitation.employeePhone) return `가입 전 · 연락처 ${invitation.employeePhone}`;
   return `가입 전 · 직원명 ${invitation.employeeName}`;
+}
+
+// 11/3: 담당 업무 항목 정리는 당장 쓰지 않아 숨깁니다(기능은 유지).
+const SHOW_JOB_TITLE_MANAGER = false as boolean;
+
+type StaffSortKey = "name" | "phone" | "role" | "status" | "expires";
+
+function InlineTextCell({ ariaLabel, disabled, inputMode, onSave, placeholder, value }: {
+  ariaLabel: string;
+  disabled: boolean;
+  inputMode?: "tel" | "text";
+  onSave: (next: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      aria-label={ariaLabel}
+      className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 text-sm font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100 disabled:text-slate-600"
+      disabled={disabled}
+      inputMode={inputMode}
+      onBlur={() => { if (draft.trim() !== value.trim()) onSave(draft.trim()); }}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => { if (event.key === "Enter") (event.target as HTMLInputElement).blur(); if (event.key === "Escape") setDraft(value); }}
+      placeholder={placeholder}
+      value={draft}
+    />
+  );
 }
