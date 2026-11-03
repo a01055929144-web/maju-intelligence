@@ -26,10 +26,16 @@ type CustomerAppShellProps = {
   readonly workspaceRole?: string;
 };
 
+// 11/3: 페이지 이동마다 메뉴(주문·단가 묶음)가 사라졌다 다시 나타나던 깜빡임 방지 — 마지막 응답을 탭 메모리에 둡니다.
+type ShellMe = { companyName?: string; features: { pricing: boolean; storeOrdering: boolean }; role?: string; scope: string };
+let shellMeMemory: ShellMe | null = null;
+
 export function CustomerAppShell({ active, children, companyName, fullBleed = false, hidePageTitle = false, mode = "customer", previewCompanyId, rightAction, showHoldModules = false, subtitle, title, userName, workspaceRole }: CustomerAppShellProps) {
-  const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(workspaceRole);
-  const [features, setFeatures] = useState({ pricing: false, storeOrdering: false });
-  const [sidebarScope, setSidebarScope] = useState("");
+  const cached = mode === "customer" ? shellMeMemory : null;
+  const [resolvedWorkspaceRole, setResolvedWorkspaceRole] = useState(cached?.role || workspaceRole);
+  const [features, setFeatures] = useState(cached?.features || { pricing: false, storeOrdering: false });
+  const [sidebarScope, setSidebarScope] = useState(cached?.scope || "");
+  const [liveCompanyName, setLiveCompanyName] = useState(cached?.companyName || companyName);
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
   const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
@@ -42,10 +48,18 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
     fetch("/api/customer/me", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
-        if (!mounted) return;
-        if (payload?.session?.workspaceRole) setResolvedWorkspaceRole(payload.session.workspaceRole);
-        if (payload?.session?.companyId && (payload.session.userId || payload.session.email)) setSidebarScope(`${payload.session.companyId}:${payload.session.userId || payload.session.email}`);
-        setFeatures({ pricing: payload?.features?.pricing === true, storeOrdering: payload?.features?.storeOrdering === true });
+        if (!mounted || !payload) return;
+        const next: ShellMe = {
+          companyName: payload.companyName || undefined,
+          features: { pricing: payload.features?.pricing === true, storeOrdering: payload.features?.storeOrdering === true },
+          role: payload.session?.workspaceRole,
+          scope: payload.session?.companyId && (payload.session.userId || payload.session.email) ? `${payload.session.companyId}:${payload.session.userId || payload.session.email}` : ""
+        };
+        shellMeMemory = next;
+        if (next.role) setResolvedWorkspaceRole(next.role);
+        if (next.scope) setSidebarScope(next.scope);
+        if (next.companyName) setLiveCompanyName(next.companyName);
+        setFeatures(next.features);
       })
       .catch(() => null);
     return () => { mounted = false; };
@@ -54,10 +68,11 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   return (
     <main className={`maju-app-bg min-h-screen text-slate-950 ${fullBleed ? "xl:h-dvh xl:overflow-y-auto" : ""}`}>
       <div className={`flex min-h-screen flex-col ${fullBleed ? "xl:h-full" : ""} lg:flex-row`}>
-        <AppSidebar active={active} brand="MAJU Intelligence" context={companyName} groups={getCustomerNavigationGroups(showHoldModules, normalizedRole, features.pricing, features.storeOrdering)} homeHref="/dashboard" previewCompanyId={mode === "admin-preview" ? previewCompanyId : undefined} storageScope={sidebarScope} renderFooter={(collapsed) => (
+        <AppSidebar active={active} brand="MAJU" context="" groups={getCustomerNavigationGroups(showHoldModules, normalizedRole, features.pricing, features.storeOrdering)} homeHref="/dashboard" previewCompanyId={mode === "admin-preview" ? previewCompanyId : undefined} storageScope={sidebarScope} renderFooter={(collapsed) => (
           <div className={collapsed ? "flex flex-col items-center gap-2" : "flex items-center justify-between gap-2"}>
-            {!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{userName || "로그인 사용자"}</p><p className="truncate text-[11px] font-semibold text-white/60">{roleLabel}</p></div> : null}
-            {mode === "customer" ? <div className={`flex shrink-0 ${collapsed ? "flex-col" : "items-center"} gap-1`}><Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link><CustomerAccountActions compact={collapsed} sidebar /></div> : null}
+            {/* 11/3: 회사명은 맨 아래 — 회사명 / 로그인한 사람 · 직책. 접었을 때는 로그아웃만. */}
+            {!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{liveCompanyName || "회사"}</p><p className="truncate text-[11px] font-semibold text-white/60">{userName || "로그인 사용자"} · {roleLabel}</p></div> : null}
+            {mode === "customer" ? <div className="flex shrink-0 items-center gap-1">{!collapsed ? <Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link> : null}<CustomerAccountActions compact={collapsed} sidebar /></div> : null}
           </div>
         )} variant="customer" />
 

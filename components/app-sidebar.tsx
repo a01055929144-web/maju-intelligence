@@ -34,28 +34,55 @@ type AppSidebarProps = {
   readonly variant: "admin" | "customer";
 };
 
+// 11/3: 페이지를 옮길 때마다 사이드바가 새로 그려지며 접힘 상태가 풀렸다 다시 접히던 문제.
+// 같은 탭 안에서는 모듈 메모리에 마지막 상태를 들고 있다가 첫 렌더부터 그대로 씁니다(브라우저 저장은 새로고침 대비).
+const sidebarMemory: { collapsed?: boolean; closedGroups: Record<string, string[]> } = { closedGroups: {} };
+const COLLAPSED_KEY = "maju:sidebar-collapsed:v1";
+
 export function AppSidebar({ active, brand, context, groups, homeHref, previewCompanyId, renderFooter, storageScope, variant }: AppSidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  const groupStorageKey = storageScope ? `maju:sidebar-groups:v1:${variant}:${storageScope}` : "";
+  const [collapsed, setCollapsedState] = useState(() => sidebarMemory.collapsed ?? false);
+  const [closedGroups, setClosedGroups] = useState<string[]>(() => sidebarMemory.closedGroups[groupStorageKey || variant] || []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentSearch, setCurrentSearch] = useState("");
   const pathname = usePathname();
   const admin = variant === "admin";
   const asideTone = admin ? "border-violet-950 bg-[#2E1065]" : "border-slate-800 bg-[#111827]";
   const accentTone = admin ? "bg-violet-300 text-violet-950" : "bg-teal-600 text-white";
-  const groupStorageKey = storageScope ? `maju:sidebar-groups:v1:${variant}:${storageScope}` : "";
+  useEffect(() => {
+    if (sidebarMemory.collapsed !== undefined) return;
+    try {
+      const saved = localStorage.getItem(COLLAPSED_KEY) === "1";
+      sidebarMemory.collapsed = saved;
+      if (saved) setCollapsedState(true);
+    } catch { sidebarMemory.collapsed = false; }
+  }, []);
+
+  const setCollapsed = (value: boolean) => {
+    sidebarMemory.collapsed = value;
+    setCollapsedState(value);
+    try { localStorage.setItem(COLLAPSED_KEY, value ? "1" : "0"); } catch { /* Storage can be unavailable. */ }
+  };
 
   useEffect(() => {
+    const memoryKey = groupStorageKey || variant;
+    if (sidebarMemory.closedGroups[memoryKey]) {
+      setClosedGroups(sidebarMemory.closedGroups[memoryKey]);
+      return;
+    }
     if (!groupStorageKey) return;
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(groupStorageKey) || "[]");
-      setClosedGroups(Array.isArray(saved) ? saved.filter((value): value is string => typeof value === "string") : []);
+      const list = Array.isArray(saved) ? saved.filter((value): value is string => typeof value === "string") : [];
+      sidebarMemory.closedGroups[memoryKey] = list;
+      setClosedGroups(list);
     } catch { setClosedGroups([]); }
-  }, [groupStorageKey]);
+  }, [groupStorageKey, variant]);
 
   const toggleGroup = (label: string) => {
     setClosedGroups((current) => {
       const next = current.includes(label) ? current.filter((value) => value !== label) : [...current, label];
+      sidebarMemory.closedGroups[groupStorageKey || variant] = next;
       if (groupStorageKey) try { localStorage.setItem(groupStorageKey, JSON.stringify(next)); } catch { /* Storage can be unavailable. */ }
       return next;
     });
@@ -98,7 +125,7 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${accentTone}`}>M</span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-bold">{brand}</span>
-                  <span className="block truncate text-xs font-medium text-white/60">{context}</span>
+                  {context ? <span className="block truncate text-xs font-medium text-white/60">{context}</span> : null}
                 </span>
               </Link>
               <button aria-label="사이드바 접기" className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 text-white/70 transition hover:bg-white/10 hover:text-white lg:inline-flex" onClick={() => setCollapsed(true)} type="button">
@@ -124,9 +151,9 @@ export function AppSidebar({ active, brand, context, groups, homeHref, previewCo
               );
             }
             return (
-              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || groupSelected || !closedGroups.includes(group.label)}>
+              <details className={`group border-b border-white/10 py-3 last:border-b-0 ${group.label === "설정" ? "mt-auto" : ""}`} key={group.label} open={collapsed || !closedGroups.includes(group.label)}>
                 {!collapsed ? (
-                  <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60" onClick={(event) => { event.preventDefault(); if (!groupSelected) toggleGroup(group.label); }}>
+                  <summary className={`mb-2 flex cursor-pointer list-none items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] ${groupSelected ? "text-white/90" : "text-white/60"}`} onClick={(event) => { event.preventDefault(); toggleGroup(group.label); }}>
                     <span>{group.label}</span><span className="h-px min-w-0 flex-1 bg-white/10" /><ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" />
                   </summary>
                 ) : null}

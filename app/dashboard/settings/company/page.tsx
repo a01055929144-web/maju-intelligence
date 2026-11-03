@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
-import { customerHasCapability, getCustomerSession } from "@/lib/auth";
+import { getCustomerSession } from "@/lib/auth";
 import { getAppUserLoginMethods, getCompanySettings } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
@@ -10,9 +10,7 @@ import { MyAccountLoginCard } from "@/components/my-account-login-card";
 import { CompanyProfileForm } from "@/components/company-profile-form";
 import { StoreOrderSettingsWorkspace } from "@/components/store-order-settings-workspace";
 import { CompanySettingsForm } from "../settings-form";
-import { SalesKpiSettingsPanel } from "../sales-kpi-settings-panel";
 import { SettingsShell } from "../settings-shell";
-import { SalesRegionSettings } from "../sales-region-settings";
 
 /**
  * 11/3: 회사 정보 한 곳에서 기본·품목·배송·주문·결제·상담·서류를 입력합니다.
@@ -37,16 +35,9 @@ export default async function CompanyInformationSettingsPage({ searchParams }: {
         orderContent={orderEnabled ? <StoreOrderSettingsWorkspace companyId={session.companyId} /> : undefined}
         slots={{
           basic: <CompanySettingsForm hideAside initial={company} sections={["company"]} showHoldModules={showHoldModules} />,
-          delivery: (
-            <>
-              <CompanySettingsForm hideAside initial={company} sections={["deliveryTemplates"]} showHoldModules={showHoldModules} />
-              <SalesRegionSettings />
-            </>
-          )
+          delivery: <CompanySettingsForm hideAside initial={company} sections={["deliveryTemplates"]} showHoldModules={showHoldModules} />
         }}
       />
-      {showHoldModules ? <CompanySettingsForm hideAside initial={company} sections={["quote"]} showHoldModules={showHoldModules} /> : null}
-      {showHoldModules ? <SalesKpiSettingsPanel canManage={customerHasCapability(session, "manage_company")} /> : null}
     </SettingsShell>
   );
 }

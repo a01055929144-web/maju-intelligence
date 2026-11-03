@@ -13,7 +13,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-teal-700 text-lg font-black text-white" aria-hidden="true">
             M
           </div>
-          <p className="mt-4 text-sm font-bold tracking-wide text-teal-700">MAJU Intelligence</p>
+          <p className="mt-4 text-sm font-bold tracking-wide text-teal-700">MAJU</p>
           <h1 className="mt-5 text-2xl font-black tracking-tight">견적서를 확인할 수 없습니다</h1>
           <p className="mt-3 text-sm font-medium leading-6 text-slate-600">
             이 견적 링크가 만료되었거나 더 이상 유효하지 않습니다.<br className="hidden sm:block" /> 담당 영업사원에게 새 견적을 요청해주세요.

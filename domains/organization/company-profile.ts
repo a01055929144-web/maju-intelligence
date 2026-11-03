@@ -41,7 +41,9 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
       { key: "email", label: "이메일", type: "text", hint: "세금계산서·연락용" },
       { key: "contacts", label: "연락 담당자", type: "contacts", hint: "이름·연락처·상담 시간. 여러 명 등록할 수 있습니다." },
       { key: "intro", label: "회사 소개", type: "textarea", hint: "DM·견적서·주문 링크 첫 화면에 쓰입니다." },
-      { key: "representative_image_path", label: "대표 이미지", type: "file" }
+      { key: "representative_image_path", label: "대표 이미지", type: "file" },
+      { key: "business_certificate_path", label: "사업자등록증", type: "file", locked: true, hint: "비공개 보관. PDF·JPG·PNG, 10MB 이하." },
+      { key: "bankbook_path", label: "통장사본", type: "file", locked: true }
     ]
   },
   {
@@ -88,15 +90,6 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
       { key: "chat_inquiry_available", label: "채팅 문의 가능", type: "boolean" },
       { key: "accepts_new_stores", label: "신규 매장 대응 가능", type: "boolean" },
       { key: "holiday_notice", label: "휴무 안내", type: "textarea" }
-    ]
-  },
-  {
-    id: "documents",
-    title: "서류",
-    description: "비공개 보관합니다. PDF·JPG·PNG, 10MB 이하.",
-    fields: [
-      { key: "business_certificate_path", label: "사업자등록증", type: "file", locked: true },
-      { key: "bankbook_path", label: "통장사본", type: "file", locked: true }
     ]
   },
   {

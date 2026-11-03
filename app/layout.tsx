@@ -14,18 +14,18 @@ const majuSans = Noto_Sans_KR({
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "MAJU Intelligence",
+  title: "MAJU",
   description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다.",
   openGraph: {
-    title: "MAJU Intelligence",
+    title: "MAJU",
     description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다.",
-    siteName: "MAJU Intelligence",
+    siteName: "MAJU",
     locale: "ko_KR",
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
-    title: "MAJU Intelligence",
+    title: "MAJU",
     description: "거래처, 배송 코스, 매출 데이터를 한 화면에서 관리하는 마주식자재 영업·배송 운영 플랫폼입니다."
   }
 };

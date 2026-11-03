@@ -74,7 +74,7 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-teal-600 text-base font-semibold text-white">M</span>
               <div>
-                <p className="text-base font-bold">MAJU Intelligence</p>
+                <p className="text-base font-bold">MAJU</p>
                 <p className="text-xs font-medium text-slate-400">Sales & delivery operations</p>
               </div>
             </div>
