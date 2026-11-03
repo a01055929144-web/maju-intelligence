@@ -56,6 +56,10 @@ export async function PATCH(request: NextRequest) {
     vehicleName?: string | null;
   } | null;
   if (!body?.invitationId) return NextResponse.json({ message: "직원 초대 ID가 필요합니다." }, { status: 400 });
+  // 초대 없이 연결된 계정(id "member:<userId>")은 초대 행이 없어 권한 저장 대상이 아닙니다(11/3 운영 오류 22P02).
+  if (body.invitationId.startsWith("member:") || !/^[0-9a-f-]{36}$/i.test(body.invitationId)) {
+    return NextResponse.json({ message: "이 계정은 초대 기록이 없습니다. '연결 복구'로 배정 기준을 먼저 저장한 뒤 권한을 바꿔 주세요." }, { status: 400 });
+  }
 
   const duties = normalizeStaffDuties(body.duties);
   const permissionRole = normalizeStaffPermissionRole(body.permissionRole);
