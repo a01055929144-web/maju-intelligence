@@ -24,18 +24,26 @@ function loadSdk(): Promise<KakaoSdk | null> {
   return loading;
 }
 
-export async function shareToKakao(input: { title: string; description: string; url: string; buttonTitle?: string }): Promise<boolean> {
+export async function shareToKakao(input: { title: string; description: string; url: string; buttonTitle?: string; imageUrl?: string }): Promise<boolean> {
   const key = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
   if (!key) return false;
   const kakao = await loadSdk();
   if (!kakao) return false;
   try {
     if (!kakao.isInitialized()) kakao.init(key);
+    // 11/4: 글자만 있는 카드 대신 이미지 카드(feed)로 보냅니다.
+    const link = { mobileWebUrl: input.url, webUrl: input.url };
     kakao.Share.sendDefault({
-      objectType: "text",
-      text: `${input.title}\n${input.description}`,
-      link: { mobileWebUrl: input.url, webUrl: input.url },
-      buttonTitle: input.buttonTitle || "초대 열기"
+      objectType: "feed",
+      content: {
+        title: input.title,
+        description: input.description,
+        imageUrl: input.imageUrl || `${window.location.origin}/mobile/join/opengraph-image`,
+        imageWidth: 1200,
+        imageHeight: 630,
+        link
+      },
+      buttons: [{ title: input.buttonTitle || "초대 열기", link }]
     });
     return true;
   } catch {
