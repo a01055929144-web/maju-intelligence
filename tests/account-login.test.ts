@@ -39,7 +39,8 @@ describe("WO-21 account login rules", () => {
     expect(login).toContain("카카오로 간편 로그인");
     expect(login).toContain("<OAuthLoginButtons />");
     expect(login).not.toContain("채우기");
-    expect(login).not.toContain("localStorage");
+    expect(login).not.toContain("maju_recent_customer_login");
+    expect(login).toContain("최근 사용");
   });
 
   it("does not ship a default administrator id or password", () => {

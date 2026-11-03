@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
   if (scope.role !== "admin" && !scopeHasCapability(scope, "manage_company")) return NextResponse.json({ message: "서류를 올릴 권한이 없습니다." }, { status: 403 });
   const file = form?.get("file");
   const fieldKey = String(form?.get("fieldKey") || "");
-  if (scope.role !== "admin" && COMPANY_PROFILE_FIELDS.find((field) => field.key === fieldKey)?.locked) {
-    return NextResponse.json({ message: "서류는 관리자에게 제출해 주세요." }, { status: 403 });
+  if (scope.role !== "admin" && scope.customerSession?.workspaceRole !== "owner" && COMPANY_PROFILE_FIELDS.find((field) => field.key === fieldKey)?.locked) {
+    return NextResponse.json({ message: "서류는 대표만 올릴 수 있습니다." }, { status: 403 });
   }
   if (!(file instanceof File)) return NextResponse.json({ message: "파일을 선택해 주세요." }, { status: 400 });
   if (file.size > COMPANY_DOCUMENT_MAX_BYTES) return NextResponse.json({ message: "10MB 이하 파일만 올릴 수 있습니다." }, { status: 400 });

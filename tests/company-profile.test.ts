@@ -33,3 +33,10 @@ describe("company profile (11/3)", () => {
     expect(companyProfileProgress({ main_phone: "1", contacts: [], payment_cycle: "협의" })).toEqual({ filled: 2, total: 12 });
   });
 });
+
+describe("owner can edit locked business fields (11/3 feedback)", () => {
+  it("accepts locked fields when canEditLocked but still hides admin-only", () => {
+    const { patch } = sanitizeCompanyProfilePatch({ owner_name: "대표", settlement_bank: "KB", grade: "A" }, false, true);
+    expect(patch).toEqual({ owner_name: "대표", settlement_bank: "KB" });
+  });
+});

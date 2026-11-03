@@ -14,7 +14,7 @@ describe("customer navigation", () => {
     expect(flattened.map((item) => item.href)).toEqual(expect.arrayContaining([
       "/dashboard",
       "/leads?type=permit", "/leads?type=keyword", "/revenue/contacts",
-      "/map", "/routes/today", "/map?view=history", "/dashboard/settings/routes",
+      "/map", "/routes/today", "/map?view=history",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
     ]));
     expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 관리", "배송 이력"]));
@@ -43,7 +43,8 @@ describe("customer navigation", () => {
     expect(hrefs).not.toContain("/crm/summary");
     const enabled = getCustomerNavigationGroups(false, "owner", true, true);
     expect(enabled.map((group) => group.label)).toEqual(["오늘", "영업", "주문", "단가", "동선", "ERP", "설정"]);
-    expect(flattenCustomerNavigationItems(enabled).map((item) => item.href)).toEqual(expect.arrayContaining(["/revenue/pricing/links", "/revenue/pricing/order-settings"]));
+    expect(flattenCustomerNavigationItems(enabled).map((item) => item.href)).toEqual(expect.arrayContaining(["/revenue/pricing/links"]));
+    expect(flattenCustomerNavigationItems(enabled).map((item) => item.href)).not.toContain("/revenue/pricing/order-settings");
     expect(enabled.find((group) => group.label === "ERP")?.items[0].label).toBe("상품관리");
     expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("주문");
     expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("단가");
