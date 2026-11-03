@@ -2,13 +2,17 @@
  * 회사 정보 통합 (11/3 대표 선택). Owner Domain: organization.
  * 화면·API·저장이 같은 필드 정의를 씁니다. adminOnly 필드는 운영 계정에 보이지 않고 저장도 무시합니다.
  */
-export type CompanyProfileFieldType = "text" | "textarea" | "date" | "time" | "number" | "tags" | "weekdays" | "boolean" | "select" | "file";
+export type CompanyProfileFieldType = "text" | "textarea" | "date" | "time" | "number" | "tags" | "checks" | "weekdays" | "boolean" | "select" | "file" | "contacts";
 
 export type CompanyProfileField = {
   readonly key: string;
   readonly label: string;
   readonly type: CompanyProfileFieldType;
   readonly adminOnly?: boolean;
+  /** 운영 계정은 보기만(관리자에게 변경 요청). */
+  readonly locked?: boolean;
+  /** 첫 로그인 필수 입력. */
+  readonly required?: boolean;
   readonly hint?: string;
   readonly options?: readonly string[];
   readonly placeholder?: string;
@@ -16,49 +20,36 @@ export type CompanyProfileField = {
 
 export type CompanyProfileSection = { readonly id: string; readonly title: string; readonly description?: string; readonly fields: readonly CompanyProfileField[] };
 
+export const STORE_SEGMENT_OPTIONS = ["한식", "중식", "일식", "양식", "분식·김밥·도시락", "아시안", "카페·디저트·베이커리", "주점", "치킨·피자·패스트푸드", "뷔페·단체급식", "프랜차이즈"] as const;
+export const PAYMENT_CYCLE_OPTIONS = ["협의", "선결제", "당일", "7일", "10일", "15일", "월말"] as const;
+
 export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
   {
-    id: "business",
-    title: "사업자 정보",
+    id: "basic",
+    title: "기본",
     fields: [
-      { key: "owner_name", label: "대표자명", type: "text" },
-      { key: "sub_business_number", label: "종사업장번호", type: "text" },
-      { key: "business_conditions", label: "업태", type: "tags", placeholder: "예: 도소매" },
-      { key: "business_items", label: "종목", type: "tags", placeholder: "예: 농수산물, 식자재유통" },
-      { key: "founded_on", label: "설립일", type: "date" },
-      { key: "main_phone", label: "대표 전화", type: "text" },
+      { key: "owner_name", label: "대표자", type: "text", locked: true },
+      { key: "sub_business_number", label: "종사업장번호", type: "text", locked: true },
+      { key: "business_conditions", label: "업태", type: "tags", locked: true, placeholder: "예: 도소매" },
+      { key: "business_items", label: "종목", type: "tags", locked: true, placeholder: "예: 농수산물, 식자재유통" },
+      { key: "founded_on", label: "설립일", type: "date", locked: true },
+      { key: "business_postcode", label: "사업장 우편번호", type: "text", locked: true },
+      { key: "business_address", label: "사업장 주소", type: "text", locked: true },
+      { key: "business_address_detail", label: "사업장 상세주소", type: "text", locked: true },
+      { key: "main_phone", label: "대표 전화", type: "text", required: true },
       { key: "fax", label: "팩스", type: "text" },
       { key: "email", label: "이메일", type: "text", hint: "세금계산서·연락용" },
-      { key: "intro", label: "사업장 소개", type: "textarea", hint: "DM·팸플릿·주문 링크 첫 화면에 쓰입니다." },
-      { key: "representative_image_path", label: "사업장 대표 이미지", type: "file" }
-    ]
-  },
-  {
-    id: "address",
-    title: "주소",
-    description: "창고(출발지) 주소는 아래 '출발지'에서 관리합니다.",
-    fields: [
-      { key: "business_postcode", label: "우편번호", type: "text" },
-      { key: "business_address", label: "사업장 주소", type: "text" },
-      { key: "business_address_detail", label: "상세주소", type: "text" },
-      { key: "warehouse_same_as_business", label: "창고 주소가 사업장 주소와 같음", type: "boolean" }
-    ]
-  },
-  {
-    id: "documents",
-    title: "서류",
-    description: "비공개 보관. PDF·JPG·PNG, 10MB 이하.",
-    fields: [
-      { key: "business_certificate_path", label: "사업자등록증", type: "file" },
-      { key: "bankbook_path", label: "통장사본", type: "file" }
+      { key: "contacts", label: "연락 담당자", type: "contacts", hint: "이름·연락처·상담 시간. 여러 명 등록할 수 있습니다." },
+      { key: "intro", label: "회사 소개", type: "textarea", hint: "DM·견적서·주문 링크 첫 화면에 쓰입니다." },
+      { key: "representative_image_path", label: "대표 이미지", type: "file" }
     ]
   },
   {
     id: "products",
-    title: "취급 품목",
-    description: "대분류(농산·수산·축산 등)는 리드 설정의 '취급 품목'을 그대로 씁니다.",
+    title: "품목",
+    description: "취급 품목 대분류는 리드 설정의 '취급 품목'과 같은 값입니다.",
     fields: [
-      { key: "main_store_segments", label: "주요 거래 매장군", type: "tags", placeholder: "예: 한식, 양식, 카페" },
+      { key: "main_store_segments", label: "주요 거래 매장군", type: "checks", options: STORE_SEGMENT_OPTIONS },
       { key: "signature_items", label: "차별화된 주력 품목", type: "textarea" }
     ]
   },
@@ -67,10 +58,11 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
     title: "배송",
     description: "주문 마감 시간·최소 주문 금액은 '주문 설정'에서 관리합니다.",
     fields: [
-      { key: "delivery_weekdays", label: "배송 가능 요일", type: "weekdays" },
-      { key: "next_day_cutoff_time", label: "익일배송 마감시간", type: "time" },
-      { key: "delivery_time_window", label: "배송 예정 시간", type: "text", placeholder: "예: 새벽 4~8시" },
-      { key: "delivery_methods", label: "배송 방식", type: "tags", placeholder: "예: 자차, 택배, 퀵" },
+      { key: "delivery_weekdays", label: "배송 요일", type: "weekdays", required: true },
+      { key: "next_day_cutoff_time", label: "익일배송 마감", type: "time" },
+      { key: "delivery_time_window", label: "배송 시간대", type: "text", placeholder: "예: 04:00~08:00" },
+      { key: "delivery_methods", label: "배송 방식", type: "checks", options: ["직배송", "택배"] },
+      { key: "delivery_regions", label: "배송 지역", type: "tags", placeholder: "예: 서울 강남구, 서울 서초구", hint: "저장하면 영업 지역(리드 수집)에 자동으로 추가됩니다." },
       { key: "delivery_comment", label: "배송·주문 코멘트", type: "textarea" }
     ]
   },
@@ -78,37 +70,47 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
     id: "payment",
     title: "결제",
     fields: [
-      { key: "payment_methods", label: "결제 방식", type: "tags", placeholder: "예: 계좌이체, 카드, 가상계좌" },
-      { key: "payment_cycle", label: "결제 주기", type: "text", hint: "기본 '협의' — DM·견적에 그대로 쓰입니다." },
+      { key: "payment_methods", label: "결제 방식", type: "checks", options: ["계좌이체", "카드", "현금"] },
+      { key: "payment_cycle", label: "결제 주기", type: "select", options: PAYMENT_CYCLE_OPTIONS, required: true, hint: "DM·견적서에 그대로 쓰입니다." },
       { key: "first_order_minimum_won", label: "첫 주문 최소금액(원)", type: "number" },
       { key: "payment_comment", label: "결제 코멘트", type: "textarea" },
-      { key: "settlement_bank", label: "입금 은행", type: "text" },
-      { key: "settlement_account_number", label: "입금 계좌번호", type: "text" },
-      { key: "settlement_account_holder", label: "예금주", type: "text" }
+      { key: "settlement_bank", label: "입금 은행", type: "text", locked: true },
+      { key: "settlement_account_number", label: "입금 계좌번호", type: "text", locked: true },
+      { key: "settlement_account_holder", label: "예금주", type: "text", locked: true }
     ]
   },
   {
     id: "consult",
     title: "상담",
     fields: [
-      { key: "holiday_notice", label: "휴무 안내", type: "textarea" },
+      { key: "consult_weekdays", label: "상담 요일", type: "weekdays" },
+      { key: "consult_hours", label: "상담 시간", type: "text", placeholder: "예: 09:00~18:00" },
+      { key: "chat_inquiry_available", label: "채팅 문의 가능", type: "boolean" },
       { key: "accepts_new_stores", label: "신규 매장 대응 가능", type: "boolean" },
-      { key: "consult_weekdays", label: "상담 가능 요일", type: "weekdays" },
-      { key: "consult_hours", label: "상담 가능 시간", type: "text", placeholder: "예: 09:00~18:00" }
+      { key: "holiday_notice", label: "휴무 안내", type: "textarea" }
+    ]
+  },
+  {
+    id: "documents",
+    title: "서류",
+    description: "비공개 보관합니다. PDF·JPG·PNG, 10MB 이하.",
+    fields: [
+      { key: "business_certificate_path", label: "사업자등록증", type: "file", locked: true },
+      { key: "bankbook_path", label: "통장사본", type: "file", locked: true }
     ]
   },
   {
     id: "admin",
-    title: "관리자 전용",
+    title: "관리자 메모",
     description: "운영 계정에는 보이지 않습니다.",
     fields: [
-      { key: "admin_memo", label: "내부 메모", type: "textarea", adminOnly: true },
       { key: "grade", label: "등급", type: "select", options: ["", "A", "B", "C"], adminOnly: true },
       { key: "price_competitiveness", label: "가격 경쟁력", type: "select", options: ["", "높음", "보통", "낮음"], adminOnly: true },
       { key: "erp_types", label: "사용 중 ERP", type: "tags", placeholder: "예: 이카운트", adminOnly: true },
       { key: "plan_name", label: "요금제", type: "text", adminOnly: true },
       { key: "contract_on", label: "계약일", type: "date", adminOnly: true },
-      { key: "trial_ends_on", label: "체험 종료일", type: "date", adminOnly: true }
+      { key: "trial_ends_on", label: "체험 종료일", type: "date", adminOnly: true },
+      { key: "admin_memo", label: "내부 메모", type: "textarea", adminOnly: true }
     ]
   }
 ];
@@ -132,7 +134,7 @@ export function sanitizeCompanyProfilePatch(input: CompanyProfileValues, isAdmin
   const patch: CompanyProfileValues = {};
   for (const field of COMPANY_PROFILE_FIELDS) {
     if (!(field.key in input)) continue;
-    if (field.adminOnly && !isAdmin) continue;
+    if ((field.adminOnly || field.locked) && !isAdmin) continue;
     if (field.type === "file") continue; // 파일은 업로드 API로만 바꿉니다.
     const raw = input[field.key];
     switch (field.type) {
@@ -177,6 +179,19 @@ export function sanitizeCompanyProfilePatch(input: CompanyProfileValues, isAdmin
         patch[field.key] = Array.from(new Set(list.map((item) => String(item).trim()).filter(Boolean))).slice(0, 20);
         break;
       }
+      case "checks": {
+        const list = Array.isArray(raw) ? raw.map(String) : [];
+        patch[field.key] = (field.options || []).filter((option) => list.includes(option));
+        break;
+      }
+      case "contacts": {
+        const list = Array.isArray(raw) ? raw : [];
+        patch[field.key] = list.slice(0, 5).map((item) => {
+          const row = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+          return { name: String(row.name || "").trim().slice(0, 40), phone: String(row.phone || "").trim().slice(0, 30), hours: String(row.hours || "").trim().slice(0, 60) };
+        }).filter((row) => row.name || row.phone);
+        break;
+      }
       case "weekdays": {
         const list = Array.isArray(raw) ? raw : [];
         patch[field.key] = Array.from(new Set(list.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))).sort();
@@ -197,4 +212,19 @@ export function redactCompanyProfile(values: CompanyProfileValues, isAdmin: bool
     out[key] = value;
   }
   return out;
+}
+
+export const COMPANY_PROFILE_PROGRESS_KEYS = [
+  "main_phone", "contacts", "intro", "main_store_segments", "signature_items", "delivery_weekdays",
+  "delivery_time_window", "delivery_regions", "payment_methods", "payment_cycle", "consult_hours", "representative_image_path"
+] as const;
+
+/** 회사 정보 입력 진행률(영업 정확도에 영향을 주는 12개 기준). */
+export function companyProfileProgress(values: CompanyProfileValues) {
+  const filled = COMPANY_PROFILE_PROGRESS_KEYS.filter((key) => {
+    const value = values[key];
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  }).length;
+  return { filled, total: COMPANY_PROFILE_PROGRESS_KEYS.length };
 }

@@ -6,6 +6,8 @@ import { HomeSalesDashboard, isHomeTab } from "@/components/home-sales-dashboard
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { buildSalesHomeSummary } from "@/application/analytics/sales-home-summary";
 import { loadTodayTaskCounts } from "@/application/dashboard/today-task-counts";
+import { getCompanyProfile } from "@/lib/company-profile-store";
+import { companyProfileProgress } from "@/domains/organization/company-profile";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
@@ -59,12 +61,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     const manager = !customerSession || canManagePriceSheets(customerSession);
     const includeDocuments = priceSheetsEnabled() && isFeatureEnabled("PRICING", companyId);
     const includeLinks = includeDocuments && storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId);
-    const [homeCompany, leadResult, ledger, homeRoutePlan, todayTasks] = await timing.measure("db_home_parallel_total", () => Promise.all([
+    const [homeCompany, leadResult, ledger, homeRoutePlan, todayTasks, homeProfile] = await timing.measure("db_home_parallel_total", () => Promise.all([
       getCompanySettings(companyId, customerSession?.companyName || "선택 고객사"),
       listPermitLeads(companyId, { excludeExcluded: true, limit: 3000 }),
       listSalesContactLedger(companyId, 5000),
       getTodayRoutePlan(companyId, { assignmentKeys }),
-      loadTodayTaskCounts({ actor, companyId, includeDocuments, includeLinks, manager })
+      loadTodayTaskCounts({ actor, companyId, includeDocuments, includeLinks, manager }),
+      getCompanyProfile(companyId).catch(() => null)
     ]));
     const summary = buildSalesHomeSummary(leadResult.leads, ledger);
     timing.log("/dashboard");
@@ -83,6 +86,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         <HomeSalesDashboard
           companyQuery={customerSession ? "" : `&companyId=${encodeURIComponent(companyId)}`}
           delivery={{ groups: homeRoutePlan.groups.length, stops: homeRoutePlan.totalStops }}
+          profileProgress={homeProfile?.available ? companyProfileProgress(homeProfile.values) : undefined}
           tab={isHomeTab(params.tab) ? params.tab : "today"}
           summary={summary}
           taskAccess={manager ? "manager" : customerSession?.workspaceRole === "sales" ? "sales" : "limited"}

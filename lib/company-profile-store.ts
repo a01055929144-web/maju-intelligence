@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
-import { COMPANY_DOCUMENT_BUCKET, COMPANY_PROFILE_FILE_KEYS, type CompanyProfileValues } from "@/domains/organization/company-profile";
-import { encodeStoragePath, getSupabaseConfig, isProductionStoreConfigured, sanitizeStorageFilename, supabaseRequest, supabaseStorageRequest } from "@/lib/store";
+import { COMPANY_DOCUMENT_BUCKET, COMPANY_PROFILE_FIELDS, COMPANY_PROFILE_FILE_KEYS, type CompanyProfileValues } from "@/domains/organization/company-profile";
+import { addCompanyLeadSearchRegion, encodeStoragePath, getCompanyLeadSearchRegions, getSupabaseConfig, isProductionStoreConfigured, normalizeSelectableSalesArea, sanitizeStorageFilename, supabaseRequest, supabaseStorageRequest } from "@/lib/store";
 
 /** Infrastructure for company_profiles (organization domain). 서비스 키로만 접근합니다. */
 export type CompanyProfileRecord = {
@@ -10,7 +10,7 @@ export type CompanyProfileRecord = {
   fileUrls: Record<string, string>;
 };
 
-export async function getCompanyProfile(companyId: string): Promise<CompanyProfileRecord> {
+export async function getCompanyProfile(companyId: string, options: { includeLockedFiles?: boolean } = {}): Promise<CompanyProfileRecord> {
   const empty: CompanyProfileRecord = { available: false, company: { name: "", businessRegistrationNumber: "", originAddress: "" }, fileUrls: {}, values: {} };
   if (!isProductionStoreConfigured()) return empty;
   const [companies, profiles] = await Promise.all([
@@ -29,6 +29,11 @@ export async function getCompanyProfile(companyId: string): Promise<CompanyProfi
   await Promise.all(COMPANY_PROFILE_FILE_KEYS.map(async (key) => {
     const path = typeof values[key] === "string" ? (values[key] as string) : "";
     if (!path || !path.startsWith(`${companyId}/`)) return;
+    const locked = COMPANY_PROFILE_FIELDS.find((field) => field.key === key)?.locked;
+    if (locked && !options.includeLockedFiles) {
+      values[key] = "submitted"; // 운영 계정에는 서류 경로·링크 대신 '제출 완료'만.
+      return;
+    }
     const url = await signCompanyDocument(path).catch(() => "");
     if (url) fileUrls[key] = url;
   }));
@@ -69,4 +74,28 @@ async function signCompanyDocument(path: string) {
   const config = getSupabaseConfig();
   if (!config) return "";
   return result.signedURL.startsWith("http") ? result.signedURL : `${config.url}/storage/v1${result.signedURL}`;
+}
+
+/**
+ * 배송 지역을 영업 지역(리드 수집, area_kind=assigned)에 자동으로 추가합니다. (11/3 대표 결정: 가장 중요한 연결)
+ * 이미 있는 지역은 건너뛰고, 형식이 맞지 않는 지역은 결과로 돌려줍니다. 지우지는 않습니다.
+ */
+export async function syncDeliveryRegionsToSalesAreas(companyId: string, labels: string[]) {
+  const existing = await getCompanyLeadSearchRegions(companyId, "assigned").catch(() => []);
+  const known = new Set(existing.map((region) => normalizeSelectableSalesArea(region.label)).filter(Boolean));
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const label of labels) {
+    const normalized = normalizeSelectableSalesArea(label);
+    if (!normalized) { skipped.push(label); continue; }
+    if (known.has(normalized)) continue;
+    try {
+      await addCompanyLeadSearchRegion(companyId, normalized, "assigned");
+      known.add(normalized);
+      added.push(normalized);
+    } catch {
+      skipped.push(label);
+    }
+  }
+  return { added, skipped };
 }
