@@ -2889,15 +2889,16 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       )}
                     </div>
                   ))}
+                  {/* 11/3 현장 피드백: 지역 설정이 좌측 하단 설정 메뉴에만 있는 줄 알았다 → 주색 버튼으로 눈에 띄게. 이 화면에서 바로 열리고 닫으면 그대로 복귀. */}
                   <button
-                    className="mt-2 h-8 w-full rounded-md border border-dashed border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                    className="maju-button-primary mt-2 h-9 w-full justify-center text-xs"
                     onClick={() => {
                       setMapFilterPop("");
                       setMobileSalesAreaOpen(true);
                     }}
                     type="button"
                   >
-                    영업 지역 추가·변경
+                    영업 지역 설정
                   </button>
                 </div>
               ) : null}
