@@ -233,7 +233,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       {notice ? <p className={`mx-4 mt-3 rounded-md px-3 py-2 text-xs font-bold ${notice.tone === "ok" ? "bg-teal-50 text-teal-800" : "bg-rose-50 text-rose-700"}`} role="status">{notice.text}</p> : null}
 
       {current ? (
-        <div className="grid gap-3 p-4 md:grid-cols-2">
+        <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2 [&>*]:min-w-0">
           {current.description ? <p className="text-xs font-semibold text-slate-500 md:col-span-2">{current.description}</p> : null}
           {current.id === "basic" && basics ? (
             <CompanyBasicsFields basics={basics} onChange={setBasics} readOnly={!editable} />
