@@ -785,6 +785,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
                 <p className="mt-1 text-xs font-bold text-muted-foreground">선택 고객사의 다음 작업으로 바로 이동합니다.</p>
                 <div className="mt-4 grid gap-2">
                   <QuickAction href={`/admin/companies/${encodeURIComponent(selectedCompany.id)}/setup`} icon={ClipboardList} label="초기 설정 도우미" primary />
+                  <QuickAction href={`/admin/companies/${encodeURIComponent(selectedCompany.id)}/profile`} icon={ClipboardList} label="회사 정보" />
                   <QuickAction href={`/leads?type=permit&companyId=${encodeURIComponent(selectedCompany.id)}`} icon={LayoutDashboard} label="고객사 대시보드" />
                   <QuickAction href={`/?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={UploadCloud} label="거래처 관리 · 등록/업로드" />
                   <QuickAction href={`/map?companyId=${encodeURIComponent(selectedCompany.id)}`} icon={MapPin} label="지도 홈" />

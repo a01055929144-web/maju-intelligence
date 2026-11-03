@@ -15,7 +15,7 @@ import { getCompanySalesAreaMapStats, getCompanySalesAreaState, getManagedCompan
 
 const viewLabels: Record<AdminMapView, string> = {
   territory: "영업권",
-  sales: "영업지역",
+  sales: "영업 지역",
   customers: "거래처",
   leads: "리드 개방"
 };
@@ -113,7 +113,7 @@ export default async function AdminMapPage({ searchParams }: { searchParams: Pro
             <CardHeader><Badge className="w-fit bg-violet-100 text-violet-800">선택 지역</Badge><CardTitle className="text-xl">{selectedArea?.administrativeArea || province}</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 text-sm">
               <Detail label="영업권 회사" value={selectedArea?.territoryCount || 0} />
-              <Detail label="영업지역 회사" value={selectedArea?.salesCount || 0} />
+              <Detail label="영업 지역 회사" value={selectedArea?.salesCount || 0} />
               <Detail label="거래처" value={selectedArea?.customerCount || 0} />
               <Detail label="최근 리드" value={selectedArea?.recentLeadCount || 0} />
               <Detail className="col-span-2" label="전체 리드" value={selectedArea?.totalLeadCount || 0} />
@@ -124,7 +124,7 @@ export default async function AdminMapPage({ searchParams }: { searchParams: Pro
         <Card className="border-slate-200 shadow-sm">
           <CardHeader><CardTitle className="text-base">{district} 회사별 집계</CardTitle></CardHeader>
           <CardContent className="overflow-x-auto p-0">
-            <table className="min-w-[720px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">고객사</th><th className="px-4 py-3">영업권</th><th className="px-4 py-3">영업지역</th><th className="px-4 py-3 text-right">거래처</th><th className="px-4 py-3 text-right">최근 리드</th><th className="px-4 py-3 text-right">전체 리드</th></tr></thead><tbody>{overview.companies.map((company) => { const area = company.areas.find((item) => item.administrativeArea === district); return <tr className="border-t border-slate-100" key={company.companyId}><td className="px-4 py-3 font-bold text-slate-900">{company.companyName}</td><td className="px-4 py-3">{area?.territoryCovered ? "포함" : "-"}</td><td className="px-4 py-3">{area?.salesCovered ? "포함" : "-"}</td><td className="px-4 py-3 text-right">{area?.customerCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.recentLeadCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.totalLeadCount.toLocaleString() || 0}</td></tr>; })}</tbody></table>
+            <table className="min-w-[720px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">고객사</th><th className="px-4 py-3">영업권</th><th className="px-4 py-3">영업 지역</th><th className="px-4 py-3 text-right">거래처</th><th className="px-4 py-3 text-right">최근 리드</th><th className="px-4 py-3 text-right">전체 리드</th></tr></thead><tbody>{overview.companies.map((company) => { const area = company.areas.find((item) => item.administrativeArea === district); return <tr className="border-t border-slate-100" key={company.companyId}><td className="px-4 py-3 font-bold text-slate-900">{company.companyName}</td><td className="px-4 py-3">{area?.territoryCovered ? "포함" : "-"}</td><td className="px-4 py-3">{area?.salesCovered ? "포함" : "-"}</td><td className="px-4 py-3 text-right">{area?.customerCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.recentLeadCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.totalLeadCount.toLocaleString() || 0}</td></tr>; })}</tbody></table>
           </CardContent>
         </Card>
       </section>

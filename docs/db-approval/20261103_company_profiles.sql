@@ -13,6 +13,7 @@ create table if not exists public.company_profiles (
   fax text,
   email text,
   intro text,
+  contacts jsonb not null default '[]'::jsonb,        -- 연락 담당자 [{name, phone, hours}]
   -- 사업장 주소 (창고=출발지는 companies.origin_address 를 그대로 사용)
   business_postcode text,
   business_address text,
@@ -27,6 +28,7 @@ create table if not exists public.company_profiles (
   delivery_time_window text,
   delivery_methods text[] not null default '{}',
   delivery_comment text,
+  delivery_regions text[] not null default '{}',     -- 배송 지역 '서울 강남구' 형식. 영업 지역은 company_lead_search_regions 가 원본
   -- 결제
   payment_methods text[] not null default '{}',
   payment_cycle text not null default '협의',
@@ -38,6 +40,7 @@ create table if not exists public.company_profiles (
   -- 상담
   holiday_notice text,
   accepts_new_stores boolean not null default true,
+  chat_inquiry_available boolean not null default true,
   consult_weekdays smallint[] not null default '{1,2,3,4,5}',
   consult_hours text,
   -- 서류·이미지 (비공개 버킷 company-documents 경로)
@@ -55,6 +58,8 @@ create table if not exists public.company_profiles (
   updated_at timestamptz not null default now(),
   updated_by text,
   constraint company_profiles_weekdays_check check (delivery_weekdays <@ '{0,1,2,3,4,5,6}'::smallint[] and consult_weekdays <@ '{0,1,2,3,4,5,6}'::smallint[]),
+  constraint company_profiles_contacts_array check (jsonb_typeof(contacts) = 'array'),
+  constraint company_profiles_payment_cycle_check check (payment_cycle in ('선결제','당일','7일','10일','15일','월말','협의')),
   constraint company_profiles_first_min_check check (first_order_minimum_won is null or first_order_minimum_won >= 0)
 );
 alter table public.company_profiles enable row level security;

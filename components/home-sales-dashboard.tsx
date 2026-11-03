@@ -21,8 +21,10 @@ export function isHomeTab(value?: string): value is HomeTab { return value === "
 
 // 0033 지시서 1절: 홈 = 한 화면, 탭 3개. 같은 숫자는 한 탭에만 둔다.
 // 오늘 할 일 = 지금 처리할 일 · 현황판 = 운영 숫자 · 성과 = 영업 흐름/전환. 현황판 · 성과는 대표 · 관리자만.
-export function HomeSalesDashboard({ companyQuery = "", delivery, summary, tab = "today", taskAccess, todayTasks }: {
+export function HomeSalesDashboard({ companyQuery = "", delivery, profileProgress, summary, tab = "today", taskAccess, todayTasks }: {
   companyQuery?: string;
+  /** 회사 정보 입력 진행률. 덜 채워졌으면 오늘 할 일 맨 앞에 안내합니다(영업 정확도). */
+  profileProgress?: { filled: number; total: number };
   delivery: DeliverySummary;
   summary: SalesHomeSummary;
   tab?: HomeTab;
@@ -35,6 +37,7 @@ export function HomeSalesDashboard({ companyQuery = "", delivery, summary, tab =
     ? [{ id: "today", label: "오늘 할 일" }, { id: "status", label: "현황판" }, { id: "performance", label: "성과" }]
     : [];
   const urgentTasks = [
+    ...(taskAccess === "manager" && profileProgress && profileProgress.filled < profileProgress.total ? [{ count: profileProgress.total - profileProgress.filled, description: `회사 정보 ${profileProgress.filled}/${profileProgress.total} — 채울수록 리드가 정확해집니다`, href: "/dashboard/settings/company#company-profile", icon: FileWarning, label: "회사 정보 채우기" }] : []),
     ...(taskAccess === "manager" && todayTasks.highInterest > 0 ? [{ count: todayTasks.highInterest, description: "최근 열람이 3회 이상이지만 아직 주문하지 않은 매장", href: "/revenue/pricing/links", icon: MousePointerClick, label: "관심 높음" }] : []),
     ...((taskAccess === "manager" || taskAccess === "sales") && summary.tasks.followUpToday > 0 ? [{ count: summary.tasks.followUpToday, description: "약속한 연락일이 오늘이거나 이미 지난 매장", href: "/mobile/sales#reminders", icon: CalendarClock, label: "오늘 다시 연락할 곳" }] : []),
     ...(taskAccess === "manager" && todayTasks.documentRecalculation > 0 ? [{ count: todayTasks.documentRecalculation, description: "매입가 변경을 반영해 다시 확인해야 하는 문서", href: "/revenue/pricing/documents", icon: FileWarning, label: "다시 계산 필요 문서" }] : []),
