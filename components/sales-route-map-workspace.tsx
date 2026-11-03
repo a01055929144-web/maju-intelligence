@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DEFAULT_LEAD_DM_TEMPLATE, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -7680,9 +7681,10 @@ export function buildOutboundItemNotes(industry?: string) {
   return rows.slice(0, 5).map((row) => row.item);
 }
 
-export function buildLeadDmScript(lead: PermitLeadItem) {
-  const items = buildOutboundItemNotes(lead.industryPrimary).slice(0, 4).join(", ");
-  return `안녕하세요, ${lead.businessName} 대표님. 식자재 납품/단가 비교 제안드리고 싶어 연락드립니다. ${lead.industryPrimary} 업종 기준으로 ${items} 품목을 먼저 맞춰보고, 현재 사용 중인 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.`;
+/** 11/3 A3: 회사 기본 문구(placeholder {상호}{업종}{품목})와 제외 품목을 반영합니다. 결제 조건 기본값은 '협의'. */
+export function buildLeadDmScript(lead: PermitLeadItem, settings?: { excluded?: string; template?: string }) {
+  const items = filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
+  return renderLeadDm(settings?.template || DEFAULT_LEAD_DM_TEMPLATE, { businessName: lead.businessName, industry: lead.industryPrimary, items });
 }
 
 function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteLine[], menuNotes: string, total: number, validUntil?: string) {

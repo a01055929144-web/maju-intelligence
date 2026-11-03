@@ -14339,14 +14339,37 @@ function mapDeliveryMessageTemplate(row: DeliveryMessageTemplateRow): DeliveryMe
 export async function getCompanyMessageTemplates(companyId: string): Promise<DeliveryMessageTemplate[]> {
   if (!isProductionStoreConfigured()) return [];
   const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
-    `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&order=sort_order.asc,created_at.asc`
+    `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&is_active=eq.true&template_key=not.like.lead_dm*&order=sort_order.asc,created_at.asc`
   );
   return rows.map(mapDeliveryMessageTemplate);
 }
 
+/** 리드 DM 기본 문구·제외 품목. 배송 문구와 같은 표를 쓰지만 template_key가 lead_dm* 인 행만 다룹니다. */
+export async function getLeadDmSettings(companyId: string): Promise<{ excluded: string; template: string }> {
+  if (!isProductionStoreConfigured()) return { excluded: "", template: "" };
+  const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
+    `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&template_key=like.lead_dm*&is_active=eq.true`
+  );
+  return {
+    excluded: rows.find((row) => row.template_key === "lead_dm_exclude")?.body || "",
+    template: rows.find((row) => row.template_key === "lead_dm")?.body || ""
+  };
+}
+
+export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string }) {
+  if (!isProductionStoreConfigured()) return { persisted: false };
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=like.lead_dm*`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  const rows = [
+    { company_id: companyId, template_key: "lead_dm", label: "리드 DM 기본 문구", body: input.template.trim(), sort_order: 9000, is_active: true },
+    ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : [])
+  ];
+  await supabaseRequest("company_message_templates", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(rows) });
+  return { persisted: true };
+}
+
 export async function replaceCompanyMessageTemplates(companyId: string, templates: DeliveryMessageTemplate[]) {
   if (!isProductionStoreConfigured()) return { persisted: false, templates };
-  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=not.like.lead_dm*`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   if (!templates.length) return { persisted: true, templates: [] };
   const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>("company_message_templates", {
     method: "POST",
