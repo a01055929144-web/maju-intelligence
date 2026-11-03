@@ -46,7 +46,7 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
       }
 
       const payload = await response.json().catch(() => null);
-      // 11/3 결정: "이메일·아이디 채우기"(최근 입력값 저장)는 쓰지 않습니다.
+      // 11/3 결정: 최근 입력값 저장·자동 입력 버튼은 쓰지 않습니다.
       window.location.href = payload?.mustChangePassword ? "/change-password" : await resolvePostLoginPath();
     } catch (error) {
       setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
