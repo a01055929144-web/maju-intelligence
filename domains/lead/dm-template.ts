@@ -8,8 +8,17 @@ export const LEAD_DM_TEMPLATE_KEY = "lead_dm";
 export const LEAD_DM_EXCLUDE_KEY = "lead_dm_exclude";
 export const LEAD_DM_KEY_PREFIX = "lead_dm";
 
-export const DEFAULT_LEAD_DM_TEMPLATE =
-  "안녕하세요, {상호} 대표님. 식자재 납품·단가 비교를 제안드리고 싶어 연락드립니다. {업종} 업종 기준으로 {품목} 품목을 먼저 맞춰보고, 현재 쓰시는 품목과 비교 견적을 간단히 정리해드릴 수 있습니다. 결제 조건은 협의해서 맞춰드립니다. 괜찮으시면 메뉴판이나 주력 메뉴 기준으로 1차 제안서 보내드리겠습니다.";
+// 11/4: 단가표로 먼저 제안하고, 관심을 보이면 견적을 드리는 흐름. 줄을 나눠 읽기 쉽게.
+export const DEFAULT_LEAD_DM_TEMPLATE = [
+  "안녕하세요, {상호} 대표님.",
+  "식자재를 납품하는 업체입니다.",
+  "",
+  "{업종} 매장에서 많이 쓰시는 {품목} 단가표를 먼저 보내드리고 싶습니다.",
+  "지금 쓰시는 단가와 비교해 보시고, 관심 있는 품목이 있으면 맞춤 견적을 드리겠습니다.",
+  "",
+  "결제 조건은 협의해서 맞춰드립니다.",
+  "편하게 답장 주세요."
+].join("\n");
 
 export function parseExcludedItems(value: string) {
   return value.split(/[,\n·]/).map((item) => item.trim()).filter(Boolean).slice(0, 30);

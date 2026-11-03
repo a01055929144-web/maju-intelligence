@@ -413,12 +413,12 @@ export function LeadContactChannelsPanel({
       <label className="mt-2 block text-[11px] font-black text-slate-600">
         보낼 문구 (이번에만 고쳐도 됨)
         <textarea
-          className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-800 outline-none focus:border-teal-400 focus:bg-white"
+          className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-medium leading-6 text-slate-800 outline-none focus:border-teal-400 focus:bg-white"
           onChange={(event) => {
             setMessage(event.target.value);
             setMessageEdited(true);
           }}
-          rows={4}
+          rows={8}
           value={message}
         />
       </label>

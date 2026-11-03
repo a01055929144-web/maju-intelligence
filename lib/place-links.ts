@@ -124,21 +124,27 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
 
 export function buildPlaceSearchLinks(input: PlaceLinkInput) {
   const fullQuery = buildPlaceSearchQuery(input) || "거래처";
-  const encodedFullQuery = encodeURIComponent(fullQuery);
   // 네이버 지도는 "상호명 + 상세주소(동/호수·층수 포함)"로 검색하면 네이버 DB에 등록된 주소 표기와
   // 조금만 달라도 결과가 아예 없거나 엉뚱한 곳으로 연결되는 경우가 많았습니다(사용자 리포트로 확인).
   // 반면 상호명 단독 검색은 해당 업체가 최상단에 뜨는 경우가 훨씬 많아, 네이버만 상호명만으로 검색합니다.
-  const naverQuery = input.customerName?.trim() || fullQuery;
+  // 11/4: 카카오·구글도 상세주소(층·호수)까지 넣으면 검색이 안 되는 경우가 많아 "상호명 + 시·군·구"로 통일합니다.
+  const district = extractDistrict(input.address);
+  const shortQuery = [input.customerName?.trim(), district].filter(Boolean).join(" ") || fullQuery;
   return {
-    googleMapUrl: `https://www.google.com/maps/search/${encodedFullQuery}`,
-    kakaoPlaceUrl: `https://map.kakao.com/?q=${encodedFullQuery}`,
-    naverPlaceUrl: `https://map.naver.com/p/search/${encodeURIComponent(naverQuery)}`
+    googleMapUrl: `https://www.google.com/maps/search/${encodeURIComponent(shortQuery)}`,
+    kakaoPlaceUrl: `https://map.kakao.com/?q=${encodeURIComponent(shortQuery)}`,
+    naverPlaceUrl: `https://map.naver.com/p/search/${encodeURIComponent(shortQuery)}`
   };
 }
 
 export function buildNaverBlogSearchUrl(query: string) {
   const encodedQuery = encodeURIComponent(query || "매장");
   return `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedQuery}`;
+}
+
+function extractDistrict(address?: string | null) {
+  const tokens = (address || "").trim().split(/\s+/);
+  return tokens.find((token, index) => index > 0 && /(구|군|시)$/.test(token)) || "";
 }
 
 function buildPlaceSearchQuery(input: PlaceLinkInput) {

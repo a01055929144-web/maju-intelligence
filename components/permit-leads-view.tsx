@@ -1,5 +1,6 @@
 "use client";
 
+import { LeadChangeHistory } from "@/components/lead-change-history";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -51,7 +52,6 @@ import {
   isLeadBusinessHoursDraftEnabled,
   isLeadNativeAttachmentsEnabled,
   isStoreDeliveryProofHistoryEnabled,
-  isStoreRevisionHistoryEnabled
 } from "@/lib/feature-modules";
 import { readLocalJson } from "@/lib/route-map-utils";
 import { InlineLoading } from "@/components/inline-loading";
@@ -174,6 +174,10 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [industryFilter, setIndustryFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // 11/4: 지도에서 쓰던 핵심 필터(영업 지역·규모·리마인드)를 리드 목록에도 둡니다.
+  const [regionFilter, setRegionFilter] = useState("");
+  const [sizeFilter, setSizeFilter] = useState<"" | "small" | "medium" | "large" | "unknown">("");
+  const [reminderOnly, setReminderOnly] = useState(false);
   const [gradeFilter, setGradeFilter] = useState("");
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [hasInstagramOnly, setHasInstagramOnly] = useState(false);
@@ -642,6 +646,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
       .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
+      .filter((lead) => !regionFilter || getLeadSigunguLabel(lead.address) === regionFilter)
+      .filter((lead) => !sizeFilter || getLeadSizeBucket(lead.storeAreaSqm) === sizeFilter)
+      .filter((lead) => !reminderOnly || Boolean(lead.followUpAt && lead.followUpAt.slice(0, 10) <= new Date().toISOString().slice(0, 10)))
       .filter((lead) => !hasPhoneOnly || isMobilePhoneNumber(lead.phone))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
       .filter((lead) => !hasTalktalkOnly || Boolean(getSafeNaverTalktalkUrl(lead.naverTalktalkUrl)))
@@ -671,7 +678,12 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter]);
+  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
+  const regionOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    leads.forEach((lead) => { const label = getLeadSigunguLabel(lead.address); if (label) counts.set(label, (counts.get(label) || 0) + 1); });
+    return Array.from(counts.entries()).sort((left, right) => right[1] - left[1]);
+  }, [leads]);
 
   // "영업리드(키워드 검색량순)"로 바꾸면 지금 화면에 보이는 리드 중 아직 점수가 없는 것만 조회합니다
   // (전체 리드를 한 번에 조회하지 않아 API 호출을 아낍니다). 이미 값이 있으면(캐시 또는 리드 자체의
@@ -2206,9 +2218,17 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               </select> : null}
               {openDateFilterMode === "year" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateYear(event.target.value)} value={openDateYear}><option value="">연도 선택</option>{openDateOptions.years.map((year) => <option key={year.value} value={year.value}>{year.value}년 · {year.count.toLocaleString()}곳</option>)}</select> : null}
               {openDateFilterMode === "month" ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setOpenDateMonth(event.target.value)} value={openDateMonth}><option value="">월 선택</option>{openDateOptions.months.map((month) => <option key={month.value} value={month.value}>{month.value} · {month.count.toLocaleString()}곳</option>)}</select> : null}
-              {isSalesLeadPage ? <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setStatusFilter(event.target.value); if (event.target.value) setActionFilter(""); }} value={statusFilter}>
-                <option value="">상태 전체</option><option value="견적 요청">견적 요청</option><option value="견적 발송">견적 발송</option><option value="재연락 예정">재연락 예정</option><option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option><option value="미팅 예정">미팅 예정</option><option value="연락 완료">연락 완료</option><option value="DM 발송">DM 발송</option><option value="방문 대상">방문 대상</option><option value="검토 필요">검토 필요</option>
-              </select> : null}
+              <select aria-label="영업 지역" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setRegionFilter(event.target.value)} value={regionFilter}>
+                <option value="">영업 지역 전체</option>
+                {regionOptions.map(([label, count]) => <option key={label} value={label}>{label} ({count.toLocaleString()})</option>)}
+              </select>
+              <select aria-label="규모" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => setSizeFilter(event.target.value as typeof sizeFilter)} value={sizeFilter}>
+                <option value="">규모 전체</option><option value="small">소형 (15평 미만)</option><option value="medium">중형 (15~40평)</option><option value="large">대형 (40평 이상)</option><option value="unknown">면적 미확인</option>
+              </select>
+              <button aria-pressed={reminderOnly} className={`h-8 shrink-0 rounded-md border px-2.5 text-xs font-bold ${reminderOnly ? "border-amber-600 bg-amber-50 text-amber-800" : "border-amber-300 bg-white text-amber-800"}`} onClick={() => setReminderOnly((value) => !value)} type="button">리마인드</button>
+              <select aria-label="단계" className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950" onChange={(event) => { setStatusFilter(event.target.value); if (event.target.value) setActionFilter(""); }} value={statusFilter}>
+                <option value="">단계 전체</option><option value="견적 요청">견적 요청</option><option value="견적 발송">견적 발송</option><option value="재연락 예정">재연락 예정</option><option value={QUOTE_FOLLOW_UP_STATUS_FILTER}>견적 후속</option><option value="미팅 예정">미팅 예정</option><option value="연락 완료">연락 완료</option><option value="DM 발송">DM 발송</option><option value="방문 대상">방문 대상</option><option value="검토 필요">검토 필요</option>
+              </select>
               <select className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-950 outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100" onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
                 <option value="">업종 전체(상세)</option>
                 {industryOptions.map((industry) => (
@@ -2336,7 +2356,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           ) : null}
           {quickOpenMonthOptions.length ? (
             <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-200/80 pt-2">
-              <span className="shrink-0 text-[11px] font-black text-slate-400">개시월</span>
+              <span className="shrink-0 text-[11px] font-black text-slate-400">인허가월</span>
               {quickOpenMonthOptions.map((month) => (
                 <button
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ring-inset transition ${
@@ -3632,7 +3652,15 @@ function PermitLeadDetailPanel({
                 </span>
               ) : null}
             </span>
-            <h3 className="mt-1 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
+            <div className="mt-1 flex min-w-0 items-center gap-2">
+              <h3 className="min-w-0 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
+              {/* 11/4: 지도 오른쪽 목록처럼 상호명 옆에 지도 바로가기(카카오·네이버·구글). */}
+              <span className="flex shrink-0 items-center gap-1">
+                <a aria-label="카카오맵에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#FEE500] text-[10px] font-black text-[#3c1e1e]" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
+                <a aria-label="네이버 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#03C75A] text-[10px] font-black text-white" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
+                <a aria-label="구글 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-[10px] font-black text-[#4285F4]" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
+              </span>
+            </div>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
               {lead.industryPrimary}
               {lead.permitStatus ? ` · ${lead.permitStatus}` : ""}
@@ -4205,11 +4233,10 @@ function PermitLeadDetailPanel({
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
-            <p className="text-sm font-black text-slate-800">수정 기록</p>
-            <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">공통 수정 기록 테이블 승인 후 이 탭에 변경 이력을 연결합니다.</p>
-            {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
-          </div>
+          <details className="rounded-xl border border-slate-200 bg-white p-3">
+            <summary className="cursor-pointer text-sm font-black text-slate-800">수정 기록</summary>
+            <div className="mt-2"><LeadChangeHistory leadId={lead.id} /></div>
+          </details>
 
           {isLeadBusinessHoursDraftEnabled() ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-black text-amber-950">영업시간·브레이크타임</p><p className="mt-1 text-[11px] font-semibold text-amber-800">현재 · {formatLeadBusinessHours(lead.businessHourIntervals || [])}</p><p className="mt-1 text-[11px] font-semibold text-amber-800">빠른 입력 예: 매일 15:00~17:00 브레이크 · 월 휴무</p><input className="mt-2 h-9 w-full rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold" onChange={(event) => setBusinessHoursDraft(event.target.value)} value={businessHoursDraft} /><button className="maju-button-secondary mt-2 h-8 text-xs" disabled={businessHoursSaving || !businessHoursDraft.trim()} onClick={() => void saveBusinessHours()} type="button">{businessHoursSaving ? "저장 중" : "저장"}</button>{businessHoursMessage ? <p className="mt-2 text-[11px] font-bold text-amber-900">{businessHoursMessage}</p> : null}</div> : null}
           <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={resultSectionRef}>
@@ -4339,10 +4366,9 @@ function PermitLeadDetailPanel({
               </div>
             ) : null}
             {detailTab === "changes" ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <h4 className="font-black text-slate-950">수정 기록</h4>
-                <p className="mt-2 text-sm text-slate-700">공통 수정 기록 테이블 승인 후 누가, 언제, 어떤 정보를 바꿨는지 표시합니다.</p>
-                {!isStoreRevisionHistoryEnabled() ? <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">기능 꺼짐 · SQL 승인 대기</span> : null}
+                <div className="mt-2"><LeadChangeHistory leadId={lead.id} /></div>
               </div>
             ) : null}
           </section>
@@ -4567,4 +4593,18 @@ function LeadQuickFilterChip({
       {label} {count.toLocaleString()}
     </button>
   );
+}
+
+/** 11/4: 주소에서 시·군·구 라벨("서울 강남구")을 뽑습니다. 리드 목록의 영업 지역 필터용. */
+function getLeadSigunguLabel(address?: string | null) {
+  const tokens = (address || "").trim().split(/\s+/);
+  if (tokens.length < 2) return "";
+  const province = tokens[0].replace(/(특별자치시|특별자치도|특별시|광역시|도)$/, "");
+  return `${province} ${tokens[1]}`;
+}
+
+function getLeadSizeBucket(sqm?: number) {
+  if (!sqm || sqm <= 0) return "unknown";
+  const pyeong = sqm / 3.3058;
+  return pyeong < 15 ? "small" : pyeong < 40 ? "medium" : "large";
 }

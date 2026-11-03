@@ -2299,7 +2299,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 배너를 몇 초간 띄웁니다. 새로고침 없이도 바로 알 수 있도록 8초 폴링과 함께 동작합니다.
         <MapVehicleConnectionToast driverLabel={justConnectedVehicle.label} />
       ) : null}
-      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
+      {/* 11/4: 리드 화면에서는 지도용 화면 전환(지도·거래처·코스·배송 이력)과 지도 필터 줄을 숨깁니다 — 리드 목록에는 적용되지 않던 필터라 혼란. */}
+      {initialView === "leads" ? null : <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 lg:flex-row lg:items-center lg:justify-between lg:gap-3 xl:px-4">
         {sourceReady ? null : (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="text-xs font-medium text-slate-500 lg:whitespace-nowrap">거래처를 등록하면 지도 운영을 시작할 수 있습니다</p>
@@ -2513,7 +2514,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </div>
           </details>
         </div>
-      </header>
+      </header>}
 
       <div className={`relative flex flex-1 flex-col ${activeView === "map" ? "lg:min-h-0" : ""}`}>
         {showOriginAddressBanner ? (
@@ -2588,7 +2589,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       {/* 시안 ⑫ 2줄: 지도 위에 떠 있는 카드가 아니라 화면 폭 전체의 고정 필터 줄입니다. 지도와
           좌우 패널은 이 줄 바로 아래에서 시작합니다(겹치지 않으므로 mapHeaderHeightPx는 0). */}
       <section
-        className={`relative z-30 shrink-0 space-y-1 border-b border-slate-200 bg-white px-3 py-1.5 ${activeView === "map" ? "lg:px-4 lg:py-2" : ""}`}
+        className={`relative z-30 shrink-0 space-y-1 border-b border-slate-200 bg-white px-3 py-1.5 ${activeView === "map" ? "lg:px-4 lg:py-2" : ""} ${initialView === "leads" ? "hidden" : ""}`}
         ref={mapHeaderRef}
       >
         {activeView === "map" ? (

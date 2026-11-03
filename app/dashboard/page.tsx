@@ -145,13 +145,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       active="dashboard"
       companyName={customerSession?.companyName || company.name}
       fullBleed
-      hidePageTitle
+      // 11/4: 신규·영업 리드는 다른 화면과 같은 머리(배지+제목) 간격을 씁니다. 지도만 머리를 숨깁니다.
+      hidePageTitle={initialView === "map"}
       mode={customerSession ? "customer" : "admin-preview"}
       previewCompanyId={customerSession ? undefined : companyId}
       rightAction={mapLeadListActions}
       showHoldModules={showHoldModules}
       subtitle="거래처 위치, 배송차 배정, 경유 코스 계산을 지도에서 바로 처리합니다"
-      title={initialView === "leads" ? "영업 리드" : "지도 홈"}
+      title={initialView === "leads" ? (params.type === "keyword" ? "영업 리드" : "신규 리드") : "지도 홈"}
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
