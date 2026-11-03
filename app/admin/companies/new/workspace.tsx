@@ -9,7 +9,7 @@ import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "@/lib/korean-admi
 const DRAFT_KEY = "maju-admin-company-onboarding-draft-v1";
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
-const STEPS = ["회사·사업자등록증", "정산 계좌·통장사본", "영업권·영업지역", "배송차·기사", "담당자·로그인", "요금제"] as const;
+const STEPS = ["회사·사업자등록증", "정산 계좌·통장사본", "영업권·영업 지역", "배송차·기사", "담당자·로그인", "요금제"] as const;
 
 type Draft = {
   companyName: string;
@@ -82,7 +82,7 @@ export function CompanyOnboardingWorkspace({ accountCreationEnabled }: { account
   }
 
   async function finish() {
-    if (!canFinish) return setMessage("회사·대표·로그인·영업지역 필수 항목과 10자 이상 임시 비밀번호를 확인해주세요.");
+    if (!canFinish) return setMessage("회사·대표·로그인·영업 지역 필수 항목과 10자 이상 임시 비밀번호를 확인해주세요.");
     setSaving(true);
     setMessage("");
     try {
