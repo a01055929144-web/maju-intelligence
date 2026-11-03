@@ -4763,7 +4763,7 @@ function DeliveryAssignmentPanel({
             }}
           />
         ) : (
-          <button className="maju-button-secondary flex h-8 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
+          <button className="maju-button-primary flex h-9 w-full items-center justify-center gap-1.5 text-xs" onClick={() => setIsAdding(true)} type="button">
             <Plus className="h-3.5 w-3.5" />
             새 담당자·배송차 추가
           </button>
@@ -6844,7 +6844,7 @@ function LeadListPanel({
           )}
         </div>
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <button className="maju-button-secondary mb-2 h-8 w-full justify-center text-xs" onClick={onOpenTable} type="button">
+          <button className="maju-button-primary mb-2 h-9 w-full justify-center text-xs" onClick={onOpenTable} type="button">
             표로 보기
           </button>
           <p className="text-xs font-bold leading-5 text-slate-500">우선순위는 사업자 상태·연락처·주소·등급·신선도·리뷰를 합산합니다.</p>
