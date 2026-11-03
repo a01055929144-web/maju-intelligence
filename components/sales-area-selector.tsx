@@ -251,6 +251,37 @@ export function SalesAreaSelector({
         </div>
       </div>
 
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
+          <div>
+            <p className="text-xs font-black text-slate-900">지도에서 지역 선택</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">경계를 누르면 지역 정보와 추가·해제 버튼이 열립니다.</p>
+          </div>
+          <div className="flex rounded-lg bg-slate-100 p-0.5">
+            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "recentLeads" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("recentLeads")} type="button">최근 30일 신규</button>
+            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "customers" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("customers")} type="button">거래처 수</button>
+          </div>
+        </div>
+        <KakaoAddressMap
+          mapClassName="h-[300px] rounded-none border-0 sm:h-[360px]"
+          markers={[]}
+          salesAreaBoundary={{
+            canManage: snapshot.canManage,
+            metric: mapMetric,
+            onLoadTiming: setMapLoadTiming,
+            onToggle: (administrativeArea) => void toggleBoundaryArea(administrativeArea),
+            province,
+            selectedAreas: snapshot.salesAreaState.effectiveAreas,
+            stats: mapStats
+          }}
+          showList={false}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500">
+          <span>옅음 → 진함: {mapMetric === "recentLeads" ? "신규 리드 수" : "거래처 수"} · 선택 지역은 청록색 테두리</span>
+          <span>{mapStatsLoading ? "집계 불러오는 중" : mapLoadTiming == null ? "경계 불러오는 중" : `경계 표시 ${Math.round(mapLoadTiming)}ms`}</span>
+        </div>
+        <p className="border-t border-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">행정경계: 국가데이터처 SGIS (2025.07.01 기준)</p>
+      </div>
       {snapshot.expansionCandidateEnabled ? <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
         <p className="text-xs font-black text-violet-950">영업 필요 지역</p>
         <p className="mt-1 text-[11px] font-semibold text-violet-700">확장 검토·수동 탐색 전용입니다. 매일 자동 수집 지역과 분리됩니다.</p>
@@ -298,7 +329,9 @@ export function SalesAreaSelector({
         <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold" disabled={!snapshot.canManage || busy} onChange={(event) => setProvince(event.target.value)} value={province}>
           {KOREAN_PROVINCES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
-        <div className="max-h-[min(48dvh,440px)] space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-2">
+        {/* 11/3: 구가 많아 한 줄 목록이 길어 2~3열 표로 */}
+        <div className="grid max-h-[min(56dvh,520px)] gap-x-4 gap-y-1 overflow-y-auto overscroll-contain rounded-lg border border-slate-200 bg-white p-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="sm:col-span-2 xl:col-span-3">
           <SalesAreaCheckbox
             checked={provinceSelected}
             disabled={!snapshot.canManage || busy}
@@ -309,10 +342,11 @@ export function SalesAreaSelector({
               recentLeadCount: districtRows.reduce((sum, row) => sum + (statsByArea.get(row.parent)?.recentLeadCount || 0), 0)
             }}
           />
+          </div>
           {districtRows.map((row) => {
             const parentExplicit = snapshot.salesAreaState.effectiveAreas.includes(row.parent);
             return (
-              <div className="border-t border-slate-100 pt-1" key={row.parent}>
+              <div className={`border-t border-slate-100 pt-1 ${row.generalGus.length ? "sm:col-span-2 xl:col-span-3" : ""}`} key={row.parent}>
                 <SalesAreaCheckbox
                   checked={provinceSelected || parentExplicit}
                   disabled={!snapshot.canManage || busy || provinceSelected}
@@ -339,37 +373,6 @@ export function SalesAreaSelector({
           })}
         </div>
         <p className="text-[11px] font-semibold text-slate-500">체크하면 즉시 저장되고 지도 색칠과 리드 목록에 반영됩니다. 시·도 전체는 키 하나로 저장합니다.</p>
-      </div>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
-          <div>
-            <p className="text-xs font-black text-slate-900">지도에서 지역 선택</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">경계를 누르면 지역 정보와 추가·해제 버튼이 열립니다.</p>
-          </div>
-          <div className="flex rounded-lg bg-slate-100 p-0.5">
-            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "recentLeads" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("recentLeads")} type="button">최근 30일 신규</button>
-            <button className={`rounded-md px-2.5 py-1.5 text-[11px] font-black ${mapMetric === "customers" ? "bg-white text-teal-800 shadow-sm" : "text-slate-500"}`} onClick={() => setMapMetric("customers")} type="button">거래처 수</button>
-          </div>
-        </div>
-        <KakaoAddressMap
-          mapClassName="h-[300px] rounded-none border-0 sm:h-[360px]"
-          markers={[]}
-          salesAreaBoundary={{
-            canManage: snapshot.canManage,
-            metric: mapMetric,
-            onLoadTiming: setMapLoadTiming,
-            onToggle: (administrativeArea) => void toggleBoundaryArea(administrativeArea),
-            province,
-            selectedAreas: snapshot.salesAreaState.effectiveAreas,
-            stats: mapStats
-          }}
-          showList={false}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-500">
-          <span>옅음 → 진함: {mapMetric === "recentLeads" ? "신규 리드 수" : "거래처 수"} · 선택 지역은 청록색 테두리</span>
-          <span>{mapStatsLoading ? "집계 불러오는 중" : mapLoadTiming == null ? "경계 불러오는 중" : `경계 표시 ${Math.round(mapLoadTiming)}ms`}</span>
-        </div>
-        <p className="border-t border-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">행정경계: 국가데이터처 SGIS (2025.07.01 기준)</p>
       </div>
       {mapCenterPoint ? <button className="maju-button-secondary w-full justify-center" disabled={!snapshot.canManage || busy} onClick={() => void addMapCenter()} type="button"><MapPin className="h-4 w-4" />현재 지도 중심의 시·군·구 추가</button> : null}
       {!snapshot.canManage ? <p className="text-xs font-semibold text-slate-500">영업 지역은 회사 또는 거래처 관리 권한이 있는 사용자만 변경할 수 있습니다.</p> : null}

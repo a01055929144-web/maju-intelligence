@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { getCustomerSession } from "@/lib/auth";
-import { getAppUserLoginMethods, getCompanySettings } from "@/lib/store";
+import { getCompanySettings } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { canManagePriceSheets } from "@/domains/pricing/access";
-import { MyAccountLoginCard } from "@/components/my-account-login-card";
 import { CompanyProfileForm } from "@/components/company-profile-form";
 import { StoreOrderSettingsWorkspace } from "@/components/store-order-settings-workspace";
 import { CompanySettingsForm } from "../settings-form";
@@ -21,20 +20,17 @@ export default async function CompanyInformationSettingsPage({ searchParams }: {
   const session = await getCustomerSession();
   if (!session) redirect("/dashboard/login");
   const showHoldModules = areHoldModulesEnabled(session.companyId);
-  const [company, loginMethods, params] = await Promise.all([
+  const [company, params] = await Promise.all([
     getCompanySettings(session.companyId, session.companyName),
-    getAppUserLoginMethods(session.userId || ""),
     searchParams
   ]);
   const orderEnabled = priceSheetsEnabled() && storeOrderingEnabled() && isFeatureEnabled("PRICING", session.companyId) && isFeatureEnabled("STORE_ORDERING", session.companyId) && canManagePriceSheets(session);
   return (
-    <SettingsShell activePath="/dashboard/settings/company" session={session} showHoldModules={showHoldModules} subtitle="영업·주문·배송에 쓰이는 회사 정보를 한 곳에서 관리합니다." title="회사 정보">
-      {session.userId ? <MyAccountLoginCard kakao={loginMethods.kakao} loginId={loginMethods.loginId} status={params?.kakao} /> : null}
+    <SettingsShell accountStatus={params?.kakao} activePath="/dashboard/settings/company" session={session} showHoldModules={showHoldModules} subtitle="영업·주문·배송에 쓰이는 회사 정보를 한 곳에서 관리합니다." title="회사 정보">
       <CompanyProfileForm
         initialTab={params?.tab || "basic"}
         orderContent={orderEnabled ? <StoreOrderSettingsWorkspace companyId={session.companyId} /> : undefined}
         slots={{
-          basic: <CompanySettingsForm hideAside initial={company} sections={["company"]} showHoldModules={showHoldModules} />,
           delivery: <CompanySettingsForm hideAside initial={company} sections={["deliveryTemplates"]} showHoldModules={showHoldModules} />
         }}
       />

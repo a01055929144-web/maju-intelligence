@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { getCompanyProfile, saveCompanyProfile, syncDeliveryRegionsToSalesAreas } from "@/lib/company-profile-store";
+import { getAppUserMobilePhone } from "@/lib/store";
 import { redactCompanyProfile, sanitizeCompanyProfilePatch } from "@/domains/organization/company-profile";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     canEdit: isAdmin || scopeHasCapability(scope, "manage_company"),
     canEditLocked,
     isAdmin,
+    suggestedMainPhone: !record.values.main_phone && scope.customerSession?.userId ? await getAppUserMobilePhone(scope.customerSession.userId) : "",
     values: redactCompanyProfile(record.values, isAdmin)
   });
 }

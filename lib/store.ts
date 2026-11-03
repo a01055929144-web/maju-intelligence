@@ -10844,6 +10844,13 @@ export async function linkKakaoToAppUser(userId: string, kakaoUserId: string): P
   return "linked";
 }
 
+export async function getAppUserMobilePhone(userId: string): Promise<string> {
+  if (!isProductionStoreConfigured() || !userId) return "";
+  const rows = await supabaseRequest<Array<{ phone: string | null }>>(`app_users?select=phone&id=eq.${encodeURIComponent(userId)}&limit=1`).catch(() => []);
+  const digits = (rows[0]?.phone || "").replace(/\D/g, "").replace(/^82/, "0");
+  return /^01[016789]\d{7,8}$/.test(digits) ? digits.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
+}
+
 export async function getAppUserLoginMethods(userId: string): Promise<{ kakao: boolean; loginId: string }> {
   if (!isProductionStoreConfigured() || !userId) return { kakao: false, loginId: "" };
   const rows = await supabaseRequest<Array<{ kakao_user_id: string | null; login_id: string | null }>>(

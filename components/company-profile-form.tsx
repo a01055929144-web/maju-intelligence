@@ -1,7 +1,7 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Lock, Plus, Trash2 } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Lock, MapPin, Plus, Trash2 } from "lucide-react";
 import {
   type CompanyProfileField,
   type CompanyProfileSection,
@@ -20,10 +20,22 @@ type ProfilePayload = {
   isAdmin: boolean;
   message?: string;
   regionSync?: { added: string[]; skipped: string[] };
+  suggestedMainPhone?: string;
   values: CompanyProfileValues;
 };
 
 type Contact = { name: string; phone: string; hours: string };
+type AddressResult = { address: string; jibunAddress?: string; latitude?: number; longitude?: number; postalCode?: string };
+type CompanyBasics = { name: string; originAddress: string; originLat?: number; originLng?: number };
+
+async function searchKakaoAddress(query: string): Promise<{ message?: string; results: AddressResult[] }> {
+  if (query.trim().length < 2) return { message: "주소를 2글자 이상 입력하세요.", results: [] };
+  const response = await fetch(`/api/address-search?query=${encodeURIComponent(query.trim())}`, { cache: "no-store" }).catch(() => null);
+  const payload = response ? ((await response.json().catch(() => null)) as { message?: string; results?: AddressResult[] } | null) : null;
+  if (!response?.ok) return { message: payload?.message || "주소 검색에 실패했습니다.", results: [] };
+  const results = payload?.results || [];
+  return { message: results.length ? "" : "검색 결과가 없습니다.", results };
+}
 
 /** 회사 정보 통합 화면. 운영(설정 > 회사 정보)과 관리자(고객사 관리)가 같은 화면을 씁니다. */
 export function CompanyProfileForm({ companyId, initialTab = "basic", orderContent, slots }: {
@@ -41,6 +53,38 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  // 11/3: 회사명·출발지(companies)도 이 화면에서 함께 저장합니다(중복 카드 제거). 관리자 화면은 고객사 관리에서.
+  const [basics, setBasics] = useState<CompanyBasics | null>(null);
+  const savedSnapshot = useRef("");
+  const snapshot = useCallback((nextValues: CompanyProfileValues, nextBasics: CompanyBasics | null) => JSON.stringify([nextValues, nextBasics]), []);
+  const dirty = Boolean(data) && savedSnapshot.current !== snapshot(values, basics);
+
+  useEffect(() => {
+    if (companyId) return;
+    void fetch("/api/customer/settings", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { company?: CompanyBasics } | null) => {
+        if (!payload?.company) return;
+        const next = { name: payload.company.name || "", originAddress: payload.company.originAddress || "", originLat: payload.company.originLat, originLng: payload.company.originLng };
+        setBasics(next);
+        setValues((currentValues) => { savedSnapshot.current = snapshot(currentValues, next); return currentValues; });
+      })
+      .catch(() => null);
+  }, [companyId, snapshot]);
+
+  // 저장하지 않고 떠나면 알립니다(새로고침·닫기·다른 메뉴 클릭).
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const onClick = (event: MouseEvent) => {
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || anchor.target === "_blank" || anchor.href.startsWith("javascript:")) return;
+      if (!window.confirm("저장하지 않은 내용이 있습니다. 저장하지 않고 이동할까요?")) { event.preventDefault(); event.stopPropagation(); }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", onClick, true); };
+  }, [dirty]);
 
   useEffect(() => {
     let active = true;
@@ -50,11 +94,14 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
         if (!active) return;
         if (!response.ok || !payload) { setNotice({ tone: "error", text: payload?.message || "회사 정보를 불러오지 못했습니다." }); return; }
         setData(payload);
-        setValues(payload.values || {});
+        const loaded = payload.values || {};
+        setBasics((currentBasics) => { savedSnapshot.current = snapshot(loaded, currentBasics); return currentBasics; });
+        // 대표 휴대폰이 비어 있으면 카카오 가입 휴대폰 번호로 먼저 채웁니다(저장은 대표가 확인 후).
+        setValues(!loaded.main_phone && payload.suggestedMainPhone ? { ...loaded, main_phone: payload.suggestedMainPhone } : loaded);
       })
       .catch(() => { if (active) setNotice({ tone: "error", text: "네트워크 연결을 확인해 주세요." }); });
     return () => { active = false; };
-  }, [query]);
+  }, [query, snapshot]);
 
   const isAdmin = Boolean(data?.isAdmin);
   const sections = useMemo(() => {
@@ -75,6 +122,23 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
     setSaving(true);
     setNotice(null);
     try {
+      if (basics && savedSnapshot.current !== snapshot(values, basics)) {
+        const original = JSON.parse(savedSnapshot.current || "[null,null]")[1] as CompanyBasics | null;
+        if (!original || original.name !== basics.name || original.originAddress !== basics.originAddress) {
+          if (!basics.name.trim()) throw new Error("회사명을 입력해 주세요.");
+          if (basics.originAddress.trim() && (!Number.isFinite(basics.originLat) || !Number.isFinite(basics.originLng))) throw new Error("출발지는 주소 검색 결과에서 골라 주세요.");
+          const settings = await fetch("/api/customer/settings", { cache: "no-store" }).then((response) => response.json()).catch(() => null) as { company?: Record<string, unknown> } | null;
+          const companyResponse = await fetch("/api/customer/settings", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...(settings?.company || {}), name: basics.name.trim(), originAddress: basics.originAddress, originLat: basics.originLat, originLng: basics.originLng, section: "company" })
+          });
+          if (!companyResponse.ok) {
+            const message = ((await companyResponse.json().catch(() => null)) as { error?: string } | null)?.error;
+            throw new Error(message || "회사명·출발지를 저장하지 못했습니다.");
+          }
+        }
+      }
       const response = await fetch("/api/company-profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -84,6 +148,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       if (!response.ok || !payload) throw new Error(payload?.message || "저장하지 못했습니다.");
       setData(payload);
       setValues(payload.values || {});
+      savedSnapshot.current = snapshot(payload.values || {}, basics);
       const added = payload.regionSync?.added || [];
       const skipped = payload.regionSync?.skipped || [];
       setNotice({
@@ -143,7 +208,10 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
           <div className="mt-1 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full bg-teal-600" style={{ width: `${Math.round((progress.filled / progress.total) * 100)}%` }} /></div>
         </div>
         {editable ? (
-          <button className="maju-button-primary h-9 px-4 text-xs" disabled={saving} onClick={() => void save()} type="button">{saving ? "저장 중" : "저장"}</button>
+          <div className="flex items-center gap-2">
+            {dirty ? <span className="text-[11px] font-bold text-amber-700">저장 안 됨</span> : null}
+            <button className="maju-button-primary h-9 px-4 text-xs" disabled={saving} onClick={() => void save()} type="button">{saving ? "저장 중" : "저장"}</button>
+          </div>
         ) : null}
       </div>
 
@@ -167,6 +235,9 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       {current ? (
         <div className="grid gap-3 p-4 md:grid-cols-2">
           {current.description ? <p className="text-xs font-semibold text-slate-500 md:col-span-2">{current.description}</p> : null}
+          {current.id === "basic" && basics ? (
+            <CompanyBasicsFields basics={basics} onChange={setBasics} readOnly={!editable} />
+          ) : null}
           {current.id === "order" ? (
             <div className="md:col-span-2">{orderContent || <p className="rounded-md bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">주문 링크를 켜면 주문 마감·배송일·최소 주문 금액을 여기서 정합니다.</p>}</div>
           ) : null}
@@ -179,6 +250,8 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
                 fileUrl={data.fileUrls[field.key]}
                 key={field.key}
                 onChange={(value) => setValue(field.key, value)}
+                onChangeExtra={setValue}
+                postcode={String(values.business_postcode || "")}
                 onUpload={(file) => void upload(field, file)}
                 readOnly={readOnly}
                 uploading={uploading === field.key}
@@ -193,10 +266,65 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
   );
 }
 
+function AddressSearchInput({ onPick, placeholder, readOnly, value }: { onPick: (result: AddressResult | null, text: string) => void; placeholder?: string; readOnly: boolean; value: string }) {
+  const [results, setResults] = useState<AddressResult[]>([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    const found = await searchKakaoAddress(value);
+    setBusy(false);
+    setResults(found.results);
+    setMessage(found.message || "");
+  }
+  return (
+    <div>
+      <div className="mt-1 flex gap-1.5">
+        <input className="h-9 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-xs font-semibold disabled:bg-slate-50" disabled={readOnly} onChange={(event) => { onPick(null, event.target.value); setResults([]); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void run(); } }} placeholder={placeholder} value={value} />
+        {!readOnly ? <button className="maju-button-secondary h-9 shrink-0 px-3 text-xs" disabled={busy} onClick={() => void run()} type="button"><MapPin className="h-3.5 w-3.5" />{busy ? "검색 중" : "주소 검색"}</button> : null}
+      </div>
+      {message ? <p className="mt-1 text-[11px] font-semibold text-slate-500">{message}</p> : null}
+      {results.length ? (
+        <div className="mt-1 divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+          {results.map((result, index) => (
+            <button className="block w-full px-3 py-2 text-left text-xs hover:bg-teal-50" key={`${result.address}-${index}`} onClick={() => { onPick(result, result.address); setResults([]); setMessage("선택했습니다. 저장을 눌러 주세요."); }} type="button">
+              <span className="font-bold text-slate-900">{result.address}</span>
+              {result.postalCode ? <span className="ml-1 text-slate-500">({result.postalCode})</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CompanyBasicsFields({ basics, onChange, readOnly }: { basics: CompanyBasics; onChange: (next: CompanyBasics) => void; readOnly: boolean }) {
+  return (
+    <>
+      <div>
+        <p className="text-[11px] font-black text-slate-600">회사명<span className="text-rose-600">*</span></p>
+        <input className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-semibold disabled:bg-slate-50" disabled={readOnly} onChange={(event) => onChange({ ...basics, name: event.target.value })} value={basics.name} />
+      </div>
+      <div>
+        <p className="text-[11px] font-black text-slate-600">출발지(창고) 주소</p>
+        <AddressSearchInput
+          onPick={(result, text) => onChange(result ? { ...basics, originAddress: result.address, originLat: result.latitude, originLng: result.longitude } : { ...basics, originAddress: text, originLat: undefined, originLng: undefined })}
+          placeholder="도로명 주소로 검색"
+          readOnly={readOnly}
+          value={basics.originAddress}
+        />
+        <p className="mt-1 text-[11px] font-medium text-slate-500">지도·배송 코스의 출발점입니다.</p>
+      </div>
+    </>
+  );
+}
+
 function FieldInput({
-  canEditLocked, field, fileUrl, onChange, onUpload, readOnly, uploading, value
+  canEditLocked, field, fileUrl, onChange, onChangeExtra, onUpload, postcode, readOnly, uploading, value
 }: {
   canEditLocked: boolean;
+  onChangeExtra: (key: string, value: unknown) => void;
+  postcode: string;
   field: CompanyProfileField;
   fileUrl?: string;
   onChange: (value: unknown) => void;
@@ -205,7 +333,7 @@ function FieldInput({
   uploading: boolean;
   value: unknown;
 }) {
-  const wide = ["textarea", "contacts", "checks", "tags"].includes(field.type);
+  const wide = ["textarea", "contacts", "checks", "checksOther", "tags"].includes(field.type);
   const inputClass = "mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs font-semibold disabled:bg-slate-50 disabled:text-slate-600";
   const label = (
     <p className="flex items-center gap-1 text-[11px] font-black text-slate-600">
@@ -225,6 +353,53 @@ function FieldInput({
     case "time":
       control = <input className={inputClass} disabled={readOnly} onChange={(event) => onChange(event.target.value)} type={field.type} value={String(value ?? "").slice(0, field.type === "time" ? 5 : 10)} />;
       break;
+    case "mobile":
+      control = <input className={inputClass} disabled={readOnly} inputMode="tel" onChange={(event) => onChange(event.target.value)} placeholder="010-0000-0000" value={String(value ?? "")} />;
+      break;
+    case "address":
+      control = (
+        <>
+          <AddressSearchInput
+            onPick={(result, text) => { onChange(result ? result.address : text); if (result) onChangeExtra("business_postcode", result.postalCode || ""); }}
+            placeholder="도로명 주소로 검색"
+            readOnly={readOnly}
+            value={String(value ?? "")}
+          />
+          {postcode ? <p className="mt-1 text-[11px] font-semibold text-slate-500">우편번호 {postcode}</p> : null}
+        </>
+      );
+      break;
+    case "checksOther": {
+      const selected = Array.isArray(value) ? (value as string[]) : [];
+      const options = (field.options || []) as readonly string[];
+      const others = selected.filter((item) => !options.includes(item));
+      control = (
+        <div className="mt-1 space-y-1.5">
+          <div className="flex flex-wrap gap-1">
+            {options.map((option) => (
+              <button
+                aria-pressed={selected.includes(option)}
+                className={`h-8 rounded-full border px-3 text-xs font-bold ${selected.includes(option) ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`}
+                disabled={readOnly}
+                key={option}
+                onClick={() => onChange(selected.includes(option) ? selected.filter((item) => item !== option) : [...selected, option])}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <input
+            className={inputClass}
+            disabled={readOnly}
+            onChange={(event) => onChange([...selected.filter((item) => options.includes(item)), ...event.target.value.split(",").map((item) => item.trimStart())])}
+            placeholder="기타 (쉼표로 구분해 직접 입력)"
+            value={others.join(", ")}
+          />
+        </div>
+      );
+      break;
+    }
     case "number":
       control = <input className={inputClass} disabled={readOnly} inputMode="numeric" onChange={(event) => onChange(event.target.value.replace(/[^\d]/g, ""))} value={value === null || value === undefined ? "" : String(value)} />;
       break;
