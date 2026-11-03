@@ -2313,7 +2313,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               const Icon = item.icon;
               const mapLeadPanelOpen = activeView === "map" && (mapPanelMode === "newLead" || mapPanelMode === "salesLead");
               const selected = item.value === "leads"
-                ? initialView === "leads" || mapLeadPanelOpen
+                ? mapLeadPanelOpen
                 : activeView === item.value && !(item.value === "map" && mapLeadPanelOpen);
               return (
                 <button
