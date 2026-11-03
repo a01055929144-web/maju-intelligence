@@ -3496,7 +3496,7 @@ function PermitLeadDetailPanel({
             <PermitLeadActionRailButton
               disabled={converting || Boolean(convertedCustomerId)}
               icon={UserCheck}
-              label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "다시 전환" : "거래처 전환"}
+              label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "거래처 연결 다시 시도" : "거래처 전환"}
               loading={converting}
               onClick={() => void convertLeadToCustomer()}
             />

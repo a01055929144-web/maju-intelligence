@@ -643,7 +643,7 @@ export function LeadContactChannelsPanel({
       {storePhone ? <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-slate-600">전화번호 보기</summary><p className="pb-2 text-xs font-semibold text-slate-700">매장 유선 {storePhone} · 참고용(콜드콜 대상 아님)</p></details> : null}
       <details className="mt-2 rounded-lg border border-slate-200 px-3 py-1">
         <summary className="cursor-pointer py-2 text-xs font-bold text-slate-600">
-          연락 거부 관리{dncState.entries.length ? ` · ${dncState.entries.length}건 등록됨` : ""}{!dncState.loading && !dncState.enabled ? " (비활성)" : ""}
+          연락 거부 관리{dncState.entries.length ? ` · ${dncState.entries.length}건 등록됨` : ""}{!dncState.loading && !dncState.enabled ? " · 운영 승인 전 비활성화됨" : ""}
         </summary>
         <div className="mb-2 grid gap-1.5 sm:grid-cols-2">
           {([
