@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "MAJU Intelligence";
+export const alt = "MAJU";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -41,7 +41,7 @@ export default function OpengraphImage() {
           M
         </div>
         <div style={{ display: "flex", color: "#ffffff", fontSize: 68, fontWeight: 900, letterSpacing: -1 }}>
-          MAJU Intelligence
+          MAJU
         </div>
         <div style={{ display: "flex", marginTop: 20, color: "rgba(255,255,255,0.82)", fontSize: 32, fontWeight: 600 }}>
           거래처·배송 코스·매출을 한 화면에서 관리하는 영업 운영 플랫폼

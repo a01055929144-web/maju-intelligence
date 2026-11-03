@@ -71,6 +71,7 @@ export async function PATCH(request: NextRequest) {
         companyId: session.companyId,
         invitationId: body.invitationId,
         employeeName: body.employeeName,
+        employeePhone: body.employeePhone,
         role: body.role,
         status: body.status,
         assignedManagerName: body.assignedManagerName,

@@ -625,6 +625,8 @@ export type StaffInvitationUpdateInput = {
   companyId: string;
   invitationId: string;
   employeeName?: string;
+  /** 11/3: 표에서 바로 고치는 연락처. 빈 값이면 지웁니다. */
+  employeePhone?: string;
   role?: StaffInvitation["role"];
   status?: Extract<StaffInvitation["status"], "pending" | "revoked">;
   // 빈 문자열("")을 넘기면 지정 해제(null)로 저장됩니다.
@@ -3180,6 +3182,11 @@ export async function updateStaffInvitation(input: StaffInvitationUpdateInput, a
     const employeeName = input.employeeName.trim();
     if (!employeeName) throw new Error("직원 이름은 비워둘 수 없습니다.");
     patch.employee_name = employeeName;
+  }
+  if (input.employeePhone !== undefined) {
+    const digits = input.employeePhone.replace(/\D/g, "");
+    if (digits && !/^01[016789]\d{7,8}$/.test(digits)) throw new Error("연락처는 010으로 시작하는 휴대폰 번호로 입력해 주세요.");
+    patch.employee_phone = digits || null;
   }
   if (input.role) patch.role = input.role;
   if (input.status) patch.status = input.status;
