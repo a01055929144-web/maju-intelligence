@@ -59,7 +59,8 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
   const isAdmin = Boolean(data?.isAdmin);
   const sections = useMemo(() => {
     const list = visibleCompanyProfileSections(isAdmin);
-    const at = list.findIndex((section) => section.id === "delivery");
+    // 11/3 탭 순서: 기본(서류 포함) > 품목 > 주문 > 배송 > 결제 > 상담
+    const at = list.findIndex((section) => section.id === "products");
     const order: CompanyProfileSection = { description: "주문 링크에 그대로 안내됩니다.", fields: [], id: "order", title: "주문" };
     return [...list.slice(0, at + 1), order, ...list.slice(at + 1)];
   }, [isAdmin]);

@@ -8822,7 +8822,7 @@ function QuoteDrawer({
           </p>
 
           <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[760px] bg-white p-10 text-slate-950" ref={quoteImageRef}>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">MAJU Intelligence</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-teal-700">MAJU</p>
             <div className="mt-3 flex items-end justify-between border-b-2 border-slate-900 pb-4">
               <div>
                 <h1 className="text-3xl font-black">식자재 납품 견적서</h1>

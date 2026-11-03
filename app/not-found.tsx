@@ -11,7 +11,7 @@ export default function NotFound() {
               <MapPin className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-black">MAJU Intelligence</p>
+              <p className="text-sm font-black">MAJU</p>
               <p className="mt-0.5 text-xs font-semibold text-slate-300">영업·배송 운영 플랫폼</p>
             </div>
           </div>
