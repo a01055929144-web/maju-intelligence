@@ -14476,7 +14476,8 @@ export async function getLeadDmSettings(companyId: string): Promise<{ excluded: 
 
 export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string }) {
   if (!isProductionStoreConfigured()) return { persisted: false };
-  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=like.lead_dm*`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  // 11/4: 영업 자료(lead_dm_kit·lead_dm_link_*)는 지우지 않도록 두 키만 지웁니다.
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=in.(lead_dm,lead_dm_exclude)`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   const rows = [
     { company_id: companyId, template_key: "lead_dm", label: "리드 DM 기본 문구", body: input.template.trim(), sort_order: 9000, is_active: true },
     ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : [])

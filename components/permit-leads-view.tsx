@@ -11,7 +11,6 @@ import {
   ArrowUpDown,
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronDown,
   CircleSlash,
   Copy,
@@ -20,7 +19,6 @@ import {
   ExternalLink,
   EyeOff,
   FileImage,
-  Gauge,
   Instagram,
   ListFilter,
   Loader2,
@@ -1612,7 +1610,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   }
 
   return (
-    <section className="flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6">
+    <section className={`flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6 ${selectedLead && detailMode === "drawer" ? "lg:pr-[calc(min(46vw,720px)+0.75rem)]" : ""}`}>
       {/* 11/4: 신규/영업 리드는 왼쪽 메뉴 하나(리드)로 합치고, 화면 왼쪽 위 스위치로 전환합니다. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <nav aria-label="리드 종류" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
@@ -2932,11 +2930,6 @@ function PermitLeadDetailPanel({
     kakaoPlaceUrl: externalSignals.kakaoPlaceUrl || fallbackPlaceLinks.kakaoPlaceUrl,
     naverPlaceUrl: externalSignals.naverPlaceUrl || fallbackPlaceLinks.naverPlaceUrl
   };
-  const externalInfoSources = [
-    externalSignals.naverPlaceUrl || externalSignals.kakaoPlaceUrl || externalSignals.googlePlaceUrl ? "플레이스" : "",
-    externalSignals.reviewCount || externalSignals.rating ? "리뷰" : "",
-    externalSignals.keywordVolume ? "검색량" : ""
-  ].filter(Boolean);
   const [quoteDraftSavedAt, setQuoteDraftSavedAt] = useState(() => readQuoteDraft(quoteSubject)?.savedAt || "");
   const [nextActionDate, setNextActionDate] = useState("");
   const [actionHistory, setActionHistory] = useState<PermitLeadActionItem[]>([]);
@@ -3386,13 +3379,13 @@ function PermitLeadDetailPanel({
 
   return (
     <div
-      className={detailMode === "page" ? "fixed inset-0 z-40 flex bg-slate-50" : "fixed inset-0 z-40 flex justify-end bg-slate-950/45"}
+      className={detailMode === "page" ? "fixed inset-0 z-40 flex bg-slate-50" : "fixed inset-0 z-40 flex justify-end bg-slate-950/45 lg:left-auto lg:w-[min(46vw,720px)] lg:bg-transparent"}
       onClick={detailMode === "page" ? undefined : onClose}
     >
       <div
         aria-label={`${lead.businessName} 리드 상세`}
         aria-modal={detailMode === "drawer" ? "true" : undefined}
-        className={`relative h-full w-full overflow-y-auto bg-white ${detailMode === "page" ? "mx-auto max-w-[1440px]" : "lg:w-[60vw] lg:max-w-[1080px] shadow-2xl"}`}
+        className={`relative h-full w-full overflow-y-auto bg-white ${detailMode === "page" ? "mx-auto max-w-[1440px]" : "border-l border-slate-200 shadow-2xl"}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -3410,6 +3403,9 @@ function PermitLeadDetailPanel({
               </span>
               <span className="text-xs font-semibold text-slate-500">{PERMIT_PERIOD_BADGE_LABEL[lead.leadPeriod]}</span>
               <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-xs font-black text-blue-700">{leadPriorityBadge(lead).label}</span>
+              {/* 11/4: '영업 우선순위' 카드는 배지로 줄였습니다. 이유는 마우스를 올리면 보입니다. */}
+              <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-xs font-black text-teal-700" title={[...confidence.reasons, ...lead.nextActionReasons].join("\n") || undefined}>우선순위 {confidence.score}점 · {confidence.label}</span>
+              {getPermitLeadRecommendationTags(lead).slice(0, 3).map((tag) => <span className="rounded-full bg-white px-1.5 py-0.5 text-xs font-bold text-teal-800 ring-1 ring-inset ring-teal-200" key={tag}>{tag}</span>)}
               {getPermitLeadOpenDate(lead) ? <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-bold text-slate-600">{formatLeadOpenDateAge(getPermitLeadOpenDate(lead))}</span> : null}
               {lead.kakaoMatchMethod ? (
                 <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${
@@ -3486,66 +3482,24 @@ function PermitLeadDetailPanel({
               {detailActionMessage}
             </p>
           ) : null}
-          <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-teal-700">영업 우선순위</p>
-                <p className="mt-1 text-2xl font-bold text-slate-950">
-                  {confidence.score}점 <span className="text-sm text-teal-700">{confidence.label}</span>
-                </p>
-              </div>
-              <Gauge className="h-8 w-8 text-teal-700" />
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(getPermitLeadRecommendationTags(lead).length ? getPermitLeadRecommendationTags(lead) : confidence.reasons).slice(0, 4).map((reason) => (
-                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-200" key={reason}>
-                  {reason}
-                </span>
-              ))}
-              {!getPermitLeadRecommendationTags(lead).length && !confidence.reasons.length ? (
-                <span className="text-xs font-medium text-slate-600">전화·주소·사업자 상태를 보강하면 우선순위를 더 정확히 계산할 수 있습니다.</span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-slate-950">{lead.nextAction || "상세 확인"}</p>
-                <p className="mt-0.5 truncate text-xs font-medium text-slate-500">현재 상태 · {lead.status}</p>
-              </div>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">빠른 실행</span>
-            </div>
-            <div className="mt-3 grid grid-cols-4 gap-2">
-              <PermitLeadActionRailButton
-                disabled={!lead.phone || Boolean(savingAction)}
-                icon={Phone}
-                label="전화"
-                loading={savingAction === "통화 성공"}
-                onClick={() => void recordAction("call", "통화 성공")}
-                primary={intent === "call"}
-              />
-              <a
-                className="flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                href={placeLinks.kakaoPlaceUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <MapPin className="h-4 w-4" />
-                지도
-              </a>
-              <PermitLeadActionRailButton icon={Instagram} label="DM" onClick={() => void copyDmScript()} primary={intent === "dm"} />
-              {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : null}
-            </div>
-            <button
-              className="maju-button-secondary mt-2 h-10 w-full justify-center text-xs disabled:opacity-50"
+          <div className="grid grid-cols-4 gap-2">
+            <PermitLeadActionRailButton
+              disabled={!lead.phone || Boolean(savingAction)}
+              icon={Phone}
+              label="전화"
+              loading={savingAction === "통화 성공"}
+              onClick={() => void recordAction("call", "통화 성공")}
+              primary={intent === "call"}
+            />
+            <PermitLeadActionRailButton icon={Instagram} label="DM 문구" onClick={() => void copyDmScript()} primary={intent === "dm"} />
+            {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : <span />}
+            <PermitLeadActionRailButton
               disabled={converting || Boolean(convertedCustomerId)}
+              icon={UserCheck}
+              label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "다시 전환" : "거래처 전환"}
+              loading={converting}
               onClick={() => void convertLeadToCustomer()}
-              type="button"
-            >
-              {converting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
-              {convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처 확인" : "거래처 전환 완료") : converting ? "전환 중..." : conversionFailed ? "거래처 연결 다시 시도" : "거래처로 전환"}
-            </button>
+            />
           </div>
 
           <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} />
@@ -3601,32 +3555,20 @@ function PermitLeadDetailPanel({
             </div>
           ) : null}
 
-          <div className="rounded-xl border border-pink-100 bg-pink-50/50 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">인스타 영업 정보</p>
-                <p className="mt-0.5 text-xs font-semibold text-slate-500">
-                  {instagramHandle ? `${instagramHandle} 저장됨` : "인스타 ID를 확인한 뒤 저장하면 검색·DM 작업에 반영됩니다."}
-                </p>
-              </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black text-slate-950">인스타</p>
               <div className="flex shrink-0 gap-1.5">
-                <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramUrl} rel="noreferrer" target="_blank">
-                  <Instagram className="h-3.5 w-3.5" />
-                  인스타
-                </a>
-                {!instagramHandle ? (
-                  <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramWebSearchUrl} rel="noreferrer" target="_blank" title="상호명·지역·업종으로 인스타 계정을 웹에서 교차 검색합니다.">
-                    <Search className="h-3.5 w-3.5" />
-                    웹 검색
-                  </a>
-                ) : null}
+                <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramUrl} rel="noreferrer" target="_blank"><Instagram className="h-3.5 w-3.5" />열기</a>
+                {!instagramHandle ? <a className="maju-button-secondary h-8 px-2 text-xs" href={instagramWebSearchUrl} rel="noreferrer" target="_blank" title="상호명·지역으로 인스타 계정을 웹에서 찾습니다."><Search className="h-3.5 w-3.5" />웹 검색</a> : <button className="maju-button-secondary h-8 px-2 text-xs" onClick={() => void copyInstagramHandle()} type="button"><Copy className="h-3.5 w-3.5" />ID 복사</button>}
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
               <input
-                className="h-9 min-w-0 rounded-lg border border-pink-100 bg-white px-3 text-xs font-bold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                aria-label="인스타 아이디"
+                className="h-9 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 outline-none placeholder:text-slate-400 focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
                 onChange={(event) => setInstagramDraft(event.target.value)}
-                placeholder="@instagram_id 또는 instagram.com/id"
+                placeholder="@아이디 또는 instagram.com/아이디"
                 value={instagramDraft}
               />
               <button className="maju-button-primary h-9 justify-center px-3 text-xs disabled:opacity-50" disabled={instagramSaving || instagramDraft.trim() === savedInstagramUrl.trim()} onClick={() => void saveInstagramProfile()} type="button">
@@ -3649,22 +3591,6 @@ function PermitLeadDetailPanel({
               }}
               saving={instagramSaving}
             />
-            {instagramHandle ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => void copyInstagramHandle()} type="button">
-                  <Copy className="h-3.5 w-3.5" />
-                  ID 복사
-                </button>
-                <button className="maju-button-primary h-8 justify-center text-xs" onClick={() => void copyDmScript()} type="button">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  DM 문안 복사
-                </button>
-                <button className="maju-button-secondary h-8 justify-center text-xs" disabled={Boolean(savingAction)} onClick={() => void recordAction("dm", "DM 발송")} type="button">
-                  {savingAction === "DM 발송" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  발송 기록
-                </button>
-              </div>
-            ) : null}
             {instagramSaveMessage ? <p className="mt-2 text-[11px] font-bold text-pink-700">{instagramSaveMessage}</p> : null}
             {copyMessage ? <p className="mt-2 text-[11px] font-bold text-pink-700">{copyMessage}</p> : null}
           </div>
@@ -3741,57 +3667,22 @@ function PermitLeadDetailPanel({
           ) : null}
 
           <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-black text-slate-950">외부 정보 확인</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
-                    externalInfoSources.length ? "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100" : "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100"
-                  }`}>
-                    {externalInfoSources.length ? `${externalInfoSources.join(" · ")} 확보` : "보강 필요"}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">플레이스, 리뷰, 사진, 메뉴 정보를 열어 영업 전 보강합니다.</p>
-              </div>
-              <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <a className="maju-button-secondary h-8 justify-center px-2 text-xs" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank">
-                네이버
-              </a>
-              <a className="maju-button-secondary h-8 justify-center px-2 text-xs" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank">
-                카카오맵에서 보기
-              </a>
-              <a className="maju-button-secondary h-8 justify-center px-2 text-xs" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank">
-                구글
-              </a>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2">
-              <PermitSignal label="리뷰" value={externalSignals.reviewCount ? `${externalSignals.reviewCount.toLocaleString()}개` : "확인 필요"} />
-              <PermitSignal label="평점" value={externalSignals.rating ? `${externalSignals.rating.toLocaleString()}점` : "확인 필요"} />
-              <PermitSignal label="검색량" value={externalSignals.keywordVolume ? externalSignals.keywordVolume.toLocaleString() : "확인 필요"} />
-              <PermitSignal label="플레이스" value={externalSignals.naverPlaceUrl || externalSignals.kakaoPlaceUrl || externalSignals.googlePlaceUrl ? "연결됨" : "검색 필요"} />
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                className="maju-button-primary h-8 justify-center text-xs"
-                disabled={externalInfoSaving}
-                onClick={() => void enrichExternalInfo()}
-                type="button"
-              >
+            {/* 11/4: 지도 링크는 상호 옆 K·N·G로 옮기고, 의미 없던 '이력 기록' 버튼은 뺐습니다. */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black text-slate-950">외부 정보</p>
+              <button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={externalInfoSaving} onClick={() => void enrichExternalInfo()} type="button">
                 {externalInfoSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                다시 보강
-              </button>
-              <button
-                className="maju-button-secondary h-8 justify-center text-xs"
-                disabled={Boolean(savingAction)}
-                onClick={() => void recordAction("hold", "외부 정보 확인")}
-                type="button"
-              >
-                {savingAction === "외부 정보 확인" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                이력 기록
+                {externalInfoSaving ? "불러오는 중" : "불러오기"}
               </button>
             </div>
+            <p className="mt-1 text-xs font-semibold text-slate-600">
+              {[
+                externalSignals.reviewCount ? `리뷰 ${externalSignals.reviewCount.toLocaleString()}개` : "",
+                externalSignals.rating ? `평점 ${externalSignals.rating.toLocaleString()}` : "",
+                externalSignals.keywordVolume ? `검색량 ${externalSignals.keywordVolume.toLocaleString()}` : "",
+                externalSignals.naverPlaceUrl || externalSignals.kakaoPlaceUrl || externalSignals.googlePlaceUrl ? "플레이스 연결됨" : ""
+              ].filter(Boolean).join(" · ") || "아직 불러온 정보가 없습니다."}
+            </p>
             {lead.kakaoMatchMethod ? (
               <div className={`mt-2 rounded-lg border p-2.5 ${
                 lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
@@ -3835,10 +3726,7 @@ function PermitLeadDetailPanel({
           {onOpenQuote ? <div className="rounded-xl border border-teal-100 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">견적 진행</p>
-                <p className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">
-                  견적 요청 리드는 초안을 저장해두고, DM/문자 발송 직전에 다시 열어 수정합니다.
-                </p>
+                <p className="text-sm font-black text-slate-950">견적</p>
               </div>
               <FileImage className="h-4 w-4 shrink-0 text-teal-600" />
             </div>
@@ -3871,41 +3759,35 @@ function PermitLeadDetailPanel({
                 {nextActionDate ? "재연락 예정 기록" : "재연락일 선택 필요"}
               </button>
             </div>
-            <p className="mt-2 text-[11px] font-semibold leading-4 text-slate-400">
-              {nextActionDate ? `재연락 예정은 ${nextActionDate} 기준으로 저장됩니다.` : "상단 빠른 액션 또는 아래 영업 결과 기록에서 재연락일을 먼저 선택하세요."}
-            </p>
           </div> : null}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-3" aria-labelledby="lead-business-identity-title">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <h4 className="text-sm font-black text-slate-950" id="lead-business-identity-title">사업자 정보</h4>
-                <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">번호를 수정하면 리드 중복 확인과 거래처 전환에 같은 값을 사용합니다.</p>
-              </div>
-              <span className="w-fit shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
-                {convertedCustomerId || lead.matchedCustomerId ? "국세청 상태 · 거래처 원장에서 확인" : "국세청 상태 · 거래처 전환 후 확인"}
-              </span>
-            </div>
-            <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <label className="min-w-0">
-                <span className="sr-only">사업자등록번호</span>
-                <input
-                  aria-describedby={businessNumberMessage ? "lead-business-number-message" : undefined}
-                  className="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold tracking-wide text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                  inputMode="numeric"
-                  maxLength={12}
-                  onChange={(event) => setBusinessNumberDraft(event.target.value)}
-                  placeholder="숫자 10자리"
-                  value={businessNumberDraft}
-                />
-              </label>
+          <section className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-600" aria-labelledby="lead-business-identity-title">
+            <h4 className="mb-1 text-sm font-black text-slate-950" id="lead-business-identity-title">기본 정보</h4>
+            <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
+            <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
+            <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
+            <PermitDetailRow label="인허가일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
+            <PermitDetailRow label={lead.source === "kakao_keyword_search" ? "탐색 기준점" : "관할기관"} value={lead.jurisdiction || "확인 필요"} />
+            <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
+            <div className="mt-2 grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+              <span className="text-slate-500">사업자번호</span>
+              <input
+                aria-describedby={businessNumberMessage ? "lead-business-number-message" : undefined}
+                aria-label="사업자등록번호"
+                className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold tracking-wide text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                inputMode="numeric"
+                maxLength={12}
+                onChange={(event) => setBusinessNumberDraft(event.target.value)}
+                placeholder="숫자 10자리"
+                value={businessNumberDraft}
+              />
               <button
-                className="maju-button-primary h-11 w-full justify-center px-4 sm:w-auto"
+                className="maju-button-primary h-9 justify-center px-3 text-xs"
                 disabled={businessNumberSaving || businessNumberDraft.replace(/[^0-9]/g, "") === (lead.businessNumber || "").replace(/[^0-9]/g, "")}
                 onClick={() => void saveBusinessNumber()}
                 type="button"
               >
-                {businessNumberSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {businessNumberSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 저장
               </button>
             </div>
@@ -3914,43 +3796,8 @@ function PermitLeadDetailPanel({
                 {businessNumberMessage}
               </p>
             ) : null}
+            {lead.isDuplicate || lead.excludeReason ? <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-800">제외 사유: {lead.excludeReason}</p> : null}
           </section>
-
-          <div className="rounded-lg border border-slate-200 p-3 text-xs font-bold text-slate-600">
-            <PermitDetailRow label="리드 출처" value={permitLeadSourceLabel(lead.source)} />
-            <PermitDetailRow label="주소" value={lead.address || "확인 필요"} />
-            <PermitDetailRow label="전화" value={lead.phone || "확인 필요"} />
-            <PermitDetailRow label="대표자" value={lead.representativeName || "확인 필요"} />
-            <PermitDetailRow label="개시일" value={getPermitLeadOpenDate(lead) || "확인 필요"} />
-            <PermitDetailRow label={lead.source === "kakao_keyword_search" ? "탐색 기준점" : "관할기관"} value={lead.jurisdiction || "확인 필요"} />
-            <PermitDetailRow label="인스타" value={instagramHandle || "검색 필요"} />
-          </div>
-
-          {getPermitLeadRecommendationTags(lead).length || lead.nextActionReasons.length ? (
-            <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3">
-              <p className="text-[11px] font-black uppercase tracking-wide text-teal-700">우선 방문 사유</p>
-              {getPermitLeadRecommendationTags(lead).length ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {getPermitLeadRecommendationTags(lead).map((reason) => (
-                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-teal-800 ring-1 ring-inset ring-teal-200" key={reason}>{reason}</span>
-                  ))}
-                </div>
-              ) : null}
-              {lead.nextActionReasons.length ? (
-              <ul className="mt-1.5 space-y-1 text-xs font-bold text-teal-900">
-                {lead.nextActionReasons.slice(0, 3).map((reason) => (
-                  <li key={reason}>· {reason}</li>
-                ))}
-              </ul>
-              ) : null}
-            </div>
-          ) : null}
-
-          {lead.isDuplicate || lead.excludeReason ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">제외 사유: {lead.excludeReason}</p>
-          ) : null}
-
-          <p className="text-[11px] font-semibold text-slate-400">현재 상태: {lead.status}</p>
 
           <div className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-3" ref={historySectionRef}>
             <button aria-expanded={historyOpen} className="flex w-full items-start justify-between gap-3 text-left" onClick={() => setHistoryOpen((value) => !value)} type="button">
@@ -4051,11 +3898,9 @@ function PermitLeadDetailPanel({
               </div>
             ) : null}
           </div>
-          <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-3">
-            <p className="text-sm font-black text-rose-950">관리 작업</p>
-            <p className="mt-0.5 text-[11px] font-semibold leading-4 text-rose-700">중복, 비대상, 영업 제외 리드는 목록에서 제외 처리합니다.</p>
-            <button className="maju-button-secondary mt-3 w-full justify-center text-rose-600" disabled={Boolean(savingAction)} onClick={() => void recordAction("exclude", "제외")} type="button">
-              {savingAction === "제외" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleSlash className="h-4 w-4" />}
+          <div className="flex justify-end">
+            <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50" disabled={Boolean(savingAction)} onClick={() => void recordAction("exclude", "제외")} title="중복·비대상 리드를 목록에서 뺍니다." type="button">
+              {savingAction === "제외" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleSlash className="h-3.5 w-3.5" />}
               영업 제외
             </button>
           </div>
@@ -4185,15 +4030,6 @@ function PermitDetailRow({ label, value }: { readonly label: string; readonly va
       <span className="shrink-0 text-slate-400">{label}</span>
       <span className="truncate text-right text-slate-800">{value}</span>
     </p>
-  );
-}
-
-function PermitSignal({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="rounded-md bg-white px-2.5 py-2 ring-1 ring-inset ring-slate-200">
-      <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className="mt-0.5 truncate text-xs font-bold text-slate-800">{value}</p>
-    </div>
   );
 }
 
