@@ -10775,7 +10775,7 @@ export async function listPermitLeadActions(companyId: string, leadId: string, l
 
   const safeLimit = Math.max(1, Math.min(50, limit));
   const rows = await supabaseRequest<PermitLeadActionRow[]>(
-    `lead_actions?select=id,action_type,result,memo,actor_name,created_at&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(
+    `lead_actions?select=id,action_type,result,memo,actor_name,created_at&voided_at=is.null&company_id=eq.${encodeURIComponent(companyId)}&lead_id=eq.${encodeURIComponent(
       leadId
     )}&or=(action_type.neq.hold,result.is.null,result.not.in.("외부 정보 보강","인스타 정보 수정"))&order=created_at.desc&limit=${safeLimit}`
   );
@@ -10814,13 +10814,24 @@ type SalesContactLedgerRow = {
   created_at: string;
 };
 
+/** 잘못 남긴 컨택 기록을 '취소됨'으로 표시하고(삭제하지 않음) 리드의 최근 연락 요약을 다시 계산합니다. */
+export async function voidLeadAction(companyId: string, actionId: string, actor: string, reason: string) {
+  const rows = await supabaseRequest<Array<{ lead_id: string | null; voided: boolean }>>("rpc/void_lead_action_v1", {
+    method: "POST",
+    body: JSON.stringify({ p_action_id: actionId, p_actor: actor, p_company_id: companyId, p_reason: reason })
+  });
+  const row = rows?.[0];
+  if (!row?.voided) throw new Error("이미 취소됐거나 찾을 수 없는 기록입니다.");
+  return { leadId: row.lead_id };
+}
+
 /** 모바일에서 쌓인 회사 전체 컨택 이력과 후속 일정을 PC 원장용으로 조회합니다. */
 export async function listSalesContactLedger(companyId: string, limit = 1000): Promise<SalesContactLedgerItem[]> {
   if (!isProductionStoreConfigured()) return [];
 
   const safeLimit = Math.max(1, Math.min(5000, Math.trunc(limit)));
   const actions = await supabaseRequest<SalesContactLedgerRow[]>(
-    `lead_actions?select=id,lead_id,action_type,result,memo,actor_name,collateral_types,follow_up_at,created_at&company_id=eq.${encodeURIComponent(companyId)}&or=(action_type.neq.hold,result.is.null,result.not.in.("외부 정보 보강","인스타 정보 수정"))&order=created_at.desc&limit=${safeLimit}`
+    `lead_actions?select=id,lead_id,action_type,result,memo,actor_name,collateral_types,follow_up_at,created_at&company_id=eq.${encodeURIComponent(companyId)}&voided_at=is.null&or=(action_type.neq.hold,result.is.null,result.not.in.("외부 정보 보강","인스타 정보 수정"))&order=created_at.desc&limit=${safeLimit}`
   );
   if (!actions.length) return [];
 

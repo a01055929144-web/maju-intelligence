@@ -4,6 +4,7 @@ import { BellRing, CalendarClock, CheckCircle2, FileText, History, Phone, Search
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
+import { VoidContactButton } from "@/components/void-contact-button";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { listSalesContactLedger, type SalesContactLedgerItem } from "@/lib/store";
@@ -146,8 +147,8 @@ export default async function SalesContactsPage({
           {!loadError && visibleItems.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1050px] border-collapse text-left">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-500"><tr><th className="px-4 py-3">매장</th><th className="px-4 py-3">리드 → 거래처</th><th className="px-4 py-3">액션·결과</th><th className="px-4 py-3">메모</th><th className="px-4 py-3">담당자</th><th className="px-4 py-3">후속 연락</th><th className="px-4 py-3">기록일</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{visibleItems.map((item) => <ContactRow customerLedgerHref={scoped("/customers/data")} item={item} key={item.id} today={today} />)}</tbody>
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500"><tr><th className="px-4 py-3">매장</th><th className="px-4 py-3">리드 → 거래처</th><th className="px-4 py-3">액션·결과</th><th className="px-4 py-3">메모</th><th className="px-4 py-3">담당자</th><th className="px-4 py-3">후속 연락</th><th className="px-4 py-3">기록일</th><th className="px-4 py-3"><span className="sr-only">관리</span></th></tr></thead>
+                <tbody className="divide-y divide-slate-100">{visibleItems.map((item) => <ContactRow companyId={isAdminPreview ? companyId : undefined} customerLedgerHref={scoped("/customers/data")} item={item} key={item.id} today={today} />)}</tbody>
               </table>
             </div>
           ) : !loadError ? <div className="px-5 py-12 text-center"><p className="font-semibold text-slate-950">조건에 맞는 컨택 기록이 없습니다.</p><p className="mt-1 text-sm text-slate-500">모바일 영업에서 기록하면 회사별 원장에 자동으로 쌓입니다.</p></div> : null}
@@ -157,7 +158,7 @@ export default async function SalesContactsPage({
   );
 }
 
-function ContactRow({ customerLedgerHref, item, today }: { customerLedgerHref: string; item: SalesContactLedgerItem; today: string }) {
+function ContactRow({ companyId, customerLedgerHref, item, today }: { companyId?: string; customerLedgerHref: string; item: SalesContactLedgerItem; today: string }) {
   const followUpDate = item.followUpAt?.slice(0, 10);
   const overdue = Boolean(followUpDate && followUpDate < today);
   const dueToday = followUpDate === today;
@@ -169,6 +170,7 @@ function ContactRow({ customerLedgerHref, item, today }: { customerLedgerHref: s
     <td className="px-4 py-3 text-sm font-semibold text-slate-700"><span className="inline-flex items-center gap-1"><UserRound className="h-4 w-4 text-slate-400" />{item.actorName || "미기록"}</span></td>
     <td className="px-4 py-3">{followUpDate ? <div><Badge className={overdue ? "bg-rose-100 text-rose-800" : dueToday ? "bg-amber-100 text-amber-900" : "bg-blue-50 text-blue-700"}>{overdue ? "기한 지남" : dueToday ? "오늘" : "예정"}</Badge><p className={`mt-1.5 text-sm font-bold ${overdue ? "text-rose-700" : "text-slate-800"}`}>{formatKoreanDate(item.followUpAt!)}</p></div> : <span className="text-sm text-slate-400">일정 없음</span>}</td>
     <td className="px-4 py-3 text-sm text-slate-600">{formatKoreanDateTime(item.createdAt)}</td>
+    <td className="px-4 py-3"><VoidContactButton actionId={item.id} companyId={companyId} /></td>
   </tr>;
 }
 
