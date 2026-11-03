@@ -8,7 +8,7 @@ export type StaffPermissionRole = (typeof STAFF_PERMISSION_ROLES)[number];
 export const STAFF_DUTY_LABELS: Record<StaffDuty, string> = {
   sales: "영업",
   delivery: "배송",
-  office: "사무(내근)",
+  office: "사무",
   other: "기타"
 };
 

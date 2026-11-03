@@ -6,7 +6,7 @@ import { STAFF_DUTIES, STAFF_DUTY_LABELS } from "../domains/organization/staff-a
 describe("settings restructure (11/3)", () => {
   it("adds office and other duties", () => {
     expect(STAFF_DUTIES).toEqual(["sales", "delivery", "office", "other"]);
-    expect(STAFF_DUTY_LABELS.office).toBe("사무(내근)");
+    expect(STAFF_DUTY_LABELS.office).toBe("사무");
   });
   it("keeps home highlight exact and maps settings tabs to 회사 정보", () => {
     const sidebar = readFileSync(resolve(process.cwd(), "components/app-sidebar.tsx"), "utf8");
