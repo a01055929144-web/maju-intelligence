@@ -23,8 +23,9 @@ export function isHoldModulePath(pathname: string) {
   return HOLD_MODULE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+// 11/3 대표 피드백: 브레이크타임 직접 입력은 사용자 피로 → 기본 꺼짐. 자동 수집된 영업시간 표시는 유지.
 export function isLeadBusinessHoursDraftEnabled(value = process.env.NEXT_PUBLIC_LEAD_BUSINESS_HOURS_UI_ENABLED || "") {
-  return value !== "false" && value !== "0";
+  return isExplicitlyEnabled(value);
 }
 
 function isExplicitlyEnabled(value: string) {

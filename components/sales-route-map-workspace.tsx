@@ -418,7 +418,7 @@ export const tmapWaypointLimit = 15;
 // v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
 const MAP_FILTER_POP_TITLES: Record<MapFilterPopKey, string> = {
-  date: "개업일",
+  date: "인허가일",
   industry: "업종",
   more: "더보기",
   region: "영업 지역",
@@ -1491,8 +1491,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       active: Boolean(mapOpenDatePreset),
       icon: CalendarDays,
       key: "date",
-      label: mapOpenDatePreset === "custom" ? "개업 기간 직접" : mapOpenDatePreset ? `개업 ${mapOpenDatePreset}일` : "개업일",
-      title: "개업일"
+      label: mapOpenDatePreset === "custom" ? "인허가 기간 직접" : mapOpenDatePreset ? `인허가 ${mapOpenDatePreset}일` : "인허가일",
+      title: "인허가일 — 대표자 변경·재허가 날짜일 수 있어 실제 개업일과 다를 수 있습니다"
     },
     { active: Boolean(mapLeadStageFilter), icon: ListFilter, key: "stage", label: summarizeMultiFilter(mapLeadStageFilter, "단계", stageLabelOf), title: "단계" }
   ];
@@ -1665,7 +1665,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     isVehicleFiltered ? `${selectedVehicleLabel} 담당만` : "",
     mapLeadRegionSigungu ? summarizeMultiFilter(mapLeadRegionSigungu, "") : "",
     mapLeadIndustryFilter ? summarizeMultiFilter(mapLeadIndustryFilter, "") : "",
-    mapOpenDatePreset === "custom" ? "개업 기간 직접" : mapOpenDatePreset ? `개업 최근 ${mapOpenDatePreset}일` : "",
+    mapOpenDatePreset === "custom" ? "인허가 기간 직접" : mapOpenDatePreset ? `인허가 최근 ${mapOpenDatePreset}일` : "",
     mapLeadStageFilter ? `단계 ${summarizeMultiFilter(mapLeadStageFilter, "", stageLabelOf)}` : "",
     mapLeadReminderOnly ? "리마인드만" : ""
   ].filter(Boolean).join(" · ") || "전체 조건";
@@ -2975,9 +2975,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   </div>
                   <p className="text-[11px] font-black text-slate-500">기간 직접</p>
                   <div className="flex items-center gap-1.5">
-                    <input aria-label="개업일 시작" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
+                    <input aria-label="인허가일 시작" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
                     <span className="text-xs text-slate-400">~</span>
-                    <input aria-label="개업일 끝" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
+                    <input aria-label="인허가일 끝" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
                   </div>
                   <button
                     className="h-8 w-full rounded-md border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
@@ -6518,7 +6518,7 @@ const LEAD_LIST_SORT_OPTIONS: Array<{ label: string; value: LeadListSortKey }> =
   { label: "기본 순", value: "default" },
   { label: "상호명", value: "name" },
   { label: "업종", value: "industry" },
-  { label: "개업일", value: "openDate" },
+  { label: "인허가일", value: "openDate" },
   { label: "등급", value: "grade" }
 ];
 
