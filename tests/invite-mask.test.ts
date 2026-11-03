@@ -1,3 +1,6 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 describe("invite screen hides the answer (11/4)", () => {
   it("masks the last four digits and asks for them", () => {
