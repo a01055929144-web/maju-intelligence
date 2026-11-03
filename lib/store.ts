@@ -3760,7 +3760,8 @@ export async function getStaffInvitationPreview(inviteCode: string): Promise<Sta
     companyId: invitation.company_id,
     companyName: company?.name || "회사 워크스페이스",
     employeeName: invitation.employee_name || "모바일 직원",
-    maskedPhone: maskPhoneNumber(invitation.employee_phone),
+    // 11/4: 끝 4자리는 본인 확인 답이라 초대 화면에 보이지 않게 앞자리만 보여줍니다.
+    maskedPhone: invitation.employee_phone ? `${(invitation.employee_phone.replace(/\D/g, "").slice(0, 3) || "010")}-****-****` : "",
     role: invitation.role || "member",
     status: invitation.status
   };
