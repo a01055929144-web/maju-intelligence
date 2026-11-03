@@ -9,7 +9,7 @@ export type CompanyProfileField = {
   readonly label: string;
   readonly type: CompanyProfileFieldType;
   readonly adminOnly?: boolean;
-  /** 운영 계정은 보기만(관리자에게 변경 요청). */
+  /** 대표(owner)와 MAJU 관리자만 수정. 직원·운영 관리자는 보기만. (11/3 대표 피드백으로 대표 수정 허용) */
   readonly locked?: boolean;
   /** 첫 로그인 필수 입력. */
   readonly required?: boolean;
@@ -130,11 +130,12 @@ export function visibleCompanyProfileSections(isAdmin: boolean) {
 }
 
 /** 사용자가 보낸 값을 필드 정의대로 정리합니다. 알 수 없는 키·권한 없는 키·파일 경로는 버립니다. */
-export function sanitizeCompanyProfilePatch(input: CompanyProfileValues, isAdmin: boolean): { patch: CompanyProfileValues; error?: string } {
+export function sanitizeCompanyProfilePatch(input: CompanyProfileValues, isAdmin: boolean, canEditLocked = isAdmin): { patch: CompanyProfileValues; error?: string } {
   const patch: CompanyProfileValues = {};
   for (const field of COMPANY_PROFILE_FIELDS) {
     if (!(field.key in input)) continue;
-    if ((field.adminOnly || field.locked) && !isAdmin) continue;
+    if (field.adminOnly && !isAdmin) continue;
+    if (field.locked && !canEditLocked) continue;
     if (field.type === "file") continue; // 파일은 업로드 API로만 바꿉니다.
     const raw = input[field.key];
     switch (field.type) {

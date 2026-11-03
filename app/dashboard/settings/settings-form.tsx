@@ -30,7 +30,11 @@ const SECTION_LABELS: Record<SettingsSection, string> = {
   telegram: "텔레그램 알림 설정"
 };
 
-export function CompanySettingsForm({ initial, showHoldModules = false }: { initial: CompanySettings; showHoldModules?: boolean }) {
+export type CompanySettingsSection = "company" | "quote" | "messagingSender" | "deliveryTemplates" | "telegram";
+
+/** 11/3: 회사 정보 탭(기본·배송)과 문자 발송 탭이 필요한 카드만 골라 씁니다. sections를 안 주면 예전처럼 전부. */
+export function CompanySettingsForm({ hideAside = false, initial, sections, showHoldModules = false }: { hideAside?: boolean; initial: CompanySettings; sections?: CompanySettingsSection[]; showHoldModules?: boolean }) {
+  const show = (section: CompanySettingsSection) => !sections || sections.includes(section);
   const [form, setForm] = useState({
     businessType: initial.businessType,
     deliveryCompleteMessage: initial.deliveryCompleteMessage || "요청하신 위치에 배송 적재 완료했습니다.",
@@ -219,19 +223,19 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
   }
 
   return (
-    <form className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={(event) => event.preventDefault()}>
+    <form className={`grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 ${hideAside ? "" : "xl:grid-cols-[minmax(0,1fr)_320px]"}`} onSubmit={(event) => event.preventDefault()}>
       <div className="space-y-5">
         {/* 2026-09-08 개선: 예전엔 이 카드 하나("회사 설정" 헤더)에 회사 정보 + 문자 발송 설정 +
             텔레그램 이탈 알림까지 서로 다른 세 기능이 한 카드 안에 섞여 있어서, 카드 헤더가 말하는
             내용과 실제 카드 본문 내용이 어긋나 보였습니다. 셋을 각자 헤더가 맞는 별도 카드로 나눕니다. */}
-        <section className="maju-section-card">
+        {show("company") ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">
               <Building2 className="mr-1 h-3.5 w-3.5" />
-              회사 설정
+              회사 정보
             </Badge>
-            <h2 className="text-2xl font-black text-slate-950">회사 기준정보</h2>
-            <p className="mt-2 text-sm font-semibold text-slate-500">지도와 배송코스에 사용할 회사명과 출발지를 관리합니다.</p>
+            <h2 className="text-xl font-black text-slate-950">회사명·출발지</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500">지도·배송 코스·견적서에 쓰이는 회사명과 출발지(창고)입니다.</p>
           </div>
           <div className="space-y-4 p-4">
             <label className="space-y-1.5">
@@ -255,7 +259,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
                 <span className="block text-[11px] font-semibold text-slate-400">대표자가 직접 배송·현장 업무를 할 때만 라이브 차량과 기사 화면에 사용됩니다.</span>
               </label>
               <label className="space-y-1.5">
-                <span className="text-xs font-bold text-muted-foreground">업태/업종</span>
+                <span className="text-xs font-bold text-muted-foreground">주력 업종 <span className="font-semibold text-slate-400">(리드 기본값)</span></span>
                 <input
                   className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                   value={form.businessType}
@@ -264,7 +268,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
               </label>
             </div>
             <div className="space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground">물류 출발지 주소</span>
+              <span className="text-xs font-bold text-muted-foreground">출발지(창고) 주소</span>
               <div className="flex gap-2">
                 <input
                   className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
@@ -316,9 +320,9 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
             onSave={() => void saveSection("company")}
             state={saveStates.company}
           />
-        </section>
+        </section> : null}
 
-        {showHoldModules ? <section className="maju-section-card">
+        {showHoldModules && show("quote") ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-100">
               <FileText className="mr-1 h-3.5 w-3.5" />
@@ -350,14 +354,14 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
           />
         </section> : null}
 
-        <section className="maju-section-card">
+        {show("messagingSender") ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-100">
               <SendHorizonal className="mr-1 h-3.5 w-3.5" />
               문자 발송 설정
             </Badge>
-            <h2 className="text-xl font-black text-slate-950">문자 발신 정보와 기본 문구</h2>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">현장 직원이 배송 메모를 남기지 않아도 여기 저장된 문구로 자동 발송됩니다.</p>
+            <h2 className="text-xl font-black text-slate-950">문자 발신 정보</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">문자를 보낼 때 점주에게 보이는 문의번호와 표시명입니다. 문자 발송은 추후 열립니다.</p>
           </div>
           <div className="space-y-4 p-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -392,6 +396,22 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
               />
               <p className="text-xs font-semibold leading-5 text-slate-500">공용 SOLAPI 발신번호와 고객사 문의번호를 분리해 관리합니다. 점주에게 보이는 문의번호는 위 문자 문의번호입니다.</p>
             </label>
+          </div>
+          <SectionSaveFooter
+            disabled={saveStates.messaging.status === "saving" || !sectionDirty.messaging}
+            dirty={sectionDirty.messaging}
+            label="문자 설정 저장"
+            onSave={() => void saveSection("messaging")}
+            state={saveStates.messaging}
+          />
+        </section> : null}
+
+        {show("deliveryTemplates") ? <section className="maju-section-card">
+          <div className="maju-card-header">
+            <h2 className="text-xl font-black text-slate-950">배송 알림 문구</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">배송기사가 메모를 남기지 않아도 여기 저장된 문구로 안내합니다.</p>
+          </div>
+          <div className="space-y-4 p-4">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -423,13 +443,13 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
           <SectionSaveFooter
             disabled={saveStates.messaging.status === "saving" || !sectionDirty.messaging}
             dirty={sectionDirty.messaging}
-            label="문자 설정 저장"
+            label="배송 알림 문구 저장"
             onSave={() => void saveSection("messaging")}
             state={saveStates.messaging}
           />
-        </section>
+        </section> : null}
 
-        {showHoldModules ? <section className="maju-section-card">
+        {showHoldModules && show("telegram") ? <section className="maju-section-card">
           <div className="maju-card-header">
             <Badge className="mb-3 w-fit bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-100">
               <Bell className="mr-1 h-3.5 w-3.5" />
@@ -505,7 +525,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
         </section> : null}
       </div>
 
-      <aside className="h-fit maju-section-card xl:sticky xl:top-4">
+      {hideAside ? null : <aside className="h-fit maju-section-card xl:sticky xl:top-4">
         <div className="maju-card-header flex items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-black text-slate-950">적용 현황</h2>
@@ -538,7 +558,7 @@ export function CompanySettingsForm({ initial, showHoldModules = false }: { init
           </details>
           <p className="px-1 text-[11px] font-semibold text-slate-400">마지막 수정: {initial.updatedAt}</p>
         </div>
-      </aside>
+      </aside>}
     </form>
   );
 }

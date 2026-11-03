@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { rememberLoginMethod } from "@/lib/last-login-method";
 
 type OAuthLoginButtonsProps = {
   inviteCode?: string;
@@ -28,6 +29,7 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
           event.preventDefault();
           return;
         }
+        rememberLoginMethod("kakao");
         setMoving(true);
       }}
     >

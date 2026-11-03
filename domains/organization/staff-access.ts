@@ -1,4 +1,5 @@
-export const STAFF_DUTIES = ["sales", "delivery"] as const;
+// 11/3: 사무(내근: 주문 접수·정산·전화 응대)와 기타 추가. DB 제약 변경 승인 필요(docs/db-approval/20261103_staff_duties_office.sql).
+export const STAFF_DUTIES = ["sales", "delivery", "office", "other"] as const;
 export type StaffDuty = (typeof STAFF_DUTIES)[number];
 
 export const STAFF_PERMISSION_ROLES = ["owner", "manager", "staff", "temporary"] as const;
@@ -6,7 +7,9 @@ export type StaffPermissionRole = (typeof STAFF_PERMISSION_ROLES)[number];
 
 export const STAFF_DUTY_LABELS: Record<StaffDuty, string> = {
   sales: "영업",
-  delivery: "배송"
+  delivery: "배송",
+  office: "사무",
+  other: "기타"
 };
 
 export const STAFF_PERMISSION_LABELS: Record<StaffPermissionRole, string> = {
@@ -48,7 +51,7 @@ export function validateStaffAccess(input: {
   permissionRole: StaffPermissionRole;
   expiresOn?: string | null;
 }) {
-  if (!input.duties.length) return "영업 또는 배송 업무를 하나 이상 선택해주세요.";
+  if (!input.duties.length) return "담당 업무를 하나 이상 선택해주세요.";
   if (input.permissionRole === "temporary" && !input.expiresOn) return "임시 직원은 만료일이 필요합니다.";
   return null;
 }

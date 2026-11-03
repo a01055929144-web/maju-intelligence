@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Lock, Plus, Trash2 } from "lucide-react";
 import {
   type CompanyProfileField,
+  type CompanyProfileSection,
   type CompanyProfileValues,
   WEEKDAY_LABELS,
   companyProfileProgress,
@@ -13,6 +14,7 @@ import {
 type ProfilePayload = {
   available: boolean;
   canEdit: boolean;
+  canEditLocked?: boolean;
   company: { name: string; businessRegistrationNumber: string; originAddress: string };
   fileUrls: Record<string, string>;
   isAdmin: boolean;
@@ -24,11 +26,18 @@ type ProfilePayload = {
 type Contact = { name: string; phone: string; hours: string };
 
 /** 회사 정보 통합 화면. 운영(설정 > 회사 정보)과 관리자(고객사 관리)가 같은 화면을 씁니다. */
-export function CompanyProfileForm({ companyId }: { companyId?: string }) {
+export function CompanyProfileForm({ companyId, initialTab = "basic", orderContent, slots }: {
+  companyId?: string;
+  initialTab?: string;
+  /** '주문' 탭 내용(주문 마감·최소 금액 등). 11/3: 주문 설정을 회사 정보 안으로. */
+  orderContent?: ReactNode;
+  /** 탭 아래에 붙일 기존 설정 카드(기본: 회사명·출발지, 배송: 배송 알림 문구·영업 지역). */
+  slots?: Partial<Record<string, ReactNode>>;
+}) {
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const [data, setData] = useState<ProfilePayload | null>(null);
   const [values, setValues] = useState<CompanyProfileValues>({});
-  const [tab, setTab] = useState("basic");
+  const [tab, setTab] = useState(initialTab);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -48,7 +57,12 @@ export function CompanyProfileForm({ companyId }: { companyId?: string }) {
   }, [query]);
 
   const isAdmin = Boolean(data?.isAdmin);
-  const sections = useMemo(() => visibleCompanyProfileSections(isAdmin), [isAdmin]);
+  const sections = useMemo(() => {
+    const list = visibleCompanyProfileSections(isAdmin);
+    const at = list.findIndex((section) => section.id === "delivery");
+    const order: CompanyProfileSection = { description: "주문 링크에 그대로 안내됩니다.", fields: [], id: "order", title: "주문" };
+    return [...list.slice(0, at + 1), order, ...list.slice(at + 1)];
+  }, [isAdmin]);
   const progress = companyProfileProgress(values);
   const current = sections.find((section) => section.id === tab) || sections[0];
 
@@ -120,7 +134,7 @@ export function CompanyProfileForm({ companyId }: { companyId?: string }) {
           <p className="text-base font-black text-slate-950">회사 정보</p>
           <p className="mt-0.5 text-xs font-semibold text-slate-500">
             {data.company.name || "회사명 미등록"} · 사업자 {data.company.businessRegistrationNumber || "미등록"}
-            {!isAdmin ? <span className="ml-1 inline-flex items-center gap-0.5 text-slate-400"><Lock className="h-3 w-3" />변경은 관리자에게 요청하세요</span> : null}
+            {!data.canEditLocked ? <span className="ml-1 inline-flex items-center gap-0.5 text-slate-400"><Lock className="h-3 w-3" />잠금 항목은 대표만 바꿀 수 있습니다</span> : null}
           </p>
         </div>
         <div className="w-44">
@@ -152,13 +166,14 @@ export function CompanyProfileForm({ companyId }: { companyId?: string }) {
       {current ? (
         <div className="grid gap-3 p-4 md:grid-cols-2">
           {current.description ? <p className="text-xs font-semibold text-slate-500 md:col-span-2">{current.description}</p> : null}
-          {current.id === "basic" ? (
-            <ReadOnlyRow label="출발지" value={data.company.originAddress || "미등록 — 아래 '출발지'에서 입력하세요"} />
+          {current.id === "order" ? (
+            <div className="md:col-span-2">{orderContent || <p className="rounded-md bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">주문 링크를 켜면 주문 마감·배송일·최소 주문 금액을 여기서 정합니다.</p>}</div>
           ) : null}
           {current.fields.map((field) => {
-            const readOnly = !editable || (Boolean(field.locked) && !isAdmin);
+            const readOnly = !editable || (Boolean(field.locked) && !data.canEditLocked);
             return (
               <FieldInput
+                canEditLocked={Boolean(data.canEditLocked)}
                 field={field}
                 fileUrl={data.fileUrls[field.key]}
                 key={field.key}
@@ -172,22 +187,15 @@ export function CompanyProfileForm({ companyId }: { companyId?: string }) {
           })}
         </div>
       ) : null}
+      {current && slots?.[current.id] ? <div className="space-y-4 border-t border-slate-100 p-4">{slots[current.id]}</div> : null}
     </section>
   );
 }
 
-function ReadOnlyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="md:col-span-2">
-      <p className="text-[11px] font-black text-slate-600">{label}</p>
-      <p className="mt-1 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">{value}</p>
-    </div>
-  );
-}
-
 function FieldInput({
-  field, fileUrl, onChange, onUpload, readOnly, uploading, value
+  canEditLocked, field, fileUrl, onChange, onUpload, readOnly, uploading, value
 }: {
+  canEditLocked: boolean;
   field: CompanyProfileField;
   fileUrl?: string;
   onChange: (value: unknown) => void;
@@ -202,7 +210,7 @@ function FieldInput({
     <p className="flex items-center gap-1 text-[11px] font-black text-slate-600">
       {field.label}
       {field.required ? <span className="text-rose-600">*</span> : null}
-      {readOnly && field.locked ? <Lock aria-label="관리자만 변경" className="h-3 w-3 text-slate-400" /> : null}
+      {readOnly && field.locked && !canEditLocked ? <Lock aria-label="대표만 변경" className="h-3 w-3 text-slate-400" /> : null}
     </p>
   );
   const hint = field.hint ? <p className="mt-1 text-[11px] font-medium text-slate-500">{field.hint}</p> : null;

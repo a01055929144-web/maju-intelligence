@@ -191,7 +191,9 @@ function isItemSelected(item: AppSidebarItem, pathname: string | null, currentSe
   if (!pathname) return activeFallback === item.active;
   const [hrefWithoutHash] = item.href.split("#");
   const [hrefPath = "/", hrefQuery = ""] = hrefWithoutHash.split("?");
-  if (hrefPath === "/revenue/pricing" && pathname !== hrefPath) return false;
+  if ((hrefPath === "/revenue/pricing" || hrefPath === "/dashboard") && pathname !== hrefPath) return false;
+  // 11/3: 설정 하위 탭(권역·호차·문자 발송·보안·고급)은 왼쪽 '회사 정보'를 켭니다. 직원은 '직원·권한'.
+  if (hrefPath === "/dashboard/settings/company" && pathname.startsWith("/dashboard/settings/") && !pathname.startsWith("/dashboard/settings/staff")) return true;
   if (hrefPath === "/" ? pathname !== "/" : pathname !== hrefPath && !pathname.startsWith(`${hrefPath}/`)) return false;
   const expected = new URLSearchParams(hrefQuery);
   const current = new URLSearchParams(currentSearch);

@@ -9,7 +9,8 @@ const SETTINGS_TABS = [
   ["/dashboard/settings/staff", "직원 관리"],
   ["/dashboard/settings/routes", "권역·호차"],
   ["/dashboard/settings/security", "보안 기록"],
-  ["/dashboard/settings/advanced", "고급 설정"]
+  ["/dashboard/settings/advanced", "고급 설정"],
+  ["/dashboard/settings/messaging", "문자 발송"]
 ] as const;
 
 export function SettingsShell({ activePath, children, session, showHoldModules, subtitle, title }: {
@@ -20,7 +21,7 @@ export function SettingsShell({ activePath, children, session, showHoldModules, 
   subtitle: string;
   title: string;
 }) {
-  const workspaceActive = activePath === "/dashboard/settings/staff" ? "settings-staff" : activePath === "/dashboard/settings/routes" ? "territory" : "settings";
+  const workspaceActive = activePath === "/dashboard/settings/staff" ? "settings-staff" : "settings";
   return (
     <CustomerAppShell active={workspaceActive} companyName={session.companyName} rightAction={<Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50" href="/map"><ArrowLeft className="h-4 w-4" />지도</Link>} showHoldModules={showHoldModules} subtitle={subtitle} title={title} userName={session.operationalDisplayName || session.invitedEmployeeName || session.name} workspaceRole={session.workspaceRole}>
       <section className="mx-auto w-full min-w-0 max-w-[1560px] px-3 py-3 sm:px-4 sm:py-4">

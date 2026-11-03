@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { type LastLoginMethod, readLoginMethod, rememberLoginMethod } from "@/lib/last-login-method";
 import { ArrowRight, Building2, Check, Loader2, LogIn, Route, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [lastMethod, setLastMethod] = useState<LastLoginMethod | "">("");
+  useEffect(() => setLastMethod(readLoginMethod()), []);
 
   async function login(nextEmail = email, nextPassword = password) {
     setLoading(true);
@@ -46,7 +49,8 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
       }
 
       const payload = await response.json().catch(() => null);
-      // 11/3 결정: 최근 입력값 저장·자동 입력 버튼은 쓰지 않습니다.
+      // 11/3 결정: 최근 입력값 저장·자동 입력 버튼은 쓰지 않습니다. 로그인 '방식'만 기억해 배지로 보여줍니다.
+      rememberLoginMethod("id");
       window.location.href = payload?.mustChangePassword ? "/change-password" : await resolvePostLoginPath();
     } catch (error) {
       setError(error instanceof Error && error.name === "FetchTimeoutError" ? error.message : "네트워크 연결을 확인한 뒤 다시 시도해주세요.");
@@ -106,6 +110,7 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
               <Building2 className="mr-1 h-3.5 w-3.5" />
               {accountLoginEnabled ? "운영 계정" : "회사 계정"}
             </Badge>
+            {lastMethod === "id" ? <span className="mb-3 ml-1.5 inline-flex rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-bold text-white">최근 사용</span> : null}
             <CardTitle className="text-2xl font-bold tracking-[-0.03em]">{accountLoginEnabled ? "아이디로 로그인" : "MAJU 로그인"}</CardTitle>
             <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">
               {accountLoginEnabled ? "관리자에게 발급받은 아이디와 비밀번호로 로그인하세요." : "회사 운영자·관리자는 이메일로 로그인하세요."}
@@ -187,6 +192,7 @@ export function CustomerLoginForm({ accountLoginEnabled }: { accountLoginEnabled
               <Smartphone className="mr-1 h-3.5 w-3.5" />
               {accountLoginEnabled ? "간편 로그인" : "직원용"}
             </Badge>
+            {lastMethod === "kakao" ? <span className="mb-3 ml-1.5 inline-flex rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-bold text-white">최근 사용</span> : null}
             <CardTitle className="text-xl font-bold tracking-[-0.025em]">{accountLoginEnabled ? "카카오로 간편 로그인" : "직원으로 접속"}</CardTitle>
             <p className="mt-1 text-sm font-medium leading-5 text-muted-foreground">
               {accountLoginEnabled ? "카카오가 연결된 계정은 아이디 없이 접속합니다. 직원은 모바일 화면으로 열립니다." : "배송·영업 직원은 회사에서 연결한 소셜 계정으로 접속하세요."}
