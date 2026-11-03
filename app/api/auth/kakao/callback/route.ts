@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeOAuthState, setCustomerSession } from "@/lib/auth";
-import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace } from "@/lib/store";
+import { consumeOAuthState, getCustomerSession, setCustomerSession } from "@/lib/auth";
+import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code") || "";
   const rawState = request.nextUrl.searchParams.get("state") || "";
   const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
-  const inviteCode = stateOk && statePayload !== "personal" ? statePayload : "";
+  const linkMode = stateOk && statePayload === "link";
+  const inviteCode = stateOk && statePayload !== "personal" && !linkMode ? statePayload : "";
 
   if (!stateOk) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
@@ -49,6 +50,13 @@ export async function GET(request: NextRequest) {
     const kakaoUser = await getKakaoUser(token.access_token);
     if (!kakaoUser.id) {
       return redirectJoin(request.url, inviteCode, "kakao_user_failed");
+    }
+
+    if (linkMode) {
+      const session = await getCustomerSession();
+      if (!session?.userId) return NextResponse.redirect(new URL("/dashboard/login", request.url));
+      const linked = await linkKakaoToAppUser(session.userId, String(kakaoUser.id));
+      return NextResponse.redirect(new URL(`/dashboard/settings/company?kakao=${linked}#my-account`, request.url));
     }
 
     const kakaoProfile = {

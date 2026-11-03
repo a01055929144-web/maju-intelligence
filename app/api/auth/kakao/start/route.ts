@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOAuthState } from "@/lib/auth";
+import { createOAuthState, getCustomerSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +9,11 @@ export const dynamic = "force-dynamic";
 // 이제 /dashboard/login과 /mobile/join(초대 코드 있는 경우) 모두 이 라우트 하나로 모입니다.
 export async function GET(request: NextRequest) {
   const inviteCode = request.nextUrl.searchParams.get("invite") || "";
+  // 11/3: 로그인한 계정에 카카오를 연결(아이디 로그인 + 카카오 간편 로그인을 한 계정으로).
+  const linkMode = request.nextUrl.searchParams.get("link") === "1";
+  if (linkMode && !(await getCustomerSession())?.userId) {
+    return NextResponse.redirect(new URL("/dashboard/login", request.url));
+  }
   const clientId = process.env.KAKAO_CLIENT_ID;
   const redirectUri = process.env.KAKAO_REDIRECT_URI;
 
@@ -22,7 +27,7 @@ export async function GET(request: NextRequest) {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    state: await createOAuthState(inviteCode || "personal")
+    state: await createOAuthState(linkMode ? "link" : inviteCode || "personal")
   });
 
   return NextResponse.redirect(`https://kauth.kakao.com/oauth/authorize?${params.toString()}`);
