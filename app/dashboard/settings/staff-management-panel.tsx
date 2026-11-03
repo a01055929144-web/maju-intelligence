@@ -222,6 +222,12 @@ export function StaffManagementPanel({
             })
           });
           if (!accessResult.response?.ok) {
+            // 11/4: 권한 저장이 실패하면 방금 만든 초대를 지워, 목록에 반쯤 만들어진 직원이 남지 않게 합니다.
+            await requestStaffJson("/api/customer/staff-invitations", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ invitationId: invitation.id })
+            });
             failed.push(`${row.employeeName}(${accessResult.payload?.message || "권한 저장 실패"})`);
             continue;
           }
@@ -553,9 +559,20 @@ export function StaffManagementPanel({
 
           {invitations.length ? (
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full min-w-[920px] border-collapse text-sm">
+              <table className="w-full min-w-[1080px] table-fixed border-collapse text-sm">
+                {/* 11/4: 열 너비를 고정해 여백을 맞추고, 좁은 칸에서 글자가 세로로 꺾이지 않게 합니다. */}
+                <colgroup>
+                  <col className="w-[150px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[100px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[170px]" />
+                  <col />
+                  <col className="w-[150px]" />
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
+                  <tr className="whitespace-nowrap border-b border-slate-200 bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
                     <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("name")} type="button">직원{sortMark("name")}</button></th>
                     <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("phone")} type="button">연락처{sortMark("phone")}</button></th>
                     <th className="px-3 py-2.5"><button className="font-black" onClick={() => toggleSort("role")} type="button">직책{sortMark("role")}</button></th>
@@ -574,7 +591,7 @@ export function StaffManagementPanel({
                       <Fragment key={invitation.id}>
                         <tr className="border-b border-slate-100 align-top hover:bg-slate-50/60">
                           {/* 11/3: 이름·연락처는 표에서 바로 고치고, 칸을 벗어나면 저장합니다. */}
-                          <td className="w-[180px] px-3 py-3">
+                          <td className="px-3 py-3">
                             <InlineTextCell
                               ariaLabel={`${invitation.employeeName} 이름`}
                               disabled={!canManageMembers || invitation.membershipOnly || savingId === invitation.id}
@@ -582,7 +599,7 @@ export function StaffManagementPanel({
                               value={invitation.employeeName}
                             />
                           </td>
-                          <td className="w-[160px] px-3 py-3">
+                          <td className="px-3 py-3">
                             <InlineTextCell
                               ariaLabel={`${invitation.employeeName} 연락처`}
                               disabled={!canManageMembers || invitation.membershipOnly || savingId === invitation.id}
@@ -595,7 +612,7 @@ export function StaffManagementPanel({
                           <td className="px-3 py-3">
                             <select
                               aria-label={`${invitation.employeeName} 직책`}
-                              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm font-medium outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={!canManageMembers || savingId === invitation.id}
                               value={invitation.role}
                               onChange={(event) => updateStaff(invitation, { role: event.target.value as StaffInvitation["role"] })}
@@ -608,12 +625,12 @@ export function StaffManagementPanel({
                             </select>
                           </td>
                           <td className="px-3 py-3">
-                            <Badge className={invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : invitation.status === "revoked" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                            <Badge className={`whitespace-nowrap ${invitation.status === "accepted" ? "bg-emerald-100 text-emerald-800" : invitation.status === "revoked" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}`}>
                               {getStatusLabel(invitation.status)}
                             </Badge>
                             {expired ? <p className="mt-1 text-[11px] font-black text-rose-600">기간 만료</p> : null}
                           </td>
-                          <td className="max-w-[150px] px-3 py-3 text-xs font-bold text-slate-500">
+                          <td className="px-3 py-3 text-xs font-bold text-slate-500">
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3 shrink-0" />
                               <span className="truncate">{invitation.expiresAt || "-"}</span>
@@ -707,7 +724,7 @@ export function StaffManagementPanel({
                             ) : (
                               <div className="flex justify-end gap-1">
                               <button
-                                className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-slate-200 bg-white px-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={!canManageMembers || savingId === invitation.id}
                                 onClick={() => updateStaff(invitation, { status: invitation.status === "revoked" ? "pending" : "revoked" })}
                                 title={invitation.status === "revoked" ? "직원 접근을 다시 허용합니다" : "초대와 직원 접근을 해제합니다"}
@@ -730,7 +747,7 @@ export function StaffManagementPanel({
                         </tr>
                         {expanded ? (
                           <tr className="border-b border-slate-100 bg-slate-50/60">
-                            <td className="px-3 py-3" colSpan={7}>
+                            <td className="px-3 py-3" colSpan={8}>
                               <p className="text-xs font-black text-slate-900">직원 이름과 배정 기준</p>
                               <p className="mt-1 text-xs font-bold text-slate-500">직원 이름은 언제든 수정할 수 있습니다. 가입 완료 직원은 거래처 담당자명이나 배송차량도 함께 연결하세요.</p>
                               <StaffAssignmentEditor
