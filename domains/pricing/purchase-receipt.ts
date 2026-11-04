@@ -1,4 +1,5 @@
 import { purchaseLineKey } from "./purchase-import";
+import { cleanCategory } from "./product-category";
 
 /** 11/4: 매입 기록 한 줄(날짜·매입처·품목 단위로 합칩니다). 순수 규칙만 둡니다. */
 export type PurchaseReceiptInputLine = {
@@ -91,7 +92,7 @@ export function planProductTaxTypes(lines: readonly PurchaseReceiptInputLine[], 
   return { conflicts, fill };
 }
 
-export type ProductFieldEdit = { name?: string; spec?: string; unit?: string; taxType?: "taxable" | "exempt" | "" };
+export type ProductFieldEdit = { name?: string; spec?: string; unit?: string; taxType?: "taxable" | "exempt" | ""; category?: string | null };
 
 /** "10kg" → 값 10 + 단위 kg, 숫자로 시작하지 않으면 단위 칸에 그대로 둡니다. */
 export function splitSpec(spec: string) {
@@ -118,6 +119,11 @@ export function buildProductFieldPatch(edit: ProductFieldEdit): { values: Record
     values.purchase_unit = unit.slice(0, 40);
   }
   if (edit.taxType !== undefined) values.tax_type = edit.taxType === "taxable" || edit.taxType === "exempt" ? edit.taxType : null;
+  if (edit.category !== undefined) {
+    const category = cleanCategory(edit.category);
+    if (category && typeof category === "object") return { error: category.error };
+    values.category = category;
+  }
   return Object.keys(values).length ? { values } : { error: "바꿀 내용이 없습니다." };
 }
 
