@@ -134,3 +134,19 @@ describe("aliases and duplicate suspects", () => {
     expect(findDuplicateSuspects({ name: "대파", spec: "", unit: "단" }, products)).toEqual([]);
   });
 });
+
+describe("runLimited", () => {
+  it("keeps order and limits concurrency", async () => {
+    const { runLimited } = await import("../lib/run-limited");
+    let running = 0;
+    let peak = 0;
+    const out = await runLimited([1, 2, 3, 4, 5], 2, async (value) => {
+      running++; peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running--;
+      return value * 2;
+    });
+    expect(out).toEqual([2, 4, 6, 8, 10]);
+    expect(peak).toBe(2);
+  });
+});

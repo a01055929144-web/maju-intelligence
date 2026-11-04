@@ -57,7 +57,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const fileInput = useRef<HTMLInputElement>(null);
   useUnsavedChangesWarning(Object.keys(candidates).length > 0 || Boolean(sheet));
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options: { documents?: boolean } = {}) => {
     setCatalogReady(false);
     const q = new URLSearchParams({ companyId });
     const [catalogResponse, pricingResponse] = await Promise.all([
@@ -72,6 +72,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setPricing(price);
     setCatalogReady(true);
     setDocumentError("");
+    // 11/4: 저장 중간에는 문서 목록(여러 페이지)을 다시 읽지 않아 속도를 높입니다.
+    if (options.documents === false) return catalog.products as CostProduct[];
     try {
       const all: DocumentDraft[] = [];
       for (let page = 1; page <= 200; page++) {
@@ -221,12 +223,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const saved = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(saved.message || "새 상품 등록에 실패했습니다.");
       const ids = (saved.unmatchedSupplierProductIds || []) as string[];
-      for (let offset = 0; offset < ids.length; offset += 25) {
-        const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create-standards", companyId, supplierProductIds: ids.slice(offset, offset + 25) }) });
+      const chunks: string[][] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) chunks.push(ids.slice(offset, offset + 100));
+      const counts = await Promise.all(chunks.map(async (chunk) => {
+        const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create-standards", companyId, supplierProductIds: chunk }) });
         const created = await createdResponse.json().catch(() => ({}));
         if (!createdResponse.ok) throw new Error(created.message || "상품관리 등록에 실패했습니다.");
-        createdCount += Number(created.createdCount || 0);
-      }
+        return Number(created.createdCount || 0);
+      }));
+      createdCount += counts.reduce((sum, value) => sum + value, 0);
     }
     return createdCount;
   }
@@ -320,6 +325,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     const newRows = unmatched;
     try {
       if (unmatched.length) {
+        setMessage(`저장 중… 새 상품 ${unmatched.length}개 상품관리 등록`);
         const created = await createNewProducts(unmatched);
         notes.push(`새 상품 ${created}개 상품관리에 등록`);
         setUnmatched([]);
@@ -338,34 +344,27 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         catch { notes.push("판매가 재계산은 마진 그룹에서 다시 해 주세요"); }
         if (batchId) setUndo((current) => (current ? { ...current, batchId } : current));
       }
-      const fresh = await load();
+      setMessage("저장 중… 상품 정보·원문 연결·매입 기록 정리");
+      const fresh = await load({ documents: false });
       // 새로 등록한 상품까지 다시 맞춰 매입 기록에 상품을 연결합니다.
       const relinked = importedLines.map((line) => line.productId ? line : { ...line, productId: (matchByAlias(aliasKey(line.rawName, line.spec, line.unit), "", fresh) || matchCostImportRow({ code: line.code, cost: line.cost, name: line.name, spec: line.spec, supplier: "", unit: line.unit }, fresh))?.id });
       // 원문 연결(중복 의심 → 기존 상품) 저장 + '상품 정보도 변경'을 고른 것 반영
       const links = Object.values(candidates).map((candidate) => candidate.link).filter((link): link is LinkInput => Boolean(link));
-      if (links.length) {
-        const response = await fetch("/api/price-sheets/links", { body: JSON.stringify({ companyId, fileName, links }), headers: { "Content-Type": "application/json" }, method: "POST" }).catch(() => null);
-        const payload = (await response?.json().catch(() => null)) as { linked?: number } | null;
-        notes.push(response?.ok ? `원문 연결 ${payload?.linked ?? 0}개` : "원문 연결은 다시 시도해 주세요");
-      }
-      for (const [productId, candidate] of Object.entries(candidates)) {
-        if (!candidate.updateFields) continue;
-        await fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, id: productId, ...candidate.updateFields, spec: candidate.updateFields.spec }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null);
-      }
-      // 새로 등록한 상품: 원문으로 찾아 고친 품목명·규격·단위를 상품관리에 반영(단위가 비지 않도록)
+      const edits: Array<Record<string, string>> = [];
+      for (const [productId, candidate] of Object.entries(candidates)) if (candidate.updateFields) edits.push({ id: productId, ...candidate.updateFields });
       for (const row of newRows) {
         const product = matchByAlias(aliasKey(row.rawName || row.name, row.rawName ? row.fileSpec : row.spec, row.rawName ? row.fileUnit : row.unit), "", fresh) || matchCostImportRow({ ...row, supplier: "" }, fresh);
-        if (!product) continue;
-        await fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, id: product.id, name: row.name, spec: row.spec, unit: row.unit }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null);
+        if (product) edits.push({ id: product.id, name: row.name, spec: row.spec, unit: row.unit, ...(row.taxType ? { taxType: row.taxType } : {}) });
       }
-      if (newRows.length || links.length) await load().catch(() => undefined);
+      // 원문 연결과 상품 정보 반영을 동시에(저장 속도)
+      const [linkResult] = await Promise.all([
+        links.length ? fetch("/api/price-sheets/links", { body: JSON.stringify({ companyId, fileName, links }), headers: { "Content-Type": "application/json" }, method: "POST" }).then(async (response) => ({ ok: response.ok, linked: ((await response.json().catch(() => null)) as { linked?: number } | null)?.linked ?? 0 })).catch(() => ({ ok: false, linked: 0 })) : Promise.resolve(null),
+        edits.length ? fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, items: edits }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null) : Promise.resolve(null)
+      ]);
+      if (linkResult) notes.push(linkResult.ok ? `원문 연결 ${linkResult.linked}개` : "원문 연결은 다시 시도해 주세요");
       const receiptNote = await saveReceipts(relinked);
-      // 새 상품 표에서 직접 고른 과세 구분은 파일 값보다 우선합니다.
-      for (const row of newRows.filter((item) => item.taxType)) {
-        const product = matchCostImportRow({ ...row, supplier: "" }, fresh);
-        if (product && product.taxType !== row.taxType) await fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, id: product.id, taxType: row.taxType }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null);
-      }
       setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
+      void load().catch(() => undefined);
       setMessage(`${notes.join(" · ")}${receiptNote}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
     } catch (cause) { setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }

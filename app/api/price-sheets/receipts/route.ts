@@ -5,6 +5,7 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { buildPurchaseReceiptRows, planMissingProductFields, planProductTaxTypes, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
+import { runLimited } from "@/lib/run-limited";
 
 export const dynamic = "force-dynamic";
 
@@ -86,13 +87,13 @@ export async function POST(request: NextRequest) {
     }
     // 나중에 올린 파일로 상품의 빈 칸(규격·단위)을 채웁니다(있는 값은 그대로).
     let fieldsFilled = 0;
-    for (const item of planMissingProductFields(lines, productFields).slice(0, 300)) {
+    await runLimited(planMissingProductFields(lines, productFields).slice(0, 300), 10, async (item) => {
       await supabaseRequest(`product_catalog?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(item.productId)}`, {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ ...item.values, updated_at: new Date().toISOString() })
       }).then(() => { fieldsFilled += 1; }).catch(() => null);
-    }
+    });
     return NextResponse.json({ fieldsFilled, saved: rows.length, taxConflicts: plan.conflicts.length, taxFilled });
   } catch (error) {
     const missing = error instanceof Error && /purchase_receipt_lines|PGRST205|42P01|404/.test(error.message);
