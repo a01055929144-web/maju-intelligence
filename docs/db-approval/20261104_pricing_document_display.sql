@@ -1,5 +1,5 @@
 -- 11/4 견적서·단가표 문서 보기: 품목 격자 열 수 · 행사 블록 모양 · 회사 정보 줄(display) 저장 + 품목 최대 100 → 300.
--- 운영 DB fcmdvveqmcgtioelzqun 승인 문구 필요. 함수 1개(pricing_p1_clean)만 바꾸고 테이블은 바꾸지 않습니다.
+-- APPLIED 2026-11-04 21:20 KST (운영 fcmdvveqmcgtioelzqun, 대표 승인 문구 확인). 함수 1개(pricing_p1_clean)만 바꾸고 테이블은 바꾸지 않습니다.
 -- 기존 문서는 display 가 없으면 기본값(1열·카드·정보 없음)으로 저장됩니다.
 create or replace function public.pricing_p1_clean(p_company uuid, p_content jsonb)
  returns jsonb
