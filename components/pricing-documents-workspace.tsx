@@ -5,6 +5,7 @@ import { documentRequest } from "@/lib/pricing/document-client";
 import {
   koreaDay,
   lineFromCatalog,
+  MAX_DOCUMENT_LINES,
   parseDocument,
   withMargin,
   type CatalogChoice,
@@ -18,6 +19,8 @@ import {
   withLivePromotions,
 } from "@/domains/pricing/document";
 import { PricingDocumentPreview } from "./pricing-document-preview";
+import { PricingDocPaper } from "./pricing-doc-paper";
+import { PricingInfoPanel } from "./pricing-info-panel";
 import { PricingDocumentLibrary } from "./pricing-document-library";
 import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
@@ -58,6 +61,9 @@ export function PricingDocumentsWorkspace({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
   const [view, setView] = useState<"list" | "editor">("list");
+  /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
+  const [docView, setDocView] = useState<"doc" | "table">("doc"),
+    [autoPrint, setAutoPrint] = useState(false);
   // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
   const requestedTab = useSearchParams()?.get("tab") || "";
   useEffect(() => {
@@ -255,8 +261,8 @@ export function PricingDocumentsWorkspace({
     const appended = items
       .filter((i) => !keys.has(`${i.id}:null`))
       .map(lineFromCatalog);
-    if (draft.content.lines.length + appended.length > 100)
-      throw new Error("문서당 최대 100개 품목을 담을 수 있습니다.");
+    if (draft.content.lines.length + appended.length > MAX_DOCUMENT_LINES)
+      throw new Error(`문서당 최대 ${MAX_DOCUMENT_LINES}개 품목을 담을 수 있습니다.`);
     rows([...draft.content.lines, ...appended]);
   }
   async function loadSet(s: ProductSet) {
@@ -378,6 +384,28 @@ export function PricingDocumentsWorkspace({
     if (result.added.length) rows([...draft.content.lines, ...result.added]);
     setMessage(`${result.added.length}개 품목을 담았습니다.${result.unmatched.length ? ` 연결되지 않은 ${result.unmatched.length}개: ${result.unmatched.slice(0, 5).join(", ")}` : ""}`);
   }
+  const openPreview = (print: boolean) => {
+    if (!draft) return;
+    void task(async () => {
+                        const content = parseDocument(draft.content),
+                          p = await read<Promotion[]>("promotions");
+                        setAutoPrint(print);
+                        setPreview(
+                          withLivePromotions(
+                            {
+                              id: `preview-${draft.id}`,
+                              documentId: draft.id,
+                              version: 0,
+                              revision: draft.revision,
+                              publishedAt: new Date().toISOString(),
+                              content,
+                              unavailablePromotions: [],
+                            },
+                            p,
+                          ),
+                        );
+                      });
+  };
   const editable = Boolean(
     draft && (draft.content.kind === "quote" || manager),
   );
@@ -424,32 +452,11 @@ export function PricingDocumentsWorkspace({
                   >
                     판매가 버전 확정
                   </button>
-                  <button
-                    disabled={busy}
-                    className={box}
-                    onClick={() =>
-                      void task(async () => {
-                        const content = parseDocument(draft.content),
-                          p = await read<Promotion[]>("promotions");
-                        setPreview(
-                          withLivePromotions(
-                            {
-                              id: `preview-${draft.id}`,
-                              documentId: draft.id,
-                              version: 0,
-                              revision: draft.revision,
-                              publishedAt: new Date().toISOString(),
-                              content,
-                              unavailablePromotions: [],
-                            },
-                            p,
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    미리보기·인쇄
-                  </button>
+                  <button disabled={busy} className={box} onClick={() => openPreview(false)} type="button">미리보기</button>
+                  <button disabled={busy} className={`${box} bg-slate-900 text-white`} onClick={() => openPreview(true)} type="button">A4 인쇄</button>
+                  <span className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="보기 방식">
+                    {([["doc", "문서 보기"], ["table", "표 보기"]] as const).map(([value, label]) => <button aria-pressed={docView === value} className={`h-9 px-3 text-sm font-bold ${docView === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`} key={value} onClick={() => setDocView(value)} type="button">{label}</button>)}
+                  </span>
                   <button
                     disabled={busy}
                     onClick={() => create("quote", draft.content)}
@@ -577,6 +584,31 @@ export function PricingDocumentsWorkspace({
             /* 11/4: 문서 목록(왼쪽)은 목록 화면에만 두고, 편집은 가운데 품목 · 오른쪽 문서 설정 두 칸으로 단순화 */
             <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
               <div className="min-w-0 space-y-4">
+                {docView === "doc" ? (
+                  <>
+                    {draft.content.lines.some((l) => l.taxType === "unknown") ? <p className="rounded border border-amber-400 bg-amber-50 p-3 text-sm" role="status">과세 미확정 품목이 있습니다 — <button className="font-bold underline" onClick={() => setDocView("table")} type="button">표 보기</button>에서 과세·면세를 고른 뒤 저장해 주세요.</p> : null}
+                    {editable && (sets.length || promotions.length) ? (
+                      <div className="flex flex-wrap gap-1.5 text-xs">
+                        {sets.map((s) => <button className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-bold" disabled={busy} key={s.id} onClick={() => void task(() => loadSet(s))} type="button">묶음 · {s.name} 담기</button>)}
+                        {promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet)).map((p) => <button className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 font-bold text-amber-900" disabled={busy} key={p.id} onClick={() => void task(() => addPromotion(p))} type="button">{p.badge} {p.displayName} 담기</button>)}
+                      </div>
+                    ) : null}
+                    <div className="rounded-xl bg-slate-100 p-3 sm:p-6">
+                      <PricingDocPaper
+                        baselines={baselines}
+                        catalog={catalogQuery ? catalog : []}
+                        catalogInput={catalogInput}
+                        content={draft.content}
+                        editable={editable}
+                        onAdd={(item) => void task(async () => add([item]))}
+                        onContent={change}
+                        onSearch={() => { setCatalogPage(1); setCatalogQuery(catalogInput); }}
+                        setCatalogInput={setCatalogInput}
+                      />
+                    </div>
+                  </>
+                ) : (
+                <>
                 {editable && (
                   <div className="space-y-2 rounded border p-3">
                     <form
@@ -932,6 +964,8 @@ export function PricingDocumentsWorkspace({
                   {draft.content.lines.length}개 품목 · 기준가보다 낮은 단가는
                   주황색으로 표시합니다.
                 </p>
+                </>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {versions.map((v) => (
                     <button
@@ -958,6 +992,7 @@ export function PricingDocumentsWorkspace({
                   ))}
                 </div>
               </div>
+              {docView === "doc" ? <PricingInfoPanel companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
               <aside className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
                 <h2 className="text-sm font-black text-slate-900">문서 설정</h2>
                 <div className="grid gap-2">
@@ -1044,6 +1079,7 @@ export function PricingDocumentsWorkspace({
                   ))}
                 </div>
               </aside>
+              )}
             </div>
           )}
         </div>
@@ -1056,12 +1092,13 @@ export function PricingDocumentsWorkspace({
             <span className="text-xs font-bold text-slate-500">글자 크기</span>
             {[1, 1.15, 1.3].map((scale) => <button className={`${box} ${fontScale === scale ? "bg-slate-900 text-white" : ""}`} key={scale} onClick={() => setFontScale(scale)} type="button">{Math.round(scale * 100)}%</button>)}
             <button className={box} disabled={busy} onClick={() => void task(exportLines)} type="button">엑셀 내려받기</button>
-            <button className={`${box} bg-slate-900 text-white`} onClick={() => setPreview(null)} type="button">닫기</button>
+            <button className={`${box} bg-slate-900 text-white`} onClick={() => { setPreview(null); setAutoPrint(false); }} type="button">닫기</button>
           </div>
           <style>{`@media print{.pricing-preview-modal{position:static!important;overflow:visible!important;background:white!important}.pricing-preview-modal>div{max-width:none!important;padding:0!important}}`}</style>
           <div className="mx-auto max-w-[1400px] p-4">
         <PricingDocumentPreview
           key={`${preview.id}-${preview.publishedAt}-${JSON.stringify(preview.promotionStock)}-${preview.unavailablePromotions.join(",")}`}
+          autoPrint={autoPrint}
           fontScale={fontScale}
           version={preview}
           refresh={async () => {
