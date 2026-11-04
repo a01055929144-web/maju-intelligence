@@ -3,7 +3,7 @@ import { getRequestAuthScope } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { buildPurchaseReceiptRows, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { buildPurchaseReceiptRows, planProductTaxTypes, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,18 @@ export async function POST(request: NextRequest) {
   const receiptDate = String(body?.receiptDate || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) return NextResponse.json({ message: "매입일을 확인해 주세요." }, { status: 400 });
   const lines = Array.isArray(body?.lines) ? body!.lines.slice(0, 5000) : [];
+  const companyId = auth.companyId;
+  const productIds = Array.from(new Set(lines.map((line) => line.productId).filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))));
+  const products = new Map<string, string | null>();
+  for (let offset = 0; offset < productIds.length; offset += 100) {
+    const part = productIds.slice(offset, offset + 100);
+    const found = await supabaseRequest<Array<{ id: string; tax_type: string | null }>>(
+      `product_catalog?select=id,tax_type&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${part.map(encodeURIComponent).join(",")})`
+    ).catch(() => []);
+    for (const row of found) products.set(row.id, row.tax_type);
+  }
   const rows = buildPurchaseReceiptRows({
+    knownProductIds: new Set(products.keys()),
     actorName: auth.customerSession?.name || auth.adminSession?.name || "운영자",
     companyId: auth.companyId,
     fileName: String(body?.fileName || "").slice(0, 200),
@@ -39,7 +50,21 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(rows.slice(offset, offset + 500))
       });
     }
-    return NextResponse.json({ saved: rows.length });
+    // 상품 과세 구분 채우기(비어 있는 상품만).
+    const plan = planProductTaxTypes(lines, products);
+    let taxFilled = 0;
+    for (const taxType of ["taxable", "exempt"] as const) {
+      const ids = plan.fill.filter((item) => item.taxType === taxType).map((item) => item.productId);
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const part = ids.slice(offset, offset + 100);
+        await supabaseRequest(`product_catalog?company_id=eq.${encodeURIComponent(companyId)}&tax_type=is.null&id=in.(${part.map(encodeURIComponent).join(",")})`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ tax_type: taxType, updated_at: new Date().toISOString() })
+        }).then(() => { taxFilled += part.length; }).catch(() => null);
+      }
+    }
+    return NextResponse.json({ saved: rows.length, taxConflicts: plan.conflicts.length, taxFilled });
   } catch (error) {
     const missing = error instanceof Error && /purchase_receipt_lines|PGRST205|42P01|404/.test(error.message);
     return NextResponse.json({ message: missing ? "DB 승인 후 시작됩니다" : "저장하지 못했습니다" }, { status: missing ? 503 : 500 });
