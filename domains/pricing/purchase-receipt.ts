@@ -1,4 +1,4 @@
-import { purchaseLineKey } from "@/domains/pricing/purchase-import";
+import { purchaseLineKey } from "./purchase-import";
 
 /** 11/4: 매입 기록 한 줄(날짜·매입처·품목 단위로 합칩니다). 순수 규칙만 둡니다. */
 export type PurchaseReceiptInputLine = {
