@@ -1,5 +1,6 @@
 "use client";
 
+import { RegionPicker } from "@/components/region-picker";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MapPin, Plus, Trash2 } from "lucide-react";
 import {
@@ -468,6 +469,12 @@ function FieldInput({
       break;
     }
     case "tags": {
+      // 11/4: 배송 지역은 글자로 입력하지 않고 지도·시군구 목록에서 고릅니다(영업 정보와 같은 방식).
+      if (field.key === "delivery_regions") {
+        const regions = Array.isArray(value) ? (value as string[]).map((item) => item.trim()).filter(Boolean) : [];
+        control = <div className="mt-1"><RegionPicker disabled={readOnly} onChange={(next) => onChange(next)} title="배송 지역" value={regions} /></div>;
+        break;
+      }
       const text = Array.isArray(value) ? (value as string[]).join(", ") : String(value ?? "");
       control = <input className={inputClass} disabled={readOnly} onChange={(event) => onChange(event.target.value.split(",").map((item) => item.trimStart()))} placeholder={field.placeholder} value={text} />;
       break;
