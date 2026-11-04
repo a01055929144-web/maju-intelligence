@@ -153,13 +153,20 @@ function QuickAdd({ added, onAdd, onSearch }: {
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const addedRef = useRef(added);
+  addedRef.current = added;
+  // 11/4: ↑↓·엔터가 이미 담은 품목은 건너뜁니다.
+  const step = (from: number, dir: 1 | -1) => {
+    for (let i = from + dir; i >= 0 && i < results.length; i += dir) if (!added.has(results[i].id)) return i;
+    return from;
+  };
   useEffect(() => {
     const q = query.trim();
     if (!q) { setResults([]); return; }
     let alive = true;
     setLoading(true);
     const timer = window.setTimeout(() => {
-      void onSearch(q).then((items) => { if (alive) { setResults(items.slice(0, 8)); setActive(0); } }).catch(() => { if (alive) setResults([]); }).finally(() => { if (alive) setLoading(false); });
+      void onSearch(q).then((items) => { if (alive) { const list = items.slice(0, 8); setResults(list); setActive(Math.max(0, list.findIndex((item) => !addedRef.current.has(item.id)))); } }).catch(() => { if (alive) setResults([]); }).finally(() => { if (alive) setLoading(false); });
     }, 200);
     return () => { alive = false; window.clearTimeout(timer); };
   }, [query, onSearch]);
@@ -182,8 +189,8 @@ function QuickAdd({ added, onAdd, onSearch }: {
           maxLength={100}
           onChange={(e) => { setQuery(e.target.value); setNote(""); }}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => step(i, 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => step(i, -1)); }
             else if (e.key === "Enter") { e.preventDefault(); if (!e.nativeEvent.isComposing) pick(results[active]); }
             else if (e.key === "Escape") { setResults([]); }
           }}
