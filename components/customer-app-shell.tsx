@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Building2, LogOut, Smartphone } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { CustomerWorkspaceKey, getCustomerNavigationGroups, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
@@ -38,8 +37,6 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
   const [liveCompanyName, setLiveCompanyName] = useState(cached?.companyName || companyName);
   const normalizedRole = normalizeWorkspaceRole(resolvedWorkspaceRole);
   const roleLabel = workspaceRoleLabels[normalizedRole];
-  const workspaceLabel = mode === "admin-preview" ? "관리자 미리보기" : "지도 OS";
-  const workspaceBadgeClassName = mode === "admin-preview" ? "bg-amber-100 text-amber-800" : "bg-lime-200 text-slate-950 ring-1 ring-inset ring-lime-300";
   const compactMapHome = fullBleed && hidePageTitle;
 
   useEffect(() => {
@@ -79,8 +76,8 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
         <section className={`min-w-0 flex-1 ${fullBleed ? "xl:flex xl:h-full xl:min-h-0 xl:flex-col" : ""}`}>
           <header className={`${compactMapHome ? "hidden" : "sticky top-0 z-20"} shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur ${fullBleed ? "xl:static" : ""}`}>
             <div className={`flex flex-col gap-3 px-4 sm:px-4 xl:flex-row xl:h-[72px] xl:items-center xl:justify-between xl:py-0 ${hidePageTitle ? "py-2" : "py-3"}`}>
-              {!hidePageTitle ? <div className="min-w-0"><div className="mb-1 flex flex-wrap items-center gap-2"><Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge>{mode === "customer" ? <Badge className="bg-white text-slate-700 ring-1 ring-inset ring-slate-200">{roleLabel}</Badge> : null}</div><div className="flex min-w-0 items-center gap-1.5"><h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>{subtitle ? <InfoTooltip text={subtitle} /> : null}</div></div> : <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><Badge className={workspaceBadgeClassName}>{workspaceLabel}</Badge><span className="text-sm font-semibold text-slate-900">{getCustomerWorkspaceLabel(active)}</span></div>}
-              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>{mode === "customer" ? <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="기사 화면 열기"><Smartphone className="h-4 w-4" /><span className="hidden xl:inline">기사 화면</span></Link> : null}{rightAction}{mode === "customer" ? <CustomerAccountActions /> : null}</div>
+              {/* 11/4: '지도 OS'·직책 배지는 왼쪽 맨 아래(회사명 / 이름 · 직책)와 겹쳐 뺐습니다. */}{!hidePageTitle ? <div className="min-w-0"><div className="flex min-w-0 items-center gap-1.5"><h1 className="truncate text-[24px] font-bold tracking-[-0.03em] text-slate-950">{title}</h1>{subtitle ? <InfoTooltip text={subtitle} /> : null}</div></div> : <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2"><span className="text-sm font-semibold text-slate-900">{getCustomerWorkspaceLabel(active)}</span></div>}
+              <div className={`flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2 ${hidePageTitle ? "justify-start sm:justify-end xl:w-auto" : ""}`}>{mode === "customer" ? <Link className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs shadow-none" href="/mobile/today" title="기사 화면 열기"><Smartphone className="h-4 w-4" /><span className="hidden xl:inline">기사 화면</span></Link> : null}{rightAction}</div>
             </div>
           </header>
 
