@@ -25,7 +25,7 @@ for(const width of [1440,390])test(`server document recalculation survives fresh
  const context=await browser.newContext({baseURL:"http://127.0.0.1:3100",viewport:{width,height:900}});await setup(context);const page=await context.newPage();
  try{
   await page.goto("/revenue/pricing/documents");await expect(page.getByText("0건 · 0개 품목",{exact:true})).toBeVisible();
-  await page.goto("/revenue/pricing");await page.getByRole("button",{name:"전체",exact:true}).click();await page.getByRole("spinbutton",{name:"합성 상품 변경 후 매입가"}).fill("200");await page.getByRole("button",{name:"저장 (1건)",exact:true}).click();await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();await expect(page.getByRole("link",{name:/합성 단가표 · 1개 품목 다시 계산 필요/})).toBeVisible();
+  await page.goto("/revenue/pricing");await page.getByRole("button",{name:"전체",exact:true}).click();await page.getByRole("spinbutton",{name:"합성 상품 변경 후 매입가"}).fill("200");await page.getByRole("button",{name:"③ 저장 (1건)",exact:true}).click();await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();await expect(page.getByRole("link",{name:/합성 단가표 · 1개 품목 다시 계산 필요/})).toBeVisible();
   expect(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith("maju:pricing-cost-changes:")||k.startsWith("maju:pricing-reviewed:")))).toBe(false);
   const fresh=await browser.newContext({baseURL:"http://127.0.0.1:3100",viewport:{width,height:900}});await setup(fresh);const other=await fresh.newPage();
   try{
