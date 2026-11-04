@@ -187,6 +187,10 @@ export function PricingDocumentsWorkspace({
     create(kind, { ...blankContent(kind), title: set.name.slice(0, 100), lines });
     if (lines.length < set.productIds.length) setMessage(`${set.productIds.length - lines.length}개 품목은 비활성이라 빠졌습니다.`);
   }
+  const quickSearch = useCallback(
+    (query: string) => read<{ items: CatalogChoice[]; total: number }>("catalog", { search: query, page: 1 }).then((r) => r.items),
+    [read],
+  );
   const loadStartDocuments = useCallback(
     () => read<{ items: DocumentDraft[]; total: number }>("list", { page: 1, search: "" }).then((r) => r.items),
     [read],
@@ -650,7 +654,7 @@ export function PricingDocumentsWorkspace({
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>
