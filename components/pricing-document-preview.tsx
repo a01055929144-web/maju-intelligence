@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   documentOutput,
@@ -8,7 +8,10 @@ import {
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
-function PageContent({
+type OutputLine = DocumentOutput["lines"][number];
+
+/** 11/4: A4·휴대폰·편집 미리보기가 모두 쓰는 한 장. 회사 정보 줄, 행사 블록(카드/표), 품목 격자(1~3열). */
+export function PageContent({
   data,
   page,
   pages,
@@ -25,123 +28,150 @@ function PageContent({
       : data.theme === "green"
         ? "#047857"
         : "#1f2937";
+  const display = data.display || { columns: 1, promoLayout: "cards", info: [] };
+  const headerInfo = display.info.filter((item) => item.place === "header");
+  const footerInfo = display.info.filter((item) => item.place === "footer");
+  const promos = data.lines.filter((l) => l.badge);
+  const regular = data.lines.filter((l) => !l.badge);
+  const columns = Math.max(1, Math.min(3, display.columns || 1));
+  const perColumn = Math.ceil(regular.length / columns) || 0;
+  const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
+  const price = (l: OutputLine) => (l.price !== null ? `${l.price.toLocaleString()}원` : "—");
   return (
     <div
       className="pricing-output-content"
       style={{ borderTop: `6px solid ${accent}` }}
     >
-      <header className="space-y-2 border-b pb-4">
-        <p className="font-semibold" style={{ color: accent }}>
-          {data.companyName}
-        </p>
+      <header className="space-y-1.5 border-b pb-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-semibold" style={{ color: accent }}>
+            {data.companyName}
+          </p>
+          <p className="text-xs">
+            {data.version ? `버전 ${data.version}` : "작성 중"} · 발행 {koreaDay(new Date(data.publishedAt))} · 유효 {data.validUntil}
+            {data.expired ? " 만료" : "까지"}
+          </p>
+        </div>
         <h2 className="text-2xl font-bold">{data.title}</h2>
-        <p>
-          {data.version ? `버전 ${data.version}` : "작성 중 미리보기"} · 발행일{" "}
-          {koreaDay(new Date(data.publishedAt))} · 유효기간 {data.validUntil}
-          {data.expired ? " 만료" : "까지"}
-        </p>
+        {headerInfo.length ? (
+          <p className="text-xs">{headerInfo.map((item) => `${item.label} ${item.value}`).join(" · ")}</p>
+        ) : null}
         {data.recipient && <p>받는 곳: {data.recipient}</p>}
-        <p>{data.contact}</p>
-        <p className="text-sm">부가세 별도 · 면세 품목 별도 표시</p>
+        {data.contact && <p className="text-xs">{data.contact}</p>}
+        <p className="text-xs">부가세 별도 · 면세 품목 별도 표시</p>
         {data.expired && (
           <p className="font-semibold text-red-700">
             유효기간이 지나 가격을 표시하지 않습니다.
           </p>
         )}
       </header>
+      {promos.length ? (
+        <section className="my-3 rounded border border-amber-300 bg-amber-50 p-2">
+          <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품</p>
+          {display.promoLayout === "table" ? (
+            <table className="w-full border-collapse text-left">
+              <tbody>
+                {promos.map((l, i) => (
+                  <tr key={i}>
+                    <td className="border-b border-amber-200 p-1"><span className="mr-1 rounded bg-amber-200 px-1">{l.badge}</span>{l.displayName}</td>
+                    <td className="border-b border-amber-200 p-1">{l.spec} {l.unit}</td>
+                    <td className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}</td>
+                    <td className="border-b border-amber-200 p-1 text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {promos.map((l, i) => (
+                <article key={i} className="rounded bg-white p-2">
+                  <p className="font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
+                  <p className="text-xs">{l.spec} {l.unit}</p>
+                  <p className="font-bold">{price(l)}</p>
+                  <p className="text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</p>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
       {data.layout === "cards" ? (
-        <div className="my-4 grid grid-cols-2 gap-3">
-          {data.lines.map((l, i) => (
-            <article key={i} className="min-h-36 space-y-2 rounded border p-3">
-              <h3 className="font-bold">
-                {l.badge && (
-                  <span className="mr-1 rounded bg-amber-100 px-1 text-amber-900">
-                    {l.badge}
-                  </span>
-                )}
-                {l.displayName}
-              </h3>
-              {l.brand && <p>{l.brand}</p>}
-              <p>
+        <div className="my-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${columns + 1}, minmax(0, 1fr))` }}>
+          {regular.map((l, i) => (
+            <article key={i} className="space-y-1 rounded border p-2">
+              <h3 className="font-bold">{l.displayName}</h3>
+              {l.brand && <p className="text-xs">{l.brand}</p>}
+              <p className="text-xs">
                 {l.spec} {l.unit}
               </p>
-              {l.price !== null && (
-                <p className="text-lg font-bold">
-                  {l.price.toLocaleString()}원
-                </p>
-              )}
-              <p className="text-xs">
-                {l.taxType === "exempt" ? "면세" : "과세"}
-                {l.endsOn ? ` · ${l.endsOn}까지` : ""}
-                {l.remaining !== null ? ` · 남은 수량 ${l.remaining}` : ""}
-              </p>
+              {l.price !== null && <p className="font-bold">{price(l)}</p>}
+              <p className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p>
             </article>
           ))}
         </div>
       ) : (
-        <table className="my-4 w-full border-collapse text-left text-sm">
-          <thead>
-            <tr>
-              {["No", "품목·브랜드", "규격·단위", "단가", "비고"].map((t) => (
-                <th key={t} className="border-b-2 p-2">
-                  {t}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.lines.map((l, i) => (
-              <tr key={i}>
-                <td className="border-b p-2">{start + i + 1}</td>
-                <td className="border-b p-2 font-semibold">
-                  {l.badge && (
-                    <span className="mr-1 rounded bg-amber-100 px-1">
-                      {l.badge}
-                    </span>
-                  )}
-                  {l.displayName}
-                  <span className="block font-normal">{l.brand}</span>
-                </td>
-                <td className="border-b p-2">
-                  {l.spec} {l.unit}
-                </td>
-                <td className="border-b p-2">
-                  {l.price !== null ? `${l.price.toLocaleString()}원` : "—"}
-                </td>
-                <td className="border-b p-2 text-xs">
-                  {l.taxType === "exempt" ? "면세" : "과세"}
-                  {l.endsOn && <span className="block">{l.endsOn}까지</span>}
-                  {l.remaining !== null && (
-                    <span className="block">남은 수량 {l.remaining}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
+          {chunks.map((chunk, c) => (
+            <table className="w-full border-collapse text-left" key={c}>
+              <thead>
+                <tr>
+                  {(columns === 1 ? ["No", "품목·브랜드", "규격·단위", "단가", "비고"] : ["품목", "규격", "단가"]).map((t) => (
+                    <th key={t} className="border-b-2 p-1.5">
+                      {t}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {chunk.map((l, i) => (
+                  <tr key={i}>
+                    {columns === 1 ? <td className="border-b p-1.5">{start + c * perColumn + i + 1}</td> : null}
+                    <td className="border-b p-1.5 font-semibold">
+                      {l.displayName}
+                      {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
+                    </td>
+                    <td className="border-b p-1.5">
+                      {l.spec} {l.unit}
+                    </td>
+                    <td className="border-b p-1.5 text-right">{price(l)}</td>
+                    {columns === 1 ? <td className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+        </div>
       )}
       {!data.lines.length && (
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
-      <footer className="mt-auto space-y-2 border-t pt-3 text-sm">
-        <p className="whitespace-pre-wrap">{data.footer}</p>
-        <p>{data.contact}</p>
-        <p className="text-right">
+      <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
+        {footerInfo.length ? (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
+            {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
+          </div>
+        ) : null}
+        {data.footer ? <p className="whitespace-pre-wrap">{data.footer}</p> : null}
+        <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>
       </footer>
     </div>
   );
 }
+
 export function PricingDocumentPreview({
   version,
   refresh,
   fontScale = 1,
+  autoPrint = false,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
   /** 11/4: 글자 크기 100%·115%·130% */
   fontScale?: number;
+  /** 11/4: 상단 'A4 인쇄'로 열었을 때 바로 인쇄 창 */
+  autoPrint?: boolean;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
@@ -161,6 +191,11 @@ export function PricingDocumentPreview({
     );
     return latest;
   }
+  useEffect(() => {
+    if (!autoPrint) return;
+    const timer = window.setTimeout(() => window.print(), 400);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint]);
   async function exportPage(index: number) {
     setBusy(true);
     setError("");

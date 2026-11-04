@@ -15,6 +15,29 @@ export type PrintLine = {
   remaining: number | null;
   badge: "" | "행사" | "임박";
 };
+/** 11/4: 회사 정보에서 골라 넣는 줄(위쪽/아래쪽). 확정 시점 값으로 고정됩니다. */
+export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
+/** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
+export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[] };
+export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [] };
+export const MAX_DOCUMENT_LINES = 300;
+export function parseDisplay(value: unknown): DocumentDisplay {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_DISPLAY, info: [] };
+  const d = value as Record<string, unknown>;
+  const columns = d.columns === 2 || d.columns === 3 ? d.columns : 1;
+  const promoLayout = d.promoLayout === "table" ? "table" : "cards";
+  const info = Array.isArray(d.info)
+    ? d.info.slice(0, 24).flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const i = item as Record<string, unknown>;
+        const label = typeof i.label === "string" ? i.label.trim() : "";
+        const text = typeof i.value === "string" ? i.value.trim() : "";
+        if ((i.place !== "header" && i.place !== "footer") || !label || label.length > 30 || !text || text.length > 200) return [];
+        return [{ key: typeof i.key === "string" ? i.key.slice(0, 40) : "", label, value: text, place: i.place as "header" | "footer" }];
+      })
+    : [];
+  return { columns, promoLayout, info };
+}
 export type DocumentContent = {
   kind: DocumentKind;
   title: string;
@@ -29,6 +52,7 @@ export type DocumentContent = {
   showBrand: boolean;
   showSpec: boolean;
   lines: PrintLine[];
+  display?: DocumentDisplay;
 };
 export type DocumentDraft = {
   id: string;
@@ -162,8 +186,8 @@ export function parseDocument(value: unknown): DocumentContent {
   const d = object(value);
   if (d.kind !== "sheet" && d.kind !== "quote")
     throw new Error("문서 종류를 확인해 주세요.");
-  if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > 100)
-    throw new Error("품목은 1~100개를 선택해 주세요.");
+  if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
+    throw new Error(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
   const lines = d.lines.map((value) => {
     const l = object(value);
     if (l.taxType === "unknown")
@@ -223,6 +247,7 @@ export function parseDocument(value: unknown): DocumentContent {
     showBrand: d.showBrand === true,
     showSpec: d.showSpec === true,
     lines,
+    display: parseDisplay(d.display),
   };
 }
 export function documentOutput(version: DocumentVersion, day = koreaDay()) {
@@ -258,6 +283,7 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
     expired,
     theme: d.theme,
     kind: d.kind,
+    display: d.display || DEFAULT_DISPLAY,
     layout:
       d.layout === "auto"
         ? visible.length > 20
@@ -292,8 +318,9 @@ export function printPages(output: DocumentOutput) {
               Math.ceil(line.brand.length / 18),
             Math.ceil((line.spec + line.unit).length / 10),
           ) + 1;
-    const limit = output.layout === "cards" ? 4 : 26;
-    if (lines.length && (weight + next > limit || lines.length >= 18)) {
+    const columns = output.display?.columns || 1;
+    const limit = output.layout === "cards" ? 4 * columns : 26 * columns;
+    if (lines.length && (weight + next > limit || lines.length >= 18 * columns)) {
       pages.push({ ...output, lines });
       lines = [];
       weight = 0;
