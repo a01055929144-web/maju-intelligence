@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
+import { PurchaseHistoryPanel } from "@/components/purchase-history-panel";
 import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
 import { matchCostImportRow, type CostImportRow, type CostProduct } from "@/domains/pricing/purchase-cost";
-import { buildPurchaseSheet, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
+import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import type { DocumentDraft } from "@/domains/pricing/document";
@@ -13,7 +14,9 @@ import { documentRequest } from "@/lib/pricing/document-client";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
-type NewRow = CostImportRow & { quantity?: number; rawCost?: number; taxType?: "taxable" | "exempt"; vatIncluded?: boolean };
+type NewRow = CostImportRow & { quantity?: number; rawCost?: number; specNone?: boolean; taxType?: "taxable" | "exempt"; vatIncluded?: boolean };
+/** 11/4: 새 상품은 단위가 꼭 있어야 하고, 규격은 입력하거나 '규격 없음'을 체크해야 저장됩니다. */
+const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.spec.trim() && !row.specNone ? "규격" : "", !row.name.trim() ? "품목" : ""].filter(Boolean);
 type Candidate = { cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀"; source: string };
 const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
@@ -29,6 +32,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [mapping, setMapping] = useState<PurchaseImportMapping>({});
   const [vatMode, setVatMode] = useState<VatMode>("auto");
   const [importedLines, setImportedLines] = useState<Array<PurchaseImportLine & { productId?: string }>>([]);
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [emptyOnly, setEmptyOnly] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
   const [receiptDate, setReceiptDate] = useState(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   const [fileName, setFileName] = useState("");
   const [newSupplier, setNewSupplier] = useState("");
@@ -93,6 +99,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (method && candidate?.method !== method) return false;
     if (search && !`${product.code} ${product.name} ${product.spec}`.toLocaleLowerCase("ko").includes(search.toLocaleLowerCase("ko"))) return false;
     if (tab === "신규") return false;
+    if (emptyOnly) return !product.spec || !product.unit;
     if (tab === "변동 있음") return candidate != null && candidate.cost !== product.cost;
     if (tab === "인상") return candidate != null && candidate.cost > product.cost;
     if (tab === "인하") return candidate != null && candidate.cost < product.cost;
@@ -177,7 +184,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setUnmatched(missing);
       setImportedLines(lines.map((line) => ({ ...line, productId: productByLine.get(`${line.lineKey}|${line.code}|${line.supplier}`) })));
       setSheet(null);
-      if (!Object.keys(next).length && missing.length) setTab("신규");
+      const missingCount = missing.filter((row) => missingFields(row).length).length;
+      if (missingCount) { setTab("신규"); setOnlyMissing(true); }
+      else if (!Object.keys(next).length && missing.length) setTab("신규");
       const vatCount = Object.values(next).filter((candidate) => candidate.vatIncluded).length;
       const exemptCount = lines.filter((line) => line.taxType === "exempt").length;
       const taxableCount = lines.filter((line) => line.taxType === "taxable").length;
@@ -196,7 +205,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     }
     const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량" };
     for (const [supplierName, items] of Array.from(groups.entries())) {
-      const raw = items.map((row) => ({ 상품명: row.name, 규격: row.spec, 단위: row.unit || "개", 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" }));
+      const raw = items.map((row) => ({ 상품명: row.name, 규격: row.specNone ? "" : row.spec, 단위: row.unit, 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" }));
       const preview = buildCatalogPreview(raw, catalogMapping, supplierName);
       const response = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save-import", companyId, fileName: fileName || "매입가 반영", supplierName, mapping: catalogMapping, products: preview.products, excludedCount: preview.excludedCount, warnings: preview.warnings }) });
       const saved = await response.json().catch(() => ({}));
@@ -241,7 +250,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     });
     // 11/4: 바뀐 매입가가 없어도 새 상품 등록·매입 기록 보관은 진행합니다(예전에는 버튼이 반응하지 않았음).
     if (!changes.length && !unmatched.length && !importedLines.length) { setMessage("저장할 변경이 없습니다."); return; }
-    if (unmatched.some((row) => !row.name.trim() || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목명·단가를 확인해 주세요."); setTab("신규"); return; }
+    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 빈 칸(품목·규격·단위·단가)을 채워 주세요."); setTab("신규"); setOnlyMissing(true); return; }
     setBusy(true); setError(""); setMessage("");
     const notes: string[] = [];
     const newRows = unmatched;
@@ -274,7 +283,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const product = matchCostImportRow({ ...row, supplier: "" }, fresh);
         if (product && product.taxType !== row.taxType) await fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, id: product.id, taxType: row.taxType }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null);
       }
-      setCandidates({}); setSelected([]); setTab("전체");
+      setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
       setMessage(`${notes.join(" · ")}${receiptNote}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
     } catch (cause) { setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }
@@ -316,21 +325,36 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     { key: "used", label: "쓰는 곳", value: (row) => (usedBy.get(row.id) || []).map((doc) => doc.content.title).join(", ") || "-", render: (row) => (usedBy.get(row.id) || []).length ? <Link className="text-teal-700 underline" href="/revenue/pricing/documents">{(usedBy.get(row.id) || []).length}개 문서</Link> : "-" },
   ], [busy, candidates, edit, selected, usedBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const missingTotal = unmatched.filter((row) => missingFields(row).length).length;
+  const unitOptions = Array.from(new Set([...COMMON_UNITS, ...products.map((product) => product.unit).filter(Boolean)]));
+
   return <div className="space-y-4" aria-busy={busy}>
-    <header className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">매입가 반영</h2><p className="text-sm text-slate-600">엑셀을 올리거나 직접 입력해 매입가를 바꿉니다. 같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다.</p></div><div className="flex flex-wrap gap-2"><button className="maju-button-secondary" onClick={exportTemplate} type="button">엑셀 양식</button><button className="maju-button-secondary" onClick={() => fileInput.current?.click()} type="button">엑셀 올리기</button><button className="maju-button-primary" disabled={busy || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => void save()} type="button">{busy ? "저장 중…" : `저장 (${selected.length + unmatched.length}건)`}</button></div></header>
+    <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
+    {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
+    <header className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="mr-auto text-lg font-bold">매입가 반영</h2>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">매입일<input aria-label="매입일" className="maju-input h-9" onChange={(event) => setReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
+        <button className={sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
+        <button className={`${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">② 열 정렬</button>
+        <button className={`maju-button-primary ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={busy || Boolean(sheet) || missingTotal > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => void save()} title={missingTotal ? `빈 칸 ${missingTotal}개를 먼저 채워 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${selected.length + unmatched.length}건)`}</button>
+        <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
+      </div>
+      <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal ? `새 상품 ${missingTotal}개에 규격·단위가 비어 있습니다. 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
+    </header>
     <input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); event.target.value = ""; }} ref={fileInput} type="file" />
     {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">다시 시도</button></p> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
-    {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3"><PurchaseSheetMapper mapping={mapping} onMapping={setMapping} onVatMode={setVatMode} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><label className="flex items-center gap-2 text-xs font-bold text-slate-700">매입일<input aria-label="매입일" className="maju-input h-9" onChange={(event) => setReceiptDate(event.target.value)} type="date" value={receiptDate} /></label><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} type="button">열 맞추기 적용</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">취소</button></div></section> : null}
+    {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3"><PurchaseSheetMapper mapping={mapping} onMapping={setMapping} onVatMode={setVatMode} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {selected.length && tab !== "신규" ? <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600"><span>선택 {selected.length}개 단가 기준</span><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, true)} type="button">부가세 포함으로</button><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, false)} type="button">부가세 별도로</button><span className="font-semibold text-slate-400">저장되는 매입가는 항상 부가세 별도 금액입니다.</span></div> : null}
     <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장된 변경은 서버 이력으로 확인합니다. 다시 계산한 초안도 새 버전을 게시할 때까지 표시를 유지합니다.</p><div className="flex flex-wrap gap-2">{documentError ? <span role="alert">{documentError} <button className="underline" type="button" onClick={() => void load().catch(cause => setError(String(cause)))}>다시 시도</button></span> : affected.length ? affected.map(({ document, count, changed }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {changed ? `${changed}개 품목 다시 계산 필요` : `${count}개 품목 변경 후보`}{changed && count ? ` · 후보 ${count}개` : ""}</Link>) : <span className="text-sm text-slate-500">다시 계산할 문서나 변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
-    <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /></div>
-    {tab === "신규" ? <section className="maju-section-card min-w-0 space-y-3 p-4">
-      <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="font-semibold">새 상품 {unmatched.length}개</h2><p className="text-sm text-slate-600">기존 상품과 이름·규격이 맞지 않는 품목입니다. 고칠 곳을 고친 뒤 위 &lsquo;저장&rsquo;을 누르면 상품관리에 등록됩니다.</p></div><label className="text-xs font-bold text-slate-600">매입처 <input aria-label="새 상품 매입처명" className="maju-input ml-1 h-9" onChange={(event) => setNewSupplier(event.target.value)} placeholder="비우면 '기본 매입처'" value={newSupplier} /></label></div>
-      {unmatched.length ? <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200"><table className="min-w-[720px] w-full text-xs"><thead className="bg-slate-50 text-left text-slate-500"><tr><th className="px-2 py-2">품목</th><th className="px-2 py-2">규격</th><th className="px-2 py-2">단위</th><th className="px-2 py-2 text-right">수량</th><th className="px-2 py-2 text-right">매입가(별도)</th><th className="px-2 py-2">단가 기준</th><th className="px-2 py-2">과세</th><th className="px-2 py-2" /></tr></thead><tbody>{unmatched.map((row, index) => <tr className="border-t border-slate-100" key={`${row.name}-${index}`}>
+    <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체", "매입 이력"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}${missingTotal ? ` · 빈 칸 ${missingTotal}` : ""}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /><label className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><input checked={emptyOnly} onChange={(event) => { setEmptyOnly(event.target.checked); if (event.target.checked) setTab("전체"); }} type="checkbox" />규격·단위 빈 상품 {unique.filter((product) => !product.spec || !product.unit).length}개</label></div>
+    {tab === "매입 이력" ? <PurchaseHistoryPanel companyId={companyId} refreshKey={historyKey} /> : tab === "신규" ? <section className="maju-section-card min-w-0 space-y-3 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">빈 칸 {missingTotal}개</span> : null}</h2><p className="text-sm text-slate-600">상품명 옆에 섞여 있던 규격·단위를 나눠 두었습니다. 빈 규격·단위를 채운 뒤 저장하면 상품관리에 등록됩니다. 규격이 없는 품목은 &lsquo;없음&rsquo;을 체크하세요.</p></div><label className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><input checked={onlyMissing} onChange={(event) => setOnlyMissing(event.target.checked)} type="checkbox" />빈 칸만 보기</label><label className="text-xs font-bold text-slate-600">매입처 <input aria-label="새 상품 매입처명" className="maju-input ml-1 h-9" onChange={(event) => setNewSupplier(event.target.value)} placeholder="비우면 '기본 매입처'" value={newSupplier} /></label></div>
+      {unmatched.length ? <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200"><table className="min-w-[720px] w-full text-xs"><thead className="bg-slate-50 text-left text-slate-500"><tr><th className="px-2 py-2">품목</th><th className="px-2 py-2">규격</th><th className="px-2 py-2">단위 *</th><th className="px-2 py-2 text-right">수량</th><th className="px-2 py-2 text-right">매입가(별도)</th><th className="px-2 py-2">단가 기준</th><th className="px-2 py-2">과세</th><th className="px-2 py-2" /></tr></thead><tbody>{unmatched.map((row, index) => onlyMissing && !missingFields(row).length ? null : <tr className={`border-t border-slate-100 ${missingFields(row).length ? "bg-amber-50/60" : ""}`} key={`${row.code}-${index}`}>
         <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 품목`} className="h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold min-w-[180px]" onChange={(event) => updateNewRow(index, { name: event.target.value })} value={row.name} /></td>
-        <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 규격`} className="h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold min-w-[80px]" onChange={(event) => updateNewRow(index, { spec: event.target.value })} value={row.spec} /></td>
-        <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className="h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold min-w-[60px]" onChange={(event) => updateNewRow(index, { unit: event.target.value })} placeholder="개" value={row.unit} /></td>
+        <td className="px-2 py-1.5"><div className="flex items-center gap-1.5"><input aria-label={`${index + 1}행 규격`} className={`h-8 w-full min-w-[90px] rounded-md border bg-white px-2 text-xs font-semibold disabled:bg-slate-100 ${!row.spec.trim() && !row.specNone ? "border-amber-400" : "border-slate-200"}`} disabled={row.specNone} onChange={(event) => updateNewRow(index, { spec: event.target.value })} placeholder="예: 180G*10EA" value={row.specNone ? "" : row.spec} /><label className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-slate-500"><input checked={Boolean(row.specNone)} onChange={(event) => updateNewRow(index, { specNone: event.target.checked })} type="checkbox" />없음</label></div></td>
+        <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className={`h-8 w-full min-w-[70px] rounded-md border bg-white px-2 text-xs font-semibold ${!row.unit.trim() ? "border-amber-400" : "border-slate-200"}`} list="purchase-unit-options" onChange={(event) => updateNewRow(index, { unit: event.target.value })} placeholder="EA·BOX·KG" value={row.unit} /></td>
         <td className="px-2 py-1.5 text-right">{row.quantity != null ? row.quantity.toLocaleString("ko-KR") : "-"}</td>
         <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 매입가`} className="h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold min-w-[90px] text-right" min="0" onChange={(event) => updateNewRow(index, { cost: Number(event.target.value), rawCost: Number(event.target.value), vatIncluded: false })} type="number" value={row.cost} /></td>
         <td className="px-2 py-1.5"><button className={`rounded-full px-2 py-0.5 text-xs font-bold ${row.vatIncluded ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`} disabled={busy} onClick={() => { const raw = row.rawCost ?? row.cost; updateNewRow(index, { cost: costExcludingVat(raw, !row.vatIncluded), rawCost: raw, vatIncluded: !row.vatIncluded }); }} type="button">{row.vatIncluded ? "포함" : "별도"}</button></td>

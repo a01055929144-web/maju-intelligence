@@ -35,7 +35,7 @@ export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate
     if (!name || unitPrice === null || cost === null) continue;
     const spec = text(line.spec, 120);
     const supplier = text(line.supplier, 120);
-    const lineKey = purchaseLineKey(name, spec);
+    const lineKey = purchaseLineKey(name, `${spec}${text(line.unit, 40)}`);
     const dedupeKey = `${input.receiptDate}|${purchaseLineKey(supplier, "")}|${lineKey}`.slice(0, 400);
     const previous = byKey.get(dedupeKey);
     const add = (field: string, value: number | null) => (value === null ? (previous?.[field] as number | null) ?? null : ((previous?.[field] as number | null) ?? 0) + value);
@@ -134,4 +134,67 @@ export function planMissingProductFields(lines: readonly PurchaseReceiptInputLin
     if (Object.keys(patch).length) patches.set(line.productId, patch);
   }
   return Array.from(patches.entries()).map(([productId, values]) => ({ productId, values }));
+}
+
+export type PurchaseHistoryRow = {
+  receipt_date: string;
+  line_key: string;
+  product_name: string;
+  spec: string | null;
+  unit: string | null;
+  supplier_name: string | null;
+  quantity: number | string | null;
+  unit_cost_ex_vat: number | string;
+  total_amount?: number | string | null;
+};
+
+export type PurchaseHistoryItem = {
+  key: string;
+  name: string;
+  spec: string;
+  unit: string;
+  supplier: string;
+  latestDate: string;
+  latestCost: number;
+  previousCost?: number;
+  changeRate?: number;
+  minCost: number;
+  maxCost: number;
+  totalQuantity: number;
+  count: number;
+  entries: Array<{ date: string; cost: number; quantity?: number }>;
+};
+
+/** 11/4: 매입 이력을 품목별로 묶고, 최근 단가·직전 단가·변동률·기간 수량을 계산합니다. */
+export function summarizePurchaseHistory(rows: readonly PurchaseHistoryRow[]): PurchaseHistoryItem[] {
+  const groups = new Map<string, PurchaseHistoryRow[]>();
+  for (const row of rows) {
+    const key = `${row.line_key}|${row.supplier_name || ""}`;
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  return Array.from(groups.entries()).map(([key, list]) => {
+    const sorted = [...list].sort((a, b) => b.receipt_date.localeCompare(a.receipt_date));
+    const entries = sorted.map((row) => ({ cost: Number(row.unit_cost_ex_vat) || 0, date: row.receipt_date, quantity: row.quantity == null ? undefined : Number(row.quantity) }));
+    const latest = entries[0];
+    const previous = entries.find((entry) => entry.date < latest.date && entry.cost !== latest.cost) || entries[1];
+    const costs = entries.map((entry) => entry.cost);
+    return {
+      changeRate: previous && previous.cost ? Math.round((latest.cost / previous.cost - 1) * 1000) / 10 : undefined,
+      count: entries.length,
+      entries,
+      key,
+      latestCost: latest.cost,
+      latestDate: latest.date,
+      maxCost: Math.max(...costs),
+      minCost: Math.min(...costs),
+      name: sorted[0].product_name,
+      previousCost: previous?.cost,
+      spec: sorted[0].spec || "",
+      supplier: sorted[0].supplier_name || "",
+      totalQuantity: entries.reduce((sum, entry) => sum + (entry.quantity || 0), 0),
+      unit: sorted[0].unit || ""
+    };
+  }).sort((a, b) => b.latestDate.localeCompare(a.latestDate) || Math.abs(b.changeRate || 0) - Math.abs(a.changeRate || 0));
 }

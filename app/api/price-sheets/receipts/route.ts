@@ -13,6 +13,22 @@ export const dynamic = "force-dynamic";
  * 같은 날 같은 품목을 다시 올리면 새 줄을 만들지 않고 덮어씁니다(company_id, dedupe_key).
  * 테이블(purchase_receipt_lines)은 운영 DB 승인 후 생성됩니다. 없으면 매입가 저장은 그대로 두고 안내만 합니다.
  */
+/** 11/4: 매입 이력 — 최근 N일 매입 기록(품목별 변동은 화면에서 묶어 보여 줍니다). */
+export async function GET(request: NextRequest) {
+  if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  const auth = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
+  if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  if (!isFeatureEnabled("PRICING", auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
+  const days = Math.min(365, Math.max(7, Number(request.nextUrl.searchParams.get("days")) || 90));
+  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const rows = await supabaseRequest<Array<Record<string, unknown>>>(
+    `purchase_receipt_lines?select=receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount&company_id=eq.${encodeURIComponent(auth.companyId)}&receipt_date=gte.${since}&order=receipt_date.desc&limit=5000`
+  ).catch(() => null);
+  if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
+  return NextResponse.json({ days, rows }, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { companyId?: string; fileName?: string; lines?: PurchaseReceiptInputLine[]; receiptDate?: string } | null;
   if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });

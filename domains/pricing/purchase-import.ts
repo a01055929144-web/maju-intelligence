@@ -81,11 +81,26 @@ const toNumber = (value: string | undefined) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
-/** "냉동오징어 [EA]" · "훈제연어 슬라이스(화이트베어) [KG]" 처럼 이름 끝 대괄호를 규격으로 나눕니다. */
-export function splitNameSpec(name: string, spec: string) {
-  if (spec) return { name: name.trim(), spec: spec.trim() };
-  const match = name.trim().match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
-  return match ? { name: match[1].trim(), spec: match[2].trim() } : { name: name.trim(), spec: "" };
+/** 11/4: 자주 쓰는 단위. 고객사마다 다른 말은 직접 입력하면 됩니다. */
+export const COMMON_UNITS = ["EA", "개", "BOX", "박스", "PACK", "팩", "KG", "G", "L", "ML", "통", "봉", "병", "캔", "판", "단", "망", "포", "미", "마리", "SET", "롤", "장"];
+const UNIT_WORDS = new Set(COMMON_UNITS.map((unit) => unit.toLowerCase()).concat(["ea", "box", "pack", "pk", "kg", "g", "l", "ml", "pcs", "set", "bag", "can", "btl"]));
+
+export function isUnitWord(value: string) {
+  return UNIT_WORDS.has(value.trim().toLowerCase());
+}
+
+/**
+ * "냉동오징어 [EA]" → 이름 냉동오징어 · 단위 EA
+ * "껍질가리비 [180G*10EA]" → 이름 껍질가리비 · 규격 180G*10EA (단위는 확인 필요)
+ * 대괄호 안이 단위 낱말이면 단위, 숫자가 섞여 있으면 규격으로 봅니다.
+ */
+export function splitNameSpec(name: string, spec: string, unit = "") {
+  const trimmed = name.trim();
+  const match = trimmed.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+  if (!match) return { name: trimmed, spec: spec.trim(), unit: unit.trim() };
+  const inner = match[2].trim();
+  if (isUnitWord(inner)) return { name: match[1].trim(), spec: spec.trim(), unit: unit.trim() || inner };
+  return { name: match[1].trim(), spec: spec.trim() || inner, unit: unit.trim() };
 }
 
 /** 품목 비교 키: 이름+규격, 대소문자·띄어쓰기·괄호 무시. 같은 키는 같은 품목으로 봅니다. */
@@ -141,7 +156,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       skipped.push(row.rowNumber);
       continue;
     }
-    const { name, spec } = splitNameSpec(rawName, read(row.cells, "spec"));
+    const { name, spec, unit } = splitNameSpec(rawName, read(row.cells, "spec"), read(row.cells, "unit"));
     const quantity = toNumber(read(row.cells, "quantity"));
     const supplyAmount = toNumber(read(row.cells, "supplyAmount"));
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
@@ -151,7 +166,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     lines.push({
       code: read(row.cells, "code"),
       cost: costExcludingVat(rawCost, vatIncluded),
-      lineKey: purchaseLineKey(name, spec),
+      lineKey: purchaseLineKey(name, `${spec}${unit}`),
       name,
       quantity,
       raw: row.cells,
@@ -162,7 +177,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       supplyAmount,
       taxType,
       totalAmount,
-      unit: read(row.cells, "unit"),
+      unit,
       vatAmount,
       vatIncluded
     });
