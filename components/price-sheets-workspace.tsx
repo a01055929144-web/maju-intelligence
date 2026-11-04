@@ -128,8 +128,8 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
         <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white" role="toolbar" aria-label="선택한 상품 마진 일괄 변경">
           <strong>{picked.size}개 선택</strong>
           <span className="flex items-center gap-1">마진 <input aria-label="선택 상품 마진율" className="h-8 w-20 rounded px-2 text-right text-slate-900" inputMode="decimal" onChange={(e) => setBulkMargin(e.target.value)} placeholder="%" value={bulkMargin} />%</span>
-          <button className="rounded bg-teal-500 px-2.5 py-1 font-bold disabled:opacity-50" disabled={busy || bulkMargin === ""} onClick={() => void run([{ action: "bulk-margin", productIds: [...picked], margin: Number(bulkMargin) }], `${picked.size}개 상품 마진을 ${bulkMargin}%로 바꿨습니다.`)} type="button">적용</button>
-          <button className="rounded bg-white/10 px-2.5 py-1 font-bold" disabled={busy} onClick={() => void run([{ action: "bulk-margin", productIds: [...picked], margin: null }, { action: "bulk-direct", productIds: [...picked], price: null }], `${picked.size}개 상품을 기본 마진으로 되돌렸습니다.`)} type="button">기본 마진으로</button>
+          <button className="rounded bg-teal-500 px-2.5 py-1 font-bold disabled:opacity-50" disabled={busy || bulkMargin === ""} onClick={() => void run([{ action: "bulk-margin", productIds: Array.from(picked), margin: Number(bulkMargin) }], `${picked.size}개 상품 마진을 ${bulkMargin}%로 바꿨습니다.`)} type="button">적용</button>
+          <button className="rounded bg-white/10 px-2.5 py-1 font-bold" disabled={busy} onClick={() => void run([{ action: "bulk-margin", productIds: Array.from(picked), margin: null }, { action: "bulk-direct", productIds: Array.from(picked), price: null }], `${picked.size}개 상품을 기본 마진으로 되돌렸습니다.`)} type="button">기본 마진으로</button>
           <button className="ml-auto rounded px-2 py-1 text-white/80" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
         </div>
       ) : null}
