@@ -15,7 +15,7 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
 // rawName·fileSpec·fileUnit 은 엑셀 원문 그대로(원문 연결용), name·spec·unit 은 고친 값(상품관리에 저장).
-type NewRow = CostImportRow & { quantity?: number; rawCost?: number; taxType?: "taxable" | "exempt"; vatIncluded?: boolean; rawName: string; fileSpec: string; fileUnit: string; notDuplicate?: boolean };
+type NewRow = CostImportRow & { rowId: string; quantity?: number; rawCost?: number; taxType?: "taxable" | "exempt"; vatIncluded?: boolean; rawName: string; fileSpec: string; fileUnit: string; notDuplicate?: boolean };
 /** 11/4: 단가·견적·주문에는 단위가 꼭 필요합니다. 규격은 비워도 됩니다. */
 const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : ""].filter(Boolean);
 type LinkInput = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
@@ -34,7 +34,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [mapping, setMapping] = useState<PurchaseImportMapping>({});
   const [vatMode, setVatMode] = useState<VatMode>("auto");
   const [importedLines, setImportedLines] = useState<Array<PurchaseImportLine & { productId?: string }>>([]);
-  const [onlyMissing, setOnlyMissing] = useState(false);
+  // 11/4: 신규 탭 필터 — 켤 때의 행 목록을 고정해 두어, 입력 중에 줄이 사라지지 않게 합니다.
+  const [newFilter, setNewFilter] = useState<"all" | "unit" | "suspect">("all");
+  const [filterIds, setFilterIds] = useState<string[] | null>(null);
   const [rowPick, setRowPick] = useState<number[]>([]);
   const [productPick, setProductPick] = useState<string[]>([]);
   const [bulkUnit, setBulkUnit] = useState("");
@@ -184,7 +186,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const fileNote = matched ? [matched.name.replace(/\s+/g, "") !== line.name.replace(/\s+/g, "") ? `파일 품목명 ${line.name}` : "", (matched.spec || "").replace(/\s+/g, "").toLowerCase() !== line.spec.replace(/\s+/g, "").toLowerCase() && line.spec ? `파일 규격 ${line.spec}` : "", (matched.unit || "").toLowerCase() !== line.unit.toLowerCase() && line.unit ? `파일 단위 ${line.unit}` : ""].filter(Boolean).join(" · ") : "";
         if (matched) productByLine.set(`${line.lineKey}|${line.code}|${line.supplier}`, matched.id);
         if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded, ...(fileNote ? { fileNote } : {}) };
-        else missing.push({ ...row, fileSpec: line.spec, fileUnit: line.unit, quantity: line.quantity, rawCost: line.rawCost, rawName: line.rawName, taxType: line.taxType, vatIncluded: line.vatIncluded });
+        else missing.push({ ...row, rowId: String(line.rowNumber), fileSpec: line.spec, fileUnit: line.unit, quantity: line.quantity, rawCost: line.rawCost, rawName: line.rawName, taxType: line.taxType, vatIncluded: line.vatIncluded });
       }
       setCandidates((current) => ({ ...current, ...next }));
       setSelected((current) => Array.from(new Set([...current, ...Object.keys(next)])));
@@ -192,8 +194,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setRowPick([]);
       setImportedLines(lines.map((line) => ({ ...line, productId: productByLine.get(`${line.lineKey}|${line.code}|${line.supplier}`) })));
       setSheet(null);
-      const missingCount = missing.filter((row) => missingFields(row).length || findDuplicateSuspects(row, unique, 1).length).length;
-      if (missingCount) { setTab("신규"); setOnlyMissing(true); }
+      if (missing.some((row) => missingFields(row).length)) openFilter("unit", missing);
+      else if (missing.some((row) => findDuplicateSuspects(row, unique, 1).length)) openFilter("suspect", missing);
       else if (!Object.keys(next).length && missing.length) setTab("신규");
       const vatCount = Object.values(next).filter((candidate) => candidate.vatIncluded).length;
       const exemptCount = lines.filter((line) => line.taxType === "exempt").length;
@@ -268,6 +270,21 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setMessage(`상품 ${done}개의 단위를 '${unit}'(으)로 바꿨습니다.`);
   }
 
+  function openFilter(kind: "all" | "unit" | "suspect", rows: NewRow[] = unmatched) {
+    setTab("신규");
+    setNewFilter(kind);
+    setFilterIds(kind === "all" ? null : rows.filter((row) => kind === "unit" ? missingFields(row).length > 0 : !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length > 0).map((row) => row.rowId));
+    if (kind === "unit") window.setTimeout(() => focusNextEmptyUnit(), 50);
+  }
+
+  /** 빈 단위 칸으로 바로 이동(엔터·빠른 단위 버튼 뒤). */
+  function focusNextEmptyUnit(after?: HTMLElement | null) {
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-unit-input]"));
+    const start = after ? inputs.indexOf(after as HTMLInputElement) + 1 : 0;
+    const next = inputs.slice(start).find((input) => !input.value.trim()) || inputs.find((input) => !input.value.trim());
+    next?.focus();
+  }
+
   function updateNewRow(index: number, patch: Partial<NewRow>) {
     setUnmatched((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
@@ -297,7 +314,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     });
     // 11/4: 바뀐 매입가가 없어도 새 상품 등록·매입 기록 보관은 진행합니다(예전에는 버튼이 반응하지 않았음).
     if (!changes.length && !unmatched.length && !importedLines.length) { setMessage("저장할 변경이 없습니다."); return; }
-    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가를 채워 주세요."); setTab("신규"); setOnlyMissing(true); return; }
+    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가를 채워 주세요."); openFilter("unit", unmatched); return; }
     setBusy(true); setError(""); setMessage("");
     const notes: string[] = [];
     const newRows = unmatched;
@@ -391,6 +408,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   ], [busy, candidates, edit, productPick, selected, usedBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const missingTotal = unmatched.filter((row) => missingFields(row).length).length;
+  const unitCounts = new Map<string, number>();
+  for (const unit of [...unmatched.map((row) => row.unit), ...products.map((product) => product.unit)]) if (unit.trim()) unitCounts.set(unit.trim(), (unitCounts.get(unit.trim()) || 0) + 1);
+  const quickUnits = Array.from(new Set([...Array.from(unitCounts.entries()).sort((a, b) => b[1] - a[1]).map(([unit]) => unit), "EA", "BOX", "PACK", "KG", "통"])).slice(0, 6);
   const suspectCount = unmatched.filter((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length).length;
   const unitOptions = Array.from(new Set([...COMMON_UNITS, ...products.map((product) => product.unit).filter(Boolean)]));
 
@@ -415,7 +435,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {selected.length && tab !== "신규" ? <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600"><span>선택 {selected.length}개 단가 기준</span><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, true)} type="button">부가세 포함으로</button><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, false)} type="button">부가세 별도로</button><span className="font-semibold text-slate-400">저장되는 매입가는 항상 부가세 별도 금액입니다.</span></div> : null}
     <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장된 변경은 서버 이력으로 확인합니다. 다시 계산한 초안도 새 버전을 게시할 때까지 표시를 유지합니다.</p><div className="flex flex-wrap gap-2">{documentError ? <span role="alert">{documentError} <button className="underline" type="button" onClick={() => void load().catch(cause => setError(String(cause)))}>다시 시도</button></span> : affected.length ? affected.map(({ document, count, changed }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {changed ? `${changed}개 품목 다시 계산 필요` : `${count}개 품목 변경 후보`}{changed && count ? ` · 후보 ${count}개` : ""}</Link>) : <span className="text-sm text-slate-500">다시 계산할 문서나 변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
     {productPick.length && tab !== "신규" ? <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"><span>선택 상품 {productPick.length}개 단위 변경</span><input aria-label="바꿀 단위" className="maju-input h-8 w-28" list="purchase-unit-options" onChange={(event) => setBulkUnit(event.target.value)} placeholder="EA·BOX·KG" value={bulkUnit} /><button className="maju-button-primary h-8 px-2.5 text-xs" disabled={busy || !bulkUnit.trim()} onClick={() => void applyProductUnit()} type="button">단위 바꾸기</button><button className="text-slate-500 underline" onClick={() => setProductPick([])} type="button">선택 해제</button></div> : null}
-    <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체", "매입 이력"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}${missingTotal ? ` · 단위 빈 칸 ${missingTotal}` : ""}${suspectCount ? ` · 중복 의심 ${suspectCount}` : ""}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /><label className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><input checked={emptyOnly} onChange={(event) => { setEmptyOnly(event.target.checked); if (event.target.checked) setTab("전체"); }} type="checkbox" />단위 빈 상품 {unique.filter((product) => !product.unit).length}개</label></div>
+    <div className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체", "매입 이력"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length}${missingTotal ? ` · 단위 빈 칸 ${missingTotal}` : ""}${suspectCount ? ` · 중복 의심 ${suspectCount}` : ""}` : ""}</button>)}<select aria-label="매입처" className="maju-input" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option disabled>전표</option></select><input aria-label="품목 검색" className="maju-input" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /><button aria-pressed={emptyOnly || (tab === "신규" && newFilter === "unit")} className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-inset ${missingTotal || unique.some((product) => !product.unit) ? "bg-amber-50 text-amber-800 ring-amber-300 hover:bg-amber-100" : "bg-white text-slate-400 ring-slate-200"}`} onClick={() => { if (missingTotal) { setEmptyOnly(false); openFilter("unit"); } else { setEmptyOnly((value) => !value); setTab("전체"); } }} type="button">단위 빈 칸 {missingTotal + unique.filter((product) => !product.unit).length}개 채우기</button></div>
     {tab === "매입 이력" ? <PurchaseHistoryPanel companyId={companyId} refreshKey={historyKey} /> : tab === "신규" ? <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
@@ -423,9 +443,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위는 꼭 채우고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700"><input checked={onlyMissing} onChange={(event) => setOnlyMissing(event.target.checked)} type="checkbox" />확인 필요만 보기</label>
+
           <label className="text-xs font-bold text-slate-600">매입처 <input aria-label="새 상품 매입처명" className="maju-input ml-1 h-9 w-36" onChange={(event) => setNewSupplier(event.target.value)} placeholder="비우면 기본 매입처" value={newSupplier} /></label>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="새 상품 필터">
+        {([["all", `전체 ${unmatched.length}`], ["unit", `단위 빈 칸 ${missingTotal}`], ["suspect", `중복 의심 ${suspectCount}`]] as const).map(([kind, label]) => (
+          <button aria-selected={newFilter === kind} className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-inset ${newFilter === kind ? (kind === "unit" ? "bg-amber-500 text-white ring-amber-500" : kind === "suspect" ? "bg-rose-600 text-white ring-rose-600" : "bg-teal-700 text-white ring-teal-700") : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`} key={kind} onClick={() => openFilter(kind)} role="tab" type="button">{label}</button>
+        ))}
+        {newFilter === "unit" && filterIds ? <span className="text-xs font-semibold text-slate-500">엔터를 누르면 다음 빈 칸으로 이동합니다 · {unmatched.filter((row) => filterIds.includes(row.rowId) && !missingFields(row).length).length}/{filterIds.length} 완료{missingTotal ? "" : " · 모두 채웠습니다. 위 ③ 저장을 누르세요"}</span> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
         <span>단위 일괄 입력</span>
@@ -439,14 +465,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </tr></thead><tbody>{unmatched.map((row, index) => {
         const suspects = row.notDuplicate ? [] : findDuplicateSuspects(row, unique);
         const twins = unmatched.filter((other, otherIndex) => otherIndex !== index && other.name.replace(/\s+/g, "") === row.name.replace(/\s+/g, "")).length;
-        const needs = missingFields(row).length > 0 || suspects.length > 0;
-        if (onlyMissing && !needs) return null;
+        if (newFilter !== "all" && filterIds && !filterIds.includes(row.rowId)) return null;
         return <tr className={`border-t border-slate-100 align-top ${missingFields(row).length ? "bg-amber-50/60" : suspects.length ? "bg-rose-50/40" : ""}`} key={`${row.rawName}-${index}`}>
           <td className="px-2 py-1.5"><input aria-label={`${row.name} 선택`} checked={rowPick.includes(index)} onChange={() => setRowPick((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} type="checkbox" /></td>
           <td className="max-w-[180px] truncate px-2 py-2 text-slate-400" title={row.rawName}>{row.rawName || "-"}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 품목`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[170px] border-slate-200" onChange={(event) => updateNewRow(index, { name: event.target.value })} value={row.name} />{twins ? <p className="mt-0.5 text-[10px] font-bold text-rose-600">파일 안에 같은 이름 {twins}개 더 있음(규격·단위 다름)</p> : null}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 규격`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[90px] border-slate-200" onChange={(event) => updateNewRow(index, { spec: event.target.value })} placeholder="없으면 비움" value={row.spec} /></td>
-          <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className={`h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[70px] ${!row.unit.trim() ? "border-amber-400" : "border-slate-200"}`} list="purchase-unit-options" onChange={(event) => updateNewRow(index, { unit: event.target.value })} placeholder="EA·BOX·KG" value={row.unit} /></td>
+          <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 단위`} className={`h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[70px] ${!row.unit.trim() ? "border-amber-400" : "border-slate-200"}`} data-unit-input list="purchase-unit-options" onChange={(event) => updateNewRow(index, { unit: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); focusNextEmptyUnit(event.currentTarget); } }} placeholder="EA·BOX·KG" value={row.unit} />{newFilter === "unit" ? <div className="mt-1 flex flex-wrap gap-0.5">{quickUnits.map((unit) => <button className={`rounded px-1.5 py-0.5 text-[10px] font-black ${row.unit === unit ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-teal-50"}`} key={unit} onClick={(event) => { const cell = event.currentTarget.closest("td")?.querySelector<HTMLInputElement>("input[data-unit-input]"); updateNewRow(index, { unit }); window.setTimeout(() => focusNextEmptyUnit(cell), 30); }} type="button">{unit}</button>)}</div> : null}</td>
           <td className="px-2 py-2 text-right">{row.quantity != null ? row.quantity.toLocaleString("ko-KR") : "-"}</td>
           <td className="px-2 py-1.5"><input aria-label={`${index + 1}행 매입가`} className="h-8 w-full rounded-md border bg-white px-2 text-xs font-semibold min-w-[90px] border-slate-200 text-right" min="0" onChange={(event) => updateNewRow(index, { cost: Number(event.target.value), rawCost: Number(event.target.value), vatIncluded: false })} type="number" value={row.cost} /></td>
           <td className="px-2 py-1.5"><button className={`rounded-full px-2 py-0.5 text-xs font-bold ${row.vatIncluded ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`} disabled={busy} onClick={() => { const raw = row.rawCost ?? row.cost; updateNewRow(index, { cost: costExcludingVat(raw, !row.vatIncluded), rawCost: raw, vatIncluded: !row.vatIncluded }); }} type="button">{row.vatIncluded ? "포함" : "별도"}</button></td>
