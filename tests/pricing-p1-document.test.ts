@@ -263,7 +263,7 @@ describe("pricing P1 documents", () => {
     expect(request).toHaveBeenCalledWith(scope, "save", {
       id,
       expected: 0,
-      content,
+      content: { ...content, display: expect.any(Object) },
     });
     expect(() =>
       app.execute(scope, {
