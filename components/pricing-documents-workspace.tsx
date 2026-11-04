@@ -187,6 +187,10 @@ export function PricingDocumentsWorkspace({
     create(kind, { ...blankContent(kind), title: set.name.slice(0, 100), lines });
     if (lines.length < set.productIds.length) setMessage(`${set.productIds.length - lines.length}개 품목은 비활성이라 빠졌습니다.`);
   }
+  const loadPrices = useCallback(
+    (ids: string[]) => read<{ items: CatalogChoice[] }>("catalog", { productIds: ids.slice(0, 100) }).then((r) => r.items),
+    [read],
+  );
   const quickSearch = useCallback(
     (query: string) => read<{ items: CatalogChoice[]; total: number }>("catalog", { search: query, page: 1 }).then((r) => r.items),
     [read],
@@ -638,19 +642,14 @@ export function PricingDocumentsWorkspace({
                         <PricingProductPicker
                           added={new Set(draft.content.lines.flatMap((l) => (l.promotionId ? [`promo:${l.promotionId}`] : [l.productId])))}
                           busy={busy}
-                          catalog={catalog}
-                          catalogInput={catalogInput}
-                          catalogPage={catalogPage}
-                          catalogTotal={catalogTotal}
+                          companyId={companyId}
+                          loadPrices={loadPrices}
                           manager={manager}
                           onAdd={(items) => void task(async () => add(items))}
                           onAddPromotion={(p) => void task(() => addPromotion(p))}
                           onOpenLibrary={() => window.open("/revenue/pricing/documents?tab=library", "_blank", "noopener")}
                           onRefreshPromotions={() => void task(loadLibrary)}
-                          onPage={setCatalogPage}
-                          onSearch={() => { setCatalogPage(1); setCatalogQuery(catalogInput); }}
                           promotions={promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet))}
-                          setCatalogInput={setCatalogInput}
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
