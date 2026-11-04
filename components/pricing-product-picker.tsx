@@ -68,7 +68,7 @@ export function PricingProductPicker({
   const units = useMemo(() => {
     const count = new Map<string, number>();
     for (const item of index || []) if (item.unit) count.set(item.unit, (count.get(item.unit) || 0) + 1);
-    return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    return Array.from(count.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
   }, [index]);
   const filtered = useMemo(() => filterIndex(index || [], filters), [index, filters]);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
