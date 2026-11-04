@@ -216,9 +216,9 @@ export function PricingDocumentsWorkspace({
       { id: draft.id, expected: draft.revision },
       true,
     );
-    setPreview(r.result);
+    // 11/4: 확정 후 미리보기 창을 자동으로 띄우지 않습니다(필요할 때 '미리보기·인쇄' 또는 버전 미리보기).
     setVersions(await read<DocumentVersion[]>("versions", { id: draft.id }));
-    setMessage(`버전 ${r.result.version}을 확정했습니다.`);
+    setMessage(`버전 ${r.result.version}을 확정했습니다. 아래 '버전 ${r.result.version} 미리보기'에서 인쇄할 수 있습니다.`);
   }
   useEffect(() => {
     let active = true;
