@@ -142,6 +142,8 @@ export type PurchaseImportLine = {
   cost: number;
   lineKey: string;
   raw: string[];
+  /** 엑셀 원문 상품명(대괄호 포함 그대로). 원문 연결(별칭)에 씁니다. */
+  rawName: string;
 };
 
 export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[] } {
@@ -170,6 +172,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       name,
       quantity,
       raw: row.cells,
+      rawName,
       rawCost,
       rowNumber: row.rowNumber,
       spec,

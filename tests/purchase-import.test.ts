@@ -111,3 +111,26 @@ describe("purchase history", () => {
     expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, previousCost: 4500, changeRate: 10, totalQuantity: 8 });
   });
 });
+
+describe("aliases and duplicate suspects", () => {
+  it("matches by remembered raw text even after the product was renamed", async () => {
+    const { aliasKey, matchByAlias } = await import("../domains/pricing/purchase-cost");
+    const key = aliasKey("냉동오징어 [EA]", "", "EA");
+    const products = [{ id: "p1", code: "", name: "오징어(냉동)", spec: "", unit: "EA", cost: 4000, supplierName: "기본 매입처", supplierRawKey: aliasKey("냉동오징어  [EA]", "", "ea") }];
+    expect(matchByAlias(key, "", products)?.id).toBe("p1");
+    expect(matchByAlias(aliasKey("냉동오징어 [KG]", "", "KG"), "", products)).toBeNull();
+  });
+
+  it("flags same-name different spec/unit and similar names", async () => {
+    const { findDuplicateSuspects } = await import("../domains/pricing/purchase-cost");
+    const products = [
+      { id: "p1", code: "", name: "껍질가리비", spec: "180G*10EA", unit: "BOX", cost: 2000 },
+      { id: "p2", code: "", name: "양파", spec: "10kg", unit: "망", cost: 9000 }
+    ];
+    const same = findDuplicateSuspects({ name: "껍질가리비", spec: "200G*10EA", unit: "BOX" }, products);
+    expect(same[0]).toMatchObject({ productId: "p1" });
+    expect(same[0].reason).toContain("규격 180G*10EA → 200G*10EA");
+    expect(findDuplicateSuspects({ name: "껍질 가리비살", spec: "", unit: "KG" }, products)[0]?.productId).toBe("p1");
+    expect(findDuplicateSuspects({ name: "대파", spec: "", unit: "단" }, products)).toEqual([]);
+  });
+});

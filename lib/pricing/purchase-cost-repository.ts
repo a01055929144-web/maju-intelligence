@@ -1,6 +1,6 @@
 import { supabaseRequest } from "../store";
 import type { PurchaseCostChange, PurchaseCostRepository } from "../../application/pricing/update-purchase-cost";
-import type { CostProduct } from "../../domains/pricing/purchase-cost";
+import { aliasKey, type CostProduct } from "../../domains/pricing/purchase-cost";
 
 type Row = Record<string, unknown>;
 const enc = encodeURIComponent;
@@ -27,7 +27,7 @@ export const purchaseCostRepository: PurchaseCostRepository = {
     const [catalog, matches, supplierProducts, suppliers] = await Promise.all([
       pages(`product_catalog?select=id,product_code,canonical_name,spec_value,spec_unit,sales_unit,purchase_price,tax_type&company_id=eq.${enc(companyId)}&order=id`),
       pages(`supplier_product_matches?select=product_catalog_id,supplier_product_id&company_id=eq.${enc(companyId)}&match_status=in.(auto,confirmed)&order=supplier_product_id`),
-      pages(`supplier_products?select=id,supplier_id,supplier_code,latest_cost&company_id=eq.${enc(companyId)}&is_active=eq.true&order=id`),
+      pages(`supplier_products?select=id,supplier_id,supplier_code,raw_name,raw_spec,raw_unit,latest_cost&company_id=eq.${enc(companyId)}&is_active=eq.true&order=id`),
       pages(`product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&order=id`),
     ]);
     const bySupplierProduct = new Map(supplierProducts.map((row) => [String(row.id), row]));
@@ -47,7 +47,7 @@ export const purchaseCostRepository: PurchaseCostRepository = {
         ...(row.tax_type === "taxable" || row.tax_type === "exempt" ? { taxType: row.tax_type as "taxable" | "exempt" } : {}),
       };
       const linked = byCatalog.get(base.id) || [];
-      return linked.length ? linked.map((supplier) => ({ ...base, supplierProductId: String(supplier.id), supplierCode: String(supplier.supplier_code || ""), supplierName: supplierNames.get(String(supplier.supplier_id)) || "" })) : [base];
+      return linked.length ? linked.map((supplier) => ({ ...base, supplierProductId: String(supplier.id), supplierCode: String(supplier.supplier_code || ""), supplierName: supplierNames.get(String(supplier.supplier_id)) || "", supplierRawKey: aliasKey(String(supplier.raw_name || ""), String(supplier.raw_spec || ""), String(supplier.raw_unit || "")) })) : [base];
     });
     return { products, suppliers: Array.from(supplierNames.values()) };
   },
