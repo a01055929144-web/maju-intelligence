@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getRequestAuthScope } from "@/lib/auth";
+import { canManagePriceSheets } from "@/domains/pricing/access";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { priceSheetsEnabled } from "@/lib/pricing/feature";
+import { buildPurchaseReceiptRows, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { supabaseRequest } from "@/lib/store";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * 11/4: 매입 기록 보관 — 엑셀의 수량·공급가액·부가세·합계를 날짜·품목별로 남깁니다.
+ * 같은 날 같은 품목을 다시 올리면 새 줄을 만들지 않고 덮어씁니다(company_id, dedupe_key).
+ * 테이블(purchase_receipt_lines)은 운영 DB 승인 후 생성됩니다. 없으면 매입가 저장은 그대로 두고 안내만 합니다.
+ */
+export async function POST(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as { companyId?: string; fileName?: string; lines?: PurchaseReceiptInputLine[]; receiptDate?: string } | null;
+  if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  const auth = await getRequestAuthScope(request, body?.companyId);
+  if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  if (!isFeatureEnabled("PRICING", auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
+  const receiptDate = String(body?.receiptDate || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) return NextResponse.json({ message: "매입일을 확인해 주세요." }, { status: 400 });
+  const lines = Array.isArray(body?.lines) ? body!.lines.slice(0, 5000) : [];
+  const rows = buildPurchaseReceiptRows({
+    actorName: auth.customerSession?.name || auth.adminSession?.name || "운영자",
+    companyId: auth.companyId,
+    fileName: String(body?.fileName || "").slice(0, 200),
+    lines,
+    receiptDate
+  });
+  if (!rows.length) return NextResponse.json({ saved: 0 });
+  try {
+    for (let offset = 0; offset < rows.length; offset += 500) {
+      await supabaseRequest("purchase_receipt_lines?on_conflict=company_id,dedupe_key", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows.slice(offset, offset + 500))
+      });
+    }
+    return NextResponse.json({ saved: rows.length });
+  } catch (error) {
+    const missing = error instanceof Error && /purchase_receipt_lines|PGRST205|42P01|404/.test(error.message);
+    return NextResponse.json({ message: missing ? "DB 승인 후 시작됩니다" : "저장하지 못했습니다" }, { status: missing ? 503 : 500 });
+  }
+}
