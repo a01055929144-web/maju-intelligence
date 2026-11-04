@@ -13,7 +13,7 @@ import { documentRequest } from "@/lib/pricing/document-client";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
-type Candidate = { cost: number; rawCost?: number; vatIncluded?: boolean; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀"; source: string };
+type Candidate = { cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀"; source: string };
 const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
 export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
@@ -161,7 +161,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       for (const line of merged) {
         const row: CostImportRow = { code: line.code, cost: line.cost, name: line.name, spec: line.spec, supplier: line.supplier, unit: line.unit };
         const matched = matchCostImportRow(row, products);
-        if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, vatIncluded: line.vatIncluded };
+        if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded };
         else missing.push(row);
       }
       setCandidates((current) => ({ ...current, ...next }));
@@ -170,7 +170,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setImportedLines(lines);
       setSheet(null);
       const vatCount = Object.values(next).filter((candidate) => candidate.vatIncluded).length;
-      setMessage(`변경 후보 ${Object.keys(next).length}개 · 새 상품/확인 필요 ${missing.length}개${skipped.length ? ` · 품목·단가가 없어 건너뛴 행 ${skipped.length}개` : ""}${vatCount ? ` · 부가세 포함으로 본 품목 ${vatCount}개(별도 금액으로 바꿔 저장)` : ""}. 저장 전에는 반영되지 않습니다.`);
+      const exemptCount = lines.filter((line) => line.taxType === "exempt").length;
+      const taxableCount = lines.filter((line) => line.taxType === "taxable").length;
+      setMessage(`변경 후보 ${Object.keys(next).length}개 · 새 상품/확인 필요 ${missing.length}개${skipped.length ? ` · 품목·단가가 없어 건너뛴 행 ${skipped.length}개` : ""}${vatCount ? ` · 부가세 포함으로 본 품목 ${vatCount}개(별도 금액으로 바꿔 저장)` : ""}${mapping.vatAmount !== undefined ? ` · 부가세 열 기준 과세 ${taxableCount}개 · 면세 ${exemptCount}개` : ""}. 저장 전에는 반영되지 않습니다.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "열 맞추기를 확인해 주세요."); }
   }
 
@@ -269,7 +271,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     { key: "current", label: "현재 매입가", align: "right", total: true, value: (row) => row.cost, render: (row) => money(row.cost) },
     { key: "date", label: "적용일", value: () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }) },
     { key: "next", label: "변경 후", align: "right", total: true, value: (row) => candidates[row.id]?.cost ?? row.cost, render: (row) => <input aria-label={`${row.name} 변경 후 매입가`} className="maju-input w-28" disabled={busy} min="0" max="1000000000" step="0.01" type="number" value={candidates[row.id]?.cost ?? ""} placeholder={String(row.cost)} onChange={(event) => edit(row, event.target.value)} /> },
-    { key: "vat", label: "단가 기준", value: (row) => candidates[row.id]?.vatIncluded ? "부가세 포함" : candidates[row.id] ? "부가세 별도" : "-", render: (row) => candidates[row.id] ? <button aria-label={`${row.name} 부가세 기준 바꾸기`} className={`rounded-full px-2 py-0.5 text-xs font-bold ${candidates[row.id].vatIncluded ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`} disabled={busy} onClick={() => setVatIncluded([row.id], !candidates[row.id].vatIncluded)} title={candidates[row.id].vatIncluded ? `원래 단가 ${money(candidates[row.id].rawCost ?? 0)} → 별도 ${money(candidates[row.id].cost)}` : "누르면 부가세 포함으로 바꿉니다"} type="button">{candidates[row.id].vatIncluded ? "포함" : "별도"}</button> : "-" },
+    { key: "vat", label: "단가 기준", value: (row) => candidates[row.id]?.vatIncluded ? "부가세 포함" : candidates[row.id] ? "부가세 별도" : "-", render: (row) => candidates[row.id] ? <><button aria-label={`${row.name} 부가세 기준 바꾸기`} className={`rounded-full px-2 py-0.5 text-xs font-bold ${candidates[row.id].vatIncluded ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`} disabled={busy} onClick={() => setVatIncluded([row.id], !candidates[row.id].vatIncluded)} title={candidates[row.id].vatIncluded ? `원래 단가 ${money(candidates[row.id].rawCost ?? 0)} → 별도 ${money(candidates[row.id].cost)}` : "누르면 부가세 포함으로 바꿉니다"} type="button">{candidates[row.id].vatIncluded ? "포함" : "별도"}</button>{candidates[row.id].taxType ? <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${candidates[row.id].taxType === "exempt" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>{candidates[row.id].taxType === "exempt" ? "면세" : "과세"}</span> : null}</> : "-" },
     { key: "quantity", label: "수량", align: "right", value: (row) => candidates[row.id]?.quantity ?? "", render: (row) => candidates[row.id]?.quantity != null ? candidates[row.id].quantity!.toLocaleString("ko-KR") : "-" },
     { key: "delta", label: "변동", value: (row) => candidates[row.id] ? (row.cost ? Math.round((candidates[row.id].cost / row.cost - 1) * 1000) / 10 : 0) : 0, render: (row) => candidates[row.id] ? `${candidates[row.id].cost >= row.cost ? "▲" : "▼"} ${row.cost ? Math.abs(Math.round((candidates[row.id].cost / row.cost - 1) * 1000) / 10) : "신규"}%` : "-" },
     { key: "method", label: "바꾼 방법·근거", value: (row) => candidates[row.id] ? `${candidates[row.id].method} · ${candidates[row.id].source}` : "-" },

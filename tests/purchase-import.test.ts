@@ -52,3 +52,16 @@ describe("purchase import", () => {
     expect(matchCostImportRow({ code: "", name: "냉동오징어", spec: "[EA]", unit: "", supplier: "", cost: 4500 }, products)?.id).toBe("p1");
   });
 });
+
+describe("purchase import vat column", () => {
+  it("treats prices as VAT-excluded and records taxable/exempt from a separate VAT column", () => {
+    const sheet = buildPurchaseSheet([
+      ["품목명", "수량", "단가", "공급가액", "부가세", "합계"],
+      ["간장 [1.8L]", "2", "10000", "20000", "2000", "22000"],
+      ["양파 [10kg]", "1", "15000", "15000", "", "15000"]
+    ]);
+    const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
+    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000]]);
+    expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
+  });
+});

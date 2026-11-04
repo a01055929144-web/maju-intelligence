@@ -52,6 +52,7 @@ export function PurchaseSheetMapper({
           </select>
         </label>
       </div>
+      {mapping.vatAmount !== undefined ? <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">부가세가 따로 적힌 파일이라 단가는 <b>부가세 별도</b> 금액으로 봅니다. 부가세 칸에 금액이 있으면 과세, 0이거나 비어 있으면 면세로 기록합니다.</p> : null}
       {missing.length ? <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">필수 항목을 골라 주세요: {missing.map((field) => field.label).join(", ")}</p> : null}
       <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-full border-collapse text-xs">

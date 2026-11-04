@@ -10,6 +10,7 @@ export type PurchaseReceiptInputLine = {
   rawCost: number;
   cost: number;
   vatIncluded?: boolean;
+  taxType?: "taxable" | "exempt";
   quantity?: number;
   supplyAmount?: number;
   vatAmount?: number;
@@ -53,6 +54,7 @@ export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate
       spec: spec || null,
       supplier_name: supplier || null,
       supply_amount: add("supply_amount", num(line.supplyAmount)),
+      tax_type: line.taxType === "taxable" || line.taxType === "exempt" ? line.taxType : null,
       total_amount: add("total_amount", num(line.totalAmount)),
       unit: text(line.unit, 40) || null,
       unit_cost_ex_vat: cost,

@@ -122,6 +122,8 @@ export type PurchaseImportLine = {
   vatAmount?: number;
   totalAmount?: number;
   vatIncluded: boolean;
+  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 0·빈칸=면세. 부가세가 따로 적힌 파일은 단가가 '별도' 금액입니다. */
+  taxType?: "taxable" | "exempt";
   cost: number;
   lineKey: string;
   raw: string[];
@@ -145,6 +147,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
     const totalAmount = toNumber(read(row.cells, "totalAmount"));
     const vatIncluded = vatMode === "auto" ? inferVatIncluded({ cost: rawCost, quantity, supplyAmount, totalAmount, vatAmount }) : vatMode === "included";
+    const taxType = mapping.vatAmount === undefined ? undefined : vatAmount && vatAmount > 0 ? "taxable" as const : "exempt" as const;
     lines.push({
       code: read(row.cells, "code"),
       cost: costExcludingVat(rawCost, vatIncluded),
@@ -157,6 +160,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       spec,
       supplier: read(row.cells, "supplier"),
       supplyAmount,
+      taxType,
       totalAmount,
       unit: read(row.cells, "unit"),
       vatAmount,
