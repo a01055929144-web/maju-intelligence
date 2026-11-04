@@ -28,10 +28,11 @@ describe("purchase import", () => {
   });
 
   it("splits bracketed spec and keeps VAT-excluded prices when price×qty matches supply amount", () => {
-    expect(splitNameSpec("냉동오징어 [EA]", "")).toEqual({ name: "냉동오징어", spec: "EA" });
+    expect(splitNameSpec("냉동오징어 [EA]", "")).toEqual({ name: "냉동오징어", spec: "", unit: "EA" });
+    expect(splitNameSpec("껍질가리비 [180G*10EA]", "")).toEqual({ name: "껍질가리비", spec: "180G*10EA", unit: "" });
     const sheet = buildPurchaseSheet(matrix);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
-    expect(lines[0]).toMatchObject({ name: "냉동오징어", spec: "EA", cost: 4500, vatIncluded: false, quantity: 5 });
+    expect(lines[0]).toMatchObject({ name: "냉동오징어", spec: "", unit: "EA", cost: 4500, vatIncluded: false, quantity: 5 });
     const included = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "included").lines[0];
     expect(included.cost).toBeCloseTo(4090.91, 2);
   });
@@ -97,5 +98,16 @@ describe("product field edits", () => {
       new Map([["p1", { spec: "", unit: "" }], ["p2", { spec: "10kg", unit: "박스" }]])
     );
     expect(plan).toEqual([{ productId: "p1", values: { purchase_unit: "병", sales_unit: "병", spec_unit: "L", spec_value: 1.8 } }]);
+  });
+});
+
+describe("purchase history", () => {
+  it("groups by item and computes latest/previous cost and quantity", async () => {
+    const { summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
+    const items = summarizePurchaseHistory([
+      { line_key: "a", product_name: "오징어", quantity: 5, receipt_date: "2026-11-03", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4500 },
+      { line_key: "a", product_name: "오징어", quantity: 3, receipt_date: "2026-11-04", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4950 }
+    ]);
+    expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, previousCost: 4500, changeRate: 10, totalQuantity: 8 });
   });
 });
