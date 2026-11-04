@@ -1,3 +1,4 @@
+import { runLimited } from "./run-limited";
 import {
   buildSupplierProductWrite,
   planSupplierMatchRefresh,
@@ -542,14 +543,14 @@ export async function createCatalogFromSupplierProducts(
       match_status: "matched",
       is_active: true,
     }));
-  const rowsWithCodes = [];
-  for (const row of rows) {
-    const code = await db<string>("rpc/next_product_code", {
+  // 11/4: 상품코드 발급은 DB에서 원자적으로 처리되므로 동시에 요청해 저장 시간을 줄입니다.
+  const rowsWithCodes = await runLimited(rows, 10, async (row) => ({
+    ...row,
+    product_code: await db<string>("rpc/next_product_code", {
       method: "POST",
       body: JSON.stringify({ p_company_id: companyId }),
-    });
-    rowsWithCodes.push({ ...row, product_code: code });
-  }
+    }),
+  }));
   let created: Array<{ id: string; source_key: string }> = [];
   for (const part of chunks(rowsWithCodes))
     created = created.concat(

@@ -6,6 +6,7 @@ import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { saveProductCatalogImport } from "@/lib/product-catalog-import";
 import { supabaseRequest } from "@/lib/store";
+import { runLimited } from "@/lib/run-limited";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +47,10 @@ export async function POST(request: NextRequest) {
         `supplier_products?select=id,source_fingerprint&company_id=eq.${encodeURIComponent(companyId)}&supplier_id=eq.${encodeURIComponent(saved.supplierId)}&source_fingerprint=in.(${fingerprints.map((value) => `"${value.replaceAll('"', "")}"`).map(encodeURIComponent).join(",")})`
       );
       const byFingerprint = new Map(supplierProducts.map((row) => [row.source_fingerprint, row.id]));
-      for (let index = 0; index < preview.products.length; index++) {
-        const product = preview.products[index];
+      await runLimited(preview.products, 8, async (product) => {
         const supplierProductId = byFingerprint.get(product.sourceFingerprint);
         const target = items.find((item) => item.rawName.trim() === product.rawName || item.rawName.trim().replace(/\s+/g, " ") === product.rawName)?.productId;
-        if (!supplierProductId || !target) continue;
+        if (!supplierProductId || !target) return;
         await supabaseRequest(`supplier_product_matches?company_id=eq.${encodeURIComponent(companyId)}&supplier_product_id=eq.${encodeURIComponent(supplierProductId)}&product_catalog_id=neq.${encodeURIComponent(target)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
         await supabaseRequest("supplier_product_matches?on_conflict=company_id,supplier_product_id,product_catalog_id", {
           method: "POST",
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({ brand_matches: true, candidate_rank: null, company_id: companyId, confirmed_at: new Date().toISOString(), conversion_confirmed: false, match_score: 100, match_status: "confirmed", name_matches: true, origin_matches: true, product_catalog_id: target, spec_matches: true, supplier_product_id: supplierProductId, unit_matches: true })
         });
         linked++;
-      }
+      });
     }
     return NextResponse.json({ linked });
   } catch (error) {
