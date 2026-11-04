@@ -70,6 +70,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editing, setEditing] = useState<{ key: string; draft: Record<string, unknown> } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const display = content.display || DEFAULT_DISPLAY;
   const latest = useRef(content);
@@ -84,22 +85,11 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     return () => { active = false; };
   }, [companyId]);
 
-  // 회사 정보가 바뀌었으면 문서에 넣어 둔 줄도 최신 값으로, 회사명이 비어 있으면 회사 정보 이름으로 채웁니다.
+  // 회사명이 비어 있으면 회사 정보 이름으로 채웁니다. 문서에 넣은 값은 문서에서 고친 그대로 둡니다.
   useEffect(() => {
     if (!profile || !editable) return;
     const current = latest.current;
-    const info = (current.display || DEFAULT_DISPLAY).info;
-    const byKey = new Map(buildInfoCandidates(profile).map((c) => [c.key, c]));
-    let changed = false;
-    const nextInfo = info.flatMap((item) => {
-      const fresh = byKey.get(item.key);
-      if (!fresh) return [item];
-      if (!fresh.value) { changed = true; return []; }
-      if (fresh.value !== item.value) { changed = true; return [{ ...item, value: fresh.value }]; }
-      return [item];
-    });
-    const name = !current.companyName.trim() && profile.company?.name ? profile.company.name.slice(0, 100) : "";
-    if (changed || name) onContent({ ...current, ...(name ? { companyName: name } : {}), display: { ...(current.display || DEFAULT_DISPLAY), info: nextInfo } });
+    if (!current.companyName.trim() && profile.company?.name) onContent({ ...current, companyName: profile.company.name.slice(0, 100) });
   }, [profile, editable]);
 
   const candidates = profile ? buildInfoCandidates(profile) : [];
@@ -131,7 +121,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     }
     if (fresh?.value) toggle(fresh, true, latest.current);
     else if (fresh) toggle(fresh, false, latest.current);
-    setMessage(`${candidate.label}을(를) 회사 정보에도 저장했습니다.`);
+    setMessage(`${candidate.label}을(를) 회사 정보에 저장하고 문서에 넣었습니다.`);
   }
 
   const input = "h-8 w-full rounded border border-slate-300 px-2 text-xs";
@@ -174,25 +164,92 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   }
 
   const canEditProfile = editable && profile?.canEdit !== false;
-  const group = (place: "header" | "footer", title: string) => (
-    <fieldset className="space-y-0.5">
-      <legend className="mb-1 text-xs font-black text-teal-700">{title}</legend>
-      {candidates.filter((c) => c.place === place).map((c) => (
-        <div key={c.key}>
-          <div className="flex min-h-8 items-center gap-2 text-sm">
-            <label className={`flex min-w-0 flex-1 items-center gap-2 ${c.value ? "" : "text-slate-400"}`}>
-              <input checked={isOn(c.key)} disabled={!editable || !c.value} onChange={(e) => toggle(c, e.target.checked)} type="checkbox" />
-              <span className="shrink-0">{c.label}</span>
-              {c.value ? <span className="min-w-0 truncate text-xs text-slate-500" title={c.value}>{c.value}</span> : null}
-            </label>
-            {canEditProfile && c.editor !== "none" && editing?.key !== c.key ? (
-              <button className="shrink-0 text-xs font-bold text-teal-700" onClick={() => { setMessage(""); setEditing({ key: c.key, draft: initialDraft(c, profile?.values || {}) }); }} type="button">{c.value ? "수정" : "+ 입력"}</button>
+  const info = display.info;
+  const setInfo = (next: DocumentInfoItem[]) => setDisplay({ info: next.slice(0, 24) });
+  const updateItem = (key: string, patch: Partial<DocumentInfoItem>) => setInfo(info.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  // 11/4: 끌어서 순서·위치(위쪽/아래쪽) 바꾸기. 손가락(모바일)은 ↑↓·위/아래 버튼으로.
+  function moveTo(key: string, place: "header" | "footer", beforeKey: string | null) {
+    const item = info.find((x) => x.key === key);
+    if (!item) return;
+    const rest = info.filter((x) => x.key !== key);
+    const moved = { ...item, place };
+    const at = beforeKey ? rest.findIndex((x) => x.key === beforeKey) : -1;
+    if (at < 0) {
+      const lastOfPlace = rest.map((x) => x.place).lastIndexOf(place);
+      rest.splice(lastOfPlace + 1, 0, moved);
+    } else rest.splice(at, 0, moved);
+    setInfo(rest);
+  }
+  function nudge(key: string, dir: -1 | 1) {
+    const item = info.find((x) => x.key === key);
+    if (!item) return;
+    const same = info.filter((x) => x.place === item.place);
+    const at = same.findIndex((x) => x.key === key);
+    const target = same[at + dir];
+    if (!target) return;
+    if (dir === -1) moveTo(key, item.place, target.key);
+    else { const after = same[at + 2]; moveTo(key, item.place, after ? after.key : null); }
+  }
+  function addCustom() {
+    if (info.length >= 24) { setMessage("정보는 24줄까지 넣을 수 있습니다."); return; }
+    const key = `custom:${Date.now().toString(36)}`;
+    setInfo([...info, { key, label: "기타", value: "내용을 입력하세요", place: "footer" }]);
+  }
+  const zone = (place: "header" | "footer", title: string) => {
+    const rows = info.filter((x) => x.place === place);
+    return (
+      <div
+        className={`min-h-12 space-y-1 rounded-lg border border-dashed p-1.5 ${dragging ? "border-teal-400 bg-teal-50/40" : "border-slate-200"}`}
+        onDragOver={(e) => { if (dragging) e.preventDefault(); }}
+        onDrop={(e) => { e.preventDefault(); if (dragging) moveTo(dragging, place, null); setDragging(null); }}
+      >
+        <p className="px-1 text-[11px] font-black text-teal-700">{title}</p>
+        {rows.map((item) => (
+          <div
+            className="group flex items-start gap-1 rounded-md border border-slate-200 bg-white p-1.5"
+            draggable={editable}
+            key={item.key}
+            onDragEnd={() => setDragging(null)}
+            onDragOver={(e) => { if (dragging && dragging !== item.key) e.preventDefault(); }}
+            onDragStart={(e) => { setDragging(item.key); e.dataTransfer.effectAllowed = "move"; }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dragging && dragging !== item.key) moveTo(dragging, place, item.key); setDragging(null); }}
+          >
+            <span aria-hidden className="cursor-grab select-none pt-1 text-slate-400">⠿</span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <input aria-label="정보 이름" className="w-full rounded border border-transparent px-1 text-xs font-bold hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={30} onChange={(e) => updateItem(item.key, { label: e.target.value })} value={item.label} />
+              <input aria-label={`${item.label} 문서에 표시할 값`} className="w-full rounded border border-transparent px-1 text-xs text-slate-700 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={200} onChange={(e) => updateItem(item.key, { value: e.target.value })} value={item.value} />
+            </div>
+            {editable ? (
+              <div className="flex shrink-0 flex-col items-center text-[11px] text-slate-500">
+                <button aria-label={`${item.label} 위로`} onClick={() => nudge(item.key, -1)} type="button">▲</button>
+                <button aria-label={`${item.label} ${place === "header" ? "아래쪽으로" : "위쪽으로"} 옮기기`} className="font-bold text-teal-700" onClick={() => moveTo(item.key, place === "header" ? "footer" : "header", null)} type="button">{place === "header" ? "↓" : "↑"}</button>
+                <button aria-label={`${item.label} 아래로`} onClick={() => nudge(item.key, 1)} type="button">▼</button>
+              </div>
             ) : null}
+            {editable ? <button aria-label={`${item.label} 빼기`} className="shrink-0 px-1 text-slate-400 hover:text-rose-600" onClick={() => setInfo(info.filter((x) => x.key !== item.key))} type="button">✕</button> : null}
+          </div>
+        ))}
+        {!rows.length ? <p className="px-1 py-2 text-center text-[11px] text-slate-400">여기로 끌어 놓으세요</p> : null}
+      </div>
+    );
+  };
+  const available = candidates.filter((c) => !isOn(c.key));
+  const library = (
+    <div className="space-y-0.5">
+      <p className="text-xs font-black text-slate-700">회사 정보에서 가져오기</p>
+      {available.map((c) => (
+        <div key={c.key}>
+          <div className="flex min-h-7 items-center gap-2 text-xs">
+            <span className={`shrink-0 font-semibold ${c.value ? "" : "text-slate-400"}`}>{c.label}</span>
+            <span className="min-w-0 flex-1 truncate text-slate-500" title={c.value}>{c.value || "회사 정보에 없음"}</span>
+            {editable && c.value ? <button className="shrink-0 font-bold text-teal-700" onClick={() => toggle(c, true)} type="button">+ 넣기</button> : null}
+            {canEditProfile && !c.value && c.editor !== "none" && editing?.key !== c.key ? <button className="shrink-0 font-bold text-teal-700" onClick={() => { setMessage(""); setEditing({ key: c.key, draft: initialDraft(c, profile?.values || {}) }); }} type="button">+ 입력</button> : null}
           </div>
           {editing?.key === c.key ? editorFor(c) : null}
         </div>
       ))}
-    </fieldset>
+      {!available.length ? <p className="text-[11px] text-slate-400">회사 정보 항목을 모두 넣었습니다.</p> : null}
+    </div>
   );
 
   const chip = (on: boolean) => `rounded-full px-2.5 py-1 text-xs font-bold ${on ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600"}`;
@@ -201,10 +258,13 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     <aside aria-label="보여줄 정보" className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 xl:sticky xl:top-24">
       <div>
         <h2 className="text-sm font-black text-slate-900">보여줄 정보</h2>
-        <p className="mt-0.5 text-xs text-slate-500">회사 정보에서 가져옵니다. 여기서 입력·수정하면 회사 정보에도 바로 저장됩니다.</p>
+        <p className="mt-0.5 text-xs text-slate-500">끌어서 위쪽·아래쪽과 순서를 바꾸세요. 문서에서 고친 값은 이 문서에만 쓰이고 회사 정보는 바뀌지 않습니다.</p>
       </div>
       {message ? <p className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700" role="status">{message}</p> : null}
-      {profile === null ? <p className="text-xs text-slate-500">회사 정보를 불러오는 중입니다.</p> : <>{group("header", "위쪽 (회사 정보)")}{group("footer", "아래쪽 (주문·배송·결제)")}</>}
+      {zone("header", "위쪽 — 회사명 아래")}
+      {zone("footer", "아래쪽 — 주문·배송·결제")}
+      {editable ? <button className="w-full rounded-lg border border-dashed border-slate-300 py-1.5 text-xs font-bold text-slate-700" onClick={addCustom} type="button">+ 기타 정보 추가</button> : null}
+      {profile === null ? <p className="text-xs text-slate-500">회사 정보를 불러오는 중입니다.</p> : library}
       <fieldset className="space-y-2">
         <legend className="mb-1 text-xs font-black text-teal-700">품목 표</legend>
         <div className="flex flex-wrap gap-1.5">
