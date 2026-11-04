@@ -65,3 +65,21 @@ describe("purchase import vat column", () => {
     expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
   });
 });
+
+describe("product tax type fill", () => {
+  it("fills only empty products and reports conflicts instead of overwriting", async () => {
+    const { planProductTaxTypes } = await import("../domains/pricing/purchase-receipt");
+    const line = { cost: 1, name: "a", rawCost: 1 };
+    const plan = planProductTaxTypes(
+      [
+        { ...line, productId: "p1", taxType: "exempt" },
+        { ...line, productId: "p2", taxType: "taxable" },
+        { ...line, productId: "p3", taxType: "taxable" },
+        { ...line, productId: "p3", taxType: "exempt" }
+      ],
+      new Map([["p1", null], ["p2", "exempt"], ["p3", null]])
+    );
+    expect(plan.fill).toEqual([{ productId: "p1", taxType: "exempt" }]);
+    expect(plan.conflicts.sort()).toEqual(["p2", "p3"]);
+  });
+});

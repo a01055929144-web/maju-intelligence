@@ -27,7 +27,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [sheet, setSheet] = useState<PurchaseSheet | null>(null);
   const [mapping, setMapping] = useState<PurchaseImportMapping>({});
   const [vatMode, setVatMode] = useState<VatMode>("auto");
-  const [importedLines, setImportedLines] = useState<PurchaseImportLine[]>([]);
+  const [importedLines, setImportedLines] = useState<Array<PurchaseImportLine & { productId?: string }>>([]);
   const [receiptDate, setReceiptDate] = useState(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }));
   const [fileName, setFileName] = useState("");
   const [newSupplier, setNewSupplier] = useState("");
@@ -126,8 +126,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       headers: { "Content-Type": "application/json" },
       method: "POST"
     }).catch(() => null);
-    const payload = (await response?.json().catch(() => null)) as { saved?: number; message?: string } | null;
-    if (response?.ok) { setImportedLines([]); return ` · 매입 기록 ${payload?.saved ?? 0}줄 보관`; }
+    const payload = (await response?.json().catch(() => null)) as { saved?: number; message?: string; taxConflicts?: number; taxFilled?: number } | null;
+    if (response?.ok) {
+      setImportedLines([]);
+      return ` · 매입 기록 ${payload?.saved ?? 0}줄 보관${payload?.taxFilled ? ` · 상품 과세 구분 ${payload.taxFilled}개 채움` : ""}${payload?.taxConflicts ? ` · 과세 구분이 기존과 다른 상품 ${payload.taxConflicts}개는 그대로 둠(상품관리에서 확인)` : ""}`;
+    }
     return ` · 매입 기록(수량 등) 보관은 ${payload?.message || "다음에 다시 시도"}`;
   }
 
@@ -156,18 +159,20 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const { lines, skipped } = parsePurchaseLines(sheet, mapping, vatMode);
       // 같은 파일 안 같은 품목은 한 줄로(수량 합산) → 매일 올려도 상품이 중복 생성되지 않게 비교 키로 기존 상품과 맞춥니다.
       const merged = mergeDuplicateLines(lines);
+      const productByLine = new Map<string, string>();
       const next: Record<string, Candidate> = {};
       const missing: CostImportRow[] = [];
       for (const line of merged) {
         const row: CostImportRow = { code: line.code, cost: line.cost, name: line.name, spec: line.spec, supplier: line.supplier, unit: line.unit };
         const matched = matchCostImportRow(row, products);
+        if (matched) productByLine.set(`${line.lineKey}|${line.code}|${line.supplier}`, matched.id);
         if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded };
         else missing.push(row);
       }
       setCandidates((current) => ({ ...current, ...next }));
       setSelected((current) => Array.from(new Set([...current, ...Object.keys(next)])));
       setUnmatched(missing);
-      setImportedLines(lines);
+      setImportedLines(lines.map((line) => ({ ...line, productId: productByLine.get(`${line.lineKey}|${line.code}|${line.supplier}`) })));
       setSheet(null);
       const vatCount = Object.values(next).filter((candidate) => candidate.vatIncluded).length;
       const exemptCount = lines.filter((line) => line.taxType === "exempt").length;
