@@ -1,83 +1,217 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import type { PriceState } from "@/domains/pricing/price-rules";
-import type { PricingCommand } from "@/application/pricing/manage-price-sheets";
-const fieldClass = "rounded border p-2";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
+import { calculatePrice } from "@/domains/pricing/price-rules";
+import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
+
+const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
+
+/** 이 품목에 실제로 적용되는 규칙(직접 단가 → 품목 마진 → 그룹 → 기본). */
+export function marginSource(item: PriceItem, state: PriceState) {
+  if (item.directPrice !== null) return { kind: "direct" as const, label: "직접 단가", margin: null };
+  if (item.itemMargin !== null) return { kind: "item" as const, label: "개별", margin: item.itemMargin };
+  const group = state.groups.find((g) => g.id === item.groupId) || state.groups.find((g) => g.id === state.categories.find((c) => c.category === item.category)?.groupId);
+  if (group) return { kind: "group" as const, label: group.name, margin: group.margin };
+  return { kind: "default" as const, label: "기본", margin: state.defaultMargin };
+}
+
+/**
+ * 11/4 마진 설정 단순화.
+ * ① 기본 마진 하나만 정하면 모든 상품 판매가가 매입가 × (1+마진)으로 바로 계산됩니다.
+ * ② 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
+ * ③ 마진 그룹(카테고리 연결)은 '고급'으로 접어 둡니다.
+ */
 export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const [state, setState] = useState<PriceState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [groupId, setGroupId] = useState("");
-  const [name, setName] = useState("");
-  const [margin, setMargin] = useState("12");
-  const [rounding, setRounding] = useState("10");
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
-  const request = useCallback(async (command?: PricingCommand) => {
+  const [defaultMargin, setDefaultMargin] = useState("");
+  const [defaultRounding, setDefaultRounding] = useState("10");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkMargin, setBulkMargin] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [groupId, setGroupId] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [groupMargin, setGroupMargin] = useState("12");
+  const [groupRounding, setGroupRounding] = useState("10");
+
+  const send = useCallback(async (command?: PricingCommand | PricingBulkCommand) => {
+    const query = new URLSearchParams({ companyId, q: search, page: String(page) });
+    const response = await fetch(`/api/price-sheets?${query}`, command ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) } : { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || "불러오지 못했습니다.");
+    setState(body as PriceState);
+    return body as PriceState;
+  }, [companyId, search, page]);
+
+  /** 바꾼 뒤에는 판매가에 바로 반영(다시 계산)까지 한 번에. */
+  const run = useCallback(async (commands: Array<PricingCommand | PricingBulkCommand>, done: string, apply = true) => {
     setBusy(true); setError(""); setMessage("");
     try {
-      const query = new URLSearchParams({ companyId, q: search, page: String(page) });
-      const response = await fetch(`/api/price-sheets?${query}`, command ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) } : { cache: "no-store" });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.message || "불러오지 못했습니다.");
-      setState(body);
-      if (command) setMessage(command.action === "restore" ? "직전 계산을 복구했습니다." : "저장했습니다.");
+      let last: PriceState | null = null;
+      for (const command of commands) last = await send(command);
+      if (apply && last && last.pendingCount > 0) last = await send({ action: "recalculate" });
+      setMessage(done);
+      setPicked(new Set());
+      setEdits({});
     } catch (e) { setError(e instanceof Error ? e.message : "다시 시도해 주세요."); }
     finally { setBusy(false); }
-  }, [companyId, search, page]);
-  useEffect(() => { void request(); }, [request]);
-  return <div className="space-y-4" aria-busy={busy}>
-    <p className="text-sm text-slate-600">마진율(매입가 대비)을 적용해 매입가 × (1 + 마진율)로 계산한 후 올림합니다. 직접 단가 → 품목 마진 → 그룹 마진 → 기본 마진 순서입니다. 견적·계약 단가는 변경하지 않습니다.</p>
-    {error && <p role="alert" className="text-red-700">{error}</p>}
-    {message && <p role="status">{message}</p>}
-    <button disabled={busy} onClick={() => void request()} className={fieldClass}>새로고침</button>
-    {!state && !error && <p role="status">불러오는 중…</p>}
-    {state && <>
-      <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">마진 그룹</h2>
-        {!state.groups.length ? <p>등록된 마진 그룹이 없습니다.</p> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{state.groups.map(g => <article key={g.id} className="space-y-2 rounded-lg border p-3">
-          <h3 className="font-semibold">{g.name}</h3><p>마진율(매입가 대비) {g.margin}% · {g.rounding}원 올림</p>
-          <p className="text-sm text-slate-600">연결된 분류: {state.categories.filter(c => c.groupId === g.id).map(c => c.category).join(", ") || "없음"}</p>
-          <button disabled={busy} className={fieldClass} onClick={() => { setGroupId(g.id); setName(g.name); setMargin(String(g.margin)); setRounding(String(g.rounding)); }}>{g.name} 수정</button>
-        </article>)}</div>}
+  }, [send]);
 
-        <form className="flex flex-wrap items-end gap-3" onSubmit={e => { e.preventDefault(); void request({ action: "group", ...(groupId ? { id: groupId } : {}), name, margin: Number(margin), rounding: Number(rounding) }); }}>
-          <label>그룹 선택<select className={`block ${fieldClass}`} value={groupId} onChange={e => { setGroupId(e.target.value); const g = state.groups.find(g => g.id === e.target.value); setName(g?.name || ""); setMargin(String(g?.margin ?? 12)); setRounding(String(g?.rounding ?? 10)); }}><option value="">새 그룹</option>{state.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-          <label>그룹명<input required maxLength={80} className={`block ${fieldClass}`} value={name} onChange={e => setName(e.target.value)} /></label>
-          <label>마진율(매입가 대비) %<input required type="number" min="0" max="1000" step="0.01" className={`block w-28 ${fieldClass}`} value={margin} onChange={e => setMargin(e.target.value)} /></label>
-          <label>올림 단위<select className={`block ${fieldClass}`} value={rounding} onChange={e => setRounding(e.target.value)}>{[1,10,100].map(n => <option key={n} value={n}>{n}원</option>)}</select></label>
-          <button disabled={busy} className={fieldClass}>그룹 저장</button>
+  useEffect(() => {
+    setBusy(true);
+    void send().then((s) => { setDefaultMargin(String(s.defaultMargin)); setDefaultRounding(String(s.defaultRounding)); }).catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다.")).finally(() => setBusy(false));
+  }, [send]);
+
+  const sample = useMemo(() => {
+    const margin = Number(defaultMargin);
+    const rounding = Number(defaultRounding);
+    if (!Number.isFinite(margin) || margin < 0) return null;
+    try { return { cost: 10000, price: calculatePrice(10000, margin, rounding) }; } catch { return null; }
+  }, [defaultMargin, defaultRounding]);
+
+  if (!state) return <div className="space-y-3">{error ? <p className="text-red-700" role="alert">{error}</p> : <p role="status">불러오는 중…</p>}</div>;
+
+  const items = state.items;
+  const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
+  const zeroMargin = state.defaultMargin === 0;
+  const preview = (item: PriceItem) => {
+    const raw = edits[item.id];
+    if (raw === undefined || raw === "") return null;
+    const margin = Number(raw);
+    if (!Number.isFinite(margin) || margin < 0 || margin > 1000) return null;
+    try { return calculatePrice(item.cost, margin, state.defaultRounding); } catch { return null; }
+  };
+
+  return <div className="space-y-4" aria-busy={busy}>
+    {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+    {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
+
+    {/* ① 기본 마진 */}
+    <section className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-black">① 기본 마진</h2>
+          <p className="text-sm text-slate-600">모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다.</p>
+          {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
+        </div>
+      </div>
+      <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); void run([{ action: "defaults", margin: Number(defaultMargin), rounding: Number(defaultRounding) }], `기본 마진 ${defaultMargin}%를 저장하고 판매가에 반영했습니다.`); }}>
+        <label className="text-sm font-bold">기본 마진
+          <span className="mt-1 flex items-center gap-1"><input aria-label="기본 마진율" className={`${box} w-24 text-right text-lg font-black`} inputMode="decimal" max="1000" min="0" onChange={(e) => setDefaultMargin(e.target.value)} required step="0.01" type="number" value={defaultMargin} /><span className="text-lg font-black">%</span></span>
+        </label>
+        <label className="text-sm font-bold">끝자리 올림
+          <select className={`${box} mt-1 block`} onChange={(e) => setDefaultRounding(e.target.value)} value={defaultRounding}>{[1, 10, 100].map((n) => <option key={n} value={n}>{n}원 단위</option>)}</select>
+        </label>
+        <div className="flex flex-wrap gap-1.5">{[5, 10, 15, 20, 25, 30].map((n) => <button className={`rounded-full px-3 py-1.5 text-sm font-bold ${Number(defaultMargin) === n ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={n} onClick={() => setDefaultMargin(String(n))} type="button">{n}%</button>)}</div>
+        <button className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || defaultMargin === ""} type="submit">저장하고 판매가 반영</button>
+      </form>
+      {sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{sample.cost.toLocaleString()}원</strong> → 판매가 <strong className="text-teal-800">{sample.price.toLocaleString()}원</strong> (이익 {(sample.price - sample.cost).toLocaleString()}원)</p> : null}
+    </section>
+
+    {/* ② 상품별 */}
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <h2 className="text-lg font-black">② 상품별로 다르게</h2>
+        <p className="text-sm text-slate-600">기본 마진과 다르게 받을 상품만 고치세요. 체크해서 여러 개를 한 번에 바꿀 수 있습니다. 칸을 비우고 저장하면 기본 마진으로 돌아갑니다.</p>
+      </div>
+      <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setPage(1); }}>
+        <input aria-label="상품 검색" className={`${box} min-w-[220px] flex-1`} maxLength={100} onChange={(e) => setSearchInput(e.target.value)} placeholder="상품명·카테고리 검색" value={searchInput} />
+        <button className={box} disabled={busy} type="submit">검색</button>
+        <span className="self-center text-sm text-slate-500">{state.total.toLocaleString()}개</span>
+      </form>
+      {picked.size ? (
+        <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white" role="toolbar" aria-label="선택한 상품 마진 일괄 변경">
+          <strong>{picked.size}개 선택</strong>
+          <span className="flex items-center gap-1">마진 <input aria-label="선택 상품 마진율" className="h-8 w-20 rounded px-2 text-right text-slate-900" inputMode="decimal" onChange={(e) => setBulkMargin(e.target.value)} placeholder="%" value={bulkMargin} />%</span>
+          <button className="rounded bg-teal-500 px-2.5 py-1 font-bold disabled:opacity-50" disabled={busy || bulkMargin === ""} onClick={() => void run([{ action: "bulk-margin", productIds: Array.from(picked), margin: Number(bulkMargin) }], `${picked.size}개 상품 마진을 ${bulkMargin}%로 바꿨습니다.`)} type="button">적용</button>
+          <button className="rounded bg-white/10 px-2.5 py-1 font-bold" disabled={busy} onClick={() => void run([{ action: "bulk-margin", productIds: Array.from(picked), margin: null }, { action: "bulk-direct", productIds: Array.from(picked), price: null }], `${picked.size}개 상품을 기본 마진으로 되돌렸습니다.`)} type="button">기본 마진으로</button>
+          <button className="ml-auto rounded px-2 py-1 text-white/80" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
+        </div>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-500">
+            <tr>
+              <th className="w-8 p-2"><input aria-label="이 페이지 전체 선택" checked={items.length > 0 && items.every((i) => picked.has(i.id))} onChange={(e) => setPicked(e.target.checked ? new Set(items.map((i) => i.id)) : new Set())} type="checkbox" /></th>
+              <th className="p-2">상품</th>
+              <th className="p-2 text-right">매입가</th>
+              <th className="p-2">마진</th>
+              <th className="p-2 text-right">판매가</th>
+              <th className="p-2 text-right">이익</th>
+              <th className="p-2">직접 단가</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const source = marginSource(item, state);
+              const next = preview(item);
+              const price = next ?? item.price;
+              return (
+                <tr className={`border-t ${picked.has(item.id) ? "bg-teal-50" : ""}`} key={item.id}>
+                  <td className="p-2"><input aria-label={`${item.name} 선택`} checked={picked.has(item.id)} onChange={(e) => setPicked((prev) => { const s = new Set(prev); if (e.target.checked) s.add(item.id); else s.delete(item.id); return s; })} type="checkbox" /></td>
+                  <td className="p-2"><span className="font-semibold">{item.name}</span>{!item.active && <span className="text-xs text-slate-400"> (비활성)</span>}{item.category ? <span className="block text-xs text-slate-500">{item.category}</span> : null}</td>
+                  <td className="p-2 text-right">{item.cost.toLocaleString()}원</td>
+                  <td className="p-2">
+                    <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const raw = edits[item.id] ?? ""; void run([{ action: "item-margin", productId: item.id, margin: raw === "" ? null : Number(raw) }], `${item.name} 마진을 ${raw === "" ? "기본으로 되돌렸습니다" : `${raw}%로 바꿨습니다`}.`); }}>
+                      <input aria-label={`${item.name} 마진율`} className="h-8 w-16 rounded border border-slate-300 px-1.5 text-right" disabled={source.kind === "direct"} inputMode="decimal" onChange={(e) => setEdits((prev) => ({ ...prev, [item.id]: e.target.value }))} placeholder={source.margin !== null ? String(source.margin) : "-"} value={edits[item.id] ?? (item.itemMargin !== null ? String(item.itemMargin) : "")} />
+                      <span>%</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${source.kind === "default" ? "bg-slate-100 text-slate-600" : source.kind === "direct" ? "bg-violet-100 text-violet-800" : "bg-teal-100 text-teal-800"}`}>{source.label}</span>
+                      {edits[item.id] !== undefined ? <button className="rounded bg-teal-700 px-2 py-1 text-xs font-bold text-white" disabled={busy} type="submit">저장</button> : null}
+                    </form>
+                  </td>
+                  <td className={`p-2 text-right font-bold ${next !== null ? "text-teal-800" : ""}`}>{price.toLocaleString()}원</td>
+                  <td className={`p-2 text-right ${price - item.cost <= 0 ? "font-bold text-rose-700" : "text-slate-600"}`}>{(price - item.cost).toLocaleString()}원</td>
+                  <td className="p-2">
+                    <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const value = new FormData(e.currentTarget).get("price"); void run([{ action: "direct", productId: item.id, price: value === "" ? null : Number(value) }], `${item.name} 직접 단가를 ${value === "" ? "해제했습니다" : "저장했습니다"}.`); }}>
+                      <input aria-label={`${item.name} 직접 단가`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right" defaultValue={item.directPrice ?? ""} key={String(item.directPrice)} max="1000000000000" min="0" name="price" placeholder="없음" step="1" type="number" />
+                      <button className="rounded border border-slate-300 px-2 py-1 text-xs" disabled={busy} type="submit">저장</button>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
+            {!items.length ? <tr><td className="p-6 text-center text-slate-500" colSpan={7}>해당 상품이 없습니다.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center gap-2 text-sm">
+        <button className={box} disabled={busy || page <= 1} onClick={() => setPage((p) => p - 1)} type="button">이전</button>
+        <span>{state.page} / {pages}</span>
+        <button className={box} disabled={busy || page >= pages} onClick={() => setPage((p) => p + 1)} type="button">다음</button>
+        <span className="ml-auto text-xs text-slate-500">직접 단가는 마진과 관계없이 그 금액을 그대로 씁니다(올림 없음).</span>
+      </div>
+    </section>
+
+    {/* ③ 고급 */}
+    <details className="rounded-xl border border-slate-200 bg-white p-4">
+      <summary className="cursor-pointer text-sm font-black text-slate-700">③ 고급 — 마진 그룹 · 카테고리 · 복구</summary>
+      <div className="mt-3 space-y-4 text-sm">
+        <p className="text-slate-600">카테고리별로 마진을 다르게 할 때 씁니다. 우선순위: 직접 단가 → 개별 마진 → 그룹 마진 → 기본 마진.</p>
+        {state.groups.length ? <ul className="grid gap-2 md:grid-cols-3">{state.groups.map((g) => <li className="rounded border p-2" key={g.id}><strong>{g.name}</strong> · {g.margin}% · {g.rounding}원 올림<span className="block text-xs text-slate-500">카테고리: {state.categories.filter((c) => c.groupId === g.id).map((c) => c.category).join(", ") || "없음"}</span><button className="mt-1 text-xs font-bold text-teal-700" onClick={() => { setGroupId(g.id); setGroupName(g.name); setGroupMargin(String(g.margin)); setGroupRounding(String(g.rounding)); }} type="button">수정</button></li>)}</ul> : <p className="text-slate-500">마진 그룹이 없습니다.</p>}
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); void run([{ action: "group", ...(groupId ? { id: groupId } : {}), name: groupName, margin: Number(groupMargin), rounding: Number(groupRounding) }], "마진 그룹을 저장했습니다."); }}>
+          <label>그룹<select className={`${box} block`} onChange={(e) => { const g = state.groups.find((x) => x.id === e.target.value); setGroupId(e.target.value); setGroupName(g?.name || ""); setGroupMargin(String(g?.margin ?? 12)); setGroupRounding(String(g?.rounding ?? 10)); }} value={groupId}><option value="">새 그룹</option>{state.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+          <label>이름<input className={`${box} block`} maxLength={80} onChange={(e) => setGroupName(e.target.value)} required value={groupName} /></label>
+          <label>마진 %<input className={`${box} block w-20`} max="1000" min="0" onChange={(e) => setGroupMargin(e.target.value)} required step="0.01" type="number" value={groupMargin} /></label>
+          <label>올림<select className={`${box} block`} onChange={(e) => setGroupRounding(e.target.value)} value={groupRounding}>{[1, 10, 100].map((n) => <option key={n} value={n}>{n}원</option>)}</select></label>
+          <button className={box} disabled={busy} type="submit">그룹 저장</button>
         </form>
-        <h3 className="font-semibold">카테고리 연결</h3>
-        <form className="flex flex-wrap items-end gap-3" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); void request({ action: "category", category: String(data.get("category")), groupId: String(data.get("groupId")) }); }}>
-          <label>상품 원장 카테고리<input name="category" required maxLength={100} className={`block ${fieldClass}`} /></label>
-          <label>적용 그룹<select name="groupId" required className={`block ${fieldClass}`}><option value="">선택</option>{state.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-          <button disabled={busy || !state.groups.length} className={fieldClass}>카테고리 연결 저장</button>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); const d = new FormData(e.currentTarget); void run([{ action: "category", category: String(d.get("category")), groupId: String(d.get("groupId")) }], "카테고리를 연결했습니다."); }}>
+          <label>카테고리<input className={`${box} block`} maxLength={100} name="category" required /></label>
+          <label>그룹<select className={`${box} block`} name="groupId" required><option value="">선택</option>{state.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+          <button className={box} disabled={busy || !state.groups.length} type="submit">카테고리 연결</button>
         </form>
-        {state.categories.length === 0 ? <p>연결된 카테고리가 없습니다.</p> : <ul>{state.categories.map(c => <li key={c.category} className="flex flex-wrap items-center gap-3 py-1"><span>{c.category} → {state.groups.find(g => g.id === c.groupId)?.name}</span><button disabled={busy} className={fieldClass} onClick={() => void request({ action: "category", category: c.category, groupId: "" })}>{c.category} 연결 해제</button></li>)}</ul>}
-      </section>
-      <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">회사 기본 마진</h2>
-        <form key={`${state.defaultMargin}-${state.defaultRounding}`} className="flex flex-wrap items-end gap-3" onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); void request({ action: "defaults", margin: Number(data.get("margin")), rounding: Number(data.get("rounding")) }); }}>
-          <label>기본 마진율(매입가 대비) %<input required name="margin" type="number" min="0" max="1000" step="0.01" defaultValue={state.defaultMargin} className={`block w-28 ${fieldClass}`} /></label>
-          <label>기본 올림 단위<select name="rounding" defaultValue={state.defaultRounding} className={`block ${fieldClass}`}>{[1,10,100].map(n => <option key={n} value={n}>{n}원</option>)}</select></label>
-          <button disabled={busy} className={fieldClass}>기본 마진 저장</button>
-        </form>
-      </section>
-      <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">다시 계산 필요 {state.pendingCount}개</h2>
-        <p className="text-sm text-slate-600">검색·현재 페이지와 관계없이 회사 전체의 변동분을 계산합니다. 직접 단가와 0원 매입·비활성 품목은 제외합니다.</p>
-        <div className="flex flex-wrap gap-2"><button disabled={busy || !state.pendingCount} className="rounded bg-slate-900 px-3 py-2 text-white disabled:opacity-50" onClick={() => void request({ action: "recalculate" })}>변동분 일괄 재계산</button>
-        <button disabled={busy || !state.lastBatch || state.restored} className={`${fieldClass} disabled:opacity-50`} onClick={() => { if (state.lastBatch) void request({ action: "restore", batchId: state.lastBatch }); }}>직전 계산 복구</button></div>
-        <form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); setSearch(String(new FormData(e.currentTarget).get("q") || "").trim()); setPage(1); }}><label>품목·카테고리 검색<input name="q" maxLength={100} className={`ml-2 ${fieldClass}`} /></label><button disabled={busy} className={fieldClass}>검색</button></form>
-        <p>검색 결과 {state.total}개 · {state.page} / {Math.max(1, Math.ceil(state.total / state.pageSize))}페이지</p>
-        {!state.items.length ? <p>해당 상품이 없습니다.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{["품목 / 카테고리", "매입가", "그룹 우선 지정", "품목 마진율(매입가 대비) %", "판매가", "직접 단가"].map(t => <th key={t} className="p-2">{t}</th>)}</tr></thead><tbody>{state.items.map(i => <tr key={i.id} className="border-t">
-          <td className="p-2">{i.name}{!i.active && " (비활성)"}<span className="block text-slate-500">{i.category || "카테고리 없음"}</span></td><td className="p-2">{i.cost.toLocaleString()}원</td>
-          <td className="p-2"><select aria-label={`${i.name} 그룹 우선 지정`} disabled={busy} value={i.groupId || ""} onChange={e => void request({ action: "assign", productId: i.id, groupId: e.target.value })}><option value="">카테고리 규칙 적용</option>{state.groups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.margin}%)</option>)}</select></td>
-          <td className="p-2"><form onSubmit={e => { e.preventDefault(); const value = new FormData(e.currentTarget).get("margin"); void request({ action: "item-margin", productId: i.id, margin: value === "" ? null : Number(value) }); }}><input key={String(i.itemMargin)} aria-label={`${i.name} 품목 마진`} name="margin" type="number" min="0" max="1000" step="0.01" defaultValue={i.itemMargin ?? ""} className="w-24 rounded border p-1" /><button disabled={busy} className="ml-1 rounded border p-1">저장</button></form></td>
-          <td className="p-2">{i.price.toLocaleString()}원</td><td className="p-2"><form onSubmit={e => { e.preventDefault(); const value = new FormData(e.currentTarget).get("price"); void request({ action: "direct", productId: i.id, price: value === "" ? null : Number(value) }); }}><input key={String(i.directPrice)} aria-label={`${i.name} 직접 단가`} name="price" type="number" min="0" max="1000000000000" step="1" defaultValue={i.directPrice ?? ""} className="w-28 rounded border p-1" /><button disabled={busy} className="ml-1 rounded border p-1">저장</button></form></td>
-        </tr>)}</tbody></table></div>}
-        <p className="text-sm text-slate-600">품목 마진·직접 단가를 비우고 저장하면 다음 우선순위 규칙을 적용합니다. 직접 단가에는 올림을 적용하지 않습니다.</p>
-        <div className="flex gap-3"><button disabled={busy || page<=1} onClick={() => setPage(p => p-1)} className={fieldClass}>이전</button><button disabled={busy || page*state.pageSize>=state.total} onClick={() => setPage(p => p+1)} className={fieldClass}>다음</button></div>
-      </section>
-    </>}
+        {state.categories.length ? <ul>{state.categories.map((c) => <li className="flex items-center gap-2 py-0.5" key={c.category}>{c.category} → {state.groups.find((g) => g.id === c.groupId)?.name}<button className="text-xs text-rose-700" disabled={busy} onClick={() => void run([{ action: "category", category: c.category, groupId: "" }], "연결을 해제했습니다.")} type="button">해제</button></li>)}</ul> : null}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
+          <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
+          <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
+        </div>
+      </div>
+    </details>
   </div>;
 }

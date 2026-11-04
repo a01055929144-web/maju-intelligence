@@ -3,7 +3,8 @@ import { getRequestAuthScope } from "../../../lib/auth";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
-import { managePriceSheets, type PricingCommand } from "../../../application/pricing/manage-price-sheets";
+import { managePriceSheets, parseBulkCommand, type PricingCommand } from "../../../application/pricing/manage-price-sheets";
+import { runLimited } from "../../../lib/run-limited";
 import { priceSheetRepository } from "../../../lib/pricing/price-sheet-repository";
 export const dynamic = "force-dynamic";
 const pricing = managePriceSheets(priceSheetRepository);
@@ -19,6 +20,12 @@ async function handle(request: NextRequest, write: boolean) {
     if (!Number.isInteger(page) || page < 1 || page > 100000 || search.length > 100) return NextResponse.json({ message: "검색 조건을 확인해 주세요." }, { status: 400 });
     if (write) {
       const command: unknown = await request.json();
+      let bulk;
+      try { bulk = parseBulkCommand(command); } catch (cause) { return NextResponse.json({ message: cause instanceof Error ? cause.message : "요청을 확인해 주세요." }, { status: 400 }); }
+      if (bulk) {
+        await pricing.bulk(scope.companyId, bulk, (items, task) => runLimited(items, 4, (id) => task(id)));
+        return NextResponse.json(await pricing.read(scope.companyId, { search, page }), { headers: { "Cache-Control": "no-store" } });
+      }
       if (!command || typeof command !== "object" || !("action" in command) || !["group", "category", "defaults", "item-margin", "assign", "direct", "recalculate", "restore"].includes(String(command.action))) return NextResponse.json({ message: "요청을 확인해 주세요." }, { status: 400 });
       await pricing.execute(scope.companyId, command as PricingCommand);
     }
