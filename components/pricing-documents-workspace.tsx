@@ -21,6 +21,8 @@ import {
 import { PricingDocumentPreview } from "./pricing-document-preview";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { PricingInfoPanel } from "./pricing-info-panel";
+import { PricingStartGallery } from "./pricing-start-gallery";
+import { applyPreset, type DocumentPreset } from "@/domains/pricing/document-presets";
 import { PricingDocumentLibrary } from "./pricing-document-library";
 import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
@@ -63,7 +65,8 @@ export function PricingDocumentsWorkspace({
   const [view, setView] = useState<"list" | "editor">("list");
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
-    [autoPrint, setAutoPrint] = useState(false);
+    [autoPrint, setAutoPrint] = useState(false),
+    [starting, setStarting] = useState<DocumentKind | null>(null);
   // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
   const requestedTab = useSearchParams()?.get("tab") || "";
   useEffect(() => {
@@ -153,6 +156,38 @@ export function PricingDocumentsWorkspace({
   function discard() {
     return !dirty || window.confirm("저장하지 않은 변경을 버리고 이동할까요?");
   }
+  function blankContent(kind: DocumentKind): DocumentContent {
+    return {
+      kind,
+      title: kind === "sheet" ? "단가표" : "식자재 견적서",
+      ...profile.content,
+      recipient: "",
+      validUntil: koreaDay(new Date(Date.now() + 14 * 86400000)),
+      theme: "blue",
+      layout: "auto",
+      showPrice: true,
+      showBrand: true,
+      showSpec: true,
+      lines: [],
+    };
+  }
+  function startPreset(preset: DocumentPreset, kind: DocumentKind) {
+    setStarting(null);
+    create(kind, applyPreset(blankContent(kind), preset));
+  }
+  async function startTemplate(set: ProductSet, kind: DocumentKind) {
+    const r = await read<{ items: CatalogChoice[] }>("catalog", { productIds: set.productIds });
+    if (!r.items.length) throw new Error("템플릿 품목이 비활성 상태입니다. 상품 설정을 확인해 주세요.");
+    const byId = new Map(r.items.map((i) => [i.id, i]));
+    const lines = set.productIds.map((id) => byId.get(id)).filter((i): i is CatalogChoice => Boolean(i)).map(lineFromCatalog);
+    setStarting(null);
+    create(kind, { ...blankContent(kind), title: set.name.slice(0, 100), lines });
+    if (lines.length < set.productIds.length) setMessage(`${set.productIds.length - lines.length}개 품목은 비활성이라 빠졌습니다.`);
+  }
+  const loadStartDocuments = useCallback(
+    () => read<{ items: DocumentDraft[]; total: number }>("list", { page: 1, search: "" }).then((r) => r.items),
+    [read],
+  );
   function create(kind: DocumentKind, content?: DocumentContent) {
     if (!discard()) return;
     const basis: Record<string, number> = {};
@@ -164,19 +199,7 @@ export function PricingDocumentsWorkspace({
       updatedAt: "",
       content: content
         ? { ...structuredClone(content), kind }
-        : {
-            kind,
-            title: kind === "sheet" ? "단가표" : "식자재 견적서",
-            ...profile.content,
-            recipient: "",
-            validUntil: koreaDay(new Date(Date.now() + 14 * 86400000)),
-            theme: "blue",
-            layout: "auto",
-            showPrice: true,
-            showBrand: true,
-            showSpec: true,
-            lines: [],
-          },
+        : blankContent(kind),
     });
     setDirty(true);
     setPreview(null);
@@ -416,8 +439,10 @@ export function PricingDocumentsWorkspace({
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
-      onCreate={(kind) => create(kind)} onOpen={select}
+      onCreate={(kind) => setStarting(kind)} onOpen={select}
       onCopy={(document) => create(document.content.kind, document.content)} />
+    {error ? <p className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
+    {starting ? <PricingStartGallery kind={starting} loadDocuments={loadStartDocuments} manager={manager} onBlank={(kind) => { setStarting(null); create(kind); }} onClose={() => setStarting(null)} onCopy={(document, kind) => { setStarting(null); create(kind, document.content); }} onPreset={startPreset} onTemplate={(set, kind) => void task(() => startTemplate(set, kind))} sets={sets} /> : null}
   </div>;
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>

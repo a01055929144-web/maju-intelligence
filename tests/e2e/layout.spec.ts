@@ -55,6 +55,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByText("아직 문서가 없습니다.")).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`pricing-sheets-${width}.png`), fullPage: false });
       await page.getByRole("button", { name: "+ 단가표" }).first().click();
+      await page.getByRole("button", { name: /빈 단가표로 시작/ }).click();
       await page.locator('input[type="file"]').setInputFiles({ name: "품목.csv", mimeType: "text/csv", buffer: Buffer.from("ERP 코드,품목명,판매가\nP-1,양파,13000\n") });
       await expect(page.getByLabel("품목 1 노출 상품명")).toHaveValue("양파");
       expect((await collectLayoutProblems(page)).filter((problem) => problem.startsWith("horizontal-overflow"))).toEqual([]);
