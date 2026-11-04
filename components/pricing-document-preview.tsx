@@ -136,9 +136,12 @@ function PageContent({
 export function PricingDocumentPreview({
   version,
   refresh,
+  fontScale = 1,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
+  /** 11/4: 글자 크기 100%·115%·130% */
+  fontScale?: number;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
@@ -253,7 +256,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:11px;line-height:16px}.pricing-paper td{max-width:65mm}.pricing-paper header{font-size:11px;line-height:16px}.pricing-paper h2{font-size:20px;line-height:24px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
+      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper td{max-width:65mm}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

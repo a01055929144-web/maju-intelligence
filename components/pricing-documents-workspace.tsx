@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
   koreaDay,
@@ -39,7 +40,8 @@ export function PricingDocumentsWorkspace({
   const [draft, setDraft] = useState<DocumentDraft | null>(null),
     [dirty, setDirty] = useState(false),
     [versions, setVersions] = useState<DocumentVersion[]>([]),
-    [preview, setPreview] = useState<DocumentVersion | null>(null);
+    [preview, setPreview] = useState<DocumentVersion | null>(null),
+    [fontScale, setFontScale] = useState(1);
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]),
     [catalogQuery, setCatalogQuery] = useState(""),
     [catalogInput, setCatalogInput] = useState(""),
@@ -56,6 +58,12 @@ export function PricingDocumentsWorkspace({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
   const [view, setView] = useState<"list" | "editor">("list");
+  // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
+  const requestedTab = useSearchParams()?.get("tab") || "";
+  useEffect(() => {
+    if (requestedTab === "library" || requestedTab === "profile") { setTab(requestedTab); setView("editor"); }
+    else { setTab("documents"); setView("list"); }
+  }, [requestedTab]);
   const [bulkMargin, setBulkMargin] = useState("12"),
     [baselines, setBaselines] = useState<Record<string, number>>({});
   const excelInput = useRef<HTMLInputElement>(null);
@@ -169,6 +177,7 @@ export function PricingDocumentsWorkspace({
     setVersions([]);
     setTab("documents");
     setView("editor");
+    setTab("documents");
   }
   async function select(d: DocumentDraft) {
     if (!discard()) return;
@@ -183,6 +192,7 @@ export function PricingDocumentsWorkspace({
     for (const p of products.items) basis[p.id] = p.price;
     setBaselines(basis);
     setView("editor");
+    setTab("documents");
   }
   async function save() {
     if (!draft) return;
@@ -206,9 +216,9 @@ export function PricingDocumentsWorkspace({
       { id: draft.id, expected: draft.revision },
       true,
     );
-    setPreview(r.result);
+    // 11/4: 확정 후 미리보기 창을 자동으로 띄우지 않습니다(필요할 때 '미리보기·인쇄' 또는 버전 미리보기).
     setVersions(await read<DocumentVersion[]>("versions", { id: draft.id }));
-    setMessage(`버전 ${r.result.version}을 확정했습니다.`);
+    setMessage(`버전 ${r.result.version}을 확정했습니다. 아래 '버전 ${r.result.version} 미리보기'에서 인쇄할 수 있습니다.`);
   }
   useEffect(() => {
     let active = true;
@@ -371,18 +381,92 @@ export function PricingDocumentsWorkspace({
   const editable = Boolean(
     draft && (draft.content.kind === "quote" || manager),
   );
-  if (view === "list") return <PricingDocumentSheets companyId={companyId} manager={manager}
-    onCreate={(kind) => create(kind)} onOpen={select}
-    onCopy={(document) => create(document.content.kind, document.content)} />;
+  if (view === "list" && tab === "documents") return <div className="space-y-3">
+    {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
+    <div className="flex flex-wrap justify-end gap-2">
+      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">행사·묶음·템플릿</button>
+      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
+    </div>
+    <PricingDocumentSheets companyId={companyId} manager={manager}
+      onCreate={(kind) => create(kind)} onOpen={select}
+      onCopy={(document) => create(document.content.kind, document.content)} />
+  </div>;
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
-      <header className="pricing-no-print">
-        <button className={box} onClick={() => { if (discard()) { setView("list"); void loadList(); } }} type="button">← 문서 목록</button>
-        <h1 className="text-2xl font-bold">견적서·단가표</h1>
-        <p className="text-sm text-slate-600">
-          초안을 저장한 뒤 버전을 확정해 온라인·오프라인 미리보기에서
-          확인하세요. 견적서는 작성자에게만 보입니다.
-        </p>
+      <header className="pricing-no-print sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-1 py-2 backdrop-blur">
+        <button className={box} onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button">← 문서 목록</button>
+        {draft && tab === "documents" ? (
+          <>
+            <input aria-label="문서 제목" className="h-9 min-w-[160px] flex-1 rounded-md border border-transparent px-2 text-lg font-bold hover:border-slate-200 focus:border-teal-400" disabled={!editable} maxLength={100} onChange={(e) => change({ ...draft.content, title: e.target.value })} value={draft.content.title} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">
+                    {draft.content.kind === "sheet"
+                      ? "단가표"
+                      : "작성자 전용 견적서"}{" "}
+                    ·{" "}
+                    {dirty ? "저장 안 된 변경 있음" : `저장 ${draft.revision}`}
+                  </span>
+                  <button
+                    disabled={
+                      busy ||
+                      !editable ||
+                      draft.content.lines.some((l) => l.taxType === "unknown")
+                    }
+                    onClick={() => void task(save)}
+                    className={box}
+                  >
+                    초안 저장
+                  </button>
+                  <button
+                    disabled={busy || dirty || !draft.revision || !editable}
+                    onClick={() => void task(publish)}
+                    className={`${box} bg-blue-700 text-white`}
+                  >
+                    판매가 버전 확정
+                  </button>
+                  <button
+                    disabled={busy}
+                    className={box}
+                    onClick={() =>
+                      void task(async () => {
+                        const content = parseDocument(draft.content),
+                          p = await read<Promotion[]>("promotions");
+                        setPreview(
+                          withLivePromotions(
+                            {
+                              id: `preview-${draft.id}`,
+                              documentId: draft.id,
+                              version: 0,
+                              revision: draft.revision,
+                              publishedAt: new Date().toISOString(),
+                              content,
+                              unavailablePromotions: [],
+                            },
+                            p,
+                          ),
+                        );
+                      })
+                    }
+                  >
+                    미리보기·인쇄
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => create("quote", draft.content)}
+                    className={box}
+                  >
+                    견적서로 복사
+                  </button>
+                  <button disabled={busy} onClick={() => void task(exportLines)} className={box} type="button">품목 엑셀 내보내기</button>
+                  <button disabled={busy || !editable} onClick={() => excelInput.current?.click()} className={box} type="button">품목 엑셀로 담기</button>
+                  <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void task(() => importLines(file));
+                    event.target.value = "";
+                  }} />
+                </div>
+          </>
+        ) : <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>}
       </header>
       {error && (
         <p
@@ -397,9 +481,8 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      <div className="pricing-no-print flex flex-wrap gap-2">
+      {tab !== "documents" ? <div className="pricing-no-print flex flex-wrap gap-2">
         {[
-          ["documents", "문서 작성"],
           ["library", "행사·묶음·템플릿"],
           ["profile", "인쇄 기본값"],
         ].map(([id, label]) => (
@@ -411,7 +494,7 @@ export function PricingDocumentsWorkspace({
             {label}
           </button>
         ))}
-      </div>
+      </div> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
@@ -487,246 +570,13 @@ export function PricingDocumentsWorkspace({
         />
       )}
       {tab === "documents" && (
-        <div className="pricing-no-print grid min-w-0 items-start gap-4 lg:grid-cols-[270px_minmax(0,1fr)]">
-          <aside className="min-w-0 space-y-3 lg:sticky lg:top-4">
-            <div className="flex flex-wrap gap-2">
-              <button
-                disabled={busy}
-                className={box}
-                onClick={() => create("quote")}
-              >
-                + 견적서
-              </button>
-              {manager && (
-                <button
-                  disabled={busy}
-                  className={box}
-                  onClick={() => create("sheet")}
-                >
-                  + 단가표
-                </button>
-              )}
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSearch(String(new FormData(e.currentTarget).get("q") || ""));
-                setPage(1);
-              }}
-            >
-              <input
-                name="q"
-                placeholder="문서명 검색"
-                aria-label="문서명 검색"
-                className={`${box} w-full`}
-                maxLength={100}
-              />
-              <button className={box}>검색</button>
-            </form>
-            <button
-              className={box}
-              disabled={busy}
-              onClick={() => void task(loadList)}
-            >
-              목록 새로고침
-            </button>
-            <p>
-              {total}개 · {page}페이지
-            </p>
-            <div className="max-h-[60vh] space-y-2 overflow-auto">
-              {docs.map((d) => (
-                <button
-                  key={d.id}
-                  disabled={busy}
-                  onClick={() => void task(() => select(d))}
-                  className={`${box} block w-full text-left ${draft?.id === d.id ? "bg-blue-50" : ""}`}
-                >
-                  <strong>{d.content.title}</strong>
-                  <span className="block text-sm">
-                    {d.content.kind === "sheet" ? "단가표" : "견적서"} ·{" "}
-                    {d.content.lines.length}개
-                  </span>
-                  <span className="block text-xs">
-                    {d.content.validUntil}
-                    {koreaDay() > d.content.validUntil ? " 만료" : "까지"}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={busy || page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className={box}
-              >
-                이전
-              </button>
-              <button
-                disabled={busy || page * 50 >= total}
-                onClick={() => setPage((p) => p + 1)}
-                className={box}
-              >
-                다음
-              </button>
-            </div>
-          </aside>
-          <section className="min-w-0 space-y-4">
-            {!draft ? (
-              <p className="rounded border p-8">
-                문서를 선택하거나 새로 작성하세요.
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  <span className="font-semibold">
-                    {draft.content.kind === "sheet"
-                      ? "단가표"
-                      : "작성자 전용 견적서"}{" "}
-                    ·{" "}
-                    {dirty ? "저장 안 된 변경 있음" : `저장 ${draft.revision}`}
-                  </span>
-                  <button
-                    disabled={
-                      busy ||
-                      !editable ||
-                      draft.content.lines.some((l) => l.taxType === "unknown")
-                    }
-                    onClick={() => void task(save)}
-                    className={box}
-                  >
-                    초안 저장
-                  </button>
-                  <button
-                    disabled={busy || dirty || !draft.revision || !editable}
-                    onClick={() => void task(publish)}
-                    className={`${box} bg-blue-700 text-white`}
-                  >
-                    판매가 버전 확정
-                  </button>
-                  <button
-                    disabled={busy}
-                    className={box}
-                    onClick={() =>
-                      void task(async () => {
-                        const content = parseDocument(draft.content),
-                          p = await read<Promotion[]>("promotions");
-                        setPreview(
-                          withLivePromotions(
-                            {
-                              id: `preview-${draft.id}`,
-                              documentId: draft.id,
-                              version: 0,
-                              revision: draft.revision,
-                              publishedAt: new Date().toISOString(),
-                              content,
-                              unavailablePromotions: [],
-                            },
-                            p,
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    작성 중 미리보기
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => create("quote", draft.content)}
-                    className={box}
-                  >
-                    견적서로 복사
-                  </button>
-                  <button disabled={busy} onClick={() => void task(exportLines)} className={box} type="button">품목 엑셀 내보내기</button>
-                  <button disabled={busy || !editable} onClick={() => excelInput.current?.click()} className={box} type="button">품목 엑셀로 담기</button>
-                  <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void task(() => importLines(file));
-                    event.target.value = "";
-                  }} />
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {(
-                    [
-                      ["title", "문서 제목"],
-                      ["companyName", "회사명"],
-                      ["contact", "담당·연락처"],
-                      ["recipient", "받는 곳"],
-                      ["validUntil", "유효기간"],
-                      ["footer", "하단 안내"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key} className="block">
-                      {label}
-                      <input
-                        disabled={!editable}
-                        type={key === "validUntil" ? "date" : "text"}
-                        value={draft.content[key]}
-                        onChange={(e) =>
-                          change({ ...draft.content, [key]: e.target.value })
-                        }
-                        className={`${box} block w-full`}
-                        maxLength={key === "footer" ? 400 : 100}
-                      />
-                    </label>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <label>
-                    테마
-                    <select
-                      disabled={!editable}
-                      value={draft.content.theme}
-                      onChange={(e) =>
-                        change({
-                          ...draft.content,
-                          theme: e.target.value as DocumentContent["theme"],
-                        })
-                      }
-                      className={box}
-                    >
-                      <option value="blue">청색</option>
-                      <option value="green">녹색</option>
-                      <option value="mono">흑백</option>
-                    </select>
-                  </label>
-                  <label>
-                    형식
-                    <select
-                      disabled={!editable}
-                      value={draft.content.layout}
-                      onChange={(e) =>
-                        change({
-                          ...draft.content,
-                          layout: e.target.value as DocumentContent["layout"],
-                        })
-                      }
-                      className={box}
-                    >
-                      <option value="auto">자동(20개 초과 표)</option>
-                      <option value="table">표형</option>
-                      <option value="cards">카드형</option>
-                    </select>
-                  </label>
-                  {(
-                    [
-                      ["showPrice", "단가"],
-                      ["showBrand", "브랜드"],
-                      ["showSpec", "규격·단위"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key}>
-                      <input
-                        disabled={!editable}
-                        type="checkbox"
-                        checked={draft.content[key]}
-                        onChange={(e) =>
-                          change({ ...draft.content, [key]: e.target.checked })
-                        }
-                      />{" "}
-                      {label}
-                    </label>
-                  ))}
-                </div>
+        <div className="pricing-no-print min-w-0">
+          {!draft ? (
+            <p className="rounded border p-8">문서를 선택하거나 새로 작성하세요.</p>
+          ) : (
+            /* 11/4: 문서 목록(왼쪽)은 목록 화면에만 두고, 편집은 가운데 품목 · 오른쪽 문서 설정 두 칸으로 단순화 */
+            <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="min-w-0 space-y-4">
                 {editable && (
                   <div className="space-y-2 rounded border p-3">
                     <form
@@ -1107,14 +957,112 @@ export function PricingDocumentsWorkspace({
                     </button>
                   ))}
                 </div>
-              </>
-            )}
-          </section>
+              </div>
+              <aside className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
+                <h2 className="text-sm font-black text-slate-900">문서 설정</h2>
+                <div className="grid gap-2">
+                  {(
+                    [
+                      ["title", "문서 제목"],
+                      ["companyName", "회사명"],
+                      ["contact", "담당·연락처"],
+                      ["recipient", "받는 곳"],
+                      ["validUntil", "유효기간"],
+                      ["footer", "하단 안내"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="block">
+                      {label}
+                      <input
+                        disabled={!editable}
+                        type={key === "validUntil" ? "date" : "text"}
+                        value={draft.content[key]}
+                        onChange={(e) =>
+                          change({ ...draft.content, [key]: e.target.value })
+                        }
+                        className={`${box} block w-full`}
+                        maxLength={key === "footer" ? 400 : 100}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-100 pt-3 text-sm">
+                  <label>
+                    테마
+                    <select
+                      disabled={!editable}
+                      value={draft.content.theme}
+                      onChange={(e) =>
+                        change({
+                          ...draft.content,
+                          theme: e.target.value as DocumentContent["theme"],
+                        })
+                      }
+                      className={box}
+                    >
+                      <option value="blue">청색</option>
+                      <option value="green">녹색</option>
+                      <option value="mono">흑백</option>
+                    </select>
+                  </label>
+                  <label>
+                    형식
+                    <select
+                      disabled={!editable}
+                      value={draft.content.layout}
+                      onChange={(e) =>
+                        change({
+                          ...draft.content,
+                          layout: e.target.value as DocumentContent["layout"],
+                        })
+                      }
+                      className={box}
+                    >
+                      <option value="auto">자동(20개 초과 표)</option>
+                      <option value="table">표형</option>
+                      <option value="cards">카드형</option>
+                    </select>
+                  </label>
+                  {(
+                    [
+                      ["showPrice", "단가"],
+                      ["showBrand", "브랜드"],
+                      ["showSpec", "규격·단위"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key}>
+                      <input
+                        disabled={!editable}
+                        type="checkbox"
+                        checked={draft.content[key]}
+                        onChange={(e) =>
+                          change({ ...draft.content, [key]: e.target.checked })
+                        }
+                      />{" "}
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          )}
         </div>
       )}
       {preview && (
+        /* 11/4: 와이어프레임 ④ — 미리보기는 큰 화면(모달)으로: 온라인(휴대폰)·오프라인(A4) 나란히, 글자 크기, 인쇄·PDF·PNG·엑셀 */
+        <div aria-label="미리보기" aria-modal="true" className="pricing-preview-modal fixed inset-0 z-[60] overflow-y-auto bg-slate-100" role="dialog">
+          <div className="pricing-no-print sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+            <strong className="mr-auto text-base">{preview.content.kind === "sheet" ? "단가표" : "견적서"} 미리보기 · {preview.content.title}{preview.version ? ` · 버전 ${preview.version}` : " · 작성 중"}</strong>
+            <span className="text-xs font-bold text-slate-500">글자 크기</span>
+            {[1, 1.15, 1.3].map((scale) => <button className={`${box} ${fontScale === scale ? "bg-slate-900 text-white" : ""}`} key={scale} onClick={() => setFontScale(scale)} type="button">{Math.round(scale * 100)}%</button>)}
+            <button className={box} disabled={busy} onClick={() => void task(exportLines)} type="button">엑셀 내려받기</button>
+            <button className={`${box} bg-slate-900 text-white`} onClick={() => setPreview(null)} type="button">닫기</button>
+          </div>
+          <style>{`@media print{.pricing-preview-modal{position:static!important;overflow:visible!important;background:white!important}.pricing-preview-modal>div{max-width:none!important;padding:0!important}}`}</style>
+          <div className="mx-auto max-w-[1400px] p-4">
         <PricingDocumentPreview
           key={`${preview.id}-${preview.publishedAt}-${JSON.stringify(preview.promotionStock)}-${preview.unavailablePromotions.join(",")}`}
+          fontScale={fontScale}
           version={preview}
           refresh={async () => {
             if (preview.id.startsWith("preview-")) {
@@ -1129,6 +1077,8 @@ export function PricingDocumentsWorkspace({
             return found;
           }}
         />
+          </div>
+        </div>
       )}
     </div>
   );
