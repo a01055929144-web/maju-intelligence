@@ -152,13 +152,11 @@ export function object(value: unknown): Record<string, unknown> {
     throw new Error("입력 내용을 확인해 주세요.");
   return value as Record<string, unknown>;
 }
-export function field(value: unknown, max: number, required = false) {
-  if (
-    typeof value !== "string" ||
-    value.trim().length > max ||
-    (required && !value.trim())
-  )
-    throw new Error("필수 항목과 입력 길이를 확인해 주세요.");
+export function field(value: unknown, max: number, required = false, label = "") {
+  if (typeof value !== "string" || (required && !value.trim()))
+    throw new Error(label ? `'${label}' 칸을 입력해 주세요.` : "필수 항목과 입력 길이를 확인해 주세요.");
+  if (value.trim().length > max)
+    throw new Error(label ? `'${label}' 칸은 ${max}자까지 입력할 수 있습니다.` : "필수 항목과 입력 길이를 확인해 주세요.");
   return value.trim();
 }
 export function dateField(value: unknown) {
@@ -188,7 +186,7 @@ export function parseDocument(value: unknown): DocumentContent {
     throw new Error("문서 종류를 확인해 주세요.");
   if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
     throw new Error(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
-  const lines = d.lines.map((value) => {
+  const lines = d.lines.map((value, index) => {
     const l = object(value);
     if (l.taxType === "unknown")
       throw new Error(
@@ -204,10 +202,10 @@ export function parseDocument(value: unknown): DocumentContent {
     const promotional = l.promotionId !== null;
     return {
       productId: l.productId,
-      displayName: field(l.displayName, 120, true),
-      brand: field(l.brand, 80),
-      spec: field(l.spec, 80),
-      unit: field(l.unit, 20),
+      displayName: field(l.displayName, 120, true, `${index + 1}번째 품목 이름`),
+      brand: field(l.brand, 80, false, `${index + 1}번째 품목 브랜드`),
+      spec: field(l.spec, 80, false, `${index + 1}번째 품목 규격`),
+      unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
       taxType: l.taxType as "taxable" | "exempt",
       visible: l.visible,
@@ -235,11 +233,11 @@ export function parseDocument(value: unknown): DocumentContent {
     throw new Error("표시 설정을 확인해 주세요.");
   return {
     kind: d.kind,
-    title: field(d.title, 100, true),
-    companyName: field(d.companyName, 100, true),
-    contact: field(d.contact, 100),
-    recipient: field(d.recipient, 100),
-    footer: field(d.footer, 400),
+    title: field(d.title, 100, true, "문서 제목"),
+    companyName: field(d.companyName, 100, true, "회사명"),
+    contact: field(d.contact, 100, false, "담당·연락처"),
+    recipient: field(d.recipient, 100, false, "받는 곳"),
+    footer: field(d.footer, 400, false, "하단 안내"),
     validUntil: dateField(d.validUntil),
     theme: d.theme as DocumentContent["theme"],
     layout: d.layout as DocumentContent["layout"],
@@ -334,7 +332,8 @@ export function printPages(output: DocumentOutput) {
 export function lineFromCatalog(item: CatalogChoice): PrintLine {
   return {
     productId: item.id,
-    displayName: item.displayName,
+    // 11/4: 노출 상품명이 비어 있으면 상품명으로 채워 둡니다(문서에서 바로 고칠 수 있음).
+    displayName: (item.displayName || item.name || "").slice(0, 120),
     brand: item.brand,
     spec: item.spec,
     unit: item.unit,

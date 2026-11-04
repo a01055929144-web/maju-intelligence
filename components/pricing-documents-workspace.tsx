@@ -20,6 +20,7 @@ import {
 } from "@/domains/pricing/document";
 import { PricingDocumentPreview } from "./pricing-document-preview";
 import { PricingDocPaper } from "./pricing-doc-paper";
+import { PricingProductPicker } from "./pricing-product-picker";
 import { PricingInfoPanel } from "./pricing-info-panel";
 import { PricingStartGallery } from "./pricing-start-gallery";
 import { applyPreset, type DocumentPreset } from "@/domains/pricing/document-presets";
@@ -623,24 +624,34 @@ export function PricingDocumentsWorkspace({
                 {docView === "doc" ? (
                   <>
                     {draft.content.lines.some((l) => l.taxType === "unknown") ? <p className="rounded border border-amber-400 bg-amber-50 p-3 text-sm" role="status">과세 미확정 품목이 있습니다 — <button className="font-bold underline" onClick={() => setDocView("table")} type="button">표 보기</button>에서 과세·면세를 고른 뒤 저장해 주세요.</p> : null}
-                    {editable && (sets.length || promotions.length) ? (
+                    {editable && sets.length ? (
                       <div className="flex flex-wrap gap-1.5 text-xs">
                         {sets.map((s) => <button className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-bold" disabled={busy} key={s.id} onClick={() => void task(() => loadSet(s))} type="button">묶음 · {s.name} 담기</button>)}
-                        {promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet)).map((p) => <button className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 font-bold text-amber-900" disabled={busy} key={p.id} onClick={() => void task(() => addPromotion(p))} type="button">{p.badge} {p.displayName} 담기</button>)}
                       </div>
                     ) : null}
-                    <div className="rounded-xl bg-slate-100 p-3 sm:p-6">
-                      <PricingDocPaper
-                        baselines={baselines}
-                        catalog={catalogQuery ? catalog : []}
-                        catalogInput={catalogInput}
-                        content={draft.content}
-                        editable={editable}
-                        onAdd={(item) => void task(async () => add([item]))}
-                        onContent={change}
-                        onSearch={() => { setCatalogPage(1); setCatalogQuery(catalogInput); }}
-                        setCatalogInput={setCatalogInput}
-                      />
+                    <div className={`grid min-w-0 items-start gap-3 ${editable ? "lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]" : ""}`}>
+                      {editable ? (
+                        <PricingProductPicker
+                          added={new Set(draft.content.lines.flatMap((l) => (l.promotionId ? [`promo:${l.promotionId}`] : [l.productId])))}
+                          busy={busy}
+                          catalog={catalog}
+                          catalogInput={catalogInput}
+                          catalogPage={catalogPage}
+                          catalogTotal={catalogTotal}
+                          manager={manager}
+                          onAdd={(items) => void task(async () => add(items))}
+                          onAddPromotion={(p) => void task(() => addPromotion(p))}
+                          onOpenLibrary={() => window.open("/revenue/pricing/documents?tab=library", "_blank", "noopener")}
+                          onRefreshPromotions={() => void task(loadLibrary)}
+                          onPage={setCatalogPage}
+                          onSearch={() => { setCatalogPage(1); setCatalogQuery(catalogInput); }}
+                          promotions={promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet))}
+                          setCatalogInput={setCatalogInput}
+                        />
+                      ) : null}
+                      <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} />
+                      </div>
                     </div>
                   </>
                 ) : (

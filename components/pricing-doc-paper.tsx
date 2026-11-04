@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
+import type { DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
 
 /**
@@ -11,24 +11,14 @@ import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
  */
 export function PricingDocPaper({
   baselines,
-  catalog,
-  catalogInput,
   content,
   editable,
-  onAdd,
-  onContent,
-  onSearch,
-  setCatalogInput
+  onContent
 }: {
   readonly baselines: Record<string, number>;
-  readonly catalog: CatalogChoice[];
-  readonly catalogInput: string;
   readonly content: DocumentContent;
   readonly editable: boolean;
-  readonly onAdd: (item: CatalogChoice) => void;
   readonly onContent: (content: DocumentContent) => void;
-  readonly onSearch: () => void;
-  readonly setCatalogInput: (value: string) => void;
 }) {
   const display = content.display || DEFAULT_DISPLAY;
   const accent = content.theme === "blue" ? "#1d4ed8" : content.theme === "green" ? "#047857" : "#1f2937";
@@ -51,23 +41,23 @@ export function PricingDocPaper({
 
   return (
     <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10" style={{ borderTop: `6px solid ${accent}` }}>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
-        <div className="min-w-0">
-          <input aria-label="회사명" className={`${cell} text-lg font-black`} disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, companyName: e.target.value })} style={{ color: accent }} value={content.companyName} />
-          {headerInfo.length ? <p className="px-1 text-xs text-slate-600">{headerInfo.map((item) => `${item.label} ${item.value}`).join(" · ")}</p> : <p className="px-1 text-xs text-slate-400">오른쪽 &lsquo;보여줄 정보&rsquo;에서 연락처·주소 등을 넣으세요.</p>}
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-black">{content.kind === "sheet" ? "단가표" : "견적서"}</p>
-          <label className="mt-1 flex items-center justify-end gap-1 text-xs text-slate-600">유효
-            <input aria-label="유효기간" className="rounded border border-slate-200 px-1 py-0.5" disabled={!editable} onChange={(e) => onContent({ ...content, validUntil: e.target.value })} type="date" value={content.validUntil} />
-            까지 · 부가세 별도
-          </label>
-        </div>
+      {/* 11/4: 문서를 주는 회사가 가장 먼저 보이도록 — 회사명 크게, 연락처·주소는 바로 아래 */}
+      <header className="border-b pb-3">
+        <input aria-label="회사명" className={`${cell} text-2xl font-black`} disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, companyName: e.target.value })} placeholder="회사명을 입력하세요" style={{ color: accent }} value={content.companyName} />
+        {headerInfo.length ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 px-1 text-sm text-slate-700">{headerInfo.map((item) => <span key={item.key || item.label}><span className="text-slate-500">{item.label}</span> {item.value}</span>)}</div>
+        ) : <p className="px-1 text-xs text-slate-400">오른쪽 &lsquo;보여줄 정보&rsquo;에서 연락처·주소 등을 넣으세요.</p>}
       </header>
-      <label className="flex items-center gap-2 text-sm">
-        <span className="shrink-0 text-slate-500">받는 곳</span>
-        <input className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1" disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, recipient: e.target.value })} placeholder={content.kind === "sheet" ? "전체 거래처" : "매장 이름"} value={content.recipient} />
-      </label>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="shrink-0 text-slate-500">받는 곳</span>
+          <input className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1" disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, recipient: e.target.value })} placeholder={content.kind === "sheet" ? "전체 거래처" : "매장 이름"} value={content.recipient} />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">유효
+          <input aria-label="유효기간" className="rounded border border-slate-200 px-1 py-0.5" disabled={!editable} onChange={(e) => onContent({ ...content, validUntil: e.target.value })} type="date" value={content.validUntil} />
+          까지 · 부가세 별도
+        </label>
+      </div>
 
       {promos.length ? (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -114,7 +104,7 @@ export function PricingDocPaper({
               {chunk.map(({ index, line }) => (
                 <tr className={`border-b border-slate-100 ${line.visible ? "" : "opacity-40"} ${line.price < (baselines[line.productId] ?? 0) ? "bg-orange-50" : ""}`} key={`${line.productId}:${line.promotionId}`}>
                   <td className="py-0.5">
-                    <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} value={line.displayName} />
+                    <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
                   </td>
                   {content.showSpec ? <td className="truncate py-0.5 text-xs text-slate-600" title={`${line.spec} ${line.unit}`}>{line.spec} {line.unit}</td> : null}
@@ -131,24 +121,7 @@ export function PricingDocPaper({
         ))}
       </div>
 
-      {editable ? (
-        <div className="space-y-2">
-          <form className="flex items-center gap-2 rounded-lg border border-dashed border-slate-400 px-3 py-2" onSubmit={(e) => { e.preventDefault(); onSearch(); }}>
-            <span className="font-black text-teal-700">+</span>
-            <input aria-label="추가할 품목 검색" className="min-w-0 flex-1 bg-transparent text-sm outline-none" maxLength={100} onChange={(e) => setCatalogInput(e.target.value)} placeholder="품목 추가 — 이름·코드로 찾고 엔터" value={catalogInput} />
-            <span className="shrink-0 text-xs text-slate-500">{content.lines.length}개 담음</span>
-          </form>
-          {catalog.length ? (
-            <div className="flex max-h-40 flex-wrap gap-1.5 overflow-auto">
-              {catalog.map((item) => (
-                <button className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold hover:border-teal-400" key={item.id} onClick={() => onAdd(item)} type="button">
-                  {item.displayName || item.name} · {item.price.toLocaleString()}원 +
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {!content.lines.length ? <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">왼쪽 상품 목록에서 품목을 골라 담으세요.</p> : null}
 
       <footer className="space-y-1 border-t pt-3 text-xs text-slate-700">
         {footerInfo.length ? <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">{footerInfo.map((item) => <p key={item.key || item.label}>{item.label} · {item.value}</p>)}</div> : null}

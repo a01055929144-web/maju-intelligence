@@ -43,19 +43,24 @@ export function PageContent({
       style={{ borderTop: `6px solid ${accent}` }}
     >
       <header className="space-y-1.5 border-b pb-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="font-semibold" style={{ color: accent }}>
-            {data.companyName}
-          </p>
-          <p className="text-xs">
-            {data.version ? `버전 ${data.version}` : "작성 중"} · 발행 {koreaDay(new Date(data.publishedAt))} · 유효 {data.validUntil}
-            {data.expired ? " 만료" : "까지"}
-          </p>
+        {/* 11/4: 문서를 주는 회사가 먼저 눈에 들어오도록 회사명을 가장 크게 */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-2xl font-black leading-tight" style={{ color: accent }}>
+              {data.companyName}
+            </p>
+            {headerInfo.length ? (
+              <p className="mt-0.5 text-xs text-slate-700">{headerInfo.map((item) => `${item.label} ${item.value}`).join(" · ")}</p>
+            ) : null}
+          </div>
+          <div className="text-right text-xs">
+            <p className="text-base font-bold">{data.title}</p>
+            <p>
+              {data.version ? `버전 ${data.version}` : "작성 중"} · 발행 {koreaDay(new Date(data.publishedAt))} · 유효 {data.validUntil}
+              {data.expired ? " 만료" : "까지"}
+            </p>
+          </div>
         </div>
-        <h2 className="text-2xl font-bold">{data.title}</h2>
-        {headerInfo.length ? (
-          <p className="text-xs">{headerInfo.map((item) => `${item.label} ${item.value}`).join(" · ")}</p>
-        ) : null}
         {data.recipient && <p>받는 곳: {data.recipient}</p>}
         {data.contact && <p className="text-xs">{data.contact}</p>}
         <p className="text-xs">부가세 별도 · 면세 품목 별도 표시</p>

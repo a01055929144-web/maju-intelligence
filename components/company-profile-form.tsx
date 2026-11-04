@@ -1,6 +1,7 @@
 "use client";
 
 import { RegionPicker } from "@/components/region-picker";
+import { formatPhoneNumber } from "@/lib/phone";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MapPin, Plus, Trash2 } from "lucide-react";
 import {
@@ -355,7 +356,7 @@ function FieldInput({
       control = <input className={inputClass} disabled={readOnly} onChange={(event) => onChange(event.target.value)} type={field.type} value={String(value ?? "").slice(0, field.type === "time" ? 5 : 10)} />;
       break;
     case "mobile":
-      control = <input className={inputClass} disabled={readOnly} inputMode="tel" onChange={(event) => onChange(event.target.value)} placeholder="010-0000-0000" value={String(value ?? "")} />;
+      control = <input className={inputClass} disabled={readOnly} inputMode="tel" onChange={(event) => onChange(formatPhoneNumber(event.target.value))} placeholder="010-0000-0000" value={formatPhoneNumber(String(value ?? ""))} />;
       break;
     case "address":
       control = (
