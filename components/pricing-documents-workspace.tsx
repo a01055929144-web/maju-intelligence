@@ -66,7 +66,9 @@ export function PricingDocumentsWorkspace({
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
     [autoPrint, setAutoPrint] = useState(false),
-    [starting, setStarting] = useState<DocumentKind | null>(null);
+    [starting, setStarting] = useState<DocumentKind | null>(null),
+    [picked, setPicked] = useState<Set<string>>(new Set());
+  const lineKey = (l: PrintLine) => `${l.productId}:${l.promotionId}`;
   // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
   const requestedTab = useSearchParams()?.get("tab") || "";
   useEffect(() => {
@@ -327,7 +329,16 @@ export function PricingDocumentsWorkspace({
     ]);
     setTab("documents");
   }
-  async function applyMargin(index?: number) {
+  useEffect(() => { setPicked(new Set()); }, [draft?.id]);
+  function bulkRows(update: (line: PrintLine) => PrintLine | null) {
+    if (!draft) return;
+    rows(draft.content.lines.flatMap((l) => {
+      if (!picked.has(lineKey(l))) return [l];
+      const next = update(l);
+      return next ? [next] : [];
+    }));
+  }
+  async function applyMargin(index?: number, only?: Set<string>) {
     if (!draft || !draft.content.lines.length) return;
     const ids = Array.from(
       new Set(
@@ -348,7 +359,7 @@ export function PricingDocumentsWorkspace({
     const rate = Number(entered);
     rows(
       draft.content.lines.map((l, i) => {
-        if (l.promotionId || (index !== undefined && i !== index)) return l;
+        if (l.promotionId || (index !== undefined && i !== index) || (only && !only.has(lineKey(l)))) return l;
         const item = byId.get(l.productId);
         if (item?.cost === undefined)
           throw new Error("매입가 확인 권한이 필요합니다.");
@@ -770,10 +781,23 @@ export function PricingDocumentsWorkspace({
                     개 — 표의 과세 항목에서 과세·면세를 확인한 후 저장해 주세요.
                   </p>
                 )}
+                {picked.size && editable ? (
+                  <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white" role="toolbar" aria-label="선택한 품목 일괄 변경">
+                    <strong className="mr-1">{picked.size}개 선택</strong>
+                    <button className="rounded bg-white/10 px-2 py-1 font-bold hover:bg-white/20" onClick={() => bulkRows((l) => ({ ...l, visible: true }))} type="button">보이기</button>
+                    <button className="rounded bg-white/10 px-2 py-1 font-bold hover:bg-white/20" onClick={() => bulkRows((l) => ({ ...l, visible: false }))} type="button">숨기기</button>
+                    <button className="rounded bg-white/10 px-2 py-1 font-bold hover:bg-white/20" onClick={() => bulkRows((l) => (l.promotionId ? l : { ...l, taxType: "taxable" }))} type="button">과세로</button>
+                    <button className="rounded bg-white/10 px-2 py-1 font-bold hover:bg-white/20" onClick={() => bulkRows((l) => (l.promotionId ? l : { ...l, taxType: "exempt" }))} type="button">면세로</button>
+                    {manager ? <button className="rounded bg-white/10 px-2 py-1 font-bold hover:bg-white/20" disabled={busy} onClick={() => void task(() => applyMargin(undefined, picked))} type="button">마진 {bulkMargin}% 적용</button> : null}
+                    <button className="rounded bg-rose-500/80 px-2 py-1 font-bold hover:bg-rose-500" onClick={() => { bulkRows(() => null); setPicked(new Set()); }} type="button">빼기</button>
+                    <button className="ml-auto rounded px-2 py-1 text-white/80 hover:text-white" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
+                  </div>
+                ) : null}
                 <div className="overflow-auto rounded border">
                   <table className="w-full min-w-[850px] text-left text-sm">
                     <thead className="sticky top-0 bg-slate-100">
                       <tr>
+                        <th className="w-8 p-2">{editable ? <input aria-label="품목 전체 선택" checked={draft.content.lines.length > 0 && picked.size === draft.content.lines.length} onChange={(e) => setPicked(e.target.checked ? new Set(draft.content.lines.map(lineKey)) : new Set())} type="checkbox" /> : null}</th>
                         {[
                           "순서·표시",
                           "노출 상품명 / 브랜드",
@@ -792,8 +816,9 @@ export function PricingDocumentsWorkspace({
                       {draft.content.lines.map((l, i) => (
                         <tr
                           key={`${l.productId}:${l.promotionId}`}
-                          className={`border-t ${l.price < (baselines[l.productId] ?? 0) ? "bg-orange-50 outline outline-1 outline-orange-300" : ""}`}
+                          className={`border-t ${picked.has(lineKey(l)) ? "bg-teal-50" : ""} ${l.price < (baselines[l.productId] ?? 0) ? "bg-orange-50 outline outline-1 outline-orange-300" : ""}`}
                         >
+                          <td className="p-2">{editable ? <input aria-label={`품목 ${i + 1} 선택`} checked={picked.has(lineKey(l))} onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(lineKey(l)); else next.delete(lineKey(l)); return next; })} type="checkbox" /> : null}</td>
                           <td className="p-2">
                             <label>
                               <input
@@ -987,7 +1012,7 @@ export function PricingDocumentsWorkspace({
                 </div>
                 <p>
                   {draft.content.lines.length}개 품목 · 기준가보다 낮은 단가는
-                  주황색으로 표시합니다.
+                  주황색으로 표시합니다. 왼쪽 칸을 체크하면 여러 품목을 한 번에 바꿀 수 있습니다.
                 </p>
                 </>
                 )}
