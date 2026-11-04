@@ -70,7 +70,8 @@ async function handle(request: NextRequest, write: boolean) {
   };
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1),
-      search = (request.nextUrl.searchParams.get("q") || "").trim();
+      // 11/4: 화면은 search 로 보내 왔는데 q 만 읽어 검색이 안 되던 문제 — 둘 다 받습니다.
+      search = (request.nextUrl.searchParams.get("search") || request.nextUrl.searchParams.get("q") || "").trim();
     if (
       !Number.isSafeInteger(page) ||
       page < 1 ||

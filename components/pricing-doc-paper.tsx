@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
-import type { DocumentContent, PrintLine } from "@/domains/pricing/document";
+import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
 
 /**
@@ -13,12 +14,16 @@ export function PricingDocPaper({
   baselines,
   content,
   editable,
-  onContent
+  onContent,
+  onQuickAdd,
+  onQuickSearch
 }: {
   readonly baselines: Record<string, number>;
   readonly content: DocumentContent;
   readonly editable: boolean;
   readonly onContent: (content: DocumentContent) => void;
+  readonly onQuickAdd?: (item: CatalogChoice) => void;
+  readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
   const display = content.display || DEFAULT_DISPLAY;
   const accent = content.theme === "blue" ? "#1d4ed8" : content.theme === "green" ? "#047857" : "#1f2937";
@@ -121,12 +126,87 @@ export function PricingDocPaper({
         ))}
       </div>
 
-      {!content.lines.length ? <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">왼쪽 상품 목록에서 품목을 골라 담으세요.</p> : null}
+      {editable && onQuickSearch && onQuickAdd ? (
+        <QuickAdd added={new Set(content.lines.filter((l) => !l.promotionId).map((l) => l.productId))} onAdd={onQuickAdd} onSearch={onQuickSearch} />
+      ) : !content.lines.length ? <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">왼쪽 상품 목록에서 품목을 골라 담으세요.</p> : null}
 
       <footer className="space-y-1 border-t pt-3 text-xs text-slate-700">
         {footerInfo.length ? <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">{footerInfo.map((item) => <p key={item.key || item.label}>{item.label} · {item.value}</p>)}</div> : null}
         <textarea aria-label="하단 안내" className="w-full resize-y rounded border border-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={400} onChange={(e) => onContent({ ...content, footer: e.target.value })} placeholder="하단에 넣을 문구 (예: 시세 품목은 경매가에 따라 달라질 수 있습니다)" rows={2} value={content.footer} />
       </footer>
     </article>
+  );
+}
+
+/**
+ * 11/4: 종이 안 '+ 품목 추가' — 이름을 치면 바로 후보가 뜨고, 엔터로 담은 뒤 입력칸이 비워져 다음 품목을 이어서 칩니다.
+ * ↑↓로 후보를 고르고, Esc로 닫습니다.
+ */
+function QuickAdd({ added, onAdd, onSearch }: {
+  readonly added: ReadonlySet<string>;
+  readonly onAdd: (item: CatalogChoice) => void;
+  readonly onSearch: (query: string) => Promise<CatalogChoice[]>;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<CatalogChoice[]>([]);
+  const [active, setActive] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) { setResults([]); return; }
+    let alive = true;
+    setLoading(true);
+    const timer = window.setTimeout(() => {
+      void onSearch(q).then((items) => { if (alive) { setResults(items.slice(0, 8)); setActive(0); } }).catch(() => { if (alive) setResults([]); }).finally(() => { if (alive) setLoading(false); });
+    }, 200);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [query, onSearch]);
+  function pick(item: CatalogChoice | undefined) {
+    if (!item) { setNote(query.trim() ? "맞는 상품이 없습니다. 이름을 조금 줄여 보세요." : ""); return; }
+    if (added.has(item.id)) { setNote(`${item.displayName || item.name}은(는) 이미 담겨 있습니다.`); return; }
+    onAdd(item);
+    setNote(`${item.displayName || item.name} 담음`);
+    setQuery("");
+    setResults([]);
+    input.current?.focus();
+  }
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 rounded-lg border border-dashed border-teal-500 bg-teal-50/40 px-3 py-2">
+        <span className="font-black text-teal-700">+</span>
+        <input
+          aria-label="문서에 품목 바로 추가"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          maxLength={100}
+          onChange={(e) => { setQuery(e.target.value); setNote(""); }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter") { e.preventDefault(); if (!e.nativeEvent.isComposing) pick(results[active]); }
+            else if (e.key === "Escape") { setResults([]); }
+          }}
+          placeholder="품목 추가 — 이름을 치고 엔터 (↑↓로 고르기)"
+          ref={input}
+          value={query}
+        />
+        <span className="shrink-0 text-xs text-slate-500">{loading ? "찾는 중" : note}</span>
+      </div>
+      {results.length ? (
+        <ul className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg" role="listbox">
+          {results.map((item, index) => (
+            <li aria-selected={index === active} key={item.id} role="option">
+              <button className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${index === active ? "bg-teal-50" : ""} ${added.has(item.id) ? "text-slate-400" : ""}`} onClick={() => pick(item)} onMouseEnter={() => setActive(index)} type="button">
+                <span className="min-w-0 flex-1 truncate font-semibold">{item.displayName || item.name}</span>
+                <span className="text-xs text-slate-500">{item.spec} {item.unit}</span>
+                <span className="w-20 text-right font-bold">{item.price.toLocaleString()}원</span>
+                {added.has(item.id) ? <span className="text-xs">담김</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

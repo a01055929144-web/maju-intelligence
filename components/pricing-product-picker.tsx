@@ -60,7 +60,7 @@ export function PricingProductPicker({
       {tab === "products" ? (
         <>
           <form className="flex gap-1.5 p-2" onSubmit={(e) => { e.preventDefault(); onSearch(); }}>
-            <input aria-label="추가할 품목 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" maxLength={100} onChange={(e) => setCatalogInput(e.target.value)} placeholder={manager ? "상품명·코드 검색" : "노출 상품명 검색"} value={catalogInput} />
+            <input aria-label="추가할 품목 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" maxLength={100} onChange={(e) => setCatalogInput(e.target.value)} placeholder={manager ? "상품명 검색" : "노출 상품명 검색"} value={catalogInput} />
             <button className="h-9 rounded-md border border-slate-300 px-2.5 text-sm font-bold" disabled={busy} type="submit">찾기</button>
           </form>
           <div className="min-h-0 flex-1 overflow-auto">
