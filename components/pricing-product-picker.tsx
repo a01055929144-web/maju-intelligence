@@ -52,11 +52,14 @@ export function PricingProductPicker({
     return () => { alive = false; };
   }, [companyId]);
 
+  // 11/4: 단위 버튼은 지금 검색·조건에 맞는 상품들의 단위만(단위 조건 자체는 빼고 계산).
   const units = useMemo(() => {
     const count = new Map<string, number>();
-    for (const item of index || []) if (item.unit) count.set(item.unit, (count.get(item.unit) || 0) + 1);
-    return Array.from(count.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  }, [index]);
+    for (const item of filterIndex(index || [], { ...filters, unit: "" })) if (item.unit) count.set(item.unit, (count.get(item.unit) || 0) + 1);
+    const list = Array.from(count.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (filters.unit && !count.has(filters.unit)) list.unshift([filters.unit, 0]);
+    return list;
+  }, [index, filters]);
   const filtered = useMemo(() => filterIndex(index || [], filters), [index, filters]);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const visible = filtered.slice((page - 1) * PAGE, page * PAGE);
