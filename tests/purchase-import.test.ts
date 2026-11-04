@@ -83,3 +83,19 @@ describe("product tax type fill", () => {
     expect(plan.conflicts.sort()).toEqual(["p2", "p3"]);
   });
 });
+
+describe("product field edits", () => {
+  it("splits spec and fills only missing product fields", async () => {
+    const { buildProductFieldPatch, planMissingProductFields, splitSpec } = await import("../domains/pricing/purchase-receipt");
+    expect(splitSpec("10kg")).toEqual({ spec_unit: "kg", spec_value: 10 });
+    expect(splitSpec("EA")).toEqual({ spec_unit: "EA", spec_value: null });
+    expect(buildProductFieldPatch({ name: " " })).toEqual({ error: "품목명은 비울 수 없습니다." });
+    expect(buildProductFieldPatch({ unit: "박스", taxType: "exempt" })).toEqual({ values: { purchase_unit: "박스", sales_unit: "박스", tax_type: "exempt" } });
+    const line = { cost: 1, name: "a", rawCost: 1 };
+    const plan = planMissingProductFields(
+      [{ ...line, productId: "p1", spec: "1.8L", unit: "병" }, { ...line, productId: "p2", spec: "5kg", unit: "박스" }],
+      new Map([["p1", { spec: "", unit: "" }], ["p2", { spec: "10kg", unit: "박스" }]])
+    );
+    expect(plan).toEqual([{ productId: "p1", values: { purchase_unit: "병", sales_unit: "병", spec_unit: "L", spec_value: 1.8 } }]);
+  });
+});
