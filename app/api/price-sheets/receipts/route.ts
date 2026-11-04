@@ -3,7 +3,7 @@ import { getRequestAuthScope } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { buildPurchaseReceiptRows, planProductTaxTypes, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { buildPurchaseReceiptRows, planMissingProductFields, planProductTaxTypes, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +26,16 @@ export async function POST(request: NextRequest) {
   const companyId = auth.companyId;
   const productIds = Array.from(new Set(lines.map((line) => line.productId).filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id))));
   const products = new Map<string, string | null>();
+  const productFields = new Map<string, { spec: string; unit: string }>();
   for (let offset = 0; offset < productIds.length; offset += 100) {
     const part = productIds.slice(offset, offset + 100);
-    const found = await supabaseRequest<Array<{ id: string; tax_type: string | null }>>(
-      `product_catalog?select=id,tax_type&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${part.map(encodeURIComponent).join(",")})`
+    const found = await supabaseRequest<Array<{ id: string; tax_type: string | null; spec_value: number | null; spec_unit: string | null; sales_unit: string | null }>>(
+      `product_catalog?select=id,tax_type,spec_value,spec_unit,sales_unit&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${part.map(encodeURIComponent).join(",")})`
     ).catch(() => []);
-    for (const row of found) products.set(row.id, row.tax_type);
+    for (const row of found) {
+      products.set(row.id, row.tax_type);
+      productFields.set(row.id, { spec: [row.spec_value, row.spec_unit].filter((value) => value != null && value !== "").join(""), unit: row.sales_unit || "" });
+    }
   }
   const rows = buildPurchaseReceiptRows({
     knownProductIds: new Set(products.keys()),
@@ -64,7 +68,16 @@ export async function POST(request: NextRequest) {
         }).then(() => { taxFilled += part.length; }).catch(() => null);
       }
     }
-    return NextResponse.json({ saved: rows.length, taxConflicts: plan.conflicts.length, taxFilled });
+    // 나중에 올린 파일로 상품의 빈 칸(규격·단위)을 채웁니다(있는 값은 그대로).
+    let fieldsFilled = 0;
+    for (const item of planMissingProductFields(lines, productFields).slice(0, 300)) {
+      await supabaseRequest(`product_catalog?company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(item.productId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ ...item.values, updated_at: new Date().toISOString() })
+      }).then(() => { fieldsFilled += 1; }).catch(() => null);
+    }
+    return NextResponse.json({ fieldsFilled, saved: rows.length, taxConflicts: plan.conflicts.length, taxFilled });
   } catch (error) {
     const missing = error instanceof Error && /purchase_receipt_lines|PGRST205|42P01|404/.test(error.message);
     return NextResponse.json({ message: missing ? "DB 승인 후 시작됩니다" : "저장하지 못했습니다" }, { status: missing ? 503 : 500 });

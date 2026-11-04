@@ -90,3 +90,48 @@ export function planProductTaxTypes(lines: readonly PurchaseReceiptInputLine[], 
   }
   return { conflicts, fill };
 }
+
+export type ProductFieldEdit = { name?: string; spec?: string; unit?: string; taxType?: "taxable" | "exempt" | "" };
+
+/** "10kg" → 값 10 + 단위 kg, 숫자로 시작하지 않으면 단위 칸에 그대로 둡니다. */
+export function splitSpec(spec: string) {
+  const trimmed = spec.trim();
+  if (!trimmed) return { spec_unit: null as string | null, spec_value: null as number | null };
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if (match && Number.isFinite(Number(match[1]))) return { spec_unit: match[2].trim() || null, spec_value: Number(match[1]) };
+  return { spec_unit: trimmed.slice(0, 60), spec_value: null };
+}
+
+export function buildProductFieldPatch(edit: ProductFieldEdit): { values: Record<string, unknown> } | { error: string } {
+  const values: Record<string, unknown> = {};
+  if (edit.name !== undefined) {
+    const name = edit.name.trim();
+    if (!name) return { error: "품목명은 비울 수 없습니다." };
+    values.canonical_name = name.slice(0, 200);
+    values.purchase_product_name = name.slice(0, 200);
+  }
+  if (edit.spec !== undefined) Object.assign(values, splitSpec(edit.spec));
+  if (edit.unit !== undefined) {
+    const unit = edit.unit.trim();
+    if (!unit) return { error: "단위는 비울 수 없습니다." };
+    values.sales_unit = unit.slice(0, 40);
+    values.purchase_unit = unit.slice(0, 40);
+  }
+  if (edit.taxType !== undefined) values.tax_type = edit.taxType === "taxable" || edit.taxType === "exempt" ? edit.taxType : null;
+  return Object.keys(values).length ? { values } : { error: "바꿀 내용이 없습니다." };
+}
+
+/** 나중에 올린 파일로 상품의 빈 칸(규격·단위)을 채웁니다. 이미 값이 있으면 그대로 둡니다. */
+export function planMissingProductFields(lines: readonly PurchaseReceiptInputLine[], current: ReadonlyMap<string, { spec: string; unit: string }>) {
+  const patches = new Map<string, Record<string, unknown>>();
+  for (const line of lines) {
+    if (!line.productId) continue;
+    const product = current.get(line.productId);
+    if (!product) continue;
+    const patch = patches.get(line.productId) || {};
+    if (!product.spec && line.spec?.trim() && patch.spec_unit === undefined) Object.assign(patch, splitSpec(line.spec));
+    if (!product.unit && line.unit?.trim() && patch.sales_unit === undefined) Object.assign(patch, { purchase_unit: line.unit.trim().slice(0, 40), sales_unit: line.unit.trim().slice(0, 40) });
+    if (Object.keys(patch).length) patches.set(line.productId, patch);
+  }
+  return Array.from(patches.entries()).map(([productId, values]) => ({ productId, values }));
+}
