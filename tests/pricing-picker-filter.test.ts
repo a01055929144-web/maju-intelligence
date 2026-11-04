@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterIndex } from "../components/pricing-product-picker";
+import { filterIndex } from "../domains/pricing/catalog-filter";
 
 const items = [
   { id: "1", code: "P-000001", name: "양파", displayName: "", spec: "10kg", unit: "BOX" },

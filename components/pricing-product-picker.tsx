@@ -2,22 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogChoice, Promotion } from "@/domains/pricing/document";
+import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 
-type IndexItem = { id: string; code: string; name: string; displayName: string; spec: string; unit: string };
 const PAGE = 50;
-const norm = (value: string) => value.toLowerCase().replace(/\s+/g, "");
-
-/** 상세 조건(코드·상품명·규격·단위)과 통합 검색으로 상품을 거릅니다. */
-export function filterIndex(items: readonly IndexItem[], f: { all: string; code: string; name: string; spec: string; unit: string }) {
-  const all = norm(f.all), code = norm(f.code), name = norm(f.name), spec = norm(f.spec);
-  return items.filter((item) =>
-    (!all || norm(`${item.code} ${item.name} ${item.displayName} ${item.spec} ${item.unit}`).includes(all)) &&
-    (!code || norm(item.code).includes(code)) &&
-    (!name || norm(`${item.name} ${item.displayName}`).includes(name)) &&
-    (!spec || norm(item.spec).includes(spec)) &&
-    (!f.unit || item.unit === f.unit)
-  );
-}
 
 /**
  * 11/4: 문서 보기 왼쪽 — 상품관리 상품을 표로 보고 골라 담습니다.
