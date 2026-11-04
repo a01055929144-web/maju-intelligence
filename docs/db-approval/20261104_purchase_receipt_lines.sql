@@ -1,5 +1,5 @@
 -- 11/4 매입 기록 보관 (대표 요청: 수량·공급가액·부가세·합계를 저장해 두고 나중에 쓰기, 당일 매입 수량 확인).
--- 운영 DB fcmdvveqmcgtioelzqun 승인 문구 필요. 새 테이블 1개만 추가하고 기존 테이블은 바꾸지 않습니다.
+-- 운영 DB fcmdvveqmcgtioelzqun 승인 문구 필요. (11/4 11:03 대표 승인 · 적용 직전 부가세 열 기준 tax_type 추가) 새 테이블 1개만 추가하고 기존 테이블은 바꾸지 않습니다.
 -- 중복 방지: (company_id, dedupe_key) 유니크. dedupe_key = 매입일|매입처|품목키(이름+규격, 띄어쓰기·괄호 무시).
 --   같은 날 같은 파일을 다시 올려도 줄이 늘지 않고 덮어씁니다.
 begin;
@@ -18,6 +18,7 @@ create table if not exists public.purchase_receipt_lines (
   quantity numeric(14,3),
   unit_price numeric(14,2) not null,
   price_includes_vat boolean not null default false,
+  tax_type text,                                       -- 부가세 열 기준: taxable(부가세 있음) / exempt(0·빈칸) / null(열 없음)
   unit_cost_ex_vat numeric(14,2) not null,
   supply_amount numeric(16,2),
   vat_amount numeric(16,2),
@@ -27,6 +28,7 @@ create table if not exists public.purchase_receipt_lines (
   raw_values jsonb not null default '[]'::jsonb,
   created_by_name text,
   created_at timestamptz not null default now(),
+  constraint purchase_receipt_lines_tax_type check (tax_type is null or tax_type in ('taxable','exempt')),
   constraint purchase_receipt_lines_dedupe unique (company_id, dedupe_key),
   constraint purchase_receipt_lines_amounts check (unit_price >= 0 and unit_cost_ex_vat >= 0 and (quantity is null or quantity >= 0)),
   constraint purchase_receipt_lines_catalog_fk foreign key (company_id, product_catalog_id) references public.product_catalog(company_id, id) on delete set null (product_catalog_id)
