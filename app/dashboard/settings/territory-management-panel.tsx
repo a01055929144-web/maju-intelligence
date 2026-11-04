@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, MapPinned, Plus, Save, X } from "lucide-react";
+import { RegionPicker } from "@/components/region-picker";
 import type { CompanyStaffMemberOption, DeliveryTerritoryItem } from "@/lib/store";
 
 type Draft = { id?: string; name: string; isActive: boolean; areasText: string; staffMemberIds: string[] };
@@ -22,6 +23,7 @@ export function TerritoryManagementPanel({
   const [message, setMessage] = useState("");
   const editing = Boolean(draft.id || draft.name || draft.areasText || draft.staffMemberIds.length);
   const staffById = useMemo(() => new Map(initialStaff.map((staff) => [staff.id, staff])), [initialStaff]);
+  const takenAreas = useMemo(() => new Map(territories.filter((item) => item.id !== draft.id && item.isActive).flatMap((item) => item.areas.map((area) => [area, item.name] as const))), [draft.id, territories]);
 
   function open(item: DeliveryTerritoryItem) {
     setDraft({ id: item.id, name: item.name, isActive: item.isActive, areasText: item.areas.join("\n"), staffMemberIds: item.defaultStaff.map((staff) => staff.staffMemberId) });
@@ -69,7 +71,7 @@ export function TerritoryManagementPanel({
           <Plus className="mr-1 inline h-4 w-4" /> 새 권역
         </button>
       </div>
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(420px,1.2fr)]">
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,0.6fr)_minmax(0,1.4fr)]">
         <div className="space-y-2">
           {territories.length ? territories.map((item) => (
             <button className={`w-full rounded-xl border p-4 text-left transition ${draft.id === item.id ? "border-teal-400 bg-teal-50" : "border-slate-200 bg-white hover:border-slate-300"}`} key={item.id} onClick={() => open(item)} type="button">
@@ -83,8 +85,9 @@ export function TerritoryManagementPanel({
           <label className="text-sm font-bold text-slate-700">권역명</label>
           <input className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5" disabled={!canManage} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="예: 강남권" value={draft.name} />
           <label className="mt-4 block text-sm font-bold text-slate-700">포함 시·군·구</label>
-          <textarea className="mt-2 min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5" disabled={!canManage} onChange={(event) => setDraft({ ...draft, areasText: event.target.value })} placeholder={"서울특별시 강남구\n서울특별시 서초구"} value={draft.areasText} />
-          <p className="mt-1 text-xs text-slate-500">한 줄에 하나씩 입력합니다. 한 시·군·구는 한 권역에만 연결됩니다.</p>
+          {/* 11/4: 글자로 입력하지 않고 지도·목록에서 고릅니다. 다른 권역이 쓰는 지역은 고를 수 없습니다. */}
+          <div className="mt-2"><RegionPicker disabled={!canManage} onChange={(next) => setDraft({ ...draft, areasText: next.join("\n") })} taken={takenAreas} title="포함 지역" value={draft.areasText.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)} /></div>
+          <p className="mt-1 text-xs text-slate-500">한 시·군·구는 한 권역에만 연결됩니다.</p>
           <label className="mt-4 block text-sm font-bold text-slate-700">기본 담당자 우선순위</label>
           <div className="mt-2 space-y-2">
             {draft.staffMemberIds.map((id, index) => (
