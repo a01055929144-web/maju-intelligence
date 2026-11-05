@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Building2, LogOut, Smartphone } from "lucide-react";
+import { Building2, LogOut, Settings, Smartphone } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { CustomerWorkspaceKey, getCustomerNavigationGroups, getCustomerWorkspaceLabel } from "@/lib/customer-navigation";
@@ -69,7 +69,7 @@ export function CustomerAppShell({ active, children, companyName, fullBleed = fa
           <div className={collapsed ? "flex flex-col items-center gap-2" : "flex items-center justify-between gap-2"}>
             {/* 11/3: 회사명은 맨 아래 — 회사명 / 로그인한 사람 · 직책. 접었을 때는 로그아웃만. */}
             {!collapsed ? <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{liveCompanyName || "회사"}</p><p className="truncate text-[11px] font-semibold text-white/60">{userName || "로그인 사용자"} · {roleLabel}</p></div> : null}
-            {mode === "customer" ? <div className="flex shrink-0 items-center gap-1">{!collapsed ? <Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link> : null}<CustomerAccountActions compact={collapsed} sidebar /></div> : null}
+            {mode === "customer" ? <div className="flex shrink-0 items-center gap-1"><Link aria-label="설정" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/dashboard/settings/company" title="설정"><Settings className="h-4 w-4" /></Link>{!collapsed ? <Link aria-label="작업공간 전환" className="grid h-8 w-8 place-items-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" href="/workspaces" title="작업공간 전환"><Building2 className="h-4 w-4" /></Link> : null}<CustomerAccountActions compact={collapsed} sidebar /></div> : null}
           </div>
         )} variant="customer" />
 
