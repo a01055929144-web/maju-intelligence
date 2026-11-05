@@ -2,10 +2,10 @@ import { expect, test } from "@playwright/test";
 const company = "00000000-0000-4000-8000-000000000001";
 
 for (const width of [1440, 390]) {
-  test(`company cost direction consent defaults off at ${width}px`, async ({ page }) => {
+  test(`company cost direction consent defaults off in authorized preview at ${width}px`, async ({ page }) => {
     let available = false, optedIn = false, failOnce = true;
     await page.setViewportSize({ width, height: 900 });
-    expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+    expect((await page.request.post("/api/admin/login", { data: { email: "ci-admin@example.test", password: "ci-admin-layout-password-2026" } })).ok()).toBeTruthy();
     await page.route("**/api/pricing-order-settings*", async route => {
       if (route.request().method() === "POST") {
         expect(route.request().postDataJSON()).toEqual({ companyId: company, action: "cost-direction", enabled: true });
@@ -15,7 +15,7 @@ for (const width of [1440, 390]) {
       }
       return route.fulfill({ json: { settings: { cutoff_days_before: 1, cutoff_time: "22:00", minimum_amount: 0, minimum_policy: "notice", delivery_fee: 0, notice: "", market_price_notice: "", show_purchase_cost_direction: optedIn }, costDirectionAvailable: available, territories: [], territoryRules: [], holidays: [] } });
     });
-    await page.goto("/revenue/pricing/order-settings");
+    await page.goto(`/revenue/pricing/order-settings?companyId=${company}`);
     const consent = page.getByRole("checkbox", { name: "주문 링크에 상승·하락 방향만 표시", exact: true });
     const save = page.getByRole("button", { name: "등락 공개 설정 저장", exact: true });
     await expect(consent).not.toBeChecked();

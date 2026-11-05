@@ -4,6 +4,23 @@ set local lock_timeout = '5s';
 set local statement_timeout = '120s';
 
 alter table public.store_order_settings add column if not exists show_purchase_cost_direction boolean not null default false;
+alter table public.purchase_receipt_lines add column if not exists storefront_cost_revision bigint not null default 0 check (storefront_cost_revision >= 0);
+
+-- Identical retries keep their revision. Every actual source change invalidates old reviews,
+-- including a later re-upload that happens to restore the exact original values.
+create or replace function public.guard_storefront_cost_source_revision()
+returns trigger language plpgsql security invoker set search_path = public, pg_temp as $$
+begin
+  if (to_jsonb(new) - 'storefront_cost_revision') is distinct from (to_jsonb(old) - 'storefront_cost_revision') then
+    new.storefront_cost_revision := old.storefront_cost_revision + 1;
+  else
+    new.storefront_cost_revision := old.storefront_cost_revision;
+  end if;
+  return new;
+end $$;
+drop trigger if exists storefront_cost_source_revision on public.purchase_receipt_lines;
+create trigger storefront_cost_source_revision before update on public.purchase_receipt_lines
+  for each row execute function public.guard_storefront_cost_source_revision();
 
 -- No existing receipt is implicitly declared valid. The purchase-history owner records a review.
 create table if not exists public.storefront_cost_source_checks (
@@ -11,6 +28,7 @@ create table if not exists public.storefront_cost_source_checks (
   company_id uuid not null references public.companies(id) on delete cascade,
   receipt_line_id uuid not null,
   receipt_snapshot jsonb not null check (jsonb_typeof(receipt_snapshot) = 'object'),
+  receipt_revision bigint not null check (receipt_revision >= 0),
   correction_event_count bigint not null check (correction_event_count >= 0),
   eligible boolean not null,
   actor_name text not null check (length(trim(actor_name)) between 1 and 80),
@@ -43,13 +61,14 @@ create or replace function public.check_storefront_cost_source(
 ) returns bigint language plpgsql security invoker set search_path = public, pg_temp as $$
 declare
   receipt public.purchase_receipt_effective%rowtype;
+  original_revision bigint;
   event_count bigint;
   check_id bigint;
 begin
   if p_company is null or p_line is null or p_eligible is null
      or length(trim(coalesce(p_actor, ''))) not between 1 and 80
      or length(trim(coalesce(p_reason, ''))) not between 5 and 500 then raise exception 'invalid_source_check'; end if;
-  perform 1 from public.purchase_receipt_lines where company_id = p_company and id = p_line for update;
+  select storefront_cost_revision into original_revision from public.purchase_receipt_lines where company_id = p_company and id = p_line for update;
   if not found then raise exception 'receipt_not_found'; end if;
   select * into receipt from public.purchase_receipt_effective where company_id = p_company and id = p_line;
   if not found or p_snapshot is distinct from to_jsonb(receipt) then raise exception 'receipt_changed_retry'; end if;
@@ -57,8 +76,8 @@ begin
      or coalesce(receipt.unit_cost_ex_vat, 0) <= 0 or nullif(trim(receipt.unit), '') is null
      or receipt.tax_type is null or receipt.tax_type not in ('taxable', 'exempt')) then raise exception 'receipt_not_eligible'; end if;
   select count(*) into event_count from public.purchase_receipt_correction_events where company_id = p_company and receipt_line_id = p_line;
-  insert into public.storefront_cost_source_checks(company_id, receipt_line_id, receipt_snapshot, correction_event_count, eligible, actor_name, reason)
-    values(p_company, p_line, to_jsonb(receipt), event_count, p_eligible, trim(p_actor), trim(p_reason)) returning id into check_id;
+  insert into public.storefront_cost_source_checks(company_id, receipt_line_id, receipt_snapshot, receipt_revision, correction_event_count, eligible, actor_name, reason)
+    values(p_company, p_line, to_jsonb(receipt), original_revision, event_count, p_eligible, trim(p_actor), trim(p_reason)) returning id into check_id;
   return check_id;
 end $$;
 
@@ -72,10 +91,12 @@ begin
   with reviewed as (
     select e.product_catalog_id, e.unit, e.receipt_date, e.unit_cost_ex_vat
     from public.purchase_receipt_effective e
+    join public.purchase_receipt_lines base on base.company_id = e.company_id and base.id = e.id
     join lateral (select c.* from public.storefront_cost_source_checks c
       where c.company_id = e.company_id and c.receipt_line_id = e.id order by c.id desc limit 1) checked on true
     where e.company_id = p_company and e.product_catalog_id = any(p_products)
       and checked.eligible and checked.receipt_snapshot = to_jsonb(e)
+      and checked.receipt_revision = base.storefront_cost_revision
       and checked.correction_event_count = (select count(*) from public.purchase_receipt_correction_events ce where ce.company_id = e.company_id and ce.receipt_line_id = e.id)
       and e.quantity > 0 and e.unit_cost_ex_vat > 0 and nullif(trim(e.unit), '') is not null
       and e.tax_type in ('taxable', 'exempt')
@@ -94,9 +115,11 @@ begin
 end $$;
 
 revoke all on function public.set_storefront_cost_direction_visibility(uuid,boolean) from public, anon, authenticated;
+revoke all on function public.guard_storefront_cost_source_revision() from public, anon, authenticated;
 revoke all on function public.check_storefront_cost_source(uuid,uuid,jsonb,boolean,text,text) from public, anon, authenticated;
 revoke all on function public.storefront_cost_directions(uuid,uuid[]) from public, anon, authenticated;
 grant execute on function public.set_storefront_cost_direction_visibility(uuid,boolean) to service_role;
+grant execute on function public.guard_storefront_cost_source_revision() to service_role;
 grant execute on function public.check_storefront_cost_source(uuid,uuid,jsonb,boolean,text,text) to service_role;
 grant execute on function public.storefront_cost_directions(uuid,uuid[]) to service_role;
 commit;

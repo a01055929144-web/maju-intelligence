@@ -33,6 +33,7 @@ export default defineConfig({
       STORE_ORDERING_ENABLED: "true",
       STORE_LINK_SECRET: "ci-spec-store-link-secret-not-for-production",
       STORE_PUBLIC_BASE_URL: "https://store.example.test",
+      FEATURE_STORE_ORDERING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001",
       FEATURE_PRICING_COMPANY_IDS: "00000000-0000-4000-8000-000000000001"
     }
   }

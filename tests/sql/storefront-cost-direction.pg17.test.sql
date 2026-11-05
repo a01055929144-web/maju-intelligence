@@ -10,14 +10,18 @@ create table public.store_order_settings(company_id uuid primary key references 
 create table public.purchase_receipt_lines(
   id uuid primary key, company_id uuid references public.companies(id), product_catalog_id uuid,
   receipt_date date, quantity numeric, unit text, unit_cost_ex_vat numeric, tax_type text,
-  correction_revision integer not null default 0, unique(company_id,id)
+  unique(company_id,id)
 );
-create view public.purchase_receipt_effective with(security_invoker=true) as select * from public.purchase_receipt_lines;
+create table public.purchase_receipt_line_overrides(company_id uuid,receipt_line_id uuid,unit_cost_ex_vat numeric,revision integer,primary key(company_id,receipt_line_id));
+create view public.purchase_receipt_effective with(security_invoker=true) as
+select r.id,r.company_id,r.product_catalog_id,r.receipt_date,r.quantity,r.unit,
+  coalesce(o.unit_cost_ex_vat,r.unit_cost_ex_vat) as unit_cost_ex_vat,r.tax_type,coalesce(o.revision,0) as correction_revision
+from public.purchase_receipt_lines r left join public.purchase_receipt_line_overrides o on o.company_id=r.company_id and o.receipt_line_id=r.id;
 create table public.purchase_receipt_correction_events(id bigint generated always as identity, company_id uuid, receipt_line_id uuid);
 grant usage on schema public to service_role;
 grant select,insert,update on public.store_order_settings to service_role;
 grant select,update on public.purchase_receipt_lines to service_role;
-grant select on public.purchase_receipt_effective,public.purchase_receipt_correction_events to service_role;
+grant select on public.purchase_receipt_effective,public.purchase_receipt_correction_events,public.purchase_receipt_line_overrides to service_role;
 \ir ../../docs/sql-drafts/20261105-storefront-cost-direction.sql
 
 insert into public.companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
@@ -73,11 +77,22 @@ do $$ begin
   exception when others then if sqlerrm <> 'receipt_changed_retry' then raise; end if; end;
 end $$;
 
--- A correction invalidates approval. Cancelling back to the identical old snapshot also stays hidden.
-update public.purchase_receipt_lines set unit_cost_ex_vat=800,correction_revision=1 where id='10000000-0000-4000-8000-000000000002';
+-- Identical retry stays valid; changed-and-restored raw uploads cannot resurrect old approval.
+update public.purchase_receipt_lines set unit_cost_ex_vat=1200 where id='10000000-0000-4000-8000-000000000002';
+do $$ begin if (pg_temp.directions()->0->>'direction') is distinct from 'up' then raise exception 'identical upload invalidated review'; end if; end $$;
+update public.purchase_receipt_lines set unit_cost_ex_vat=1100 where id='10000000-0000-4000-8000-000000000002';
+update public.purchase_receipt_lines set unit_cost_ex_vat=1200 where id='10000000-0000-4000-8000-000000000002';
+update public.purchase_receipt_lines set storefront_cost_revision=0 where id='10000000-0000-4000-8000-000000000002';
+do $$ begin
+  if pg_temp.directions()<>'[]' then raise exception 'restored upload resurrected approval'; end if;
+  if (select storefront_cost_revision from public.purchase_receipt_lines where id='10000000-0000-4000-8000-000000000002')<>2 then raise exception 'source revision was forged'; end if;
+end $$;
+select pg_temp.check_source('10000000-0000-4000-8000-000000000002');
+-- Corrections do not touch the raw row: cancelling one still invalidates its old review.
+insert into public.purchase_receipt_line_overrides values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002',800,1);
 insert into public.purchase_receipt_correction_events(company_id,receipt_line_id) values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
 do $$ begin if pg_temp.directions()<>'[]' then raise exception 'changed receipt approval reused'; end if; end $$;
-update public.purchase_receipt_lines set unit_cost_ex_vat=1200,correction_revision=0 where id='10000000-0000-4000-8000-000000000002';
+delete from public.purchase_receipt_line_overrides where receipt_line_id='10000000-0000-4000-8000-000000000002';
 do $$ begin if pg_temp.directions()<>'[]' then raise exception 'cancelled correction resurrected approval'; end if; end $$;
 select pg_temp.check_source('10000000-0000-4000-8000-000000000002');
 do $$ begin if (pg_temp.directions()->0->>'direction') is distinct from 'up' then raise exception 'explicit recheck failed'; end if; end $$;
@@ -98,6 +113,7 @@ do $$ begin if pg_temp.directions()<>'[]' then raise exception 'same day ambiguo
 
 do $$ begin
   if has_function_privilege('anon','public.storefront_cost_directions(uuid,uuid[])','execute')
+     or has_function_privilege('anon','public.guard_storefront_cost_source_revision()','execute')
      or has_function_privilege('authenticated','public.check_storefront_cost_source(uuid,uuid,jsonb,boolean,text,text)','execute')
      or has_table_privilege('authenticated','public.storefront_cost_source_checks','select') then raise exception 'private grants leaked'; end if;
   if not has_function_privilege('service_role','public.storefront_cost_directions(uuid,uuid[])','execute') then raise exception 'service grant missing'; end if;
@@ -106,10 +122,12 @@ set role service_role;
 select public.set_storefront_cost_direction_visibility('00000000-0000-4000-8000-000000000001',false);
 select * from public.storefront_cost_directions('00000000-0000-4000-8000-000000000001',array['20000000-0000-4000-8000-000000000001']::uuid[]);
 reset role;
+create temp table before_cost_direction_down as select id,to_jsonb(r)-'storefront_cost_revision' as business_snapshot from public.purchase_receipt_lines r;
 \ir ../../docs/sql-drafts/20261105-storefront-cost-direction.down.sql
 do $$ begin
   if to_regclass('public.storefront_cost_source_checks') is not null then raise exception 'down left source checks'; end if;
   if (select count(*) from public.purchase_receipt_lines)<>7 then raise exception 'down changed receipts'; end if;
+  if exists(select 1 from public.purchase_receipt_lines r join before_cost_direction_down b using(id) where to_jsonb(r) is distinct from b.business_snapshot) then raise exception 'down changed receipt business values'; end if;
 end $$;
 \ir ../../docs/sql-drafts/20261105-storefront-cost-direction.sql
 do $$ begin
