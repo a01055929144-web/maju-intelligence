@@ -1,7 +1,9 @@
 \set ON_ERROR_STOP on
-create role anon;
-create role authenticated;
-create role service_role;
+do $$ begin
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon; end if;
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if;
+  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role; end if;
+end $$;
 create table public.store_order_settings(company_id uuid primary key, notice text not null default '', updated_at timestamptz not null default now());
 insert into public.store_order_settings(company_id,notice) values ('00000000-0000-4000-8000-000000000001','preserve'),('00000000-0000-4000-8000-000000000002','other');
 grant select,insert,update on public.store_order_settings to service_role;
