@@ -27,6 +27,7 @@ it("keeps the link's published selling price and compares only its preceding ver
     if (path.startsWith("normalized_customers?")) return [{ id: "customer", customer_name: "synthetic", delivery_territory_id: null }];
     if (path.startsWith("store_order_settings?")) return [{ cutoff_days_before: 1, cutoff_time: "22:00", minimum_amount: 0, minimum_policy: "notice", delivery_fee: 0, show_storefront_price_direction: optedIn }];
     if (path.startsWith("product_catalog?")) return [{ id: "product", is_active: active, order_pricing_mode: market ? "market" : "fixed" }];
+    if (path.startsWith("store_order_customer_rules?")) return [{ delivery_weekdays: [0, 1, 2, 3, 4, 5, 6], cutoff_days_before: 0, cutoff_time: "23:59" }];
     if (path.startsWith("customer_price_agreements?") && agreement) return [{ product_catalog_id: "product", sales_unit: "bag", unit_price: 900, tax_type: "exempt", price_includes_tax: false }];
     return [];
   });
@@ -38,7 +39,8 @@ it("keeps the link's published selling price and compares only its preceding ver
   historyError = true;
   const historyUnavailable = await readStorefront("token");
   expect(historyUnavailable?.version).toBe(3);
-  expect(historyUnavailable?.canOrder).toBe(result?.canOrder);
+  expect(result?.canOrder).toBe(true);
+  expect(historyUnavailable?.canOrder).toBe(true);
   expect(toPublicStorefront(historyUnavailable!).lines[0]).toMatchObject({ unitPrice: 1200 });
   expect(toPublicStorefront(historyUnavailable!).lines[0]).not.toHaveProperty("salesPriceDirection");
   historyError = false;
