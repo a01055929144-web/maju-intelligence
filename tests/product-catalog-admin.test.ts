@@ -14,6 +14,14 @@ const categorySource = readFileSync(
   new URL("../components/product-category-manager.tsx", import.meta.url),
   "utf8",
 );
+const pageSource = readFileSync(
+  new URL("../app/revenue/products/page.tsx", import.meta.url),
+  "utf8",
+);
+const workspaceSource = readFileSync(
+  new URL("../components/product-catalog-workspace.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("product catalog admin presentation", () => {
   it("calculates markup and exposes reverse margins", () => {
@@ -51,5 +59,13 @@ describe("product catalog admin presentation", () => {
     expect(categorySource).toContain("분류 검색 선택");
     expect(categorySource).toContain("분류 정리 · 분류별 마진");
     expect(marginSource).not.toContain("ProductCategoryManager");
+  });
+
+  it("does not call manager-only pricing APIs for sales-role product access", () => {
+    expect(pageSource).toContain("canManagePriceSheets(customerSession)");
+    expect(pageSource).toContain("canManageCategories={canManageCategories}");
+    expect(workspaceSource).toContain("canManageCategories={canManageCategories}");
+    expect(adminSource).toContain("canManageCategories ? <ProductCategoryWorkspace");
+    expect(adminSource).toContain('sideTab === "category" && canManageCategories');
   });
 });
