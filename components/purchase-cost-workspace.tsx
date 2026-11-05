@@ -328,7 +328,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (unmatched.length) {
         setMessage(`저장 중… 새 상품 ${unmatched.length}개 상품관리 등록`);
         const created = await createNewProducts(unmatched);
-        notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개 적용` : ""}`);
+        notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개는 상품관리에서 확인 후 저장` : ""}`);
         setUnmatched([]);
       }
       let batchId: string | undefined;

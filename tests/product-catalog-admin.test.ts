@@ -25,4 +25,12 @@ describe("product catalog admin presentation", () => {
     expect(adminSource).toContain('event.ctrlKey && event.key === "Enter"');
     expect(adminSource).not.toContain('max-w-[440px]');
   });
+
+  it("requires preview, selection and explicit confirmation before batch category save", () => {
+    expect(adminSource).toContain("분류 추천 미리보기");
+    expect(adminSource).toContain("추천은 자동 저장되지 않습니다");
+    expect(adminSource).toContain("전체 제외");
+    expect(adminSource).toContain("확인하고 저장");
+    expect(adminSource).toContain("start += 50");
+  });
 });
