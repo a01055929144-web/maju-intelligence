@@ -302,7 +302,7 @@ function CategoryRecommendationReview({ companyId, onClose, onUpdated }: {
         const batch = chosen.slice(start, start + 50);
         const response = await fetch("/api/product-catalog", {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "update-categories", companyId, updates: batch.map((item) => ({ id: item.id, category: item.suggestion })) }),
+          body: JSON.stringify({ action: "update-categories", companyId, updates: batch.map((item) => ({ id: item.id, category: item.suggestion, expectedCategory: item.category })) }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) { failures.push(payload.message || `${start + 1}~${start + batch.length}번째 묶음 저장 실패`); continue; }

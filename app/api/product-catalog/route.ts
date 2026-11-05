@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 }
 async function payload(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
-    | ({ action?: string; companyId?: string; id?: string; updates?: Array<{ id: string; category: string }> } & Partial<SaveProductCatalogInput>)
+    | ({ action?: string; companyId?: string; id?: string; updates?: Array<{ id: string; category: string; expectedCategory: string }> } & Partial<SaveProductCatalogInput>)
     | null;
   return { body, scope: await getRequestAuthScope(request, body?.companyId) };
 }

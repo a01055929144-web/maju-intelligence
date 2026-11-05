@@ -303,7 +303,7 @@ export async function updateProductCatalogForAdmin(
   return toItem(rows[0]);
 }
 
-export type ProductCategoryUpdate = { id: string; category: string };
+export type ProductCategoryUpdate = { id: string; category: string; expectedCategory: string };
 export type ProductCategorySuggestion = { id: string; name: string; category: string; suggestion: string };
 
 export async function listProductCategorySuggestions(
@@ -333,18 +333,21 @@ export async function updateProductCategoriesForAdmin(
   const unique = Array.from(new Map(updates.map((item) => [item.id, item])).values());
   const results: Array<{ id: string; category?: string; ok: boolean; message?: string }> = [];
   for (let start = 0; start < unique.length; start += 5) {
-    results.push(...await Promise.all(unique.slice(start, start + 5).map(async ({ id, category }) => {
+    results.push(...await Promise.all(unique.slice(start, start + 5).map(async ({ id, category, expectedCategory }) => {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return { id, ok: false as const, message: "품목 번호를 확인해 주세요." };
     const cleaned = cleanCategory(category);
     if (typeof cleaned !== "string") return { id, ok: false as const, message: typeof cleaned === "object" ? cleaned.error : "추천 분류를 확인해 주세요." };
     try {
+      const expected = cleanCategory(expectedCategory);
+      if (expected && typeof expected === "object") return { id, ok: false as const, message: expected.error };
+      const categoryCondition = expected === null ? "category=is.null" : `category=eq.${enc(expected)}`;
       const rows = await request<Row[]>(
-        `product_catalog?id=eq.${enc(id)}&company_id=eq.${enc(companyId)}&select=id,category`,
+        `product_catalog?id=eq.${enc(id)}&company_id=eq.${enc(companyId)}&${categoryCondition}&select=id,category`,
         { method: "PATCH", body: JSON.stringify({ category: cleaned, updated_at: new Date().toISOString() }) },
       );
       return rows[0]
         ? { id, category: cleaned, ok: true as const }
-        : { id, ok: false as const, message: "이 회사의 품목을 찾을 수 없습니다." };
+        : { id, ok: false as const, message: "다른 사용자가 분류를 변경했습니다. 새로고침 후 다시 검토해 주세요." };
     } catch (error) {
       return { id, ok: false as const, message: error instanceof Error ? error.message : "저장하지 못했습니다." };
     }

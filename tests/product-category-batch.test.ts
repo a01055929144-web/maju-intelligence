@@ -14,8 +14,8 @@ describe("product category batch review", () => {
       .mockRejectedValueOnce(new Error("temporary failure"));
 
     const results = await updateProductCategoriesForAdmin("company-a", [
-      { id: "10000000-0000-4000-8000-000000000001", category: "농산 > 채소류" },
-      { id: "10000000-0000-4000-8000-000000000002", category: "수산 > 어류" },
+      { id: "10000000-0000-4000-8000-000000000001", category: "농산 > 채소류", expectedCategory: "" },
+      { id: "10000000-0000-4000-8000-000000000002", category: "수산 > 어류", expectedCategory: "" },
     ]);
 
     expect(results).toEqual([
@@ -31,6 +31,7 @@ describe("product category batch review", () => {
     const updates = Array.from({ length: 51 }, (_, index) => ({
       id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       category: "기타",
+      expectedCategory: "",
     }));
     await expect(updateProductCategoriesForAdmin("company-a", updates)).rejects.toThrow("1~50개");
     expect(supabaseRequest).not.toHaveBeenCalled();
@@ -71,8 +72,20 @@ describe("product category batch review", () => {
     const results = await updateProductCategoriesForAdmin("company-a", Array.from({ length: 12 }, (_, index) => ({
       id: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       category: "기타",
+      expectedCategory: "",
     })));
     expect(results).toHaveLength(12);
     expect(maximum).toBe(5);
+  });
+
+  it("does not overwrite a category changed after preview", async () => {
+    supabaseRequest.mockResolvedValueOnce([]);
+    const [result] = await updateProductCategoriesForAdmin("company-a", [{
+      id: "10000000-0000-4000-8000-000000000001",
+      category: "수산 > 어류",
+      expectedCategory: "축산 > 우육",
+    }]);
+    expect(supabaseRequest.mock.calls[0][0]).toContain("category=eq.%EC%B6%95%EC%82%B0%20%3E%20%EC%9A%B0%EC%9C%A1");
+    expect(result).toMatchObject({ ok: false, message: expect.stringContaining("다른 사용자") });
   });
 });
