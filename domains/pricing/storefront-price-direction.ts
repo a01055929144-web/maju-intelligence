@@ -30,7 +30,7 @@ export function publishedPriceDirections(current: DocumentContent, previous: Doc
     || (current.recipient ?? "") !== (previous.recipient ?? "")
     || !Array.isArray(current.lines) || !Array.isArray(previous.lines)) return result;
   const before = index(previous.lines);
-  for (const [key, line] of index(current.lines)) {
+  for (const [key, line] of Array.from(index(current.lines))) {
     const old = before.get(key);
     if (!line || !old || line.taxType !== old.taxType || (line.spec || "").trim() !== (old.spec || "").trim()) continue;
     const direction = salesPriceDirection(line.price, old.price);
