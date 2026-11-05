@@ -9,7 +9,7 @@ import { toPublicStorefront } from "../lib/pricing/storefront-public";
 afterEach(() => vi.unstubAllEnvs());
 it("keeps the link's published selling price and compares only its preceding version; hides overrides and OFF", async () => {
   vi.stubEnv("STOREFRONT_PRICE_DIRECTION_ENABLED", "true");
-  let agreement = false, market = false, active = true, optedIn = true;
+  let agreement = false, market = false, active = true, optedIn = true, historyError = false;
   const line = { productId: "product", unit: "bag", spec: "1kg", visible: true, price: 1200, taxType: "exempt", promotionId: null };
   const content = { kind: "sheet", recipient: "store", showPrice: true, validUntil: "2099-12-31", lines: [line] };
   const seen: string[] = [];
@@ -17,7 +17,10 @@ it("keeps the link's published selling price and compares only its preceding ver
     seen.push(path);
     if (path.startsWith("storefront_links?")) return [{ id: "link", company_id: "company", customer_id: "customer", document_version_id: "frozen-version", expires_at: "2099-12-31", revoked_at: null, can_order: true }];
     if (path.startsWith("pricing_document_versions?")) {
-      if (path.includes("&version=eq.2&")) return [{ version: 2, content: { ...content, lines: [{ ...line, price: 1000 }] } }];
+      if (path.includes("&version=eq.2&")) {
+        if (historyError) throw new Error("synthetic history unavailable");
+        return [{ version: 2, content: { ...content, lines: [{ ...line, price: 1000 }] } }];
+      }
       expect(path).toContain("&id=eq.frozen-version&");
       return [{ id: "frozen-version", document_id: "doc", version: 3, content }];
     }
@@ -32,6 +35,13 @@ it("keeps the link's published selling price and compares only its preceding ver
   expect(toPublicStorefront(result!).lines[0]).toMatchObject({ unitPrice: 1200, salesPriceDirection: "up" });
   expect(seen.find(path => path.includes("&version=eq.2&"))).toContain("company_id=eq.company&document_id=eq.doc");
   expect(seen.some(path => /purchase_receipt|product_base_prices|supplier|margin/.test(path))).toBe(false);
+  historyError = true;
+  const historyUnavailable = await readStorefront("token");
+  expect(historyUnavailable?.version).toBe(3);
+  expect(historyUnavailable?.canOrder).toBe(result?.canOrder);
+  expect(toPublicStorefront(historyUnavailable!).lines[0]).toMatchObject({ unitPrice: 1200 });
+  expect(toPublicStorefront(historyUnavailable!).lines[0]).not.toHaveProperty("salesPriceDirection");
+  historyError = false;
   for (const mode of ["agreement", "market", "inactive", "optout", "masteroff"]) {
     agreement = mode === "agreement"; market = mode === "market"; active = mode !== "inactive"; optedIn = mode !== "optout";
     vi.stubEnv("STOREFRONT_PRICE_DIRECTION_ENABLED", mode === "masteroff" ? "false" : "true");

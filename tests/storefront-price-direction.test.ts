@@ -51,5 +51,5 @@ it("pins company, document and exact previous version, never latest live prices"
   db.mockResolvedValue([{ version: 1, content: document(500) }]);
   expect((await readPublishedPriceDirections("company", true, current)).size).toBe(0);
   db.mockRejectedValue(new Error("history unavailable"));
-  await expect(readPublishedPriceDirections("company", true, current)).rejects.toThrow("history unavailable");
+  expect((await readPublishedPriceDirections("company", true, current)).size).toBe(0);
 });

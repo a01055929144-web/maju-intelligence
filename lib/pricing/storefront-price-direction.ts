@@ -11,9 +11,10 @@ export async function readPublishedPriceDirections(companyId: string, optedIn: b
   const empty = new Map<string, SalesPriceDirection>();
   if (!priceDirectionEnabled() || !optedIn || !current.document_id || !Number.isSafeInteger(current.version) || current.version <= 1) return empty;
   const previousVersion = current.version - 1;
+  // Direction is optional: history availability must never block the current order link.
   const rows = await supabaseRequest<Array<{ version: number; content: DocumentContent }>>(
     `pricing_document_versions?company_id=eq.${encodeURIComponent(companyId)}&document_id=eq.${encodeURIComponent(current.document_id)}&version=eq.${previousVersion}&select=version,content&limit=1`,
-  );
+  ).catch(() => []);
   if (rows[0]?.version !== previousVersion) return empty;
   return publishedPriceDirections(current.content, rows[0].content);
 }
