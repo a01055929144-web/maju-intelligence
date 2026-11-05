@@ -40,13 +40,45 @@ values('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000
 insert into public.store_cost_revisions(company_id,store_account_id,store_cost_item_id,revision,effective_on,product_name,specification,unit,cost_krw,change_kind,actor_member_id,source_file_name,source_sha256,source_row_number)
 values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',1,'2026-11-05','양파','15kg','망',18000,'import','20000000-0000-4000-8000-000000000001','costs.xlsx',repeat('a',64),2)
 on conflict do nothing;
+
+select public.save_store_cost(
+  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  '양파|15kg|망','양파','15kg','망','2026-11-06',19000,'30000000-0000-4000-8000-000000000001',1,null,null,null
+);
+do $$
+begin
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      '양파|15kg|망','양파','15kg','망','2026-11-07',20000,'30000000-0000-4000-8000-000000000001',1,null,null,null
+    );
+    raise exception 'stale_edit_allowed';
+  exception when others then
+    if sqlerrm <> 'store_cost_revision_conflict' then raise; end if;
+  end;
+  if (select revision from public.store_cost_items where id='30000000-0000-4000-8000-000000000001')<>2
+    or (select count(*) from public.store_cost_revisions where store_cost_item_id='30000000-0000-4000-8000-000000000001')<>2 then
+    raise exception 'failed_edit_was_not_atomic';
+  end if;
+end $$;
+select public.save_store_cost(
+  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
+);
+select public.save_store_cost(
+  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
+);
 insert into public.store_cost_revisions(company_id,store_account_id,store_cost_item_id,revision,effective_on,product_name,specification,unit,cost_krw,change_kind,actor_member_id,source_file_name,source_sha256,source_row_number)
 values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',1,'2026-11-05','양파','15kg','망',18000,'import','20000000-0000-4000-8000-000000000001','costs.xlsx',repeat('a',64),2)
 on conflict do nothing;
 
 do $$
 begin
-  if (select count(*) from public.store_cost_revisions) <> 1 then raise exception 'reupload_not_idempotent'; end if;
+  if (select count(*) from public.store_cost_revisions) <> 3
+    or (select revision from public.store_cost_items where id='30000000-0000-4000-8000-000000000001')<>3 then
+    raise exception 'reupload_not_idempotent';
+  end if;
   begin
     insert into public.store_cost_items(company_id,store_account_id,product_key,product_name,unit,effective_on,cost_krw)
     values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','양파|15kg|망','양파','망','2026-11-06',19000);

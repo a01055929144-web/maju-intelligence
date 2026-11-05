@@ -15,6 +15,7 @@ export type StoreCostInput = {
   specification?: string;
   unit: string;
   costKrw: number;
+  sourceRowNumber?: number;
 };
 
 const normalized = (value: unknown) => String(value ?? "").normalize("NFKC").trim();
@@ -44,6 +45,9 @@ export function validateStoreCostInput(input: StoreCostInput, rowNumber?: number
     throw new Error(`${prefix}품목명·단위를 확인해 주세요.`);
   }
   if ((input.specification?.length ?? 0) > 200) throw new Error(`${prefix}규격은 200자 이하로 입력해 주세요.`);
+  if (input.sourceRowNumber !== undefined && (!Number.isSafeInteger(input.sourceRowNumber) || input.sourceRowNumber < 1)) {
+    throw new Error(`${prefix}원본 행 번호를 확인해 주세요.`);
+  }
   if (!Number.isSafeInteger(input.costKrw) || input.costKrw < 0 || input.costKrw > 1_000_000_000) {
     throw new Error(`${prefix}원가는 0~10억원 사이의 원 단위 정수로 입력해 주세요.`);
   }
@@ -57,11 +61,19 @@ export function parseStoreCostRows(rows: readonly unknown[][], mapping: StoreCos
     const read = (field: StoreCostField) => normalized(row[mapping[field] ?? -1]);
     const costText = read("costKrw").replace(/[,원\s]/g, "");
     const costKrw = Number(costText);
-    const effectiveOn = read("effectiveOn");
+    const effectiveOn = normalizeSheetDate(row[mapping.effectiveOn ?? -1]);
     const productName = read("productName");
     const unit = read("unit");
-    return validateStoreCostInput({ costKrw, effectiveOn, productName, specification: read("specification"), unit }, index + 2);
+    return validateStoreCostInput({ costKrw, effectiveOn, productName, sourceRowNumber: index + 2, specification: read("specification"), unit }, index + 2);
   });
+}
+
+function normalizeSheetDate(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.valueOf())) return value.toISOString().slice(0, 10);
+  if (typeof value === "number" && Number.isInteger(value) && value > 0 && value < 3_000_000) {
+    return new Date((value - 25_569) * 86_400_000).toISOString().slice(0, 10);
+  }
+  return normalized(value);
 }
 
 export function collapseStoreCostDuplicates(rows: readonly StoreCostInput[]) {

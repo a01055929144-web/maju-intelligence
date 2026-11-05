@@ -62,10 +62,71 @@ create index store_cost_items_search_idx
 create index store_cost_revisions_history_idx
   on public.store_cost_revisions(company_id, store_account_id, store_cost_item_id, revision desc);
 
+create function public.save_store_cost(
+  p_company_id uuid, p_store_account_id uuid, p_actor_member_id uuid,
+  p_product_key text, p_product_name text, p_specification text, p_unit text,
+  p_effective_on date, p_cost_krw bigint, p_item_id uuid default null, p_expected_revision integer default null,
+  p_source_file_name text default null, p_source_sha256 text default null,
+  p_source_row_number integer default null
+) returns jsonb language plpgsql security invoker set search_path = public, pg_temp as $$
+declare
+  v_item public.store_cost_items%rowtype;
+  v_item_found boolean;
+  v_change_kind text := case when p_source_sha256 is null then 'edit' else 'import' end;
+begin
+  if not exists (
+    select 1 from public.store_account_members
+    where company_id=p_company_id and store_account_id=p_store_account_id
+      and id=p_actor_member_id and status='active'
+  ) then raise exception 'active_store_member_required'; end if;
+  if length(p_product_key) not between 3 and 500 or length(p_product_name) not between 1 and 200
+    or length(coalesce(p_specification,'')) > 200 or length(p_unit) not between 1 and 40
+    or p_effective_on is null or p_cost_krw not between 0 and 1000000000
+    or ((p_source_sha256 is null) <> (p_source_row_number is null))
+    or (p_source_sha256 is not null and p_source_sha256 !~ '^[0-9a-f]{64}$') then
+    raise exception 'invalid_store_cost';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text||':'||p_store_account_id::text||':'||p_product_key,0));
+  select * into v_item from public.store_cost_items
+    where company_id=p_company_id and store_account_id=p_store_account_id
+      and case when p_item_id is null then product_key=p_product_key else id=p_item_id end
+    for update;
+  v_item_found := found;
+  if p_source_sha256 is not null and exists (
+    select 1 from public.store_cost_revisions where company_id=p_company_id
+      and store_account_id=p_store_account_id and source_sha256=p_source_sha256
+      and source_row_number=p_source_row_number
+  ) then return jsonb_build_object('id',v_item.id,'revision',v_item.revision,'replayed',true); end if;
+  if not v_item_found then
+    if p_expected_revision is not null then raise exception 'store_cost_revision_conflict'; end if;
+    insert into public.store_cost_items(company_id,store_account_id,product_key,product_name,specification,unit,effective_on,cost_krw)
+      values(p_company_id,p_store_account_id,p_product_key,p_product_name,coalesce(p_specification,''),p_unit,p_effective_on,p_cost_krw)
+      returning * into v_item;
+  else
+    if p_expected_revision is not null and v_item.revision <> p_expected_revision then raise exception 'store_cost_revision_conflict'; end if;
+    update public.store_cost_items set product_key=p_product_key, product_name=p_product_name, specification=coalesce(p_specification,''),
+      unit=p_unit, effective_on=p_effective_on, cost_krw=p_cost_krw,
+      revision=revision+1, updated_at=now()
+      where company_id=p_company_id and store_account_id=p_store_account_id and id=v_item.id
+      returning * into v_item;
+  end if;
+  insert into public.store_cost_revisions(company_id,store_account_id,store_cost_item_id,revision,
+    effective_on,product_name,specification,unit,cost_krw,change_kind,actor_member_id,
+    source_file_name,source_sha256,source_row_number)
+  values(p_company_id,p_store_account_id,v_item.id,v_item.revision,p_effective_on,p_product_name,
+    coalesce(p_specification,''),p_unit,p_cost_krw,v_change_kind,p_actor_member_id,
+    p_source_file_name,p_source_sha256,p_source_row_number);
+  return jsonb_build_object('id',v_item.id,'revision',v_item.revision,'replayed',false);
+end $$;
+
 alter table public.store_cost_items enable row level security;
 alter table public.store_cost_revisions enable row level security;
 revoke all on public.store_cost_items, public.store_cost_revisions from public, anon, authenticated, service_role;
 grant select, insert, update on public.store_cost_items to service_role;
 grant select, insert on public.store_cost_revisions to service_role;
+revoke all on function public.save_store_cost(uuid,uuid,uuid,text,text,text,text,date,bigint,uuid,integer,text,text,integer)
+  from public, anon, authenticated, service_role;
+grant execute on function public.save_store_cost(uuid,uuid,uuid,text,text,text,text,date,bigint,uuid,integer,text,text,integer)
+  to service_role;
 
 commit;

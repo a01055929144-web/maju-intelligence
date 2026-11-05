@@ -12,8 +12,18 @@ describe("store-owned costs", () => {
   it("reuses column mapping semantics and accepts only integer KRW", () => {
     const mapping = suggestStoreCostMapping(["날짜", "상품명", "규격", "단위", "원가(원)"]);
     const rows = parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", "18,000원"]], mapping);
-    expect(rows).toEqual([{ effectiveOn: "2026-11-05", productName: "양파", specification: "15kg", unit: "망", costKrw: 18000 }]);
+    expect(rows).toEqual([{ effectiveOn: "2026-11-05", productName: "양파", sourceRowNumber: 2, specification: "15kg", unit: "망", costKrw: 18000 }]);
     expect(() => parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", "18.5"]], mapping)).toThrow("원 단위 정수");
+  });
+
+  it("normalizes spreadsheet dates and preserves the original duplicate row", () => {
+    const mapping = suggestStoreCostMapping(["날짜", "상품명", "단위", "원가"]);
+    const rows = parseStoreCostRows([
+      [new Date("2026-11-05T00:00:00Z"), "양파", "망", 18000],
+      [46336, "양파", "망", 19000],
+    ], mapping);
+    expect(rows.map(row => row.effectiveOn)).toEqual(["2026-11-05", "2026-11-10"]);
+    expect(collapseStoreCostDuplicates([rows[0], { ...rows[1], effectiveOn: rows[0].effectiveOn }])[0].sourceRowNumber).toBe(3);
   });
 
   it("normalizes duplicates without supplier or distributor identity", () => {
