@@ -19,7 +19,7 @@ async function historyPages(path: string) {
     rows.push(...page);
     if (page.length < 1000) return rows;
   }
-  throw new Error("매입 이력이 10,000건을 넘습니다. 기간이나 품목으로 좁혀 조회해 주세요.");
+  throw new Error("매입 이력이 10,000건을 넘어 현재 화면에서 모두 조회할 수 없습니다.");
 }
 
 async function listSupplierCostHistory(companyId: string, input: { from: string; to: string; search: string; productId: string; lineKey: string; supplier: string }) {
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
   const receiptHistory = from ? await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.filter((filter) => !filter.startsWith("receipt_date=")).join("&")}&order=receipt_date.desc,id.desc`).catch(() => rows) : rows;
   const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => null);
-  if (!supplierHistory) return NextResponse.json({ message: "매입 이력이 10,000건을 넘거나 원가 이력을 읽지 못했습니다. 기간이나 품목으로 좁혀 다시 조회해 주세요." }, { status: 500 });
+  if (!supplierHistory) return NextResponse.json({ message: "매입 이력이 10,000건을 넘거나 원가 이력을 읽지 못했습니다. 관리자에게 조회 범위 확장을 요청해 주세요." }, { status: 500 });
   const receiptHistoryRows = receiptHistory as PurchaseHistoryRow[];
   const supplierHistoryRows = supplierHistory as PurchaseHistoryRow[];
   const combined: PurchaseHistoryRow[] = [...receiptHistoryRows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistoryRows.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
