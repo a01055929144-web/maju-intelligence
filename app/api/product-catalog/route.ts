@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import {
   createProductCatalogForAdmin,
+  listProductCategorySuggestions,
   listProductCatalogForAdmin,
   updateProductCatalogForAdmin,
+  updateProductCategoriesForAdmin,
   type SaveProductCatalogInput,
 } from "@/lib/product-catalog-admin";
 export const dynamic = "force-dynamic";
@@ -34,6 +36,10 @@ export async function GET(request: NextRequest) {
     error = denied(scope);
   if (error) return error;
   try {
+    if (request.nextUrl.searchParams.get("action") === "category-suggestions") {
+      const page = Math.max(1, Number(request.nextUrl.searchParams.get("page")) || 1);
+      return NextResponse.json(await listProductCategorySuggestions(scope.companyId!, page));
+    }
     return NextResponse.json({
       items: await listProductCatalogForAdmin(
         scope.companyId!,
@@ -52,7 +58,7 @@ export async function GET(request: NextRequest) {
 }
 async function payload(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
-    | ({ companyId?: string; id?: string } & Partial<SaveProductCatalogInput>)
+    | ({ action?: string; companyId?: string; id?: string; updates?: Array<{ id: string; category: string; expectedCategory: string }> } & Partial<SaveProductCatalogInput>)
     | null;
   return { body, scope: await getRequestAuthScope(request, body?.companyId) };
 }
@@ -86,6 +92,19 @@ export async function PATCH(request: NextRequest) {
   const { body, scope } = await payload(request),
     error = denied(scope);
   if (error) return error;
+  if (body?.action === "update-categories") {
+    if (!Array.isArray(body.updates)) return NextResponse.json({ message: "저장할 추천을 확인해 주세요." }, { status: 400 });
+    try {
+      const results = await updateProductCategoriesForAdmin(scope.companyId!, body.updates);
+      return NextResponse.json({
+        results,
+        savedCount: results.filter((item) => item.ok).length,
+        failedCount: results.filter((item) => !item.ok).length,
+      });
+    } catch (e) {
+      return NextResponse.json({ message: e instanceof Error ? e.message : "추천 분류를 저장하지 못했습니다." }, { status: 400 });
+    }
+  }
   if (!body?.id || !body.name)
     return NextResponse.json(
       { message: "품목 정보를 확인해 주세요." },

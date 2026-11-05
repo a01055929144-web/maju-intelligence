@@ -51,7 +51,8 @@ export function ProductCatalogAdmin({
     [sideOpen, setSideOpen] = useState<Set<string>>(new Set()),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
-    [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null);
+    [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null),
+    [reviewingCategories, setReviewingCategories] = useState(false);
   async function load() {
     setLoading(true);
     setError("");
@@ -181,13 +182,12 @@ export function ProductCatalogAdmin({
               판매 단위와 공급 상품의 원가·환산을 한 곳에서 관리합니다.
             </p>
           </div>
-          <button
-            className="maju-button-primary inline-flex items-center gap-2"
-            onClick={() => setEditing({ ...blank })}
-          >
-            <PackagePlus className="h-4 w-4" />
-            상품 등록
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button className="maju-button-secondary" onClick={() => setReviewingCategories(true)} type="button">분류 추천 검토</button>
+            <button className="maju-button-primary inline-flex items-center gap-2" onClick={() => setEditing({ ...blank })}>
+              <PackagePlus className="h-4 w-4" />상품 등록
+            </button>
+          </div>
         </div>
         <div className="grid gap-2 border-b p-4 sm:grid-cols-2 xl:grid-cols-5">
           {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <input aria-label={`${label} 검색`} className="maju-input w-full" key={key} onChange={(e) => setSearch((value) => ({ ...value, [key]: e.target.value }))} placeholder={`${label} 검색`} value={search[key]} />)}
@@ -252,9 +252,96 @@ export function ProductCatalogAdmin({
           }}
         />
       ) : null}
+      {reviewingCategories ? <CategoryRecommendationReview
+        companyId={companyId}
+        onClose={() => setReviewingCategories(false)}
+        onUpdated={(updates) => setItems((current) => current.map((item) => updates[item.id] ? { ...item, category: updates[item.id] } : item))}
+      /> : null}
       </div>
     </div>
   );
+}
+
+type CategorySuggestion = { id: string; name: string; category: string; suggestion: string };
+function CategoryRecommendationReview({ companyId, onClose, onUpdated }: {
+  companyId: string;
+  onClose: () => void;
+  onUpdated: (updates: Record<string, string>) => void;
+}) {
+  const [candidates, setCandidates] = useState<CategorySuggestion[]>([]), [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1), [confirming, setConfirming] = useState(false), [saving, setSaving] = useState(false), [message, setMessage] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const all: CategorySuggestion[] = [];
+      try {
+        for (let next = 1; ; next += 1) {
+          const query = new URLSearchParams({ action: "category-suggestions", page: String(next) });
+          if (companyId) query.set("companyId", companyId);
+          const response = await fetch(`/api/product-catalog?${query}`, { cache: "no-store" });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.message);
+          all.push(...(payload.candidates || []));
+          if (!payload.hasMore) break;
+        }
+        if (!cancelled) { setCandidates(all); setSelected(new Set(all.filter((item) => !item.category).map((item) => item.id))); }
+      } catch (error) { if (!cancelled) setMessage(error instanceof Error ? error.message : "추천을 불러오지 못했습니다."); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [companyId]);
+  const pageSize = 50, pageCount = Math.max(1, Math.ceil(candidates.length / pageSize));
+  const visible = candidates.slice((page - 1) * pageSize, page * pageSize);
+  const chosen = candidates.filter((item) => selected.has(item.id));
+  async function save() {
+    setSaving(true); setMessage("");
+    const saved: Record<string, string> = {}, failures: string[] = [];
+    try {
+      for (let start = 0; start < chosen.length; start += 50) {
+        const batch = chosen.slice(start, start + 50);
+        const response = await fetch("/api/product-catalog", {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update-categories", companyId, updates: batch.map((item) => ({ id: item.id, category: item.suggestion, expectedCategory: item.category })) }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) { failures.push(payload.message || `${start + 1}~${start + batch.length}번째 묶음 저장 실패`); continue; }
+        for (const result of payload.results || []) {
+          if (result.ok) saved[result.id] = result.category;
+          else failures.push(`${batch.find((item) => item.id === result.id)?.name || result.id}: ${result.message}`);
+        }
+      }
+      onUpdated(saved);
+      setCandidates((current) => current.filter((item) => !saved[item.id]));
+      setSelected((current) => { const next = new Set(current); Object.keys(saved).forEach((id) => next.delete(id)); return next; });
+      setMessage(`${Object.keys(saved).length}개 저장 완료${failures.length ? ` · ${failures.length}개 실패: ${failures.slice(0, 3).join(" / ")}` : ""}`);
+      setConfirming(false);
+    } finally { setSaving(false); }
+  }
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-0 sm:p-4">
+    <section aria-labelledby="category-review-title" aria-modal="true" className="flex h-full w-full flex-col bg-white shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:max-w-4xl sm:rounded-2xl" role="dialog">
+      <header className="flex items-start justify-between gap-3 border-b p-4">
+        <div><h2 className="text-lg font-black" id="category-review-title">분류 추천 미리보기</h2><p className="mt-1 text-sm text-slate-600">추천은 자동 저장되지 않습니다. 적용할 상품만 남기고 확인해 주세요.</p></div>
+        <button aria-label="분류 추천 검토 닫기" onClick={onClose} type="button"><X /></button>
+      </header>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3 text-sm">
+        <span>추천 {candidates.length}개 · 선택 {chosen.length}개</span>
+        <div className="flex gap-2"><button className="maju-button-secondary" onClick={() => setSelected(new Set(candidates.map((item) => item.id)))} type="button">전체 선택</button><button className="maju-button-secondary" onClick={() => setSelected(new Set())} type="button">전체 제외</button></div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {loading ? <p className="p-8 text-center text-sm text-slate-500">전체 상품의 추천을 불러오는 중입니다.</p> : !candidates.length ? <p className="p-8 text-center text-sm text-slate-500">확인할 새 추천이 없습니다.</p> : visible.map((item) => <label className="mb-2 grid cursor-pointer gap-2 rounded-xl border p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]" key={item.id}>
+          <input aria-label={`${item.name} 추천 선택`} checked={selected.has(item.id)} className="h-5 w-5" onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next; })} type="checkbox" />
+          <span><b>{item.name}</b><span className={`block text-xs ${item.category ? "font-bold text-amber-700" : "text-slate-500"}`}>현재: {item.category || "미분류"}{item.category ? " · 기존 분류는 기본 제외" : ""}</span></span>
+          <span className="text-sm font-bold text-teal-700">추천: {item.suggestion.replaceAll(" > ", " › ")}</span>
+        </label>)}
+      </div>
+      {candidates.length > pageSize ? <div className="flex items-center justify-center gap-3 border-t p-2 text-sm"><button className="maju-button-secondary" disabled={page === 1} onClick={() => setPage((value) => value - 1)} type="button">이전</button><span>{page} / {pageCount}</span><button className="maju-button-secondary" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)} type="button">다음</button></div> : null}
+      {message ? <p className={`border-t px-4 py-3 text-sm font-bold ${message.includes("실패") ? "text-amber-800" : "text-teal-800"}`} role="status">{message}</p> : null}
+      <footer className="flex flex-wrap items-center justify-end gap-2 border-t p-4">
+        {confirming ? <><span className="mr-auto text-sm font-bold text-rose-700">선택한 {chosen.length}개 상품의 분류를 저장합니다.</span><button className="maju-button-secondary" onClick={() => setConfirming(false)} type="button">돌아가기</button><button className="maju-button-primary" disabled={saving || !chosen.length} onClick={() => void save()} type="button">{saving ? "저장 중…" : "확인하고 저장"}</button></> : <><button className="maju-button-secondary" onClick={onClose} type="button">닫기</button><button className="maju-button-primary" disabled={!chosen.length} onClick={() => setConfirming(true)} type="button">선택 {chosen.length}개 저장 검토</button></>}
+      </footer>
+    </section>
+  </div>;
 }
 type MatchWorkspace = {
   businessType: string;

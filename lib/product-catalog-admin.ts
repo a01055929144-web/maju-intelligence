@@ -1,4 +1,5 @@
 import { convertedUnitCost } from "../domains/product/catalog-import";
+import { cleanCategory, suggestCategory } from "../domains/pricing/product-category";
 import { supabaseRequest as request } from "./store";
 import { ciLayoutProducts, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
@@ -300,4 +301,57 @@ export async function updateProductCatalogForAdmin(
   if (input.salesPrice != null && previous !== input.salesPrice)
     await recordPrice(companyId, id, previous, input.salesPrice, actor);
   return toItem(rows[0]);
+}
+
+export type ProductCategoryUpdate = { id: string; category: string; expectedCategory: string };
+export type ProductCategorySuggestion = { id: string; name: string; category: string; suggestion: string };
+
+export async function listProductCategorySuggestions(
+  companyId: string,
+  page: number,
+  pageSize = 200,
+) {
+  const offset = (Math.max(1, page) - 1) * pageSize;
+  const source: Row[] = isCiLayoutFixturesEnabled()
+    ? ciLayoutProducts.slice(offset, offset + pageSize).map((item): Row => ({ id: item.id, canonical_name: item.name, category: item.category, spec_value: item.specValue, spec_unit: item.specUnit }))
+    : await request<Row[]>(`product_catalog?select=id,canonical_name,purchase_product_name,spec_value,spec_unit,category&company_id=eq.${enc(companyId)}&order=id&limit=${pageSize}&offset=${offset}`);
+  const candidates = source.map((row) => {
+    const name = String(row.canonical_name || row.purchase_product_name || "");
+    const spec = [row.spec_value, row.spec_unit].filter((value) => value != null).join("");
+    return { id: String(row.id), name, category: String(row.category || ""), suggestion: suggestCategory(name, spec) };
+  }).filter((item) => item.suggestion && item.suggestion !== item.category);
+  return { candidates, hasMore: source.length === pageSize };
+}
+
+/** 선택·확인된 추천만 회사 범위 안에서 저장합니다. 한 행 실패가 나머지를 막지 않습니다. */
+export async function updateProductCategoriesForAdmin(
+  companyId: string,
+  updates: readonly ProductCategoryUpdate[],
+) {
+  if (!updates.length || updates.length > 50)
+    throw new Error("한 번에 1~50개 품목을 저장할 수 있습니다.");
+  const unique = Array.from(new Map(updates.map((item) => [item.id, item])).values());
+  const results: Array<{ id: string; category?: string; ok: boolean; message?: string }> = [];
+  for (let start = 0; start < unique.length; start += 5) {
+    results.push(...await Promise.all(unique.slice(start, start + 5).map(async ({ id, category, expectedCategory }) => {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { id, ok: false as const, message: "품목 번호를 확인해 주세요." };
+    const cleaned = cleanCategory(category);
+    if (typeof cleaned !== "string") return { id, ok: false as const, message: cleaned && typeof cleaned === "object" ? cleaned.error : "추천 분류를 확인해 주세요." };
+    try {
+      const expected = cleanCategory(expectedCategory);
+      if (expected && typeof expected === "object") return { id, ok: false as const, message: expected.error };
+      const categoryCondition = expected === null ? "category=is.null" : `category=eq.${enc(expected)}`;
+      const rows = await request<Row[]>(
+        `product_catalog?id=eq.${enc(id)}&company_id=eq.${enc(companyId)}&${categoryCondition}&select=id,category`,
+        { method: "PATCH", body: JSON.stringify({ category: cleaned, updated_at: new Date().toISOString() }) },
+      );
+      return rows[0]
+        ? { id, category: cleaned, ok: true as const }
+        : { id, ok: false as const, message: "다른 사용자가 분류를 변경했습니다. 새로고침 후 다시 검토해 주세요." };
+    } catch (error) {
+      return { id, ok: false as const, message: error instanceof Error ? error.message : "저장하지 못했습니다." };
+    }
+    })));
+  }
+  return results;
 }

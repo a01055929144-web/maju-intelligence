@@ -26,8 +26,9 @@ describe("product catalog import data access", () => {
       .resolves.toEqual({ categorySuggestedCount: 1, createdCount: 1 });
     const catalog = JSON.parse(supabaseRequest.mock.calls[3][1].body);
     expect(catalog[0]).toMatchObject({
-      category: "농산 > 채소류 > 조미채소", product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
+      product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
     });
+    expect(catalog[0]).not.toHaveProperty("category");
     const matches = JSON.parse(supabaseRequest.mock.calls[4][1].body);
     expect(matches[0]).toMatchObject({ product_catalog_id: "catalog-1", match_status: "confirmed" });
   });
