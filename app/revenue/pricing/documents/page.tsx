@@ -5,6 +5,7 @@ import {
   getCustomerSession,
   resolvePageCompanyId,
 } from "@/lib/auth";
+import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
@@ -40,6 +41,7 @@ export default async function DocumentsPage({
       <Suspense fallback={null}>
         <PricingDocumentsWorkspace
           companyId={companyId}
+          storeLinksEnabled={storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId)}
           manager={!customer || canManagePriceSheets(customer)}
         />
       </Suspense>

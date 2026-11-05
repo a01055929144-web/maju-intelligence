@@ -11,6 +11,7 @@ export type DocumentScope = {
   companyId: string;
   actor: string;
   manager: boolean;
+  archiveEnabled?: boolean;
 };
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;
@@ -39,6 +40,10 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       if (!Number.isSafeInteger(body.expected) || Number(body.expected) < 0)
         throw new Error("저장 버전을 확인해 주세요.");
       const expected = Number(body.expected);
+      if (action === "archive") {
+        if (!scope.archiveEnabled || expected < 1 || typeof body.archived !== "boolean") throw new Error("문서 보관을 사용할 수 없습니다.");
+        return repository.request<T>(scope, action, { id, expected, archived: body.archived });
+      }
       if (action === "save") {
         const content = parseDocument(body.content);
         if (!scope.manager && content.kind !== "quote")

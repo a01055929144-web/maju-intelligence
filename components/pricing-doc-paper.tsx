@@ -68,12 +68,12 @@ export function PricingDocPaper({
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <p className="mb-2 text-sm font-black text-amber-900">행사·임박 {promos.length}개 <span className="font-semibold text-amber-800">· 매장 화면·인쇄에 위쪽에 나옵니다</span></p>
           {display.promoLayout === "table" ? (
-            <table className="w-full text-sm"><tbody>
+            <table className="w-full table-fixed text-sm"><tbody>
               {promos.map(({ index, line }) => (
                 <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`}>
                   <td className="py-1"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}</td>
-                  <td className="py-1 text-slate-600">{line.spec} {line.unit}</td>
-                  <td className="py-1 text-right font-bold">{line.price.toLocaleString()}원</td>
+                  <td className="px-2 py-1 text-slate-600 [overflow-wrap:anywhere]">{line.spec} {line.unit}</td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{line.price.toLocaleString()}원</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -94,14 +94,15 @@ export function PricingDocPaper({
         </section>
       ) : null}
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(1, chunks.length)}, minmax(0, 1fr))` }}>
+      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(1, chunks.length)}, minmax(0, 1fr))` }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
+            <colgroup><col style={{ width: content.showSpec ? "35%" : "60%" }} />{content.showSpec ? <col style={{ width: "30%" }} /> : null}{content.showPrice ? <col style={{ width: "30%" }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
             <thead>
               <tr className="text-left text-xs text-slate-500">
                 <th className="border-b py-1.5">품목</th>
-                {content.showSpec ? <th className={`border-b py-1.5 ${columns > 1 ? "w-16" : "w-28"}`}>규격·단위</th> : null}
-                {content.showPrice ? <th className="w-24 border-b py-1.5 text-right">단가</th> : null}
+                {content.showSpec ? <th className="border-b px-2 py-1.5">규격·단위</th> : null}
+                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right">단가</th> : null}
                 {editable ? <th className="w-7 border-b" /> : null}
               </tr>
             </thead>
@@ -112,9 +113,9 @@ export function PricingDocPaper({
                     <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
                   </td>
-                  {content.showSpec ? <td className="truncate py-0.5 text-xs text-slate-600" title={`${line.spec} ${line.unit}`}>{line.spec} {line.unit}</td> : null}
+                  {content.showSpec ? <td className="break-words whitespace-normal px-2 py-1 text-xs text-slate-600 [overflow-wrap:anywhere]" title={`${line.spec} ${line.unit}`}>{line.spec} {line.unit}</td> : null}
                   {content.showPrice ? (
-                    <td className="py-0.5">
+                    <td className="border-l border-slate-100 pl-2 py-1">
                       <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: value }); }} value={line.price.toLocaleString()} />
                     </td>
                   ) : null}
@@ -130,6 +131,7 @@ export function PricingDocPaper({
         <QuickAdd added={new Set(content.lines.filter((l) => !l.promotionId).map((l) => l.productId))} onAdd={onQuickAdd} onSearch={onQuickSearch} />
       ) : !content.lines.length ? <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">왼쪽 상품 목록에서 품목을 골라 담으세요.</p> : null}
 
+      <style>{`@media screen and (max-width:640px){.pricing-edit-grid{grid-template-columns:minmax(0,1fr)!important}}`}</style>
       <footer className="space-y-1 border-t pt-3 text-xs text-slate-700">
         {footerInfo.length ? <div className="grid grid-cols-2 gap-x-6 gap-y-0.5">{footerInfo.map((item) => <p key={item.key || item.label}>{item.label} · {item.value}</p>)}</div> : null}
         <textarea aria-label="하단 안내" className="w-full resize-y rounded border border-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500" disabled={!editable} maxLength={400} onChange={(e) => onContent({ ...content, footer: e.target.value })} placeholder="하단에 넣을 문구 (예: 시세 품목은 경매가에 따라 달라질 수 있습니다)" rows={2} value={content.footer} />

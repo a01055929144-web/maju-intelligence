@@ -5,7 +5,7 @@ import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVe
 
 type CatalogResult = { items: Array<{ id: string; spec: string }> };
 type DocumentList = { items: DocumentDraft[]; total: number };
-type DocumentRow = { id: string; revision: number; content: DocumentDraft["content"]; updated_at: string };
+type DocumentRow = { id: string; revision: number; content: DocumentDraft["content"]; updated_at: string; archived_at?: string | null };
 type VersionRow = { id: string; document_id: string; version: number; revision: number; content: DocumentDraft["content"]; published_at: string };
 type PromotionRow = { id: string; stock: number | null; starts_on: string; ends_on: string };
 
@@ -21,16 +21,17 @@ async function companyGet<T>(path: string, config: NonNullable<ReturnType<typeof
 async function listCompanyDocuments(scope: DocumentScope, payload: object): Promise<DocumentList> {
   const config = getSupabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
-  const input = payload as { page?: unknown; search?: unknown };
+  const input = payload as { page?: unknown; search?: unknown; archived?: unknown };
   const page = Number.isSafeInteger(input.page) && Number(input.page) > 0 ? Number(input.page) : 1;
   const search = typeof input.search === "string" ? input.search.trim().slice(0, 100) : "";
   const params = new URLSearchParams({
-    select: "id,revision,content,updated_at",
+    select: `id,revision,content,updated_at${scope.archiveEnabled ? ",archived_at" : ""}`,
     company_id: `eq.${scope.companyId}`,
     order: "updated_at.desc,id",
     limit: "50",
     offset: String((page - 1) * 50),
   });
+  if (scope.archiveEnabled) params.set("archived_at", input.archived === true ? "not.is.null" : "is.null");
   if (search) params.set("content->>title", `ilike.*${search}*`);
   const response = await fetch(`${config.url}/rest/v1/pricing_documents?${params}`, {
     headers: {
@@ -44,7 +45,7 @@ async function listCompanyDocuments(scope: DocumentScope, payload: object): Prom
   const rows = await response.json() as DocumentRow[];
   const total = Number(response.headers.get("content-range")?.split("/")[1]);
   if (!Number.isSafeInteger(total) || total < 0) throw new Error("문서 전체 건수를 확인하지 못했습니다.");
-  return { items: rows.map(row => ({ id: row.id, revision: row.revision, content: row.content, updatedAt: row.updated_at })), total };
+  return { items: rows.map(row => ({ id: row.id, revision: row.revision, content: row.content, updatedAt: row.updated_at, ...(scope.archiveEnabled ? { archivedAt: row.archived_at ?? null } : {}) })), total };
 }
 
 async function readCompanyVersions(scope: DocumentScope, payload: object): Promise<DocumentVersion[]> {
@@ -89,6 +90,11 @@ async function withCatalogSpecs(companyId: string, result: CatalogResult): Promi
 }
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "archive") {
+      if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");
+      const input = payload as { id: string; expected: number; archived: boolean };
+      return supabaseRequest<T>("rpc/set_pricing_document_archived", { method: "POST", body: JSON.stringify({ p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id, p_expected: input.expected, p_archived: input.archived }) });
+    }
     if (action === "list") return withDocumentRecalculations(scope.companyId, await listCompanyDocuments(scope, payload)) as Promise<T>;
     if (action === "versions") return readCompanyVersions(scope, payload) as Promise<T>;
     const result = await supabaseRequest<T>("rpc/pricing_p1", {

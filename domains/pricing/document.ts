@@ -59,6 +59,7 @@ export type DocumentDraft = {
   revision: number;
   content: DocumentContent;
   updatedAt: string;
+  archivedAt?: string | null;
   recalculation?: import("./document-recalculation").DocumentRecalculation;
 };
 export type DocumentVersion = {
@@ -319,7 +320,7 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
   };
 }
 export type DocumentOutput = ReturnType<typeof documentOutput>;
-export function printPages(output: DocumentOutput) {
+export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = false) {
   const pages: DocumentOutput[] = [];
   let lines: DocumentOutput["lines"] = [],
     weight = 0;
@@ -334,7 +335,7 @@ export function printPages(output: DocumentOutput) {
             Math.ceil((line.spec + line.unit).length / 10),
           ) + 1;
     const columns = output.display?.columns || 1;
-    const limit = output.layout === "cards" ? 4 * columns : 26 * columns;
+    const limit = Math.max(columns, Math.floor((output.layout === "cards" ? 4 * columns : 26 * columns) / Math.max(1, fontScale)) - (hasOrderQr ? columns * (output.layout === "cards" ? 1 : 5) : 0));
     if (lines.length && (weight + next > limit || lines.length >= 18 * columns)) {
       pages.push({ ...output, lines });
       lines = [];

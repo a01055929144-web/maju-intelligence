@@ -6,6 +6,7 @@ import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
+import { documentArchiveEnabled } from "../../../lib/pricing/document-archive";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -67,6 +68,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1),
@@ -90,6 +92,7 @@ async function handle(request: NextRequest, write: boolean) {
           {
             page,
             search,
+            archived: request.nextUrl.searchParams.get("archived") === "true",
             id: request.nextUrl.searchParams.get("id"),
             productIds: request.nextUrl.searchParams
               .get("productIds")
@@ -104,7 +107,7 @@ async function handle(request: NextRequest, write: boolean) {
           },
         );
     return NextResponse.json(
-      { result, manager },
+      { result, manager, ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

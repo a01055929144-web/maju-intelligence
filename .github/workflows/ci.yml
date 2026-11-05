@@ -242,6 +242,16 @@ jobs:
           createdb storefront_price_direction_test
           psql --dbname=storefront_price_direction_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-price-direction.pg17.test.sql
 
+      - name: Verify document archive without removing links or orders on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb pricing_document_archive_test
+          psql --dbname=pricing_document_archive_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-archive.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -287,7 +297,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/pricing-document-actions.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
