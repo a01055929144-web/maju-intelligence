@@ -121,7 +121,7 @@ export function PageContent({
         <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
-              <colgroup>{(columns === 1 ? [5, 38, 27, 20, 10] : [38, 35, 27]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
+              <colgroup>{(columns === 1 ? [5, 35, 25, 25, 10] : [25, 35, 40]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
               <thead>
                 <tr>
                   {(columns === 1 ? ["No", "품목·브랜드", "규격·단위", "단가", "비고"] : ["품목", "규격", "단가"]).map((t) => (
@@ -142,7 +142,7 @@ export function PageContent({
                     <td data-document-spec className="border-b px-2 py-1.5 whitespace-normal [overflow-wrap:anywhere]">
                       {l.spec} {l.unit}
                     </td>
-                    <td data-document-price className="border-b border-l px-2 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]">{price(l)}</td>
+                    <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
                     {columns === 1 ? <td className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
                   </tr>
                 ))}
@@ -308,7 +308,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}@media screen and (max-width:640px){.pricing-online .pricing-output-grid{grid-template-columns:minmax(0,1fr)!important}}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
+      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid{grid-template-columns:minmax(0,1fr)!important}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

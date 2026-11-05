@@ -41,6 +41,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(paperSpec).toContainText(spec);
   expect(await paperSpec.evaluate(el => getComputedStyle(el).textOverflow)).not.toBe("ellipsis");
   expect(await paperSpec.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  const priceFits = await page.getByRole("textbox", { name: "품목 1 단가", exact: true }).evaluate((element) => {
+    const input = element as HTMLInputElement, style = getComputedStyle(input), context = document.createElement("canvas").getContext("2d")!;
+    context.font = style.font;
+    return context.measureText(input.value).width <= input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) + 1;
+  });
+  expect(priceFits).toBe(true);
   await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
   const dialog = page.getByRole("dialog", { name: "미리보기", exact: true });
   await dialog.getByRole("button", { name: "130%", exact: true }).click();
@@ -50,6 +56,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(dialog.getByRole("img", { name: "합성 매장 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
   await dialog.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(dialog.locator(".pricing-paper").first().getByRole("img", { name: "합성 매장 주문 링크 QR", exact: true })).toBeVisible();
+  expect(await dialog.locator(".pricing-paper [data-document-price-value]").first().evaluate(element => element.getClientRects().length)).toBe(1);
   const specBox = await dialog.locator(".pricing-paper [data-document-spec]").first().boundingBox(), priceBox = await dialog.locator(".pricing-paper [data-document-price]").first().boundingBox();
   expect(specBox!.x + specBox!.width).toBeLessThanOrEqual(priceBox!.x + 1);
   const metrics = await dialog.locator(".pricing-paper").evaluateAll(papers => papers.map(paper => {

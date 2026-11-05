@@ -94,7 +94,7 @@ export function PricingDocPaper({
         </section>
       ) : null}
 
-      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(1, chunks.length)}, minmax(0, 1fr))` }}>
+      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))" }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
             <colgroup><col style={{ width: content.showSpec ? "35%" : "60%" }} />{content.showSpec ? <col style={{ width: "30%" }} /> : null}{content.showPrice ? <col style={{ width: "30%" }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
