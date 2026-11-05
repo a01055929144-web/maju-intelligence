@@ -38,7 +38,7 @@ create table public.purchase_receipt_lines (
   foreign key (company_id, product_catalog_id) references public.product_catalog(company_id, id) on delete set null (product_catalog_id)
 );
 grant usage on schema public to service_role;
-grant select on public.purchase_receipt_lines, public.product_catalog to service_role;
+grant select on public.product_catalog to service_role;
 insert into public.companies values
   ('00000000-0000-4000-8000-000000000001'),
   ('00000000-0000-4000-8000-000000000002');
