@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "./ui/button";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { koreaDay, type CatalogChoice, type DocumentDraft, type DocumentKind } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
@@ -37,23 +37,32 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const loadSequence = useRef(0);
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    setLoading(true);
     setError("");
+    try {
+    let available = false;
     const all: DocumentDraft[] = [];
     let total = 0;
     for (let page = 1; page <= 20; page++) {
       const response = await documentRequest<{ items: DocumentDraft[]; total: number }>(companyId, "list", { page, archived: showArchived });
-      setArchiveAvailable(response.archiveAvailable === true);
+      available = response.archiveAvailable === true;
       all.push(...response.result.items);
       total = response.result.total;
       if (all.length >= total) break;
     }
+    if (sequence !== loadSequence.current) return;
+    setArchiveAvailable(available);
     // ponytail: P1 lists 50 rows per call; add a bulk summary endpoint if companies exceed 1,000 documents.
     if (all.length < total) setMessage(`최근 ${all.length}개 문서만 표시합니다. 전체 ${total}개 중 이전 문서는 다음 조회 범위 확장이 필요합니다.`);
     if (all.some(document => !document.recalculation)) throw new Error("문서 가격 상태를 확인하지 못했습니다. 다시 불러와 주세요.");
     setDocuments(all);
+    } catch (cause) { if (sequence === loadSequence.current) throw cause; }
+    finally { if (sequence === loadSequence.current) setLoading(false); }
   }, [companyId, showArchived]);
-  useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다.")).finally(() => setLoading(false)); }, [load]);
+  useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다.")); }, [load]);
 
   const rows = useMemo<SheetRow[]>(() => documents.map((document) => {
     const stale = document.recalculation!.needsRecalculation;
@@ -166,7 +175,7 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
   ], [onOpen, selected]);
   return <div className="space-y-4" aria-busy={busy}>
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-semibold">견적서·단가표</h1><p className="text-sm text-slate-600">작성한 문서를 고르고 편집하거나 새로 만드세요.</p></div><div className="flex flex-wrap gap-2"><Link className="maju-button-secondary" href="/dashboard/settings/company?tab=order">주문 설정</Link><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("restore"))} type="button">직전 변동분 복구</button><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("recalculate"))} type="button">변동분 일괄 계산</button><button className="maju-button-primary" onClick={() => onCreate("quote")} type="button">+ 견적서</button>{manager ? <button className="maju-button-primary" onClick={() => onCreate("sheet")} type="button">+ 단가표</button> : null}</div></header>
-    {archiveAvailable ? <div className="flex flex-wrap items-center gap-2"><Button aria-pressed={!showArchived} onClick={() => { setShowArchived(false); setSelected([]); }} type="button">사용 중 문서</Button><Button aria-pressed={showArchived} onClick={() => { setShowArchived(true); setSelected([]); }} type="button">문서 보관함</Button><Button disabled={busy || !selected.length} onClick={() => void run(archiveSelected)} type="button">{showArchived ? "선택 문서 복원" : "선택 문서 보관"}</Button><p className="text-sm">보관은 목록 정리입니다. 발행본·링크·주문은 삭제되지 않습니다.</p></div> : null}
+    {archiveAvailable ? <div className="flex flex-wrap items-center gap-2"><Button disabled={busy || loading} aria-pressed={!showArchived} onClick={() => { setShowArchived(false); setSelected([]); }} type="button">사용 중 문서</Button><Button disabled={busy || loading} aria-pressed={showArchived} onClick={() => { setShowArchived(true); setSelected([]); }} type="button">문서 보관함</Button><Button disabled={busy || loading || !selected.length} onClick={() => void run(archiveSelected)} type="button">{showArchived ? "선택 문서 복원" : "선택 문서 보관"}</Button><p className="text-sm">보관은 목록 정리입니다. 발행본·링크·주문은 삭제되지 않습니다.</p></div> : null}
     {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error} <button className="underline" onClick={() => void load().catch(cause => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))} type="button">다시 시도</button></p> : null}
     {message ? <p role="status" className="rounded bg-teal-50 p-3">{message}</p> : null}
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{[["게시 중", rows.filter((row) => row.status === "게시 중").length], ["다시 계산 필요", `${rows.filter((row) => row.stale).length}건 · ${rows.filter((row) => row.stale).reduce((n, row) => n + (row.recalculation?.changedProductCount || 0), 0)}개 품목`], ["이번 주 링크 주문", "–"], ["만료 7일 이내", rows.filter((row) => row.content.validUntil >= today && row.content.validUntil <= addDays(today, 7)).length]].map(([label, value]) => <div className="maju-section-card p-3" key={label}><p className="text-sm text-slate-600">{label}</p><strong>{value}</strong></div>)}</div>

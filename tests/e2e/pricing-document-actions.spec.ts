@@ -63,7 +63,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.screenshot({ path: info.outputPath(`${kind}-wrapped-qr-${width}.png`), fullPage: true });
   if (width === 1440) await page.pdf({ path: info.outputPath(`${kind}-wrapped-qr-a4.pdf`), format: "A4", printBackground: true });
   await dialog.getByRole("button", { name: "닫기", exact: true }).click();
-  await page.getByRole("button", { name: /목록/ }).first().click();
+  await page.getByRole("button", { name: "← 문서 목록", exact: true }).click();
   await page.getByRole("checkbox", { name: "인쇄 검증 문서 선택", exact: true }).check();
   page.on("dialog", dialog => dialog.accept());
   const archive = page.getByRole("button", { name: "선택 문서 보관", exact: true });
