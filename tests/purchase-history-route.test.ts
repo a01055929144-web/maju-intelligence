@@ -35,12 +35,12 @@ it("filters by company, date, item and search before paging", async () => {
   expect(query).not.toContain("forged");
 });
 
-it("loads one unmatched item and supplier without broad text search", async () => {
+it("loads an item without excluding older receipts whose supplier column was empty", async () => {
   const response = await GET(new NextRequest("https://example.test/api/price-sheets/receipts?lineKey=name%7Cspec&supplier=%ED%95%9C%EB%B9%9B"));
   expect(response.status).toBe(200);
   const query = String(mocks.db.mock.calls[0][0]);
   expect(query).toContain("line_key=eq.name%7Cspec");
-  expect(query).toContain("supplier_name=eq.%ED%95%9C%EB%B9%9B");
+  expect(query).not.toContain("supplier_name=eq.");
   expect(query).not.toContain("or=(product_name.ilike");
 });
 
@@ -50,6 +50,18 @@ it("returns a next page only when more than 100 records exist", async () => {
   const payload = await response.json();
   expect(payload.hasMore).toBe(true);
   expect(payload.rows).toHaveLength(100);
+});
+
+it("filters changed purchase items before pagination", async () => {
+  const receipt = (id: string, key: string, date: string, cost: number) => ({ id, line_key: key, product_name: key, receipt_date: date,
+    spec: null, unit: "EA", supplier_name: null, quantity: 1, unit_cost_ex_vat: cost });
+  mocks.db.mockImplementation(async (path: string) => path.startsWith("purchase_receipt_lines?") ? [
+    receipt("a2", "changed", "2026-11-05", 120), receipt("a1", "changed", "2026-11-04", 100), receipt("b1", "same", "2026-11-05", 100)
+  ] : []);
+  const response = await GET(new NextRequest("https://example.test/api/price-sheets/receipts?changed=1"));
+  const payload = await response.json();
+  expect(payload.rows.map((row: { id: string }) => row.id)).toEqual(["a2", "a1"]);
+  expect(payload.hasMore).toBe(false);
 });
 
 it("rejects invalid dates without reading data", async () => {

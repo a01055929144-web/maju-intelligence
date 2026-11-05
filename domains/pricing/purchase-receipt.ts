@@ -160,7 +160,24 @@ export type PurchaseHistoryRow = {
   total_amount?: number | string | null;
 };
 
+export type PurchaseHistoryProductContext = { supplier: string; unit: string };
+
+/** 엑셀에 매입처·단위 열이 없던 과거 기록은 연결된 단일 상품 정보로만 보완합니다. */
+export function resolvePurchaseHistoryRows(rows: readonly PurchaseHistoryRow[], context: ReadonlyMap<string, PurchaseHistoryProductContext>) {
+  return rows.map((row) => {
+    const product = row.product_catalog_id ? context.get(row.product_catalog_id) : undefined;
+    return { ...row, supplier_name: row.supplier_name || product?.supplier || null, unit: row.unit || product?.unit || null };
+  });
+}
+
+/** 같은 날짜의 매입을 두 원천에 기록했으면 수량·부가세 기준이 있는 엑셀 원장을 남깁니다. */
+export function mergePurchaseHistoryRows(receipts: readonly PurchaseHistoryRow[], supplierCosts: readonly PurchaseHistoryRow[]) {
+  const receiptKeys = new Set(receipts.map((row) => [row.product_catalog_id || row.line_key, row.supplier_name || "", row.receipt_date].join("|")));
+  return [...receipts, ...supplierCosts.filter((row) => !receiptKeys.has([row.product_catalog_id || row.line_key, row.supplier_name || "", row.receipt_date].join("|")))];
+}
+
 export type PurchaseHistoryItem = {
+  productId?: string;
   key: string;
   lineKey: string;
   name: string;
@@ -217,6 +234,7 @@ export function summarizePurchaseHistory(rows: readonly PurchaseHistoryRow[]): P
       maxCost: Math.max(...costs),
       minCost: Math.min(...costs),
       name: sorted[0].product_name,
+      productId: sorted[0].product_catalog_id || undefined,
       previousCost: previous?.cost,
       direction,
       spec: sorted[0].spec || "",

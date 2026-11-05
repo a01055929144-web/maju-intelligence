@@ -3,7 +3,7 @@ import { getRequestAuthScope } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { attachPurchaseHistoryPreviousCosts, buildPurchaseReceiptRows, planMissingProductFields, planProductTaxTypes, type PurchaseHistoryRow, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { attachPurchaseHistoryPreviousCosts, buildPurchaseReceiptRows, mergePurchaseHistoryRows, planMissingProductFields, planProductTaxTypes, resolvePurchaseHistoryRows, summarizePurchaseHistory, type PurchaseHistoryProductContext, type PurchaseHistoryRow, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
 import { runLimited } from "@/lib/run-limited";
 
@@ -35,6 +35,13 @@ async function listSupplierCostHistory(companyId: string, input: { from: string;
   const supplierProductById = new Map(supplierProducts.map((row) => [String(row.id), row]));
   const catalogById = new Map(catalog.map((row) => [String(row.id), row]));
   const supplierNames = new Map(suppliers.map((row) => [String(row.id), String(row.name || "")]));
+  const namesByProduct = new Map<string, Set<string>>();
+  for (const match of matches) {
+    const productId = String(match.product_catalog_id);
+    const supplierProduct = supplierProductById.get(String(match.supplier_product_id));
+    const name = supplierNames.get(String(supplierProduct?.supplier_id || ""));
+    if (name) namesByProduct.set(productId, (namesByProduct.get(productId) || new Set<string>()).add(name));
+  }
   const normalizedSearch = input.search.toLocaleLowerCase("ko");
   const rows = history.filter((row) => row.supplier_product_id && row.price_date && row.purchase_price != null).map((row) => {
     const supplierProduct = supplierProductById.get(String(row.supplier_product_id));
@@ -50,7 +57,12 @@ async function listSupplierCostHistory(companyId: string, input: { from: string;
     };
   }).filter((row) => (!input.productId || row.product_catalog_id === input.productId) && (!input.lineKey || row.line_key === input.lineKey) &&
     (!input.supplier || row.supplier_name === input.supplier) && (!normalizedSearch || `${row.product_name} ${row.supplier_name} ${row.erp_code}`.toLocaleLowerCase("ko").includes(normalizedSearch)));
-  return rows;
+  const context = new Map<string, PurchaseHistoryProductContext>();
+  for (const [productId, product] of Array.from(catalogById.entries())) {
+    const names = namesByProduct.get(productId);
+    context.set(productId, { supplier: names?.size === 1 ? Array.from(names)[0] : "", unit: String(product.sales_unit || "") });
+  }
+  return { rows, context };
 }
 
 /**
@@ -78,23 +90,26 @@ export async function GET(request: NextRequest) {
   const lineKey = (params.get("lineKey") || "").trim().slice(0, 240);
   const supplier = (params.get("supplier") || "").trim().slice(0, 120);
   const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`,
-    lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`, supplier && `supplier_name=eq.${encodeURIComponent(supplier)}`].filter(Boolean);
-  if (search) {
-    const term = encodeURIComponent(search);
-    filters.push(`or=(product_name.ilike.*${term}*,supplier_name.ilike.*${term}*,erp_code.ilike.*${term}*)`);
-  }
+    lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`].filter(Boolean);
   const correctionEnabled = canCorrect(auth.companyId);
   const receiptTable = correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines";
   const select = `select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}`;
   const rows = await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc`).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
   const receiptHistory = from ? await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.filter((filter) => !filter.startsWith("receipt_date=")).join("&")}&order=receipt_date.desc,id.desc`).catch(() => rows) : rows;
-  const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => null);
+  const supplierHistory = await listSupplierCostHistory(auth.companyId, { from: "", to: "", search, productId, lineKey, supplier }).catch(() => null);
   if (!supplierHistory) return NextResponse.json({ message: "매입 이력이 10,000건을 넘거나 원가 이력을 읽지 못했습니다. 관리자에게 조회 범위 확장을 요청해 주세요." }, { status: 500 });
-  const receiptHistoryRows = receiptHistory as PurchaseHistoryRow[];
-  const supplierHistoryRows = supplierHistory as PurchaseHistoryRow[];
-  const combined: PurchaseHistoryRow[] = [...receiptHistoryRows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistoryRows.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
-  const period: PurchaseHistoryRow[] = [...(rows as PurchaseHistoryRow[]).map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistoryRows.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to)).map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const matchesReceiptFilter = (row: PurchaseHistoryRow) => (!supplier || row.supplier_name === supplier) && (!search || `${row.product_name} ${row.supplier_name || ""}`.toLocaleLowerCase("ko").includes(search.toLocaleLowerCase("ko")));
+  const receiptHistoryRows = resolvePurchaseHistoryRows(receiptHistory as PurchaseHistoryRow[], supplierHistory.context).filter(matchesReceiptFilter).map((row) => ({ ...row, correctable: correctionEnabled }));
+  const supplierHistoryRows = supplierHistory.rows.map((row) => ({ ...row, correctable: false }));
+  const sortHistory = (a: PurchaseHistoryRow, b: PurchaseHistoryRow) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id));
+  const combined = mergePurchaseHistoryRows(receiptHistoryRows, supplierHistoryRows).sort(sortHistory);
+  let period = mergePurchaseHistoryRows(resolvePurchaseHistoryRows(rows as PurchaseHistoryRow[], supplierHistory.context).filter(matchesReceiptFilter).map((row) => ({ ...row, correctable: correctionEnabled })), supplierHistoryRows.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to))).sort(sortHistory);
+  if (params.get("summary") === "1") return NextResponse.json({ summary: summarizePurchaseHistory(period), count: period.length }, { headers: { "Cache-Control": "no-store" } });
+  if (params.get("changed") === "1") {
+    const changed = new Set(summarizePurchaseHistory(attachPurchaseHistoryPreviousCosts(combined, period)).filter((item) => item.changeAmount).map((item) => item.key));
+    period = period.filter((row) => changed.has(`${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}`));
+  }
   const offset = (page - 1) * 100;
   const visible = attachPurchaseHistoryPreviousCosts(combined as PurchaseHistoryRow[], period.slice(offset, offset + 100) as PurchaseHistoryRow[]);
   const items = visible.map((row) => {
@@ -162,7 +177,7 @@ export async function POST(request: NextRequest) {
     actorName: auth.customerSession?.name || auth.adminSession?.name || "운영자",
     companyId: auth.companyId,
     fileName: String(body?.fileName || "").slice(0, 200),
-    lines,
+    lines: lines.map((line) => ({ ...line, supplier: line.supplier?.trim() || "기본 매입처" })),
     receiptDate
   });
   if (!rows.length) return NextResponse.json({ saved: 0 });
