@@ -14,8 +14,8 @@ export async function getCompanyProfile(companyId: string, options: { includeLoc
   const empty: CompanyProfileRecord = { available: false, company: { name: "", businessRegistrationNumber: "", originAddress: "" }, fileUrls: {}, values: {} };
   if (!isProductionStoreConfigured()) return empty;
   const [companies, profiles] = await Promise.all([
-    supabaseRequest<Array<{ name: string | null; business_registration_number: string | null; origin_address: string | null }>>(
-      `companies?select=name,business_registration_number,origin_address&id=eq.${encodeURIComponent(companyId)}&limit=1`
+    supabaseRequest<Array<{ name: string | null; business_registration_number: string | null; origin_address: string | null; owner_name: string | null }>>(
+      `companies?select=name,business_registration_number,origin_address,owner_name&id=eq.${encodeURIComponent(companyId)}&limit=1`
     ),
     supabaseRequest<CompanyProfileValues[]>(`company_profiles?select=*&company_id=eq.${encodeURIComponent(companyId)}&limit=1`).then(
       (rows) => ({ ok: true as const, rows }),
@@ -25,6 +25,7 @@ export async function getCompanyProfile(companyId: string, options: { includeLoc
   const company = companies[0];
   const values = { ...(profiles.rows[0] || {}) };
   delete values.company_id;
+  if (!values.owner_name && company?.owner_name) values.owner_name = company.owner_name;
   const fileUrls: Record<string, string> = {};
   await Promise.all(COMPANY_PROFILE_FILE_KEYS.map(async (key) => {
     const path = typeof values[key] === "string" ? (values[key] as string) : "";
