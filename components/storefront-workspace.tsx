@@ -5,6 +5,7 @@ import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/doma
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; brand: string; spec: string; unit: string;
+  purchaseCostDirection?: "up" | "down";
   badge: string; taxType: "taxable" | "exempt"; unitPrice: number | null;
   priceIncludesTax: boolean; isMarketPrice: boolean; remaining: number | null;
   maximumQuantity: number | null;
@@ -181,7 +182,8 @@ export function StorefrontWorkspace() {
       <ul className="space-y-2">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
-          <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p></div>
+          <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
+          {line.purchaseCostDirection === "up" || line.purchaseCostDirection === "down" ? <span className="text-xs text-slate-600">유통사 매입가 {line.purchaseCostDirection === "up" ? "상승" : "하락"}</span> : null}</div>
           <div className="text-right text-sm">{line.isMarketPrice ? "시세 · 가격 미정" :
             line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}

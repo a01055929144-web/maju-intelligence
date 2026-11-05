@@ -66,6 +66,7 @@ describe("store link public response", () => {
           purchaseDate: "private purchase date",
           supplierCostTrend: { current: 1200, previous: 1075 },
           storeCostTrend: [{ cost: 900 }],
+          purchaseCostDirection: { direction: "up", cost: 1200 },
           loadingPhoto: "private loading photo",
           internalMemo: "private staff memo",
         },
@@ -91,7 +92,13 @@ describe("store link public response", () => {
       "purchaseDate",
       "supplierCostTrend",
       "storeCostTrend",
+      "purchaseCostDirection",
     ])
       expect(result).not.toContain(privateValue);
+    internal.lines[0].purchaseCostDirection = "up";
+    const published = toPublicStorefront(internal);
+    expect(published.lines[0].purchaseCostDirection).toBe("up");
+    expect(Object.keys(published.lines[0]).filter(key => /cost|margin|supplier/i.test(key))).toEqual(["purchaseCostDirection"]);
+    expect(JSON.stringify(published)).not.toContain("purchaseCostChange");
   });
 });
