@@ -4,7 +4,7 @@ import { storeOrderingEnabled } from "./pricing/store-order-feature";
 export const companyFeatures = [
   "PRICING", "STORE_ORDERING", "ACCOUNT_LOGIN_V2",
   "CUSTOMER_ITEMS_IMPORT", "PRODUCT_IMPORT_AUDIT_V2", "IMPORT_ROW_EDITOR",
-  "PRODUCT_IMPORT_TARGETS", "COMPANY_FIELD_DEFINITIONS", "PRODUCT_CATEGORIES"
+  "PRODUCT_IMPORT_TARGETS", "COMPANY_FIELD_DEFINITIONS", "PRODUCT_CATEGORIES", "STORE_COSTS"
 ] as const;
 export type CompanyFeature = (typeof companyFeatures)[number];
 

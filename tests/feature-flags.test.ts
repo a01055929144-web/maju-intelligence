@@ -47,4 +47,11 @@ describe("company pricing gates", () => {
     process.env.ACCOUNT_LOGIN_V2_ENABLED = "true";
     expect(isFeatureEnabled("ACCOUNT_LOGIN_V2", "company-a")).toBe(true);
   });
+
+  it("keeps store costs off until a company is explicitly allowed", () => {
+    expect(isFeatureEnabled("STORE_COSTS", "company-a")).toBe(false);
+    process.env.FEATURE_STORE_COSTS_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("STORE_COSTS", "company-a")).toBe(true);
+    expect(isFeatureEnabled("STORE_COSTS", "company-b")).toBe(false);
+  });
 });

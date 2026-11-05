@@ -210,6 +210,17 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=purchase_receipt_correction_test --set=ON_ERROR_STOP=1 --file=20261105-purchase-receipt-corrections.pg17.test.sql
 
+      - name: Verify store-owned cost draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb store_cost_test
+          cd docs/sql-drafts
+          psql --dbname=store_cost_test --set=ON_ERROR_STOP=1 --file=20261105-store-cost-management.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
