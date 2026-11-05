@@ -117,15 +117,15 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto font-semibold">매입 이력</h2>
         <span className="text-xs font-semibold text-slate-500">불러온 기록 기준 {dates}일 · 품목 {items.length}개 · 인상 {up} · 인하 {down}</span>
-        <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input h-9" onChange={(event) => { setFrom(event.target.value); setPage(1); }} type="date" value={from} /></label>
-        <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input h-9" onChange={(event) => { setTo(event.target.value); setPage(1); }} type="date" value={to} /></label>
+        <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input min-h-11" onChange={(event) => { setFrom(event.target.value); setPage(1); }} type="date" value={from} /></label>
+        <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input min-h-11" onChange={(event) => { setTo(event.target.value); setPage(1); }} type="date" value={to} /></label>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => setOnlyChanged(event.target.checked)} type="checkbox" />단가 바뀐 품목만</label>
         <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); setSearch(searchInput); setPage(1); }}>
-          <input aria-label="이력 검색" className="maju-input h-9" onChange={(event) => setSearchInput(event.target.value)} placeholder="품목·코드·매입처 검색" value={searchInput} />
-          <button className="maju-button-secondary" type="submit">검색</button>
+          <input aria-label="이력 검색" className="maju-input min-h-11" onChange={(event) => setSearchInput(event.target.value)} placeholder="품목·코드·매입처 검색" value={searchInput} />
+          <button className="maju-button-secondary min-h-11" type="submit">검색</button>
         </form>
       </div>
-      {error ? <div className="flex items-center gap-2 text-sm text-rose-700" role="alert">{error}<button className="maju-button-secondary" onClick={() => setReloadKey((value) => value + 1)} type="button">다시 시도</button></div> : null}
+      {error ? <div className="flex items-center gap-2 text-sm text-rose-700" role="alert">{error}<button className="maju-button-secondary min-h-11" onClick={() => setReloadKey((value) => value + 1)} type="button">다시 시도</button></div> : null}
       {rows === null ? <p className="text-sm text-slate-500">불러오는 중입니다.</p> : !items.length ? <p className="text-sm text-slate-500">조회 조건에 맞는 매입 기록이 없습니다. 기간이나 검색어를 바꿔 보세요.</p> : (
         <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[760px] text-sm">
