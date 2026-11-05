@@ -143,6 +143,10 @@ export function planMissingProductFields(lines: readonly PurchaseReceiptInputLin
 }
 
 export type PurchaseHistoryRow = {
+  id?: string;
+  product_catalog_id?: string | null;
+  correctionRevision?: number;
+  corrected?: boolean;
   receipt_date: string;
   line_key: string;
   product_name: string;
@@ -168,21 +172,21 @@ export type PurchaseHistoryItem = {
   maxCost: number;
   totalQuantity: number;
   count: number;
-  entries: Array<{ date: string; cost: number; quantity?: number }>;
+  entries: Array<{ id?: string; date: string; cost: number; quantity?: number; correctionRevision?: number; corrected?: boolean }>;
 };
 
 /** 11/4: 매입 이력을 품목별로 묶고, 최근 단가·직전 단가·변동률·기간 수량을 계산합니다. */
 export function summarizePurchaseHistory(rows: readonly PurchaseHistoryRow[]): PurchaseHistoryItem[] {
   const groups = new Map<string, PurchaseHistoryRow[]>();
   for (const row of rows) {
-    const key = `${row.line_key}|${row.supplier_name || ""}`;
+    const key = `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}`;
     const list = groups.get(key) || [];
     list.push(row);
     groups.set(key, list);
   }
   return Array.from(groups.entries()).map(([key, list]) => {
     const sorted = [...list].sort((a, b) => b.receipt_date.localeCompare(a.receipt_date));
-    const entries = sorted.map((row) => ({ cost: Number(row.unit_cost_ex_vat) || 0, date: row.receipt_date, quantity: row.quantity == null ? undefined : Number(row.quantity) }));
+    const entries = sorted.map((row) => ({ id: row.id, cost: Number(row.unit_cost_ex_vat) || 0, date: row.receipt_date, quantity: row.quantity == null ? undefined : Number(row.quantity), correctionRevision: row.correctionRevision, corrected: row.corrected }));
     const latest = entries[0];
     const previous = entries.find((entry) => entry.date < latest.date && entry.cost !== latest.cost) || entries[1];
     const costs = entries.map((entry) => entry.cost);

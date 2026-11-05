@@ -83,6 +83,23 @@ export type CatalogChoice = {
   cost?: number;
   taxType: "taxable" | "exempt" | "unknown";
 };
+
+/** 판매 규격을 우선하고, 비어 있으면 상품 원장의 값·단위를 사용합니다. */
+export function catalogDisplaySpec(row: {
+  sales_spec?: string | null;
+  spec_value?: number | string | null;
+  spec_unit?: string | null;
+}): string {
+  const salesSpec = row.sales_spec?.trim();
+  if (salesSpec) return salesSpec;
+  return row.spec_value == null ? "" : `${row.spec_value}${row.spec_unit || ""}`;
+}
+
+/** 기존 문서의 스냅샷은 보존하고 비어 있는 초안 규격만 명시적으로 채웁니다. */
+export function fillBlankDocumentSpecs(lines: readonly PrintLine[], catalog: readonly CatalogChoice[]): PrintLine[] {
+  const specs = new Map(catalog.map((item) => [item.id, item.spec]));
+  return lines.map((line) => line.spec.trim() ? line : { ...line, spec: specs.get(line.productId) || "" });
+}
 export type Promotion = {
   id: string;
   productId: string;
