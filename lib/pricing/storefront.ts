@@ -1,6 +1,8 @@
 import { supabaseRequest } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { verifyStoreLinkToken } from "./store-link-token";
+import { readPublishedPriceDirections } from "./storefront-price-direction";
+import { publishedPriceKey } from "../../domains/pricing/storefront-price-direction";
 import {
   canOrderForDelivery,
   kstDateTime,
@@ -21,6 +23,7 @@ type Link = {
 };
 type Version = {
   id: string;
+  document_id: string;
   content: DocumentContent;
   version: number;
   published_at: string;
@@ -56,6 +59,7 @@ type RecentPrice = {
   document_date: string;
 };
 type Settings = {
+  show_storefront_price_direction?: boolean;
   cutoff_days_before: 0 | 1 | 2;
   cutoff_time: string;
   minimum_amount: number;
@@ -108,7 +112,7 @@ export async function readStorefront(
       path(
         "pricing_document_versions",
         company,
-        `&id=eq.${link.document_version_id}&select=id,content,version,published_at&limit=1`,
+        `&id=eq.${link.document_version_id}&select=id,document_id,content,version,published_at&limit=1`,
       ),
     ),
     supabaseRequest<Customer[]>(
@@ -281,6 +285,9 @@ export async function readStorefront(
     const key = `${item.product_catalog_id}:${item.sales_unit}`;
     if (!agreementByProduct.has(key)) agreementByProduct.set(key, item);
   }
+  const visibleLines = version.content.lines.filter(line => line.visible && activeProductIds.has(line.productId) && (!line.promotionId || livePromotions.has(line.promotionId)));
+  const comparable = priceAvailable && settings.show_storefront_price_direction === true && visibleLines.some(line => !marketIds.has(line.productId) && !agreementByProduct.has(`${line.productId}:${line.unit}`));
+  const priceDirections = await readPublishedPriceDirections(company, comparable, version);
   return {
     linkId: link.id,
     companyId: company,
@@ -300,14 +307,7 @@ export async function readStorefront(
     notice: settings.notice,
     marketPriceNotice: settings.market_price_notice,
     policy,
-    lines: version.content.lines
-      .filter(
-        (line) =>
-          line.visible &&
-          activeProductIds.has(line.productId) &&
-          (!line.promotionId || livePromotions.has(line.promotionId)),
-      )
-      .map((line) => {
+    lines: visibleLines.map((line) => {
         const agreement = agreementByProduct.get(
           `${line.productId}:${line.unit}`,
         );
@@ -321,6 +321,7 @@ export async function readStorefront(
           name: line.displayName,
           brand: line.brand,
           spec: line.spec,
+          salesPriceDirection: !matchingContract && !market ? priceDirections.get(publishedPriceKey(line)) ?? null : null,
           unit: line.unit,
           badge: line.badge,
           startsOn: line.startsOn,

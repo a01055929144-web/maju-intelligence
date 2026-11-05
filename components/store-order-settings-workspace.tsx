@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "./ui/button";
 
 type Rule = {
   delivery_weekdays?: number[] | null;
@@ -14,7 +15,8 @@ type Territory = { id: string; name: string; is_active: boolean };
 type Customer = { id: string; customer_name: string; delivery_territory_id: string | null };
 type Holiday = { id: string; territory_id: string | null; kind: "weekly" | "fixed" | "date";
   weekday: number | null; month: number | null; day: number | null; holiday_date: string | null; label: string };
-type SettingsResponse = { settings: Rule & { notice?: string; market_price_notice?: string } | null;
+type SettingsResponse = { settings: Rule & { notice?: string; market_price_notice?: string; show_storefront_price_direction?: boolean } | null;
+  priceDirectionAvailable?: boolean;
   territories: Territory[]; territoryRules: (Rule & { territory_id: string })[];
   holidays: Holiday[] };
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -71,6 +73,7 @@ function PolicyFields({ value, onChange, inherit = false }: {
 }
 
 export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }) {
+  const [showPriceDirection, setShowPriceDirection] = useState(false);
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [company, setCompany] = useState<Rule & { notice: string; marketPriceNotice: string }>({
     ...defaultRule, notice: "", marketPriceNotice: "싯가·경매가에 따라 달라질 수 있습니다." });
@@ -92,6 +95,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
     const result = await response.json() as SettingsResponse & { message?: string };
     if (!response.ok) throw new Error(result.message || "주문 설정을 불러오지 못했습니다.");
     setData(result);
+    setShowPriceDirection(result.settings?.show_storefront_price_direction === true);
     if (result.settings) setCompany({
       ...result.settings, notice: result.settings.notice ?? "",
       marketPriceNotice: result.settings.market_price_notice ?? "",
@@ -159,6 +163,13 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
           deliveryFee: company.delivery_fee,
         }, notice: company.notice, marketPriceNotice: company.marketPriceNotice,
       })}>기본값 저장</button>
+    </section>
+    <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">판매가 등락 공개</h2>
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={showPriceDirection} disabled={busy || !data?.priceDirectionAvailable} onChange={event => setShowPriceDirection(event.target.checked)} />주문 링크에 판매가 상승·하락·보합 표시</label>
+      <p className="text-xs text-slate-600">기본은 비공개입니다. 같은 문서의 직전 게시 판매가와 비교하며 원가·매입처·마진율은 공개하지 않습니다. 협의단가·싯가 또는 단위·규격·과세 조건이 다른 품목은 표시하지 않습니다.</p>
+      <p className="text-xs text-slate-600">마진·품목 규칙 변경은 재계산 후 새 버전을 확정해야 게시가에 반영됩니다. 기존 문서와 링크의 가격은 유지됩니다.</p>
+      {!data?.priceDirectionAvailable && <p className="text-xs text-slate-600">현재 사용할 수 없습니다.</p>}
+      <Button type="button" className="min-h-11 text-xs" disabled={busy || !data?.priceDirectionAvailable} onClick={() => void save({ action: "storefront-price-direction", enabled: showPriceDirection })}>판매가 등락 공개 설정 저장</Button>
     </section>
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">권역별 배송</h2>
       <select aria-label="배송 권역" className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={territoryId}

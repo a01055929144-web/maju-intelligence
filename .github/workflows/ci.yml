@@ -232,6 +232,16 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=store_kakao_membership_test --set=ON_ERROR_STOP=1 --file=20261105-store-kakao-membership.pg17.test.sql
 
+      - name: Verify selling price direction opt-in on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb storefront_price_direction_test
+          psql --dbname=storefront_price_direction_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-price-direction.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -277,7 +287,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
