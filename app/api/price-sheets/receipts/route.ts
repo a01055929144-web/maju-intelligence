@@ -8,26 +8,73 @@ import { supabaseRequest } from "@/lib/store";
 import { runLimited } from "@/lib/run-limited";
 
 export const dynamic = "force-dynamic";
+const canCorrect = (companyId: string) => (process.env.PURCHASE_RECEIPT_CORRECTIONS_COMPANY_IDS || "").split(",").map((id) => id.trim()).includes(companyId);
+const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
 /**
  * 11/4: 매입 기록 보관 — 엑셀의 수량·공급가액·부가세·합계를 날짜·품목별로 남깁니다.
  * 같은 날 같은 품목을 다시 올리면 새 줄을 만들지 않고 덮어씁니다(company_id, dedupe_key).
  * 테이블(purchase_receipt_lines)은 운영 DB 승인 후 생성됩니다. 없으면 매입가 저장은 그대로 두고 안내만 합니다.
  */
-/** 11/4: 매입 이력 — 최근 N일 매입 기록(품목별 변동은 화면에서 묶어 보여 줍니다). */
+/** 매입 이력은 서버에서 기간·품목을 좁히고 한 번에 100줄씩 읽습니다. */
 export async function GET(request: NextRequest) {
   if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   const auth = await getRequestAuthScope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   if (!isFeatureEnabled("PRICING", auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
-  const days = Math.min(365, Math.max(7, Number(request.nextUrl.searchParams.get("days")) || 90));
-  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const params = request.nextUrl.searchParams;
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
+  if ((from && !validDate(from)) || (to && !validDate(to)) || (from && to && from > to))
+    return NextResponse.json({ message: "조회 기간을 확인해 주세요." }, { status: 400 });
+  const page = Number(params.get("page") || 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 1_000_000) return NextResponse.json({ message: "조회 페이지를 확인해 주세요." }, { status: 400 });
+  const search = (params.get("search") || "").replace(/[^a-zA-Z0-9\u3131-\uD79D\s-]/g, "").trim().slice(0, 80);
+  const productId = params.get("productId") || "";
+  if (productId && !/^[0-9a-f-]{36}$/i.test(productId)) return NextResponse.json({ message: "품목 번호를 확인해 주세요." }, { status: 400 });
+  const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`].filter(Boolean);
+  if (search) {
+    const term = encodeURIComponent(search);
+    filters.push(`or=(product_name.ilike.*${term}*,supplier_name.ilike.*${term}*,erp_code.ilike.*${term}*)`);
+  }
+  const correctionEnabled = canCorrect(auth.companyId);
   const rows = await supabaseRequest<Array<Record<string, unknown>>>(
-    `purchase_receipt_lines?select=receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount&company_id=eq.${encodeURIComponent(auth.companyId)}&receipt_date=gte.${since}&order=receipt_date.desc&limit=5000`
+    `${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc&limit=101&offset=${(page - 1) * 100}`
   ).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
-  return NextResponse.json({ days, rows }, { headers: { "Cache-Control": "no-store" } });
+  const items = rows.slice(0, 100).map(({ correction_revision, ...row }) => ({ ...row, correctionRevision: Number(correction_revision || 0) }));
+  return NextResponse.json({ canCorrect: correctionEnabled, hasMore: rows.length > 100, rows: items }, { headers: { "Cache-Control": "no-store" } });
+}
+
+/** 원본 엑셀 행은 보존하고 정정 값·사유만 한 트랜잭션으로 추가합니다. */
+export async function PATCH(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as { companyId?: string; id?: string; productId?: string; cost?: number; reason?: string; expectedRevision?: number } | null;
+  if (!priceSheetsEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  const auth = await getRequestAuthScope(request, body?.companyId);
+  if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  if (!isFeatureEnabled("PRICING", auth.companyId) || !canCorrect(auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
+  const uuid = /^[0-9a-f-]{36}$/i;
+  if (!body?.id || !uuid.test(body.id) || (body.productId && !uuid.test(body.productId)) ||
+    typeof body.cost !== "number" || !Number.isFinite(body.cost) || body.cost < 0 || body.cost > 1_000_000_000 ||
+    Math.abs(Math.round(body.cost * 100) - body.cost * 100) > 1e-8 || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision! < 0 ||
+    !body.reason || body.reason.trim().length < 5 || body.reason.trim().length > 500)
+    return NextResponse.json({ message: "품목·단가·정정 사유를 확인해 주세요." }, { status: 400 });
+  try {
+    const result = await supabaseRequest<{ revision: number }>("rpc/correct_purchase_receipt_line", {
+      method: "POST",
+      body: JSON.stringify({ p_company: auth.companyId, p_line: body.id, p_product: body.productId || null,
+        p_cost: body.cost, p_reason: body.reason.trim(), p_actor: auth.customerSession?.name || auth.adminSession?.name || "운영자",
+        p_expected_revision: body.expectedRevision })
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return NextResponse.json({ message: message.includes("receipt_correction_conflict") ? "다른 사용자가 먼저 정정했습니다. 새로고침 후 다시 시도해 주세요." :
+      message.includes("product_not_in_company") ? "같은 회사의 상품을 선택해 주세요." : "정정을 저장하지 못했습니다." }, { status: message.includes("receipt_correction_conflict") ? 409 : 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {

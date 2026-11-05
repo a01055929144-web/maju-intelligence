@@ -9,6 +9,7 @@ import {
   parseDocument,
   withMargin,
   type CatalogChoice,
+  fillBlankDocumentSpecs,
   type DocumentContent,
   type DocumentDraft,
   type DocumentKind,
@@ -191,6 +192,15 @@ export function PricingDocumentsWorkspace({
     (ids: string[]) => read<{ items: CatalogChoice[] }>("catalog", { productIds: ids.slice(0, 100) }).then((r) => r.items),
     [read],
   );
+  async function fillMissingSpecs() {
+    if (!draft) return;
+    const ids = Array.from(new Set(draft.content.lines.filter((line) => !line.spec.trim()).map((line) => line.productId)));
+    if (!ids.length) return;
+    const products = await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids });
+    const updated = fillBlankDocumentSpecs(draft.content.lines, products.items);
+    rows(updated);
+    setMessage(`원장 규격 ${updated.filter((line, index) => line.spec && !draft.content.lines[index].spec).length}개를 채웠습니다. 확인 후 저장해 주세요.`);
+  }
   const quickSearch = useCallback(
     (query: string) => read<{ items: CatalogChoice[]; total: number }>("catalog", { search: query, page: 1 }).then((r) => r.items),
     [read],
@@ -629,6 +639,7 @@ export function PricingDocumentsWorkspace({
             /* 11/4: 문서 목록(왼쪽)은 목록 화면에만 두고, 편집은 가운데 품목 · 오른쪽 문서 설정 두 칸으로 단순화 */
             <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
               <div className="min-w-0 space-y-4">
+                {editable && draft.content.lines.some((line) => !line.spec.trim()) ? <button className="maju-button-secondary min-h-11" disabled={busy} onClick={() => void task(fillMissingSpecs)} type="button">빈 규격 원장에서 채우기</button> : null}
                 {docView === "doc" ? (
                   <>
                     {draft.content.lines.some((l) => l.taxType === "unknown") ? <p className="rounded border border-amber-400 bg-amber-50 p-3 text-sm" role="status">과세 미확정 품목이 있습니다 — <button className="font-bold underline" onClick={() => setDocView("table")} type="button">표 보기</button>에서 과세·면세를 고른 뒤 저장해 주세요.</p> : null}
