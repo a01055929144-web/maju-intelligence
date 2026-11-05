@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { categoryAncestors, isUnder, splitCategory } from "@/domains/pricing/product-category";
+import { categoryAncestors, categoryLevelOptions, isUnder, joinCategory, splitCategory, suggestCategory } from "@/domains/pricing/product-category";
 import { Edit3, Loader2, PackagePlus, X } from "lucide-react";
 import {
   CommonDataTable,
@@ -427,13 +427,7 @@ function Editor({
             <input className="maju-input w-full" value={d.barcodes?.[0] || ""} onChange={(e) => put("barcodes", e.target.value ? [e.target.value] : [])} />
           </Field>
           <h3 className="mt-2 border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">분류 · 매입처 · 보관</h3>
-          <Field label="분류">
-            <input
-              className="maju-input w-full"
-              value={d.category || ""}
-              onChange={(e) => put("category", e.target.value)}
-            />
-          </Field>
+          <CategoryFields item={d} onChange={(category) => put("category", category)} />
           <Field label="브랜드">
             <input
               className="maju-input w-full"
@@ -580,6 +574,35 @@ function Editor({
           </button>
         </footer>
       </form>
+    </div>
+  );
+}
+function CategoryFields({ item, onChange }: { item: ProductCatalogAdminItem; onChange: (category: string) => void }) {
+  const parts = splitCategory(item.category || "");
+  const options = categoryLevelOptions(item.category || "");
+  const select = (depth: number, value: string) => onChange(joinCategory([...parts.slice(0, depth), value]));
+  const suggestion = suggestCategory(item.name, item.spec || "");
+  return (
+    <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+      <span className="text-xs font-bold text-slate-600">분류 (대 › 중 › 소)</span>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <select aria-label="대분류" className="maju-input w-full" onChange={(event) => select(0, event.target.value)} value={parts[0] || ""}>
+          <option value="">대분류 선택</option>
+          {options.large.map((name) => <option key={name}>{name}</option>)}
+        </select>
+        <select aria-label="중분류" className="maju-input w-full" disabled={!parts[0]} onChange={(event) => select(1, event.target.value)} value={parts[1] || ""}>
+          <option value="">중분류 선택</option>
+          {options.medium.map((name) => <option key={name}>{name}</option>)}
+        </select>
+        <select aria-label="소분류" className="maju-input w-full" disabled={!parts[1]} onChange={(event) => select(2, event.target.value)} value={parts[2] || ""}>
+          <option value="">소분류 선택</option>
+          {options.small.map((name) => <option key={name}>{name}</option>)}
+        </select>
+      </div>
+      <div className="flex min-h-11 flex-wrap items-center gap-2">
+        {suggestion && suggestion !== item.category ? <button className="maju-button-secondary min-h-11" onClick={() => onChange(suggestion)} type="button">추천 적용: {suggestion.replaceAll(" > ", " › ")}</button> : null}
+        {item.category ? <button className="text-xs font-bold text-slate-500 underline" onClick={() => onChange("")} type="button">분류 지우기</button> : null}
+      </div>
     </div>
   );
 }

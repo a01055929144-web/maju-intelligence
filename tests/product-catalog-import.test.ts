@@ -14,7 +14,7 @@ describe("product catalog import data access", () => {
   it("creates the first standard product with imported cost and a confirmed match", async () => {
     supabaseRequest
       .mockResolvedValueOnce([{
-        id: "supplier-product-1", raw_name: "샘플", raw_unit: "EA",
+        id: "supplier-product-1", raw_name: "양파", raw_unit: "EA",
         latest_cost: 18_910, cost_confirmed: true, parsed_tax_type: "taxable",
       }])
       .mockResolvedValueOnce([])
@@ -23,10 +23,10 @@ describe("product catalog import data access", () => {
       .mockResolvedValueOnce(undefined);
 
     await expect(createCatalogFromSupplierProducts("company-1", ["supplier-product-1"]))
-      .resolves.toEqual({ createdCount: 1 });
+      .resolves.toEqual({ categorySuggestedCount: 1, createdCount: 1 });
     const catalog = JSON.parse(supabaseRequest.mock.calls[3][1].body);
     expect(catalog[0]).toMatchObject({
-      product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
+      category: "농산 > 채소류 > 조미채소", product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
     });
     const matches = JSON.parse(supabaseRequest.mock.calls[4][1].body);
     expect(matches[0]).toMatchObject({ product_catalog_id: "catalog-1", match_status: "confirmed" });
@@ -47,7 +47,7 @@ describe("product catalog import data access", () => {
 
     await expect(
       createCatalogFromSupplierProducts("company-1", ids),
-    ).resolves.toEqual({ createdCount: 0 });
+    ).resolves.toEqual({ categorySuggestedCount: 0, createdCount: 0 });
 
     expect(supabaseRequest).toHaveBeenCalledTimes(5);
     const supplierPaths = supabaseRequest.mock.calls

@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
   const search = (params.get("search") || "").replace(/[^a-zA-Z0-9\u3131-\uD79D\s-]/g, "").trim().slice(0, 80);
   const productId = params.get("productId") || "";
   if (productId && !/^[0-9a-f-]{36}$/i.test(productId)) return NextResponse.json({ message: "품목 번호를 확인해 주세요." }, { status: 400 });
-  const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`].filter(Boolean);
+  const lineKey = (params.get("lineKey") || "").trim().slice(0, 240);
+  const supplier = (params.get("supplier") || "").trim().slice(0, 120);
+  const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`,
+    lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`, supplier && `supplier_name=eq.${encodeURIComponent(supplier)}`].filter(Boolean);
   if (search) {
     const term = encodeURIComponent(search);
     filters.push(`or=(product_name.ilike.*${term}*,supplier_name.ilike.*${term}*,erp_code.ilike.*${term}*)`);

@@ -82,14 +82,15 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
     finally { setSaving(false); }
   }
 
-  async function loadProductHistory(item: { key: string; name: string }, productId: string | null, nextPage = 1) {
+  async function loadProductHistory(item: { key: string; lineKey: string; name: string; supplier: string }, productId: string | null, nextPage = 1) {
     setOpen(item.key);
     setDetail((current) => ({ key: item.key, rows: nextPage === 1 ? [] : current?.rows || [], page: nextPage, hasMore: false, loading: true }));
     const params = new URLSearchParams({ companyId, page: String(nextPage) });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (productId) params.set("productId", productId);
-    else params.set("search", item.name);
+    else params.set("lineKey", item.lineKey);
+    if (item.supplier) params.set("supplier", item.supplier);
     try {
       const response = await fetch(`/api/price-sheets/receipts?${params}`, { cache: "no-store" });
       const payload = (await response.json()) as { rows?: PurchaseHistoryRow[]; hasMore?: boolean; message?: string };
@@ -124,6 +125,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
           <input aria-label="이력 검색" className="maju-input min-h-11" onChange={(event) => setSearchInput(event.target.value)} placeholder="품목·코드·매입처 검색" value={searchInput} />
           <button className="maju-button-secondary min-h-11" type="submit">검색</button>
         </form>
+        {(from || to || searchInput || search) ? <button className="maju-button-secondary min-h-11" onClick={() => { setFrom(""); setTo(""); setSearchInput(""); setSearch(""); setPage(1); }} type="button">전체 보기</button> : null}
       </div>
       {error ? <div className="flex items-center gap-2 text-sm text-rose-700" role="alert">{error}<button className="maju-button-secondary min-h-11" onClick={() => setReloadKey((value) => value + 1)} type="button">다시 시도</button></div> : null}
       {rows === null ? <p className="text-sm text-slate-500">불러오는 중입니다.</p> : !items.length ? <p className="text-sm text-slate-500">조회 조건에 맞는 매입 기록이 없습니다. 기간이나 검색어를 바꿔 보세요.</p> : (

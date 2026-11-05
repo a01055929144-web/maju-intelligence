@@ -67,6 +67,19 @@ export function isUnder(path: string, ancestor: string) {
   return p === a || p.startsWith(a + CATEGORY_SEP);
 }
 
+/** 표준 트리에 없는 회사 고유 분류도 편집창에서 현재 선택값으로 보존합니다. */
+export function categoryLevelOptions(path: string) {
+  const parts = splitCategory(path);
+  const top = CATEGORY_TREE.find((node) => node.name === parts[0]);
+  const middle = top?.children?.find((node) => node.name === parts[1]);
+  const withCurrent = (values: readonly string[], current?: string) => Array.from(new Set([...values, ...(current ? [current] : [])]));
+  return {
+    large: withCurrent(CATEGORY_TREE.map((node) => node.name), parts[0]),
+    medium: withCurrent((top?.children || []).map((node) => node.name), parts[1]),
+    small: withCurrent((middle?.children || []).map((node) => node.name), parts[2]),
+  };
+}
+
 /** 트리의 모든 경로(대·중·소). */
 export function treePaths(tree: readonly CategoryNode[] = CATEGORY_TREE, prefix: readonly string[] = []): string[] {
   return tree.flatMap((node) => {

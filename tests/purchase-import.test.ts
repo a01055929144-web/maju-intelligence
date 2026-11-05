@@ -105,10 +105,10 @@ describe("purchase history", () => {
   it("groups by item and computes latest/previous cost and quantity", async () => {
     const { summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
     const items = summarizePurchaseHistory([
-      { line_key: "a", product_name: "오징어", quantity: 5, receipt_date: "2026-11-03", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4500 },
-      { line_key: "a", product_name: "오징어", quantity: 3, receipt_date: "2026-11-04", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4950 }
+      { line_key: "a|spec", product_name: "오징어", quantity: 5, receipt_date: "2026-11-03", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4500 },
+      { line_key: "a|spec", product_name: "오징어", quantity: 3, receipt_date: "2026-11-04", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4950 }
     ]);
-    expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, previousCost: 4500, changeRate: 10, totalQuantity: 8 });
+    expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, lineKey: "a|spec", previousCost: 4500, changeRate: 10, totalQuantity: 8 });
   });
 });
 

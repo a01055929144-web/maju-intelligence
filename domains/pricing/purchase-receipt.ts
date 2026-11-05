@@ -160,6 +160,7 @@ export type PurchaseHistoryRow = {
 
 export type PurchaseHistoryItem = {
   key: string;
+  lineKey: string;
   name: string;
   spec: string;
   unit: string;
@@ -197,6 +198,7 @@ export function summarizePurchaseHistory(rows: readonly PurchaseHistoryRow[]): P
       key,
       latestCost: latest.cost,
       latestDate: latest.date,
+      lineKey: sorted[0].line_key,
       maxCost: Math.max(...costs),
       minCost: Math.min(...costs),
       name: sorted[0].product_name,

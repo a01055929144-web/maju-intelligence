@@ -6,6 +6,7 @@ import {
   type CatalogMapping,
   type ParsedProduct,
 } from "../domains/product/catalog-import";
+import { suggestCategory } from "../domains/pricing/product-category";
 import type { ImportPreviewRow } from "../domains/product/import-row-editor";
 import { supabaseRequest as db } from "./store";
 import { ciLayoutProductImports, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
@@ -536,6 +537,7 @@ export async function createCatalogFromSupplierProducts(
       product_code: null,
       purchase_to_sales_ratio: p.parsed_pack_quantity || null,
       tax_type: p.parsed_tax_type || null,
+      category: suggestCategory(String(p.parsed_name || p.raw_name || ""), String(p.raw_spec || "")) || null,
       usage_tags: Array.isArray((p.parser_metadata as Json)?.usage_tags)
         ? (p.parser_metadata as Json).usage_tags
         : [],
@@ -622,5 +624,5 @@ export async function createCatalogFromSupplierProducts(
         body: JSON.stringify(part),
       },
     );
-  return { createdCount: created.length };
+  return { createdCount: created.length, categorySuggestedCount: rows.filter((row) => row.category).length };
 }
