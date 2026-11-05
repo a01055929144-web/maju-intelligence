@@ -3,7 +3,7 @@ import { getRequestAuthScope } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { buildPurchaseReceiptRows, planMissingProductFields, planProductTaxTypes, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { buildPurchaseReceiptRows, paginatePurchaseHistoryRows, planMissingProductFields, planProductTaxTypes, type PurchaseHistoryRow, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
 import { runLimited } from "@/lib/run-limited";
 
@@ -11,6 +11,38 @@ export const dynamic = "force-dynamic";
 const canCorrect = (companyId: string) => (process.env.PURCHASE_RECEIPT_CORRECTIONS_COMPANY_IDS || "").split(",").map((id) => id.trim()).includes(companyId);
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+
+async function listSupplierCostHistory(companyId: string, input: { from: string; to: string; search: string; productId: string; lineKey: string; supplier: string }) {
+  const company = encodeURIComponent(companyId);
+  const dateFilters = [input.from && `price_date=gte.${input.from}`, input.to && `price_date=lte.${input.to}`].filter(Boolean);
+  const [history, matches, supplierProducts, catalog, suppliers] = await Promise.all([
+    supabaseRequest<Array<Record<string, unknown>>>(`supplier_product_cost_history?select=id,supplier_product_id,price_date,purchase_price&company_id=eq.${company}&${dateFilters.join("&")}${dateFilters.length ? "&" : ""}order=price_date.desc,created_at.desc&limit=5000`),
+    supabaseRequest<Array<Record<string, unknown>>>(`supplier_product_matches?select=supplier_product_id,product_catalog_id&company_id=eq.${company}&match_status=in.(auto,confirmed)&limit=5000`),
+    supabaseRequest<Array<Record<string, unknown>>>(`supplier_products?select=id,supplier_id,raw_name,raw_spec,raw_unit&company_id=eq.${company}&limit=5000`),
+    supabaseRequest<Array<Record<string, unknown>>>(`product_catalog?select=id,product_code,canonical_name,sales_unit&company_id=eq.${company}&limit=10000`),
+    supabaseRequest<Array<Record<string, unknown>>>(`product_suppliers?select=id,name&company_id=eq.${company}&limit=5000`)
+  ]);
+  const matchBySupplier = new Map(matches.map((row) => [String(row.supplier_product_id), String(row.product_catalog_id)]));
+  const supplierProductById = new Map(supplierProducts.map((row) => [String(row.id), row]));
+  const catalogById = new Map(catalog.map((row) => [String(row.id), row]));
+  const supplierNames = new Map(suppliers.map((row) => [String(row.id), String(row.name || "")]));
+  const normalizedSearch = input.search.toLocaleLowerCase("ko");
+  const rows = history.map((row) => {
+    const supplierProduct = supplierProductById.get(String(row.supplier_product_id));
+    const catalogId = matchBySupplier.get(String(row.supplier_product_id)) || "";
+    const product = catalogById.get(catalogId);
+    const supplierName = supplierNames.get(String(supplierProduct?.supplier_id || "")) || "";
+    return {
+      id: String(row.id), receipt_date: String(row.price_date), line_key: `supplier-history|${row.supplier_product_id}`,
+      product_catalog_id: catalogId || null, product_name: String(product?.canonical_name || supplierProduct?.raw_name || ""),
+      spec: String(supplierProduct?.raw_spec || ""), unit: String(product?.sales_unit || supplierProduct?.raw_unit || ""), supplier_name: supplierName,
+      quantity: null, unit_price: Number(row.purchase_price) || 0, unit_cost_ex_vat: Number(row.purchase_price) || 0,
+      price_includes_vat: false, tax_type: null, total_amount: null, erp_code: String(product?.product_code || "")
+    };
+  }).filter((row) => (!input.productId || row.product_catalog_id === input.productId) && (!input.lineKey || row.line_key === input.lineKey) &&
+    (!input.supplier || row.supplier_name === input.supplier) && (!normalizedSearch || `${row.product_name} ${row.supplier_name} ${row.erp_code}`.toLocaleLowerCase("ko").includes(normalizedSearch)));
+  return rows;
+}
 
 /**
  * 11/4: 매입 기록 보관 — 엑셀의 수량·공급가액·부가세·합계를 날짜·품목별로 남깁니다.
@@ -44,11 +76,17 @@ export async function GET(request: NextRequest) {
   }
   const correctionEnabled = canCorrect(auth.companyId);
   const rows = await supabaseRequest<Array<Record<string, unknown>>>(
-    `${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc&limit=101&offset=${(page - 1) * 100}`
+    `${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc&limit=5000`
   ).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
-  const items = rows.slice(0, 100).map(({ correction_revision, ...row }) => ({ ...row, correctionRevision: Number(correction_revision || 0) }));
-  return NextResponse.json({ canCorrect: correctionEnabled, hasMore: rows.length > 100, rows: items }, { headers: { "Cache-Control": "no-store" } });
+  const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => []);
+  const combined = [...rows, ...supplierHistory].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const offset = (page - 1) * 100;
+  const items = paginatePurchaseHistoryRows(combined as PurchaseHistoryRow[], page).map((row) => {
+    const { correction_revision, ...item } = row as PurchaseHistoryRow & { correction_revision?: unknown };
+    return { ...item, correctionRevision: Number(correction_revision || 0) };
+  });
+  return NextResponse.json({ canCorrect: correctionEnabled && !supplierHistory.length, hasMore: combined.length > offset + 100, rows: items }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** 원본 엑셀 행은 보존하고 정정 값·사유만 한 트랜잭션으로 추가합니다. */

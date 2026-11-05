@@ -13,6 +13,33 @@ export type CostProduct = {
   supplierRawKey?: string;
 };
 
+export type PurchaseCostCandidate = {
+  productId: string;
+  supplierProductId: string;
+  supplierName: string;
+  cost: number;
+  direction: "increase" | "decrease" | "review";
+  reviewReason?: string;
+};
+
+export function selectPurchaseCostCandidate(
+  productId: string,
+  currentCost: number,
+  suppliers: readonly { id: string; supplierName: string; latestCost: number | null; confirmed: boolean }[]
+): PurchaseCostCandidate | null {
+  const selected = suppliers
+    .filter((supplier) => supplier.confirmed && supplier.latestCost != null && Number.isFinite(supplier.latestCost) && supplier.latestCost > 0)
+    .sort((a, b) => Number(a.latestCost) - Number(b.latestCost) || a.id.localeCompare(b.id))[0];
+  if (!selected || selected.latestCost === currentCost) return null;
+  return {
+    productId,
+    supplierProductId: selected.id,
+    supplierName: selected.supplierName,
+    cost: Number(selected.latestCost),
+    direction: Number(selected.latestCost) > currentCost ? "increase" : "decrease"
+  };
+}
+
 export type CostImportRow = {
   code: string;
   name: string;
