@@ -3,7 +3,7 @@ import { getRequestAuthScope } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
-import { buildPurchaseReceiptRows, paginatePurchaseHistoryRows, planMissingProductFields, planProductTaxTypes, type PurchaseHistoryRow, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
+import { attachPurchaseHistoryPreviousCosts, buildPurchaseReceiptRows, planMissingProductFields, planProductTaxTypes, type PurchaseHistoryRow, type PurchaseReceiptInputLine } from "@/domains/pricing/purchase-receipt";
 import { supabaseRequest } from "@/lib/store";
 import { runLimited } from "@/lib/run-limited";
 
@@ -12,15 +12,24 @@ const canCorrect = (companyId: string) => (process.env.PURCHASE_RECEIPT_CORRECTI
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
+async function historyPages(path: string) {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let offset = 0; offset < 10_000; offset += 1000) {
+    const page = await supabaseRequest<Array<Record<string, unknown>>>(`${path}&limit=1000&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+
 async function listSupplierCostHistory(companyId: string, input: { from: string; to: string; search: string; productId: string; lineKey: string; supplier: string }) {
   const company = encodeURIComponent(companyId);
-  const dateFilters = [input.from && `price_date=gte.${input.from}`, input.to && `price_date=lte.${input.to}`].filter(Boolean);
   const [history, matches, supplierProducts, catalog, suppliers] = await Promise.all([
-    supabaseRequest<Array<Record<string, unknown>>>(`supplier_product_cost_history?select=id,supplier_product_id,price_date,purchase_price&company_id=eq.${company}&${dateFilters.join("&")}${dateFilters.length ? "&" : ""}order=price_date.desc,created_at.desc&limit=5000`),
-    supabaseRequest<Array<Record<string, unknown>>>(`supplier_product_matches?select=supplier_product_id,product_catalog_id&company_id=eq.${company}&match_status=in.(auto,confirmed)&limit=5000`),
-    supabaseRequest<Array<Record<string, unknown>>>(`supplier_products?select=id,supplier_id,raw_name,raw_spec,raw_unit&company_id=eq.${company}&limit=5000`),
-    supabaseRequest<Array<Record<string, unknown>>>(`product_catalog?select=id,product_code,canonical_name,sales_unit&company_id=eq.${company}&limit=10000`),
-    supabaseRequest<Array<Record<string, unknown>>>(`product_suppliers?select=id,name&company_id=eq.${company}&limit=5000`)
+    historyPages(`supplier_product_cost_history?select=id,supplier_product_id,price_date,purchase_price&company_id=eq.${company}&order=price_date.desc,created_at.desc`),
+    historyPages(`supplier_product_matches?select=supplier_product_id,product_catalog_id&company_id=eq.${company}&match_status=in.(auto,confirmed)&order=supplier_product_id`),
+    historyPages(`supplier_products?select=id,supplier_id,raw_name,raw_spec,raw_unit&company_id=eq.${company}&order=id`),
+    historyPages(`product_catalog?select=id,product_code,canonical_name,sales_unit&company_id=eq.${company}&order=id`),
+    historyPages(`product_suppliers?select=id,name&company_id=eq.${company}&order=id`)
   ]);
   const matchBySupplier = new Map(matches.map((row) => [String(row.supplier_product_id), String(row.product_catalog_id)]));
   const supplierProductById = new Map(supplierProducts.map((row) => [String(row.id), row]));
@@ -68,25 +77,25 @@ export async function GET(request: NextRequest) {
   if (productId && !/^[0-9a-f-]{36}$/i.test(productId)) return NextResponse.json({ message: "품목 번호를 확인해 주세요." }, { status: 400 });
   const lineKey = (params.get("lineKey") || "").trim().slice(0, 240);
   const supplier = (params.get("supplier") || "").trim().slice(0, 120);
-  const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`,
+  const filters = [productId && `product_catalog_id=eq.${productId}`,
     lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`, supplier && `supplier_name=eq.${encodeURIComponent(supplier)}`].filter(Boolean);
   if (search) {
     const term = encodeURIComponent(search);
     filters.push(`or=(product_name.ilike.*${term}*,supplier_name.ilike.*${term}*,erp_code.ilike.*${term}*)`);
   }
   const correctionEnabled = canCorrect(auth.companyId);
-  const rows = await supabaseRequest<Array<Record<string, unknown>>>(
-    `${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc&limit=5000`
-  ).catch(() => null);
+  const rows = await historyPages(`${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc`).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
   const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => []);
-  const combined = [...rows, ...supplierHistory].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const combined = [...rows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const period = combined.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to));
   const offset = (page - 1) * 100;
-  const items = paginatePurchaseHistoryRows(combined as PurchaseHistoryRow[], page).map((row) => {
+  const visible = attachPurchaseHistoryPreviousCosts(combined as PurchaseHistoryRow[], period.slice(offset, offset + 100) as PurchaseHistoryRow[]);
+  const items = visible.map((row) => {
     const { correction_revision, ...item } = row as PurchaseHistoryRow & { correction_revision?: unknown };
     return { ...item, correctionRevision: Number(correction_revision || 0) };
   });
-  return NextResponse.json({ canCorrect: correctionEnabled && !supplierHistory.length, hasMore: combined.length > offset + 100, rows: items }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ canCorrect: correctionEnabled, hasMore: period.length > offset + 100, rows: items }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** 원본 엑셀 행은 보존하고 정정 값·사유만 한 트랜잭션으로 추가합니다. */

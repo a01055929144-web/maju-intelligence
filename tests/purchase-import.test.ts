@@ -121,7 +121,7 @@ describe("purchase history", () => {
   });
 
   it("includes the previous changed cost when it falls beyond the page boundary", async () => {
-    const { paginatePurchaseHistoryRows, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
+    const { attachPurchaseHistoryPreviousCosts, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
     const rows = Array.from({ length: 101 }, (_, index) => ({
       line_key: index === 0 || index === 100 ? "target" : `other-${index}`,
       product_name: index === 0 || index === 100 ? "대상" : `기타 ${index}`,
@@ -129,7 +129,7 @@ describe("purchase history", () => {
       receipt_date: index === 0 ? "2026-11-05" : index === 100 ? "2026-11-01" : "2026-11-04",
       spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: index === 100 ? 90 : 100
     }));
-    const item = summarizePurchaseHistory(paginatePurchaseHistoryRows(rows, 1)).find((entry) => entry.lineKey === "target");
+    const item = summarizePurchaseHistory(attachPurchaseHistoryPreviousCosts(rows, rows.slice(0, 100))).find((entry) => entry.lineKey === "target");
     expect(item).toMatchObject({ latestCost: 100, previousCost: 90, changeAmount: 10, direction: "up" });
   });
 });

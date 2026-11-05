@@ -147,6 +147,8 @@ export type PurchaseHistoryRow = {
   product_catalog_id?: string | null;
   correctionRevision?: number;
   corrected?: boolean;
+  correctable?: boolean;
+  previous_cost?: number | string;
   receipt_date: string;
   line_key: string;
   product_name: string;
@@ -175,21 +177,15 @@ export type PurchaseHistoryItem = {
   maxCost: number;
   totalQuantity: number;
   count: number;
-  entries: Array<{ id?: string; date: string; cost: number; quantity?: number; correctionRevision?: number; corrected?: boolean }>;
+  entries: Array<{ id?: string; date: string; cost: number; quantity?: number; correctionRevision?: number; corrected?: boolean; correctable?: boolean }>;
 };
 
-export function paginatePurchaseHistoryRows(rows: readonly PurchaseHistoryRow[], page: number, size = 100) {
-  const offset = (page - 1) * size;
-  const visible = rows.slice(offset, offset + size);
-  const extras: PurchaseHistoryRow[] = [];
-  for (const latest of visible) {
+export function attachPurchaseHistoryPreviousCosts(rows: readonly PurchaseHistoryRow[], visible: readonly PurchaseHistoryRow[]) {
+  return visible.map((latest) => {
     const key = `${latest.product_catalog_id || latest.line_key}|${latest.supplier_name || ""}`;
-    const hasPrevious = visible.some((row) => row !== latest && `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === key && row.receipt_date < latest.receipt_date && Number(row.unit_cost_ex_vat) !== Number(latest.unit_cost_ex_vat));
-    if (hasPrevious || extras.some((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === key)) continue;
-    const previous = rows.slice(offset + size).find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === key && row.receipt_date < latest.receipt_date && Number(row.unit_cost_ex_vat) !== Number(latest.unit_cost_ex_vat));
-    if (previous) extras.push(previous);
-  }
-  return [...visible, ...extras];
+    const previous = rows.find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === key && row.receipt_date < latest.receipt_date && Number(row.unit_cost_ex_vat) !== Number(latest.unit_cost_ex_vat));
+    return previous ? { ...latest, previous_cost: previous.unit_cost_ex_vat } : latest;
+  });
 }
 
 /** 11/4: 매입 이력을 품목별로 묶고, 최근 단가·직전 단가·변동 금액·기간 수량을 계산합니다. */
@@ -203,9 +199,9 @@ export function summarizePurchaseHistory(rows: readonly PurchaseHistoryRow[]): P
   }
   return Array.from(groups.entries()).map(([key, list]) => {
     const sorted = [...list].sort((a, b) => b.receipt_date.localeCompare(a.receipt_date));
-    const entries = sorted.map((row) => ({ id: row.id, cost: Number(row.unit_cost_ex_vat) || 0, date: row.receipt_date, quantity: row.quantity == null ? undefined : Number(row.quantity), correctionRevision: row.correctionRevision, corrected: row.corrected }));
+    const entries = sorted.map((row) => ({ id: row.id, cost: Number(row.unit_cost_ex_vat) || 0, date: row.receipt_date, quantity: row.quantity == null ? undefined : Number(row.quantity), correctionRevision: row.correctionRevision, corrected: row.corrected, correctable: row.correctable }));
     const latest = entries[0];
-    const previous = entries.find((entry) => entry.date < latest.date && entry.cost !== latest.cost) || entries[1];
+    const previous = entries.find((entry) => entry.date < latest.date && entry.cost !== latest.cost) || entries[1] || (sorted[0].previous_cost != null ? { cost: Number(sorted[0].previous_cost) } : undefined);
     const changeAmount = previous ? latest.cost - previous.cost : undefined;
     const direction: PurchaseHistoryItem["direction"] = changeAmount == null || changeAmount === 0 ? "same" : changeAmount > 0 ? "up" : "down";
     const costs = entries.map((entry) => entry.cost);
