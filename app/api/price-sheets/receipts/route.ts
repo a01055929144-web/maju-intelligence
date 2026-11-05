@@ -17,9 +17,9 @@ async function historyPages(path: string) {
   for (let offset = 0; offset < 10_000; offset += 1000) {
     const page = await supabaseRequest<Array<Record<string, unknown>>>(`${path}&limit=1000&offset=${offset}`);
     rows.push(...page);
-    if (page.length < 1000) break;
+    if (page.length < 1000) return rows;
   }
-  return rows;
+  throw new Error("매입 이력이 10,000건을 넘습니다. 기간이나 품목으로 좁혀 조회해 주세요.");
 }
 
 async function listSupplierCostHistory(companyId: string, input: { from: string; to: string; search: string; productId: string; lineKey: string; supplier: string }) {
