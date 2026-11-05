@@ -68,7 +68,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   page.on("dialog", dialog => dialog.accept());
   const archive = page.getByRole("button", { name: "선택 문서 보관", exact: true });
   if (width === 390) expect((await archive.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await archive.click(); await expect(page.getByRole("alert")).toContainText("합성 보관 실패");
+  await archive.click(); await expect(page.getByRole("alert").filter({ hasText: "합성 보관 실패" })).toContainText("합성 보관 실패");
   await archive.click(); await expect(page.getByRole("status").filter({ hasText: "보관했습니다" })).toBeVisible();
   await page.getByRole("button", { name: "문서 보관함", exact: true }).click();
   await page.getByRole("checkbox", { name: "인쇄 검증 문서 선택", exact: true }).check();
