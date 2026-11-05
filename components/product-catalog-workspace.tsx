@@ -71,6 +71,7 @@ const importTargets = [
 
 export function ProductCatalogWorkspace({
   categoriesEnabled = false,
+  canManageCategories = false,
   companyId = "",
   importAuditV2Enabled = false,
   importTargetsEnabled = false,
@@ -80,6 +81,7 @@ export function ProductCatalogWorkspace({
   tableSettingsKey = "products:current",
 }: {
   categoriesEnabled?: boolean;
+  canManageCategories?: boolean;
   companyId?: string;
   importAuditV2Enabled?: boolean;
   importTargetsEnabled?: boolean;
@@ -221,6 +223,7 @@ export function ProductCatalogWorkspace({
       {tab === "catalog" ? (
         <ProductCatalogAdmin
           categoriesEnabled={categoriesEnabled}
+          canManageCategories={canManageCategories}
           companyId={companyId}
           settingsKey={tableSettingsKey}
         />

@@ -5,6 +5,7 @@ import { getAdminSession, getCustomerSession, customerHasCapability, resolvePage
 import { customerItemsFileImportEnabled } from "../../../lib/customer-items-import";
 import { areHoldModulesEnabled } from "../../../lib/feature-modules";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
+import { canManagePriceSheets } from "@/domains/pricing/access";
 
 export default async function ProductCatalogPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; tab?: string }> }) {
   const params = await searchParams;
@@ -15,6 +16,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
   if (customerSession && !customerHasCapability(customerSession, "manage_sales")) notFound();
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const canManageCategories = isAdminPreview || canManagePriceSheets(customerSession);
   // 매입처 상품 · 표준 품목 연결 탭은 없앴다(2149). 예전 주소(?tab=supplier|mapping)는 전체 상품으로 연다.
   const initialTab = params?.tab === "imports" ? "imports" : "catalog";
 
@@ -33,6 +35,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
         <ProductCatalogWorkspace
           key={companyId}
           categoriesEnabled={isFeatureEnabled("PRODUCT_CATEGORIES", companyId)}
+          canManageCategories={canManageCategories}
           companyId={isAdminPreview ? companyId : ""}
           importAuditV2Enabled={isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", companyId)}
           importTargetsEnabled={isFeatureEnabled("PRODUCT_IMPORT_TARGETS", companyId)}
