@@ -88,7 +88,7 @@ export function PricingStartGallery({ kind, loadDocuments, manager, onBlank, onC
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-black text-slate-700">내 템플릿·묶음 <span className="font-semibold text-slate-500">· 저장해 둔 품목 묶음을 담아 시작</span></h3>
+          <h3 className="text-sm font-black text-slate-700">품목 템플릿·묶음 <span className="font-semibold text-slate-500">· 품목·순서만 불러오며 단가는 현재 마진 규칙으로 계산</span></h3>
           {sets.length ? (
             <div className="grid gap-2 sm:grid-cols-3">
               {sets.map((set) => (

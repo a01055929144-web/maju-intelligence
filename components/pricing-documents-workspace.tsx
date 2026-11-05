@@ -37,9 +37,11 @@ type Profile = {
 export function PricingDocumentsWorkspace({
   companyId,
   manager,
+  storeLinksEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
+  storeLinksEnabled?: boolean;
 }) {
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
@@ -149,7 +151,7 @@ export function PricingDocumentsWorkspace({
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
   function change(content: DocumentContent) {
-    if (draft) {
+    if (draft && !draft.archivedAt) {
       setDraft({ ...draft, content });
       setDirty(true);
       setPreview(null);
@@ -246,7 +248,7 @@ export function PricingDocumentsWorkspace({
     setTab("documents");
   }
   async function save() {
-    if (!draft) return;
+    if (!draft || draft.archivedAt) return;
     const content = parseDocument(draft.content);
     const r = await documentRequest<DocumentDraft>(
       companyId,
@@ -260,7 +262,7 @@ export function PricingDocumentsWorkspace({
     await loadList();
   }
   async function publish() {
-    if (!draft || dirty) return;
+    if (!draft || draft.archivedAt || dirty) return;
     const r = await documentRequest<DocumentVersion>(
       companyId,
       "publish",
@@ -461,7 +463,7 @@ export function PricingDocumentsWorkspace({
                       });
   };
   const editable = Boolean(
-    draft && (draft.content.kind === "quote" || manager),
+    draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
   );
   if (view === "list" && tab === "documents") return <div className="space-y-3">
     {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
@@ -531,6 +533,7 @@ export function PricingDocumentsWorkspace({
           </>
         ) : <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>}
       </header>
+      {draft?.archivedAt ? <p role="status" className="rounded border p-3 text-sm">보관된 문서입니다. 내용을 바꾸거나 새 버전을 발행하려면 문서 보관함에서 먼저 복원해 주세요. 기존 발행본과 주문 링크는 유지됩니다.</p> : null}
       {error && (
         <p
           role="alert"
@@ -1178,6 +1181,8 @@ export function PricingDocumentsWorkspace({
           autoPrint={autoPrint}
           fontScale={fontScale}
           version={preview}
+          companyId={companyId}
+          canManageLinks={manager && storeLinksEnabled}
           refresh={async () => {
             if (preview.id.startsWith("preview-")) {
               const promos = await read<Promotion[]>("promotions");

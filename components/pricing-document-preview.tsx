@@ -8,6 +8,7 @@ import {
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
+import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
 type OutputLine = DocumentOutput["lines"][number];
 
 /** 11/4: A4·휴대폰·편집 미리보기가 모두 쓰는 한 장. 회사 정보 줄, 행사 블록(카드/표), 품목 격자(1~3열). */
@@ -16,11 +17,13 @@ export function PageContent({
   page,
   pages,
   start = 0,
+  qr,
 }: {
   data: DocumentOutput;
   page: number;
   pages: number;
   start?: number;
+  qr?: DocumentOrderQr | null;
 }) {
   const accent =
     data.theme === "blue"
@@ -74,7 +77,7 @@ export function PageContent({
         <section className="my-3 rounded border border-amber-300 bg-amber-50 p-2">
           <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품</p>
           {display.promoLayout === "table" ? (
-            <table className="w-full border-collapse text-left">
+            <table className="pricing-output-table w-full table-fixed border-collapse text-left">
               <tbody>
                 {promos.map((l, i) => (
                   <tr key={i}>
@@ -115,9 +118,10 @@ export function PageContent({
           ))}
         </div>
       ) : (
-        <div className="my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
+        <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
-            <table className="w-full border-collapse text-left" key={c}>
+            <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
+              <colgroup>{(columns === 1 ? [5, 35, 25, 25, 10] : [25, 35, 40]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
               <thead>
                 <tr>
                   {(columns === 1 ? ["No", "품목·브랜드", "규격·단위", "단가", "비고"] : ["품목", "규격", "단가"]).map((t) => (
@@ -135,10 +139,10 @@ export function PageContent({
                       {l.displayName}
                       {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
                     </td>
-                    <td className="border-b p-1.5">
+                    <td data-document-spec className="border-b px-2 py-1.5 whitespace-normal [overflow-wrap:anywhere]">
                       {l.spec} {l.unit}
                     </td>
-                    <td className="border-b p-1.5 text-right">{price(l)}</td>
+                    <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
                     {columns === 1 ? <td className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
                   </tr>
                 ))}
@@ -151,6 +155,7 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
+        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요.<br />이 거래처에만 전달해 주세요.</p></div> : null}
         {footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
@@ -170,6 +175,8 @@ export function PricingDocumentPreview({
   refresh,
   fontScale = 1,
   autoPrint = false,
+  companyId,
+  canManageLinks = false,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
@@ -177,14 +184,17 @@ export function PricingDocumentPreview({
   fontScale?: number;
   /** 11/4: 상단 'A4 인쇄'로 열었을 때 바로 인쇄 창 */
   autoPrint?: boolean;
+  companyId?: string;
+  canManageLinks?: boolean;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [day, setDay] = useState(koreaDay());
+  const [qr, setQr] = useState<DocumentOrderQr | null>(null);
   const papers = useRef<Array<HTMLDivElement | null>>([]);
   const output = documentOutput(current, day),
-    pages = printPages(output);
+    pages = printPages(output, fontScale, Boolean(qr));
   async function prepare() {
     const latest = refresh ? await refresh() : version;
     flushSync(() => {
@@ -250,6 +260,7 @@ export function PricingDocumentPreview({
           PNG는 A4 페이지별로 저장합니다.
         </span>
       </div>
+      {companyId && canManageLinks && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} onInsert={setQr} /> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
           {error}
@@ -258,8 +269,8 @@ export function PricingDocumentPreview({
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
-          <div className="max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} />
+          <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
+            <PageContent data={output} page={1} pages={1} qr={qr} />
           </div>
         </div>
         <div className="min-w-0">
@@ -276,6 +287,7 @@ export function PricingDocumentPreview({
                   >
                     <PageContent
                       data={data}
+                      qr={qr}
                       page={i + 1}
                       pages={pages.length}
                       start={pages
@@ -296,7 +308,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper td{max-width:65mm}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
+      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:14mm;box-sizing:border-box;color:#111827}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid{grid-template-columns:minmax(0,1fr)!important}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

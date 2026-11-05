@@ -520,10 +520,9 @@ export function PricingDocumentLibrary(p: Props) {
         )}
       </section>
       <section className="maju-section-card space-y-3 p-4">
-        <h2 className="text-lg font-bold">묶음·템플릿</h2>
+        <h2 className="text-lg font-bold">품목 묶음·템플릿</h2>
         <p className="text-sm text-slate-600">
-          품목과 순서만 저장합니다. 불러올 때 현재 회사 가격 규칙으로 다시
-          계산합니다.
+          품목과 순서만 저장합니다. 저장한 단가·마진율·문서 모양은 포함하지 않습니다. 불러올 때 현재 회사 가격 규칙으로 다시 계산합니다. 마진 그룹은 판매가 계산 규칙이며 이 품목 목록과 별개입니다.
         </p>
         <div className="grid gap-3 md:grid-cols-3">
           {p.sets.map((s) => (
@@ -694,7 +693,7 @@ export function PricingDocumentLibrary(p: Props) {
               className={`${box} block`}
             >
               <option value="bundle">묶음</option>
-              <option value="template">템플릿</option>
+              <option value="template">품목 템플릿</option>
             </select>
           </label>
           <label>

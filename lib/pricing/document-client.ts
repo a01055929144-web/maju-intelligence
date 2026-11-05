@@ -3,7 +3,7 @@ export async function documentRequest<T>(
   action: string,
   payload: Record<string, unknown> = {},
   write = false,
-): Promise<{ result: T; manager: boolean }> {
+): Promise<{ result: T; manager: boolean; archiveAvailable?: boolean }> {
   const params = new URLSearchParams({ companyId, action });
   if (!write)
     for (const [key, value] of Object.entries(payload))
