@@ -98,7 +98,7 @@ export function catalogDisplaySpec(row: {
 /** 기존 문서의 스냅샷은 보존하고 비어 있는 초안 규격만 명시적으로 채웁니다. */
 export function fillBlankDocumentSpecs(lines: readonly PrintLine[], catalog: readonly CatalogChoice[]): PrintLine[] {
   const specs = new Map(catalog.map((item) => [item.id, item.spec]));
-  return lines.map((line) => line.spec.trim() ? line : { ...line, spec: specs.get(line.productId) || "" });
+  return lines.map((line) => (line.spec || "").trim() ? line : { ...line, spec: specs.get(line.productId) || "" });
 }
 export type Promotion = {
   id: string;
@@ -221,7 +221,7 @@ export function parseDocument(value: unknown): DocumentContent {
       productId: l.productId,
       displayName: field(l.displayName, 120, true, `${index + 1}번째 품목 이름`),
       brand: field(l.brand, 80, false, `${index + 1}번째 품목 브랜드`),
-      spec: field(l.spec, 80, false, `${index + 1}번째 품목 규격`),
+      spec: field(l.spec ?? "", 80, false, `${index + 1}번째 품목 규격`),
       unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
       taxType: l.taxType as "taxable" | "exempt",

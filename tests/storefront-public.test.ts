@@ -61,6 +61,11 @@ describe("store link public response", () => {
           purchaseCost: 1200,
           marginPercent: 25,
           supplierName: "private supplier",
+          purchaseCostChange: 125,
+          purchaseCostChangePercent: 12.5,
+          purchaseDate: "private purchase date",
+          supplierCostTrend: { current: 1200, previous: 1075 },
+          storeCostTrend: [{ cost: 900 }],
           loadingPhoto: "private loading photo",
           internalMemo: "private staff memo",
         },
@@ -82,6 +87,10 @@ describe("store link public response", () => {
       "private document URL",
       "private loading photo",
       "private staff memo",
+      "purchaseCostChange",
+      "purchaseDate",
+      "supplierCostTrend",
+      "storeCostTrend",
     ])
       expect(result).not.toContain(privateValue);
   });
