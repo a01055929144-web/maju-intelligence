@@ -5,6 +5,19 @@ const prior = { ...process.env };
 afterEach(() => { process.env = { ...prior }; });
 
 describe("company pricing gates", () => {
+  it("requires the acceptance master switch AND an exact company allowlist", () => {
+    delete process.env.QUOTE_ACCEPTANCE;
+    process.env.FEATURE_QUOTE_ACCEPTANCE_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE", "company-a")).toBe(false);
+    process.env.QUOTE_ACCEPTANCE = "true";
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE", "company-a")).toBe(true);
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE", "company-ab")).toBe(false);
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE")).toBe(false);
+    process.env.FEATURE_QUOTE_ACCEPTANCE = "true";
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE", "company-b")).toBe(false);
+    delete process.env.FEATURE_QUOTE_ACCEPTANCE_COMPANY_IDS;
+    expect(isFeatureEnabled("QUOTE_ACCEPTANCE", "company-a")).toBe(false);
+  });
   it("requires both the deployment switch and an exact company ID", () => {
     process.env.FEATURE_PRICING_COMPANY_IDS = "company-a,company-b";
     expect(isFeatureEnabled("PRICING", "company-a")).toBe(false);
