@@ -49,14 +49,14 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
     ]
   },
   {
-    label: "영업 관리",
+    label: "영업",
     items: [
       { active: "dashboard", description: "신규 개업·영업 후보 (화면 위에서 전환)", href: "/leads", icon: Building2, label: "리드" },
       { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 기록" }
     ]
   },
   {
-    label: "물류 관리",
+    label: "물류",
     items: [
       { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/map", icon: MapPinned, label: "지도" },
       { active: "routes-today", description: "오늘 배송 순서와 완료 상태", href: "/routes/today", icon: Route, label: "오늘 코스" },
@@ -87,7 +87,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
 
 export const holdNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "ERP 관리",
+    label: "ERP",
     items: [
       { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고", workspaceRoles: ["owner", "manager"] },
       { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "매입·매출관리", workspaceRoles: ["owner", "manager"] },
@@ -103,9 +103,9 @@ const coreErpItems: CustomerNavigationItem[] = [
 ];
 
 const pricingNavigationGroup: CustomerNavigationGroup = {
-  label: "판매 관리",
+  label: "판매",
   items: [
-    { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 업로드", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 설정", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표", workspaceRoles: ["owner", "manager", "sales"] },
     { active: "revenue", description: "행사·임박 상품, 묶음, 템플릿", href: "/revenue/pricing/documents?tab=library", icon: FileSpreadsheet, label: "행사·템플릿", workspaceRoles: ["owner", "manager"] },
@@ -114,7 +114,7 @@ const pricingNavigationGroup: CustomerNavigationGroup = {
 };
 
 const orderNavigationGroup: CustomerNavigationGroup = {
-  label: "주문 관리",
+  label: "주문",
   items: [
     // 11/3: 주문 설정은 설정 > 회사 정보 '주문' 탭으로 옮겼습니다(정보를 한 곳에서 입력).
     { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] }
@@ -122,7 +122,7 @@ const orderNavigationGroup: CustomerNavigationGroup = {
 };
 
 export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string, pricingEnabled = false, storeOrderingEnabled = false) {
-  const [today, sales, routes, settings] = customerNavigationGroups;
+  const [today, sales, routes] = customerNavigationGroups;
   const groups = [today, sales];
   if (pricingEnabled) groups.push(pricingNavigationGroup);
   if (pricingEnabled && storeOrderingEnabled) groups.push(orderNavigationGroup);
@@ -131,8 +131,7 @@ export function getCustomerNavigationGroups(includeHoldModules = false, workspac
     ...coreErpItems,
     ...(includeHoldModules ? holdNavigationGroups[0].items : [])
   ];
-  if (erpItems.length) groups.push({ label: "ERP 관리", items: erpItems });
-  groups.push(settings);
+  if (erpItems.length) groups.push({ label: "ERP", items: erpItems });
   if (!workspaceRole) return groups;
   return groups.map((group) => ({
     ...group,
@@ -146,7 +145,7 @@ export function flattenCustomerNavigationItems(groups: CustomerNavigationGroup[]
 }
 
 export function getCustomerWorkspaceLabel(active: CustomerWorkspaceKey) {
-  return flattenCustomerNavigationItems(getCustomerNavigationGroups(true)).find((item) => item.active === active)?.label || "지도";
+  return flattenCustomerNavigationItems([...getCustomerNavigationGroups(true), customerNavigationGroups[3]]).find((item) => item.active === active)?.label || "지도";
 }
 
 export function getCustomerQuickActions() {

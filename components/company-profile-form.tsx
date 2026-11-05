@@ -237,6 +237,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       {current ? (
         <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2 [&>*]:min-w-0">
           {current.description ? <p className="text-xs font-semibold text-slate-500 md:col-span-2">{current.description}</p> : null}
+          {current.id === "basic" ? <div><p className="text-[11px] font-black text-slate-600">사업자등록번호</p><p className="maju-input mt-1 flex items-center" aria-label="사업자등록번호">{data.company.businessRegistrationNumber || "미등록"}</p></div> : null}
           {current.id === "basic" && basics ? (
             <CompanyBasicsFields basics={basics} onChange={setBasics} readOnly={!editable} />
           ) : null}

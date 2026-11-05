@@ -441,7 +441,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
     <header className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-lg font-bold">매입가 반영</h2>
+        <h2 className="mr-auto text-lg font-bold">매입가 업로드</h2>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">매입일<input aria-label="매입일" className="maju-input h-9" onChange={(event) => setReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
         <button className={`${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">② 열 정렬</button>
