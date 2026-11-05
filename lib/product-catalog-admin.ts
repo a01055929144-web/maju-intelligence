@@ -1,4 +1,5 @@
 import { convertedUnitCost } from "../domains/product/catalog-import";
+import { customerErpCode } from "../domains/product/customer-erp-code";
 import { cleanCategory, suggestCategory } from "../domains/pricing/product-category";
 import { supabaseRequest as request } from "./store";
 import { ciLayoutProducts, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
@@ -67,7 +68,7 @@ function toItem(r: Row): ProductCatalogAdminItem {
   const isActive = Boolean(r.is_active);
   return {
     id: String(r.id),
-    productCode: r.product_code ? String(r.product_code) : undefined,
+    productCode: customerErpCode(r.product_code ? String(r.product_code) : null) || undefined,
     name,
     managementName:
       r.purchase_product_name && r.purchase_product_name !== name

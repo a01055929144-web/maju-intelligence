@@ -4,7 +4,7 @@ import { customerNavigationGroups, flattenCustomerNavigationItems, getCustomerNa
 
 describe("customer navigation", () => {
   it("keeps today separate above the core groups", () => {
-    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["오늘", "영업", "동선", "설정"]);
+    expect(customerNavigationGroups.map((group) => group.label)).toEqual(["홈", "영업 관리", "물류 관리", "설정"]);
     expect(customerNavigationGroups[0].items.map((item) => item.label)).toEqual(["홈"]);
   });
 
@@ -17,7 +17,7 @@ describe("customer navigation", () => {
       "/map", "/routes/today", "/map?view=history",
       "/dashboard/settings/company", "/dashboard/settings/staff", "/settings/billing"
     ]));
-    expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 관리", "배송 이력"]));
+    expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["영업 기록", "배송 이력"]));
     expect(customerNavigationGroups.find((group) => group.label === "설정")?.items.map((item) => item.label)).toContain("데이터 가져오기");
     expect(flattened.map((item) => item.label)).toEqual(expect.arrayContaining(["새로 가져오기", "업로드 이력"]));
     expect(flattened.map((item) => item.label)).not.toContain("연락 기록");
@@ -25,12 +25,12 @@ describe("customer navigation", () => {
 
   it("exposes held destinations only through the explicit module switch", () => {
     const focused = getCustomerNavigationGroups(false);
-    expect(focused.map((group) => group.label)).toEqual(["오늘", "영업", "동선", "ERP", "설정"]);
-    expect(focused.find((group) => group.label === "ERP")?.items).toHaveLength(3);
+    expect(focused.map((group) => group.label)).toEqual(["홈", "영업 관리", "물류 관리", "ERP 관리", "설정"]);
+    expect(focused.find((group) => group.label === "ERP 관리")?.items).toHaveLength(3);
     const expanded = getCustomerNavigationGroups(true);
-    expect(expanded.map((group) => group.label)).toEqual(["오늘", "영업", "동선", "ERP", "설정"]);
+    expect(expanded.map((group) => group.label)).toEqual(["홈", "영업 관리", "물류 관리", "ERP 관리", "설정"]);
     expect(flattenCustomerNavigationItems(expanded)).toEqual(expect.arrayContaining(flattenCustomerNavigationItems(holdNavigationGroups)));
-    expect(expanded.find((group) => group.label === "ERP")?.items.slice(0, 3).map((item) => item.label)).toEqual(["상품관리", "매출처", "매입처"]);
+    expect(expanded.find((group) => group.label === "ERP 관리")?.items.slice(0, 3).map((item) => item.label)).toEqual(["상품관리", "매출처", "매입처"]);
   });
 
   it("shows only approved pricing links without opening other held modules", () => {
@@ -42,16 +42,16 @@ describe("customer navigation", () => {
     expect(hrefs).not.toContain("/revenue/pricing/links");
     expect(hrefs).not.toContain("/crm/summary");
     const enabled = getCustomerNavigationGroups(false, "owner", true, true);
-    expect(enabled.map((group) => group.label)).toEqual(["오늘", "영업", "주문", "단가", "동선", "ERP", "설정"]);
+    expect(enabled.map((group) => group.label)).toEqual(["홈", "영업 관리", "판매 관리", "주문 관리", "물류 관리", "ERP 관리", "설정"]);
     expect(flattenCustomerNavigationItems(enabled).map((item) => item.href)).toEqual(expect.arrayContaining(["/revenue/pricing/links"]));
     expect(flattenCustomerNavigationItems(enabled).map((item) => item.href)).not.toContain("/revenue/pricing/order-settings");
-    expect(enabled.find((group) => group.label === "ERP")?.items[0].label).toBe("상품관리");
-    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("주문");
-    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("단가");
+    expect(enabled.find((group) => group.label === "ERP 관리")?.items[0].label).toBe("상품관리");
+    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("주문 관리");
+    expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("판매 관리");
   });
 
   it("keeps the three core ERP directories visible without the hold switch", () => {
-    const erp = getCustomerNavigationGroups(false, "owner", false, false).find((group) => group.label === "ERP");
+    const erp = getCustomerNavigationGroups(false, "owner", false, false).find((group) => group.label === "ERP 관리");
     expect(erp?.items.map((item) => item.href)).toEqual(["/revenue/products", "/crm/timeline", "/purchasing/suppliers"]);
   });
 
