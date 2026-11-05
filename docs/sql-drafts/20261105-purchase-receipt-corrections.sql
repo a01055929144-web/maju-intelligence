@@ -3,6 +3,8 @@ begin;
 
 create unique index if not exists purchase_receipt_lines_company_id_id_uq
   on public.purchase_receipt_lines(company_id, id);
+-- FOR UPDATE in the correction RPC requires UPDATE on the original row.
+grant select, update on public.purchase_receipt_lines to service_role;
 
 create table if not exists public.purchase_receipt_line_overrides (
   company_id uuid not null references public.companies(id) on delete cascade,
