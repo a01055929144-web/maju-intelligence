@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryAncestors, categoryOptions, cleanCategory, isUnder, suggestCategory } from "../domains/pricing/product-category";
+import { categoryAncestors, categoryLevelOptions, categoryOptions, cleanCategory, isUnder, suggestCategory } from "../domains/pricing/product-category";
 
 describe("product category suggestion (대 > 중 > 소)", () => {
   it.each([
@@ -44,5 +44,10 @@ describe("product category suggestion (대 > 중 > 소)", () => {
     expect(cleanCategory("a>b>c>d")).toEqual({ error: "카테고리는 대·중·소 3단계까지입니다." });
     expect(categoryOptions(["베이커리 > 빵"])).toContain("베이커리 > 빵");
     expect(categoryOptions([])).toContain("축산 > 돈육 > 목살");
+    expect(categoryLevelOptions("회사분류 > 냉장 > 특선")).toMatchObject({
+      large: expect.arrayContaining(["회사분류"]),
+      medium: ["냉장"],
+      small: ["특선"],
+    });
   });
 });

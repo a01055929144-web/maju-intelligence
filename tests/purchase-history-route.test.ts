@@ -35,6 +35,15 @@ it("filters by company, date, item and search before paging", async () => {
   expect(query).not.toContain("forged");
 });
 
+it("loads one unmatched item and supplier without broad text search", async () => {
+  const response = await GET(new NextRequest("https://example.test/api/price-sheets/receipts?lineKey=name%7Cspec&supplier=%ED%95%9C%EB%B9%9B"));
+  expect(response.status).toBe(200);
+  const query = String(mocks.db.mock.calls[0][0]);
+  expect(query).toContain("line_key=eq.name%7Cspec");
+  expect(query).toContain("supplier_name=eq.%ED%95%9C%EB%B9%9B");
+  expect(query).not.toContain("or=(product_name.ilike");
+});
+
 it("returns a next page only when more than 100 records exist", async () => {
   mocks.db.mockResolvedValue(Array.from({ length: 101 }, (_, id) => ({ id })));
   const response = await GET(new NextRequest("https://example.test/api/price-sheets/receipts"));

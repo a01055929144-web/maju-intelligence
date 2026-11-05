@@ -208,7 +208,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
 
   /** 새 상품을 상품관리(전체 상품)에 등록합니다. 매입처가 없으면 입력값 → 없으면 '기본 매입처'. */
   async function createNewProducts(rows: NewRow[]) {
-    let createdCount = 0;
+    let createdCount = 0, categorySuggestedCount = 0;
     const groups = new Map<string, NewRow[]>();
     for (const row of rows) {
       const name = row.supplier || newSupplier.trim() || "기본 매입처";
@@ -229,11 +229,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create-standards", companyId, supplierProductIds: chunk }) });
         const created = await createdResponse.json().catch(() => ({}));
         if (!createdResponse.ok) throw new Error(created.message || "상품관리 등록에 실패했습니다.");
-        return Number(created.createdCount || 0);
+        return { created: Number(created.createdCount || 0), suggested: Number(created.categorySuggestedCount || 0) };
       }));
-      createdCount += counts.reduce((sum, value) => sum + value, 0);
+      createdCount += counts.reduce((sum, value) => sum + value.created, 0);
+      categorySuggestedCount += counts.reduce((sum, value) => sum + value.suggested, 0);
     }
-    return createdCount;
+    return { categorySuggestedCount, createdCount };
   }
 
   /** 중복 의심 → 기존 상품에 연결. 원문을 기억해 두어 다음 업로드부터 자동으로 붙습니다. */
@@ -327,7 +328,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (unmatched.length) {
         setMessage(`저장 중… 새 상품 ${unmatched.length}개 상품관리 등록`);
         const created = await createNewProducts(unmatched);
-        notes.push(`새 상품 ${created}개 상품관리에 등록`);
+        notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개 적용` : ""}`);
         setUnmatched([]);
       }
       let batchId: string | undefined;
