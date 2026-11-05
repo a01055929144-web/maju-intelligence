@@ -36,7 +36,7 @@ function buildTree(paths: readonly string[]) {
 export function ProductCategoryManager({ busy, companyId, send, state, task }: {
   readonly busy: boolean;
   readonly companyId: string;
-  readonly send: (command: PricingCommand) => Promise<PriceState>;
+  readonly send: (command?: PricingCommand) => Promise<PriceState>;
   readonly state: PriceState;
   readonly task: (work: () => Promise<void>, done: string) => Promise<void>;
 }) {
@@ -93,7 +93,6 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
 
   /** 각 분류 값이 가장 가까운(가장 깊은) 분류 마진 그룹에 연결되도록 맞춥니다. */
   async function syncLinks(s: PriceState, values: readonly string[]) {
-    let latest = s;
     const work: Array<{ category: string; groupId: string }> = [];
     for (const value of Array.from(new Set(values.filter(Boolean)))) {
       const ancestor = categoryAncestors(value).reverse().find((path) => groupFor(path, s));
@@ -108,9 +107,10 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
     }
     let cursor = 0;
     await Promise.all(Array.from({ length: Math.min(4, work.length) }, async () => {
-      while (cursor < work.length) { const next = work[cursor++]; latest = await send({ action: "category", ...next }); }
+      while (cursor < work.length) { const next = work[cursor++]; await send({ action: "category", ...next }); }
     }));
-    return latest;
+    // The last completed POST can contain a stale count when other links commit concurrently.
+    return work.length ? send() : s;
   }
   const allValues = (list: readonly Item[] = items || []) => list.map((item) => current(item)).filter(Boolean);
 
