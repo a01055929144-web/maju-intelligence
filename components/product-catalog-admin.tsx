@@ -131,6 +131,7 @@ export function ProductCatalogAdmin({
     { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
     { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span></button> },
     { key: "spec", label: "규격", width: 75, value: (i) => i.spec || "-" },
+    { key: "category", label: "분류", width: 140, value: (i) => i.category?.replaceAll(" > ", " › ") || "미분류" },
     { key: "unit", label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
     { key: "supplier", label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
     { key: "stockMode", label: "재고 방식", width: 75, value: (i) => i.trackingEnabled == null ? "미설정" : i.trackingEnabled ? "재고" : "사입" },
@@ -183,6 +184,7 @@ export function ProductCatalogAdmin({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <a className="maju-button-secondary" href="/revenue/pricing/documents?tab=library">행사·임박 관리</a>
             <button className="maju-button-secondary" onClick={() => setReviewingCategories(true)} type="button">분류 추천 검토</button>
             <button className="maju-button-primary inline-flex items-center gap-2" onClick={() => setEditing({ ...blank })}>
               <PackagePlus className="h-4 w-4" />상품 등록
