@@ -51,6 +51,24 @@ const member = await getStoreCostMemberAccess({
 
 `authUserId`는 URL, JSON body, header, 고객사 `getCustomerSession()`, 공개 링크 토큰에서 가져오지 않는다. `getStoreCostMemberAccess()`는 구성원 `id`, 현재 `role`, `active` 상태만 반환한다.
 
+## 구현 판단과 차단 지점
+
+카카오 provider ID에서 기존 `app_users.id`를 찾는 코드는 있지만, 이를 `store_account_members.auth_user_id`의 공식 대상이라고 보장하는 FK나 애플리케이션 계약이 없다. 더 중요한 차단점은 첫 owner 또는 초대 구성원을 원자적으로 만드는 승인된 RPC가 없다는 것이다. 콜백에서 service role REST 호출 여러 번으로 계정·구성원·이벤트를 만들면 중간 실패, owner 중복, 초대 재사용 경쟁을 막을 수 없다. 따라서 추가 승인 없이 OAuth callback과 쿠키만 구현하는 것은 사용 가능한 로그인 흐름이 아니며 진행하지 않는다.
+
+### DB 승인표 초안
+
+| 승인 항목 | 최소 계약 | 실패 시 위험 |
+| --- | --- | --- |
+| 사용자 기준 | `auth_user_id`가 `app_users.id`임을 명시하고 FK 또는 동일 수준의 검증을 둔다. 기존 null·고아 값을 먼저 진단한다. | 카카오 계정과 다른 내부 사용자가 연결됨 |
+| 구성원 유일성 | 같은 `(company_id, store_account_id, auth_user_id)`의 활성 구성원을 하나로 제한한다. 여러 유통사·매장 소속 자체는 허용한다. | 한 매장에서 역할이 중복·충돌함 |
+| 첫 owner | 승인된 store account에 한해 owner 한 명을 만드는 별도 관리자 절차/RPC를 둔다. 공개 callback은 매장이나 owner를 임의 생성하지 않는다. | 임의 매장 탈취·owner 중복 |
+| 직원 초대 | 초대 hash, 만료, 대상 회사·매장·역할, 미사용 상태를 잠그고 검증한 뒤 구성원과 이벤트를 한 트랜잭션에서 만든다. | 초대 재사용·교차 매장 가입·부분 저장 |
+| owner/manager 변경 | owner 이전과 manager 지정은 일반 직원 초대와 분리하고 기존 active owner를 잠근다. | owner 부재 또는 복수 owner |
+| 권한 | RPC와 테이블은 public/anon/authenticated 접근을 막고 service role만 호출한다. 원문 토큰을 저장·로그하지 않는다. | 공개 클라이언트에서 구성원 생성 |
+| PG17 | 동시 초대 수락, 만료·재사용, 교차 회사/매장, owner 경쟁, 제거 후 재로그인, down 안전성을 폐기 가능한 PG17에서 검증한다. | 운영에서만 격리·경쟁 오류 발견 |
+
+승인 전 상태는 기능 플래그 OFF, 매장 OAuth 목적 미노출, 03 원가 API 미연결이다. 승인 SQL은 별도 PR과 운영 적용 승인을 거쳐야 하며 이 문서 PR에서는 만들거나 실행하지 않는다.
+
 ## 범위 밖
 
 - 새 로그인 화면이나 아이디·비밀번호 인증
