@@ -36,7 +36,7 @@ async function listSupplierCostHistory(companyId: string, input: { from: string;
   const catalogById = new Map(catalog.map((row) => [String(row.id), row]));
   const supplierNames = new Map(suppliers.map((row) => [String(row.id), String(row.name || "")]));
   const normalizedSearch = input.search.toLocaleLowerCase("ko");
-  const rows = history.map((row) => {
+  const rows = history.filter((row) => row.supplier_product_id && row.price_date && row.purchase_price != null).map((row) => {
     const supplierProduct = supplierProductById.get(String(row.supplier_product_id));
     const catalogId = matchBySupplier.get(String(row.supplier_product_id)) || "";
     const product = catalogById.get(catalogId);
@@ -77,18 +77,22 @@ export async function GET(request: NextRequest) {
   if (productId && !/^[0-9a-f-]{36}$/i.test(productId)) return NextResponse.json({ message: "품목 번호를 확인해 주세요." }, { status: 400 });
   const lineKey = (params.get("lineKey") || "").trim().slice(0, 240);
   const supplier = (params.get("supplier") || "").trim().slice(0, 120);
-  const filters = [productId && `product_catalog_id=eq.${productId}`,
+  const filters = [from && `receipt_date=gte.${from}`, to && `receipt_date=lte.${to}`, productId && `product_catalog_id=eq.${productId}`,
     lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`, supplier && `supplier_name=eq.${encodeURIComponent(supplier)}`].filter(Boolean);
   if (search) {
     const term = encodeURIComponent(search);
     filters.push(`or=(product_name.ilike.*${term}*,supplier_name.ilike.*${term}*,erp_code.ilike.*${term}*)`);
   }
   const correctionEnabled = canCorrect(auth.companyId);
-  const rows = await historyPages(`${correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines"}?select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc`).catch(() => null);
+  const receiptTable = correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines";
+  const select = `select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}`;
+  const rows = await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc`).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
-  const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => []);
-  const combined = [...rows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
-  const period = combined.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to));
+  const receiptHistory = from ? await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.filter((filter) => !filter.startsWith("receipt_date=")).join("&")}&order=receipt_date.desc,id.desc`).catch(() => rows) : rows;
+  const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => null);
+  if (!supplierHistory) return NextResponse.json({ message: "매입 이력이 10,000건을 넘거나 원가 이력을 읽지 못했습니다. 기간이나 품목으로 좁혀 다시 조회해 주세요." }, { status: 500 });
+  const combined = [...receiptHistory.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const period = [...rows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to)).map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
   const offset = (page - 1) * 100;
   const visible = attachPurchaseHistoryPreviousCosts(combined as PurchaseHistoryRow[], period.slice(offset, offset + 100) as PurchaseHistoryRow[]);
   const items = visible.map((row) => {

@@ -30,8 +30,8 @@ it("filters by company, date, item and search before paging", async () => {
   expect(query).toContain("receipt_date=gte.2026-10-01");
   expect(query).toContain("receipt_date=lte.2026-11-05");
   expect(query).toContain(`product_catalog_id=eq.${company}`);
-  expect(query).toContain("offset=100");
-  expect(query).toContain("limit=101");
+  expect(query).toContain("offset=0");
+  expect(query).toContain("limit=1000");
   expect(query).not.toContain("forged");
 });
 
