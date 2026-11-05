@@ -2,9 +2,9 @@
 drop schema if exists public cascade;
 create schema public;
 create extension if not exists pgcrypto;
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin bypassrls;
+do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;
+do $$ begin if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;
+do $$ begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if; end $$;
 
 create table public.companies(id uuid primary key);
 create table public.store_accounts(
