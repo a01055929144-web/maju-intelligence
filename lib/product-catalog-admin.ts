@@ -113,7 +113,7 @@ export async function listProductCatalogForAdmin(
   const search = query.trim()
     ? `&or=(canonical_name.ilike.*${enc(query.trim())}*,purchase_product_name.ilike.*${enc(query.trim())}*,product_code.ilike.*${enc(query.trim())}*)`
     : "";
-  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances] = await Promise.all([
+  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances, effective] = await Promise.all([
     request<Row[]>(
       `product_catalog?select=${select}&company_id=eq.${enc(companyId)}${search}&order=updated_at.desc&limit=1000`,
     ),
@@ -132,7 +132,12 @@ export async function listProductCatalogForAdmin(
     request<Row[]>(
       `inventory_balances?select=product_catalog_id,on_hand_quantity&company_id=eq.${enc(companyId)}&limit=5000`,
     ).catch(() => []),
+    // 11/5: 마진 설정으로 계산된 판매가(단가표·주문 링크와 같은 값)
+    request<Row[]>(
+      `pricing_p0_effective?select=product_id,price&company_id=eq.${enc(companyId)}&limit=5000`,
+    ).catch(() => []),
   ]);
+  const effectivePrice = new Map(effective.map((x) => [String(x.product_id), x.price == null ? undefined : Number(x.price)]));
   const sp = new Map(supplierProducts.map((x) => [String(x.id), x])),
     supplierNames = new Map(supplierRows.map((x) => [String(x.id), String(x.name)])),
     settings = new Map(inventorySettings.map((x) => [String(x.product_catalog_id), x])),
@@ -172,10 +177,12 @@ export async function listProductCatalogForAdmin(
     const setting = settings.get(item.id);
     return {
       ...item,
+      // 11/5: 매입가 반영 화면은 상품 원장 매입가(판매 단위)를 바로 고칩니다. 환산 확정된 매입처 원가가 없으면 그 값을 씁니다.
       purchasePrice: minimum ?? item.purchasePrice,
+      salesPrice: item.salesPrice ?? effectivePrice.get(item.id),
       linkedSupplierCount: linked.length,
       minimumUnitCost: minimum,
-      hasUnconfirmedConversion: pending,
+      hasUnconfirmedConversion: pending && minimum === undefined && !item.purchasePrice,
       costOptions: costs.map((x) => ({ ...x, isDefault: x.cost === minimum })),
       supplierNames: names,
       trackingEnabled: setting == null ? undefined : Boolean(setting.tracking_enabled),

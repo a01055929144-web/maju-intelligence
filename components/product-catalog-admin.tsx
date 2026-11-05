@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { categoryAncestors, isUnder, splitCategory } from "@/domains/pricing/product-category";
 import { Edit3, Loader2, PackagePlus, X } from "lucide-react";
 import {
   CommonDataTable,
@@ -46,6 +47,8 @@ export function ProductCatalogAdmin({
     [mapped, setMapped] = useState<"all" | "mapped" | "unmapped">("all"),
     [view, setView] = useState<View>("all"),
     [sideTab, setSideTab] = useState<SideTab>("category"),
+    [sideFilter, setSideFilter] = useState(""),
+    [sideOpen, setSideOpen] = useState<Set<string>>(new Set()),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null);
@@ -89,17 +92,27 @@ export function ProductCatalogAdmin({
           (view === "no-code" && !i.productCode) ||
           (view === "duplicate-code" && Boolean(i.productCode && (codeCounts.get(i.productCode) || 0) > 1)) ||
           (view === "no-photo" && !i.photoUrl);
-        return matchesSearch && matchesView &&
+        // 11/5: 왼쪽 분류·매입처를 누르면 그 상품만
+        const matchesSide = !sideFilter || (sideTab === "category"
+          ? (sideFilter === "미분류" ? !i.category : Boolean(i.category) && isUnder(i.category!, sideFilter))
+          : sideTab === "supplier" ? (sideFilter === "매입처 없음" ? !i.supplierNames?.length : Boolean(i.supplierNames?.includes(sideFilter))) : true);
+        return matchesSearch && matchesView && matchesSide &&
           (tax === "all" || i.taxType === tax) &&
           (active === "all" || (active === "active") === i.isActive) &&
           (mapped === "all" ||
             (mapped === "mapped") === i.linkedSupplierCount > 0);
       });
     },
-    [items, search, tax, active, mapped, view],
+    [items, search, tax, active, mapped, view, sideFilter, sideTab],
   );
   const sideItems = useMemo(() => {
     const counts = new Map<string, number>();
+    if (sideTab === "category") {
+      // 대 › 중 › 소 트리(위 분류에 아래 상품 수를 더함), 순서는 경로 순
+      for (const item of items) for (const path of item.category ? categoryAncestors(item.category) : ["미분류"]) counts.set(path, (counts.get(path) || 0) + 1);
+      return Array.from(counts, ([name, count]) => ({ name, count, depth: name === "미분류" ? 0 : splitCategory(name).length - 1 }))
+        .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : a.name.localeCompare(b.name, "ko")));
+    }
     for (const item of items) {
       const names = sideTab === "category"
         ? [item.category || "미분류"]
@@ -108,8 +121,13 @@ export function ProductCatalogAdmin({
           : ["공통 카테고리 미연결"];
       for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
     }
-    return Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    return Array.from(counts, ([name, count]) => ({ name, count, depth: 0 })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
   }, [items, sideTab]);
+  const sideVisible = sideItems.filter((item) => {
+    if (item.depth === 0) return true;
+    const parent = splitCategory(item.name).slice(0, -1).join(" > ");
+    return sideOpen.has(parent) || (Boolean(sideFilter) && isUnder(sideFilter, parent));
+  });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
     { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
     { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span></button> },
@@ -132,13 +150,28 @@ export function ProductCatalogAdmin({
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
         <div className={`grid border-b p-2 ${categoriesEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
-          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("category")} type="button">구분</button>
-          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("supplier")} type="button">매입처</button>
+          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => { setSideTab("category"); setSideFilter(""); }} type="button">분류</button>
+          <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => { setSideTab("supplier"); setSideFilter(""); }} type="button">매입처</button>
           {categoriesEnabled ? <button className={`rounded-lg px-2 py-2 text-xs font-bold ${sideTab === "maju-category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("maju-category")} type="button">마주 공통 카테고리</button> : null}
         </div>
-        {sideTab === "category" && !categoriesEnabled ? <p className="border-b bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">트리 편집 OFF · SQL 승인 대기</p> : null}
+        {sideTab === "category" ? <a className="block border-b bg-slate-50 px-3 py-2 text-xs font-bold text-teal-700" href="/revenue/pricing/margins">분류 정리·분류별 마진 →</a> : null}
         {sideTab === "maju-category" ? <p className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600">CategoryMatch 연결 전 상품은 미연결로 모아 봅니다. 연결 편집은 SQL 승인 후 제공합니다.</p> : null}
-        <div className="max-h-[70vh] overflow-y-auto p-2">{sideItems.map((item) => <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-50" key={item.name}><span className="truncate font-semibold">{item.name}</span><span className="text-xs text-slate-500">{item.count}</span></div>)}</div>
+        <div className="max-h-[70vh] overflow-y-auto p-2">
+          {sideFilter ? <button className="mb-1 w-full rounded-lg px-3 py-1.5 text-left text-xs font-bold text-teal-700 hover:bg-teal-50" onClick={() => setSideFilter("")} type="button">← 전체 보기</button> : null}
+          {sideVisible.map((item) => {
+            const label = sideTab === "category" && item.name !== "미분류" ? splitCategory(item.name).slice(-1)[0] : item.name;
+            const hasChildren = sideTab === "category" && sideItems.some((x) => x.depth === item.depth + 1 && x.name.startsWith(item.name + " > "));
+            const openNow = sideOpen.has(item.name);
+            return (
+              <div className={`flex items-center gap-1 rounded-lg text-sm ${sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={item.name} style={{ paddingLeft: 4 + item.depth * 14 }}>
+                {hasChildren ? <button aria-label={`${label} ${openNow ? "접기" : "펼치기"}`} className="w-5 shrink-0 text-xs text-slate-500" onClick={() => setSideOpen((prev) => { const next = new Set(prev); if (next.has(item.name)) next.delete(item.name); else next.add(item.name); return next; })} type="button">{openNow ? "▾" : "▸"}</button> : <span className="w-5 shrink-0" />}
+                <button className={`flex min-w-0 flex-1 items-center justify-between py-2 pr-2 text-left ${item.depth === 0 ? "font-bold" : ""}`} onClick={() => setSideFilter(sideFilter === item.name ? "" : item.name)} type="button">
+                  <span className="truncate">{label}</span><span className="text-xs text-slate-500">{item.count}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </aside>
       <div className="min-w-0 space-y-4">
       {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
@@ -203,7 +236,7 @@ export function ProductCatalogAdmin({
           </p>
         ) : null}
         {!loading ? (
-          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" groupBy={(item) => ({ key: item.category || "uncategorized", label: item.category || "미분류" })} rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
+          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" groupBy={(item) => { const top = item.category ? splitCategory(item.category).slice(0, 2).join(" › ") : ""; return { key: top || "uncategorized", label: top || "미분류" }; }} rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
         ) : null}
       </section>
       {editing ? (
