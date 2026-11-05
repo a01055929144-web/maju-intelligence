@@ -9,6 +9,7 @@ import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
 import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
 import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
+import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import type { DocumentDraft } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
@@ -398,14 +399,14 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   function exportTemplate() {
-    const csv = ["ERP 코드,품목,규격,단위,매입처,매입가", ...unique.map((product) => [product.code, product.name, product.spec, product.unit, product.supplierName || "", product.cost].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))].join("\r\n");
+    const csv = ["ERP 코드,품목,규격,단위,매입처,매입가", ...unique.map((product) => [customerErpCode(product.code), product.name, product.spec, product.unit, product.supplierName || "", product.cost].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))].join("\r\n");
     const url = URL.createObjectURL(new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "매입가_엑셀_양식.csv"; link.click(); URL.revokeObjectURL(url);
   }
 
   const columns = useMemo<CommonTableColumn<CostProduct>[]>(() => [
     { key: "select", label: "선택", value: (row) => selected.includes(row.id) ? "선택" : "", render: (row) => <input aria-label={`${row.name} 선택`} checked={selected.includes(row.id)} disabled={!candidates[row.id] || candidates[row.id].reviewOnly || busy} onChange={() => setSelected((current) => current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id])} type="checkbox" /> },
-    { key: "name", label: "품목", value: (row) => row.name, render: (row) => <><input aria-label={`${row.name} 품목명`} className="h-8 w-full min-w-[160px] rounded-md border border-transparent bg-transparent px-1.5 text-sm font-semibold hover:border-slate-200 focus:border-teal-400 focus:bg-white" defaultValue={row.name} disabled={busy} key={`${row.id}-${row.name}`} onBlur={(event) => void saveProductField(row, "name", event.target.value.trim())} /><small className="block px-1.5 text-slate-500">{row.code}</small>{candidates[row.id]?.fileNote ? <small className="block px-1.5 font-semibold text-amber-700">⚠ {candidates[row.id].fileNote}</small> : null}</> },
+    { key: "name", label: "품목", value: (row) => row.name, render: (row) => <><input aria-label={`${row.name} 품목명`} className="h-8 w-full min-w-[160px] rounded-md border border-transparent bg-transparent px-1.5 text-sm font-semibold hover:border-slate-200 focus:border-teal-400 focus:bg-white" defaultValue={row.name} disabled={busy} key={`${row.id}-${row.name}`} onBlur={(event) => void saveProductField(row, "name", event.target.value.trim())} />{customerErpCode(row.code) ? <small className="block px-1.5 text-slate-500">{customerErpCode(row.code)}</small> : null}{candidates[row.id]?.fileNote ? <small className="block px-1.5 font-semibold text-amber-700">⚠ {candidates[row.id].fileNote}</small> : null}</> },
     { key: "spec", label: "규격", value: (row) => row.spec, render: (row) => <input aria-label={`${row.name} 규격`} className="h-8 w-24 rounded-md border border-transparent bg-transparent px-1.5 text-sm hover:border-slate-200 focus:border-teal-400 focus:bg-white" defaultValue={row.spec} disabled={busy} key={`${row.id}-${row.spec}`} onBlur={(event) => void saveProductField(row, "spec", event.target.value.trim())} placeholder="-" /> },
     { key: "unit", label: "단위", value: (row) => row.unit, render: (row) => <input aria-label={`${row.name} 단위 검색·선택`} className="maju-input w-24" defaultValue={row.unit} disabled={busy} key={`${row.id}-${row.unit}`} list="purchase-unit-options" onBlur={(event) => { const value = event.target.value.trim(); if (value) void saveProductField(row, "unit", value); else event.target.value = row.unit; }} placeholder="단위 검색" /> },
     { key: "supplier", label: "매입처", value: (row) => row.supplierName || "-" },

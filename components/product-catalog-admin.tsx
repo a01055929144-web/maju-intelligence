@@ -480,15 +480,6 @@ function Editor({
             <h2 className="text-lg font-black" id="product-editor-title">
               {d.id ? "상품 편집" : "상품 등록"}
             </h2>
-            {d.productCode ? (
-              <p className="font-mono text-xs text-slate-500">
-                {d.productCode} · 변경 불가
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">
-                저장 시 품목코드가 자동 발급됩니다.
-              </p>
-            )}
           </div>
           <button aria-label="상품 편집 닫기" type="button" onClick={onClose}>
             <X />
@@ -507,8 +498,8 @@ function Editor({
           <Field label="관리명">
             <input className="maju-input w-full" value={d.managementName || ""} onChange={(e) => put("managementName", e.target.value)} />
           </Field>
-          <Field label="ERP 코드 (자동)">
-            <input className="maju-input w-full" disabled placeholder="저장 시 자동 발급" value={d.productCode || ""} />
+          <Field label="고객사 ERP 코드">
+            <input className="maju-input w-full" disabled placeholder="미등록" value={d.productCode || ""} />
           </Field>
           <Field label="바코드">
             <input className="maju-input w-full" value={d.barcodes?.[0] || ""} onChange={(e) => put("barcodes", e.target.value ? [e.target.value] : [])} />

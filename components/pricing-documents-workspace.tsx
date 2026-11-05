@@ -28,6 +28,7 @@ import { applyPreset, type DocumentPreset } from "@/domains/pricing/document-pre
 import { PricingDocumentLibrary } from "./pricing-document-library";
 import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
+import { customerErpCode } from "@/domains/product/customer-erp-code";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -398,7 +399,7 @@ export function PricingDocumentsWorkspace({
     if (!draft) return;
     const ids = Array.from(new Set(draft.content.lines.map((line) => line.productId)));
     const current = ids.length ? await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids }) : { items: [] };
-    const codes = new Map(current.items.map((item) => [item.id, item.productCode || ""]));
+    const codes = new Map(current.items.map((item) => [item.id, customerErpCode(item.productCode)]));
     const XLSX = await import("xlsx");
     const sheet = XLSX.utils.json_to_sheet(draft.content.lines.map((line) => ({
       "ERP 코드": codes.get(line.productId) || "", "품목명": line.displayName,

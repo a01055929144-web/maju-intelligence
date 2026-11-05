@@ -5,6 +5,7 @@ import { priceSheetsEnabled } from "../../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../../domains/pricing/access";
 import { supabaseRequest } from "../../../../lib/store";
 import { catalogDisplaySpec } from "../../../../domains/pricing/document";
+import { customerErpCode } from "../../../../domains/product/customer-erp-code";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
       const sales = (row.sales_product_name || "").trim();
       if (!manager && !sales) return [];
       const name = manager ? (row.canonical_name || row.purchase_product_name || sales || "").trim() : sales;
-      return [{ id: row.id, code: row.product_code || "", name, displayName: sales, spec: catalogDisplaySpec(row), unit: row.sales_unit || "" }];
+      return [{ id: row.id, code: customerErpCode(row.product_code), name, displayName: sales, spec: catalogDisplaySpec(row), unit: row.sales_unit || "" }];
     });
     return NextResponse.json({ items }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

@@ -43,20 +43,20 @@ export type CustomerNavigationGroup = {
 
 export const customerNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "오늘",
+    label: "홈",
     items: [
       { active: "dashboard", description: "오늘 확인할 영업·배송 업무", href: "/dashboard", icon: LayoutDashboard, label: "홈" }
     ]
   },
   {
-    label: "영업",
+    label: "영업 관리",
     items: [
       { active: "dashboard", description: "신규 개업·영업 후보 (화면 위에서 전환)", href: "/leads", icon: Building2, label: "리드" },
-      { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 관리" }
+      { active: "sales-contacts", description: "컨택·방문 기록과 후속 연락 일정", href: "/revenue/contacts", icon: MessageSquareText, label: "영업 기록" }
     ]
   },
   {
-    label: "동선",
+    label: "물류 관리",
     items: [
       { active: "dashboard", description: "영업 후보와 배송 현황 통합 지도", href: "/map", icon: MapPinned, label: "지도" },
       { active: "routes-today", description: "오늘 배송 순서와 완료 상태", href: "/routes/today", icon: Route, label: "오늘 코스" },
@@ -87,7 +87,7 @@ export const customerNavigationGroups: CustomerNavigationGroup[] = [
 
 export const holdNavigationGroups: CustomerNavigationGroup[] = [
   {
-    label: "ERP",
+    label: "ERP 관리",
     items: [
       { active: "inventory", description: "현재고와 실사", href: "/operations/inventory", icon: Boxes, label: "재고", workspaceRoles: ["owner", "manager"] },
       { active: "erp-documents", description: "매출·매입·반품 전표", href: "/operations/documents", icon: FileSpreadsheet, label: "매입·매출관리", workspaceRoles: ["owner", "manager"] },
@@ -103,7 +103,7 @@ const coreErpItems: CustomerNavigationItem[] = [
 ];
 
 const pricingNavigationGroup: CustomerNavigationGroup = {
-  label: "단가",
+  label: "판매 관리",
   items: [
     { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 반영", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 설정", workspaceRoles: ["owner", "manager"] },
@@ -114,7 +114,7 @@ const pricingNavigationGroup: CustomerNavigationGroup = {
 };
 
 const orderNavigationGroup: CustomerNavigationGroup = {
-  label: "주문",
+  label: "주문 관리",
   items: [
     // 11/3: 주문 설정은 설정 > 회사 정보 '주문' 탭으로 옮겼습니다(정보를 한 곳에서 입력).
     { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] }
@@ -124,14 +124,14 @@ const orderNavigationGroup: CustomerNavigationGroup = {
 export function getCustomerNavigationGroups(includeHoldModules = false, workspaceRole?: string, pricingEnabled = false, storeOrderingEnabled = false) {
   const [today, sales, routes, settings] = customerNavigationGroups;
   const groups = [today, sales];
-  if (pricingEnabled && storeOrderingEnabled) groups.push(orderNavigationGroup);
   if (pricingEnabled) groups.push(pricingNavigationGroup);
+  if (pricingEnabled && storeOrderingEnabled) groups.push(orderNavigationGroup);
   groups.push(routes);
   const erpItems = [
     ...coreErpItems,
     ...(includeHoldModules ? holdNavigationGroups[0].items : [])
   ];
-  if (erpItems.length) groups.push({ label: "ERP", items: erpItems });
+  if (erpItems.length) groups.push({ label: "ERP 관리", items: erpItems });
   groups.push(settings);
   if (!workspaceRole) return groups;
   return groups.map((group) => ({
