@@ -39,6 +39,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (search) params.set("search", search);
+    if (onlyChanged) params.set("changed", "1");
     void fetch(`/api/price-sheets/receipts?${params}`, { cache: "no-store" }).then(async (response) => {
       const payload = (await response.json().catch(() => null)) as { rows?: PurchaseHistoryRow[]; canCorrect?: boolean; hasMore?: boolean; message?: string } | null;
       if (!active) return;
@@ -49,7 +50,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
       setLoading(false);
     }).catch(() => { if (active) { setError("매입 이력을 불러오지 못했습니다. 다시 시도해 주세요."); if (page === 1) setRows([]); setLoading(false); } });
     return () => { active = false; };
-  }, [companyId, from, to, search, page, refreshKey, reloadKey]);
+  }, [companyId, from, to, search, onlyChanged, page, refreshKey, reloadKey]);
 
   async function findProducts() {
     if (!productQuery.trim()) return;
@@ -108,7 +109,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
     }
   }
 
-  const items = useMemo(() => summarizePurchaseHistory(rows || []).filter((item) => !onlyChanged || Boolean(item.changeAmount)), [onlyChanged, rows]);
+  const items = useMemo(() => summarizePurchaseHistory(rows || []), [rows]);
   const dates = useMemo(() => new Set((rows || []).map((row) => row.receipt_date)).size, [rows]);
   const up = items.filter((item) => item.direction === "up").length;
   const down = items.filter((item) => item.direction === "down").length;
@@ -120,7 +121,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
         <span className="text-xs font-semibold text-slate-500">불러온 기록 기준 {dates}일 · 품목 {items.length}개 · 인상 {up} · 인하 {down}</span>
         <label className="text-xs">시작일 <input aria-label="매입 시작일" className="maju-input min-h-11" onChange={(event) => { setFrom(event.target.value); setPage(1); }} type="date" value={from} /></label>
         <label className="text-xs">종료일 <input aria-label="매입 종료일" className="maju-input min-h-11" onChange={(event) => { setTo(event.target.value); setPage(1); }} type="date" value={to} /></label>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => setOnlyChanged(event.target.checked)} type="checkbox" />단가 바뀐 품목만</label>
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600"><input checked={onlyChanged} onChange={(event) => { setOnlyChanged(event.target.checked); setPage(1); }} type="checkbox" />단가 바뀐 품목만</label>
         <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); setSearch(searchInput); setPage(1); }}>
           <input aria-label="이력 검색" className="maju-input min-h-11" onChange={(event) => setSearchInput(event.target.value)} placeholder="품목·코드·매입처 검색" value={searchInput} />
           <button className="maju-button-secondary min-h-11" type="submit">검색</button>
@@ -132,7 +133,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
         <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr><th className="px-3 py-2">품목</th><th className="px-3 py-2">매입처</th><th className="px-3 py-2">최근 매입일</th><th className="px-3 py-2 text-right">최근 단가</th><th className="px-3 py-2 text-right">직전 단가</th><th className="px-3 py-2 text-right">변동</th><th className="px-3 py-2 text-right">기간 최저~최고</th><th className="px-3 py-2 text-right">기간 수량</th><th className="px-3 py-2 text-right">횟수</th></tr>
+              <tr><th className="px-3 py-2">품목</th><th className="px-3 py-2">규격·단위</th><th className="px-3 py-2">매입처</th><th className="px-3 py-2">최근 매입일</th><th className="px-3 py-2 text-right">최근 단가</th><th className="px-3 py-2 text-right">직전 단가</th><th className="px-3 py-2 text-right">변동</th><th className="px-3 py-2 text-right">기간 최저~최고</th><th className="px-3 py-2 text-right">기간 수량</th><th className="px-3 py-2 text-right">횟수</th></tr>
             </thead>
             <tbody>
               {items.map((item) => (
@@ -141,19 +142,20 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
                     <td className="px-3 py-2 font-semibold"><button className="min-h-11 text-left underline-offset-2 hover:underline" onClick={() => {
                       if (open === item.key) { setOpen(""); return; }
                       void loadProductHistory(item, rows?.find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === item.key)?.product_catalog_id || null);
-                    }} type="button">{item.name}</button><span className="ml-1 text-xs font-normal text-slate-500">{[item.spec, item.unit].filter(Boolean).join(" · ")}</span></td>
-                    <td className="px-3 py-2 text-slate-600">{item.supplier || "-"}</td>
+                    }} type="button">{item.name}</button></td>
+                    <td className="px-3 py-2 text-slate-600">{[item.spec, item.unit || "단위 미지정"].filter(Boolean).join(" · ")}</td>
+                    <td className="px-3 py-2 text-slate-600">{item.supplier || "매입처 미지정"}</td>
                     <td className="px-3 py-2 text-slate-600">{item.latestDate}</td>
                     <td className="px-3 py-2 text-right font-semibold">{money(item.latestCost)}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.previousCost != null ? money(item.previousCost) : "-"}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${item.direction === "up" ? "text-rose-600" : item.direction === "down" ? "text-blue-600" : "text-slate-400"}`}>{item.changeAmount ? <>{item.direction === "up" ? "▲" : "▼"} {item.changeAmount > 0 ? "+" : "-"}{money(Math.abs(item.changeAmount))}{item.changeRate != null ? <small className="ml-1 font-semibold">({Math.abs(item.changeRate)}%)</small> : null}</> : "-"}</td>
+                    <td className={`px-3 py-2 text-right font-semibold ${item.direction === "up" ? "text-rose-600" : item.direction === "down" ? "text-blue-600" : "text-slate-400"}`}>{item.changeAmount ? <>{item.direction === "up" ? "▲" : "▼"} {money(Math.abs(item.changeAmount))}{item.changeRate != null ? <span className="ml-1">({Math.abs(item.changeRate)}%)</span> : null}</> : "-"}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.minCost === item.maxCost ? money(item.minCost) : `${money(item.minCost)} ~ ${money(item.maxCost)}`}</td>
                     <td className="px-3 py-2 text-right">{item.totalQuantity ? `${item.totalQuantity.toLocaleString("ko-KR")}${item.unit ? ` ${item.unit}` : ""}` : "-"}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.count}</td>
                   </tr>
                   {open === item.key ? (
                     <tr className="bg-slate-50/70">
-                      <td className="px-3 py-2" colSpan={9}>
+                      <td className="px-3 py-2" colSpan={10}>
                         <div className="flex flex-wrap gap-1.5">
                           {(detail?.key === item.key ? summarizePurchaseHistory(detail.rows).find((group) => group.key === item.key)?.entries || [] : []).map((entry, index, entries) => {
                             const prev = entries[index + 1];

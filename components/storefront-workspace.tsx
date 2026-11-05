@@ -148,16 +148,20 @@ export function StorefrontWorkspace() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "주문을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
-  if (!store) return <main className="mx-auto max-w-xl p-5"><p role="status">{message || "매장 정보를 불러오는 중입니다."}</p></main>;
-  return <main className="mx-auto min-h-dvh max-w-xl bg-white pb-24 text-slate-900">
-    <header className="sticky top-0 z-10 border-b bg-white p-4">
+  if (!store) return <main className="mx-auto max-w-6xl p-5"><p role="status">{message || "매장 정보를 불러오는 중입니다."}</p></main>;
+  return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
+    <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
       <h1 className="text-lg font-semibold">{store.title}</h1>
       {store.notice && <p className="mt-2 rounded bg-blue-50 p-2 text-sm">{store.notice}</p>}
       {!store.priceAvailable && <p className="mt-2 rounded bg-amber-50 p-2 text-sm">문서 유효기간이 지났습니다. 품목은 볼 수 있지만 가격과 주문은 잠시 숨겼습니다.</p>}
     </header>
+    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-4 border-t bg-white text-sm md:static md:max-w-none md:translate-x-0 md:border-b md:border-t-0">
+      {(["home", "order", "history", "info"] as const).map((item, index) =>
+        <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
+          onClick={() => setTab(item)}>{["홈", "주문", "내역", "내 정보"][index]}</button>)}</nav>
     {message && <p role="status" className="mx-4 mt-3 rounded border p-3 text-sm">{message}</p>}
-    {tab === "home" && <section className="space-y-4 p-4">
+    {tab === "home" && <section className="space-y-4 p-4 md:max-w-3xl md:p-6">
       <p>다음 배송일: <strong>{store.nextDeliveryDate || "권역 배송일 설정 필요"}</strong></p>
       <div className="grid grid-cols-2 gap-2">
         <button className="min-h-14 rounded bg-slate-900 px-4 text-white" onClick={() => setTab("order")}>주문하기</button>
@@ -168,7 +172,7 @@ export function StorefrontWorkspace() {
       <p className="text-sm text-slate-600">주문은 후결제로 접수됩니다. 시세 품목은 출고 전 단가가 확정됩니다.</p>
       <p className="text-sm">배송지: {store.deliveryAddress || "등록된 주소가 없습니다. 거래처 담당자에게 확인해 주세요."}</p>
     </section>}
-    {tab === "order" && <section className="space-y-4 p-4">
+    {tab === "order" && <section className="space-y-4 p-4 md:p-6">
       {visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       <label className="block text-sm">배송일
@@ -182,7 +186,7 @@ export function StorefrontWorkspace() {
           <button key={view} aria-pressed={productView === view} className="min-h-11 rounded border px-3"
             onClick={() => setProductView(view)}>{view === "all" ? "전체" : view === "favorites" ? "즐겨찾기" : "숨긴 품목"}</button>)}
       </div>
-      <ul className="space-y-2">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
+      <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
@@ -219,7 +223,7 @@ export function StorefrontWorkspace() {
       <button disabled={!store.canOrder || busy || !summary?.canSubmit} className="min-h-12 w-full rounded bg-slate-900 text-white disabled:opacity-50"
         onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</button>
     </section>}
-    {tab === "history" && <section className="space-y-3 p-4"><h2 className="font-semibold">주문 내역</h2>
+    {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
       {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
         !data?.orders.length && <p className="text-sm text-slate-600">아직 주문이 없습니다.</p>}
       {data?.orders.map((order) => <article key={order.id} className="rounded border p-3 text-sm">
@@ -238,13 +242,9 @@ export function StorefrontWorkspace() {
         <button disabled={!data?.historyHasMore || busy} className="min-h-11 rounded border px-3 disabled:opacity-50"
           onClick={() => void load(deliveryDate, (data?.historyPage ?? 1) + 1).catch(() => setMessage("다음 내역을 불러오지 못했습니다."))}>다음</button>
       </div>}</section>}
-    {tab === "info" && <section className="space-y-3 p-4"><h2 className="font-semibold">매장 정보</h2>
+    {tab === "info" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">매장 정보</h2>
       <p>매장: {store.customerName}</p><p>배송지: {store.deliveryAddress || "등록되지 않음"}</p>
       <p className="text-sm text-slate-600">배송지와 출입 정보 변경은 담당자에게 요청해 주세요.</p>
     </section>}
-    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-4 border-t bg-white text-sm">
-      {(["home", "order", "history", "info"] as const).map((item, index) =>
-        <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
-          onClick={() => setTab(item)}>{["홈", "주문", "내역", "내 정보"][index]}</button>)}</nav>
   </main>;
 }

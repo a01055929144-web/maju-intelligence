@@ -102,6 +102,15 @@ describe("product field edits", () => {
 });
 
 describe("purchase history", () => {
+  it("fills a blank supplier and unit from a single catalog link without counting the same cost twice", async () => {
+    const { mergePurchaseHistoryRows, resolvePurchaseHistoryRows, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
+    const receipt = { id: "receipt", product_catalog_id: "p1", line_key: "raw", product_name: "양파", receipt_date: "2026-11-05", spec: "10kg", unit: null, supplier_name: null, quantity: 3, unit_cost_ex_vat: 1200 };
+    const supplier = { ...receipt, id: "supplier", line_key: "supplier-history", unit: "BOX", supplier_name: "기본 매입처", quantity: null };
+    const normalized = resolvePurchaseHistoryRows([receipt], new Map([["p1", { supplier: "기본 매입처", unit: "BOX" }]]));
+    const [item] = summarizePurchaseHistory(mergePurchaseHistoryRows(normalized, [supplier]));
+    expect(item).toMatchObject({ supplier: "기본 매입처", unit: "BOX", spec: "10kg", count: 1, totalQuantity: 3 });
+  });
+
   it("groups by item and computes latest/previous cost and quantity", async () => {
     const { summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
     const items = summarizePurchaseHistory([

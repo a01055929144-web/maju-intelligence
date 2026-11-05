@@ -11,6 +11,12 @@ for (const width of [1440, 390]) test(`public order link shows published spec at
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
   await expect(page.getByText("18L · 통", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
+  const layout = await page.evaluate(() => ({
+    columns: getComputedStyle(document.querySelector("main ul")!).gridTemplateColumns.split(" ").length,
+    navigation: getComputedStyle(document.querySelector("nav[aria-label='매장 메뉴']")!).position,
+  }));
+  expect(layout.columns).toBe(width === 390 ? 1 : 3);
+  expect(layout.navigation).toBe(width === 390 ? "fixed" : "static");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
 

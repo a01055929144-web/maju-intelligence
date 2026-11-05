@@ -5,6 +5,7 @@ export type CostProduct = {
   spec: string;
   unit: string;
   cost: number;
+  createdAt?: string;
   taxType?: "taxable" | "exempt";
   supplierProductId?: string;
   supplierCode?: string;
