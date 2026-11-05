@@ -336,7 +336,7 @@ export async function updateProductCategoriesForAdmin(
     results.push(...await Promise.all(unique.slice(start, start + 5).map(async ({ id, category, expectedCategory }) => {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return { id, ok: false as const, message: "품목 번호를 확인해 주세요." };
     const cleaned = cleanCategory(category);
-    if (typeof cleaned !== "string") return { id, ok: false as const, message: typeof cleaned === "object" ? cleaned.error : "추천 분류를 확인해 주세요." };
+    if (typeof cleaned !== "string") return { id, ok: false as const, message: cleaned && typeof cleaned === "object" ? cleaned.error : "추천 분류를 확인해 주세요." };
     try {
       const expected = cleanCategory(expectedCategory);
       if (expected && typeof expected === "object") return { id, ok: false as const, message: expected.error };
