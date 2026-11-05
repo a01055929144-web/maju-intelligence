@@ -6,6 +6,14 @@ const adminSource = readFileSync(
   new URL("../components/product-catalog-admin.tsx", import.meta.url),
   "utf8",
 );
+const marginSource = readFileSync(
+  new URL("../components/price-sheets-workspace.tsx", import.meta.url),
+  "utf8",
+);
+const categorySource = readFileSync(
+  new URL("../components/product-category-manager.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("product catalog admin presentation", () => {
   it("calculates markup and exposes reverse margins", () => {
@@ -32,5 +40,16 @@ describe("product catalog admin presentation", () => {
     expect(adminSource).toContain("전체 제외");
     expect(adminSource).toContain("확인하고 저장");
     expect(adminSource).toContain("start += 50");
+  });
+
+  it("keeps category cleanup in product management with searchable choices", () => {
+    expect(adminSource).toContain("ProductCategoryWorkspace");
+    expect(adminSource).toContain('href="#product-category-management"');
+    expect(adminSource).toContain("product-large-category-options");
+    expect(adminSource).toContain("${label} 검색 선택");
+    expect(categorySource).toContain("옮길 분류 검색 선택");
+    expect(categorySource).toContain("분류 검색 선택");
+    expect(categorySource).toContain("분류 정리 · 분류별 마진");
+    expect(marginSource).not.toContain("ProductCategoryManager");
   });
 });

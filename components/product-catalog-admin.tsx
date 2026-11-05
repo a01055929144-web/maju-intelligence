@@ -11,6 +11,7 @@ import {
   type ProductTaxType,
 } from "@/lib/product-catalog-admin";
 import { productCatalogMargin } from "@/lib/product-catalog-presentation";
+import { ProductCategoryWorkspace } from "@/components/product-category-manager";
 const blank: ProductCatalogAdminItem = {
   id: "",
   name: "",
@@ -153,7 +154,7 @@ export function ProductCatalogAdmin({
           <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => { setSideTab("supplier"); setSideFilter(""); }} type="button">매입처</button>
           {categoriesEnabled ? <button className={`rounded-lg px-2 py-2 text-xs font-bold ${sideTab === "maju-category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("maju-category")} type="button">마주 공통 카테고리</button> : null}
         </div>
-        {sideTab === "category" ? <a className="block border-b bg-slate-50 px-3 py-2 text-xs font-bold text-teal-700" href="/revenue/pricing/margins">분류 정리·분류별 마진 →</a> : null}
+        {sideTab === "category" ? <a className="block border-b bg-slate-50 px-3 py-2 text-xs font-bold text-teal-700" href="#product-category-management">분류 정리·분류별 마진 ↓</a> : null}
         {sideTab === "maju-category" ? <p className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600">CategoryMatch 연결 전 상품은 미연결로 모아 봅니다. 연결 편집은 SQL 승인 후 제공합니다.</p> : null}
         <div className="max-h-[70vh] overflow-y-auto p-2">
           {sideFilter ? <button className="mb-1 w-full rounded-lg px-3 py-1.5 text-left text-xs font-bold text-teal-700 hover:bg-teal-50" onClick={() => setSideFilter("")} type="button">← 전체 보기</button> : null}
@@ -174,6 +175,7 @@ export function ProductCatalogAdmin({
       </aside>
       <div className="min-w-0 space-y-4">
       {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
+      <ProductCategoryWorkspace companyId={companyId} />
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -664,18 +666,14 @@ function CategoryFields({ item, onChange }: { item: ProductCatalogAdminItem; onC
     <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
       <span className="text-xs font-bold text-slate-600">분류 (대 › 중 › 소)</span>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <select aria-label="대분류" className="maju-input w-full" onChange={(event) => select(0, event.target.value)} value={parts[0] || ""}>
-          <option value="">대분류 선택</option>
-          {options.large.map((name) => <option key={name}>{name}</option>)}
-        </select>
-        <select aria-label="중분류" className="maju-input w-full" disabled={!parts[0]} onChange={(event) => select(1, event.target.value)} value={parts[1] || ""}>
-          <option value="">중분류 선택</option>
-          {options.medium.map((name) => <option key={name}>{name}</option>)}
-        </select>
-        <select aria-label="소분류" className="maju-input w-full" disabled={!parts[1]} onChange={(event) => select(2, event.target.value)} value={parts[2] || ""}>
-          <option value="">소분류 선택</option>
-          {options.small.map((name) => <option key={name}>{name}</option>)}
-        </select>
+        {([
+          ["대분류", "product-large-category-options", options.large, parts[0] || ""],
+          ["중분류", "product-medium-category-options", options.medium, parts[1] || ""],
+          ["소분류", "product-small-category-options", options.small, parts[2] || ""],
+        ] as const).map(([label, list, names, value], depth) => <div key={label}>
+          <input aria-label={`${label} 검색 선택`} className="maju-input w-full" disabled={depth > 0 && !parts[depth - 1]} list={list} onChange={(event) => select(depth, event.target.value)} placeholder={`${label} 검색`} value={value} />
+          <datalist id={list}>{names.map((name) => <option key={name} value={name} />)}</datalist>
+        </div>)}
       </div>
       <div className="flex min-h-11 flex-wrap items-center gap-2">
         {suggestion && suggestion !== item.category ? <button className="maju-button-secondary min-h-11" onClick={() => onChange(suggestion)} type="button">추천 적용: {suggestion.replaceAll(" > ", " › ")}</button> : null}

@@ -48,7 +48,6 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [moveTo, setMoveTo] = useState("");
-  const [newCategory, setNewCategory] = useState("");
   const [page, setPage] = useState(1);
   const [margins, setMargins] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -119,13 +118,12 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
     setFilter("");
   }
   function applyMove() {
-    const raw = moveTo === "__new__" ? newCategory : moveTo;
-    const cleaned = cleanCategory(raw);
+    const cleaned = cleanCategory(moveTo);
     if (!cleaned || typeof cleaned === "object" || !picked.size) { if (cleaned && typeof cleaned === "object") setError(cleaned.error); return; }
     if (!options.includes(cleaned)) setOptions((prev) => [...prev, cleaned]);
     setDraft((prev) => { const next = { ...prev }; picked.forEach((id) => { next[id] = cleaned; }); return next; });
     setPicked(new Set());
-    setNewCategory("");
+    setMoveTo("");
   }
   async function saveDraft() {
     const list = changed.map((item) => ({ id: item.id, category: draft[item.id] || null }));
@@ -202,10 +200,10 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
   const selectPaths = flat(sortedOptions);
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4" id="product-category-management">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-black">② 품목 분류(대 › 중 › 소)별 마진</h2>
+          <h2 className="text-lg font-black">분류 정리 · 분류별 마진</h2>
           <p className="text-sm text-slate-600">KAMIS·aT 부류를 참고한 분류입니다. 종합식자재는 대·중분류로, 축산·수산 전문은 소분류(부위 등)까지 내려가 마진을 다르게 줄 수 있습니다. 아래 분류에 따로 정한 마진이 위 분류보다 우선입니다.</p>
         </div>
         {unsortedCount ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">미분류 {unsortedCount}개</span> : null}
@@ -240,13 +238,9 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
         {picked.size ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
             <strong>{picked.size}개 선택</strong> →
-            <select aria-label="옮길 분류" className="h-8 max-w-[260px] rounded px-2 text-slate-900" onChange={(e) => setMoveTo(e.target.value)} value={moveTo}>
-              <option value="">분류 선택</option>
-              {selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}
-              <option value="__new__">+ 새 분류 직접 입력</option>
-            </select>
-            {moveTo === "__new__" ? <input aria-label="새 분류" className="h-8 w-56 rounded px-2 text-slate-900" maxLength={95} onChange={(e) => setNewCategory(e.target.value)} placeholder="예: 축산 > 우육 > 수입 척롤" value={newCategory} /> : null}
-            <button className="rounded bg-teal-500 px-2.5 py-1 font-bold disabled:opacity-50" disabled={!moveTo || (moveTo === "__new__" && !newCategory.trim())} onClick={applyMove} type="button">옮기기</button>
+            <input aria-label="옮길 분류 검색 선택" className="h-9 min-w-0 flex-1 rounded px-2 text-slate-900 sm:max-w-[300px]" list="bulk-category-options" maxLength={95} onChange={(e) => setMoveTo(e.target.value)} placeholder="분류 검색 또는 새 분류 입력" value={moveTo} />
+            <datalist id="bulk-category-options">{selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}</datalist>
+            <button className="min-h-11 rounded bg-teal-500 px-3 py-1 font-bold disabled:opacity-50" disabled={!moveTo.trim()} onClick={applyMove} type="button">옮기기</button>
             <button className="ml-auto text-white/80" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
           </div>
         ) : null}
@@ -268,10 +262,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
                     <td className="p-2"><span className="font-semibold">{item.name}</span>{item.code ? <span className="ml-1 text-[11px] text-slate-400">{item.code}</span> : null}</td>
                     <td className="p-2 text-xs text-slate-600">{item.spec} {item.unit}</td>
                     <td className="p-2">
-                      <select aria-label={`${item.name} 분류`} className={`h-8 max-w-[240px] rounded border px-1 text-sm ${pending ? "border-amber-400 font-bold" : "border-slate-300"}`} onChange={(e) => setDraft((prev) => ({ ...prev, [item.id]: e.target.value }))} title={value} value={value}>
-                        <option value="">미분류</option>
-                        {selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}
-                      </select>
+                      <input aria-label={`${item.name} 분류 검색 선택`} className={`h-9 w-full min-w-[180px] rounded border px-2 text-sm ${pending ? "border-amber-400 font-bold" : "border-slate-300"}`} list="row-category-options" onChange={(e) => setDraft((prev) => ({ ...prev, [item.id]: e.target.value }))} placeholder="미분류" title={value} value={value} />
                     </td>
                     <td className="p-2 text-xs">{item.suggestion ? (item.suggestion === value ? <span className="text-slate-400">같음</span> : <button className="text-left font-bold text-amber-700 underline" onClick={() => setDraft((prev) => ({ ...prev, [item.id]: item.suggestion }))} type="button">{item.suggestion.replace(/ > /g, " › ")} 적용</button>) : <span className="text-slate-300">-</span>}</td>
                   </tr>
@@ -281,6 +272,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
             </tbody>
           </table>
         </div>
+        <datalist id="row-category-options">{selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}</datalist>
         <div className="flex items-center gap-2 text-xs">
           <button className="rounded border px-2 py-1" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} type="button">이전</button>
           <span>{page}/{pages} · {shown.length}개</span>
@@ -290,4 +282,32 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
       </div>
     </section>
   );
+}
+
+/** 상품관리에서 분류 정리와 기존 분류별 마진 계산을 함께 사용합니다. */
+export function ProductCategoryWorkspace({ companyId }: { readonly companyId: string }) {
+  const [state, setState] = useState<PriceState | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const send = useCallback(async (command?: PricingCommand) => {
+    const query = new URLSearchParams({ companyId, page: "1" });
+    const response = await fetch(`/api/price-sheets?${query}`, command ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) } : { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || "분류 설정을 불러오지 못했습니다.");
+    setState(body as PriceState);
+    return body as PriceState;
+  }, [companyId]);
+  const task = useCallback(async (work: () => Promise<void>, done: string) => {
+    setBusy(true); setError(""); setMessage("");
+    try { await work(); await send(); setMessage(done); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "다시 시도해 주세요."); }
+    finally { setBusy(false); }
+  }, [send]);
+  useEffect(() => {
+    setBusy(true);
+    void send().catch((cause) => setError(cause instanceof Error ? cause.message : "분류 설정을 불러오지 못했습니다.")).finally(() => setBusy(false));
+  }, [send]);
+  if (!state) return <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm" id="product-category-management">{error ? <p className="text-rose-700" role="alert">{error} <button className="underline" onClick={() => void send()} type="button">다시 시도</button></p> : "분류 설정을 불러오는 중…"}</section>;
+  return <div className="space-y-2">{message ? <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-900" role="status">{message}</p> : null}{error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}<ProductCategoryManager busy={busy} companyId={companyId} send={send} state={state} task={task} /></div>;
 }

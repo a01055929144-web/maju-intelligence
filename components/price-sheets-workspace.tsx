@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { calculatePrice } from "@/domains/pricing/price-rules";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
-import { ProductCategoryManager } from "./product-category-manager";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
 
@@ -63,13 +62,6 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     finally { setBusy(false); }
   }, [send]);
 
-  const task = useCallback(async (work: () => Promise<void>, done: string) => {
-    setBusy(true); setError(""); setMessage("");
-    try { await work(); await send(); setMessage(done); }
-    catch (e) { setError(e instanceof Error ? e.message : "다시 시도해 주세요."); }
-    finally { setBusy(false); }
-  }, [send]);
-
   useEffect(() => {
     setBusy(true);
     void send().then((s) => { setDefaultMargin(String(s.defaultMargin)); setDefaultRounding(String(s.defaultRounding)); }).catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다.")).finally(() => setBusy(false));
@@ -121,13 +113,10 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
       {sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{sample.cost.toLocaleString()}원</strong> → 판매가 <strong className="text-teal-800">{sample.price.toLocaleString()}원</strong> (이익 {(sample.price - sample.cost).toLocaleString()}원)</p> : null}
     </section>
 
-    {/* ② 카테고리 */}
-    <ProductCategoryManager busy={busy} companyId={companyId} send={(command) => send(command)} state={state} task={task} />
-
-    {/* ③ 상품별 */}
+    {/* ② 상품별 */}
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div>
-        <h2 className="text-lg font-black">③ 상품별로 다르게</h2>
+        <h2 className="text-lg font-black">② 상품별로 다르게</h2>
         <p className="text-sm text-slate-600">기본 마진과 다르게 받을 상품만 고치세요. 체크해서 여러 개를 한 번에 바꿀 수 있습니다. 칸을 비우고 저장하면 기본 마진으로 돌아갑니다.</p>
       </div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setPage(1); }}>
@@ -200,7 +189,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
 
     {/* ③ 고급 */}
     <details className="rounded-xl border border-slate-200 bg-white p-4">
-      <summary className="cursor-pointer text-sm font-black text-slate-700">④ 고급 — 마진 그룹 · 카테고리 연결 · 복구</summary>
+      <summary className="cursor-pointer text-sm font-black text-slate-700">③ 고급 — 마진 그룹 · 카테고리 연결 · 복구</summary>
       <div className="mt-3 space-y-4 text-sm">
         <p className="text-slate-600">카테고리별로 마진을 다르게 할 때 씁니다. 우선순위: 직접 단가 → 개별 마진 → 그룹 마진 → 기본 마진.</p>
         {state.groups.length ? <ul className="grid gap-2 md:grid-cols-3">{state.groups.map((g) => <li className="rounded border p-2" key={g.id}><strong>{g.name}</strong> · {g.margin}% · {g.rounding}원 올림<span className="block text-xs text-slate-500">카테고리: {state.categories.filter((c) => c.groupId === g.id).map((c) => c.category).join(", ") || "없음"}</span><button className="mt-1 text-xs font-bold text-teal-700" onClick={() => { setGroupId(g.id); setGroupName(g.name); setGroupMargin(String(g.margin)); setGroupRounding(String(g.rounding)); }} type="button">수정</button></li>)}</ul> : <p className="text-slate-500">마진 그룹이 없습니다.</p>}
