@@ -33,4 +33,10 @@ describe("product catalog admin presentation", () => {
     expect(adminSource).toContain("확인하고 저장");
     expect(adminSource).toContain("start += 50");
   });
+
+  it("shows the current category and reuses the existing promotion manager", () => {
+    expect(adminSource).toContain('key: "category", label: "분류"');
+    expect(adminSource).toContain('href="/revenue/pricing/documents?tab=library"');
+    expect(adminSource).toContain("행사·임박 관리");
+  });
 });
