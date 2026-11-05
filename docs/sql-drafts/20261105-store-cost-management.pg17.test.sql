@@ -2,6 +2,7 @@
 drop schema if exists public cascade;
 create schema public;
 create extension if not exists pgcrypto;
+create extension if not exists dblink;
 do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;
 do $$ begin if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;
 do $$ begin if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if; end $$;
@@ -62,6 +63,10 @@ begin
     raise exception 'failed_edit_was_not_atomic';
   end if;
 end $$;
+select public.save_store_cost(
+  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
+);
 do $$
 declare replay jsonb;
 begin
@@ -73,10 +78,6 @@ begin
     raise exception 'replay_did_not_return_original_item';
   end if;
 end $$;
-select public.save_store_cost(
-  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
-  '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
-);
 insert into public.store_cost_revisions(company_id,store_account_id,store_cost_item_id,revision,effective_on,product_name,specification,unit,cost_krw,change_kind,actor_member_id,source_file_name,source_sha256,source_row_number)
 values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',1,'2026-11-05','양파','15kg','망',18000,'import','20000000-0000-4000-8000-000000000001','costs.xlsx',repeat('a',64),2)
 on conflict do nothing;
@@ -125,6 +126,55 @@ begin
       and product_name='양파' and effective_on='2026-11-07' and cost_krw=20000 and revision=4)
     or (select count(*) from public.store_cost_revisions where store_cost_item_id='30000000-0000-4000-8000-000000000001')<>4 then
     raise exception 'older_import_overwrote_current_cost';
+  end if;
+end $$;
+
+-- Two real sessions: different files importing the same new product serialize.
+select dblink_connect('cost_other_file','dbname='||current_database());
+do $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended('00000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000001',0));
+  perform dblink_send_query('cost_other_file',$q$
+    select public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      '감자||kg','감자','','kg','2026-11-07',1100,null,null,'other.xlsx',repeat('f',64),2)
+  $q$);
+  perform public.save_store_cost(
+    '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+    '감자||kg','감자','','kg','2026-11-07',1000,null,null,'first.xlsx',repeat('e',64),2
+  );
+end $$;
+select * from dblink_get_result('cost_other_file') as t(result jsonb);
+select dblink_disconnect('cost_other_file');
+do $$ begin
+  if (select count(*) from public.store_cost_items where product_key='감자||kg')<>1
+    or (select count(*) from public.store_cost_revisions r join public.store_cost_items i on i.id=r.store_cost_item_id where i.product_key='감자||kg')<>2 then
+    raise exception 'concurrent_new_product_not_serialized';
+  end if;
+end $$;
+
+-- Two real sessions: a changed product key with the same file/row returns replay.
+select dblink_connect('cost_same_file','dbname='||current_database());
+do $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended('00000000-0000-4000-8000-000000000001:10000000-0000-4000-8000-000000000001',0));
+  perform dblink_send_query('cost_same_file',$q$
+    select public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      '변조 당근||kg','변조 당근','','kg','2026-11-08',9999,null,null,'same.xlsx',repeat('9',64),2)
+  $q$);
+  perform public.save_store_cost(
+    '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+    '당근||kg','당근','','kg','2026-11-08',2000,null,null,'same.xlsx',repeat('9',64),2
+  );
+end $$;
+create temporary table same_file_result as
+  select * from dblink_get_result('cost_same_file') as t(result jsonb);
+select dblink_disconnect('cost_same_file');
+do $$ begin
+  if (select count(*) from public.store_cost_items where product_key in ('당근||kg','변조 당근||kg'))<>1
+    or (select result->>'replayed' from same_file_result) <> 'true' then
+    raise exception 'concurrent_same_file_not_replayed';
   end if;
 end $$;
 

@@ -86,8 +86,8 @@ begin
     or (p_source_sha256 is not null and p_source_sha256 !~ '^[0-9a-f]{64}$') then
     raise exception 'invalid_store_cost';
   end if;
-  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text||':'||p_store_account_id::text||':'||
-    coalesce(p_source_sha256||':'||p_source_row_number::text,p_item_id::text,p_product_key),0));
+  -- ponytail: store-wide lock favors correctness; split by product only after measured write contention.
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text||':'||p_store_account_id::text,0));
   if p_source_sha256 is not null then
     select i.* into v_item
     from public.store_cost_revisions r
