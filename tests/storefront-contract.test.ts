@@ -10,6 +10,7 @@ vi.mock("../lib/pricing/store-link-token", () => ({
   verifyStoreLinkToken: () => ({ id: "link", hash: "hash" }),
 }));
 import { readStorefront } from "../lib/pricing/storefront";
+import { toPublicStorefront } from "../lib/pricing/storefront-public";
 it("matches the newest contract by product AND sales unit consistently with ordering", async () => {
   const seen: string[] = [];
   db.mockImplementation(async (path: string) => {
@@ -41,6 +42,7 @@ it("matches the newest contract by product AND sales unit consistently with orde
                 visible: true,
                 price: 1200,
                 taxType: "exempt",
+                spec: "18L",
               },
             ],
           },
@@ -92,7 +94,10 @@ it("matches the newest contract by product AND sales unit consistently with orde
     unitPrice: 900,
     taxType: "exempt",
     priceIncludesTax: false,
+    spec: "18L",
   });
+  expect(toPublicStorefront(store!).lines[0].spec).toBe("18L");
+  expect(seen.some((path) => /purchase_receipt|supplier_cost/.test(path))).toBe(false);
   expect(
     seen.find((path) => path.startsWith("customer_price_agreements?")),
   ).toContain("order=effective_from.desc,id.desc");

@@ -6,14 +6,14 @@ import { catalogDisplaySpec } from "../../domains/pricing/document";
 type CatalogResult = { items: Array<{ id: string; spec: string }> };
 
 async function withCatalogSpecs(companyId: string, result: CatalogResult): Promise<CatalogResult> {
-  const missing = result.items.filter((item) => !item.spec && /^[0-9a-f-]{36}$/i.test(item.id));
+  const missing = result.items.filter((item) => !(item.spec || "").trim() && /^[0-9a-f-]{36}$/i.test(item.id));
   if (!missing.length) return result;
   const ids = missing.map((item) => item.id).join(",");
   const rows = await supabaseRequest<Array<{ id: string; sales_spec: string | null; spec_value: number | null; spec_unit: string | null }>>(
     `product_catalog?select=id,sales_spec,spec_value,spec_unit&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${ids})&limit=100`
   );
   const specs = new Map(rows.map((row) => [row.id, catalogDisplaySpec(row)]));
-  return { ...result, items: result.items.map((item) => ({ ...item, spec: item.spec || specs.get(item.id) || "" })) };
+  return { ...result, items: result.items.map((item) => ({ ...item, spec: (item.spec || "").trim() || specs.get(item.id) || "" })) };
 }
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
