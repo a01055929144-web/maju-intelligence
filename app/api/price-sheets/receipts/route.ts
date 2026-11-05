@@ -91,8 +91,10 @@ export async function GET(request: NextRequest) {
   const receiptHistory = from ? await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.filter((filter) => !filter.startsWith("receipt_date=")).join("&")}&order=receipt_date.desc,id.desc`).catch(() => rows) : rows;
   const supplierHistory = await listSupplierCostHistory(auth.companyId, { from, to, search, productId, lineKey, supplier }).catch(() => null);
   if (!supplierHistory) return NextResponse.json({ message: "매입 이력이 10,000건을 넘거나 원가 이력을 읽지 못했습니다. 기간이나 품목으로 좁혀 다시 조회해 주세요." }, { status: 500 });
-  const combined = [...receiptHistory.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
-  const period = [...rows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistory.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to)).map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const receiptHistoryRows = receiptHistory as PurchaseHistoryRow[];
+  const supplierHistoryRows = supplierHistory as PurchaseHistoryRow[];
+  const combined: PurchaseHistoryRow[] = [...receiptHistoryRows.map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistoryRows.map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
+  const period: PurchaseHistoryRow[] = [...(rows as PurchaseHistoryRow[]).map((row) => ({ ...row, correctable: correctionEnabled })), ...supplierHistoryRows.filter((row) => (!from || String(row.receipt_date) >= from) && (!to || String(row.receipt_date) <= to)).map((row) => ({ ...row, correctable: false }))].sort((a, b) => String(b.receipt_date).localeCompare(String(a.receipt_date)) || String(b.id).localeCompare(String(a.id)));
   const offset = (page - 1) * 100;
   const visible = attachPurchaseHistoryPreviousCosts(combined as PurchaseHistoryRow[], period.slice(offset, offset + 100) as PurchaseHistoryRow[]);
   const items = visible.map((row) => {
