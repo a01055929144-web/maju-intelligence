@@ -312,8 +312,8 @@ export async function listProductCategorySuggestions(
   pageSize = 200,
 ) {
   const offset = (Math.max(1, page) - 1) * pageSize;
-  const source = isCiLayoutFixturesEnabled()
-    ? ciLayoutProducts.slice(offset, offset + pageSize).map((item) => ({ id: item.id, canonical_name: item.name, category: item.category, spec_value: item.specValue, spec_unit: item.specUnit }))
+  const source: Row[] = isCiLayoutFixturesEnabled()
+    ? ciLayoutProducts.slice(offset, offset + pageSize).map((item): Row => ({ id: item.id, canonical_name: item.name, category: item.category, spec_value: item.specValue, spec_unit: item.specUnit }))
     : await request<Row[]>(`product_catalog?select=id,canonical_name,purchase_product_name,spec_value,spec_unit,category&company_id=eq.${enc(companyId)}&order=id&limit=${pageSize}&offset=${offset}`);
   const candidates = source.map((row) => {
     const name = String(row.canonical_name || row.purchase_product_name || "");
