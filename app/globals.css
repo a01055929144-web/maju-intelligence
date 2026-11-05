@@ -368,3 +368,15 @@ select {
   content: "";
   transform: translateY(-50%);
 }
+
+/* 11/5: 리드 화면 색 — 신규 리드는 보라, 영업 리드는 녹색. 화면 안의 기본(청록) 버튼·강조색을 리드 종류 색으로 맞춥니다. */
+.lead-theme-new { --lead-50: #f5f3ff; --lead-100: #ede9fe; --lead-500: #8b5cf6; --lead-600: #7c3aed; --lead-700: #6d28d9; --lead-800: #5b21b6; }
+.lead-theme-sales { --lead-50: #ecfdf5; --lead-100: #d1fae5; --lead-500: #10b981; --lead-600: #059669; --lead-700: #047857; --lead-800: #065f46; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.maju-button-primary, .bg-teal-700, .bg-teal-600) { background-color: var(--lead-700) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.maju-button-primary:hover, .hover\:bg-teal-800:hover, .hover\:bg-teal-700:hover) { background-color: var(--lead-800) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.text-teal-600, .text-teal-700, .text-teal-800, .text-teal-900) { color: var(--lead-700) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.bg-teal-50) { background-color: var(--lead-50) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.bg-teal-100) { background-color: var(--lead-100) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.bg-teal-500) { background-color: var(--lead-500) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.border-teal-200, .border-teal-300, .border-teal-400, .border-teal-500, .border-teal-600, .border-teal-700) { border-color: var(--lead-600) !important; }
+:is(.lead-theme-new, .lead-theme-sales) :is(.ring-teal-500, .ring-teal-600, .focus\:border-teal-400:focus, .focus\:border-teal-500:focus) { --tw-ring-color: var(--lead-500); border-color: var(--lead-500); }

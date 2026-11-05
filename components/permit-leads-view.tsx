@@ -1610,7 +1610,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   }
 
   return (
-    <section className={`flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6 ${selectedLead && detailMode === "drawer" ? "lg:pr-[calc(min(46vw,720px)+0.75rem)]" : ""}`}>
+    <section className={`${isSalesLeadPage ? "lead-theme-sales" : "lead-theme-new"} flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6 ${selectedLead && detailMode === "drawer" ? "lg:pr-[calc(min(46vw,720px)+0.75rem)]" : ""}`}>
       {/* 11/4: 신규/영업 리드는 왼쪽 메뉴 하나(리드)로 합치고, 화면 왼쪽 위 스위치로 전환합니다. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <nav aria-label="리드 종류" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
@@ -1622,7 +1622,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             return (
               <button
                 aria-current={current ? "page" : undefined}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-black transition ${current ? (item.sales ? "bg-violet-700 text-white" : "bg-teal-700 text-white") : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-black transition ${current ? (item.sales ? "bg-emerald-700 text-white" : "bg-violet-700 text-white") : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
                 key={item.type}
                 onClick={() => { if (!current) window.location.assign(withPermitLeadCompanyQuery(`/leads?type=${item.type}`)); }}
                 type="button"
@@ -2070,7 +2070,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-950">{leadPageCopy.resultLabel}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"}`}>
                 {filteredLeads.length.toLocaleString()}곳
               </span>
               {activeFilterCount ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">필터 {activeFilterCount}개 적용</span> : null}
@@ -2110,7 +2110,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             네이버 검색량 API가 아직 연결되지 않아 검색량순 정렬을 쓸 수 없습니다. 관리자에게 문의하세요.
           </p>
         ) : null}
-        {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-violet-50 !px-3 !py-2 !text-violet-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
+        {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-emerald-50 !px-3 !py-2 !text-emerald-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
         {!salesRegionsConfigured ? (
           <div className="mx-3 mt-2 space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <div>
@@ -2502,7 +2502,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                         <td className="min-w-[240px] max-w-[340px] border-r border-slate-100 px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
                             <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPermitLeadType(lead) === "new" ? "bg-emerald-500" : "bg-violet-500"}`}
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${getPermitLeadType(lead) === "new" ? "bg-violet-500" : "bg-emerald-500"}`}
                               title={`${PERMIT_LEAD_TYPE_LABEL[getPermitLeadType(lead)]} · ${PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}`}
                             />
                             <p className="truncate font-bold text-slate-950">{lead.businessName}</p>
@@ -3395,7 +3395,7 @@ function PermitLeadDetailPanel({
               <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade ? `${lead.grade}등급` : isPermitLeadUnscored(lead) ? "채점 전" : "등급 미달"}</Badge>
               <span
                 className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
-                  getPermitLeadType(lead) === "new" ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"
+                  getPermitLeadType(lead) === "new" ? "bg-violet-50 text-violet-700" : "bg-emerald-50 text-emerald-700"
                 }`}
                 title={PERMIT_LEAD_TYPE_DESCRIPTION[getPermitLeadType(lead)]}
               >
