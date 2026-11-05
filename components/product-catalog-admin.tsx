@@ -114,11 +114,9 @@ export function ProductCatalogAdmin({
         .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : a.name.localeCompare(b.name, "ko")));
     }
     for (const item of items) {
-      const names = sideTab === "category"
-        ? [item.category || "미분류"]
-        : sideTab === "supplier"
-          ? item.supplierNames?.length ? item.supplierNames : ["매입처 없음"]
-          : ["공통 카테고리 미연결"];
+      const names = sideTab === "supplier"
+        ? item.supplierNames?.length ? item.supplierNames : ["매입처 없음"]
+        : ["공통 카테고리 미연결"];
       for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
     }
     return Array.from(counts, ([name, count]) => ({ name, count, depth: 0 })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
