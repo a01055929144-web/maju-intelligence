@@ -1,6 +1,7 @@
 import { supabaseRequest } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { verifyStoreLinkToken } from "./store-link-token";
+import { readCostDirections } from "./cost-direction";
 import {
   canOrderForDelivery,
   kstDateTime,
@@ -56,6 +57,7 @@ type RecentPrice = {
   document_date: string;
 };
 type Settings = {
+  show_purchase_cost_direction?: boolean;
   cutoff_days_before: 0 | 1 | 2;
   cutoff_time: string;
   minimum_amount: number;
@@ -153,6 +155,7 @@ export async function readStorefront(
     ),
   );
   const [
+    costDirections,
     productModes,
     promotions,
     recentPrices,
@@ -160,6 +163,7 @@ export async function readStorefront(
     customerRules,
     holidays,
   ] = await Promise.all([
+    readCostDirections(company, priceAvailable && settings.show_purchase_cost_direction === true, productIds),
     productIds.length
       ? supabaseRequest<ProductMode[]>(
           path(
@@ -321,6 +325,7 @@ export async function readStorefront(
           name: line.displayName,
           brand: line.brand,
           spec: line.spec,
+          purchaseCostDirection: costDirections.get(`${line.productId}:${line.unit}`) ?? null,
           unit: line.unit,
           badge: line.badge,
           startsOn: line.startsOn,
