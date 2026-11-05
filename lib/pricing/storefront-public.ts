@@ -1,4 +1,5 @@
 import type { readStorefront } from "./storefront";
+import { publicSalesPriceDirection } from "../../domains/pricing/storefront-price-direction";
 
 type Storefront = NonNullable<Awaited<ReturnType<typeof readStorefront>>>;
 
@@ -34,6 +35,7 @@ export function toPublicStorefront(store: Storefront) {
       name: line.name,
       brand: line.brand,
       spec: line.spec,
+      ...(publicSalesPriceDirection(line.salesPriceDirection) ? { salesPriceDirection: publicSalesPriceDirection(line.salesPriceDirection) } : {}),
       unit: line.unit,
       badge: line.badge,
       startsOn: line.startsOn,

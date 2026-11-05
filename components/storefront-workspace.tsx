@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
+import { Badge } from "./ui/badge";
+import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; brand: string; spec: string; unit: string;
+  salesPriceDirection?: SalesPriceDirection;
   badge: string; taxType: "taxable" | "exempt"; unitPrice: number | null;
   priceIncludesTax: boolean; isMarketPrice: boolean; remaining: number | null;
   maximumQuantity: number | null;
@@ -166,6 +169,7 @@ export function StorefrontWorkspace() {
       <p className="text-sm">배송지: {store.deliveryAddress || "등록된 주소가 없습니다. 거래처 담당자에게 확인해 주세요."}</p>
     </section>}
     {tab === "order" && <section className="space-y-4 p-4">
+      {visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       <label className="block text-sm">배송일
         <input className="mt-1 min-h-11 w-full rounded border p-2" type="date" value={deliveryDate}
@@ -181,7 +185,8 @@ export function StorefrontWorkspace() {
       <ul className="space-y-2">{visibleProducts.map((line) => <li key={line.key} className="rounded border p-3">
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
-          <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p></div>
+          <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
+          {line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat" ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
           <div className="text-right text-sm">{line.isMarketPrice ? "시세 · 가격 미정" :
             line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}

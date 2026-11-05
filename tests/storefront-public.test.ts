@@ -58,6 +58,8 @@ describe("store link public response", () => {
           maximumQuantity: null,
           recentDispatchPrice: null,
           recentDispatchDate: null,
+          salesPriceDirection: "up",
+          purchaseCostDirection: "down",
           purchaseCost: 1200,
           marginPercent: 25,
           supplierName: "private supplier",
@@ -71,6 +73,11 @@ describe("store link public response", () => {
         },
       ],
     } as unknown as Parameters<typeof toPublicStorefront>[0];
+    expect(toPublicStorefront(internal).lines[0].salesPriceDirection).toBe("up");
+    for (const value of ["down", "flat", { direction: "up", cost: 900 }, null, "unknown"]) {
+      Object.assign(internal.lines[0], { salesPriceDirection: value });
+      expect(toPublicStorefront(internal).lines[0].salesPriceDirection).toBe(value === "down" || value === "flat" ? value : undefined);
+    }
     const result = JSON.stringify(toPublicStorefront(internal));
     for (const privateValue of [
       "private-link",
@@ -79,6 +86,7 @@ describe("store link public response", () => {
       "private-version",
       "private supplier",
       "purchaseCost",
+      "purchaseCostDirection",
       "marginPercent",
       "private object path",
       "private ciphertext",

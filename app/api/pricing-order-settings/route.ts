@@ -5,6 +5,7 @@ import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { supabaseRequest } from "@/lib/store";
+import { priceDirectionEnabled } from "../../../lib/pricing/storefront-price-direction";
 import { validateDeliveryPolicy, type DeliveryPolicy } from "@/domains/order/order-rules";
 
 export const dynamic = "force-dynamic";
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest) {
       supabaseRequest<Record<string, unknown>[]>(`store_order_territory_rules?company_id=eq.${company}&select=*`),
       supabaseRequest<Record<string, unknown>[]>(`store_order_holidays?company_id=eq.${company}&select=*&order=holiday_date.asc.nullslast&limit=200`),
     ]);
-    return NextResponse.json({ settings: settings[0] ?? null, territories, territoryRules,
+    return NextResponse.json({ settings: settings[0] ?? null, ...(priceDirectionEnabled() ? { priceDirectionAvailable: true } : {}), territories, territoryRules,
       holidays }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ message: "주문 설정을 불러오지 못했습니다." }, { status: 500 });
@@ -130,6 +131,14 @@ export async function POST(request: NextRequest) {
   const scope = await authorize(request, true, typeof body.companyId === "string" ? body.companyId : undefined);
   if (typeof scope !== "string") return scope;
   try {
+    if (body.action === "storefront-price-direction") {
+      if (!priceDirectionEnabled()) return unavailable();
+      if (typeof body.enabled !== "boolean") return NextResponse.json({ message: "공개 여부를 확인해 주세요." }, { status: 400 });
+      const result = await supabaseRequest<boolean>("rpc/set_storefront_price_direction_visibility", {
+        method: "POST", body: JSON.stringify({ p_company: scope, p_enabled: body.enabled }),
+      });
+      return NextResponse.json({ result });
+    }
     let path = "";
     let payload: Record<string, unknown>;
     if (body.action === "company") {
