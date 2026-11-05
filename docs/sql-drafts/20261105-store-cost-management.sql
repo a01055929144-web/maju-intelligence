@@ -77,8 +77,8 @@ begin
   if not exists (
     select 1 from public.store_account_members
     where company_id=p_company_id and store_account_id=p_store_account_id
-      and id=p_actor_member_id and status='active'
-  ) then raise exception 'active_store_member_required'; end if;
+      and id=p_actor_member_id and status='active' and role in ('owner','manager')
+  ) then raise exception 'store_cost_manager_required'; end if;
   if length(p_product_key) not between 3 and 500 or length(p_product_name) not between 1 and 200
     or length(coalesce(p_specification,'')) > 200 or length(p_unit) not between 1 and 40
     or p_effective_on is null or p_cost_krw not between 0 and 1000000000
@@ -86,26 +86,36 @@ begin
     or (p_source_sha256 is not null and p_source_sha256 !~ '^[0-9a-f]{64}$') then
     raise exception 'invalid_store_cost';
   end if;
-  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text||':'||p_store_account_id::text||':'||p_product_key,0));
+  perform pg_advisory_xact_lock(hashtextextended(p_company_id::text||':'||p_store_account_id::text||':'||
+    coalesce(p_source_sha256||':'||p_source_row_number::text,p_item_id::text,p_product_key),0));
+  if p_source_sha256 is not null then
+    select i.* into v_item
+    from public.store_cost_revisions r
+    join public.store_cost_items i on i.company_id=r.company_id and i.store_account_id=r.store_account_id and i.id=r.store_cost_item_id
+    where r.company_id=p_company_id and r.store_account_id=p_store_account_id
+      and r.source_sha256=p_source_sha256 and r.source_row_number=p_source_row_number;
+    if found then return jsonb_build_object('id',v_item.id,'revision',v_item.revision,'replayed',true); end if;
+  end if;
   select * into v_item from public.store_cost_items
     where company_id=p_company_id and store_account_id=p_store_account_id
       and case when p_item_id is null then product_key=p_product_key else id=p_item_id end
     for update;
   v_item_found := found;
-  if p_source_sha256 is not null and exists (
-    select 1 from public.store_cost_revisions where company_id=p_company_id
-      and store_account_id=p_store_account_id and source_sha256=p_source_sha256
-      and source_row_number=p_source_row_number
-  ) then return jsonb_build_object('id',v_item.id,'revision',v_item.revision,'replayed',true); end if;
   if not v_item_found then
+    if p_item_id is not null then raise exception 'store_cost_item_not_found'; end if;
     if p_expected_revision is not null then raise exception 'store_cost_revision_conflict'; end if;
     insert into public.store_cost_items(company_id,store_account_id,product_key,product_name,specification,unit,effective_on,cost_krw)
       values(p_company_id,p_store_account_id,p_product_key,p_product_name,coalesce(p_specification,''),p_unit,p_effective_on,p_cost_krw)
       returning * into v_item;
   else
     if p_expected_revision is not null and v_item.revision <> p_expected_revision then raise exception 'store_cost_revision_conflict'; end if;
-    update public.store_cost_items set product_key=p_product_key, product_name=p_product_name, specification=coalesce(p_specification,''),
-      unit=p_unit, effective_on=p_effective_on, cost_krw=p_cost_krw,
+    update public.store_cost_items set
+      product_key=case when v_change_kind='import' and p_effective_on < effective_on then product_key else p_product_key end,
+      product_name=case when v_change_kind='import' and p_effective_on < effective_on then product_name else p_product_name end,
+      specification=case when v_change_kind='import' and p_effective_on < effective_on then specification else coalesce(p_specification,'') end,
+      unit=case when v_change_kind='import' and p_effective_on < effective_on then unit else p_unit end,
+      effective_on=greatest(effective_on,p_effective_on),
+      cost_krw=case when v_change_kind='import' and p_effective_on < effective_on then cost_krw else p_cost_krw end,
       revision=revision+1, updated_at=now()
       where company_id=p_company_id and store_account_id=p_store_account_id and id=v_item.id
       returning * into v_item;

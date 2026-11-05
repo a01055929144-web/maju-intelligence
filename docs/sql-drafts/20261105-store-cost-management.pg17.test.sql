@@ -33,6 +33,7 @@ insert into public.store_accounts(company_id,id) values
   ('00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002');
 insert into public.store_account_members(company_id,store_account_id,id,role,status) values
   ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','owner','active'),
+  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003','staff','active'),
   ('00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','owner','active');
 
 insert into public.store_cost_items(id,company_id,store_account_id,product_key,product_name,specification,unit,effective_on,cost_krw)
@@ -61,10 +62,17 @@ begin
     raise exception 'failed_edit_was_not_atomic';
   end if;
 end $$;
-select public.save_store_cost(
-  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
-  '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
-);
+do $$
+declare replay jsonb;
+begin
+  replay := public.save_store_cost(
+    '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+    '변조된키|EA','변조된 이름','','EA','2026-11-08',99999,null,null,'new.xlsx',repeat('b',64),3
+  );
+  if replay->>'id' <> '30000000-0000-4000-8000-000000000001' or (replay->>'replayed')::boolean is not true then
+    raise exception 'replay_did_not_return_original_item';
+  end if;
+end $$;
 select public.save_store_cost(
   '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
   '양파|15kg|망','양파','15kg','망','2026-11-07',20000,null,null,'new.xlsx',repeat('b',64),3
@@ -91,6 +99,33 @@ begin
     raise exception 'cross_tenant_history_allowed';
   exception when foreign_key_violation then null;
   end;
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003',
+      '감자||kg','감자','','kg','2026-11-07',1000,null,null,'staff.xlsx',repeat('c',64),2
+    );
+    raise exception 'staff_write_allowed';
+  exception when others then if sqlerrm <> 'store_cost_manager_required' then raise; end if; end;
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      '감자||kg','감자','','kg','2026-11-07',1000,'39999999-0000-4000-8000-000000000099',3,null,null,null
+    );
+    raise exception 'missing_item_edit_allowed';
+  exception when others then if sqlerrm <> 'store_cost_item_not_found' then raise; end if; end;
+end $$;
+
+select public.save_store_cost(
+  '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  '양파|15kg|망','과거 양파','15kg','망','2026-11-01',17000,null,null,'old.xlsx',repeat('d',64),4
+);
+do $$
+begin
+  if not exists(select 1 from public.store_cost_items where id='30000000-0000-4000-8000-000000000001'
+      and product_name='양파' and effective_on='2026-11-07' and cost_krw=20000 and revision=4)
+    or (select count(*) from public.store_cost_revisions where store_cost_item_id='30000000-0000-4000-8000-000000000001')<>4 then
+    raise exception 'older_import_overwrote_current_cost';
+  end if;
 end $$;
 
 do $$
