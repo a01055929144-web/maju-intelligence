@@ -108,7 +108,29 @@ describe("purchase history", () => {
       { line_key: "a|spec", product_name: "오징어", quantity: 5, receipt_date: "2026-11-03", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4500 },
       { line_key: "a|spec", product_name: "오징어", quantity: 3, receipt_date: "2026-11-04", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 4950 }
     ]);
-    expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, lineKey: "a|spec", previousCost: 4500, changeRate: 10, totalQuantity: 8 });
+    expect(items[0]).toMatchObject({ count: 2, latestCost: 4950, lineKey: "a|spec", previousCost: 4500, changeAmount: 450, changeRate: 10, direction: "up", totalQuantity: 8 });
+  });
+
+  it("keeps an amount and direction when the previous cost is zero", async () => {
+    const { summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
+    const [item] = summarizePurchaseHistory([
+      { line_key: "zero", product_name: "샘플", quantity: 1, receipt_date: "2026-11-03", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 0 },
+      { line_key: "zero", product_name: "샘플", quantity: 1, receipt_date: "2026-11-04", spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: 100 }
+    ]);
+    expect(item).toMatchObject({ previousCost: 0, changeAmount: 100, changeRate: undefined, direction: "up" });
+  });
+
+  it("includes the previous changed cost when it falls beyond the page boundary", async () => {
+    const { attachPurchaseHistoryPreviousCosts, summarizePurchaseHistory } = await import("../domains/pricing/purchase-receipt");
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      line_key: index === 0 || index === 100 ? "target" : `other-${index}`,
+      product_name: index === 0 || index === 100 ? "대상" : `기타 ${index}`,
+      quantity: 1,
+      receipt_date: index === 0 ? "2026-11-05" : index === 100 ? "2026-11-01" : "2026-11-04",
+      spec: null, supplier_name: null, unit: "EA", unit_cost_ex_vat: index === 100 ? 90 : 100
+    }));
+    const item = summarizePurchaseHistory(attachPurchaseHistoryPreviousCosts(rows, rows.slice(0, 100))).find((entry) => entry.lineKey === "target");
+    expect(item).toMatchObject({ latestCost: 100, previousCost: 90, changeAmount: 10, direction: "up" });
   });
 });
 

@@ -1,6 +1,7 @@
 import { supabaseRequest } from "../store";
 import type { PurchaseCostChange, PurchaseCostRepository } from "../../application/pricing/update-purchase-cost";
-import { aliasKey, type CostProduct } from "../../domains/pricing/purchase-cost";
+import { aliasKey, selectPurchaseCostCandidate, type CostProduct, type PurchaseCostCandidate } from "../../domains/pricing/purchase-cost";
+import { convertedUnitCost } from "../../domains/product/catalog-import";
 
 type Row = Record<string, unknown>;
 const enc = encodeURIComponent;
@@ -26,8 +27,8 @@ export const purchaseCostRepository: PurchaseCostRepository = {
   async list(companyId) {
     const [catalog, matches, supplierProducts, suppliers] = await Promise.all([
       pages(`product_catalog?select=id,product_code,canonical_name,spec_value,spec_unit,sales_unit,purchase_price,tax_type&company_id=eq.${enc(companyId)}&order=id`),
-      pages(`supplier_product_matches?select=product_catalog_id,supplier_product_id&company_id=eq.${enc(companyId)}&match_status=in.(auto,confirmed)&order=supplier_product_id`),
-      pages(`supplier_products?select=id,supplier_id,supplier_code,raw_name,raw_spec,raw_unit,latest_cost&company_id=eq.${enc(companyId)}&is_active=eq.true&order=id`),
+      pages(`supplier_product_matches?select=product_catalog_id,supplier_product_id,match_status,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${enc(companyId)}&match_status=in.(auto,confirmed)&order=supplier_product_id`),
+      pages(`supplier_products?select=id,supplier_id,supplier_code,raw_name,raw_spec,raw_unit,latest_cost,cost_confirmed&company_id=eq.${enc(companyId)}&is_active=eq.true&order=id`),
       pages(`product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&order=id`),
     ]);
     const bySupplierProduct = new Map(supplierProducts.map((row) => [String(row.id), row]));
@@ -36,7 +37,7 @@ export const purchaseCostRepository: PurchaseCostRepository = {
     for (const match of matches) {
       const list = byCatalog.get(String(match.product_catalog_id)) || [];
       const supplier = bySupplierProduct.get(String(match.supplier_product_id));
-      if (supplier) list.push(supplier);
+      if (supplier) list.push({ ...supplier, match_status: match.match_status, purchase_to_sales_ratio: match.purchase_to_sales_ratio, conversion_confirmed: match.conversion_confirmed });
       byCatalog.set(String(match.product_catalog_id), list);
     }
     const products: CostProduct[] = catalog.flatMap((row) => {
@@ -49,7 +50,36 @@ export const purchaseCostRepository: PurchaseCostRepository = {
       const linked = byCatalog.get(base.id) || [];
       return linked.length ? linked.map((supplier) => ({ ...base, supplierProductId: String(supplier.id), supplierCode: String(supplier.supplier_code || ""), supplierName: supplierNames.get(String(supplier.supplier_id)) || "", supplierRawKey: aliasKey(String(supplier.raw_name || ""), String(supplier.raw_spec || ""), String(supplier.raw_unit || "")) })) : [base];
     });
-    return { products, suppliers: Array.from(supplierNames.values()) };
+    const changes = catalog.map((row) => {
+      const productId = String(row.id);
+      const linked = byCatalog.get(productId) || [];
+      const change = selectPurchaseCostCandidate(productId, Number(row.purchase_price) || 0, linked.map((supplier) => {
+        const sameUnit = String(supplier.raw_unit || "").trim().toLocaleLowerCase("ko") === String(row.sales_unit || "").trim().toLocaleLowerCase("ko") && Boolean(String(row.sales_unit || "").trim());
+        const rawCost = supplier.latest_cost == null ? null : Number(supplier.latest_cost);
+        const cost = rawCost == null ? null : sameUnit ? rawCost : convertedUnitCost(rawCost, supplier.purchase_to_sales_ratio == null ? undefined : Number(supplier.purchase_to_sales_ratio), supplier.conversion_confirmed === true) ?? null;
+        return {
+          id: String(supplier.id),
+          supplierName: supplierNames.get(String(supplier.supplier_id)) || "",
+          latestCost: cost,
+          confirmed: supplier.cost_confirmed === true && supplier.match_status === "confirmed"
+        };
+      }));
+      if (change) return change;
+      const review = linked.map((supplier) => {
+        const sameUnit = String(supplier.raw_unit || "").trim().toLocaleLowerCase("ko") === String(row.sales_unit || "").trim().toLocaleLowerCase("ko") && Boolean(String(row.sales_unit || "").trim());
+        const reviewReason = supplier.match_status !== "confirmed" ? "매입처 상품 연결 확인 필요" : supplier.cost_confirmed !== true ? "원가 확인 필요" : !sameUnit && supplier.conversion_confirmed !== true ? "단위 환산 확인 필요" : "";
+        return { supplier, reviewReason };
+      }).find(({ supplier, reviewReason }) => supplier.latest_cost != null && Number(supplier.latest_cost) > 0 && reviewReason);
+      return review ? {
+        productId,
+        supplierProductId: String(review.supplier.id),
+        supplierName: supplierNames.get(String(review.supplier.supplier_id)) || "",
+        cost: Number(row.purchase_price) || 0,
+        direction: "review" as const,
+        reviewReason: review.reviewReason
+      } : null;
+    }).filter((change): change is PurchaseCostCandidate => change != null);
+    return { changes, products, suppliers: Array.from(supplierNames.values()) };
   },
 
   async save(companyId, actorName, change: PurchaseCostChange) {

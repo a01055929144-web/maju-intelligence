@@ -108,10 +108,10 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
     }
   }
 
-  const items = useMemo(() => summarizePurchaseHistory(rows || []).filter((item) => !onlyChanged || Boolean(item.changeRate)), [onlyChanged, rows]);
+  const items = useMemo(() => summarizePurchaseHistory(rows || []).filter((item) => !onlyChanged || Boolean(item.changeAmount)), [onlyChanged, rows]);
   const dates = useMemo(() => new Set((rows || []).map((row) => row.receipt_date)).size, [rows]);
-  const up = items.filter((item) => (item.changeRate || 0) > 0).length;
-  const down = items.filter((item) => (item.changeRate || 0) < 0).length;
+  const up = items.filter((item) => item.direction === "up").length;
+  const down = items.filter((item) => item.direction === "down").length;
 
   return (
     <section className="maju-section-card min-w-0 space-y-3 p-4">
@@ -146,7 +146,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
                     <td className="px-3 py-2 text-slate-600">{item.latestDate}</td>
                     <td className="px-3 py-2 text-right font-semibold">{money(item.latestCost)}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.previousCost != null ? money(item.previousCost) : "-"}</td>
-                    <td className={`px-3 py-2 text-right font-bold ${(item.changeRate || 0) > 0 ? "text-rose-600" : (item.changeRate || 0) < 0 ? "text-blue-600" : "text-slate-400"}`}>{item.changeRate ? `${item.changeRate > 0 ? "▲" : "▼"} ${Math.abs(item.changeRate)}%` : "-"}</td>
+                    <td className={`px-3 py-2 text-right font-bold ${item.direction === "up" ? "text-rose-600" : item.direction === "down" ? "text-blue-600" : "text-slate-400"}`}>{item.changeAmount ? <>{item.direction === "up" ? "▲" : "▼"} {item.changeAmount > 0 ? "+" : "-"}{money(Math.abs(item.changeAmount))}{item.changeRate != null ? <small className="ml-1 font-semibold">({Math.abs(item.changeRate)}%)</small> : null}</> : "-"}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.minCost === item.maxCost ? money(item.minCost) : `${money(item.minCost)} ~ ${money(item.maxCost)}`}</td>
                     <td className="px-3 py-2 text-right">{item.totalQuantity ? `${item.totalQuantity.toLocaleString("ko-KR")}${item.unit ? ` ${item.unit}` : ""}` : "-"}</td>
                     <td className="px-3 py-2 text-right text-slate-500">{item.count}</td>
@@ -158,7 +158,7 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
                           {(detail?.key === item.key ? summarizePurchaseHistory(detail.rows).find((group) => group.key === item.key)?.entries || [] : []).map((entry, index, entries) => {
                             const prev = entries[index + 1];
                             const diff = prev ? entry.cost - prev.cost : 0;
-                            return <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs" key={entry.id || `${entry.date}-${index}`}>{entry.date.slice(5)} · <b>{money(entry.cost)}</b>{entry.corrected ? " · 정정됨" : ""}{diff ? <span className={diff > 0 ? " text-rose-600" : " text-blue-600"}> {diff > 0 ? "+" : ""}{diff.toLocaleString("ko-KR")}</span> : null}{entry.quantity ? ` · ${entry.quantity.toLocaleString("ko-KR")}${item.unit ? item.unit : ""}` : ""}{canCorrect && entry.id ? <button aria-label={`${entry.date} ${item.name} 매입 기록 정정`} className="min-h-11 rounded border px-2" onClick={() => { setEditing({ id: entry.id!, cost: String(entry.cost), revision: entry.correctionRevision || 0 }); setProductId(""); setProductChoices([]); setProductQuery(""); setReason(""); }} type="button">정정</button> : null}</span>;
+                            return <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs" key={entry.id || `${entry.date}-${index}`}>{entry.date.slice(5)} · <b>{money(entry.cost)}</b>{entry.corrected ? " · 정정됨" : ""}{diff ? <span className={diff > 0 ? " text-rose-600" : " text-blue-600"}> {diff > 0 ? "+" : ""}{diff.toLocaleString("ko-KR")}</span> : null}{entry.quantity ? ` · ${entry.quantity.toLocaleString("ko-KR")}${item.unit ? item.unit : ""}` : ""}{canCorrect && entry.correctable && entry.id ? <button aria-label={`${entry.date} ${item.name} 매입 기록 정정`} className="min-h-11 rounded border px-2" onClick={() => { setEditing({ id: entry.id!, cost: String(entry.cost), revision: entry.correctionRevision || 0 }); setProductId(""); setProductChoices([]); setProductQuery(""); setReason(""); }} type="button">정정</button> : null}</span>;
                           })}
                           {detail?.key === item.key && detail.loading ? <span className="text-xs text-slate-500">품목 이력을 불러오는 중입니다.</span> : null}
                           {detail?.key === item.key && detail.hasMore ? <button className="maju-button-secondary min-h-11" onClick={() => void loadProductHistory(item, rows?.find((row) => `${row.product_catalog_id || row.line_key}|${row.supplier_name || ""}` === item.key)?.product_catalog_id || null, detail.page + 1)} type="button">이 품목 이력 더 보기</button> : null}

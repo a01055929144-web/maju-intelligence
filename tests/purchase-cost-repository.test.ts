@@ -9,6 +9,34 @@ const supplierProductId = "22222222-2222-4222-8222-222222222222";
 
 beforeEach(() => request.mockReset());
 
+it("lists only confirmed same-unit or confirmed-conversion changes and breaks equal-cost ties by supplier product id", async () => {
+  request.mockImplementation(async (path: string) => {
+    if (!path) return [];
+    expect(path).toContain("company_id=eq.company");
+    if (path.startsWith("product_catalog?")) return [{ id: productId, product_code: "P1", canonical_name: "상품", sales_unit: "EA", purchase_price: 100 }];
+    if (path.startsWith("supplier_product_matches?")) {
+      expect(path).toContain("match_status=in.(auto,confirmed)");
+      return [
+      { product_catalog_id: productId, supplier_product_id: "b", match_status: "confirmed", purchase_to_sales_ratio: null, conversion_confirmed: false },
+      { product_catalog_id: productId, supplier_product_id: "a", match_status: "confirmed", purchase_to_sales_ratio: 10, conversion_confirmed: true },
+      { product_catalog_id: productId, supplier_product_id: "zero", match_status: "confirmed", purchase_to_sales_ratio: null, conversion_confirmed: false },
+      { product_catalog_id: productId, supplier_product_id: "ignored", match_status: "confirmed", purchase_to_sales_ratio: 5, conversion_confirmed: false }
+      ];
+    }
+    if (path.startsWith("supplier_products?")) return [
+      { id: "b", supplier_id: "s2", raw_name: "상품", raw_unit: "EA", latest_cost: 120, cost_confirmed: true },
+      { id: "a", supplier_id: "s1", raw_name: "상품", raw_unit: "BOX", latest_cost: 1200, cost_confirmed: true },
+      { id: "zero", supplier_id: "s1", raw_name: "상품", raw_unit: "EA", latest_cost: 0, cost_confirmed: true },
+      { id: "ignored", supplier_id: "s3", raw_name: "상품", raw_unit: "BOX", latest_cost: 50, cost_confirmed: true }
+    ];
+    if (path.startsWith("product_suppliers?")) return [{ id: "s1", name: "가 매입처" }, { id: "s2", name: "나 매입처" }, { id: "s3", name: "미확정 환산" }];
+    return [];
+  });
+
+  const result = await purchaseCostRepository.list("company") as { changes: Array<Record<string, unknown>> };
+  expect(result.changes).toEqual([{ productId, supplierProductId: "a", supplierName: "가 매입처", cost: 120, direction: "increase" }]);
+});
+
 it("restores both cost rows when the supplier history write fails", async () => {
   request.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
     if (!path) return [];
