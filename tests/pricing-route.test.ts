@@ -3,15 +3,15 @@ vi.mock("@/lib/pricing/feature",()=>import("../lib/pricing/feature"));
 vi.mock("@/lib/pricing/store-order-feature",()=>import("../lib/pricing/store-order-feature"));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), read: vi.fn(), execute: vi.fn() }));
-vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), capability: vi.fn(), read: vi.fn(), execute: vi.fn() }));
+vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, scopeHasCapability: mocks.capability }));
 vi.mock("../lib/pricing/price-sheet-repository", () => ({ priceSheetRepository: { read: mocks.read, execute: mocks.execute } }));
 import { GET, POST } from "../app/api/price-sheets/route";
 const company = "00000000-0000-4000-8000-000000000001";
 const originalFlag = process.env.PRICE_SHEETS_ENABLED;
 const originalHold = process.env.FEATURE_PRICING_COMPANY_IDS;
 beforeEach(() => {
-  vi.clearAllMocks(); process.env.PRICE_SHEETS_ENABLED = "true"; process.env.FEATURE_PRICING_COMPANY_IDS = company;
+  vi.clearAllMocks(); mocks.capability.mockReturnValue(true); process.env.PRICE_SHEETS_ENABLED = "true"; process.env.FEATURE_PRICING_COMPANY_IDS = company;
   mocks.auth.mockResolvedValue({ ok: true, companyId: company, customerSession: { role: "owner" } });
   mocks.read.mockResolvedValue({ groups: [], items: [], lastBatch: null, restored: false });
 });
@@ -68,4 +68,16 @@ it("HOLD allowlisting alone cannot grant pricing access",async()=>{
  expect((await GET(new NextRequest("http://localhost/api/price-sheets"))).status).toBe(404);
  expect(mocks.read).not.toHaveBeenCalled();
  }finally{if(previous===undefined)delete process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;else process.env.HOLD_MODULES_ENABLED_COMPANY_IDS=previous;}
+});
+
+
+it("rejects a manager whose manage_sales capability was revoked before group/category writes", async () => {
+  mocks.auth.mockResolvedValue({ ok: true, role: "customer", companyId: company, customerSession: { role: "member", workspaceRole: "manager", rolePermissionGroup: "manager", rolePermissions: [] } });
+  mocks.capability.mockReturnValue(false);
+  for (const command of [{ action: "group", name: "합성 그룹", margin: 12, rounding: 10 }, { action: "category", category: "농산 > 채소류", groupId: "10000000-0000-4000-8000-000000000001" }, { action: "recalculate" }]) {
+    expect((await POST(new NextRequest("http://localhost/api/price-sheets", { method: "POST", body: JSON.stringify(command) }))).status).toBe(403);
+  }
+  expect((await GET(new NextRequest("http://localhost/api/price-sheets"))).status).toBe(403);
+  expect(mocks.capability).toHaveBeenCalledWith(expect.objectContaining({ companyId: company }), "manage_sales");
+  expect(mocks.execute).not.toHaveBeenCalled(); expect(mocks.read).not.toHaveBeenCalled();
 });
