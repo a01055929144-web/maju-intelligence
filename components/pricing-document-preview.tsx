@@ -31,7 +31,7 @@ export function PageContent({
       : data.theme === "green"
         ? "#047857"
         : "#1f2937";
-  const display = data.display || { columns: 1, promoLayout: "cards", info: [] };
+  const display = data.display;
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const promos = data.lines.filter((l) => l.badge);
@@ -66,7 +66,7 @@ export function PageContent({
         </div>
         {data.recipient && <p>받는 곳: {data.recipient}</p>}
         {data.contact && <p className="text-xs">{data.contact}</p>}
-        <p className="text-xs">부가세 별도 · 면세 품목 별도 표시</p>
+        <p className="text-xs">{display.priceIncludesTax ? "과세 품목 부가세 포함" : "부가세 별도"} · 면세 품목 별도 표시</p>
         {data.expired && (
           <p className="font-semibold text-red-700">
             유효기간이 지나 가격을 표시하지 않습니다.
@@ -81,8 +81,7 @@ export function PageContent({
               <tbody>
                 {promos.map((l, i) => (
                   <tr key={i}>
-                    <td className="border-b border-amber-200 p-1"><span className="mr-1 rounded bg-amber-200 px-1">{l.badge}</span>{l.displayName}</td>
-                    <td className="border-b border-amber-200 p-1">{l.spec} {l.unit}</td>
+                    <td className="border-b border-amber-200 p-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1">{l.badge}</span>{l.displayName}<span data-document-spec className="block text-xs text-slate-600">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span></td>
                     <td className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}</td>
                     <td className="border-b border-amber-200 p-1 text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</td>
                   </tr>
@@ -121,10 +120,10 @@ export function PageContent({
         <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
-              <colgroup>{(columns === 1 ? [5, 35, 25, 25, 10] : [25, 35, 40]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
+              <colgroup>{(columns === 1 ? [6, display.productWidth * 0.83, (100 - display.productWidth) * 0.83, 11] : [display.productWidth, 100 - display.productWidth]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
               <thead>
                 <tr>
-                  {(columns === 1 ? ["No", "품목·브랜드", "규격·단위", "단가", "비고"] : ["품목", "규격", "단가"]).map((t) => (
+                  {(columns === 1 ? ["No", "품목·규격·단위", "단가", "비고"] : ["품목·규격·단위", "단가"]).map((t) => (
                     <th key={t} className="border-b-2 p-1.5">
                       {t}
                     </th>
@@ -135,12 +134,10 @@ export function PageContent({
                 {chunk.map((l, i) => (
                   <tr key={i}>
                     {columns === 1 ? <td className="border-b p-1.5">{start + c * perColumn + i + 1}</td> : null}
-                    <td className="border-b p-1.5 font-semibold">
-                      {l.displayName}
+                    <td className="min-w-0 border-b p-1.5 font-semibold [overflow-wrap:anywhere]">
+                      <span className="block">{l.displayName}</span>
                       {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
-                    </td>
-                    <td data-document-spec className="border-b px-2 py-1.5 whitespace-normal [overflow-wrap:anywhere]">
-                      {l.spec} {l.unit}
+                      {l.spec || l.unit ? <span data-document-spec className="block font-normal text-xs text-slate-600 [overflow-wrap:anywhere]">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span> : null}
                     </td>
                     <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
                     {columns === 1 ? <td className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
