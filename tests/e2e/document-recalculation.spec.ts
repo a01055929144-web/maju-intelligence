@@ -40,7 +40,6 @@ for(const width of [1440,390])test(`server document recalculation survives fresh
 });
 
 
-
 // Margin settings use the same existing pricing command/recalculation flow.
 for (const width of [1440, 390]) for (const failure of ["category-and-recalculate", "create-response"] as const) test(`margin group paths and retry checkpoints ${failure} at ${width}px`, async ({ page }, info) => {
   const groupId = "60000000-0000-4000-8000-000000000001", createdId = "60000000-0000-4000-8000-000000000002";
