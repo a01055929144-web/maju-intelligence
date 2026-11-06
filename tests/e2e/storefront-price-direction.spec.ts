@@ -122,6 +122,11 @@ for (const width of [1440, 390]) {
     await page.reload();
     await page.getByRole("button", { name: "내역", exact: true }).click();
     await expect(page.getByText("문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다.", { exact: false })).toBeVisible();
+    await page.getByRole("button", { name: "주문", exact: true }).click();
+    await expect(page.getByText("확정된 품목 합계", { exact: false })).toHaveCount(0);
+    await expect(page.getByText("12,000원", { exact: true })).toHaveCount(0);
+    await expect(submit).toBeDisabled();
+    await page.getByRole("button", { name: "내역", exact: true }).click();
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText("16,000원", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 담기", exact: true })).toHaveCount(0);

@@ -80,6 +80,7 @@ export function StorefrontWorkspace() {
   useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
   const store = data?.store;
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
+  const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
   const categories = Array.from(new Set(store?.lines.map((line) => line.category || "미분류") ?? [])).sort((a, b) => a.localeCompare(b, "ko"));
   const hasPriceDirections = pricesReady && Boolean(store?.priceAvailable && store.lines.some(line => publicSalesPriceDirection(line.salesPriceDirection)));
@@ -217,7 +218,7 @@ export function StorefrontWorkspace() {
       <p className="text-sm">배송지: {store.deliveryAddress || "등록된 주소가 없습니다. 거래처 담당자에게 확인해 주세요."}</p>
     </section>}
     {tab === "order" && <section className="space-y-4 p-4 md:p-6">
-      {visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
+      {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!pricesReady ? retryLoad : null}
       <label className="block text-sm">배송일
@@ -240,11 +241,11 @@ export function StorefrontWorkspace() {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <button aria-pressed={priceChangesOnly} className="min-h-[44px] rounded border px-3"
           onClick={() => setPriceChangesOnly((value) => !value)}>판매가 변동만</button>
-        <label>정렬 <select disabled={busy || !pricesReady} className="min-h-[44px] rounded border px-2" value={sortBy}
+        <label>정렬 <select disabled={busy || !pricesVisible} className="min-h-[44px] rounded border px-2" value={sortBy}
           onChange={(event) => setSortBy(event.target.value as "name" | "price")}>
           <option value="name">상품명</option><option value="price">판매가</option>
         </select></label>
-        <button disabled={busy || !pricesReady} className="min-h-[44px] rounded border px-3" onClick={() => setAscending((value) => !value)}
+        <button disabled={busy || !pricesVisible} className="min-h-[44px] rounded border px-3" onClick={() => setAscending((value) => !value)}
           aria-label={ascending ? "내림차순으로 변경" : "오름차순으로 변경"}>{ascending ? "오름차순 ↑" : "내림차순 ↓"}</button>
         <div role="group" aria-label="품목 배열" className="ml-auto hidden gap-1 md:flex">
           <button aria-pressed={orderView === "grid"} className="min-h-[44px] rounded border px-3" onClick={() => setOrderView("grid")}>격자형</button>
@@ -257,11 +258,11 @@ export function StorefrontWorkspace() {
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
-          {line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat" ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
-          <div className="text-right text-sm">{!pricesReady ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
+          {pricesVisible && (line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat") ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
+          <div className="text-right text-sm">{!pricesVisible ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
             line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}
-          {line.recentDispatchPrice !== null && line.recentDispatchDate &&
+          {pricesVisible && line.recentDispatchPrice !== null && line.recentDispatchDate &&
             <> 최근 출고 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)} (참고)</>}
         </p>}
         <div className="mt-2 flex gap-2 text-xs md:mt-0">
@@ -280,7 +281,7 @@ export function StorefrontWorkspace() {
       </li>)}</ul>
       <label className="block text-sm">요청 사항<textarea className="mt-1 w-full rounded border p-2" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
-      {pricesReady && summary && <div className="rounded bg-slate-50 p-3 text-sm">
+      {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
         <p>부가세 {won(summary.tax)} · 배송비 {won(summary.deliveryFee)}</p>
         <p className="font-semibold">확정된 품목 합계 {won(summary.knownTotal)}</p>
