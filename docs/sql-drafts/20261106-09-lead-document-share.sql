@@ -87,6 +87,7 @@ begin
   if not found or l.created_by_key is distinct from p_actor then raise exception 'share_document_not_found'; end if;
   if l.document_id is distinct from p_document_id or l.document_version_id is distinct from p_document_version_id
     or l.lead_id is distinct from p_lead_id or l.idempotency_key is distinct from p_idempotency_key then raise exception 'share_delivery_conflict'; end if;
+  if l.send_id is null and (l.revoked_at is not null or l.expires_at<=clock_timestamp()) then raise exception 'share_link_unavailable'; end if;
   select * into d from pricing_documents where company_id=p_company_id and id=l.document_id for share;
   if not found or d.kind not in ('sheet','quote') or (d.kind='quote' and d.owner_key is distinct from p_actor)
     or to_jsonb(d)->>'archived_at' is not null then raise exception 'share_document_not_found'; end if;

@@ -38,7 +38,7 @@
 - `(company_id,idempotency_key)` 고유. `(company_id,send_id)` 고유이며 NULL은 준비 상태다. 초기 삽입에 send_id를 넣지 못한다.
 - trigger의 quote 작성자 검사는 **새 외부 공유 링크 삽입**에만 적용하며 기존 문서 조회를 제한하지 않는다. 정확한 게시 버전, 동일 회사의 병합되지 않은 리드, 게시 유효기간도 검사한다. 선택적 보관 컬럼이 있으면 보관 문서도 거부하며 미적용 보관 컬럼을 직접 참조하지 않는다.
 - 생성/만료는 DB 시각과 TTL로 계산한다. 문서·버전·대상·키·토큰·TTL·시각은 변경 불가다. 새 버전 공유는 새 링크로 발급한다.
-- send_id는 같은 회사·문서·버전·리드·전달 키·작성자이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 같은 리드·버전의 예전 전달 기록을 새 링크에 끼워 넣지 못한다. 연결/회수 취소는 불가하다. 늦은 전달 기록 연결은 링크를 재활성화하지 않는다.
+- send_id는 같은 회사·문서·버전·리드·전달 키·작성자이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 같은 리드·버전의 예전 전달 기록을 새 링크에 끼워 넣지 못한다. 연결/회수 취소는 불가하다. 회수·하드 만료 뒤 신규 발송은 거부하고 이미 send_id가 있는 동일 키 재시도만 기존 ID를 복원한다. 이 복원은 링크를 재활성화하지 않는다.
 - RLS ON, anon/authenticated/public 직접 접근 및 trigger 함수 실행 권한 없음. service_role은 select/insert/update만 허용한다. 실제 인증은 서버 API에서 먼저 수행한다. 새 SECURITY DEFINER·기존 테이블 변경·기존 행 backfill 없음. 실제 전달만 처리하는 service-only SECURITY INVOKER RPC 하나를 추가한다.
 
 ## 4. 토큰·공개 열람 계약
@@ -85,3 +85,5 @@
 - lead_actions.metadata는 문서/버전/링크/send/재시도 UUID만 보존한다. URL/토큰/가격/원가는 저장하지 않는다. actor_name은 인증 세션에서 결정한다. 실제 quote는 action_type=quote/result=견적 전달, sheet는 dm/단가표 전달로 기존 연락 이력 조회에 나타난다. 링크 열람은 연락·리드 상태 변경을 만들지 않는다.
 - 추가 선행 의존성: 기존 lead_actions의 metadata/actor_name/result/memo 컬럼 및 서비스 역할 SELECT/INSERT 권한, 병합과의 경쟁을 막는 기존 리드 행 잠금용 SELECT/UPDATE 권한(20260818/20261009 기존 스키마). 이 초안은 기존 lead_actions 테이블을 만들거나 변경하지 않는다. 테스트의 해당 테이블은 주변 합성 fixture다.
 - 기존 테이블/열/행의 backfill 없이 RPC 하나만 추가한다. anon/authenticated/PUBLIC 실행 금지. 운영 SQL 승인·적용, 기능 ON 및 배포 금지는 그대로다.
+
+- RPC의 회수/만료 검사는 공유 행 잠금 안에서 수행한다. send_id=NULL인 회수·만료 링크의 새 전달은 금지한다. 이미 send_id가 연결된 동일 입력·작성자 재시도는 기존 send/leadAction ID만 복원하며 링크가 다시 유효해지지 않는다. actor_name은 #288 서버가 인증 세션에서만 주입하며 클라이언트 actorName은 사용하지 않는다.
