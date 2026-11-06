@@ -41,6 +41,7 @@ beforeEach(() => {
     if (table === "rpc/pricing_s2_public_request_guard") {
       const b = JSON.parse(String(init?.body));
       expect(b.p_requester_hash).toMatch(/^[a-f0-9]{64}$/); expect(Object.keys(b.p_payload)).toEqual(["shareLinkId"]);
+      expect(b.p_limit).toBe(b.p_route_key === "lead-document-prepare-v1" ? 10 : 20);
       expect(JSON.stringify(b)).not.toContain("synthetic-test-key");
       return limit;
     }
@@ -148,11 +149,13 @@ it("keeps nonce and signing purposes separate even if deployment keys are accide
   expect(verifyDocumentShareToken(issueStoreLinkToken(doc).token)).toBeNull();
   const issued = issueDocumentShareToken(doc); expect(verifyDocumentShareToken(issued.token)).toMatchObject({ id: doc, hash: issued.hash });
 });
-it.each(["revoked", "expired", "merged", "company"])("returns the same content-free 404 for %s links", async state => {
+it.each(["revoked", "expired", "merged", "company", "author", "archived"])("returns the same content-free 404 for %s links", async state => {
   const p = await prepared();
   if (state === "revoked") await service.execute(scope, { action: "revoke-share", shareLinkId: p.shareLinkId });
   if (state === "expired") links[0].expires_at = "2020-01-01T00:00:00Z";
   if (state === "merged") merged = true;
+  if (state === "author") owner = "another-author";
+  if (state === "archived") archived = true;
   if (state === "company") vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", other);
   const r = await publicPost(request({ token: token(p.publicUrl) })); expect(r.status).toBe(404); expect(await r.json()).toEqual({ message: "공유 문서를 사용할 수 없습니다." });
 });
@@ -178,6 +181,7 @@ it("enforces strict same-origin JSON, actual body bytes and token-only input bef
   for (const b of [{ token: "x", companyId: company }, { token: "x".repeat(201) }, { token: "한글" }, { token: "x", padding: "x".repeat(1024) }]) expect((await publicPost(request(b))).status).toBe(404);
   expect((await publicPost(request({ token: "x" }, "https://other.test"))).status).toBe(403);
   expect((await publicPost(request({ token: "x" }, "null"))).status).toBe(403);
+  expect((await publicPost(request({ token: "x" }, "https://fixture.test", { "Content-Type": "application/jsonevil" }))).status).toBe(404);
   expect(mocks.db).not.toHaveBeenCalled();
 });
 it("limits prepare/read separately and fails closed on guard/storage failure", async () => {
@@ -194,4 +198,18 @@ it("keeps every new-table access off for default OFF, excluded companies and ano
   vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "true"); vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", "");
   expect((await privatePost(request(prepare))).status).toBe(404); expect(mocks.db).not.toHaveBeenCalled();
   mocks.auth.mockResolvedValueOnce({ ok: false }); expect((await privatePost(request(prepare))).status).toBe(401);
+});
+it("does not query the sharing table when every allowed company's PRICING gate is off", async () => {
+  vi.stubEnv("FEATURE_PRICING_COMPANY_IDS", other);
+  expect((await publicPost(request({ token: "x" }))).status).toBe(404); expect(mocks.db).not.toHaveBeenCalled();
+});
+it("does not trust client forwarded headers or put a raw IP into request audit arguments", async () => {
+  const p = await prepared(); vi.stubEnv("VERCEL", "0");
+  for (const ip of ["192.0.2.1", "192.0.2.2"]) await publicPost(request({ token: token(p.publicUrl) }, "https://fixture.test", { "x-forwarded-for": ip, "x-vercel-forwarded-for": ip }));
+  let reads = mocks.db.mock.calls.filter(([path]) => path === "rpc/pricing_s2_public_request_guard").slice(-2).map(([, init]) => JSON.parse(init.body));
+  expect(reads[0].p_requester_hash).toBe(reads[1].p_requester_hash);
+  vi.stubEnv("VERCEL", "1");
+  await publicPost(request({ token: token(p.publicUrl) }, "https://fixture.test", { "x-vercel-forwarded-for": "192.0.2.1" }));
+  reads = mocks.db.mock.calls.filter(([path]) => path === "rpc/pricing_s2_public_request_guard").slice(-1).map(([, init]) => JSON.parse(init.body));
+  expect(JSON.stringify(reads)).not.toContain("192.0.2.1");
 });

@@ -2,7 +2,7 @@ import { expect, test, type Route } from "@playwright/test";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
 
-for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} prepare, explicit delivery and public read at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} prepare, explicit delivery and public read at ${width}px`, async ({ page, browser }, info) => {
   page.setDefaultTimeout(15_000);
   await page.setViewportSize({ width, height: 900 });
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
@@ -78,7 +78,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   for (const b of [...prepareInputs, ...sendInputs]) { expect(b).not.toHaveProperty("publicUrl"); expect(b).not.toHaveProperty("companyId"); }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`lead-share-${kind}-${width}.png`), fullPage: true });
-  const viewer = await page.context().newPage();
+  const viewerContext = await browser.newContext({ viewport: { width, height: 900 } });
+  const viewer = await viewerContext.newPage();
   await viewer.setViewportSize({ width, height: 900 });
   await viewer.route("**/api/pricing-documents/public", publicHandler);
   await viewer.goto(new URL(publicUrl, page.url()).href);
@@ -99,5 +100,5 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(revoked).toBe(true);
   await viewer.reload(); await expect(viewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
-  await viewer.close();
+  await viewerContext.close();
 });

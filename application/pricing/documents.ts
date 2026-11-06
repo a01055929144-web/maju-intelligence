@@ -1,5 +1,5 @@
 import { calculatePrice } from "../../domains/pricing/price-rules";
-import { parseDocumentSend } from "../../domains/pricing/document-send";
+import { DocumentSendError, parseDocumentSend } from "../../domains/pricing/document-send";
 import { parseDocumentShare } from "../../domains/pricing/document-share";
 import {
   dateField,
@@ -42,7 +42,7 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       if (action === "record-send") return repository.request<T>(scope, action, parseDocumentSend(body));
       if (action === "prepare-share") return repository.request<T>(scope, action, parseDocumentShare(body));
       if (action === "revoke-share") {
-        if (!isId(body.shareLinkId)) throw new Error("공유 링크를 확인해 주세요.");
+        if (!isId(body.shareLinkId)) throw new DocumentSendError("공유 링크를 확인해 주세요.", 400);
         return repository.request<T>(scope, action, { shareLinkId: body.shareLinkId.toLowerCase() });
       }
       if (!isId(id)) throw new Error("저장 번호를 확인해 주세요.");
