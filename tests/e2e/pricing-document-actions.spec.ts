@@ -37,7 +37,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   });
   await page.goto("/revenue/pricing/documents");
   await page.getByRole("button", { name: "인쇄 검증 문서", exact: true }).click();
-  const paperSpec = page.locator(".pricing-edit-grid td[title]").first();
+  const paperSpec = page.locator(".pricing-edit-grid [data-document-spec]").first();
   await expect(paperSpec).toContainText(spec);
   expect(await paperSpec.evaluate(el => getComputedStyle(el).textOverflow)).not.toBe("ellipsis");
   expect(await paperSpec.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
@@ -83,3 +83,4 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(page.getByRole("status").filter({ hasText: "복원했습니다" })).toBeVisible();
   expect(archived).toBe(false); expect(JSON.stringify(content)).toBe(original);
 });
+
