@@ -120,7 +120,7 @@ export function PricingDocPaper({
                     {editable ? <span aria-hidden="true" className="cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
                     <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
-                    {content.showSpec && (line.spec || line.unit) ? <span className="block px-1 text-xs text-slate-600 [overflow-wrap:anywhere]">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span> : null}
+                    {content.showSpec && (line.spec || line.unit) ? <span className="block px-1 text-xs text-slate-600 [overflow-wrap:anywhere]" data-document-spec>{[line.spec, line.unit].filter(Boolean).join(" · ")}</span> : null}
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
@@ -227,3 +227,4 @@ function QuickAdd({ added, onAdd, onSearch }: {
     </div>
   );
 }
+
