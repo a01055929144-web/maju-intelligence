@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import type { PricingCommand } from "@/application/pricing/manage-price-sheets";
 import { CATEGORY_SEP, categoryAncestors, cleanCategory, isUnder, splitCategory } from "@/domains/pricing/product-category";
+import { ProductCategoryPicker } from "./product-category-picker";
 
 type Item = { id: string; code: string; name: string; spec: string; unit: string; category: string; suggestion: string };
 const UNSORTED = "__none__";
@@ -194,7 +195,6 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
     );
   };
   const chip = (on: boolean) => `rounded-full px-3 py-1 text-xs font-bold ${on ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"}`;
-  const optionLabel = (path: string) => { const parts = splitCategory(path); return `${"　".repeat(parts.length - 1)}${parts[parts.length - 1]}`; };
   const sortedOptions = buildTree(allPaths);
   const flat = (nodes: TreeNode[]): string[] => nodes.flatMap((node) => [node.path, ...flat(node.children)]);
   const selectPaths = flat(sortedOptions);
@@ -204,13 +204,14 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-black">분류 정리 · 분류별 마진</h2>
-          <p className="text-sm text-slate-600">KAMIS·aT 부류를 참고한 분류입니다. 종합식자재는 대·중분류로, 축산·수산 전문은 소분류(부위 등)까지 내려가 마진을 다르게 줄 수 있습니다. 아래 분류에 따로 정한 마진이 위 분류보다 우선입니다.</p>
+          <p className="text-sm text-slate-600">추천을 채우거나 분류를 골라 확인한 뒤 「확인하고 저장」을 누르세요. 마진은 필요할 때 따로 펼쳐 설정합니다.</p>
         </div>
         {unsortedCount ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">미분류 {unsortedCount}개</span> : null}
       </div>
       {error ? <p className="text-sm text-rose-700" role="alert">{error}</p> : null}
 
-      <div className="rounded-lg border">
+      <details className="rounded-lg border">
+        <summary className="cursor-pointer bg-slate-50 px-3 py-2 text-sm font-semibold">분류별 마진 설정은 필요할 때 열기</summary>
         <div className="flex flex-wrap items-center gap-2 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
           <strong className="text-slate-800">분류별 마진</strong>
           <label className="ml-auto flex items-center gap-1"><input checked={onlyUsed} onChange={(e) => setOnlyUsed(e.target.checked)} type="checkbox" />상품이 있는 분류만</label>
@@ -220,7 +221,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
         <div className="max-h-[420px] overflow-auto">
           {tree.length ? tree.map((node) => renderNode(node, 0)) : <p className="p-4 text-center text-sm text-slate-500">아직 분류된 상품이 없습니다. 아래에서 「MAJU 추천 채우기」로 시작하세요.</p>}
         </div>
-      </div>
+      </details>
 
       <div className="space-y-2 border-t pt-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -230,7 +231,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
           {filter && filter !== UNSORTED && splitCategory(filter).length > 1 ? <span className="text-xs text-teal-800">· {filter}</span> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input aria-label="분류 정리 상품 검색" className="h-9 min-w-[200px] flex-1 rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setSearch(e.target.value)} placeholder="코드·상품명·규격·분류 검색" value={search} />
+          <input aria-label="분류 정리 상품 검색" className="h-9 min-w-[200px] flex-1 rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setSearch(e.target.value)} placeholder="상품명·규격·분류 검색" value={search} />
           <button className="h-9 rounded-md bg-amber-500 px-3 text-sm font-black text-white disabled:bg-slate-300" disabled={!suggestable.length} onClick={fillSuggestions} type="button">MAJU 추천 채우기 ({suggestable.length})</button>
           <button className="h-9 rounded-md bg-teal-700 px-3 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || !changed.length} onClick={() => void saveDraft()} type="button">확인하고 저장 ({changed.length})</button>
           {changed.length ? <button className="h-9 px-2 text-sm text-slate-500 underline" onClick={() => setDraft({})} type="button">되돌리기</button> : null}
@@ -238,8 +239,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
         {picked.size ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
             <strong>{picked.size}개 선택</strong> →
-            <input aria-label="옮길 분류 검색 선택" className="h-9 min-w-0 flex-1 rounded px-2 text-slate-900 sm:max-w-[300px]" list="bulk-category-options" maxLength={95} onChange={(e) => setMoveTo(e.target.value)} placeholder="분류 검색 또는 새 분류 입력" value={moveTo} />
-            <datalist id="bulk-category-options">{selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}</datalist>
+            <ProductCategoryPicker label="옮길 분류 검색 선택" onChange={setMoveTo} options={selectPaths} value={moveTo} />
             <button className="min-h-11 rounded bg-teal-500 px-3 py-1 font-bold disabled:opacity-50" disabled={!moveTo.trim()} onClick={applyMove} type="button">옮기기</button>
             <button className="ml-auto text-white/80" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
           </div>
@@ -249,7 +249,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
             <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
               <tr>
                 <th className="w-8 p-2"><input aria-label="보이는 상품 전체 선택" checked={visible.length > 0 && visible.every((i) => picked.has(i.id))} onChange={(e) => setPicked(e.target.checked ? new Set(visible.map((i) => i.id)) : new Set())} type="checkbox" /></th>
-                <th className="p-2">상품</th><th className="p-2">규격·단위</th><th className="p-2">분류</th><th className="p-2">MAJU 추천</th>
+                <th className="p-2">상품</th><th className="p-2">규격·단위</th><th className="p-2">분류 · 추천</th>
               </tr>
             </thead>
             <tbody>
@@ -259,20 +259,19 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
                 return (
                   <tr className={`border-t ${pending ? "bg-amber-50" : picked.has(item.id) ? "bg-teal-50" : ""}`} key={item.id}>
                     <td className="p-2"><input aria-label={`${item.name} 선택`} checked={picked.has(item.id)} onChange={(e) => setPicked((prev) => { const s = new Set(prev); if (e.target.checked) s.add(item.id); else s.delete(item.id); return s; })} type="checkbox" /></td>
-                    <td className="p-2"><span className="font-semibold">{item.name}</span>{item.code ? <span className="ml-1 text-[11px] text-slate-400">{item.code}</span> : null}</td>
+                    <td className="p-2 font-semibold">{item.name}</td>
                     <td className="p-2 text-xs text-slate-600">{item.spec} {item.unit}</td>
                     <td className="p-2">
-                      <input aria-label={`${item.name} 분류 검색 선택`} className={`h-9 w-full min-w-[180px] rounded border px-2 text-sm ${pending ? "border-amber-400 font-bold" : "border-slate-300"}`} list="row-category-options" onChange={(e) => setDraft((prev) => ({ ...prev, [item.id]: e.target.value }))} placeholder="미분류" title={value} value={value} />
+                      <ProductCategoryPicker label={`${item.name} 분류 검색 선택`} onChange={(next) => setDraft((prev) => ({ ...prev, [item.id]: next }))} options={selectPaths} value={value} />
+                      {item.suggestion && item.suggestion !== value ? <button className="mt-1 text-left text-xs font-semibold text-amber-700 underline" onClick={() => setDraft((prev) => ({ ...prev, [item.id]: item.suggestion }))} type="button">추천: {item.suggestion.replace(/ > /g, " › ")} 적용</button> : null}
                     </td>
-                    <td className="p-2 text-xs">{item.suggestion ? (item.suggestion === value ? <span className="text-slate-400">같음</span> : <button className="text-left font-bold text-amber-700 underline" onClick={() => setDraft((prev) => ({ ...prev, [item.id]: item.suggestion }))} type="button">{item.suggestion.replace(/ > /g, " › ")} 적용</button>) : <span className="text-slate-300">-</span>}</td>
                   </tr>
                 );
               })}
-              {!visible.length ? <tr><td className="p-6 text-center text-slate-500" colSpan={5}>해당 상품이 없습니다.</td></tr> : null}
+              {!visible.length ? <tr><td className="p-6 text-center text-slate-500" colSpan={4}>해당 상품이 없습니다.</td></tr> : null}
             </tbody>
           </table>
         </div>
-        <datalist id="row-category-options">{selectPaths.map((path) => <option key={path} value={path}>{optionLabel(path)}</option>)}</datalist>
         <div className="flex items-center gap-2 text-xs">
           <button className="rounded border px-2 py-1" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} type="button">이전</button>
           <span>{page}/{pages} · {shown.length}개</span>
