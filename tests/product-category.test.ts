@@ -44,6 +44,8 @@ describe("product category suggestion (대 > 중 > 소)", () => {
     expect(cleanCategory("a>b>c>d")).toEqual({ error: "카테고리는 대·중·소 3단계까지입니다." });
     expect(categoryOptions(["베이커리 > 빵"])).toContain("베이커리 > 빵");
     expect(categoryOptions([])).toContain("축산 > 돈육 > 목살");
+    expect(categoryOptions([])).toContain("공산품 > 조미·장류 > 소스·드레싱");
+    expect(categoryOptions(["양념·조미료 > 장류"])).toContain("양념·조미료 > 장류");
     expect(categoryLevelOptions("회사분류 > 냉장 > 특선")).toMatchObject({
       large: expect.arrayContaining(["회사분류"]),
       medium: ["냉장"],
@@ -51,3 +53,4 @@ describe("product category suggestion (대 > 중 > 소)", () => {
     });
   });
 });
+
