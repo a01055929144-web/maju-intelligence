@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "../../../lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope } from "../../../lib/auth";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
@@ -8,6 +8,8 @@ import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
 import { documentArchiveEnabled } from "../../../lib/pricing/document-archive";
 import { DocumentSendError } from "../../../domains/pricing/document-send";
+import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
+import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -69,9 +71,11 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
   let recordSend = false;
+  let sharingAction = false;
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1),
       // 11/4: 화면은 search 로 보내 왔는데 q 만 읽어 검색이 안 되던 문제 — 둘 다 받습니다.
@@ -88,6 +92,10 @@ async function handle(request: NextRequest, write: boolean) {
       );
     const input: unknown = write ? await request.json() : null;
     recordSend = Boolean(input && typeof input === "object" && "action" in input && input.action === "record-send");
+    sharingAction = Boolean(input && typeof input === "object" && "action" in input &&
+      (input.action === "prepare-share" || input.action === "revoke-share" || (recordSend && "shareLinkId" in input)));
+    if (sharingAction && !scope.sharingEnabled) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+    if (sharingAction && !request.headers.get("origin")) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
     const result = write
       ? await documents.execute(scope, input)
       : await documents.read(
@@ -112,10 +120,11 @@ async function handle(request: NextRequest, write: boolean) {
         );
     return NextResponse.json(
       { result, manager, ...(scope.archiveEnabled ? { archiveAvailable: true } : {}) },
-      { headers: { "Cache-Control": "no-store" } },
+      { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } },
     );
   } catch (error) {
     if (error instanceof DocumentSendError) return NextResponse.json({ message: error.message }, { status: error.status });
+    if (sharingAction) return NextResponse.json({ message: "공유 요청을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
     if (recordSend) return NextResponse.json({ message: "전달 기록을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503 });
     console.error("Pricing P1 request failed", error);
     return NextResponse.json(

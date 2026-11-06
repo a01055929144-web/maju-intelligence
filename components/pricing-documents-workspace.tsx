@@ -30,6 +30,8 @@ import { PricingDocumentLibrary } from "./pricing-document-library";
 import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
+import type { LeadDocumentContext } from "@/application/pricing/document-entry";
+import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -39,10 +41,16 @@ export function PricingDocumentsWorkspace({
   companyId,
   manager,
   storeLinksEnabled = false,
+  initialStartKind,
+  leadContext,
+  sharingEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
   storeLinksEnabled?: boolean;
+  initialStartKind?: DocumentKind;
+  leadContext?: LeadDocumentContext;
+  sharingEnabled?: boolean;
 }) {
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
@@ -72,15 +80,15 @@ export function PricingDocumentsWorkspace({
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
     [autoPrint, setAutoPrint] = useState(false),
-    [starting, setStarting] = useState<DocumentKind | null>(null),
+    [starting, setStarting] = useState<DocumentKind | null>(initialStartKind ?? null),
     [picked, setPicked] = useState<Set<string>>(new Set());
   const lineKey = (l: PrintLine) => `${l.productId}:${l.promotionId}`;
   // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
   const requestedTab = useSearchParams()?.get("tab") || "";
   useEffect(() => {
-    if (requestedTab === "library" || requestedTab === "profile") { setTab(requestedTab); setView("editor"); }
+    if (!initialStartKind && (requestedTab === "library" || requestedTab === "profile")) { setTab(requestedTab); setView("editor"); }
     else { setTab("documents"); setView("list"); }
-  }, [requestedTab]);
+  }, [requestedTab, initialStartKind]);
   const [bulkMargin, setBulkMargin] = useState("12"),
     [baselines, setBaselines] = useState<Record<string, number>>({});
   const excelInput = useRef<HTMLInputElement>(null);
@@ -170,7 +178,7 @@ export function PricingDocumentsWorkspace({
       kind,
       title: kind === "sheet" ? "단가표" : "식자재 견적서",
       ...profile.content,
-      recipient: "",
+      recipient: leadContext?.name.slice(0, 100) || "",
       validUntil: koreaDay(new Date(Date.now() + 14 * 86400000)),
       theme: "blue",
       layout: "auto",
@@ -224,7 +232,7 @@ export function PricingDocumentsWorkspace({
       revision: 0,
       updatedAt: "",
       content: content
-        ? { ...structuredClone(content), kind }
+        ? { ...structuredClone(content), kind, recipient: leadContext?.name.slice(0, 100) ?? content.recipient }
         : blankContent(kind),
     });
     setDirty(true);
@@ -236,10 +244,11 @@ export function PricingDocumentsWorkspace({
   }
   async function select(d: DocumentDraft) {
     if (!discard()) return;
+    setVersions([]);
     setDraft(structuredClone(d));
     setDirty(false);
     setPreview(null);
-    setVersions(await read<DocumentVersion[]>("versions", { id: d.id }));
+    setVersions((await read<DocumentVersion[]>("versions", { id: d.id })).filter(v => v.documentId === d.id));
     const products = await read<{ items: CatalogChoice[] }>("catalog", {
       productIds: Array.from(new Set(d.content.lines.map((l) => l.productId))),
     });
@@ -273,7 +282,7 @@ export function PricingDocumentsWorkspace({
     );
     // 11/4: 확정 후 미리보기 창을 자동으로 띄우지 않습니다(필요할 때 '미리보기·인쇄' 또는 버전 미리보기).
     setVersions(await read<DocumentVersion[]>("versions", { id: draft.id }));
-    setMessage(`버전 ${r.result.version}을 확정했습니다. 아래 '버전 ${r.result.version} 미리보기'에서 인쇄할 수 있습니다.`);
+    setMessage(`버전 ${r.result.version}을 확정했습니다. 아래 '버전 ${r.result.version} 미리보기'에서 인쇄할 수 있습니다.${leadContext ? " 작성·게시만 완료됐으며 리드에게 전달하지 않았습니다." : ""}`);
   }
   useEffect(() => {
     let active = true;
@@ -476,7 +485,12 @@ export function PricingDocumentsWorkspace({
   const editable = Boolean(
     draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
   );
+  const leadNotice = leadContext ? <aside className="pricing-no-print flex flex-wrap items-center gap-2 rounded border p-3 text-sm" aria-label="리드 문서 작성 문맥">
+    <p className="mr-auto">{leadContext.name} · {sharingEnabled ? "작성·게시는 전달이 아닙니다. 게시 버전으로 링크를 준비한 뒤 실제 전달을 별도로 기록해 주세요." : "작성·게시 전용입니다. 공개 링크 준비 전이며 아직 전달되지 않았습니다."}</p>
+    <a className="inline-flex min-h-[44px] items-center rounded border px-3" href={leadContext.backHref} onClick={event => { if (!discard()) event.preventDefault(); }}>리드 상세로 돌아가기</a>
+  </aside> : null;
   if (view === "list" && tab === "documents") return <div className="space-y-3">
+    {leadNotice}
     {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
     <div className="flex flex-wrap justify-end gap-2">
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">행사·묶음·템플릿</button>
@@ -490,6 +504,7 @@ export function PricingDocumentsWorkspace({
   </div>;
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
+      {leadNotice}
       <header className="pricing-no-print sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-1 py-2 backdrop-blur">
         <button className={box} onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button">← 문서 목록</button>
         {draft && tab === "documents" ? (
@@ -1178,6 +1193,7 @@ export function PricingDocumentsWorkspace({
           )}
         </div>
       )}
+      {leadContext && sharingEnabled && draft && versions.some(v => v.documentId === draft.id) ? <PricingLeadDocumentShare key={`${draft.id}:${leadContext.id}`} companyId={companyId} leadId={leadContext.id} documentId={draft.id} versions={versions} onDeliveryRecorded={() => setMessage("리드에게 실제 전달한 기록을 확인했습니다.")} /> : null}
       {preview && (
         /* 11/4: 와이어프레임 ④ — 미리보기는 큰 화면(모달)으로: 온라인(휴대폰)·오프라인(A4) 나란히, 글자 크기, 인쇄·PDF·PNG·엑셀 */
         <div aria-label="미리보기" aria-modal="true" className="pricing-preview-modal fixed inset-0 z-[60] overflow-y-auto bg-slate-100" role="dialog">
@@ -1196,7 +1212,7 @@ export function PricingDocumentsWorkspace({
           fontScale={fontScale}
           version={preview}
           companyId={companyId}
-          canManageLinks={manager && storeLinksEnabled}
+            canManageLinks={manager && storeLinksEnabled && !leadContext}
           refresh={async () => {
             if (preview.id.startsWith("preview-")) {
               const promos = await read<Promotion[]>("promotions");

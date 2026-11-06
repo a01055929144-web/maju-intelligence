@@ -1,15 +1,17 @@
 import { field, isId } from "./document";
 
 export class DocumentSendError extends Error {
-  constructor(message: string, public readonly status: 400 | 404 | 409) { super(message); }
+  constructor(message: string, public readonly status: 400 | 404 | 409 | 429 | 503) { super(message); }
 }
 export type DocumentSendInput = {
   documentVersionId: string; leadId: string | null; customerId: string | null;
   templateId: string; channel: "link" | "kakao" | "qr" | "print" | "staff";
   idempotencyKey: string;
+  shareLinkId?: string;
 };
 export type DocumentSendResult = {
-  sendId: string; documentId: string; documentVersionId: string; publicUrl: null;
+  leadActionId?: string;
+  sendId: string; documentId: string; documentVersionId: string; publicUrl: string | null;
 };
 
 export function parseDocumentSend(body: Record<string, unknown>): DocumentSendInput {
@@ -21,9 +23,12 @@ export function parseDocumentSend(body: Record<string, unknown>): DocumentSendIn
   if (channel !== "link" && channel !== "kakao" && channel !== "qr" && channel !== "print" && channel !== "staff")
     throw new DocumentSendError("전달 경로를 확인해 주세요.", 400);
   let templateId: string;
+  if (body.shareLinkId !== undefined && (!isId(body.shareLinkId) || !leadId || customerId != null))
+    throw new DocumentSendError("리드에게 준비한 공유 링크를 확인해 주세요.", 400);
   try { templateId = field(body.templateId, 100, true); }
   catch { throw new DocumentSendError("실제 사용한 템플릿을 확인해 주세요.", 400); }
   return { documentVersionId: documentVersionId.toLowerCase(), idempotencyKey: idempotencyKey.toLowerCase(),
     leadId: typeof leadId === "string" ? leadId.toLowerCase() : null,
-    customerId: typeof customerId === "string" ? customerId.toLowerCase() : null, templateId, channel };
+    customerId: typeof customerId === "string" ? customerId.toLowerCase() : null, templateId, channel,
+    ...(typeof body.shareLinkId === "string" ? { shareLinkId: body.shareLinkId.toLowerCase() } : {}) };
 }

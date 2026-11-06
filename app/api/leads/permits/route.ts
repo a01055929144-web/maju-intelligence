@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { getCompanySalesAdministrativeAreas, getPermitLeadQueues, ingestPermitLeadRows, listPermitLeads, PermitLeadIngestRow, PermitLeadPeriod } from "@/lib/store";
 import { isStoreAreaRange } from "@/domains/lead/store-area";
+import { leadDocumentEntryAccess } from "@/domains/lead/document-entry";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { priceSheetsEnabled } from "@/lib/pricing/feature";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +50,12 @@ export async function GET(request: NextRequest) {
     getCompanySalesAdministrativeAreas(scope.companyId!)
   ]);
 
-  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0 });
+  const documentEntry = leadDocumentEntryAccess({
+    admin: scope.role === "admin",
+    pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", scope.companyId),
+    workspaceRole: scope.customerSession?.workspaceRole,
+  });
+  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry });
 }
 
 // POST: 사업자 인허가 데이터 업로드(엑셀/CSV를 클라이언트에서 미리 파싱한 행 배열)를 일괄 적재합니다.
