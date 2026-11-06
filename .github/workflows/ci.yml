@@ -252,6 +252,29 @@ jobs:
           createdb pricing_document_archive_test
           psql --dbname=pricing_document_archive_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-archive.pg17.test.sql
 
+      # Read-only dependency on #285's unapproved SQL contract. Never apply to an operating database.
+      - name: Checkout pinned lead-share SQL draft for isolated tests
+        uses: actions/checkout@v5
+        with:
+          ref: 0833fe91fa37425e12ba9f217c6ceb4d8f0683b8
+          path: .ci-lead-share-schema
+          persist-credentials: false
+
+      - name: Verify lead-sharing runtime contracts on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb lead_share_runtime_test
+          psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share-migrations.pg17.test.sql
+          psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-runtime.pg17.test.sql
+          psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-share-atomic.pg17.test.sql
+          node scripts/test-lead-share-concurrency.mjs
+          createdb lead_share_policy_test
+          psql --dbname=lead_share_policy_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -288,6 +311,8 @@ jobs:
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          LEAD_DOCUMENT_SHARING_ENABLED: "true"
+          LEAD_DOCUMENT_SHARING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
@@ -297,10 +322,12 @@ jobs:
         run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/pricing-document-actions.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-lead-sharing.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          LEAD_DOCUMENT_SHARING_ENABLED: "true"
+          LEAD_DOCUMENT_SHARING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 

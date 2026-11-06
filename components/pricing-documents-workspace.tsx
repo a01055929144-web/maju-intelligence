@@ -31,6 +31,7 @@ import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { LeadDocumentContext } from "@/application/pricing/document-entry";
+import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -42,12 +43,14 @@ export function PricingDocumentsWorkspace({
   storeLinksEnabled = false,
   initialStartKind,
   leadContext,
+  sharingEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
   storeLinksEnabled?: boolean;
   initialStartKind?: DocumentKind;
   leadContext?: LeadDocumentContext;
+  sharingEnabled?: boolean;
 }) {
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
@@ -241,10 +244,11 @@ export function PricingDocumentsWorkspace({
   }
   async function select(d: DocumentDraft) {
     if (!discard()) return;
+    setVersions([]);
     setDraft(structuredClone(d));
     setDirty(false);
     setPreview(null);
-    setVersions(await read<DocumentVersion[]>("versions", { id: d.id }));
+    setVersions((await read<DocumentVersion[]>("versions", { id: d.id })).filter(v => v.documentId === d.id));
     const products = await read<{ items: CatalogChoice[] }>("catalog", {
       productIds: Array.from(new Set(d.content.lines.map((l) => l.productId))),
     });
@@ -482,7 +486,7 @@ export function PricingDocumentsWorkspace({
     draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
   );
   const leadNotice = leadContext ? <aside className="pricing-no-print flex flex-wrap items-center gap-2 rounded border p-3 text-sm" aria-label="리드 문서 작성 문맥">
-    <p className="mr-auto">{leadContext.name} · 작성·게시 전용입니다. 공개 링크 준비 전이며 아직 전달되지 않았습니다.</p>
+    <p className="mr-auto">{leadContext.name} · {sharingEnabled ? "작성·게시는 전달이 아닙니다. 게시 버전으로 링크를 준비한 뒤 실제 전달을 별도로 기록해 주세요." : "작성·게시 전용입니다. 공개 링크 준비 전이며 아직 전달되지 않았습니다."}</p>
     <a className="inline-flex min-h-[44px] items-center rounded border px-3" href={leadContext.backHref} onClick={event => { if (!discard()) event.preventDefault(); }}>리드 상세로 돌아가기</a>
   </aside> : null;
   if (view === "list" && tab === "documents") return <div className="space-y-3">
@@ -1189,6 +1193,7 @@ export function PricingDocumentsWorkspace({
           )}
         </div>
       )}
+      {leadContext && sharingEnabled && draft && versions.some(v => v.documentId === draft.id) ? <PricingLeadDocumentShare key={`${draft.id}:${leadContext.id}`} companyId={companyId} leadId={leadContext.id} documentId={draft.id} versions={versions} onDeliveryRecorded={() => setMessage("리드에게 실제 전달한 기록을 확인했습니다.")} /> : null}
       {preview && (
         /* 11/4: 와이어프레임 ④ — 미리보기는 큰 화면(모달)으로: 온라인(휴대폰)·오프라인(A4) 나란히, 글자 크기, 인쇄·PDF·PNG·엑셀 */
         <div aria-label="미리보기" aria-modal="true" className="pricing-preview-modal fixed inset-0 z-[60] overflow-y-auto bg-slate-100" role="dialog">

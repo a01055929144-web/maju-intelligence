@@ -3,6 +3,8 @@ import type { DocumentScope, PricingDocumentsRepository } from "../../applicatio
 import { withDocumentRecalculations } from "./document-recalculation";
 import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
+import type { PrepareDocumentShare } from "../../domains/pricing/document-share";
+import { prepareDocumentShare, revokeDocumentShare, recordSharedDocumentDelivery } from "./document-share";
 
 type CatalogResult = { items: Array<{ id: string; spec: string }> };
 type DocumentList = { items: DocumentDraft[]; total: number };
@@ -125,7 +127,13 @@ async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput
 
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
-    if (action === "record-send") return recordDocumentSend(scope, payload as DocumentSendInput) as Promise<T>;
+    if (action === "prepare-share") return prepareDocumentShare(scope, payload as PrepareDocumentShare) as Promise<T>;
+    if (action === "revoke-share") return revokeDocumentShare(scope, (payload as { shareLinkId: string }).shareLinkId) as Promise<T>;
+    if (action === "record-send") {
+      const input = payload as DocumentSendInput;
+      if (input.shareLinkId) return recordSharedDocumentDelivery(scope, input) as Promise<T>;
+      return recordDocumentSend(scope, input) as Promise<T>;
+    }
     if (action === "archive") {
       if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");
       const input = payload as { id: string; expected: number; archived: boolean };
