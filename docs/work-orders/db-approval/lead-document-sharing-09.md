@@ -89,3 +89,8 @@
 - RPC의 회수/만료 검사는 공유 행 잠금 안에서 수행한다. send_id=NULL인 회수·만료 링크의 새 전달은 금지한다. 이미 send_id가 연결된 동일 입력·작성자 재시도는 기존 send/leadAction ID만 복원하며 링크가 다시 유효해지지 않는다. actor_name은 #288 서버가 인증 세션에서만 주입하며 클라이언트 actorName은 사용하지 않는다.
 
 - A-0 퍼널 분리를 위해 metadata.documentKind에 DB 문서의 kind(sheet/quote)를 저장한다. 클라이언트 주장을 사용하지 않으며 SQL 기대값에도 포함한다.
+
+
+## 회사 이용 종료 삭제 회귀 (2026-11-07)
+
+실제 P0/P1/P2/S2 마이그레이션과 현재 공유 초안 위의 격리 PG17에서 기존 send만 있는 회사 삭제 및 공유+send+lead_actions가 있는 회사 삭제를 구분해 검사한다. 주변 lead/lead_actions fixture의 회사/리드 FK는 원래 20260818 스키마의 CASCADE에 맞췄으며, 실제 pricing migration은 수정하지 않는다. 양쪽 삭제가 성공해 새 공유 FK의 충돌은 재현되지 않았다. 따라서 up/down FK 정책은 변경하지 않는다. 개별 send 삭제는 공유 FK에서 차단되고, 회사 삭제는 해당 회사의 공유/문서/버전/send/리드/연락을 제거하며 다른 회사는 남는지 확인한다. 삭제 후 빈 공유 테이블의 down→up도 검사한다. 운영 삭제/DB 접속은 하지 않는다.
