@@ -51,12 +51,12 @@ test("PC cost search, history, edit, conflict, retry and permission guidance", a
   await page.getByRole("button", { name: "다시 조회", exact: true }).click();
   await page.getByRole("button", { name: "수정", exact: true }).click();
   await page.getByRole("button", { name: "원가 저장", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("다른 구성원이 먼저 수정");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("다른 구성원이 먼저 수정");
   await expect(page.getByRole("button", { name: "수정", exact: true })).toHaveCount(0);
   for (const code of [503, 401, 403, 404]) {
     status = code;
     await page.getByRole("button", { name: "다시 조회", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText(code === 503 ? "다시 조회" : code === 401 ? "로그인" : code === 403 ? "권한" : "담당자");
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(code === 503 ? "다시 조회" : code === 401 ? "로그인" : code === 403 ? "권한" : "담당자");
     await expect(page.getByText(item.productName, { exact: true })).toHaveCount(0);
   }
   status = 200; empty = true;
