@@ -162,6 +162,22 @@ test("category selection stays compact and hides the internal code at 390px", as
     await manager.getByRole("button", { name: "2개 상품에 적용" }).click();
     await manager.getByRole("button", { name: "확인하고 저장 (2)" }).click();
     expect(categories).toEqual({ onion: "공산품 > 신선채소 > 조미채소", sauce: "공산품 > 신선채소 > 조미채소" });
+    await manager.getByLabel("바꿀 분류 경로 검색 선택").click();
+    await manager.getByLabel("바꿀 분류 경로 검색 선택 검색어").fill("공산품 > 신선채소");
+    await expect(manager.getByRole("button", { name: /공산품 › 신선채소/ }).first()).toBeVisible();
+    await manager.getByRole("button", { name: /공산품 › 신선채소/ }).first().click();
+    await manager.getByRole("button", { name: "신선채소까지 적용" }).click();
+    await manager.getByLabel("새 분류 경로 검색 선택").click();
+    await manager.getByLabel("새 분류 경로 검색 선택 검색어").fill("공산품 > 신선식품");
+    await manager.getByRole("button", { name: /신선식품.*새 분류로 선택/ }).click();
+    await manager.getByRole("button", { name: "영향 2개 확인" }).click();
+    await manager.getByRole("button", { name: "2개 상품에 적용" }).click();
+    await manager.getByRole("button", { name: "확인하고 저장 (2)" }).click();
+    await expect(page.getByRole("status")).toContainText("2개 상품의 분류를 저장했습니다.");
+    expect(categories).toEqual({ onion: "공산품 > 신선식품 > 조미채소", sauce: "공산품 > 신선식품 > 조미채소" });
+    await manager.getByLabel("바꿀 분류 경로 검색 선택").click();
+    await manager.getByLabel("바꿀 분류 경로 검색 선택 검색어").fill("공산품 > 신선채소");
+    await expect(manager.getByText("맞는 분류가 없습니다.")).toBeVisible();
     await manager.screenshot({ path: testInfo.outputPath("category-picker-390.png") });
   } finally { await context.close(); }
 });
