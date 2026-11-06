@@ -323,7 +323,7 @@ export function StorefrontWorkspace() {
         <div className="rounded border p-4"><h3 className="font-semibold">판매가 변동</h3>
           <p className="mt-2 text-2xl">{!pricesReady ? "배송일 가격 확인 필요" : hasPriceDirections ? `${changedPrices.length}품목` : "비교 정보 없음"}</p>
           <p className="text-xs text-slate-600">현재 게시본과 직전 게시본 비교</p>
-          <button disabled={!hasPriceDirections} className="mt-3 min-h-[44px] rounded border px-3" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(true); setTab("order"); }}>변동 품목 보기</button></div>
+          <button disabled={changedPrices.length === 0} className="mt-3 min-h-[44px] rounded border px-3" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(true); setTab("order"); }}>변동 품목 보기</button></div>
         <div className="rounded border p-4"><h3 className="font-semibold">즐겨찾기</h3>
           <p className="mt-2 text-2xl">{data?.preferences.filter((item) => item.isFavorite && !item.isHidden).length ?? 0}품목</p>
           <button className="mt-3 min-h-[44px] rounded border px-3" onClick={() => { setPriceChangesOnly(false); setCategory("전체"); setProductView("favorites"); setTab("order"); }}>즐겨찾기 보기</button></div>

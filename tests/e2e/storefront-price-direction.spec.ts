@@ -118,6 +118,15 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("heading", { name: "매장 데이터" })).toBeVisible();
     await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "주문", exact: true }).click();
+    for (const name of ["합성 생선", "합성 고기"]) {
+      await rows.filter({ has: page.getByText(name, { exact: true }) }).getByRole("button", { name: "품목 숨기기", exact: true }).click();
+    }
+    await page.getByRole("button", { name: "데이터", exact: true }).click();
+    await expect(page.getByText("0품목", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "홈", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
     expired = true;
     await page.reload();
     await page.getByRole("button", { name: "내역", exact: true }).click();
