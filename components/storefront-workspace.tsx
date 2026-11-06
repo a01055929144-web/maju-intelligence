@@ -241,7 +241,7 @@ export function StorefrontWorkspace() {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <button aria-pressed={priceChangesOnly} className="min-h-[44px] rounded border px-3"
           onClick={() => setPriceChangesOnly((value) => !value)}>판매가 변동만</button>
-        <label>정렬 <select disabled={busy || !pricesVisible} className="min-h-[44px] rounded border px-2" value={sortBy}
+        <label>정렬 <select aria-label="정렬" disabled={busy || !pricesVisible} className="min-h-[44px] rounded border px-2" value={sortBy}
           onChange={(event) => setSortBy(event.target.value as "name" | "price")}>
           <option value="name">상품명</option><option value="price">판매가</option>
         </select></label>
