@@ -89,6 +89,10 @@ test("default OFF ignores client role and synthetic fixture outside CI allowlist
   await page.goto(`/store?companyId=${companyId}&storeAccountId=${storeAccountId}&role=owner`);
   await expect(page.getByRole("heading", { name: "매장 자체 원가관리" })).toHaveCount(0);
   expect(requests).toBe(0);
+  // Exercise the merged API without interception: OFF must stop before session/DB access.
+  const response = await page.request.get(`/api/store/costs?companyId=${companyId}&storeAccountId=${storeAccountId}&offset=0`);
+  expect(response.status()).toBe(404);
+  expect(await response.json()).toEqual({ message: "Not found" });
 });
 
 
