@@ -13,7 +13,7 @@
 - 시가 품목 없음
 - 모든 행이 `price_includes_tax=false`
 - `delivery_fee=0`
-- 취소 주문 아님
+- 주문 상태가 `received/in_delivery/delivered` 중 하나여서 P2 주문 수정 RPC로 더 이상 수정할 수 없음
 - 주문 저장 합계와 주문 행 재계산 합계 일치
 
 세금 포함가 또는 배송비를 억지로 환산하면 원 단위 스냅샷이 달라질 수 있으므로 자동 변환하지 않고 명시적 오류로 보류한다.
@@ -49,7 +49,7 @@ type StoreOrderSalesDocumentResult = {
 
 1. `create_sales_document_from_store_order`가 회사·주문 조합 advisory lock을 잡는다.
 2. 기존 source key 전표가 있으면 그대로 반환한다.
-3. 주문과 행을 회사 범위로 잠그고 위 지원 범위를 검증한다.
+3. 주문과 행을 회사 범위로 잠그고 위 지원 범위를 검증한다. `submitted`는 기존 P2 수정 가능 상태이므로 전표를 만들지 않는다.
 4. 기존 `next_erp_number`로 매출 번호를 만들고 초안 헤더를 추가한다.
 5. 기존 `save_business_document`에 주문 행 스냅샷을 넘겨 합계를 다시 계산한다.
 6. 저장 합계가 주문 스냅샷과 다르면 전체 트랜잭션을 롤백한다.
@@ -65,7 +65,10 @@ type StoreOrderSalesDocumentResult = {
 
 ## 승인 전 검증
 
+PG17은 자체 ERP mock을 쓰지 않는다. 가격 P0/P1 합성 선행 객체 뒤 실제 운영 기록 마이그레이션 `20261016190000_erp_phase_1_documents_ledger.sql`, `20261016200000_erp_phase_1b_v2.sql`, `20261102114602_pricing_p2_store_ordering.sql`을 순서대로 적용해 GENERATED 금액 칸, 변경 가드, 실제 저장·확정 RPC와 함께 검증한다.
+
 - [ ] 같은 주문 재요청이 전표 하나와 같은 결과로 수렴
+- [ ] `submitted` 주문은 전표 생성 거부, `received` 뒤 생성한 전표가 존재하면 실제 P2 수정 RPC도 거부
 - [ ] 다른 회사 주문 참조 거부
 - [ ] 시가·세금 포함가·배송비·취소 주문 거부
 - [ ] 주문 합계와 전표 합계 불일치 시 전체 롤백
