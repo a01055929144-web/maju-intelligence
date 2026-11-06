@@ -21,6 +21,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
     try { if (value) sessionStorage.setItem(checkpointKey, JSON.stringify(value)); else sessionStorage.removeItem(checkpointKey); } catch { /* Keep the current form in memory. */ }
   }
   function selectGroup(group?: MarginGroup, categories?: string[]) {
+    onError(""); onMessage("");
     setId(group?.id ?? ""); setName(group?.name ?? ""); setMargin(String(group?.margin ?? 12)); setRounding(String(group?.rounding ?? 10));
     setSelected(categories ?? state.categories.filter(link => link.groupId === group?.id).map(link => link.category));
     setQuery(""); setLevels(["", "", ""]); setSteps(["미시작", "미시작", "미시작"]);
@@ -113,14 +114,14 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
         ...latest.categories.filter(link => link.groupId === target && !selected.includes(link.category)).map(link => ({ action: "category" as const, category: link.category, groupId: "" })),
         ...selected.filter(category => !latest.categories.some(link => link.category === category && link.groupId === target)).map(category => ({ action: "category" as const, category, groupId: target })),
       ];
-      for (const command of commands) { latest = await send(command); completed++; setSteps(["완료", `${completed}/${commands.length}개 완료`, "대기"]); }
+      for (const command of commands) { latest = await send(command); if (command.action === "category" && (command.groupId ? !latest.categories.some(link => link.category === command.category && link.groupId === command.groupId) : latest.categories.some(link => link.category === command.category))) throw new Error("분류 연결 결과가 변경됐습니다. 최신 목록을 확인해 주세요."); completed++; setSteps(["완료", `${completed}/${commands.length}개 완료`, "대기"]); }
       setSteps(["완료", "완료", "반영 중"]); stage = 2;
       if (latest.pendingCount > 0) await send({ action: "recalculate" });
       checkpoint(null); setSteps(["완료", "완료", "완료"]); onMessage("그룹·분류 연결을 저장하고 판매가 반영을 마쳤습니다.");
     } catch (error) {
       if (!target) { const pending = { name: trimmed, categories: selected }; setUncertain(pending); checkpoint(pending); }
       setSteps(stage === 0 ? ["실패 또는 응답 미확정", "미시작", "미시작"] : stage === 1 ? ["완료", `${completed}개 완료 후 실패`, "미시작"] : ["완료", "완료", "실패 또는 응답 미확정"]);
-      onError(`${stage ? "앞 단계 저장은 유지됩니다. 같은 그룹으로 다시 저장하면 이미 완료된 연결은 건너뜁니다. " : "그룹 생성 결과를 먼저 조회해 주세요. "}${error instanceof Error ? error.message : "저장하지 못했습니다."}`);
+      onError(`${stage ? "앞 단계 저장은 유지됩니다. 같은 그룹으로 다시 저장하면 이미 완료된 연결은 건너뜁니다. " : target ? "기존 그룹은 다시 만들지 않습니다. 같은 그룹으로 다시 저장해 주세요. " : "그룹 생성 결과를 먼저 조회해 주세요. "}${error instanceof Error ? error.message : "저장하지 못했습니다."}`);
     } finally { onBusy(false); }
   }
 
@@ -151,7 +152,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
         <div className="rounded border bg-slate-50 p-3" aria-label="선택 분류와 적용 상품 요약"><p>선택 분류 {selected.length}개 · 분류의 활성 상품 {items && !loading && !loadError ? `${summary.categoryProducts}개` : "확인 중"}</p>
           <p>실제 그룹 마진 대상 {items && !loading && !loadError ? `${summary.groupProducts}개` : "확인 중"} <span className="text-xs">(상품 지정 {summary.explicitProducts}개 포함, 현재 조회 기준)</span></p>
           <p className="text-xs">직접 단가·개별 마진·상품 지정 그룹이 우선합니다. 선택 분류의 상품 수와 실제 적용 수가 다를 수 있습니다.</p>
-          <div className="mt-2 flex flex-wrap gap-2">{selected.map(category => <button key={category} type="button" className="min-h-11 max-w-full rounded border bg-white px-2 py-1 text-left text-xs [overflow-wrap:anywhere]" onClick={() => setSelected(previous => previous.filter(value => value !== category))}>{category} ×<span className="sr-only"> 연결 선택 해제</span></button>)}</div>
+          <div className="mt-2 flex flex-wrap gap-2">{selected.map(category => <button key={category} type="button" disabled={!options.find(option => option.path === category)?.selectable} className="min-h-11 max-w-full rounded border bg-white px-2 py-1 text-left text-xs [overflow-wrap:anywhere]" onClick={() => setSelected(previous => previous.filter(value => value !== category))}>{category} ×<span className="sr-only"> 연결 선택 해제</span></button>)}</div>
         </div>
         <Button disabled={loading || Boolean(loadError) || !items} type="submit">그룹·분류 저장하고 판매가 반영</Button>
       </fieldset>
