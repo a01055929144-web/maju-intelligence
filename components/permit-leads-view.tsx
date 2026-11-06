@@ -42,6 +42,7 @@ import { formatLeadBusinessHours, getLeadVisitAvailability } from "@/domains/lea
 import { formatKoreanPhoneNumber, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
 import { compareLeadListDefault, formatLeadOpenDateAge, leadPriorityBadge } from "@/domains/lead/lead-list";
 import { displayLeadNextAction, isLeadUncontacted } from "@/domains/lead/next-action";
+import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { getAdjacentLeadIds } from "@/domains/lead/detail-navigation";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -152,6 +153,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [refreshingLeads, setRefreshingLeads] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  const [documentEntry, setDocumentEntry] = useState<LeadDocumentEntryAccess>({ canCreateQuote: false, canCreateSheet: false });
 
   const [periodFilter, setPeriodFilter] = useState<"all" | PermitLeadPeriod>("all");
   // 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응입니다.
@@ -458,6 +460,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         setLeads(nextLeads);
         if (initialLeadId) setSelectedLead(nextLeads.find((lead: PermitLeadItem) => lead.id === initialLeadId) || null);
         setQueues(payload.queues || null);
+        setDocumentEntry(payload.documentEntry || { canCreateQuote: false, canCreateSheet: false });
         setSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
         setLoadState("ready");
       })
@@ -2696,6 +2699,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           }}
           hasNext={Boolean(selectedLeadNavigation.nextId)}
           hasPrevious={Boolean(selectedLeadNavigation.previousId)}
+          documentEntry={documentEntry}
           onConvert={convertToCustomer}
           onLeadUpdated={(updatedLead) => {
             setLeads((current) => current.map((item) => (item.id === updatedLead.id ? updatedLead : item)));
@@ -2833,8 +2837,11 @@ export function PermitLeadDetailDrawer({
   );
 }
 
+const NO_DOCUMENT_ENTRY: LeadDocumentEntryAccess = { canCreateQuote: false, canCreateSheet: false };
+
 function PermitLeadDetailPanel({
   detailMode = "drawer",
+  documentEntry = NO_DOCUMENT_ENTRY,
   hasNext = false,
   hasPrevious = false,
   intent,
@@ -2848,6 +2855,7 @@ function PermitLeadDetailPanel({
   onOpenQuote
 }: {
   readonly detailMode?: "drawer" | "page";
+  readonly documentEntry?: LeadDocumentEntryAccess;
   readonly hasNext?: boolean;
   readonly hasPrevious?: boolean;
   readonly intent?: PermitLeadActionIntent;
@@ -3723,10 +3731,35 @@ function PermitLeadDetailPanel({
             {externalInfoMessage ? <p className="mt-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px] font-bold text-slate-600">{externalInfoMessage}</p> : null}
           </div>
 
+          {documentEntry.canCreateQuote || documentEntry.canCreateSheet ? (
+            <div className="rounded-xl border border-teal-100 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-950">정식 영업 문서</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">작성·게시 후 별도로 전달해야 합니다.</p>
+                </div>
+                <FileImage className="h-4 w-4 shrink-0 text-teal-600" />
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {documentEntry.canCreateSheet ? (
+                  <a className="maju-button-secondary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("sheet", lead.id))}>
+                    단가표 만들기
+                  </a>
+                ) : null}
+                {documentEntry.canCreateQuote ? (
+                  <a className="maju-button-primary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("quote", lead.id))}>
+                    견적서 만들기
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {onOpenQuote ? <div className="rounded-xl border border-teal-100 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">견적</p>
+                <p className="text-sm font-black text-slate-950">현장 임시 견적</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">빠른 상담용 기존 리드 견적입니다.</p>
               </div>
               <FileImage className="h-4 w-4 shrink-0 text-teal-600" />
             </div>
