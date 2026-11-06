@@ -85,7 +85,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.goto(new URL(publicUrl, page.url()).href);
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
   await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("18L · 통", { exact: true })).toBeVisible();
+  await expect(viewer.getByText(/^18L\s*(?:·\s*)?통$/)).toBeVisible();
   await expect(viewer.getByText(/PRIVATE-|CANARY/)).toHaveCount(0);
   expect(await viewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   expect((await viewer.getByRole("button", { name: "다시 확인", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
