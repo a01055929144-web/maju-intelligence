@@ -50,6 +50,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
 }) {
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const [data, setData] = useState<ProfilePayload | null>(null);
+  const [businessNumber, setBusinessNumber] = useState("");
   const [values, setValues] = useState<CompanyProfileValues>({});
   const [tab, setTab] = useState(initialTab);
   const [saving, setSaving] = useState(false);
@@ -59,7 +60,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
   const [basics, setBasics] = useState<CompanyBasics | null>(null);
   const savedSnapshot = useRef("");
   const snapshot = useCallback((nextValues: CompanyProfileValues, nextBasics: CompanyBasics | null) => JSON.stringify([nextValues, nextBasics]), []);
-  const dirty = Boolean(data) && savedSnapshot.current !== snapshot(values, basics);
+  const dirty = Boolean(data) && (savedSnapshot.current !== snapshot(values, basics) || businessNumber !== data?.company.businessRegistrationNumber);
 
   useEffect(() => {
     if (companyId) return;
@@ -96,6 +97,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
         if (!active) return;
         if (!response.ok || !payload) { setNotice({ tone: "error", text: payload?.message || "회사 정보를 불러오지 못했습니다." }); return; }
         setData(payload);
+        setBusinessNumber(payload.company.businessRegistrationNumber || "");
         const loaded = payload.values || {};
         setBasics((currentBasics) => { savedSnapshot.current = snapshot(loaded, currentBasics); return currentBasics; });
         // 대표 휴대폰이 비어 있으면 카카오 가입 휴대폰 번호로 먼저 채웁니다(저장은 대표가 확인 후).
@@ -144,11 +146,12 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       const response = await fetch("/api/company-profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, values })
+        body: JSON.stringify({ companyId, values, ...(businessNumber !== data?.company.businessRegistrationNumber ? { businessRegistrationNumber: businessNumber } : {}) })
       });
       const payload = (await response.json().catch(() => null)) as ProfilePayload | null;
       if (!response.ok || !payload) throw new Error(payload?.message || "저장하지 못했습니다.");
       setData(payload);
+      setBusinessNumber(payload.company.businessRegistrationNumber || "");
       setValues(payload.values || {});
       savedSnapshot.current = snapshot(payload.values || {}, basics);
       const added = payload.regionSync?.added || [];
@@ -237,7 +240,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
       {current ? (
         <div className="grid min-w-0 gap-3 p-4 md:grid-cols-2 [&>*]:min-w-0">
           {current.description ? <p className="text-xs font-semibold text-slate-500 md:col-span-2">{current.description}</p> : null}
-          {current.id === "basic" ? <div><p className="text-[11px] font-black text-slate-600">사업자등록번호</p><p className="maju-input mt-1 flex items-center" aria-label="사업자등록번호">{data.company.businessRegistrationNumber || "미등록"}</p></div> : null}
+          {current.id === "basic" ? <label className="text-[11px] font-black text-slate-600">사업자등록번호<input aria-label="사업자등록번호" className="maju-input mt-1 block w-full" disabled={!editable || !data.canEditLocked} inputMode="numeric" maxLength={12} onChange={(event) => setBusinessNumber(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="000-00-00000" value={businessNumber.length > 5 ? `${businessNumber.slice(0, 3)}-${businessNumber.slice(3, 5)}-${businessNumber.slice(5)}` : businessNumber.length > 3 ? `${businessNumber.slice(0, 3)}-${businessNumber.slice(3)}` : businessNumber} />{!data.canEditLocked ? <span className="block text-slate-500">대표만 수정할 수 있습니다.</span> : null}</label> : null}
           {current.id === "basic" && basics ? (
             <CompanyBasicsFields basics={basics} onChange={setBasics} readOnly={!editable} />
           ) : null}
