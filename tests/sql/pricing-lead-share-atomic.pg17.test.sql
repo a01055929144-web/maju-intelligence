@@ -58,7 +58,7 @@ do $$ declare l pricing_document_share_links%rowtype; first_result jsonb; retry_
     or (select count(*) from lead_actions where company_id=l.company_id and lead_id=l.lead_id and metadata->>'idempotencyKey'=l.idempotency_key::text)<>1 then raise exception 'atomic_retry_duplicated'; end if;
   if not exists(select from lead_actions where id=(first_result->>'leadActionId')::uuid and id=(first_result->>'sendId')::uuid
     and action_type='quote' and result='견적 전달' and actor_name='합성 담당'
-    and metadata=jsonb_build_object('pricingDocumentId',l.document_id,'documentVersionId',l.document_version_id,'shareLinkId',l.id,
+    and metadata=jsonb_build_object('documentKind','quote','pricingDocumentId',l.document_id,'documentVersionId',l.document_version_id,'shareLinkId',l.id,
       'sendId',(first_result->>'sendId')::uuid,'idempotencyKey',l.idempotency_key)) then raise exception 'contact_history_contract'; end if;
   begin
     perform record_pricing_lead_share_delivery(l.company_id,l.created_by_key,l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'different-template','link','합성 담당');

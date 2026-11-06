@@ -82,8 +82,10 @@
 - prepare-share의 documentId는 선택 문서에 대한 일치 주장이다. 서버는 버전에서 실제 문서 ID를 유도한 뒤 일치를 검사한다. 다른 문서의 버전으로 링크를 준비하지 못한다.
 - 기존 recordPermitLeadAction은 REST INSERT와 상태 PATCH를 나눠 실행하며 전달 키 멱등/발송 원자성을 제공하지 않아 그대로 호출하지 않는다. 기존 record-send의 shareLinkId 경로만 새 service-only SECURITY INVOKER RPC record_pricing_lead_share_delivery로 전환한다.
 - RPC는 공유 행을 잠근 같은 트랜잭션에서 기존 pricing_document_sends와 lead_actions를 저장하고 send_id를 연결한다. lead action ID는 send ID를 재사용하며 동일 키/입력/작성자 재시도는 각 1건이다. 어느 단계라도 실패하면 모두 롤백한다. 기존 shareLinkId 없는 record-send는 변경하지 않는다.
-- lead_actions.metadata는 문서/버전/링크/send/재시도 UUID만 보존한다. URL/토큰/가격/원가는 저장하지 않는다. actor_name은 인증 세션에서 결정한다. 실제 quote는 action_type=quote/result=견적 전달, sheet는 dm/단가표 전달로 기존 연락 이력 조회에 나타난다. 링크 열람은 연락·리드 상태 변경을 만들지 않는다.
+- lead_actions.metadata는 documentKind(sheet/quote)와 문서/버전/링크/send/재시도 UUID만 보존한다. URL/토큰/가격/원가는 저장하지 않는다. actor_name은 인증 세션에서 결정한다. 실제 quote는 action_type=quote/result=견적 전달, sheet는 dm/단가표 전달로 기존 연락 이력 조회에 나타난다. 링크 열람은 연락·리드 상태 변경을 만들지 않는다.
 - 추가 선행 의존성: 기존 lead_actions의 metadata/actor_name/result/memo 컬럼 및 서비스 역할 SELECT/INSERT 권한, 병합과의 경쟁을 막는 기존 리드 행 잠금용 SELECT/UPDATE 권한(20260818/20261009 기존 스키마). 이 초안은 기존 lead_actions 테이블을 만들거나 변경하지 않는다. 테스트의 해당 테이블은 주변 합성 fixture다.
 - 기존 테이블/열/행의 backfill 없이 RPC 하나만 추가한다. anon/authenticated/PUBLIC 실행 금지. 운영 SQL 승인·적용, 기능 ON 및 배포 금지는 그대로다.
 
 - RPC의 회수/만료 검사는 공유 행 잠금 안에서 수행한다. send_id=NULL인 회수·만료 링크의 새 전달은 금지한다. 이미 send_id가 연결된 동일 입력·작성자 재시도는 기존 send/leadAction ID만 복원하며 링크가 다시 유효해지지 않는다. actor_name은 #288 서버가 인증 세션에서만 주입하며 클라이언트 actorName은 사용하지 않는다.
+
+- A-0 퍼널 분리를 위해 metadata.documentKind에 DB 문서의 kind(sheet/quote)를 저장한다. 클라이언트 주장을 사용하지 않으며 SQL 기대값에도 포함한다.
