@@ -245,8 +245,8 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
           </div>
         ) : null}
         <div className="max-h-[480px] overflow-auto rounded border">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+          <table className="w-full text-left text-sm sm:min-w-[700px]">
+            <thead className="sticky top-0 hidden bg-slate-50 text-xs text-slate-500 sm:table-header-group">
               <tr>
                 <th className="w-8 p-2"><input aria-label="보이는 상품 전체 선택" checked={visible.length > 0 && visible.every((i) => picked.has(i.id))} onChange={(e) => setPicked(e.target.checked ? new Set(visible.map((i) => i.id)) : new Set())} type="checkbox" /></th>
                 <th className="p-2">상품</th><th className="p-2">규격·단위</th><th className="p-2">분류 · 추천</th>
@@ -257,11 +257,11 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
                 const value = current(item);
                 const pending = draft[item.id] !== undefined && draft[item.id] !== item.category;
                 return (
-                  <tr className={`border-t ${pending ? "bg-amber-50" : picked.has(item.id) ? "bg-teal-50" : ""}`} key={item.id}>
-                    <td className="p-2"><input aria-label={`${item.name} 선택`} checked={picked.has(item.id)} onChange={(e) => setPicked((prev) => { const s = new Set(prev); if (e.target.checked) s.add(item.id); else s.delete(item.id); return s; })} type="checkbox" /></td>
-                    <td className="p-2 font-semibold">{item.name}</td>
-                    <td className="p-2 text-xs text-slate-600">{item.spec} {item.unit}</td>
-                    <td className="p-2">
+                  <tr className={`block border-t p-2 sm:table-row sm:p-0 ${pending ? "bg-amber-50" : picked.has(item.id) ? "bg-teal-50" : ""}`} key={item.id}>
+                    <td className="inline-block p-1 sm:table-cell sm:p-2"><input aria-label={`${item.name} 선택`} checked={picked.has(item.id)} onChange={(e) => setPicked((prev) => { const s = new Set(prev); if (e.target.checked) s.add(item.id); else s.delete(item.id); return s; })} type="checkbox" /></td>
+                    <td className="inline-block p-1 font-semibold sm:table-cell sm:p-2">{item.name}</td>
+                    <td className="block p-1 text-xs text-slate-600 sm:table-cell sm:p-2">{item.spec} {item.unit}</td>
+                    <td className="block min-w-0 p-1 sm:table-cell sm:p-2">
                       <ProductCategoryPicker label={`${item.name} 분류 검색 선택`} onChange={(next) => setDraft((prev) => ({ ...prev, [item.id]: next }))} options={selectPaths} value={value} />
                       {item.suggestion && item.suggestion !== value ? <button className="mt-1 text-left text-xs font-semibold text-amber-700 underline" onClick={() => setDraft((prev) => ({ ...prev, [item.id]: item.suggestion }))} type="button">추천: {item.suggestion.replace(/ > /g, " › ")} 적용</button> : null}
                     </td>
