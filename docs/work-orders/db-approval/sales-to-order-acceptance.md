@@ -1,7 +1,7 @@
 # S-2 영업 → 주문 수락 DB 승인 초안
 
-> 상태: **승인 전 · 운영 실행 금지**  
-> 운영 프로젝트 `fcmdvveqmcgtioelzqun`에는 `DB-APPROVED:` 명시 승인 전 어떤 SQL도 실행하지 않는다.  
+> 상태: **수락 DB 객체 운영 적용 확인 · 앱 연결 전 · 기능 OFF**
+> 운영 프로젝트 `fcmdvveqmcgtioelzqun`에는 `20261102124354_s2_sales_to_order_acceptance_20261102.sql`이 적용돼 있다. 이 문서는 재실행 승인이 아니며 후속 SQL은 별도 `DB-APPROVED:` 전 실행하지 않는다.
 > 소유: 03 거래처·원장. 중앙 `db-approval-queue.md`에는 이 문서 링크만 추가하며, 이 문서의 상세 내용은 다른 방이 수정하지 않는다.
 
 ## 목적과 범위
@@ -22,6 +22,8 @@
 
 ## 현재 상태
 
+- 2026-11-06 읽기 점검에서 `record_pricing_document_acceptance`, `pricing_document_acceptance_requests`, `customer_pricing_document_links`, `customer_price_agreements`가 운영에 존재하고 RLS가 켜진 것을 확인했다. RPC 실행 권한은 `postgres`, `service_role`에만 있다.
+- 같은 점검에서 수락 요청·문서 연결·협의 단가 운영 건수는 모두 0건이었다. 앱/API 호출자는 아직 없으므로 `QUOTE_ACCEPTANCE=false`를 유지한다.
 - `pricing_documents`와 `pricing_document_versions`는 운영 적용 기록이 있으며 회사 복합 키를 사용한다. 공용 단가표와 매장별 견적이 같은 테이블에서 `kind`로 나뉜다.
 - 게시 버전은 불변이다. 수락 가격의 근거는 편집 중 문서가 아니라 정확한 `pricing_document_versions.id`여야 한다.
 - 운영 중인 `customer_price_agreements`는 기존 `sales_quotes` 출처만 지원한다. 이 경로는 삭제하거나 의미를 바꾸지 않는다.
@@ -192,7 +194,7 @@
 
 ## RPC 계약
 
-### `accept_pricing_document`
+### `record_pricing_document_acceptance` (운영 적용된 실제 서명)
 
 입력:
 
@@ -202,9 +204,17 @@
 - `p_idempotency_key uuid`
 - `p_request_fingerprint text`
 - `p_accepted_via text` (`store/staff/kakao_start/kakao_login`)
-- `p_actor_key text`
+- `p_customer_id uuid`
+- `p_lead_id uuid default null`
 - `p_send_id uuid default null`
+- `p_needs_review boolean default false`
+- `p_review_reason text default null`
+- `p_storefront_link_id uuid default null`
 - `p_customer_profile jsonb default '{}'`
+
+성공 결과의 05/09 공통 소비 계약은 `customerId`, `leadId`, `documentVersionId`, `kind`, `needsReview`, `pricingDocumentLinkId`, `storefrontLinkId`, `orderEnabled`다. 현재 운영 함수는 거래처 후보 다중 분기에서만 `orderEnabled=false`를 명시하고 일반 성공에서는 생략하므로, 소비자는 임의로 `true`를 추론하지 않는다. 항상 명시하는 후속 변경은 별도 승인 대상으로 둔다.
+
+09 서버는 공개 입력의 `companyId`, `customerId`, `leadId`, 가격을 전달값 그대로 신뢰하지 않고 인증 범위 또는 검증된 서명 링크에서 유도한다. 03 RPC는 회사·문서·게시 버전·거래처·리드·발송·스토어 링크의 회사 경계를 다시 검증한다. 05는 이 결과만으로 리드 연결, 거래처 연결, 협의 단가 생성 여부와 `needsReview`를 소비한다.
 
 서버가 인증·권한·서명 토큰을 확인한 뒤에만 호출한다. RPC는 다음 순서로 잠금·검증한다.
 
