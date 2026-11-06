@@ -10,7 +10,7 @@ import {
   type DeliveryPolicy,
   type HolidayRule,
 } from "@/domains/order/order-rules";
-import type { DocumentContent } from "@/domains/pricing/document";
+import { documentDisplayPrice, parseDisplay, type DocumentContent } from "../../domains/pricing/document";
 
 type Link = {
   id: string;
@@ -288,6 +288,7 @@ export async function readStorefront(
   const visibleLines = version.content.lines.filter(line => line.visible && activeProductIds.has(line.productId) && (!line.promotionId || livePromotions.has(line.promotionId)));
   const comparable = priceAvailable && settings.show_storefront_price_direction === true && visibleLines.some(line => !marketIds.has(line.productId) && !agreementByProduct.has(`${line.productId}:${line.unit}`));
   const priceDirections = await readPublishedPriceDirections(company, comparable, version);
+  const priceIncludesTax = parseDisplay(version.content.display).priceIncludesTax;
   return {
     linkId: link.id,
     companyId: company,
@@ -332,9 +333,9 @@ export async function readStorefront(
           taxType: matchingContract?.tax_type ?? line.taxType,
           unitPrice:
             priceAvailable && !market
-              ? (matchingContract?.unit_price ?? line.price)
+              ? (matchingContract?.unit_price ?? documentDisplayPrice(line.price, line.taxType, priceIncludesTax))
               : null,
-          priceIncludesTax: matchingContract?.price_includes_tax ?? false,
+          priceIncludesTax: matchingContract?.price_includes_tax ?? priceIncludesTax,
           isMarketPrice: market,
           maximumQuantity: line.promotionId
             ? (livePromotions.get(line.promotionId)?.per_store_limit ?? null)
