@@ -49,6 +49,9 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [moveTo, setMoveTo] = useState("");
+  const [editFrom, setEditFrom] = useState("");
+  const [editTo, setEditTo] = useState("");
+  const [editPreview, setEditPreview] = useState(false);
   const [page, setPage] = useState(1);
   const [margins, setMargins] = useState<Record<string, string>>({});
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -126,13 +129,40 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
     setPicked(new Set());
     setMoveTo("");
   }
+  const editAffected = (items || []).filter((item) => editFrom && current(item) && isUnder(current(item), editFrom));
+  function applyCategoryEdit() {
+    const target = cleanCategory(editTo);
+    if (!editFrom || !target || typeof target === "object" || target === editFrom || isUnder(target, editFrom)) {
+      setError(target && typeof target === "object" ? target.error : "바꿀 분류와 새 경로를 확인해 주세요. 새 경로는 기존 분류 아래에 둘 수 없습니다.");
+      return;
+    }
+    const fromDepth = splitCategory(editFrom).length;
+    const updates = editAffected.map((item) => ({ id: item.id, category: [target, ...splitCategory(current(item)).slice(fromDepth)].filter(Boolean).join(CATEGORY_SEP) }));
+    if (updates.some((item) => typeof cleanCategory(item.category) !== "string")) {
+      setError("하위 분류를 유지하면 3단계를 넘습니다. 새 상위 경로를 더 짧게 선택해 주세요.");
+      return;
+    }
+    setDraft((prev) => {
+      const next = { ...prev };
+      for (const item of updates) next[item.id] = item.category;
+      return next;
+    });
+    setOptions((prev) => prev.includes(target) ? prev : [...prev, target]);
+    setEditFrom(""); setEditTo(""); setEditPreview(false); setError("");
+  }
   async function saveDraft() {
     const list = changed.map((item) => ({ id: item.id, category: draft[item.id] || null }));
     await task(async () => {
+      let saved = 0;
       for (let i = 0; i < list.length; i += 300) {
         const response = await fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, items: list.slice(i, i + 300) }), headers: { "Content-Type": "application/json" }, method: "PATCH" });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok || body.failed) throw new Error(body.message || `${body.failed || ""}개를 저장하지 못했습니다. 다시 시도해 주세요.`);
+        const body = await response.json().catch(() => ({})) as { failed?: number; message?: string; saved?: number };
+        saved += body.saved || 0;
+        if (!response.ok || body.failed) {
+          const remaining = Math.max(0, list.length - saved);
+          const reason = body.message ? ` (${body.message})` : "";
+          throw new Error(`${saved}개 저장 완료 · ${remaining}개 재시도 필요${reason}. 변경 내용은 화면에 남아 있습니다. 다시 시도해 주세요.`);
+        }
       }
       setDraft({});
       const fresh = await load();
@@ -224,6 +254,17 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
       </details>
 
       <div className="space-y-2 border-t pt-3">
+        <details className="rounded-lg border border-slate-200 p-3">
+          <summary className="cursor-pointer text-sm font-black text-slate-700">분류 경로 이름·상위 위치 바꾸기</summary>
+          <p className="mt-2 text-xs text-slate-500">선택한 분류 아래 상품도 함께 바뀝니다. 새 경로 검색창에 새 이름을 직접 입력할 수 있습니다. 영향 수를 확인한 뒤 최종 저장하세요.</p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <ProductCategoryPicker label="바꿀 분류 경로 검색 선택" onChange={(value) => { setEditFrom(value); setEditPreview(false); }} options={selectPaths} value={editFrom} />
+            <span className="pb-2 text-slate-400">→</span>
+            <ProductCategoryPicker label="새 분류 경로 검색 선택" onChange={(value) => { setEditTo(value); setEditPreview(false); }} options={selectPaths} value={editTo} />
+            <button className="maju-button-secondary min-h-11" disabled={!editFrom || !editTo || !editAffected.length} onClick={() => setEditPreview(true)} type="button">영향 {editAffected.length}개 확인</button>
+          </div>
+          {editPreview ? <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><strong>{editFrom.replace(/ > /g, " › ")}</strong><span>아래 상품 {editAffected.length}개를</span><strong>{editTo.replace(/ > /g, " › ")}</strong><span>경로로 바꿉니다.</span><button className="maju-button-primary min-h-11" onClick={applyCategoryEdit} type="button">{editAffected.length}개 상품에 적용</button></div> : null}
+        </details>
         <div className="flex flex-wrap items-center gap-1.5">
           <button className={chip(!filter)} onClick={() => setFilter("")} type="button">전체 {items.length}</button>
           <button className={chip(filter === UNSORTED)} onClick={() => setFilter(filter === UNSORTED ? "" : UNSORTED)} type="button">미분류 {unsortedCount}</button>

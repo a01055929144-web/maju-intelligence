@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
@@ -16,6 +16,7 @@ export async function PATCH(request: NextRequest) {
   const auth = await getRequestAuthScope(request, body?.companyId);
   if (!auth.ok || !auth.companyId) return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   if (!isFeatureEnabled("PRICING", auth.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (!scopeHasCapability(auth, "manage_sales")) return NextResponse.json({ message: "상품 원장을 관리할 권한이 없습니다." }, { status: 403 });
   if (auth.customerSession && !canManagePriceSheets(auth.customerSession)) return NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 });
   // 11/4: 여러 상품을 한 번에(저장 속도). items 가 없으면 한 건.
   const items = (Array.isArray(body?.items) ? body!.items : [body]).filter(Boolean).slice(0, 1000) as Array<{ id?: string } & ProductFieldEdit>;

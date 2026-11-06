@@ -58,7 +58,17 @@ describe("product catalog admin presentation", () => {
     expect(categorySource).toContain("옮길 분류 검색 선택");
     expect(categorySource).toContain("분류 검색 선택");
     expect(categorySource).toContain("분류 정리 · 분류별 마진");
+    expect(categorySource).toContain("분류 경로 이름·상위 위치 바꾸기");
+    expect(categorySource).toContain("영향 {editAffected.length}개 확인");
+    expect(categorySource).toContain("isUnder(target, editFrom)");
+    expect(categorySource).toContain("typeof cleanCategory(item.category) !== \"string\"");
+    expect(categorySource).toContain("하위 분류를 유지하면 3단계를 넘습니다");
+    expect(categorySource).toContain("개 저장 완료 · ${remaining}개 재시도 필요");
+    expect(categorySource).toContain('body.message ? ` (${body.message})`');
+    expect(categorySource).toContain("변경 내용은 화면에 남아 있습니다. 다시 시도해 주세요.");
     expect(marginSource).not.toContain("ProductCategoryManager");
+    expect(adminSource).not.toContain("groupBy={(item)");
+    expect(adminSource).toContain('(i.category || "미분류").replaceAll(" > ", " › ")');
   });
 
   it("does not call manager-only pricing APIs for sales-role product access", () => {

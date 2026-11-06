@@ -132,7 +132,7 @@ export function ProductCatalogAdmin({
   });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
     { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
-    { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span></button> },
+    { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""} ${i.category || "미분류"}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span><span className="block max-w-[180px] truncate text-[11px] font-normal text-teal-700" title={i.category || "미분류"}>{(i.category || "미분류").replaceAll(" > ", " › ")}</span></button> },
     { key: "spec", label: "규격", width: 75, value: (i) => i.spec || "-" },
     { key: "unit", label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
     { key: "supplier", label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
@@ -238,7 +238,7 @@ export function ProductCatalogAdmin({
           </p>
         ) : null}
         {!loading ? (
-          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" groupBy={(item) => { const top = item.category ? splitCategory(item.category).slice(0, 2).join(" › ") : ""; return { key: top || "uncategorized", label: top || "미분류" }; }} rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
+          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
         ) : null}
       </section>
       {editing ? (

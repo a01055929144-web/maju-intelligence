@@ -111,13 +111,20 @@ test("category selection stays compact and hides the internal code at 390px", as
   const context = await authenticatedContext(browser, "customer", 390, 844);
   try {
     const page = await context.newPage();
-    let category = "";
-    await page.route("**/api/product-catalog?*", (route) => route.fulfill({ json: { items: [{ id: "30000000-0000-4000-8000-000000000001", name: "양파", code: "P-00005", category: "", unit: "개", isActive: true }] } }));
-    await page.route("**/api/price-sheets/categories?*", (route) => route.fulfill({ json: { items: [{ id: "30000000-0000-4000-8000-000000000001", name: "양파", code: "P-00005", spec: "1kg", unit: "개", category, suggestion: "농산 > 채소류 > 조미채소" }], options: ["농산", "농산 > 채소류", "농산 > 채소류 > 조미채소", "공산품", "공산품 > 조미·장류", "공산품 > 조미·장류 > 소스·드레싱"] } }));
-    await page.route("**/api/price-sheets/products", (route) => { category = route.request().postDataJSON().items[0].category; return route.fulfill({ json: { updated: 1 } }); });
+    const categories: Record<string, string> = { onion: "", sauce: "" };
+    await page.route("**/api/product-catalog?*", (route) => route.fulfill({ json: { items: [
+      { id: "onion", name: "양파", code: "P-00005", category: categories.onion, unit: "개", isActive: true },
+      { id: "sauce", name: "간장", code: "P-00006", category: categories.sauce, unit: "병", isActive: true },
+    ] } }));
+    await page.route("**/api/price-sheets/categories?*", (route) => route.fulfill({ json: { items: [
+      { id: "onion", name: "양파", code: "P-00005", spec: "1kg", unit: "개", category: categories.onion, suggestion: "농산 > 채소류 > 조미채소" },
+      { id: "sauce", name: "간장", code: "P-00006", spec: "1L", unit: "병", category: categories.sauce, suggestion: "공산품 > 조미·장류 > 소스·드레싱" },
+    ], options: ["농산", "농산 > 채소류", "농산 > 채소류 > 조미채소", "공산품", "공산품 > 조미·장류", "공산품 > 조미·장류 > 소스·드레싱"] } }));
+    await page.route("**/api/price-sheets/products", (route) => { const items = route.request().postDataJSON().items as Array<{ id: string; category: string }>; for (const item of items) categories[item.id] = item.category; return route.fulfill({ json: { updated: items.length } }); });
     await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0 } }));
     await page.goto("/revenue/products#product-category-management", { waitUntil: "domcontentloaded" });
     const manager = page.locator("#product-category-management");
+    await expect(page.locator(".common-data-table-group")).toHaveCount(0);
     await expect(manager.getByLabel("양파 분류 검색 선택")).toBeVisible();
     await expect(manager.locator("tbody tr").first()).not.toContainText("P-00005");
     await manager.getByLabel("양파 분류 검색 선택").click();
@@ -127,13 +134,34 @@ test("category selection stays compact and hides the internal code at 390px", as
     await manager.getByRole("button", { name: "조미채소", exact: true }).click();
     await manager.getByRole("button", { name: "확인하고 저장 (1)" }).click();
     await expect(manager.getByLabel("양파 분류 검색 선택")).toContainText("농산 › 채소류 › 조미채소");
-    expect(category).toBe("농산 > 채소류 > 조미채소");
+    expect(categories.onion).toBe("농산 > 채소류 > 조미채소");
     await manager.getByLabel("양파 분류 검색 선택").click();
     await manager.getByRole("button", { name: "공산품", exact: true }).click();
     await manager.getByRole("button", { name: "조미·장류", exact: true }).click();
     await manager.getByRole("button", { name: "소스·드레싱", exact: true }).click();
     await manager.getByRole("button", { name: "확인하고 저장 (1)" }).click();
-    expect(category).toBe("공산품 > 조미·장류 > 소스·드레싱");
+    expect(categories.onion).toBe("공산품 > 조미·장류 > 소스·드레싱");
+    await manager.getByLabel("양파 선택").check();
+    await manager.getByLabel("간장 선택").check();
+    await manager.getByLabel("옮길 분류 검색 선택").click();
+    await manager.getByRole("button", { name: "농산", exact: true }).click();
+    await manager.getByRole("button", { name: "채소류", exact: true }).click();
+    await manager.getByRole("button", { name: "조미채소", exact: true }).click();
+    await manager.getByRole("button", { name: "옮기기" }).click();
+    await manager.getByRole("button", { name: "확인하고 저장 (2)" }).click();
+    expect(categories).toEqual({ onion: "농산 > 채소류 > 조미채소", sauce: "농산 > 채소류 > 조미채소" });
+    await manager.getByText("분류 경로 이름·상위 위치 바꾸기").click();
+    await manager.getByLabel("바꿀 분류 경로 검색 선택").click();
+    await manager.getByRole("button", { name: "농산", exact: true }).click();
+    await manager.getByRole("button", { name: "채소류", exact: true }).click();
+    await manager.getByRole("button", { name: "채소류까지 적용" }).click();
+    await manager.getByLabel("새 분류 경로 검색 선택").click();
+    await manager.getByLabel("새 분류 경로 검색 선택 검색어").fill("공산품 > 신선채소");
+    await manager.getByRole("button", { name: /신선채소.*새 분류로 선택/ }).click();
+    await manager.getByRole("button", { name: "영향 2개 확인" }).click();
+    await manager.getByRole("button", { name: "2개 상품에 적용" }).click();
+    await manager.getByRole("button", { name: "확인하고 저장 (2)" }).click();
+    expect(categories).toEqual({ onion: "공산품 > 신선채소 > 조미채소", sauce: "공산품 > 신선채소 > 조미채소" });
     await manager.screenshot({ path: testInfo.outputPath("category-picker-390.png") });
   } finally { await context.close(); }
 });
