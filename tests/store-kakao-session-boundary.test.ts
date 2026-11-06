@@ -14,6 +14,7 @@ describe("store Kakao session route boundary", () => {
     expect(callback).toContain("resolveStoreAuthUserId(String(kakaoUser.id))");
     expect(callback).toContain("hasActiveStoreMembership(authUserId)");
     expect(callback).toContain("setStoreSession(authUserId)");
+    expect(callback).toContain('storeMode ? redirectStore(request.url, "kakao_callback_failed")');
     expect(callback).not.toContain("createStore");
   });
 

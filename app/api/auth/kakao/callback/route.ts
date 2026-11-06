@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Kakao staff callback failed:", error);
     const message = error instanceof Error ? error.message : "kakao_callback_failed";
-    return storeMode ? redirectStore(request.url, message) : redirectJoin(request.url, inviteCode, message);
+    return storeMode ? redirectStore(request.url, "kakao_callback_failed") : redirectJoin(request.url, inviteCode, message);
   }
 }
 
