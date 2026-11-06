@@ -1,4 +1,5 @@
 import { calculatePrice } from "../../domains/pricing/price-rules";
+import { parseDocumentSend } from "../../domains/pricing/document-send";
 import {
   dateField,
   field,
@@ -36,6 +37,7 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       const body = object(input),
         action = field(body.action, 30, true),
         id = body.id;
+      if (action === "record-send") return repository.request<T>(scope, action, parseDocumentSend(body));
       if (!isId(id)) throw new Error("저장 번호를 확인해 주세요.");
       if (!Number.isSafeInteger(body.expected) || Number(body.expected) < 0)
         throw new Error("저장 버전을 확인해 주세요.");
