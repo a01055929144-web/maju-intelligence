@@ -8,7 +8,7 @@ import { validateStoreCostInput } from "@/domains/store-cost/store-cost";
 
 export type StoreCostAccess = { companyId: string; storeAccountId: string; canManage: boolean } | { message: string } | null;
 type Cost = { id: string; revision: number; productName: string; specification: string; unit: string; effectiveOn: string; costKrw: number };
-const control = "maju-input min-h-[44px]";
+const control = "mt-1 min-h-[44px] w-full rounded border p-2";
 
 function failure(status: number) {
   if (status === 401) return "매장 구성원 로그인을 확인한 뒤 새로고침해 주세요.";
