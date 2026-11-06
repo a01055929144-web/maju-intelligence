@@ -38,6 +38,8 @@ export function StorefrontWorkspace() {
   const [productView, setProductView] = useState<"all" | "favorites" | "hidden">("all");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const retryKey = useRef<string | null>(null);
   const loadSequence = useRef(0);
   const endpoint = "/api/storefront";
@@ -49,17 +51,26 @@ export function StorefrontWorkspace() {
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
     const sequence = ++loadSequence.current;
-    const response = await fetch(endpoint, { method: "POST", cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, deliveryDate: day, historyPage }) });
-    const result = await response.json() as Response;
-    if (!response.ok) throw new Error(result.message || "매장 링크를 열 수 없습니다.");
-    if (sequence !== loadSequence.current) return;
-    setData(result);
-    setDeliveryDate(result.store.selectedDeliveryDate);
+    setLoading(true); setLoadError("");
+    try {
+      const response = await fetch(endpoint, { method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, deliveryDate: day, historyPage }) });
+      const result = await response.json() as Response;
+      if (!response.ok) throw new Error(result.message || "매장 링크를 열 수 없습니다.");
+      if (sequence !== loadSequence.current) return;
+      setData(result);
+      setDeliveryDate(result.store.selectedDeliveryDate);
+    } catch (error) {
+      if (sequence === loadSequence.current) setLoadError(error instanceof Error ? error.message : "매장 정보를 불러오지 못했습니다.");
+      throw error;
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false);
+    }
   }, [endpoint, token]);
-  useEffect(() => { if (token) void load().catch((error) => setMessage(error instanceof Error ? error.message : "불러오지 못했습니다.")); }, [load, token]);
+  useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
   const store = data?.store;
+  const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
   const visibleProducts = store?.lines.filter((line) => {
     const preference = preferences.get(line.productId);
@@ -126,7 +137,7 @@ export function StorefrontWorkspace() {
       missing ? ` 현재 문서에 없는 품목 ${missing}개는 담지 않았습니다.` : ""}`);
   }
   async function submit() {
-    if (!store || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    if (!store || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
     setBusy(true); setMessage("");
     if (!retryKey.current) retryKey.current = crypto.randomUUID();
     try {
@@ -148,7 +159,11 @@ export function StorefrontWorkspace() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "주문을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
-  if (!store) return <main className="mx-auto max-w-6xl p-5"><p role="status">{message || "매장 정보를 불러오는 중입니다."}</p></main>;
+  const retryLoad = <div className="space-y-2 rounded border p-3 text-sm" aria-live="polite">
+    <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
+    {loadError && token ? <button disabled={loading || busy} className="min-h-11 rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
+  </div>;
+  if (!store) return <main className="mx-auto max-w-6xl p-5">{token ? retryLoad : <p role="status">{message || "매장 정보를 불러오는 중입니다."}</p>}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
@@ -175,11 +190,13 @@ export function StorefrontWorkspace() {
     {tab === "order" && <section className="space-y-4 p-4 md:p-6">
       {visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
+      {!pricesReady ? retryLoad : null}
       <label className="block text-sm">배송일
         <input className="mt-1 min-h-11 w-full rounded border p-2" type="date" value={deliveryDate}
           min={store.nextDeliveryDate || undefined}
           onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
-            if (day) void load(day).catch(() => setMessage("선택한 배송일의 가격을 불러오지 못했습니다.")); }} /></label>
+            if (day) void load(day).catch(() => undefined);
+            else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
       <p className="text-sm text-slate-600">배송 요일·휴일·마감은 저장할 때 다시 확인합니다.</p>
       <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
         {(["all", "favorites", "hidden"] as const).map((view) =>
@@ -191,7 +208,7 @@ export function StorefrontWorkspace() {
           {line.badge && <span className="ml-2 rounded bg-amber-50 px-2 text-xs">{line.badge}</span>}
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
           {line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat" ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
-          <div className="text-right text-sm">{line.isMarketPrice ? "시세 · 가격 미정" :
+          <div className="text-right text-sm">{!pricesReady ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
             line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}
           {line.recentDispatchPrice !== null && line.recentDispatchDate &&
@@ -213,14 +230,14 @@ export function StorefrontWorkspace() {
       </li>)}</ul>
       <label className="block text-sm">요청 사항<textarea className="mt-1 w-full rounded border p-2" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
-      {summary && <div className="rounded bg-slate-50 p-3 text-sm">
+      {pricesReady && summary && <div className="rounded bg-slate-50 p-3 text-sm">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
         <p>부가세 {won(summary.tax)} · 배송비 {won(summary.deliveryFee)}</p>
         <p className="font-semibold">확정된 품목 합계 {won(summary.knownTotal)}</p>
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <button disabled={!store.canOrder || busy || !summary?.canSubmit} className="min-h-12 w-full rounded bg-slate-900 text-white disabled:opacity-50"
+      <button disabled={!pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-12 w-full rounded bg-slate-900 text-white disabled:opacity-50"
         onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
