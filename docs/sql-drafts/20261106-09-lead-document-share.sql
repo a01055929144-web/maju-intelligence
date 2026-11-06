@@ -109,7 +109,7 @@ begin
   insert into lead_actions(id,company_id,lead_id,action_type,result,memo,actor_name,metadata)
     values(s.id,p_company_id,l.lead_id,v_type,v_result,'게시 문서 링크 전달',btrim(p_actor_name),v_metadata)
     on conflict(id) do nothing;
-  select * into a from lead_actions where id=s.id for share;
+  select * into a from lead_actions where id=s.id;
   if not found or a.company_id is distinct from p_company_id or a.lead_id is distinct from l.lead_id
     or a.action_type is distinct from v_type or a.result is distinct from v_result or a.metadata is distinct from v_metadata then raise exception 'share_action_conflict'; end if;
   if l.send_id is not null and l.send_id is distinct from s.id then raise exception 'share_delivery_conflict'; end if;

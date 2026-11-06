@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 -- After actual P0/P1/P2/S2 + sharing up/down/up in a disposable PG17 DB.
-grant select on business_permit_leads to service_role;
+grant select,update on business_permit_leads to service_role;
 do $$ begin
   if current_setting('server_version_num')::integer/10000<>17 then raise exception 'PG17_required'; end if;
   if has_function_privilege('anon','record_pricing_lead_share_delivery(uuid,text,uuid,uuid,uuid,uuid,uuid,text,text,text)','execute')
