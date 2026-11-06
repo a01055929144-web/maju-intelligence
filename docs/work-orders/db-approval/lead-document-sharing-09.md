@@ -32,7 +32,7 @@
 - `(company_id,idempotency_key)` 고유. `(company_id,send_id)` 고유이며 NULL은 준비 상태다. 초기 삽입에 send_id를 넣지 못한다.
 - trigger는 quote 작성자, 정확한 게시 버전, 동일 회사의 병합되지 않은 리드, 게시 유효기간을 검사한다. 선택적 보관 컬럼이 있으면 보관 문서도 거부하며 미적용 보관 컬럼을 직접 참조하지 않는다.
 - 생성/만료는 DB 시각과 TTL로 계산한다. 문서·버전·대상·키·토큰·TTL·시각은 변경 불가다. 새 버전 공유는 새 링크로 발급한다.
-- send_id는 같은 회사·문서·버전·리드이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 연결/회수 취소는 불가하다. 늦은 전달 기록 연결은 링크를 재활성화하지 않는다.
+- send_id는 같은 회사·문서·버전·리드·전달 키·작성자이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 같은 리드·버전의 예전 전달 기록을 새 링크에 끼워 넣지 못한다. 연결/회수 취소는 불가하다. 늦은 전달 기록 연결은 링크를 재활성화하지 않는다.
 - RLS ON, anon/authenticated/public 직접 접근 및 trigger 함수 실행 권한 없음. service_role은 select/insert/update만 허용한다. 실제 인증은 서버 API에서 먼저 수행한다. 새 SECURITY DEFINER/RPC·기존 테이블 변경·기존 행 backfill 없음.
 
 ## 4. 토큰·공개 열람 계약
