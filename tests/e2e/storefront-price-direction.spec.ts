@@ -123,7 +123,7 @@ for (const width of [1440, 390]) {
       await rows.filter({ has: page.getByText(name, { exact: true }) }).getByRole("button", { name: "품목 숨기기", exact: true }).click();
     }
     await page.getByRole("button", { name: "데이터", exact: true }).click();
-    await expect(page.getByText("0품목", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "판매가 변동", exact: true }).locator("..").getByText("0품목", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "홈", exact: true }).click();
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
