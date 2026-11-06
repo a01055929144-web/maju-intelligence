@@ -70,7 +70,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
-    sharingEnabled: documentSharingEnabled(auth.companyId),
+    ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
   let recordSend = false;
