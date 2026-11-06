@@ -62,8 +62,15 @@ export type CustomerSession = {
   vehicleDisplayName?: string;
 };
 
+export type StoreSession = {
+  authUserId: string;
+  issuedAt: number;
+  expiresAt: number;
+};
+
 const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
+const STORE_COOKIE_NAME = "maju_store_session";
 const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
 const sessionObservationThrottle = new Map<string, number>();
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
@@ -109,9 +116,27 @@ export async function consumeInvitePhoneProof(inviteCode: string) {
   return code === inviteCode && signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
-function encodeSession(session: AdminSession | CustomerSession) {
+function encodeSession(session: AdminSession | CustomerSession | StoreSession) {
   const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STORE_SESSION_SECONDS = 60 * 60 * 8;
+
+export function storeMemberSessionEnabled() {
+  return process.env.STORE_MEMBER_SESSION_ENABLED === "true";
+}
+
+export async function getStoreSession(): Promise<StoreSession | null> {
+  if (!storeMemberSessionEnabled()) return null;
+  const cookieStore = await cookies();
+  const session = decodeSession<StoreSession>(cookieStore.get(STORE_COOKIE_NAME)?.value);
+  const now = Math.floor(Date.now() / 1000);
+  if (!session || !UUID_PATTERN.test(session.authUserId) || !Number.isSafeInteger(session.issuedAt) ||
+    !Number.isSafeInteger(session.expiresAt) || session.issuedAt > now + 60 || session.expiresAt <= now ||
+    session.expiresAt <= session.issuedAt || session.expiresAt - session.issuedAt > STORE_SESSION_SECONDS) return null;
+  return session;
 }
 
 function decodeSession<TSession>(value?: string): TSession | null {
@@ -492,6 +517,20 @@ export async function setCustomerSession(session: CustomerSession, options?: { r
   });
 }
 
+export async function setStoreSession(authUserId: string) {
+  if (!storeMemberSessionEnabled() || !UUID_PATTERN.test(authUserId)) return false;
+  const cookieStore = await cookies();
+  const issuedAt = Math.floor(Date.now() / 1000);
+  cookieStore.set(STORE_COOKIE_NAME, encodeSession({ authUserId, issuedAt, expiresAt: issuedAt + STORE_SESSION_SECONDS }), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: STORE_SESSION_SECONDS
+  });
+  return true;
+}
+
 export async function clearAdminSession() {
   const cookieStore = await cookies();
   cookieStore.delete(ADMIN_COOKIE_NAME);
@@ -500,6 +539,11 @@ export async function clearAdminSession() {
 export async function clearCustomerSession() {
   const cookieStore = await cookies();
   cookieStore.delete(CUSTOMER_COOKIE_NAME);
+}
+
+export async function clearStoreSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete(STORE_COOKIE_NAME);
 }
 
 const OAUTH_STATE_COOKIE = "maju_oauth_state";

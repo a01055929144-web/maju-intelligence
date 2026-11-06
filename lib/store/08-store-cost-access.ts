@@ -31,3 +31,19 @@ export async function getStoreCostMemberAccess(input: StoreCostAccessInput): Pro
   if (!member || member.status !== "active" || !isStoreAccountRole(member.role)) return null;
   return { id: member.id, role: member.role, status: "active" };
 }
+
+export async function resolveStoreAuthUserId(kakaoUserId: string): Promise<string | null> {
+  if (!/^\d{1,32}$/.test(kakaoUserId)) return null;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `app_users?select=id&kakao_user_id=eq.${encodeURIComponent(kakaoUserId)}&status=eq.active&limit=1`
+  );
+  return UUID_PATTERN.test(rows[0]?.id || "") ? rows[0].id : null;
+}
+
+export async function hasActiveStoreMembership(authUserId: string): Promise<boolean> {
+  if (!UUID_PATTERN.test(authUserId)) return false;
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `store_account_members?select=id&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&limit=1`
+  );
+  return Boolean(rows[0]?.id);
+}

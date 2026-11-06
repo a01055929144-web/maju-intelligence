@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOAuthState, getCustomerSession } from "@/lib/auth";
+import { createOAuthState, getCustomerSession, storeMemberSessionEnabled } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,9 @@ export async function GET(request: NextRequest) {
   const inviteCode = request.nextUrl.searchParams.get("invite") || "";
   // 11/3: 로그인한 계정에 카카오를 연결(아이디 로그인 + 카카오 간편 로그인을 한 계정으로).
   const linkMode = request.nextUrl.searchParams.get("link") === "1";
+  const storeMode = request.nextUrl.searchParams.get("store") === "1";
+  if (storeMode && !storeMemberSessionEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (storeMode && (linkMode || inviteCode)) return NextResponse.json({ message: "로그인 요청을 확인해 주세요." }, { status: 400 });
   if (linkMode && !(await getCustomerSession())?.userId) {
     return NextResponse.redirect(new URL("/dashboard/login", request.url));
   }
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    state: await createOAuthState(linkMode ? "link" : inviteCode || "personal")
+    state: await createOAuthState(storeMode ? "store" : linkMode ? "link" : inviteCode || "personal")
   });
 
   return NextResponse.redirect(`https://kauth.kakao.com/oauth/authorize?${params.toString()}`);

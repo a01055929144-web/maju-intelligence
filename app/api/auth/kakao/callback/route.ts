@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, setCustomerSession } from "@/lib/auth";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
+import { hasActiveStoreMembership, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -32,13 +33,15 @@ export async function GET(request: NextRequest) {
   const rawState = request.nextUrl.searchParams.get("state") || "";
   const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
   const linkMode = stateOk && statePayload === "link";
-  const inviteCode = stateOk && statePayload !== "personal" && !linkMode ? statePayload : "";
+  const storeMode = stateOk && statePayload === "store";
+  const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeMode ? statePayload : "";
 
   if (!stateOk) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
   }
+  if (storeMode && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
   if (!code) {
-    return redirectJoin(request.url, inviteCode, "missing_kakao_code");
+    return storeMode ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
 
   try {
@@ -50,6 +53,13 @@ export async function GET(request: NextRequest) {
     const kakaoUser = await getKakaoUser(token.access_token);
     if (!kakaoUser.id) {
       return redirectJoin(request.url, inviteCode, "kakao_user_failed");
+    }
+
+    if (storeMode) {
+      const authUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
+      if (!authUserId || !(await hasActiveStoreMembership(authUserId)) || !(await setStoreSession(authUserId)))
+        return redirectStore(request.url, "store_membership_required");
+      return NextResponse.redirect(new URL("/store", request.url));
     }
 
     if (linkMode) {
@@ -102,8 +112,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(isOwner ? "/dashboard" : "/mobile/today", request.url));
   } catch (error) {
     console.error("Kakao staff callback failed:", error);
-    return redirectJoin(request.url, inviteCode, error instanceof Error ? error.message : "kakao_callback_failed");
+    const message = error instanceof Error ? error.message : "kakao_callback_failed";
+    return storeMode ? redirectStore(request.url, message) : redirectJoin(request.url, inviteCode, message);
   }
+}
+
+function redirectStore(baseUrl: string, error: string) {
+  return NextResponse.redirect(new URL(`/store?error=${encodeURIComponent(error)}`, baseUrl));
 }
 
 async function exchangeKakaoCode(code: string): Promise<KakaoTokenResponse> {
