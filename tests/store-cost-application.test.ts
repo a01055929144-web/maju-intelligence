@@ -34,12 +34,13 @@ describe("store cost application boundary", () => {
 
   it("allows an active staff member to read only their verified company and store", async () => {
     mocks.context.mockResolvedValue({ companyId, memberId: "member-1", role: "staff", storeAccountId });
-    mocks.list.mockResolvedValue([{ id: itemId }]);
+    mocks.list.mockResolvedValue({ hasMore: false, rows: [{ id: itemId }] });
     await expect(readStoreCosts({ companyId, product: "사과", storeAccountId })).resolves.toEqual({
-      ok: true, rows: [{ id: itemId }]
+      hasMore: false, ok: true, rows: [{ id: itemId }]
     });
     expect(mocks.context).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId });
-    expect(mocks.list).toHaveBeenCalledExactlyOnceWith({ companyId, product: "사과", storeAccountId });
+    expect(mocks.list).toHaveBeenCalledExactlyOnceWith({ companyId, from: undefined, offset: undefined,
+      product: "사과", storeAccountId, to: undefined });
   });
 
   it("rejects staff changes before touching the database", async () => {

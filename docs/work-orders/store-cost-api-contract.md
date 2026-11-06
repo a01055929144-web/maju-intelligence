@@ -12,10 +12,10 @@
 
 ## 요청
 
-- `GET ?companyId=<uuid>&storeAccountId=<uuid>&from=YYYY-MM-DD&to=YYYY-MM-DD&product=<text>`: 현재 원가 검색
-- `GET ?companyId=<uuid>&storeAccountId=<uuid>&itemId=<uuid>&history=true`: 항목 변경 이력
+- `GET ?companyId=<uuid>&storeAccountId=<uuid>&from=YYYY-MM-DD&to=YYYY-MM-DD&product=<text>&offset=<number>`: 현재 원가 검색
+- `GET ?companyId=<uuid>&storeAccountId=<uuid>&itemId=<uuid>&history=true&offset=<number>`: 항목 변경 이력
 - `PATCH`: `{ companyId, storeAccountId, itemId, expectedRevision, row }` 낙관적 잠금 수정
 
-최소 경계에서는 GET과 PATCH만 제공한다. 파일 업로드는 DB 승인 후 별도 작업으로 남긴다. 성공 응답은 GET `{ rows }`, PATCH `{ id, revision, replayed }`이다. 인증 없음 401, 권한 부족 403, 기능 OFF 또는 항목 없음 404, revision 충돌 409를 반환한다.
+최소 경계에서는 GET과 PATCH만 제공한다. 파일 업로드는 DB 승인 후 별도 작업으로 남긴다. GET은 50행 고정 페이지이며 성공 응답은 `{ rows, hasMore, nextOffset }`, PATCH는 `{ id, revision, replayed }`이다. 다음 페이지는 응답의 `nextOffset`을 그대로 전달한다. 인증 없음 401, 권한 부족 403, 기능 OFF 또는 항목 없음 404, revision 충돌 409를 반환한다.
 
 행 형식은 `{ effectiveOn, productName, specification?, unit, costKrw }`이며 `costKrw`는 0~10억원의 원 단위 정수다. 공급처·유통사 매입가·마진 필드는 받지 않는다.

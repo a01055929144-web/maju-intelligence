@@ -2,6 +2,8 @@ import "server-only";
 
 import { supabaseRequest } from "../store";
 
+const PAGE_SIZE = 50;
+
 export type StoreCostItem = {
   costKrw: number;
   effectiveOn: string;
@@ -39,6 +41,7 @@ function mapRow(row: StoreCostDbRow): StoreCostItem {
 export async function listStoreCosts(input: {
   companyId: string;
   from?: string;
+  offset?: number;
   product?: string;
   storeAccountId: string;
   to?: string;
@@ -51,23 +54,26 @@ export async function listStoreCosts(input: {
     input.product ? `product_name=ilike.*${encodeURIComponent(input.product)}*` : ""
   ].filter(Boolean).join("&");
   const rows = await supabaseRequest<StoreCostDbRow[]>(
-    `store_cost_items?select=id,product_name,specification,unit,effective_on,cost_krw,revision&${filters}&order=effective_on.desc,product_name.asc`
+    `store_cost_items?select=id,product_name,specification,unit,effective_on,cost_krw,revision&${filters}` +
+      `&order=effective_on.desc,product_name.asc,id.asc&limit=${PAGE_SIZE + 1}&offset=${input.offset ?? 0}`
   );
-  return rows.map(mapRow);
+  return { hasMore: rows.length > PAGE_SIZE, rows: rows.slice(0, PAGE_SIZE).map(mapRow) };
 }
 
 export async function listStoreCostHistory(input: {
   companyId: string;
   itemId: string;
+  offset?: number;
   storeAccountId: string;
 }) {
   const rows = await supabaseRequest<StoreCostDbRow[]>(
     `store_cost_revisions?select=id,product_name,specification,unit,effective_on,cost_krw,revision` +
       `&company_id=eq.${encodeURIComponent(input.companyId)}` +
       `&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}` +
-      `&store_cost_item_id=eq.${encodeURIComponent(input.itemId)}&order=revision.desc`
+      `&store_cost_item_id=eq.${encodeURIComponent(input.itemId)}` +
+      `&order=revision.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${input.offset ?? 0}`
   );
-  return rows.map(mapRow);
+  return { hasMore: rows.length > PAGE_SIZE, rows: rows.slice(0, PAGE_SIZE).map(mapRow) };
 }
 
 export async function updateStoreCost(input: {

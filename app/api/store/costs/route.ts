@@ -25,14 +25,18 @@ export async function GET(request: NextRequest) {
   const from = params.get("from") || undefined;
   const to = params.get("to") || undefined;
   const product = params.get("product")?.trim() || undefined;
+  const offsetValue = params.get("offset");
+  const offset = offsetValue === null ? 0 : Number(offsetValue);
   const historyItemId = params.get("history") === "true" ? params.get("itemId") || undefined : undefined;
   if (!UUID.test(companyId) || !UUID.test(storeAccountId) || (from && !validDate(from)) || (to && !validDate(to)) ||
-    (product && product.length > 200) || (params.get("history") === "true" && (!historyItemId || !UUID.test(historyItemId)))) {
+    (product && product.length > 200) || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000 ||
+    (params.get("history") === "true" && (!historyItemId || !UUID.test(historyItemId)))) {
     return NextResponse.json({ message: "Invalid request" }, { status: 400 });
   }
   try {
-    const result = await readStoreCosts({ companyId, from, historyItemId, product, storeAccountId, to });
-    return result.ok ? NextResponse.json({ rows: result.rows }) : accessResponse(result.status);
+    const result = await readStoreCosts({ companyId, from, historyItemId, offset, product, storeAccountId, to });
+    return result.ok ? NextResponse.json({ hasMore: result.hasMore,
+      nextOffset: result.hasMore ? offset + result.rows.length : null, rows: result.rows }) : accessResponse(result.status);
   } catch {
     return NextResponse.json({ message: "Store costs unavailable" }, { status: 503 });
   }

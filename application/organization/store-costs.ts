@@ -24,16 +24,18 @@ async function authorize(scope: Scope, action: "read" | "manage") {
 export async function readStoreCosts(input: Scope & {
   from?: string;
   historyItemId?: string;
+  offset?: number;
   product?: string;
   to?: string;
-}): Promise<AccessFailure | { ok: true; rows: Awaited<ReturnType<typeof listStoreCosts>> }> {
+}): Promise<AccessFailure | { hasMore: boolean; ok: true; rows: Awaited<ReturnType<typeof listStoreCosts>>["rows"] }> {
   const access = await authorize(input, "read");
   if (!access.ok) return access;
-  const rows = input.historyItemId
-    ? await listStoreCostHistory({ companyId: input.companyId, itemId: input.historyItemId, storeAccountId: input.storeAccountId })
+  const page = input.historyItemId
+    ? await listStoreCostHistory({ companyId: input.companyId, itemId: input.historyItemId, offset: input.offset,
+      storeAccountId: input.storeAccountId })
     : await listStoreCosts({ companyId: input.companyId, from: input.from, product: input.product,
-      storeAccountId: input.storeAccountId, to: input.to });
-  return { ok: true, rows };
+      offset: input.offset, storeAccountId: input.storeAccountId, to: input.to });
+  return { ok: true, rows: page.rows, hasMore: page.hasMore };
 }
 
 export async function changeStoreCost(input: Scope & {
