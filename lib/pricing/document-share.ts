@@ -63,20 +63,24 @@ export async function limitDocumentShare(company: string, identity: string, acti
 }
 export async function prepareDocumentShare(scope: DocumentScope, input: PrepareDocumentShare): Promise<PreparedDocumentShare> {
   enabled(scope);
-  await limitDocumentShare(scope.companyId, `actor:${scope.actor}`, "prepare", input.documentVersionId);
+  const id = randomUUID();
+  await limitDocumentShare(scope.companyId, `actor:${scope.actor}`, "prepare", id);
+  const keyPath = path("pricing_document_share_links", scope.companyId, `idempotency_key=eq.${input.idempotencyKey}&select=${shareFields}&limit=1`);
+  const existing = (await supabaseRequest<ShareRow[]>(keyPath))[0];
+  if (existing && (existing.document_version_id !== input.documentVersionId || existing.lead_id !== input.leadId ||
+    existing.ttl_days !== input.ttlDays || existing.created_by_key !== scope.actor))
+    throw new DocumentSendError("같은 재시도 키에 다른 공유 요청이 있습니다. 기존 요청을 확인해 주세요.", 409);
   const version = await published(scope.companyId, input.documentVersionId, scope.actor);
-  if (version.content.validUntil < koreaDay()) missing();
+  if (!existing && version.content.validUntil < koreaDay()) missing();
   await assertLead(scope.companyId, input.leadId);
-  const id = randomUUID(), issued = issueDocumentShareToken(id);
+  const issued = issueDocumentShareToken(id);
   const expected = { company_id: scope.companyId, document_id: version.documentId, document_version_id: version.id,
     lead_id: input.leadId, idempotency_key: input.idempotencyKey, created_by_key: scope.actor, ttl_days: input.ttlDays };
-  await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
+  if (!existing) await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
     method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
     body: JSON.stringify({ ...expected, id, token_nonce: issued.nonce, token_hash: issued.hash }),
   });
-  const rows = await supabaseRequest<ShareRow[]>(path("pricing_document_share_links", scope.companyId,
-    `idempotency_key=eq.${input.idempotencyKey}&select=${shareFields}&limit=1`));
-  const saved = rows[0];
+  const saved = existing || (await supabaseRequest<ShareRow[]>(keyPath))[0];
   if (!saved) throw new Error("Share preparation unconfirmed");
   if (Object.entries(expected).some(([key, value]) => saved[key as keyof ShareRow] !== value))
     throw new DocumentSendError("같은 재시도 키에 다른 공유 요청이 있습니다. 기존 요청을 확인해 주세요.", 409);

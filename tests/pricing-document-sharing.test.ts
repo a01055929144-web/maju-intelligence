@@ -95,7 +95,7 @@ it("restores a committed preparation after a lost response", async () => {
 });
 it.each([{ ttlDays: 15 }, { documentVersionId: "20000000-0000-4000-8000-000000000002" }, { leadId: "30000000-0000-4000-8000-000000000002" }])("never replaces a prior request: %j", async change => {
   await prepared(); const before = structuredClone(links);
-  await expect(service.execute(scope, { ...prepare, ...change })).rejects.toBeTruthy(); expect(links).toEqual(before);
+  await expect(service.execute(scope, { ...prepare, ...change })).rejects.toMatchObject({ status: 409 }); expect(links).toEqual(before);
 });
 it.each([false, true])("denies other-author external quotes even for manager=%s", async manager => {
   owner = "other-author"; await expect(service.execute({ ...scope, manager }, prepare)).rejects.toMatchObject({ status: 404 }); expect(links).toHaveLength(0);
@@ -128,6 +128,13 @@ it("hides sales prices at the KST date boundary and showPrice=false", async () =
   expect((await (await publicPost(request({ token: token(p.publicUrl) }))).json()).document.lines[0].price).toBeNull();
   content.validUntil = "2099-12-31"; content.showPrice = false;
   expect((await (await publicPost(request({ token: token(p.publicUrl) }))).json()).document.lines[0].price).toBeNull();
+});
+it("restores an existing hard-valid link after its prices expire but never issues a fresh expired version", async () => {
+  content.validUntil = "2026-11-06"; vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-06T14:59:59Z"));
+  const p = await prepared(); vi.setSystemTime(new Date("2026-11-06T15:00:00Z"));
+  expect(await prepared()).toEqual(p);
+  await expect(service.execute(scope, { ...prepare, idempotencyKey: "40000000-0000-4000-8000-000000000002" })).rejects.toMatchObject({ status: 404 });
+  expect(links).toHaveLength(1);
 });
 it("uses current promotion availability but never current promotion prices", async () => {
   Object.assign(content.lines[0], { promotionId: "70000000-0000-4000-8000-000000000001", startsOn: "2020-01-01", endsOn: "2099-12-31", remaining: 10, badge: "행사" });
