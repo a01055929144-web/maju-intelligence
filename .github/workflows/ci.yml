@@ -328,6 +328,14 @@ jobs:
           createdb lead_share_policy_test
           psql --dbname=lead_share_policy_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share.pg17.test.sql
 
+      - name: Verify lead document share draft on PostgreSQL 17
+        env:
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb pricing_lead_document_share_test
+          psql --dbname=pricing_lead_document_share_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
