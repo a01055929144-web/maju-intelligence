@@ -7,6 +7,9 @@ do $$ begin
 end $$;
 create table companies(id uuid primary key);
 create table business_permit_leads(id uuid primary key,company_id uuid references companies,merged_into_lead_id uuid,unique(company_id,id));
+create table public.lead_actions(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies,lead_id uuid not null references business_permit_leads,
+  action_type text not null,result text,memo text,actor_name text,metadata jsonb not null default '{}'::jsonb,created_at timestamptz not null default now());
+grant select,insert on public.lead_actions to service_role;
 create table normalized_customers(id uuid primary key,company_id uuid references companies,unique(company_id,id));
 create table pricing_documents(id uuid primary key,company_id uuid references companies,kind text,owner_key text,archived_at timestamptz,unique(company_id,id));
 create table pricing_document_versions(id uuid primary key,company_id uuid,document_id uuid,content jsonb,

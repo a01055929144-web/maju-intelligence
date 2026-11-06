@@ -15,11 +15,11 @@
 
 아래 액션은 **승인 후 구현 제안**이다. 현재 #282의 `record-send`는 아직 `shareLinkId`를 받지 않고 `publicUrl:null`을 반환한다.
 
-1. 인증된 기존 `/api/pricing-documents`에 `prepare-share` 추가: `{documentVersionId, leadId, idempotencyKey, ttlDays?:14}`. 이 액션은 회사 내부 조회가 아니라 **외부 공유 링크 발급**이다. 초안 정책으로 같은 회사, 작성자의 quote 또는 읽을 수 있는 sheet, 병합되지 않은 리드만 허용한다. 새 초안을 자동 저장/게시하지 않는다.
+1. 인증된 기존 `/api/pricing-documents`에 `prepare-share` 추가: `{documentId, documentVersionId, leadId, idempotencyKey, ttlDays?:14}`. 이 액션은 회사 내부 조회가 아니라 **외부 공유 링크 발급**이다. 초안 정책으로 같은 회사, 작성자의 quote 또는 읽을 수 있는 sheet, 병합되지 않은 리드만 허용한다. 새 초안을 자동 저장/게시하지 않는다.
 2. 준비 성공의 `result`: `{shareLinkId, sendId:null, documentId, documentVersionId, publicUrl, expiresAt, deliveryRecorded:false}`. 제안 URL은 **`/pricing-document#<token>`**이다. 링크 생성·복사·파일 저장만으로 발송 완료/리드 상태 변경을 기록하지 않는다.
 3. 실제 전달을 확인한 뒤 기존 `record-send`에 선택 `shareLinkId`와 `delivered:true`를 보낸다. 기존 입력(실제 templateId/channel, 대상 leadId, documentVersionId, 동일 전달 건의 idempotencyKey)은 보존한다.
-4. 연결 확인까지 성공한 `result`: **`{sendId, documentId, documentVersionId, publicUrl}`**. publicUrl은 준비한 URL이며 customer 주문 URL이 아니다. 공유 링크 없는 기존 record-send 호출은 계속 null이다.
-5. 발송 행 저장 후 링크 연결이 실패하면 `503`과 같은 키 재시도 안내를 반환한다. 같은 키로 기존 sendId를 복원하고 연결을 재시도한다. 연결 확인 전 05가 전달 완료로 처리하지 않는다. 05의 lead_action 저장이 실패해도 새 전달 건/키를 만들지 않고 이미 받은 ID로 연결만 재시도한다. **05는 publicUrl/토큰 원문을 lead_actions 등 DB에 저장하지 않고 ID와 재시도 키만 보존한다.** URL이 다시 필요하면 서버가 권한을 재확인해 원래 URL을 복원한다.
+4. 연결 확인까지 성공한 `result`: **`{sendId, leadActionId, documentId, documentVersionId, publicUrl}`**. publicUrl은 준비한 URL이며 customer 주문 URL이 아니다. 공유 링크 없는 기존 record-send 호출은 계속 null이다.
+5. RPC가 발송·lead_actions 연락 기록·링크 연결을 한 트랜잭션으로 저장한다. 어느 단계라도 실패하면 전부 롤백하며 `503`과 같은 키 재시도 안내를 반환한다. 커밋 응답만 유실되면 같은 키로 기존 sendId/leadActionId를 복원한다. **05는 반환된 leadActionId를 사용하며 같은 전달의 연락 기록을 따로 INSERT하지 않는다. publicUrl/토큰 원문은 DB에 보존하지 않고 ID와 키만 보존한다.** URL이 다시 필요하면 권한을 재확인해 원래 URL을 복원한다.
 
 준비 키와 발송 키는 같은 전달 건의 UUID를 두 기존/신규 고유 키 범위에서 재사용한다. 같은 회사·키·입력·작성자는 같은 링크/버전/sendId를 복원한다. 다른 리드·버전·TTL·작성자 또는 다른 발송 입력이면 409이며 이전 행을 덮어쓰지 않는다. 준비의 서버 생성 ID·nonce·시각은 입력 비교에서 제외하고 기존 행의 값을 재사용한다. 새 전달은 새 키로 별도 기록한다.
 
@@ -39,7 +39,7 @@
 - trigger의 quote 작성자 검사는 **새 외부 공유 링크 삽입**에만 적용하며 기존 문서 조회를 제한하지 않는다. 정확한 게시 버전, 동일 회사의 병합되지 않은 리드, 게시 유효기간도 검사한다. 선택적 보관 컬럼이 있으면 보관 문서도 거부하며 미적용 보관 컬럼을 직접 참조하지 않는다.
 - 생성/만료는 DB 시각과 TTL로 계산한다. 문서·버전·대상·키·토큰·TTL·시각은 변경 불가다. 새 버전 공유는 새 링크로 발급한다.
 - send_id는 같은 회사·문서·버전·리드·전달 키·작성자이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 같은 리드·버전의 예전 전달 기록을 새 링크에 끼워 넣지 못한다. 연결/회수 취소는 불가하다. 늦은 전달 기록 연결은 링크를 재활성화하지 않는다.
-- RLS ON, anon/authenticated/public 직접 접근 및 trigger 함수 실행 권한 없음. service_role은 select/insert/update만 허용한다. 실제 인증은 서버 API에서 먼저 수행한다. 새 SECURITY DEFINER/RPC·기존 테이블 변경·기존 행 backfill 없음.
+- RLS ON, anon/authenticated/public 직접 접근 및 trigger 함수 실행 권한 없음. service_role은 select/insert/update만 허용한다. 실제 인증은 서버 API에서 먼저 수행한다. 새 SECURITY DEFINER·기존 테이블 변경·기존 행 backfill 없음. 실제 전달만 처리하는 service-only SECURITY INVOKER RPC 하나를 추가한다.
 
 ## 4. 토큰·공개 열람 계약
 
@@ -75,3 +75,13 @@
 - 대상 건수: 신규 테이블 초기 0행, 기존 행 갱신/이전 0건. 운영 현재 건수는 조회하지 않았다. 승인자는 대상 프로젝트·기존 P1/S2 스키마/권한·운영 보존 정책과 예상 회사별 발급량을 읽기 확인해야 한다.
 - 운영 적용·활성화는 새 프로젝트별 승인 및 후속 runtime 검증 뒤 별도 진행한다. 중앙 승인표 갱신은 컨트롤타워 소유다. 이 초안은 DB-APPROVED를 주장하지 않는다.
 - 복구 우선은 기능 OFF·코드 되돌림·필요 시 링크 회수다. down은 링크 행이 하나라도 있으면(회수됐어도) 거부한다. 데이터가 없을 때만 새 테이블/trigger 함수를 제거하며 기존 문서·버전·발송·주문·감사 이력은 건드리지 않는다.
+
+
+## PR #288 독립 리뷰 보완 — 운영 미승인 유지
+
+- prepare-share의 documentId는 선택 문서에 대한 일치 주장이다. 서버는 버전에서 실제 문서 ID를 유도한 뒤 일치를 검사한다. 다른 문서의 버전으로 링크를 준비하지 못한다.
+- 기존 recordPermitLeadAction은 REST INSERT와 상태 PATCH를 나눠 실행하며 전달 키 멱등/발송 원자성을 제공하지 않아 그대로 호출하지 않는다. 기존 record-send의 shareLinkId 경로만 새 service-only SECURITY INVOKER RPC record_pricing_lead_share_delivery로 전환한다.
+- RPC는 공유 행을 잠근 같은 트랜잭션에서 기존 pricing_document_sends와 lead_actions를 저장하고 send_id를 연결한다. lead action ID는 send ID를 재사용하며 동일 키/입력/작성자 재시도는 각 1건이다. 어느 단계라도 실패하면 모두 롤백한다. 기존 shareLinkId 없는 record-send는 변경하지 않는다.
+- lead_actions.metadata는 문서/버전/링크/send/재시도 UUID만 보존한다. URL/토큰/가격/원가는 저장하지 않는다. actor_name은 인증 세션에서 결정한다. 실제 quote는 action_type=quote/result=견적 전달, sheet는 dm/단가표 전달로 기존 연락 이력 조회에 나타난다. 링크 열람은 연락·리드 상태 변경을 만들지 않는다.
+- 추가 선행 의존성: 기존 lead_actions의 metadata/actor_name/result/memo 컬럼 및 서비스 역할 SELECT/INSERT 권한(20260818/20261009 기존 스키마). 이 초안은 기존 lead_actions 테이블을 만들거나 변경하지 않는다. 테스트의 해당 테이블은 주변 합성 fixture다.
+- 기존 테이블/열/행의 backfill 없이 RPC 하나만 추가한다. anon/authenticated/PUBLIC 실행 금지. 운영 SQL 승인·적용, 기능 ON 및 배포 금지는 그대로다.

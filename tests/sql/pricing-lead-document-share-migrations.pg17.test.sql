@@ -30,6 +30,10 @@ do $$ begin
     and pg_get_constraintdef(oid)='UNIQUE (company_id, document_id, id)') then raise exception 'S2_triple_unique_missing'; end if;
 end $$;
 
+create table public.lead_actions(id uuid primary key default gen_random_uuid(),company_id uuid not null references companies,lead_id uuid not null references business_permit_leads,
+  action_type text not null,result text,memo text,actor_name text,metadata jsonb not null default '{}'::jsonb,created_at timestamptz not null default now());
+grant select,insert on public.lead_actions to service_role;
+
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.sql
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.down.sql
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.sql
