@@ -75,15 +75,20 @@ update pricing_documents set archived_at=clock_timestamp() where id='10000000-00
 select pg_temp.expect_error($q$select pg_temp.prepare_link('60000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000003')$q$,'share_document_not_found');
 update pricing_documents set archived_at=null where id='10000000-0000-4000-8000-000000000001';
 insert into pricing_document_sends(id,company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key) values
- ('50000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','actual-template','table','staff','80000000-0000-4000-8000-000000000001',repeat('a',64)),
+ ('50000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','actual-template','table','staff','70000000-0000-4000-8000-000000000001',repeat('a',64)),
  ('50000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002','actual-template','table','staff','80000000-0000-4000-8000-000000000002',repeat('a',64));
 insert into pricing_document_sends(id,company_id,document_id,document_version_id,customer_id,template_id,layout,channel,idempotency_key,sent_by_key) values
  ('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','actual-template','table','staff','80000000-0000-4000-8000-000000000003',repeat('a',64));
 insert into pricing_document_sends(id,company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key) values
  ('50000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000003','actual-template','table','staff','80000000-0000-4000-8000-000000000004',repeat('b',64));
+insert into pricing_document_sends(id,company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key) values
+ ('50000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','actual-template','table','staff','80000000-0000-4000-8000-000000000005',repeat('a',64)),
+ ('50000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','actual-template','table','staff','70000000-0000-4000-8000-000000000002',repeat('a',64));
 select pg_temp.expect_error($q$update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000002' where id='60000000-0000-4000-8000-000000000001'$q$,'share_send_mismatch');
 select pg_temp.expect_error($q$update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000003' where id='60000000-0000-4000-8000-000000000001'$q$,'share_send_mismatch');
 select pg_temp.expect_error($q$update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000004' where id='60000000-0000-4000-8000-000000000001'$q$,'share_send_mismatch');
+select pg_temp.expect_error($q$update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000005' where id='60000000-0000-4000-8000-000000000001'$q$,'share_send_mismatch');
+select pg_temp.expect_error($q$update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000006' where id='60000000-0000-4000-8000-000000000002'$q$,'share_send_mismatch');
 update pricing_document_share_links set send_id='50000000-0000-4000-8000-000000000001' where id='60000000-0000-4000-8000-000000000001';
 update pricing_document_share_links set send_id=send_id where id='60000000-0000-4000-8000-000000000001';
 select pg_temp.expect_error($q$update pricing_document_share_links set send_id=null where id='60000000-0000-4000-8000-000000000001'$q$,'share_send_immutable');
@@ -98,7 +103,7 @@ select pg_temp.expect_error($q$update pricing_document_share_links set revoked_a
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.down.sql
 \set ON_ERROR_STOP on
 do $$ begin
-  if (select count(*) from pricing_document_share_links)<>2 or (select count(*) from pricing_document_sends)<>4
+  if (select count(*) from pricing_document_share_links)<>2 or (select count(*) from pricing_document_sends)<>6
     or (select count(*) from pricing_document_versions)<>4 then raise exception 'down_removed_history'; end if;
 end $$;
 -- Fixture owner alone clears its synthetic links to verify the permitted empty down/up path.

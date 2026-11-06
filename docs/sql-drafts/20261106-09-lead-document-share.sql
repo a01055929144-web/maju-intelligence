@@ -54,7 +54,8 @@ begin
     if new.send_id is distinct from old.send_id then
       select * into s from public.pricing_document_sends where company_id=new.company_id and id=new.send_id;
       if not found or s.document_id<>new.document_id or s.document_version_id<>new.document_version_id
-        or s.lead_id is distinct from new.lead_id or s.customer_id is not null then raise exception 'share_send_mismatch'; end if;
+        or s.lead_id is distinct from new.lead_id or s.customer_id is not null
+        or s.idempotency_key<>new.idempotency_key or s.sent_by_key is distinct from new.created_by_key then raise exception 'share_send_mismatch'; end if;
     end if;
   end if;
   return new;
