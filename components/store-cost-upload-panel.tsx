@@ -17,9 +17,9 @@ function importError(status: number) {
   if (status === 401) return "매장 구성원 로그인을 확인한 뒤 다시 열어 주세요.";
   if (status === 403) return "원가 업로드는 점주·관리자만 가능합니다. 점주에게 권한을 확인해 주세요.";
   if (status === 404) return "원가 업로드는 아직 사용할 수 없습니다. 담당자에게 확인해 주세요.";
-  if (status === 409) return "미리보기 내용이 달라졌습니다. 서버 미리보기를 다시 확인해 주세요.";
-  if (status === 400) return "파일과 열 연결을 확인한 뒤 서버 미리보기를 다시 요청해 주세요.";
-  return "서버 응답을 확인하지 못했습니다. 같은 내용으로 다시 시도하면 중복 반영하지 않습니다.";
+  if (status === 409) return "미리보기 내용이 달라졌습니다. 반영 전 최종 확인을 다시 진행해 주세요.";
+  if (status === 400) return "파일과 열 연결을 확인한 뒤 미리보기를 다시 요청해 주세요.";
+  return "처리 결과를 확인하지 못했습니다. 같은 내용으로 다시 시도하면 중복 반영하지 않습니다.";
 }
 
 export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClose }: {
@@ -119,7 +119,7 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
     {error && <p role="alert">{error}</p>}
     {!sheet && !error && <p>선택한 파일이 없습니다. 원가 파일을 선택해 주세요.</p>}
     {sheet && <>
-      <fieldset disabled={busy}><legend className="sr-only">원가 필수 열 맞추기</legend>
+      <fieldset className="min-w-0" disabled={busy}><legend className="sr-only">원가 필수 열 맞추기</legend>
         <ExcelHeaderMappingPreview key={fileName} fields={fields} headers={headers} rows={rawPreview} fieldMap={fieldMap}
           onMap={next => { setFieldMap(next); invalidate(); }} />
       </fieldset>
@@ -130,10 +130,10 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
         {preview.data.errors.length > 0 && <div role="alert"><p>오류가 있는 행은 반영할 수 없습니다. 파일이나 열 연결을 수정해 주세요.</p><ul>{preview.data.errors.map(item => <li key={item.rowNumber}>{item.rowNumber}행: {item.message}</li>)}</ul></div>}
         <p className="text-sm">미리보기 내려받기에는 아래 반영 후보 행만 포함됩니다.</p>
         <CommonDataTable columns={columns} rows={server?.rows ?? preview.data.rows} rowKey={row => String(row.sourceRowNumber)} settingsKey="store-cost-upload-preview" filename="매장-원가-반영후보.csv" />
-        <Button className="min-h-[44px]" disabled={busy || !preview.data.rows.length || preview.data.errors.length > 0} onClick={() => void requestPreview()}>서버 미리보기 확인</Button>
+        <Button className="min-h-[44px]" disabled={busy || !preview.data.rows.length || preview.data.errors.length > 0} onClick={() => void requestPreview()}>반영 전 최종 확인</Button>
       </>}
       {server && <div className="space-y-3">
-        <p>서버에서 {server.rows.length}행을 확인했습니다. 반영할 내용을 확인해 주세요.</p>
+        <p>반영할 {server.rows.length}행을 확인했습니다. 원가와 중복 처리 내용을 확인한 뒤 반영해 주세요.</p>
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />미리보기 원가와 중복 처리 내용을 확인했습니다.</label>
         <Button className="min-h-[44px]" disabled={busy || !confirmed} onClick={() => void apply()}>확인 후 반영</Button>
       </div>}

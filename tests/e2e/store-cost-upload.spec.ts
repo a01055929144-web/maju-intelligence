@@ -38,7 +38,7 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   await costMapping.selectOption("costKrw");
   await expect(upload.getByText("반영 후보 1행 · 오류 0행 · 중복 1행", { exact: true })).toBeVisible();
   expect(requests).toHaveLength(0);
-  await upload.getByRole("button", { name: "서버 미리보기 확인", exact: true }).click();
+  await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
   const firstImportId = requests[0].importId;
   await upload.getByRole("checkbox", { name: "미리보기 원가와 중복 처리 내용을 확인했습니다." }).check();
@@ -46,7 +46,7 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   await costMapping.selectOption("");
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
   await costMapping.selectOption("costKrw");
-  await upload.getByRole("button", { name: "서버 미리보기 확인", exact: true }).click();
+  await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
   expect(requests[1].importId).not.toBe(firstImportId);
   await upload.getByRole("checkbox", { name: "미리보기 원가와 중복 처리 내용을 확인했습니다." }).check();
@@ -81,19 +81,19 @@ test("empty and invalid files, row errors and server permission errors never app
   await expect(upload.getByRole("alert")).toContainText("원가 행이 없습니다");
   await file.setInputFiles(csv(valid.replace("3500", "-1")));
   await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
-  await expect(upload.getByRole("button", { name: "서버 미리보기 확인", exact: true })).toBeDisabled();
+  await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
   expect(posts).toBe(0);
   await file.setInputFiles(csv(valid));
   for (const [code, message] of [[401, "로그인"], [403, "점주·관리자"], [404, "아직 사용할 수 없습니다"], [400, "열 연결"], [503, "다시 시도"]] as const) {
     status = code;
-    await upload.getByRole("button", { name: "서버 미리보기 확인", exact: true }).click();
+    await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
     await expect(upload.getByRole("alert")).toContainText(message);
     await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
   }
   await page.screenshot({ path: info.outputPath("store-cost-upload-error.png"), fullPage: true });
   await file.setInputFiles(csv(valid.replace("3500", "")));
   await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
-  await expect(upload.getByRole("button", { name: "서버 미리보기 확인", exact: true })).toBeDisabled();
+  await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
 });
 
 test("xlsx date cells normalize through the 04 parser; a new file resets confirmation and import ID", async ({ page }) => {
@@ -113,11 +113,11 @@ test("xlsx date cells normalize through the 04 parser; a new file resets confirm
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["적용일", "품목명", "규격", "단위", "단가"], [new Date("2026-11-07T00:00:00Z"), "합성 채소", "1kg", "봉", 3500]]), "합성");
   await upload.getByLabel("원가 파일 선택").setInputFiles({ name: "합성.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) });
   await expect(upload.getByText("반영 후보 1행 · 오류 0행 · 중복 0행", { exact: true })).toBeVisible();
-  await upload.getByRole("button", { name: "서버 미리보기 확인", exact: true }).click();
+  await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
   await upload.getByLabel("원가 파일 선택").setInputFiles(csv(valid));
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
-  await upload.getByRole("button", { name: "서버 미리보기 확인", exact: true }).click();
+  await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
   expect(previews[0].importId).not.toBe(previews[1].importId);
 });
