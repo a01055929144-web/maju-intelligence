@@ -1192,7 +1192,7 @@ export function PricingDocumentsWorkspace({
           )}
         </div>
       )}
-      {leadContext && sharingEnabled && draft && versions.length > 0 ? <PricingLeadDocumentShare key={`${draft.id}:${leadContext.id}`} companyId={companyId} leadId={leadContext.id} versions={versions} /> : null}
+      {leadContext && sharingEnabled && draft && versions.length > 0 ? <PricingLeadDocumentShare key={`${draft.id}:${leadContext.id}`} companyId={companyId} leadId={leadContext.id} versions={versions} onDeliveryRecorded={() => setMessage("리드에게 실제 전달한 기록을 확인했습니다.")} /> : null}
       {preview && (
         /* 11/4: 와이어프레임 ④ — 미리보기는 큰 화면(모달)으로: 온라인(휴대폰)·오프라인(A4) 나란히, 글자 크기, 인쇄·PDF·PNG·엑셀 */
         <div aria-label="미리보기" aria-modal="true" className="pricing-preview-modal fixed inset-0 z-[60] overflow-y-auto bg-slate-100" role="dialog">

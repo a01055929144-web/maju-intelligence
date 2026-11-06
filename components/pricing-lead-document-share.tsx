@@ -5,7 +5,7 @@ import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import type { DocumentSendResult } from "@/domains/pricing/document-send";
 import { documentRequest } from "@/lib/pricing/document-client";
 
-export function PricingLeadDocumentShare({ companyId, leadId, versions }: { companyId: string; leadId: string; versions: DocumentVersion[] }) {
+export function PricingLeadDocumentShare({ companyId, leadId, versions, onDeliveryRecorded }: { companyId: string; leadId: string; versions: DocumentVersion[]; onDeliveryRecorded?: () => void }) {
   const [versionId, setVersionId] = useState(versions[0]?.id || ""), [ttlDays, setTtlDays] = useState(14);
   const [prepared, setPrepared] = useState<PreparedDocumentShare | null>(null), [sendId, setSendId] = useState("");
   const [confirmed, setConfirmed] = useState(false), [revoked, setRevoked] = useState(false);
@@ -53,7 +53,7 @@ export function PricingLeadDocumentShare({ companyId, leadId, versions }: { comp
           if (!delivery.current) delivery.current = { shareLinkId: prepared.shareLinkId, documentVersionId: prepared.documentVersionId,
             leadId, idempotencyKey: retry.current!.idempotencyKey, templateId: "pricing-doc-paper-v1", channel: "link", delivered: true };
           const r = await documentRequest<DocumentSendResult>(companyId, "record-send", delivery.current, true);
-          setSendId(r.result.sendId); setMessage("실제 전달 기록을 확인했습니다.");
+          setSendId(r.result.sendId); setMessage("실제 전달 기록을 확인했습니다."); onDeliveryRecorded?.();
         })}>실제 전달 완료 기록</button>
       </>}
       {sendId && <p>전달 완료 기록됨 · 링크 열람은 수락이나 주문이 아닙니다.</p>}

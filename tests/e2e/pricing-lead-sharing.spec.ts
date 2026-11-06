@@ -74,6 +74,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(share.getByRole("alert")).toContainText("합성 전달 연결 응답 유실");
   await share.getByRole("button", { name: "실제 전달 완료 기록", exact: true }).click();
   await expect(share.getByRole("status")).toContainText("실제 전달 기록을 확인했습니다");
+  await expect(page.getByText(/작성·게시만 완료됐으며 리드에게 전달하지 않았습니다/)).toHaveCount(0);
   expect(sendInputs).toHaveLength(2); expect(sendInputs[0]).toEqual(sendInputs[1]); expect(sendInputs[0].idempotencyKey).toBe(prepareInputs[0].idempotencyKey);
   for (const b of [...prepareInputs, ...sendInputs]) { expect(b).not.toHaveProperty("publicUrl"); expect(b).not.toHaveProperty("companyId"); }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
