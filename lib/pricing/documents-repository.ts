@@ -2,6 +2,7 @@ import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
 import { withDocumentRecalculations } from "./document-recalculation";
 import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
+import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 
 type CatalogResult = { items: Array<{ id: string; spec: string }> };
 type DocumentList = { items: DocumentDraft[]; total: number };
@@ -88,8 +89,43 @@ async function withCatalogSpecs(companyId: string, result: CatalogResult): Promi
   const specs = new Map(rows.map((row) => [row.id, catalogDisplaySpec(row)]));
   return { ...result, items: result.items.map((item) => ({ ...item, spec: (item.spec || "").trim() || specs.get(item.id) || "" })) };
 }
+async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput): Promise<DocumentSendResult> {
+  const company = encodeURIComponent(scope.companyId);
+  const versions = await supabaseRequest<Array<{ id: string; document_id: string; content: { layout: string } }>>(
+    `pricing_document_versions?company_id=eq.${company}&id=eq.${input.documentVersionId}&select=id,document_id,content&limit=1`);
+  const version = versions[0];
+  if (!version) throw new DocumentSendError("게시 문서를 찾지 못했습니다.", 404);
+  const documents = await supabaseRequest<Array<{ id: string; kind: string; owner_key: string }>>(
+    `pricing_documents?company_id=eq.${company}&id=eq.${version.document_id}&select=id,kind,owner_key&limit=1`);
+  const document = documents[0];
+  if (!document || (document.kind !== "sheet" && document.owner_key !== scope.actor))
+    throw new DocumentSendError("게시 문서를 찾지 못했습니다.", 404);
+  const targetTable = input.leadId ? "business_permit_leads" : "normalized_customers";
+  const targets = await supabaseRequest<Array<{ id: string }>>(
+    `${targetTable}?company_id=eq.${company}&id=eq.${input.leadId ?? input.customerId}&select=id&limit=1`);
+  if (!targets.length) throw new DocumentSendError("전달 대상을 찾지 못했습니다.", 404);
+  const layout = version.content.layout;
+  if (layout !== "auto" && layout !== "table" && layout !== "cards") throw new Error("Invalid published layout");
+  const row = { company_id: scope.companyId, document_id: version.document_id, document_version_id: version.id,
+    lead_id: input.leadId, customer_id: input.customerId, template_id: input.templateId, layout, channel: input.channel,
+    idempotency_key: input.idempotencyKey, sent_by_key: scope.actor };
+  const select = "id,company_id,document_id,document_version_id,lead_id,customer_id,template_id,layout,channel,idempotency_key,sent_by_key";
+  // The existing unique key serializes concurrent retries; never overwrite a prior delivery record.
+  await supabaseRequest(`pricing_document_sends?on_conflict=company_id,idempotency_key`, {
+    method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify(row),
+  });
+  const rows = await supabaseRequest<Array<typeof row & { id: string }>>(
+    `pricing_document_sends?company_id=eq.${company}&idempotency_key=eq.${input.idempotencyKey}&select=${select}&limit=1`);
+  const saved = rows[0];
+  if (!saved) throw new Error("Delivery record not confirmed");
+  if (Object.entries(row).some(([key, value]) => saved[key as keyof typeof row] !== value))
+    throw new DocumentSendError("같은 재시도 키에 다른 전달 내용이 있습니다. 기존 요청을 확인해 주세요.", 409);
+  return { sendId: saved.id, documentId: saved.document_id, documentVersionId: saved.document_version_id, publicUrl: null };
+}
+
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "record-send") return recordDocumentSend(scope, payload as DocumentSendInput) as Promise<T>;
     if (action === "archive") {
       if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");
       const input = payload as { id: string; expected: number; archived: boolean };

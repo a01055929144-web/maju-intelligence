@@ -7,6 +7,7 @@ import { canManagePriceSheets } from "../../../domains/pricing/access";
 import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
 import { documentArchiveEnabled } from "../../../lib/pricing/document-archive";
+import { DocumentSendError } from "../../../domains/pricing/document-send";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -70,6 +71,7 @@ async function handle(request: NextRequest, write: boolean) {
     manager,
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
+  let recordSend = false;
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1),
       // 11/4: 화면은 search 로 보내 왔는데 q 만 읽어 검색이 안 되던 문제 — 둘 다 받습니다.
@@ -84,8 +86,10 @@ async function handle(request: NextRequest, write: boolean) {
         { message: "검색 조건을 확인해 주세요." },
         { status: 400 },
       );
+    const input: unknown = write ? await request.json() : null;
+    recordSend = Boolean(input && typeof input === "object" && "action" in input && input.action === "record-send");
     const result = write
-      ? await documents.execute(scope, await request.json())
+      ? await documents.execute(scope, input)
       : await documents.read(
           scope,
           request.nextUrl.searchParams.get("action") || "list",
@@ -111,6 +115,8 @@ async function handle(request: NextRequest, write: boolean) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof DocumentSendError) return NextResponse.json({ message: error.message }, { status: error.status });
+    if (recordSend) return NextResponse.json({ message: "전달 기록을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503 });
     console.error("Pricing P1 request failed", error);
     return NextResponse.json(
       {
