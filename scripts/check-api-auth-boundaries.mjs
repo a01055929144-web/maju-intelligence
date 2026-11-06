@@ -59,6 +59,11 @@ function hasDeviceTokenGuard(source) {
     && /saveStaffLocationBatch\s*\(/.test(source);
 }
 
+function hasStoreCostApplicationGuard(source) {
+  return /from ["']@\/application\/organization\/store-costs["']/.test(source)
+    && /\b(readStoreCosts|changeStoreCost)\s*\(/.test(source);
+}
+
 const routeFiles = listRouteFiles(apiRoot);
 const failures = [];
 
@@ -66,7 +71,8 @@ for (const filePath of routeFiles) {
   const route = relativeRoute(filePath);
   const source = fs.readFileSync(filePath, "utf8");
   if (publicRoutes.has(route)) continue;
-  if (sessionGuardPatterns.some((pattern) => pattern.test(source)) || hasCronSecretGuard(source) || hasDeviceTokenGuard(source)) continue;
+  if (sessionGuardPatterns.some((pattern) => pattern.test(source)) || hasCronSecretGuard(source)
+    || hasDeviceTokenGuard(source) || hasStoreCostApplicationGuard(source)) continue;
   failures.push(route);
 }
 
