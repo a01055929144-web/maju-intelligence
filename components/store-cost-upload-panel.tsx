@@ -58,9 +58,10 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
       const buffer = await file.arrayBuffer();
       const workbook = file.name.toLowerCase().endsWith(".csv")
         ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
-        : XLSX.read(buffer, { type: "array", cellDates: true });
+        : XLSX.read(buffer, { type: "array", cellDates: false });
       const first = workbook.Sheets[workbook.SheetNames[0]];
       if (!first) throw new Error("파일에 시트가 없습니다. 첫 시트에 원가 자료를 넣어 다시 선택해 주세요.");
+      // Keep Excel date serials numeric for the 04 parser; browser timezones must not shift the day.
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(first, { defval: "", header: 1, raw: true });
       const next = buildPurchaseSheet(matrix);
       if (!next.rows.length) throw new Error("파일에 원가 행이 없습니다. 자료를 넣어 다시 선택해 주세요.");

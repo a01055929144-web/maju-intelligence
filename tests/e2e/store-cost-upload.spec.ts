@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import type { StoreCostInput } from "../../domains/store-cost/store-cost";
 type ImportRequest = { companyId: string; storeAccountId: string; importId: string; fileName: string; mode: "preview" | "apply"; confirmationHash?: string; rows: StoreCostInput[] };
 
+test.use({ timezoneId: "Asia/Seoul" });
+
 const companyId = "00000000-0000-4000-8000-000000000001";
 const storeAccountId = "20000000-0000-4000-8000-000000000001";
 const csv = (text: string, name = "합성-원가.csv") => ({ name, mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
