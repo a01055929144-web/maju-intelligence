@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
-import { parseDocument, koreaDay, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
 import { publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
@@ -67,10 +67,11 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   await limitDocumentShare(scope.companyId, `actor:${scope.actor}`, "prepare", id);
   const keyPath = path("pricing_document_share_links", scope.companyId, `idempotency_key=eq.${input.idempotencyKey}&select=${shareFields}&limit=1`);
   const existing = (await supabaseRequest<ShareRow[]>(keyPath))[0];
-  if (existing && (existing.document_version_id !== input.documentVersionId || existing.lead_id !== input.leadId ||
+  if (existing && (existing.document_id !== input.documentId || existing.document_version_id !== input.documentVersionId || existing.lead_id !== input.leadId ||
     existing.ttl_days !== input.ttlDays || existing.created_by_key !== scope.actor))
     throw new DocumentSendError("같은 재시도 키에 다른 공유 요청이 있습니다. 기존 요청을 확인해 주세요.", 409);
   const version = await published(scope.companyId, input.documentVersionId, scope.actor);
+  if (version.documentId !== input.documentId) throw new DocumentSendError("선택한 문서와 게시 버전이 다릅니다. 다시 확인해 주세요.", 409);
   if (!existing && version.content.validUntil < koreaDay()) missing();
   await assertLead(scope.companyId, input.leadId);
   const issued = issueDocumentShareToken(id);
@@ -99,6 +100,7 @@ export async function revokeDocumentShare(scope: DocumentScope, id: string) {
 }
 export async function validateShareDelivery(scope: DocumentScope, input: DocumentSendInput) {
   const row = await link(scope, input.shareLinkId!);
+  if (!row.send_id && (row.revoked_at || Date.parse(row.expires_at) <= Date.now())) missing();
   if (row.document_version_id !== input.documentVersionId || row.lead_id !== input.leadId ||
     row.idempotency_key !== input.idempotencyKey || input.customerId !== null)
     throw new DocumentSendError("준비한 링크와 실제 전달 내용을 확인해 주세요.", 409);
@@ -108,13 +110,25 @@ export async function validateShareDelivery(scope: DocumentScope, input: Documen
   publicUrl(row); // Key rotation must fail before creating a delivery record.
   return row;
 }
-export async function bindShareDelivery(scope: DocumentScope, row: ShareRow, result: DocumentSendResult): Promise<DocumentSendResult> {
-  await supabaseRequest(path("pricing_document_share_links", scope.companyId, `id=eq.${row.id}&send_id=is.null`), {
-    method: "PATCH", body: JSON.stringify({ send_id: result.sendId }),
-  });
-  const saved = await link(scope, row.id);
-  if (saved.send_id !== result.sendId) throw new Error("Share delivery binding unconfirmed");
-  return { ...result, publicUrl: publicUrl(saved) };
+export async function recordSharedDocumentDelivery(scope: DocumentScope, input: DocumentSendInput): Promise<DocumentSendResult> {
+  const row = await validateShareDelivery(scope, input);
+  let result: DocumentSendResult;
+  try {
+    result = await supabaseRequest<DocumentSendResult>("rpc/record_pricing_lead_share_delivery", { method: "POST", body: JSON.stringify({
+      p_company_id: scope.companyId, p_actor: scope.actor, p_share_link_id: row.id, p_document_id: row.document_id,
+      p_document_version_id: row.document_version_id, p_lead_id: row.lead_id, p_idempotency_key: input.idempotencyKey,
+      p_template_id: input.templateId, p_channel: input.channel, p_actor_name: scope.actorName || "이름 미등록 직원",
+    }) });
+  } catch (error) {
+    if (error instanceof Error && /share_delivery_conflict|share_action_conflict/.test(error.message))
+      throw new DocumentSendError("같은 재시도 키에 다른 전달 내용이 있습니다. 기존 요청을 확인해 주세요.", 409);
+    if (error instanceof Error && /share_document_not_found|share_lead_not_found|share_link_unavailable/.test(error.message)) missing();
+    throw error;
+  }
+  if (!isId(result.sendId) || result.leadActionId !== result.sendId || result.documentId !== row.document_id || result.documentVersionId !== row.document_version_id)
+    throw new Error("Atomic delivery/contact record unconfirmed");
+  return { sendId: result.sendId, leadActionId: result.leadActionId, documentId: result.documentId,
+    documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
 export async function readPublicDocument(token: string, requester: string) {
   if (!documentSharingEnabled()) missing();

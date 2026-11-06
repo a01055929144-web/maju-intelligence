@@ -10,6 +10,7 @@ export type DocumentSendInput = {
   shareLinkId?: string;
 };
 export type DocumentSendResult = {
+  leadActionId?: string;
   sendId: string; documentId: string; documentVersionId: string; publicUrl: string | null;
 };
 

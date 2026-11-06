@@ -10,7 +10,7 @@ async function query(sql) {
   const { stdout } = await exec("psql", ["--dbname=lead_share_runtime_test", "--no-psqlrc", "--no-align", "--tuples-only", "--set=ON_ERROR_STOP=1", "--command", sql]);
   return stdout.trim();
 }
-const key = randomUUID(), linkIds = [randomUUID(), randomUUID()], sendIds = [randomUUID(), randomUUID()];
+const key = randomUUID(), linkIds = [randomUUID(), randomUUID()];
 const c = "00000000-0000-4000-8000-000000000001", d = "10000000-0000-4000-8000-000000000001", lead = "30000000-0000-4000-8000-000000000001";
 assert.equal(await query("select current_setting('server_version_num')::integer/10000"), "17");
 await Promise.all(linkIds.map(id => query(`set role service_role; begin;
@@ -20,16 +20,16 @@ await Promise.all(linkIds.map(id => query(`set role service_role; begin;
   on conflict(company_id,idempotency_key) do nothing;
   select pg_sleep(0.2); commit;`)));
 assert.equal(await query(`select count(*) from pricing_document_share_links where company_id='${c}' and idempotency_key='${key}' and send_id is null`), "1");
-await Promise.all(sendIds.map(id => query(`set role service_role; begin;
-  insert into pricing_document_sends(id,company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key)
-  select '${id}',company_id,document_id,document_version_id,lead_id,'pricing-doc-paper-v1','table','link',idempotency_key,created_by_key
-  from pricing_document_share_links where company_id='${c}' and idempotency_key='${key}'
-  on conflict(company_id,idempotency_key) do nothing;
-  select pg_sleep(0.2); commit;`)));
-const send = await query(`select id from pricing_document_sends where company_id='${c}' and idempotency_key='${key}'`);
-assert(sendIds.includes(send));
-await Promise.all([0, 1].map(() => query(`set role service_role;
-  update pricing_document_share_links set send_id='${send}' where company_id='${c}' and idempotency_key='${key}' and send_id is null;`)));
+const link = await query(`select id from pricing_document_share_links where company_id='${c}' and idempotency_key='${key}'`);
+assert(linkIds.includes(link));
+const version = await query(`select document_version_id from pricing_document_share_links where id='${link}'`);
+const responses = await Promise.all([0, 1, 2, 3].map(() => query(`set role service_role;
+  select record_pricing_lead_share_delivery('${c}',repeat('a',64),'${link}','${d}','${version}','${lead}','${key}','pricing-doc-paper-v1','link','합성 담당');`)));
+const replies = responses.map(text => JSON.parse(text.split("\n").find(line => line.startsWith("{"))));
+assert.equal(new Set(replies.map(r => JSON.stringify(r))).size, 1);
+assert.equal(replies[0].sendId, replies[0].leadActionId);
 assert.equal(await query(`select count(*) from pricing_document_share_links l join pricing_document_sends s on s.id=l.send_id
-  where l.company_id='${c}' and l.idempotency_key='${key}' and s.idempotency_key=l.idempotency_key and s.sent_by_key=l.created_by_key`), "1");
+  join lead_actions a on a.id=s.id and a.company_id=s.company_id and a.lead_id=s.lead_id
+  where l.company_id='${c}' and l.idempotency_key='${key}' and s.idempotency_key=l.idempotency_key
+    and a.metadata->>'idempotencyKey'='${key}' and s.sent_by_key=l.created_by_key`), "1");
 console.log("pricing_lead_share_concurrent_prepare_delivery_pg17_pass");

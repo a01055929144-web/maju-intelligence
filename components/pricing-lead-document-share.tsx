@@ -5,12 +5,12 @@ import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import type { DocumentSendResult } from "@/domains/pricing/document-send";
 import { documentRequest } from "@/lib/pricing/document-client";
 
-export function PricingLeadDocumentShare({ companyId, leadId, versions, onDeliveryRecorded }: { companyId: string; leadId: string; versions: DocumentVersion[]; onDeliveryRecorded?: () => void }) {
-  const [versionId, setVersionId] = useState(versions[0]?.id || ""), [ttlDays, setTtlDays] = useState(14);
+export function PricingLeadDocumentShare({ companyId, leadId, documentId, versions, onDeliveryRecorded }: { companyId: string; leadId: string; documentId: string; versions: DocumentVersion[]; onDeliveryRecorded?: () => void }) {
+  const [versionId, setVersionId] = useState(versions.find(v => v.documentId === documentId)?.id || ""), [ttlDays, setTtlDays] = useState(14);
   const [prepared, setPrepared] = useState<PreparedDocumentShare | null>(null), [sendId, setSendId] = useState("");
   const [confirmed, setConfirmed] = useState(false), [revoked, setRevoked] = useState(false);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
-  const retry = useRef<{ documentVersionId: string; leadId: string; ttlDays: number; idempotencyKey: string } | null>(null);
+  const retry = useRef<{ documentId: string; documentVersionId: string; leadId: string; ttlDays: number; idempotencyKey: string } | null>(null);
   const delivery = useRef<Record<string, unknown> | null>(null);
   const box = "min-h-[44px] rounded border px-3 disabled:opacity-50";
   async function task(run: () => Promise<void>) {
@@ -18,18 +18,20 @@ export function PricingLeadDocumentShare({ companyId, leadId, versions, onDelive
     try { await run(); } catch (e) { setError(e instanceof Error ? e.message : "요청을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
-  const chosen = versions.find(v => v.id === versionId);
+  const documentVersions = versions.filter(v => v.documentId === documentId);
+  const chosen = documentVersions.find(v => v.id === versionId);
   return <section className="pricing-no-print space-y-3 rounded border p-3" aria-label="리드 문서 공유">
     <h2 className="font-semibold">게시 문서 링크</h2>
     <p className="text-sm">링크 준비·복사는 전달 완료가 아닙니다. 실제 전달한 뒤 별도로 확인해 주세요.</p>
     <div className="flex flex-wrap items-center gap-2">
       <label>공유 버전 <select aria-label="공유 버전" className={box} disabled={busy || Boolean(retry.current)} value={versionId} onChange={e => setVersionId(e.target.value)}>
-        {versions.map(v => <option key={v.id} value={v.id}>버전 {v.version}</option>)}
+        {documentVersions.map(v => <option key={v.id} value={v.id}>버전 {v.version}</option>)}
       </select></label>
       <label>링크 기간 <input aria-label="링크 기간" className={`${box} w-20`} type="number" min={1} max={30} disabled={busy || Boolean(retry.current)} value={ttlDays} onChange={e => setTtlDays(Number(e.target.value))} />일</label>
       <button className={box} disabled={busy || !chosen || Boolean(prepared)} onClick={() => void task(async () => {
+        if (!chosen || chosen.documentId !== documentId) throw new Error("선택한 문서의 게시 버전을 다시 확인해 주세요.");
         if (!Number.isInteger(ttlDays) || ttlDays < 1 || ttlDays > 30) throw new Error("링크 기간은 1~30일로 입력해 주세요.");
-        if (!retry.current) retry.current = { documentVersionId: versionId, leadId, ttlDays, idempotencyKey: crypto.randomUUID() };
+        if (!retry.current) retry.current = { documentId, documentVersionId: versionId, leadId, ttlDays, idempotencyKey: crypto.randomUUID() };
         const r = await documentRequest<PreparedDocumentShare>(companyId, "prepare-share", retry.current, true);
         setPrepared(r.result); setMessage("링크를 준비했습니다. 아직 전달 기록은 없습니다.");
       })}>링크 준비</button>

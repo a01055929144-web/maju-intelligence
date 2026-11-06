@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "../../../lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope } from "../../../lib/auth";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { priceSheetsEnabled } from "../../../lib/pricing/feature";
 import { canManagePriceSheets } from "../../../domains/pricing/access";
@@ -8,6 +8,7 @@ import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
 import { documentArchiveEnabled } from "../../../lib/pricing/document-archive";
 import { DocumentSendError } from "../../../domains/pricing/document-send";
+import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
 import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
@@ -70,7 +71,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
-    ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true } : {}),
+    ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };
   let recordSend = false;

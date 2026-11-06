@@ -1,12 +1,12 @@
 # 09 리드 문서 공유 런타임 — 기본 OFF
 
-기준 main 582ab2a. SQL 소유/승인은 별도 Draft #285 (71cbc9f)이며 이 구현은 운영 DB 적용·기능 활성화·배포 승인이 아니다.
+기준 main 582ab2a. SQL 소유/승인은 별도 Draft #285 (74991b7)이며 이 구현은 운영 DB 적용·기능 활성화·배포 승인이 아니다.
 
 ## 변경과 보존
 
 - 기존 문서 API에 prepare-share/revoke-share, 기존 record-send에 선택 shareLinkId를 추가한다. prepare는 발송 행이나 리드 액션을 만들지 않는다.
 - 같은 전달의 UUID 키를 준비/발송에서 재사용한다. 준비 또는 발송 연결 응답 유실 시 같은 입력으로 재시도한다. token/publicUrl은 DB에 저장하지 않는다.
-- 문서 작성기의 리드 문맥에서 게시 버전 선택 → 링크 준비/복사 → 실제 전달 확인 → 기존 발송 기록을 제공한다. 회수는 새 조회를 막으며 이미 전달된 인쇄물 삭제를 약속하지 않는다. 템플릿 ID pricing-doc-paper-v1은 재사용하는 출력 부품을 가리킨다.
+- 문서 작성기의 리드 문맥에서 게시 버전 선택 → 링크 준비/복사 → 실제 전달 확인 → 기존 발송 기록과 연락 이력을 같은 트랜잭션으로 남긴다. 회수는 새 조회를 막으며 이미 전달된 인쇄물 삭제를 약속하지 않는다. 템플릿 ID pricing-doc-paper-v1은 재사용하는 출력 부품을 가리킨다.
 - 공개 셸 /pricing-document는 fragment 토큰을 같은 출처의 /api/pricing-documents/public POST로만 전송한다. HTML/OG에 리드/회사/가격을 넣지 않는다. cache private,no-store, no-referrer, noindex. 공개 응답은 고정 게시 버전의 판매 출력 whitelist와 링크 만료 시각뿐이다.
 - PricingDocPaper의 읽기 전용 출력 옵션은 기존 PageContent를 재사용한다. showPrice=false/문서 가격 만료는 price:null, 링크 하드 만료/회수/병합 리드/보관 문서/외부 quote 작성자 불일치는 전체 404다. 실패 시 이전 화면의 가격을 재사용하지 않는다.
 - 회사 내부 공동 읽기 #261, 기존 문서 쓰기 권한, legacy /quote, customer /store, 05 버튼, 수락·협의 단가·회원 인증·주문 활성화는 바꾸지 않는다.
@@ -28,3 +28,12 @@ CI PG17은 #285 고정 커밋을 별도 경로에 읽기 체크아웃한다. 원
 브라우저는 합성 데이터로 1440/390px sheet/quote 작성→게시→준비 응답 유실 재시도→복사(발송 아님)→명시적 전달 기록 응답 유실 재시도→별도 공개 열람→실패 가격 숨김→문서 가격 만료→회수 후 차단을 검사한다. 실제 카카오/메일 발송은 하지 않는다.
 
 실제 실행 결과는 PR 본문에서 확정한다. 기능 ON·운영 SQL·다음 묶음 배포는 컨트롤타워의 별도 진행 사항이다.
+
+
+## 독립 리뷰 보완
+
+선택 시작 시 이전 versions를 비우고 현재 draft 소속 버전만 공유 패널에 표시한다. 준비 요청은 documentId 일치를 필수로 주장하며 서버가 version.documentId와 일치 여부를 확인한다. 지연/다른 문서 버전 응답은 준비에 사용할 수 없다.
+
+공유 전달은 #285에 보완한 record_pricing_lead_share_delivery(service-only/security invoker) RPC만 사용한다. 공유 행 잠금 안에서 send + lead_actions + send_id 연결을 원자적으로 저장한다. 연락 행 ID는 send ID이며 metadata에는 문서/버전/링크/send/키만 보존한다. 05는 반환된 leadActionId를 재사용하고 같은 연락을 따로 INSERT하지 않는다. actor_name은 서버 인증 세션에서만 결정한다. shareLinkId 없는 기존 record-send는 유지한다.
+
+회수·하드 만료된 링크는 send_id=NULL일 때 새 전달을 거부한다. 이미 연결된 동일 입력 재시도는 기존 send/leadAction ID만 반환하며 링크를 재활성화하지 않는다. #285 SQL 초안에 기존 lead_actions의 metadata 등 컬럼 및 SELECT/INSERT, 리드 행 잠금용 SELECT/UPDATE 권한 의존성을 명시했다. 운영 SQL·기능 ON·배포 승인으로 보지 않는다.

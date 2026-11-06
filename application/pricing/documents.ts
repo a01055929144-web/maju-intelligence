@@ -15,6 +15,7 @@ export type DocumentScope = {
   manager: boolean;
   archiveEnabled?: boolean;
   sharingEnabled?: boolean;
+  actorName?: string;
 };
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;

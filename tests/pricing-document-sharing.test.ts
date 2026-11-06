@@ -5,7 +5,7 @@ import { lineFromCatalog, type DocumentContent } from "../domains/pricing/docume
 import { pricingDocuments } from "../application/pricing/documents";
 const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db, getSupabaseConfig: vi.fn() }));
-vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
+vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOperationalName: (session: { name?: string } | undefined) => session?.name }));
 import { pricingDocumentsRepository } from "../lib/pricing/documents-repository";
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
@@ -18,14 +18,14 @@ const lead = "30000000-0000-4000-8000-000000000001", key = "40000000-0000-4000-8
 const actor = createHash("sha256").update(`${company}:customer:synthetic@example.test`).digest("hex");
 const scope = { companyId: company, actor, manager: false, sharingEnabled: true };
 const service = pricingDocuments(pricingDocumentsRepository);
-const prepare = { action: "prepare-share", documentVersionId: version, leadId: lead, idempotencyKey: key };
+const prepare = { action: "prepare-share", documentId: doc, documentVersionId: version, leadId: lead, idempotencyKey: key };
 type Row = Record<string, string | number | null>;
-let links: Row[], sends: Row[], content: DocumentContent, owner: string, merged: boolean, archived: boolean;
+let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner: string, merged: boolean, archived: boolean;
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
 const seen: string[] = [];
 
 beforeEach(() => {
-  vi.clearAllMocks(); links = []; sends = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
+  vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
   vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "true"); vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", company);
   vi.stubEnv("PRICE_SHEETS_ENABLED", "true"); vi.stubEnv("FEATURE_PRICING_COMPANY_IDS", company);
   vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET", "synthetic-test-key-for-lead-document-only-32");
@@ -34,7 +34,7 @@ beforeEach(() => {
     validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
     display: { columns: 1, promoLayout: "table", info: [{ key: "private", label: "secret", value: "PRIVATE-INFO-CANARY", place: "header" }], productWidth: 65, priceIncludesTax: true },
     lines: [lineFromCatalog({ id: "50000000-0000-4000-8000-000000000001", name: "합성 품목", displayName: "합성 품목", brand: "공개 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "taxable", cost: 777777 })] };
-  mocks.auth.mockResolvedValue({ ok: true, companyId: company, customerSession: { workspaceRole: "sales", email: "synthetic@example.test" } });
+  mocks.auth.mockResolvedValue({ ok: true, companyId: company, customerSession: { workspaceRole: "sales", name: "합성 세션 담당", email: "synthetic@example.test" } });
   mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
     seen.push(url);
     const u = new URL(url, "https://fixture.test/"), table = u.pathname.slice(1), p = u.searchParams;
@@ -44,6 +44,22 @@ beforeEach(() => {
       expect(b.p_limit).toBe(b.p_route_key === "lead-document-prepare-v1" ? 10 : 20);
       expect(JSON.stringify(b)).not.toContain("synthetic-test-key");
       return limit;
+    }
+    if (table === "rpc/record_pricing_lead_share_delivery") {
+      const b = JSON.parse(String(init?.body));
+      const l = links.find(r => r.id === b.p_share_link_id && r.company_id === b.p_company_id)!;
+      let saved = sends.find(r => r.company_id === b.p_company_id && r.idempotency_key === b.p_idempotency_key);
+      if (saved && (saved.template_id !== b.p_template_id || saved.channel !== b.p_channel || saved.sent_by_key !== b.p_actor)) throw new Error("share_delivery_conflict");
+      if (!saved) {
+        saved = { id: "60000000-0000-4000-8000-000000000001", company_id: b.p_company_id, document_id: b.p_document_id,
+          document_version_id: b.p_document_version_id, lead_id: b.p_lead_id, customer_id: null, template_id: b.p_template_id,
+          channel: b.p_channel, idempotency_key: b.p_idempotency_key, sent_by_key: b.p_actor };
+        sends.push(saved);
+      }
+      if (!actions.some(a => a.id === saved!.id)) actions.push({ id: saved.id, company_id: b.p_company_id, lead_id: b.p_lead_id, actor_name: b.p_actor_name });
+      l.send_id = saved.id;
+      if (failBinding) { failBinding = false; throw new Error("synthetic atomic commit response lost"); }
+      return { sendId: saved.id, leadActionId: saved.id, documentId: saved.document_id, documentVersionId: saved.document_version_id };
     }
     const matches = (r: Row) => Array.from(p.entries()).every(([k, v]) => !v.startsWith("eq.") || r[k] === v.slice(3)) &&
       Array.from(p.entries()).every(([k, v]) => v !== "is.null" || r[k] == null);
@@ -84,7 +100,7 @@ function token(url: string) { return url.split("#")[1]; }
 
 it("prepares once under concurrent retries without delivery and restores its original URL", async () => {
   const results = await Promise.all(Array.from({ length: 5 }, prepared));
-  expect(new Set(results.map(r => JSON.stringify(r))).size).toBe(1); expect(links).toHaveLength(1); expect(sends).toHaveLength(0);
+  expect(new Set(results.map(r => JSON.stringify(r))).size).toBe(1); expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
   expect(results[0]).toMatchObject({ sendId: null, deliveryRecorded: false, documentId: doc, documentVersionId: version });
   expect(links[0]).not.toHaveProperty("token"); expect(links[0]).not.toHaveProperty("publicUrl");
 });
@@ -93,7 +109,7 @@ it("restores a committed preparation after a lost response", async () => {
   const row = structuredClone(links[0]); const result = await prepared();
   expect(result.shareLinkId).toBe(row.id); expect(links).toEqual([row]);
 });
-it.each([{ ttlDays: 15 }, { documentVersionId: "20000000-0000-4000-8000-000000000002" }, { leadId: "30000000-0000-4000-8000-000000000002" }])("never replaces a prior request: %j", async change => {
+it.each([{ documentId: "10000000-0000-4000-8000-000000000002" }, { ttlDays: 15 }, { documentVersionId: "20000000-0000-4000-8000-000000000002" }, { leadId: "30000000-0000-4000-8000-000000000002" }])("never replaces a prior request: %j", async change => {
   await prepared(); const before = structuredClone(links);
   await expect(service.execute(scope, { ...prepare, ...change })).rejects.toMatchObject({ status: 409 }); expect(links).toEqual(before);
 });
@@ -166,13 +182,13 @@ it.each(["revoked", "expired", "merged", "company", "author", "archived"])("retu
   if (state === "company") vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", other);
   const r = await publicPost(request({ token: token(p.publicUrl) })); expect(r.status).toBe(404); expect(await r.json()).toEqual({ message: "공유 문서를 사용할 수 없습니다." });
 });
-it("retries delivery binding with the original send ID and only marks sent records viewed", async () => {
+it("restores atomic delivery and contact records after commit response loss and only marks sent records viewed", async () => {
   const p = await prepared();
   const input = { action: "record-send", shareLinkId: p.shareLinkId, documentVersionId: version, leadId: lead, idempotencyKey: key, delivered: true, templateId: "pricing-doc-paper-v1", channel: "link" };
   failBinding = true;
-  expect((await privatePost(request(input))).status).toBe(503); expect(sends).toHaveLength(1);
+  expect((await privatePost(request(input))).status).toBe(503); expect(sends).toHaveLength(1); expect(actions).toHaveLength(1);
   const result = await (await privatePost(request(input))).json();
-  expect(result.result).toMatchObject({ sendId: sends[0].id, publicUrl: p.publicUrl }); expect(links[0].send_id).toBe(sends[0].id);
+  expect(result.result).toMatchObject({ sendId: sends[0].id, publicUrl: p.publicUrl }); expect(links[0].send_id).toBe(sends[0].id); expect(result.result.leadActionId).toBe(actions[0].id); expect(actions).toHaveLength(1);
   sends[0].acceptance_status = "accepted";
   await publicPost(request({ token: token(p.publicUrl) })); expect(sends[0].acceptance_status).toBe("accepted");
   sends[0].acceptance_status = "sent"; sends[0].viewed_at = null;
@@ -219,4 +235,34 @@ it("does not trust client forwarded headers or put a raw IP into request audit a
   await publicPost(request({ token: token(p.publicUrl) }, "https://fixture.test", { "x-vercel-forwarded-for": "192.0.2.1" }));
   reads = mocks.db.mock.calls.filter(([path]) => path === "rpc/pricing_s2_public_request_guard").slice(-1).map(([, init]) => JSON.parse(init.body));
   expect(JSON.stringify(reads)).not.toContain("192.0.2.1");
+});
+
+it("rejects a selected-document mismatch before inserting a link", async () => {
+  await expect(service.execute(scope, { ...prepare, documentId: "10000000-0000-4000-8000-000000000002" })).rejects.toMatchObject({ status: 409 });
+  expect(links).toHaveLength(0); expect(sends).toHaveLength(0);
+});
+
+it("concurrent actual-delivery retries retain one send, one contact action and the same IDs", async () => {
+  const p = await prepared();
+  const input = { action: "record-send", shareLinkId: p.shareLinkId, documentVersionId: version, leadId: lead,
+    idempotencyKey: key, delivered: true, templateId: "pricing-doc-paper-v1", channel: "link" };
+  const results = await Promise.all(Array.from({ length: 6 }, () => service.execute(scope, input)));
+  expect(new Set(results.map(r => JSON.stringify(r))).size).toBe(1);
+  expect(sends).toHaveLength(1); expect(actions).toHaveLength(1); expect(links[0].send_id).toBe(sends[0].id);
+  await expect(service.execute(scope, { ...input, templateId: "different-template" })).rejects.toMatchObject({ status: 409 });
+  expect(sends).toHaveLength(1); expect(actions).toHaveLength(1);
+});
+
+it.each(["revoked", "expired"])("rejects new %s delivery but restores the original committed IDs", async state => {
+  const p = await prepared();
+  const input = { action: "record-send", shareLinkId: p.shareLinkId, documentVersionId: version, leadId: lead,
+    idempotencyKey: key, delivered: true, templateId: "pricing-doc-paper-v1", channel: "link", actorName: "위조 이름" };
+  if (state === "revoked") links[0].revoked_at = "2026-11-06T00:00:00Z"; else links[0].expires_at = "2020-01-01T00:00:00Z";
+  expect((await privatePost(request(input))).status).toBe(404); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+  links[0].revoked_at = null; links[0].expires_at = "2099-01-01T00:00:00Z";
+  const first = await (await privatePost(request(input))).json();
+  expect(actions[0].actor_name).toBe("합성 세션 담당");
+  if (state === "revoked") links[0].revoked_at = "2026-11-06T00:00:00Z"; else links[0].expires_at = "2020-01-01T00:00:00Z";
+  const retry = await privatePost(request(input)); expect(retry.status).toBe(200); expect(await retry.json()).toEqual(first);
+  expect(sends).toHaveLength(1); expect(actions).toHaveLength(1);
 });

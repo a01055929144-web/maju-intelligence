@@ -256,7 +256,7 @@ jobs:
       - name: Checkout pinned lead-share SQL draft for isolated tests
         uses: actions/checkout@v5
         with:
-          ref: 71cbc9f23efa622a5793e6a598554ca3796fe37d
+          ref: 74991b781a3a72097208b608cd40df28eddb84a8
           path: .ci-lead-share-schema
           persist-credentials: false
 
@@ -270,6 +270,7 @@ jobs:
           createdb lead_share_runtime_test
           psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share-migrations.pg17.test.sql
           psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-runtime.pg17.test.sql
+          psql --dbname=lead_share_runtime_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-share-atomic.pg17.test.sql
           node scripts/test-lead-share-concurrency.mjs
           createdb lead_share_policy_test
           psql --dbname=lead_share_policy_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share.pg17.test.sql

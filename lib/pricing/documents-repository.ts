@@ -4,7 +4,7 @@ import { withDocumentRecalculations } from "./document-recalculation";
 import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import type { PrepareDocumentShare } from "../../domains/pricing/document-share";
-import { prepareDocumentShare, revokeDocumentShare, validateShareDelivery, bindShareDelivery } from "./document-share";
+import { prepareDocumentShare, revokeDocumentShare, recordSharedDocumentDelivery } from "./document-share";
 
 type CatalogResult = { items: Array<{ id: string; spec: string }> };
 type DocumentList = { items: DocumentDraft[]; total: number };
@@ -131,9 +131,8 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
     if (action === "revoke-share") return revokeDocumentShare(scope, (payload as { shareLinkId: string }).shareLinkId) as Promise<T>;
     if (action === "record-send") {
       const input = payload as DocumentSendInput;
-      const share = input.shareLinkId ? await validateShareDelivery(scope, input) : null;
-      const result = await recordDocumentSend(scope, input);
-      return (share ? await bindShareDelivery(scope, share, result) : result) as T;
+      if (input.shareLinkId) return recordSharedDocumentDelivery(scope, input) as Promise<T>;
+      return recordDocumentSend(scope, input) as Promise<T>;
     }
     if (action === "archive") {
       if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");

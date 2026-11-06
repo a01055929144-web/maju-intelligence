@@ -8,6 +8,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   const leadId = "20000000-0000-4000-8000-000000000001", versionId = "40000000-0000-4000-8000-000000000001";
   const shareLinkId = "50000000-0000-4000-8000-000000000001", sendId = "60000000-0000-4000-8000-000000000001";
+  const otherDocument = "70000000-0000-4000-8000-000000000001";
+  let releaseOtherVersions: (() => void) | undefined;
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 공개 품목", displayName: "합성 공개 품목", brand: "합성 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
   let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
   let failPrepare = true, failSend = true, prepared = false, sent = false, revoked = false, readError = false, expiredPrice = false;
@@ -21,21 +23,26 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     const b = request.method() === "POST" ? request.postDataJSON() : {};
     const action = b.action || url.searchParams.get("action") || "list";
     let result: unknown = [];
-    if (action === "list") result = { items: content ? [draft()] : [], total: content ? 1 : 0 };
+    if (action === "list") result = { items: content ? [draft(), { ...draft(), id: otherDocument, content: { ...content, title: "합성 다른 문서" } }] : [], total: content ? 2 : 0 };
     if (action === "profile") { profileRead = true; result = { revision: 0, content: { companyName: "합성 유통", contact: "PRIVATE-CONTACT-CANARY", footer: "PRIVATE-FOOTER-CANARY" } }; }
     if (action === "catalog") result = { items: [product], total: 1 };
-    if (action === "versions") result = published ? [version()] : [];
+    if (action === "versions") {
+      if (url.searchParams.get("id") === otherDocument) await new Promise<void>(resolve => { releaseOtherVersions = resolve; });
+      // Deliberately replay an old document's response for the new selection.
+      result = published ? [version()] : [];
+    }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
     if (action === "publish") { published = true; result = version(); }
     if (action === "prepare-share") {
+      expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
       prepareInputs.push(b); prepared = true;
       if (failPrepare) { failPrepare = false; return route.fulfill({ status: 503, json: { message: "합성 링크 응답 유실. 같은 요청으로 다시 시도해 주세요." } }); }
       result = { shareLinkId, sendId: null, documentId, documentVersionId: versionId, publicUrl, expiresAt: "2099-01-01T00:00:00Z", deliveryRecorded: false };
     }
     if (action === "record-send") {
-      expect(prepared).toBe(true); expect(b.delivered).toBe(true); expect(b.shareLinkId).toBe(shareLinkId); sent = true; sendInputs.push(b);
+      expect(b.documentId).toBeUndefined(); expect(prepared).toBe(true); expect(b.delivered).toBe(true); expect(b.shareLinkId).toBe(shareLinkId); sent = true; sendInputs.push(b);
       if (failSend) { failSend = false; return route.fulfill({ status: 503, json: { message: "합성 전달 연결 응답 유실. 같은 요청으로 다시 시도해 주세요." } }); }
-      result = { sendId, documentId, documentVersionId: versionId, publicUrl };
+      result = { sendId, leadActionId: sendId, documentId, documentVersionId: versionId, publicUrl };
     }
     if (action === "revoke-share") { revoked = true; result = { shareLinkId, revoked: true }; }
     expect(url.pathname).not.toContain("store");
@@ -102,4 +109,24 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.reload(); await expect(viewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
   await viewerContext.close();
+  const prepareCount = prepareInputs.length;
+  await page.getByRole("button", { name: "← 문서 목록", exact: true }).click();
+  await page.getByRole("button", { name: "합성 다른 문서", exact: true }).click();
+  await expect.poll(() => Boolean(releaseOtherVersions)).toBe(true);
+  await expect(page.getByRole("button", { name: "링크 준비", exact: true })).toHaveCount(0);
+  releaseOtherVersions!();
+  await expect(page.getByRole("button", { name: "초안 저장", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
+  expect(prepareInputs).toHaveLength(prepareCount);
+  await page.route(`**/api/leads/permits/${leadId}/actions*`, route => route.fulfill({ json: { actions: sent ? [{
+    id: sendId, actionType: kind === "quote" ? "quote" : "dm", result: kind === "quote" ? "견적 전달" : "단가표 전달",
+    memo: "게시 문서 링크 전달", actorName: "합성 담당", createdAt: "2026-11-06T00:00:00Z",
+  }] : [] } }));
+  await page.goto(`/leads/${leadId}`);
+  await page.getByRole("tab", { name: "영업 기록", exact: true }).click();
+  const history = page.getByRole("tabpanel", { name: "영업 기록", exact: true });
+  await expect(history.getByText(kind === "quote" ? "견적 전달" : "단가표 전달", { exact: true })).toHaveCount(1);
+  await expect(history).toContainText("합성 담당");
+  await page.screenshot({ path: info.outputPath(`lead-contact-${kind}-${width}.png`), fullPage: true });
+
 });
