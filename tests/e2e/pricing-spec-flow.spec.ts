@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
+  page.setDefaultTimeout(15_000);
   const leadId = "20000000-0000-4000-8000-000000000001";
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 진입 품목", displayName: "합성 진입 품목", productCode: "ENTRY-1", brand: "", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
   let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
