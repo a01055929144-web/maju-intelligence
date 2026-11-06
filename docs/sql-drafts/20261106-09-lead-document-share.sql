@@ -32,7 +32,7 @@ begin
   if tg_op='INSERT' then
     if new.send_id is not null then raise exception 'share_prepare_is_not_delivery'; end if;
     select * into d from public.pricing_documents where company_id=new.company_id and id=new.document_id;
-    if not found or d.kind not in ('sheet','quote') or (d.kind='quote' and d.owner_key<>new.created_by_key)
+    if not found or d.kind not in ('sheet','quote') or (d.kind='quote' and d.owner_key is distinct from new.created_by_key)
       or to_jsonb(d)->>'archived_at' is not null then raise exception 'share_document_not_found'; end if;
     select v.content into content from public.pricing_document_versions v
       where v.company_id=new.company_id and v.document_id=new.document_id and v.id=new.document_version_id;
