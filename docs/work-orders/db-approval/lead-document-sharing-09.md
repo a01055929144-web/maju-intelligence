@@ -19,7 +19,7 @@
 2. 준비 성공의 `result`: `{shareLinkId, sendId:null, documentId, documentVersionId, publicUrl, expiresAt, deliveryRecorded:false}`. 제안 URL은 **`/pricing-document#<token>`**이다. 링크 생성·복사·파일 저장만으로 발송 완료/리드 상태 변경을 기록하지 않는다.
 3. 실제 전달을 확인한 뒤 기존 `record-send`에 선택 `shareLinkId`와 `delivered:true`를 보낸다. 기존 입력(실제 templateId/channel, 대상 leadId, documentVersionId, 동일 전달 건의 idempotencyKey)은 보존한다.
 4. 연결 확인까지 성공한 `result`: **`{sendId, documentId, documentVersionId, publicUrl}`**. publicUrl은 준비한 URL이며 customer 주문 URL이 아니다. 공유 링크 없는 기존 record-send 호출은 계속 null이다.
-5. 발송 행 저장 후 링크 연결이 실패하면 `503`과 같은 키 재시도 안내를 반환한다. 같은 키로 기존 sendId를 복원하고 연결을 재시도한다. 연결 확인 전 05가 전달 완료로 처리하지 않는다. 05의 lead_action 저장이 실패해도 새 전달 건/키를 만들지 않고 이미 받은 ID로 연결만 재시도한다.
+5. 발송 행 저장 후 링크 연결이 실패하면 `503`과 같은 키 재시도 안내를 반환한다. 같은 키로 기존 sendId를 복원하고 연결을 재시도한다. 연결 확인 전 05가 전달 완료로 처리하지 않는다. 05의 lead_action 저장이 실패해도 새 전달 건/키를 만들지 않고 이미 받은 ID로 연결만 재시도한다. **05는 publicUrl/토큰 원문을 lead_actions 등 DB에 저장하지 않고 ID와 재시도 키만 보존한다.** URL이 다시 필요하면 서버가 권한을 재확인해 원래 URL을 복원한다.
 
 준비 키와 발송 키는 같은 전달 건의 UUID를 두 기존/신규 고유 키 범위에서 재사용한다. 같은 회사·키·입력·작성자는 같은 링크/버전/sendId를 복원한다. 다른 리드·버전·TTL·작성자 또는 다른 발송 입력이면 409이며 이전 행을 덮어쓰지 않는다. 준비의 서버 생성 ID·nonce·시각은 입력 비교에서 제외하고 기존 행의 값을 재사용한다. 새 전달은 새 키로 별도 기록한다.
 
@@ -41,7 +41,7 @@
 
 - 기존 store 토큰의 Node crypto 패턴을 재사용하되 서명 목적을 `lead-document-link-v1`로 분리한다. 별도 서버 전용 `LEAD_DOCUMENT_LINK_SECRET`(최소 32바이트 무작위 키)로 UUID + 128-bit nonce를 HMAC-SHA256 서명한다. store 토큰 검증 함수를 그대로 사용하지 않는다.
 - token은 fragment에만 넣고 열람 POST body로 보낸다. raw token은 DB·콘솔·분석·referrer에 남기지 않는다. 권한 있는 준비 재시도는 저장 nonce와 같은 키로 원래 URL을 복원한다. 키 변경으로 hash가 맞지 않으면 자동 새 서명/대체 URL을 만들지 않고 회수·재발급을 요구한다.
-- 요청 body는 token 하나만 허용하며 companyId/leadId/versionId를 받지 않는다. 서명·토큰 hash와 링크를 검증한 뒤 해당 행의 회사에서 PRICING/새 공유 게이트·회수·만료·문서·리드 상태를 확인한다. 임의 회사 입력으로 조회하지 않는다.
+- 요청은 기존 Origin/Host 검증을 재사용하는 same-origin JSON POST이며 wildcard CORS는 허용하지 않는다. body는 token 하나만 허용하며 companyId/leadId/versionId를 받지 않는다. 서명·토큰 hash와 링크를 검증한 뒤 해당 행의 회사에서 PRICING/새 공유 게이트·회수·만료·문서·리드 상태를 확인한다. 임의 회사 입력으로 조회하지 않는다.
 - 캐시 `private,no-store`, referrer `no-referrer`, 검색 인덱싱 금지. 초기 HTML/OG에는 회사/리드/가격을 넣지 않는다. 비정상/회수/하드 만료/비허용 회사는 내용 없는 동일 404, 한도 초과는 429, 확인 실패는 503. 과거 응답/로컬 캐시로 우회하지 않는다.
 - 링크 소지자는 열람할 수 있다. 링크는 리드 본인 확인이나 매장 회원 권한이 아니다. 07 인증·03 수락·주문 활성화·협의 단가 생성은 호출하지 않는다. 병합된 리드의 URL은 404로 막고 대표 리드에 새 링크를 준비한다. 원래 기록을 자동 이전하지 않는다.
 - 열람 기록은 콘텐츠 응답 성공 시의 기술적 접근이다. 사람의 확인·수락·발송 사실로 해석하지 않는다. send가 연결돼 있으면 최초 viewed_at과 sent→viewed만 기록하며 accepted/cancelled 상태를 되돌리지 않는다. 05 리드 상태를 자동 변경하지 않는다.
