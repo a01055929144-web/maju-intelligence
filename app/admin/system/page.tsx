@@ -315,6 +315,10 @@ export default async function AdminSystemPage({
                 <KeyRound className="h-4 w-4" />
                 계정 설정 점검
               </Link>
+              <Link className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-muted" href="/admin/market-data">
+                <Database className="h-4 w-4" />
+                시장·행사 참고 정보
+              </Link>
             </div>
           </CardContent>
         </Card>
