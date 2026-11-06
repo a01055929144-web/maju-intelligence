@@ -104,7 +104,7 @@ begin
     or s.layout is distinct from v_layout or s.channel is distinct from p_channel or s.sent_by_key is distinct from p_actor then raise exception 'share_delivery_conflict'; end if;
   v_type:=case when d.kind='quote' then 'quote' else 'dm' end;
   v_result:=case when d.kind='quote' then '견적 전달' else '단가표 전달' end;
-  v_metadata:=jsonb_build_object('pricingDocumentId',l.document_id,'documentVersionId',l.document_version_id,
+  v_metadata:=jsonb_build_object('documentKind',d.kind,'pricingDocumentId',l.document_id,'documentVersionId',l.document_version_id,
     'shareLinkId',l.id,'sendId',s.id,'idempotencyKey',l.idempotency_key);
   -- A send UUID is also its contact-action UUID: retry/concurrency never generate another action.
   insert into lead_actions(id,company_id,lead_id,action_type,result,memo,actor_name,metadata)
