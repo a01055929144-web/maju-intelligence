@@ -8,7 +8,7 @@ const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-r
 function reply(status: number, message: string) { return NextResponse.json({ message }, { status, headers }); }
 function unavailable() { return reply(404, "공유 문서를 사용할 수 없습니다."); }
 async function smallBody(request: NextRequest): Promise<unknown> {
-  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) throw new Error("Invalid body");
+  if (request.headers.get("content-type")?.toLowerCase().split(";")[0].trim() !== "application/json") throw new Error("Invalid body");
   const reader = request.body?.getReader();
   if (!reader) throw new Error("Missing body");
   const chunks: Uint8Array[] = [];

@@ -28,12 +28,12 @@ do $$ declare i integer; result text; begin
   for i in 1..11 loop
     result:=pricing_s2_public_request_guard('00000000-0000-4000-8000-000000000001','lead-document-prepare-v1',repeat('9',64),
       '{"shareLinkId":"60000000-0000-4000-8000-000000000010"}'::jsonb,10);
-    if result is distinct from case when i<=10 then 'allowed' else 'rate_limited' end then raise exception 'prepare_rate_limit'; end if;
+    if result is distinct from (case when i<=10 then 'allowed' else 'rate_limited' end) then raise exception 'prepare_rate_limit'; end if;
   end loop;
   for i in 1..21 loop
     result:=pricing_s2_public_request_guard('00000000-0000-4000-8000-000000000001','lead-document-read-v1',repeat('9',64),
       '{"shareLinkId":"60000000-0000-4000-8000-000000000010"}'::jsonb,20);
-    if result is distinct from case when i<=20 then 'allowed' else 'rate_limited' end then raise exception 'read_rate_limit'; end if;
+    if result is distinct from (case when i<=20 then 'allowed' else 'rate_limited' end) then raise exception 'read_rate_limit'; end if;
   end loop;
 end $$;
 insert into pricing_document_sends(id,company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key)
