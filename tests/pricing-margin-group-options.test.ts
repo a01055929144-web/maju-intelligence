@@ -19,10 +19,10 @@ it("filters real large/middle/small paths and supports multiple search terms wit
   expect(options.some(option => option.path === "기존 자체 분류")).toBe(true);
 });
 it("counts exact-category targets separately from effective group pricing, preserving zero overrides and product assignments", () => {
-  const items = [item("normal"), item("direct", { directPrice: 0 }), item("individual", { itemMargin: 0 }), item("other", { groupId: "two" }), item("explicit", { category: "다른 분류", groupId: "one" }), item("inactive", { active: false }), item("child", { category: `${category} > 하위` })];
+  const items = [item("normal"), item("zero-cost", { cost: 0 }), item("direct", { directPrice: 0 }), item("individual", { itemMargin: 0 }), item("other", { groupId: "two" }), item("explicit", { category: "다른 분류", groupId: "one" }), item("inactive", { active: false }), item("child", { category: `${category} > 하위` })];
   const original = JSON.stringify({ state, items });
-  expect(marginGroupSummary(state, items, "one", [category])).toEqual({ categoryProducts: 4, groupProducts: 2, explicitProducts: 1 });
-  expect(marginGroupSummary(state, items, "", [category])).toEqual({ categoryProducts: 4, groupProducts: 1, explicitProducts: 0 });
+  expect(marginGroupSummary(state, items, "one", [category])).toEqual({ categoryProducts: 5, groupProducts: 2, explicitProducts: 1 });
+  expect(marginGroupSummary(state, items, "", [category])).toEqual({ categoryProducts: 5, groupProducts: 1, explicitProducts: 0 });
   expect(marginGroupSummary(state, items, "one", ["농산"])).toEqual({ categoryProducts: 0, groupProducts: 1, explicitProducts: 1 });
   expect(marginSource(items[1], state).kind).toBe("direct"); expect(marginSource(items[2], state).margin).toBe(0);
   expect(JSON.stringify({ state, items })).toBe(original);

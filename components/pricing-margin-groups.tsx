@@ -151,7 +151,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
         </label>) : <p className="p-3">선택할 분류가 없습니다. 검색·필터를 바꾸거나 상품관리의 분류를 확인해 주세요.</p>}</div> : null}
         <div className="rounded border bg-slate-50 p-3" aria-label="선택 분류와 적용 상품 요약"><p>선택 분류 {selected.length}개 · 분류의 활성 상품 {items && !loading && !loadError ? `${summary.categoryProducts}개` : "확인 중"}</p>
           <p>실제 그룹 마진 대상 {items && !loading && !loadError ? `${summary.groupProducts}개` : "확인 중"} <span className="text-xs">(상품 지정 {summary.explicitProducts}개 포함, 현재 조회 기준)</span></p>
-          <p className="text-xs">직접 단가·개별 마진·상품 지정 그룹이 우선합니다. 선택 분류의 상품 수와 실제 적용 수가 다를 수 있습니다.</p>
+          <p className="text-xs">직접 단가·개별 마진·상품 지정 그룹이 우선하고, 매입가 0원 상품은 반영 대상에서 빠집니다. 선택 분류의 상품 수와 실제 적용 수가 다를 수 있습니다.</p>
           <div className="mt-2 flex flex-wrap gap-2">{selected.map(category => <button key={category} type="button" disabled={!options.find(option => option.path === category)?.selectable} className="min-h-11 max-w-full rounded border bg-white px-2 py-1 text-left text-xs [overflow-wrap:anywhere]" onClick={() => setSelected(previous => previous.filter(value => value !== category))}>{category} ×<span className="sr-only"> 연결 선택 해제</span></button>)}</div>
         </div>
         <Button disabled={loading || Boolean(loadError) || !items} type="submit">그룹·분류 저장하고 판매가 반영</Button>

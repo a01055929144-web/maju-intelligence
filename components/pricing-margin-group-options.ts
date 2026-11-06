@@ -28,7 +28,7 @@ export function marginGroupSummary(state: PriceState, items: readonly PriceItem[
   const active = items.filter(item => item.active);
   for (const item of active) {
     const source = marginSource(item, proposed);
-    if (source.kind === "group" && source.groupId === target) { groupProducts++; if (item.groupId === target) explicitProducts++; }
+    if (item.cost > 0 && source.kind === "group" && source.groupId === target) { groupProducts++; if (item.groupId === target) explicitProducts++; }
   }
   return { categoryProducts: active.filter(item => selectedSet.has(item.category)).length, groupProducts, explicitProducts };
 }
