@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { validateStoreCostInput } from "@/domains/store-cost/store-cost";
 
 export type StoreCostAccess = { companyId: string; storeAccountId: string; canManage: boolean } | { message: string } | null;
+type Search = { product: string; from: string; to: string };
+type CostPage = { rows: Cost[]; hasMore: boolean; nextOffset: number | null };
 type Cost = { id: string; revision: number; productName: string; specification: string; unit: string; effectiveOn: string; costKrw: number };
 const control = "mt-1 min-h-[44px] w-full rounded border p-2";
 
@@ -20,7 +22,7 @@ function failure(status: number) {
 
 export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
   const [rows, setRows] = useState<Cost[]>([]);
-  const [history, setHistory] = useState<{ name: string; rows: Cost[] } | null>(null);
+  const [history, setHistory] = useState<{ itemId: string; name: string; rows: Cost[]; nextOffset: number | null } | null>(null);
   const [editing, setEditing] = useState<Cost | null>(null);
   const [product, setProduct] = useState("");
   const [from, setFrom] = useState("");
@@ -29,32 +31,40 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [applied, setApplied] = useState<Search>({ product: "", from: "", to: "" });
   const scope = access && "companyId" in access ? access : null;
   const companyId = scope?.companyId, storeAccountId = scope?.storeAccountId;
 
-  const load = useCallback(async (filters?: { product: string; from: string; to: string }) => {
+  const load = useCallback(async (filters: Search = { product: "", from: "", to: "" }, offset = 0) => {
     if (!companyId || !storeAccountId) return;
-    setBusy(true); setError(""); setRows([]); setHistory(null); setEditing(null); setLoaded(false);
+    setBusy(true); setError(""); setHistory(null); setEditing(null);
+    if (offset === 0) { setRows([]); setLoaded(false); setNextOffset(null); setApplied(filters); }
     try {
-      const query = new URLSearchParams({ companyId, storeAccountId, ...filters });
+      const query = new URLSearchParams({ companyId, storeAccountId, ...filters, offset: String(offset) });
       const response = await fetch(`/api/store/costs?${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error(failure(response.status));
-      const result = await response.json() as { rows: Cost[] };
-      setRows(result.rows); setLoaded(true);
-    } catch (error) { setError(error instanceof Error ? error.message : failure(503)); }
+      const result = await response.json() as CostPage;
+      setRows(previous => Array.from(new Map([...(offset ? previous : []), ...result.rows].map(row => [row.id, row])).values()));
+      setNextOffset(result.hasMore && result.nextOffset !== null && result.nextOffset > offset ? result.nextOffset : null);
+      setLoaded(true);
+    } catch (error) { setRows([]); setLoaded(false); setNextOffset(null); setError(error instanceof Error ? error.message : failure(503)); }
     finally { setBusy(false); }
   }, [companyId, storeAccountId]);
   useEffect(() => { void load(); }, [load]);
 
-  async function showHistory(row: Cost) {
+  async function showHistory(row: Pick<Cost, "id" | "productName">, offset = 0) {
     if (!scope) return;
-    setBusy(true); setError(""); setHistory(null); setEditing(null); setNotice("");
+    setBusy(true); setError(""); if (!offset) setHistory(null); setEditing(null); setNotice("");
     try {
-      const query = new URLSearchParams({ companyId: scope.companyId, storeAccountId: scope.storeAccountId, itemId: row.id, history: "true" });
+      const query = new URLSearchParams({ companyId: scope.companyId, storeAccountId: scope.storeAccountId, itemId: row.id, history: "true", offset: String(offset) });
       const response = await fetch(`/api/store/costs?${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error(failure(response.status));
-      setHistory({ name: row.productName, rows: (await response.json() as { rows: Cost[] }).rows });
-    } catch (error) { setRows([]); setLoaded(false); setError(error instanceof Error ? error.message : failure(503)); }
+      const result = await response.json() as CostPage;
+      setHistory(previous => ({ itemId: row.id, name: row.productName,
+        rows: Array.from(new Map([...(offset && previous?.itemId === row.id ? previous.rows : []), ...result.rows].map(item => [item.id, item])).values()),
+        nextOffset: result.hasMore && result.nextOffset !== null && result.nextOffset > offset ? result.nextOffset : null }));
+    } catch (error) { setRows([]); setHistory(null); setLoaded(false); setNextOffset(null); setError(error instanceof Error ? error.message : failure(503)); }
     finally { setBusy(false); }
   }
 
@@ -69,7 +79,7 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
         body: JSON.stringify({ companyId: scope.companyId, storeAccountId: scope.storeAccountId, itemId: id, expectedRevision: revision, row }) });
       if (!response.ok) throw new Error(failure(response.status));
       setNotice("원가를 저장했습니다. 최신 목록을 확인해 주세요.");
-      await load({ product, from, to });
+      await load(applied);
     } catch (error) {
       setRows([]); setLoaded(false); setEditing(null);
       setError(error instanceof Error ? error.message : failure(503));
@@ -103,10 +113,13 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
             <Button className="min-h-[44px]" type="submit" disabled={busy}>다시 조회</Button>
           </form>
           <div aria-live="polite">{busy && <p>원가 자료를 확인 중입니다.</p>}{notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}</div>
-          {loaded && !busy && <CommonDataTable columns={listColumns} rows={rows} rowKey={row => row.id} settingsKey={`store-costs:${access.companyId}:${access.storeAccountId}`}
-            filename="매장-원가.csv" emptyMessage="등록된 원가가 없습니다. 검색 조건을 바꾸거나 점주에게 자료 등록을 요청해 주세요." />}
+          {loaded && !busy && <><p className="text-sm">현재 불러온 행 {rows.length}건 · 엑셀 내려받기에는 이 행만 포함됩니다.</p><CommonDataTable columns={listColumns} rows={rows} rowKey={row => row.id} settingsKey={`store-costs:${access.companyId}:${access.storeAccountId}`}
+            filename="매장-원가-현재불러온행.csv" emptyMessage="등록된 원가가 없습니다. 검색 조건을 바꾸거나 점주에게 자료 등록을 요청해 주세요." />
+            {nextOffset !== null && <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void load(applied, nextOffset)}>원가 더 보기</Button>}</>}
           {history && !busy && <section aria-label="원가 변경 이력"><h4 className="font-semibold">{history.name} 변경 이력</h4>
-            <CommonDataTable columns={columns} rows={history.rows} rowKey={row => row.id} settingsKey="store-cost-history" emptyMessage="변경 이력이 없습니다. 목록에서 다른 품목을 확인해 주세요." /></section>}
+            <p className="text-sm">이력 엑셀 내려받기에도 현재 불러온 행만 포함됩니다.</p>
+            <CommonDataTable filename="매장-원가이력-현재불러온행.csv" columns={columns} rows={history.rows} rowKey={row => row.id} settingsKey="store-cost-history" emptyMessage="변경 이력이 없습니다. 목록에서 다른 품목을 확인해 주세요." />
+            {history.nextOffset !== null && <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void showHistory({ id: history.itemId, productName: history.name }, history.nextOffset!)}>이력 더 보기</Button>}</section>}
           {editing && <form aria-label="원가 수정" className="space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
             <h4 className="font-semibold">원가 수정 · {editing.productName}</h4>
             <fieldset disabled={busy} className="grid grid-cols-3 gap-3">

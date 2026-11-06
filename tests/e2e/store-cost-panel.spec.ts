@@ -25,9 +25,9 @@ test("PC cost search, history, edit, conflict, retry and permission guidance", a
     if (status !== 200) return route.fulfill({ status, json: { message: "Synthetic failure" } });
     if (url.searchParams.get("history") === "true") {
       expect(url.searchParams.get("itemId")).toBe(item.id);
-      return route.fulfill({ json: { rows: [{ ...item, id: "revision-1" }] } });
+      return route.fulfill({ json: { rows: [{ ...item, id: "revision-1" }], hasMore: false, nextOffset: null } });
     }
-    return route.fulfill({ json: { rows: empty ? [] : [row] } });
+    return route.fulfill({ json: { rows: empty ? [] : [row], hasMore: false, nextOffset: null } });
   });
   await page.goto("/store?fixture=store-cost-owner");
   await expect(page.getByText(item.productName, { exact: true })).toBeVisible();
@@ -69,7 +69,7 @@ test("staff can read but cannot edit; 390px keeps the PC guidance contained", as
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.route("**/api/store/costs**", route => {
     expect(route.request().method()).toBe("GET");
-    return route.fulfill({ json: { rows: [item] } });
+    return route.fulfill({ json: { rows: [item], hasMore: false, nextOffset: null } });
   });
   await page.goto("/store?fixture=store-cost-staff");
   await expect(page.getByText(item.productName, { exact: true })).toBeVisible();
@@ -89,4 +89,56 @@ test("default OFF ignores client role and synthetic fixture outside CI allowlist
   await page.goto(`/store?companyId=${companyId}&storeAccountId=${storeAccountId}&role=owner`);
   await expect(page.getByRole("heading", { name: "매장 자체 원가관리" })).toHaveCount(0);
   expect(requests).toBe(0);
+});
+
+
+test("cost pages deduplicate overlapping IDs, reset search, and export only loaded rows without persisting costs", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  const first = Array.from({ length: 50 }, (_, index) => ({ ...item, id: `cost-${index}`, productName: `합성원가-${String(index).padStart(3, "0")}` }));
+  const extra = { ...item, id: "cost-extra", productName: "합성원가-추가행" };
+  const filtered = { ...item, id: "cost-filtered", productName: "검색후 단일행" };
+  const queries: { product: string | null; offset: string | null }[] = [];
+  await page.route("**/api/store/costs**", route => {
+    expect(route.request().method()).toBe("GET");
+    const url = new URL(route.request().url());
+    const product = url.searchParams.get("product"), offset = url.searchParams.get("offset");
+    queries.push({ product, offset });
+    if (product === "검색후") return route.fulfill({ json: { rows: [filtered], hasMore: false, nextOffset: null } });
+    expect(product || "").toBe("");
+    if (offset === "50") return route.fulfill({ json: { rows: [first[49], extra], hasMore: false, nextOffset: null } });
+    expect(offset).toBe("0");
+    return route.fulfill({ json: { rows: first, hasMore: true, nextOffset: 50 } });
+  });
+  await page.goto("/store?fixture=store-cost-staff");
+  await expect(page.getByText("현재 불러온 행 50건", { exact: false })).toBeVisible();
+  // Unsubmitted search input must not change the active page query.
+  await page.getByLabel("품목명", { exact: true }).fill("미적용");
+  await page.getByRole("button", { name: "원가 더 보기", exact: true }).click();
+  await expect(page.getByText("현재 불러온 행 51건", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "원가 더 보기", exact: true })).toHaveCount(0);
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "엑셀 내려받기", exact: true }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toContain("현재불러온행");
+  const stream = await download.createReadStream(); const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const csv = Buffer.concat(chunks).toString("utf8");
+  expect(csv.match(/합성원가-049/g)).toHaveLength(1);
+  expect(csv.match(/합성원가-추가행/g)).toHaveLength(1);
+  expect(csv.trim().split("\r\n")).toHaveLength(52);
+  await page.getByRole("button", { name: "열 편집", exact: true }).click();
+  await page.getByRole("checkbox").first().uncheck();
+  await page.getByRole("button", { name: "열 편집", exact: true }).click();
+  const storage = await page.evaluate(() => ({ local: Object.values(localStorage), session: Object.values(sessionStorage) }));
+  expect(storage.local.length).toBeGreaterThan(0);
+  for (const value of [...storage.local, ...storage.session]) {
+    expect(value).not.toContain("합성원가-");
+    expect(value).not.toContain('"costKrw":3500');
+  }
+  await page.getByLabel("품목명", { exact: true }).fill("검색후");
+  await page.getByRole("button", { name: "다시 조회", exact: true }).click();
+  await expect(page.getByText("검색후 단일행", { exact: true })).toBeVisible();
+  await expect(page.getByText("현재 불러온 행 1건", { exact: false })).toBeVisible();
+  expect(queries.at(-1)).toEqual({ product: "검색후", offset: "0" });
+  await page.screenshot({ path: info.outputPath("store-cost-paging-reset.png"), fullPage: true });
 });
