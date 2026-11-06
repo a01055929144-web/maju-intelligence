@@ -62,7 +62,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message || "상품 목록을 불러오지 못했습니다.");
     setItems(body.items);
-    setOptions((prev) => Array.from(new Set([...(body.options as string[]), ...prev])));
+    setOptions(body.options as string[]);
     return body.items as Item[];
   }, [companyId]);
   useEffect(() => { void load().catch((e) => setError(e instanceof Error ? e.message : "불러오지 못했습니다.")); }, [load]);
@@ -124,7 +124,6 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
   function applyMove() {
     const cleaned = cleanCategory(moveTo);
     if (!cleaned || typeof cleaned === "object" || !picked.size) { if (cleaned && typeof cleaned === "object") setError(cleaned.error); return; }
-    if (!options.includes(cleaned)) setOptions((prev) => [...prev, cleaned]);
     setDraft((prev) => { const next = { ...prev }; picked.forEach((id) => { next[id] = cleaned; }); return next; });
     setPicked(new Set());
     setMoveTo("");
@@ -147,7 +146,6 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
       for (const item of updates) next[item.id] = item.category;
       return next;
     });
-    setOptions((prev) => prev.includes(target) ? prev : [...prev, target]);
     setEditFrom(""); setEditTo(""); setEditPreview(false); setError("");
   }
   async function saveDraft() {
@@ -351,3 +349,4 @@ export function ProductCategoryWorkspace({ companyId }: { readonly companyId: st
   if (!state) return <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm" id="product-category-management">{error ? <p className="text-rose-700" role="alert">{error} <button className="underline" onClick={() => void send()} type="button">다시 시도</button></p> : "분류 설정을 불러오는 중…"}</section>;
   return <div className="space-y-2">{message ? <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-900" role="status">{message}</p> : null}{error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}<ProductCategoryManager busy={busy} companyId={companyId} send={send} state={state} task={task} /></div>;
 }
+
