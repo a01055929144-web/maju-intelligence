@@ -337,6 +337,8 @@ jobs:
         run: |
           createdb pricing_lead_document_share_test
           psql --dbname=pricing_lead_document_share_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share.pg17.test.sql
+          createdb pricing_lead_document_share_migrations_test
+          psql --dbname=pricing_lead_document_share_migrations_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share-migrations.pg17.test.sql
 
   build:
     runs-on: ubuntu-latest
