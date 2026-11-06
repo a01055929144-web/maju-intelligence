@@ -138,7 +138,7 @@ export function koreaDay(now = new Date()) {
 /** Refresh availability and stock while keeping the draft's selected prices. */
 export function withLivePromotions(
   version: DocumentVersion,
-  promotions: readonly Promotion[],
+  promotions: readonly Pick<Promotion, "id" | "stock" | "startsOn" | "endsOn">[],
   day = koreaDay(),
 ): DocumentVersion {
   const byId = new Map(promotions.map((promotion) => [promotion.id, promotion]));

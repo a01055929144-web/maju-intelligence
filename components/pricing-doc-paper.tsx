@@ -4,13 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
+import type { DocumentOutput } from "@/domains/pricing/document";
+import { PageContent } from "./pricing-document-preview";
+
+export function PricingDocPaper(props: { output: DocumentOutput } | React.ComponentProps<typeof EditablePricingDocPaper>) {
+  if ("output" in props) return <article className="pricing-online mx-auto max-w-[860px] rounded border bg-white p-4"><PageContent data={props.output} page={1} pages={1} /></article>;
+  return <EditablePricingDocPaper {...props} />;
+}
 
 /**
  * 11/4: 문서 보기 — A4 한 장처럼 보이는 편집 화면(시안 ①).
  * 품목명·단가를 종이 위에서 바로 고치고, 아래 칸에서 품목을 찾아 담습니다.
  * 품목이 많으면 1~3열 격자로, 행사·임박은 위쪽 블록(카드/표)으로 보여 줍니다.
  */
-export function PricingDocPaper({
+function EditablePricingDocPaper({
   baselines,
   content,
   editable,
