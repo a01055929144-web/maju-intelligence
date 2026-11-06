@@ -23,9 +23,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
  */
 export async function getStoreCostMemberAccess(input: StoreCostAccessInput): Promise<StoreCostMemberAccess | null> {
   if (!UUID_PATTERN.test(input?.companyId) || !UUID_PATTERN.test(input?.storeAccountId) || !UUID_PATTERN.test(input?.authUserId)) return null;
+  if (!(await isActiveStoreAuthUser(input.authUserId))) return null;
 
   const rows = await supabaseRequest<Array<{ id: string; role: string; status: string }>>(
-    `store_account_members?select=id,role,status,store_accounts!inner(id),app_users!inner(id)&company_id=eq.${encodeURIComponent(input.companyId)}&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}&auth_user_id=eq.${encodeURIComponent(input.authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&app_users.status=eq.active&limit=1`
+    `store_account_members?select=id,role,status,store_accounts!inner(id)&company_id=eq.${encodeURIComponent(input.companyId)}&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}&auth_user_id=eq.${encodeURIComponent(input.authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
   );
   const member = rows[0];
   if (!member || member.status !== "active" || !isStoreAccountRole(member.role)) return null;
@@ -42,8 +43,16 @@ export async function resolveStoreAuthUserId(kakaoUserId: string): Promise<strin
 
 export async function hasActiveStoreMembership(authUserId: string): Promise<boolean> {
   if (!UUID_PATTERN.test(authUserId)) return false;
+  if (!(await isActiveStoreAuthUser(authUserId))) return false;
   const rows = await supabaseRequest<Array<{ id: string }>>(
-    `store_account_members?select=id,store_accounts!inner(id),app_users!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&app_users.status=eq.active&limit=1`
+    `store_account_members?select=id,store_accounts!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
+  );
+  return Boolean(rows[0]?.id);
+}
+
+async function isActiveStoreAuthUser(authUserId: string): Promise<boolean> {
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `app_users?select=id&id=eq.${encodeURIComponent(authUserId)}&status=eq.active&limit=1`
   );
   return Boolean(rows[0]?.id);
 }

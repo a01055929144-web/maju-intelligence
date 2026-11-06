@@ -14,13 +14,18 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("store cost membership boundary", () => {
   it("checks the authenticated Kakao user inside the company and store-account pair", async () => {
-    mocks.db.mockResolvedValue([{ id: "member-1", role: "owner", status: "active", private_value: "not returned" }]);
+    mocks.db
+      .mockResolvedValueOnce([{ id: authUserId }])
+      .mockResolvedValueOnce([{ id: "member-1", role: "owner", status: "active", private_value: "not returned" }]);
 
     await expect(getStoreCostMemberAccess({ authUserId, companyId, storeAccountId })).resolves.toEqual({
       id: "member-1", role: "owner", status: "active"
     });
-    expect(mocks.db).toHaveBeenCalledExactlyOnceWith(
-      `store_account_members?select=id,role,status,store_accounts!inner(id),app_users!inner(id)&company_id=eq.${companyId}&store_account_id=eq.${storeAccountId}&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&app_users.status=eq.active&limit=1`
+    expect(mocks.db).toHaveBeenNthCalledWith(1,
+      `app_users?select=id&id=eq.${authUserId}&status=eq.active&limit=1`
+    );
+    expect(mocks.db).toHaveBeenNthCalledWith(2,
+      `store_account_members?select=id,role,status,store_accounts!inner(id)&company_id=eq.${companyId}&store_account_id=eq.${storeAccountId}&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
     );
   });
 
@@ -32,8 +37,11 @@ describe("store cost membership boundary", () => {
 
   it("rejects inactive, unknown-role and cross-company or cross-store lookups", async () => {
     mocks.db
+      .mockResolvedValueOnce([{ id: authUserId }])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: authUserId }])
       .mockResolvedValueOnce([{ id: "member-1", role: "owner", status: "removed" }])
+      .mockResolvedValueOnce([{ id: authUserId }])
       .mockResolvedValueOnce([{ id: "member-1", role: "administrator", status: "active" }]);
 
     await expect(getStoreCostMemberAccess({ authUserId, companyId, storeAccountId })).resolves.toBeNull();
@@ -42,11 +50,12 @@ describe("store cost membership boundary", () => {
   });
 
   it("requires an active parent account, active business and active auth user on every request", async () => {
-    mocks.db.mockResolvedValue([]);
+    mocks.db.mockResolvedValueOnce([{ id: authUserId }]).mockResolvedValueOnce([]);
     await expect(getStoreCostMemberAccess({ authUserId, companyId, storeAccountId })).resolves.toBeNull();
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("store_accounts.status=eq.active");
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("store_accounts.business_status=eq.active");
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("app_users.status=eq.active");
+    expect(mocks.db.mock.calls[0]?.[0]).toBe(`app_users?select=id&id=eq.${authUserId}&status=eq.active&limit=1`);
+    expect(mocks.db.mock.calls[1]?.[0]).toContain("store_accounts.status=eq.active");
+    expect(mocks.db.mock.calls[1]?.[0]).toContain("store_accounts.business_status=eq.active");
+    expect(mocks.db.mock.calls[1]?.[0]).not.toContain("app_users!inner");
   });
 });
 
@@ -75,18 +84,26 @@ describe("store Kakao identity resolution", () => {
   });
 
   it("issues a session only when the internal user has an active store membership", async () => {
-    mocks.db.mockResolvedValueOnce([{ id: "member-1" }]).mockResolvedValueOnce([]);
+    mocks.db
+      .mockResolvedValueOnce([{ id: authUserId }]).mockResolvedValueOnce([{ id: "member-1" }])
+      .mockResolvedValueOnce([{ id: authUserId }]).mockResolvedValueOnce([]);
     await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(true);
     await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(false);
-    expect(mocks.db).toHaveBeenNthCalledWith(1,
-      `store_account_members?select=id,store_accounts!inner(id),app_users!inner(id)&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&app_users.status=eq.active&limit=1`);
+    expect(mocks.db).toHaveBeenNthCalledWith(2,
+      `store_account_members?select=id,store_accounts!inner(id)&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`);
   });
 
   it("rejects login when every membership belongs to a suspended, closed or inactive account", async () => {
+    mocks.db.mockResolvedValueOnce([{ id: authUserId }]).mockResolvedValueOnce([]);
+    await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(false);
+    expect(mocks.db.mock.calls[1]?.[0]).toContain("store_accounts.status=eq.active");
+    expect(mocks.db.mock.calls[1]?.[0]).toContain("store_accounts.business_status=eq.active");
+    expect(mocks.db.mock.calls[1]?.[0]).not.toContain("app_users!inner");
+  });
+
+  it("rejects an inactive auth user before checking memberships", async () => {
     mocks.db.mockResolvedValue([]);
     await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(false);
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("store_accounts.status=eq.active");
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("store_accounts.business_status=eq.active");
-    expect(mocks.db.mock.calls[0]?.[0]).toContain("app_users.status=eq.active");
+    expect(mocks.db).toHaveBeenCalledExactlyOnceWith(`app_users?select=id&id=eq.${authUserId}&status=eq.active&limit=1`);
   });
 });
