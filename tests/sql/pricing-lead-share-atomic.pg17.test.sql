@@ -25,6 +25,22 @@ insert into pricing_document_share_links(id,company_id,document_id,document_vers
 select '60000000-0000-4000-8000-000000000041',company_id,document_id,id,'30000000-0000-4000-8000-000000000001',
   '70000000-0000-4000-8000-000000000041',repeat('a',64),repeat('1',32),repeat('2',64)
 from pricing_document_versions where document_id='10000000-0000-4000-8000-000000000001';
+reset role;
+insert into pricing_document_share_links(id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash)
+select '60000000-0000-4000-8000-000000000042',company_id,document_id,id,'30000000-0000-4000-8000-000000000001',
+  '70000000-0000-4000-8000-000000000042',repeat('a',64),repeat('1',32),repeat('2',64)
+from pricing_document_versions where document_id='10000000-0000-4000-8000-000000000001';
+insert into pricing_document_share_links(id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash)
+select '60000000-0000-4000-8000-000000000043',company_id,document_id,id,'30000000-0000-4000-8000-000000000001',
+  '70000000-0000-4000-8000-000000000043',repeat('a',64),repeat('1',32),repeat('2',64)
+from pricing_document_versions where document_id='10000000-0000-4000-8000-000000000001';
+update pricing_document_share_links set revoked_at=clock_timestamp() where id='60000000-0000-4000-8000-000000000042';
+-- Fixture clock states only: the application/service role cannot bypass immutable times.
+alter table pricing_document_share_links disable trigger validate_pricing_document_share_link;
+update pricing_document_share_links set created_at=clock_timestamp()-interval '2 days',expires_at=clock_timestamp()-interval '1 day'
+  where id='60000000-0000-4000-8000-000000000043';
+alter table pricing_document_share_links enable trigger validate_pricing_document_share_link;
+set role service_role;
 do $$ declare l pricing_document_share_links%rowtype; first_result jsonb; retry_result jsonb; begin
   select * into l from pricing_document_share_links where id='60000000-0000-4000-8000-000000000040';
   begin
@@ -52,6 +68,17 @@ do $$ declare l pricing_document_share_links%rowtype; first_result jsonb; retry_
     perform record_pricing_lead_share_delivery(l.company_id,repeat('b',64),l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'pricing-doc-paper-v1','link','합성 담당');
     raise exception 'other_actor_allowed';
   exception when raise_exception then if sqlerrm<>'share_document_not_found' then raise; end if; end;
+  update pricing_document_share_links set revoked_at=clock_timestamp() where id=l.id;
+  retry_result:=record_pricing_lead_share_delivery(l.company_id,l.created_by_key,l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'pricing-doc-paper-v1','link','합성 담당');
+  if retry_result<>first_result then raise exception 'revoked_existing_delivery_retry_changed'; end if;
+  for l in select * from pricing_document_share_links where id in ('60000000-0000-4000-8000-000000000042','60000000-0000-4000-8000-000000000043') loop
+    begin
+      perform record_pricing_lead_share_delivery(l.company_id,l.created_by_key,l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'pricing-doc-paper-v1','link','합성 담당');
+      raise exception 'unavailable_new_delivery_allowed';
+    exception when raise_exception then if sqlerrm<>'share_link_unavailable' then raise; end if; end;
+    if exists(select from pricing_document_sends where company_id=l.company_id and idempotency_key=l.idempotency_key)
+      or exists(select from lead_actions where metadata->>'shareLinkId'=l.id::text) then raise exception 'unavailable_new_delivery_wrote_rows'; end if;
+  end loop;
   select * into l from pricing_document_share_links where id='60000000-0000-4000-8000-000000000041';
   begin
     perform record_pricing_lead_share_delivery(l.company_id,l.created_by_key,l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'pricing-doc-paper-v1','link','합성 담당');
@@ -60,6 +87,17 @@ do $$ declare l pricing_document_share_links%rowtype; first_result jsonb; retry_
   if exists(select from pricing_document_sends where company_id=l.company_id and idempotency_key=l.idempotency_key)
     or exists(select from lead_actions where metadata->>'shareLinkId'=l.id::text)
     or exists(select from pricing_document_share_links where id=l.id and send_id is not null) then raise exception 'bind_failure_left_partial_delivery'; end if;
+end $$;
+reset role;
+alter table pricing_document_share_links disable trigger validate_pricing_document_share_link;
+update pricing_document_share_links set created_at=clock_timestamp()-interval '2 days',expires_at=clock_timestamp()-interval '1 day'
+  where id='60000000-0000-4000-8000-000000000040';
+alter table pricing_document_share_links enable trigger validate_pricing_document_share_link;
+set role service_role;
+do $$ declare l pricing_document_share_links%rowtype; r jsonb; begin
+  select * into l from pricing_document_share_links where id='60000000-0000-4000-8000-000000000040';
+  r:=record_pricing_lead_share_delivery(l.company_id,l.created_by_key,l.id,l.document_id,l.document_version_id,l.lead_id,l.idempotency_key,'pricing-doc-paper-v1','link','합성 담당');
+  if r->>'sendId' is distinct from l.send_id::text or r->>'leadActionId' is distinct from l.send_id::text then raise exception 'expired_existing_delivery_retry_changed'; end if;
 end $$;
 reset role;
 drop trigger test_share_contact_failure on lead_actions;
