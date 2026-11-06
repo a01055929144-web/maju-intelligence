@@ -1,6 +1,57 @@
 import { expect, test } from "@playwright/test";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
+for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
+  page.setDefaultTimeout(15_000);
+  const leadId = "20000000-0000-4000-8000-000000000001";
+  const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 진입 품목", displayName: "합성 진입 품목", productCode: "ENTRY-1", brand: "", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
+  let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
+  const writes: string[] = [];
+  const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z" });
+  const version = () => ({ id: "40000000-0000-4000-8000-000000000001", documentId, version: 1, revision, content, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [], promotionStock: {} });
+  await page.setViewportSize({ width, height: 900 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-store-links*", route => { writes.push("FORBIDDEN-store-link"); return route.fulfill({ status: 500, json: {} }); });
+  await page.route(/\/api\/pricing-documents(?:\/catalog-index)?(?:\?.*)?$/, async route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = request.method() === "POST" ? request.postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: content ? [draft()] : [], total: content ? 1 : 0 };
+    if (action === "profile") { profileRead = true; result = { revision: 0, content: { companyName: "합성 유통", contact: "", footer: "" } }; }
+    if (action === "catalog") result = { items: [product], total: 1 };
+    if (action === "versions") result = published ? [version()] : [];
+    if (request.method() === "POST") {
+      writes.push(action);
+      expect(["save", "publish"]).toContain(action);
+      if (action === "save") { content = body.content; documentId = body.id; revision++; result = draft(); }
+      if (action === "publish") { published = true; result = version(); }
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
+  const gallery = page.getByRole("dialog", { name: "새 문서 시작", exact: true });
+  await expect(gallery.getByRole("heading", { name: kind === "sheet" ? "새 단가표 만들기" : "새 견적서 만들기", exact: true })).toBeVisible();
+  await expect.poll(() => profileRead).toBe(true);
+  await gallery.getByRole("button", { name: new RegExp(`빈 ${kind === "sheet" ? "단가표" : "견적서"}로 시작`) }).click();
+  const context = page.getByRole("complementary", { name: "리드 문서 작성 문맥", exact: true });
+  await expect(context).toContainText("테스트 매장 01");
+  await page.getByRole("button", { name: /합성 진입 품목.*담기/ }).click();
+  await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
+  expect(content?.kind).toBe(kind); expect(content?.recipient).toBe("테스트 매장 01"); expect(content?.lines).toHaveLength(1);
+  await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("작성·게시만 완료됐으며 리드에게 전달하지 않았습니다");
+  expect(writes).toEqual(["save", "publish"]);
+  const back = page.getByRole("link", { name: "리드 상세로 돌아가기", exact: true });
+  await expect(back).toHaveAttribute("href", `/leads/${leadId}`);
+  expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`lead-${kind}-entry-${width}.png`), fullPage: true });
+  await back.click(); await expect(page).toHaveURL(new RegExp(`/leads/${leadId}$`));
+});
+
 for (const width of [1440, 390]) test(`public order link shows published spec at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await page.route("**/api/storefront", route => route.fulfill({ json: {
