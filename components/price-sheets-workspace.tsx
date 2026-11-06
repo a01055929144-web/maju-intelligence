@@ -4,16 +4,12 @@ import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { calculatePrice } from "@/domains/pricing/price-rules";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
 
-const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
 
-/** 이 품목에 실제로 적용되는 규칙(직접 단가 → 품목 마진 → 그룹 → 기본). */
-export function marginSource(item: PriceItem, state: PriceState) {
-  if (item.directPrice !== null) return { kind: "direct" as const, label: "직접 단가", margin: null };
-  if (item.itemMargin !== null) return { kind: "item" as const, label: "개별", margin: item.itemMargin };
-  const group = state.groups.find((g) => g.id === item.groupId) || state.groups.find((g) => g.id === state.categories.find((c) => c.category === item.category)?.groupId);
-  if (group) return { kind: "group" as const, label: group.name, margin: group.margin };
-  return { kind: "default" as const, label: "기본", margin: state.defaultMargin };
-}
+import { marginSource } from "./pricing-margin-group-options";
+import { PricingMarginGroups } from "./pricing-margin-groups";
+export { marginSource } from "./pricing-margin-group-options";
+
+const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
 
 /**
  * 11/4 마진 설정 단순화.
@@ -34,10 +30,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMargin, setBulkMargin] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [groupId, setGroupId] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [groupMargin, setGroupMargin] = useState("12");
-  const [groupRounding, setGroupRounding] = useState("10");
+  const [groupsOpen, setGroupsOpen] = useState(false);
 
   const send = useCallback(async (command?: PricingCommand | PricingBulkCommand) => {
     const query = new URLSearchParams({ companyId, q: search, page: String(page) });
@@ -188,24 +181,11 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     </section>
 
     {/* ③ 고급 */}
-    <details className="rounded-xl border border-slate-200 bg-white p-4">
+    <details onToggle={event => setGroupsOpen(event.currentTarget.open)} className="rounded-xl border border-slate-200 bg-white p-4">
       <summary className="cursor-pointer text-sm font-black text-slate-700">③ 고급 — 마진 그룹 · 카테고리 연결 · 복구</summary>
       <div className="mt-3 space-y-4 text-sm">
         <p className="text-slate-600">카테고리별로 마진을 다르게 할 때 씁니다. 우선순위: 직접 단가 → 개별 마진 → 그룹 마진 → 기본 마진.</p>
-        {state.groups.length ? <ul className="grid gap-2 md:grid-cols-3">{state.groups.map((g) => <li className="rounded border p-2" key={g.id}><strong>{g.name}</strong> · {g.margin}% · {g.rounding}원 올림<span className="block text-xs text-slate-500">카테고리: {state.categories.filter((c) => c.groupId === g.id).map((c) => c.category).join(", ") || "없음"}</span><button className="mt-1 text-xs font-bold text-teal-700" onClick={() => { setGroupId(g.id); setGroupName(g.name); setGroupMargin(String(g.margin)); setGroupRounding(String(g.rounding)); }} type="button">수정</button></li>)}</ul> : <p className="text-slate-500">마진 그룹이 없습니다.</p>}
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); void run([{ action: "group", ...(groupId ? { id: groupId } : {}), name: groupName, margin: Number(groupMargin), rounding: Number(groupRounding) }], "마진 그룹을 저장했습니다."); }}>
-          <label>그룹<select className={`${box} block`} onChange={(e) => { const g = state.groups.find((x) => x.id === e.target.value); setGroupId(e.target.value); setGroupName(g?.name || ""); setGroupMargin(String(g?.margin ?? 12)); setGroupRounding(String(g?.rounding ?? 10)); }} value={groupId}><option value="">새 그룹</option>{state.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-          <label>이름<input className={`${box} block`} maxLength={80} onChange={(e) => setGroupName(e.target.value)} required value={groupName} /></label>
-          <label>마진 %<input className={`${box} block w-20`} max="1000" min="0" onChange={(e) => setGroupMargin(e.target.value)} required step="0.01" type="number" value={groupMargin} /></label>
-          <label>올림<select className={`${box} block`} onChange={(e) => setGroupRounding(e.target.value)} value={groupRounding}>{[1, 10, 100].map((n) => <option key={n} value={n}>{n}원</option>)}</select></label>
-          <button className={box} disabled={busy} type="submit">그룹 저장</button>
-        </form>
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); const d = new FormData(e.currentTarget); void run([{ action: "category", category: String(d.get("category")), groupId: String(d.get("groupId")) }], "카테고리를 연결했습니다."); }}>
-          <label>카테고리<input className={`${box} block`} maxLength={100} name="category" required /></label>
-          <label>그룹<select className={`${box} block`} name="groupId" required><option value="">선택</option>{state.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-          <button className={box} disabled={busy || !state.groups.length} type="submit">카테고리 연결</button>
-        </form>
-        {state.categories.length ? <ul>{state.categories.map((c) => <li className="flex items-center gap-2 py-0.5" key={c.category}>{c.category} → {state.groups.find((g) => g.id === c.groupId)?.name}<button className="text-xs text-rose-700" disabled={busy} onClick={() => void run([{ action: "category", category: c.category, groupId: "" }], "연결을 해제했습니다.")} type="button">해제</button></li>)}</ul> : null}
+        {groupsOpen ? <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} /> : null}
         <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
           <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>

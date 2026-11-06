@@ -39,3 +39,99 @@ for(const width of [1440,390])test(`server document recalculation survives fresh
  }finally{await context.close()}
 });
 
+
+
+// Margin settings use the same existing pricing command/recalculation flow.
+for (const width of [1440, 390]) for (const failure of ["category-and-recalculate", "create-response"] as const) test(`margin group paths and retry checkpoints ${failure} at ${width}px`, async ({ page }, info) => {
+  const groupId = "60000000-0000-4000-8000-000000000001", createdId = "60000000-0000-4000-8000-000000000002";
+  const category = "농산 > 채소류 > 조미채소", legacy = "회사 자체 > 기존 분류", other = "공산품 > 소스";
+  const groups = [{ id: groupId, name: "합성 기존 그룹", margin: 12, rounding: 10 }];
+  let categories = [{ category, groupId }, { category: legacy, groupId }], pendingCount = 0, groupCreates = 0, categoryAttempts = 0, recalculateAttempts = 0;
+  let categoryFailed = false, recalculateFailed = false, createFailed = false;
+  const seenPages = new Set<number>(), commands: Record<string, unknown>[] = [];
+  const products = Array.from({ length: 7 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12,"0")}`, name: `합성 상품 ${index + 1}`, category: index === 4 ? other : index === 6 ? `${category} > 하위` : category,
+    groupId: index === 3 || index === 4 ? groupId : null, itemMargin: index === 2 ? 0 : null, directPrice: index === 1 ? 0 : null,
+    cost: 1000, price: 1200, appliedCost: 1000, appliedMargin: 12, appliedRounding: 10, active: index !== 5 }));
+  const originalProducts = JSON.stringify(products);
+  const state = (pageNumber: number) => ({ groups, categories, items: products.slice((pageNumber-1)*2,pageNumber*2), defaultMargin: 10, defaultRounding: 10, pendingCount, total: products.length, page: pageNumber, pageSize: 2, lastBatch: null, restored: false });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width, height: 1000 });
+  await page.route(/\/api\/price-sheets(?:\?|$)/, async route => {
+    const number = Number(new URL(route.request().url()).searchParams.get("page") || 1); seenPages.add(number);
+    if (route.request().method() === "POST") {
+      const command = route.request().postDataJSON(); commands.push(command);
+      if (command.action === "group") {
+        if (!command.id) { groupCreates++; groups.push({ id: createdId, name: command.name, margin: command.margin, rounding: command.rounding }); }
+        else Object.assign(groups.find(group => group.id === command.id)!, { name: command.name, margin: command.margin, rounding: command.rounding });
+        pendingCount = 1;
+        if (failure === "create-response" && !createFailed) { createFailed = true; return route.fulfill({ status: 503, json: { message: "합성 생성 응답 유실" } }); }
+      }
+      if (command.action === "category") {
+        categoryAttempts++;
+        if (failure === "category-and-recalculate" && !categoryFailed) { categoryFailed = true; return route.fulfill({ status: 503, json: { message: "합성 분류 연결 실패" } }); }
+        categories = categories.filter(link => link.category !== command.category);
+        if (command.groupId) categories.push({ category: command.category, groupId: command.groupId });
+      }
+      if (command.action === "recalculate") {
+        recalculateAttempts++;
+        if (failure === "category-and-recalculate" && !recalculateFailed) { recalculateFailed = true; return route.fulfill({ status: 503, json: { message: "합성 판매가 반영 실패" } }); }
+        pendingCount = 0;
+      }
+    }
+    return route.fulfill({ json: state(number) });
+  });
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("/revenue/pricing/margins");
+  await page.locator("summary").filter({ hasText: "③ 고급" }).click();
+  const panel = page.getByRole("region", { name: "마진 그룹 만들기·수정", exact: true });
+  await expect(panel.getByRole("button", { name: "분류·상품 수 다시 조회", exact: true })).toBeEnabled();
+  await expect(panel.getByRole("checkbox", { name: `마진 분류 ${category}`, exact: true })).toBeVisible();
+  expect(seenPages.has(4)).toBe(true);
+  await panel.getByRole("textbox", { name: "마진 그룹 이름", exact: true }).fill("합성 새 그룹");
+  await panel.getByRole("spinbutton", { name: "그룹 마진율", exact: true }).fill("0");
+  await panel.getByRole("textbox", { name: "마진 적용 분류 검색", exact: true }).fill("농산 조미");
+  await panel.getByRole("combobox", { name: "마진 대분류 필터", exact: true }).selectOption("농산");
+  await panel.getByRole("combobox", { name: "마진 중분류 필터", exact: true }).selectOption("채소류");
+  await panel.getByRole("combobox", { name: "마진 소분류 필터", exact: true }).selectOption("조미채소");
+  await panel.getByRole("checkbox", { name: `마진 분류 ${category}`, exact: true }).check();
+  const summary = panel.getByLabel("선택 분류와 적용 상품 요약", { exact: true });
+  await expect(summary).toContainText("선택 분류 1개 · 분류의 활성 상품 4개");
+  await expect(summary).toContainText("실제 그룹 마진 대상 1개");
+  const save = panel.getByRole("button", { name: "그룹·분류 저장하고 판매가 반영", exact: true });
+  if (width === 390) expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await save.click();
+  await expect(page.getByRole("alert").filter({ hasText: failure === "create-response" ? "합성 생성 응답 유실" : "합성 분류 연결 실패" })).toBeVisible();
+  expect(groupCreates).toBe(1);
+  await page.reload();
+  await page.locator("summary").filter({ hasText: "③ 고급" }).click();
+  if (failure === "create-response") {
+    await expect(save).toBeDisabled();
+    await panel.getByRole("button", { name: "생성 결과 다시 조회", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "이미 생성된 그룹" })).toBeVisible();
+  }
+  await expect(save).toBeEnabled();
+  await expect(panel.getByRole("textbox", { name: "마진 그룹 이름", exact: true })).toHaveValue("합성 새 그룹");
+  await save.click();
+  if (failure === "category-and-recalculate") {
+    await expect(page.getByRole("alert").filter({ hasText: "합성 판매가 반영 실패" })).toBeVisible();
+    await expect(panel.getByLabel("마진 그룹 저장 단계")).toContainText("2. 분류 연결: 완료");
+    await expect(save).toBeEnabled(); await save.click();
+  }
+  await expect(page.getByRole("status").filter({ hasText: "그룹·분류 연결을 저장하고 판매가 반영을 마쳤습니다" })).toBeVisible();
+  expect(groupCreates).toBe(1);
+  expect(categories).toContainEqual({ category, groupId: createdId });
+  expect(categories).toContainEqual({ category: legacy, groupId });
+  expect(categoryAttempts).toBe(failure === "category-and-recalculate" ? 2 : 1);
+  await panel.getByRole("button", { name: "합성 기존 그룹 · 12% · 10원 올림", exact: true }).click();
+  await expect(panel.getByRole("checkbox", { name: `마진 분류 ${legacy}`, exact: true })).toBeChecked();
+  await expect(summary).toContainText("선택 분류 1개 · 분류의 활성 상품 0개");
+  await expect(summary).toContainText("실제 그룹 마진 대상 2개");
+  await panel.getByRole("spinbutton", { name: "그룹 마진율", exact: true }).fill("15");
+  await expect(save).toBeEnabled(); await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "그룹·분류 연결을 저장하고 판매가 반영을 마쳤습니다" })).toBeVisible();
+  expect(groupCreates).toBe(1); expect(groups.find(group => group.id === groupId)?.margin).toBe(15);
+  expect(JSON.stringify(products)).toBe(originalProducts);
+  expect(commands.every(command => ["group", "category", "recalculate"].includes(String(command.action)))).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`margin-group-${failure}-${width}.png`), fullPage: true });
+});
