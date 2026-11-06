@@ -12,7 +12,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.setViewportSize({ width, height: 900 });
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   await page.route("**/api/pricing-store-links*", route => { writes.push("FORBIDDEN-store-link"); return route.fulfill({ status: 500, json: {} }); });
-  await page.route("**/api/pricing-documents*", async route => {
+  await page.route(/\/api\/pricing-documents(?:\/catalog-index)?(?:\?.*)?$/, async route => {
     const request = route.request(), url = new URL(request.url());
     if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
     const body = request.method() === "POST" ? request.postDataJSON() : {};
