@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
-import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
+import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
 
 /**
  * 11/4: 문서 보기 — A4 한 장처럼 보이는 편집 화면(시안 ①).
@@ -35,12 +35,21 @@ export function PricingDocPaper({
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
+  const draggedLine = useRef<number | null>(null);
+  const visiblePrice = (line: PrintLine) => documentDisplayPrice(line.price, line.taxType, display.priceIncludesTax);
 
   function updateLine(index: number, patch: Partial<PrintLine>) {
     onContent({ ...content, lines: content.lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
   }
   function removeLine(index: number) {
     onContent({ ...content, lines: content.lines.filter((_, i) => i !== index) });
+  }
+  function dropLine(target: number) {
+    if (draggedLine.current === null) return;
+    const next = [...content.lines];
+    next.splice(target, 0, next.splice(draggedLine.current, 1)[0]);
+    draggedLine.current = null;
+    onContent({ ...content, lines: next });
   }
   const cell = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500 focus:bg-white disabled:hover:border-transparent";
 
@@ -60,7 +69,7 @@ export function PricingDocPaper({
         </label>
         <label className="flex items-center gap-1 text-xs text-slate-600">유효
           <input aria-label="유효기간" className="rounded border border-slate-200 px-1 py-0.5" disabled={!editable} onChange={(e) => onContent({ ...content, validUntil: e.target.value })} type="date" value={content.validUntil} />
-          까지 · 부가세 별도
+          까지 · 부가세 {display.priceIncludesTax ? "포함" : "별도"}
         </label>
       </div>
 
@@ -71,9 +80,8 @@ export function PricingDocPaper({
             <table className="w-full table-fixed text-sm"><tbody>
               {promos.map(({ index, line }) => (
                 <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`}>
-                  <td className="py-1"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}</td>
-                  <td className="px-2 py-1 text-slate-600 [overflow-wrap:anywhere]">{line.spec} {line.unit}</td>
-                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{line.price.toLocaleString()}원</td>
+                  <td className="py-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -85,7 +93,7 @@ export function PricingDocPaper({
                 <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`}>
                   <p className="text-sm font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
                   <p className="text-xs text-slate-600">{line.spec} {line.unit}{line.endsOn ? ` · ${line.endsOn}까지` : ""}</p>
-                  <p className="font-black text-orange-700">{line.price.toLocaleString()}원</p>
+                  <p className="font-black text-orange-700">{visiblePrice(line).toLocaleString()}원</p>
                   {editable ? <button aria-label={`${line.displayName} 빼기`} className="absolute right-1.5 top-1.5 text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
                 </div>
               ))}
@@ -97,26 +105,26 @@ export function PricingDocPaper({
       <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))" }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
-            <colgroup><col style={{ width: content.showSpec ? "35%" : "60%" }} />{content.showSpec ? <col style={{ width: "30%" }} /> : null}{content.showPrice ? <col style={{ width: "30%" }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
+            <colgroup><col style={{ width: `${content.showPrice ? display.productWidth * (editable ? 0.95 : 1) : editable ? 95 : 100}%` }} />{content.showPrice ? <col style={{ width: `${(100 - display.productWidth) * (editable ? 0.95 : 1)}%` }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
             <thead>
               <tr className="text-left text-xs text-slate-500">
-                <th className="border-b py-1.5">품목</th>
-                {content.showSpec ? <th className="border-b px-2 py-1.5">규격·단위</th> : null}
+                <th className="border-b py-1.5">품목{content.showSpec ? "·규격·단위" : ""}</th>
                 {content.showPrice ? <th className="border-b px-2 py-1.5 text-right">단가</th> : null}
                 {editable ? <th className="w-7 border-b" /> : null}
               </tr>
             </thead>
             <tbody>
               {chunk.map(({ index, line }) => (
-                <tr className={`border-b border-slate-100 ${line.visible ? "" : "opacity-40"} ${line.price < (baselines[line.productId] ?? 0) ? "bg-orange-50" : ""}`} key={`${line.productId}:${line.promotionId}`}>
+                <tr className={`border-b border-slate-100 ${line.visible ? "" : "opacity-40"} ${line.price < (baselines[line.productId] ?? 0) ? "bg-orange-50" : ""}`} key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
                   <td className="py-0.5">
+                    {editable ? <span aria-hidden="true" className="cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
                     <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
+                    {content.showSpec && (line.spec || line.unit) ? <span className="block px-1 text-xs text-slate-600 [overflow-wrap:anywhere]">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span> : null}
                   </td>
-                  {content.showSpec ? <td className="break-words whitespace-normal px-2 py-1 text-xs text-slate-600 [overflow-wrap:anywhere]" title={`${line.spec} ${line.unit}`}>{line.spec} {line.unit}</td> : null}
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: value }); }} value={line.price.toLocaleString()} />
+                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value }); }} value={visiblePrice(line).toLocaleString()} />
                     </td>
                   ) : null}
                   {editable ? <td className="py-0.5 text-right"><button aria-label={`${line.displayName} 빼기`} className="text-slate-300 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button></td> : null}
