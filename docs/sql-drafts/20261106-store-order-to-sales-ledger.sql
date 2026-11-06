@@ -30,6 +30,15 @@ begin
     pg_catalog.hashtextextended(p_company_id::text || ':' || p_store_order_id::text, 0)
   );
 
+  select * into v_order
+  from public.store_orders
+  where company_id = p_company_id and id = p_store_order_id
+  for update;
+  if not found then raise exception 'store order not found'; end if;
+  if v_order.status not in ('received','in_delivery','delivered') then
+    raise exception 'editable or cancelled store order cannot become a sales document';
+  end if;
+
   select * into v_document
   from public.business_documents
   where company_id = p_company_id and source_type = 'order' and source_key = v_source_key;
@@ -46,12 +55,6 @@ begin
     );
   end if;
 
-  select * into v_order
-  from public.store_orders
-  where company_id = p_company_id and id = p_store_order_id
-  for update;
-  if not found then raise exception 'store order not found'; end if;
-  if v_order.status = 'cancelled' then raise exception 'cancelled store order cannot become a sales document'; end if;
   if v_order.has_market_price then raise exception 'market-price store order requires price resolution'; end if;
   if v_order.delivery_fee <> 0 then raise exception 'delivery-fee store order is not supported yet'; end if;
   if not exists (

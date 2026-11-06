@@ -147,6 +147,17 @@ jobs:
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-S2-sales-to-order-acceptance.pg17.test.sql
 
+      - name: Verify store order to sales ledger against real ERP migrations on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb store_order_sales_ledger_test
+          cd docs/sql-drafts
+          psql --dbname=store_order_sales_ledger_test --set=ON_ERROR_STOP=1 --file=20261106-store-order-to-sales-ledger.pg17.test.sql
+
       - name: Verify store account manager role on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
