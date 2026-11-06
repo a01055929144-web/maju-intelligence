@@ -4,7 +4,7 @@ import { getAdminSession } from "@/lib/auth";
 import { AdminPageHeader } from "../admin-page-header";
 import { readKamisPrices, readTourEvents } from "./market-api";
 
-const categories = { "200": "채소류", "500": "축산물", "600": "수산물" } as const;
+const categories = { "200": "채소류", "400": "과일류", "600": "수산물" } as const;
 
 export default async function AdminMarketDataPage({ searchParams }: { searchParams: Promise<{ category?: string }> }) {
   const session = await getAdminSession();
