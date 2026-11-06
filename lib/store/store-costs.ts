@@ -1,6 +1,7 @@
 import "server-only";
 
 import { supabaseRequest } from "../store";
+import { storeCostProductKey, type StoreCostInput } from "../../domains/store-cost/store-cost";
 
 const PAGE_SIZE = 50;
 
@@ -104,6 +105,27 @@ export async function updateStoreCost(input: {
       p_specification: input.row.specification,
       p_store_account_id: input.storeAccountId,
       p_unit: input.row.unit
+    })
+  });
+}
+
+export async function importStoreCosts(input: {
+  actorMemberId: string;
+  companyId: string;
+  fileName: string;
+  importId: string;
+  rows: readonly StoreCostInput[];
+  storeAccountId: string;
+}) {
+  return supabaseRequest<{ imported: number; replayed: number; total: number }>("rpc/import_store_cost_batch", {
+    method: "POST",
+    body: JSON.stringify({
+      p_actor_member_id: input.actorMemberId,
+      p_company_id: input.companyId,
+      p_file_name: input.fileName,
+      p_import_id: input.importId,
+      p_rows: input.rows.map(row => ({ ...row, productKey: storeCostProductKey(row) })),
+      p_store_account_id: input.storeAccountId
     })
   });
 }

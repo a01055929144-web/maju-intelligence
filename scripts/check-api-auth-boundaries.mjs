@@ -60,8 +60,8 @@ function hasDeviceTokenGuard(source) {
 }
 
 function hasStoreCostApplicationGuard(source) {
-  return /from ["']@\/application\/organization\/store-costs["']/.test(source)
-    && /\b(readStoreCosts|changeStoreCost)\s*\(/.test(source);
+  return /from ["']@\/application\/organization\/store-cost(?:s|-import)["']/.test(source)
+    && /\b(readStoreCosts|changeStoreCost|previewStoreCostImport|applyStoreCostImport)\s*\(/.test(source);
 }
 
 const routeFiles = listRouteFiles(apiRoot);
