@@ -63,7 +63,7 @@ create trigger validate_pricing_document_share_link before insert or update on p
   for each row execute function public.validate_pricing_document_share_link();
 
 alter table public.pricing_document_share_links enable row level security;
-revoke all on public.pricing_document_share_links from public,anon,authenticated;
+revoke all on public.pricing_document_share_links from public,anon,authenticated,service_role;
 grant select,insert,update on public.pricing_document_share_links to service_role;
 revoke all on function public.validate_pricing_document_share_link() from public,anon,authenticated;
 grant execute on function public.validate_pricing_document_share_link() to service_role;

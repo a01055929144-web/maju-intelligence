@@ -35,6 +35,8 @@ insert into business_permit_leads values
  ('30000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002',null),
  ('30000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001');
 insert into normalized_customers values ('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
+-- Managed projects can grant service_role ALL through default privileges; the draft must still remove DELETE.
+alter default privileges in schema public grant all on tables to service_role;
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.sql
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.down.sql
 \ir ../../docs/sql-drafts/20261106-09-lead-document-share.sql
