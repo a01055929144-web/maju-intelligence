@@ -2,6 +2,8 @@
 
 [PC·모바일 전환 와이어프레임](2026-11-06-store-order-link-wireframe.html) · 2026-11-06 · 합성 데이터 시안
 
+[모바일 주문 화면](../evidence/store-order-link-mobile.png) · [PC 표형 주문 화면](../evidence/store-order-link-desktop.png) — 모두 합성 데이터 화면입니다.
+
 ## 한 화면 틀
 
 매장에 새 웹앱이나 주문 폼을 만들지 않는다. 현재 `/store#<token>`에서 쓰는 `components/storefront-workspace.tsx`의 **홈·주문·내역·내 정보**를 유지하고 **데이터** 탭을 더한다. 모바일 390px과 PC가 같은 응답, 필터·즐겨찾기 상태, 주문 규칙을 사용하며 배치만 달라진다. 고객사 문서 편집기의 온라인 미리보기는 매장이 보는 품목 표현을 재사용한다.
