@@ -483,7 +483,7 @@ export function PricingDocumentsWorkspace({
   );
   const leadNotice = leadContext ? <aside className="pricing-no-print flex flex-wrap items-center gap-2 rounded border p-3 text-sm" aria-label="리드 문서 작성 문맥">
     <p className="mr-auto">{leadContext.name} · 작성·게시 전용입니다. 공개 링크 준비 전이며 아직 전달되지 않았습니다.</p>
-    <a className="inline-flex min-h-11 items-center rounded border px-3" href={leadContext.backHref} onClick={event => { if (!discard()) event.preventDefault(); }}>리드 상세로 돌아가기</a>
+    <a className="inline-flex min-h-[44px] items-center rounded border px-3" href={leadContext.backHref} onClick={event => { if (!discard()) event.preventDefault(); }}>리드 상세로 돌아가기</a>
   </aside> : null;
   if (view === "list" && tab === "documents") return <div className="space-y-3">
     {leadNotice}
