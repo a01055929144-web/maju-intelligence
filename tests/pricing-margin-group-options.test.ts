@@ -24,6 +24,6 @@ it("counts exact-category targets separately from effective group pricing, prese
   expect(marginGroupSummary(state, items, "one", [category])).toEqual({ categoryProducts: 5, groupProducts: 2, explicitProducts: 1 });
   expect(marginGroupSummary(state, items, "", [category])).toEqual({ categoryProducts: 5, groupProducts: 1, explicitProducts: 0 });
   expect(marginGroupSummary(state, items, "one", ["농산"])).toEqual({ categoryProducts: 0, groupProducts: 1, explicitProducts: 1 });
-  expect(marginSource(items[1], state).kind).toBe("direct"); expect(marginSource(items[2], state).margin).toBe(0);
+  expect(marginSource(items.find(item => item.id === "direct")!, state).kind).toBe("direct"); expect(marginSource(items.find(item => item.id === "individual")!, state).margin).toBe(0);
   expect(JSON.stringify({ state, items })).toBe(original);
 });
