@@ -15,7 +15,7 @@
 
 아래 액션은 **승인 후 구현 제안**이다. 현재 #282의 `record-send`는 아직 `shareLinkId`를 받지 않고 `publicUrl:null`을 반환한다.
 
-1. 인증된 기존 `/api/pricing-documents`에 `prepare-share` 추가: `{documentVersionId, leadId, idempotencyKey, ttlDays?:14}`. 같은 회사, 작성자의 quote 또는 읽을 수 있는 sheet, 병합되지 않은 리드만 허용한다. 새 초안을 자동 저장/게시하지 않는다.
+1. 인증된 기존 `/api/pricing-documents`에 `prepare-share` 추가: `{documentVersionId, leadId, idempotencyKey, ttlDays?:14}`. 이 액션은 회사 내부 조회가 아니라 **외부 공유 링크 발급**이다. 초안 정책으로 같은 회사, 작성자의 quote 또는 읽을 수 있는 sheet, 병합되지 않은 리드만 허용한다. 새 초안을 자동 저장/게시하지 않는다.
 2. 준비 성공의 `result`: `{shareLinkId, sendId:null, documentId, documentVersionId, publicUrl, expiresAt, deliveryRecorded:false}`. 제안 URL은 **`/pricing-document#<token>`**이다. 링크 생성·복사·파일 저장만으로 발송 완료/리드 상태 변경을 기록하지 않는다.
 3. 실제 전달을 확인한 뒤 기존 `record-send`에 선택 `shareLinkId`와 `delivered:true`를 보낸다. 기존 입력(실제 templateId/channel, 대상 leadId, documentVersionId, 동일 전달 건의 idempotencyKey)은 보존한다.
 4. 연결 확인까지 성공한 `result`: **`{sendId, documentId, documentVersionId, publicUrl}`**. publicUrl은 준비한 URL이며 customer 주문 URL이 아니다. 공유 링크 없는 기존 record-send 호출은 계속 null이다.
@@ -23,14 +23,20 @@
 
 준비 키와 발송 키는 같은 전달 건의 UUID를 두 기존/신규 고유 키 범위에서 재사용한다. 같은 회사·키·입력·작성자는 같은 링크/버전/sendId를 복원한다. 다른 리드·버전·TTL·작성자 또는 다른 발송 입력이면 409이며 이전 행을 덮어쓰지 않는다. 준비의 서버 생성 ID·nonce·시각은 입력 비교에서 제외하고 기존 행의 값을 재사용한다. 새 전달은 새 키로 별도 기록한다.
 
-인증/역할/회사 플래그는 기존 문서 API 게이트를 유지한다. 영업직원은 자기 quote 작성 및 허용된 sheet 읽기/공유만 가능하고 sheet 작성 권한을 새로 얻지 않는다. 관리자도 다른 작성자의 quote를 공유할 수 없다. 서버가 companyId·작성자·문서 ID·레이아웃을 결정하며 클라이언트 URL/회사/작성자 주장은 신뢰하지 않는다. 준비는 로그가 아닌 미리보기이며 발송 증명은 기존 명시적 확인 기록이다.
+인증/역할/회사 플래그는 기존 문서 API 게이트를 유지하며, 행위별 권한을 구분한다.
+
+- **회사 내부 읽기:** 병합된 [PR #261](https://github.com/a01055929144-web/maju-intelligence/pull/261)의 승인대로, 기존 문서 접근 권한이 있는 같은 회사 사용자는 다른 작성자의 sheet/quote 목록·게시 버전을 읽을 수 있다. `list`·`versions`에 작성자 필터를 추가하지 않는다. 타 회사 문서 접근은 거부한다. 과거 P1 명세·SQL의 작성자 전용 읽기 규칙으로 이 승인을 되돌리지 않는다.
+- **생성·수정·발행:** 기존 `pricing_p1` RPC의 역할·작성자 제한을 유지한다. 영업직원은 자기 quote를 작성하며, sheet 작성 권한을 새로 얻지 않는다. 다른 작성자의 quote 수정·발행은 관리자도 허용하지 않는다.
+- **외부 공유·발송:** 이 미승인 초안의 공개 링크 발급·전달 기록 정책으로만 작성자 제한을 둔다. 이 범위에서 관리자도 다른 작성자의 quote를 공유·발송 처리할 수 없으며, 해당 제한을 회사 내부 공동 읽기에 적용하지 않는다. 새 공유/발송 정책은 운영 활성화 전에 별도 승인을 받는다.
+
+서버가 companyId·작성자·문서 ID·레이아웃을 결정하며 클라이언트 URL/회사/작성자 주장은 신뢰하지 않는다. 링크 준비는 실제 전달 기록이 아니며, 발송 기록은 기존 명시적 전달 확인 뒤에 남긴다. 이번 초안은 조회 필터·런타임을 변경하지 않는다.
 
 ## 3. SQL 모델과 무결성
 
 `pricing_document_share_links`: 회사·문서·게시 버전·리드 복합 FK, 준비 키, 서버 작성자 키, nonce/토큰 SHA256, TTL/생성/만료 시각, 회수 시각, 선택 send_id. 가격·원가·문서 본문·리드 연락처·토큰 원문은 저장하지 않는다.
 
 - `(company_id,idempotency_key)` 고유. `(company_id,send_id)` 고유이며 NULL은 준비 상태다. 초기 삽입에 send_id를 넣지 못한다.
-- trigger는 quote 작성자, 정확한 게시 버전, 동일 회사의 병합되지 않은 리드, 게시 유효기간을 검사한다. 선택적 보관 컬럼이 있으면 보관 문서도 거부하며 미적용 보관 컬럼을 직접 참조하지 않는다.
+- trigger의 quote 작성자 검사는 **새 외부 공유 링크 삽입**에만 적용하며 기존 문서 조회를 제한하지 않는다. 정확한 게시 버전, 동일 회사의 병합되지 않은 리드, 게시 유효기간도 검사한다. 선택적 보관 컬럼이 있으면 보관 문서도 거부하며 미적용 보관 컬럼을 직접 참조하지 않는다.
 - 생성/만료는 DB 시각과 TTL로 계산한다. 문서·버전·대상·키·토큰·TTL·시각은 변경 불가다. 새 버전 공유는 새 링크로 발급한다.
 - send_id는 같은 회사·문서·버전·리드·전달 키·작성자이고 customer_id가 없는 기존 발송 행만 한 번 연결한다. 같은 리드·버전의 예전 전달 기록을 새 링크에 끼워 넣지 못한다. 연결/회수 취소는 불가하다. 늦은 전달 기록 연결은 링크를 재활성화하지 않는다.
 - RLS ON, anon/authenticated/public 직접 접근 및 trigger 함수 실행 권한 없음. service_role은 select/insert/update만 허용한다. 실제 인증은 서버 API에서 먼저 수행한다. 새 SECURITY DEFINER/RPC·기존 테이블 변경·기존 행 backfill 없음.
