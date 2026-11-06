@@ -1,4 +1,4 @@
-import type { DocumentContent, DocumentDisplay, DocumentKind } from "./document";
+import { DEFAULT_DISPLAY, type DocumentContent, type DocumentDisplay, type DocumentKind } from "./document";
 
 /**
  * 11/4: 새 문서 시작 화면의 'MAJU 추천' 4종. 품목은 담지 않고 모양(열·형식·표시 항목·테마)만 정합니다.
@@ -10,7 +10,7 @@ export type DocumentPreset = {
   readonly description: string;
   readonly title: string;
   readonly patch: Pick<DocumentContent, "layout" | "theme" | "showPrice" | "showBrand" | "showSpec">;
-  readonly display: Omit<DocumentDisplay, "info">;
+  readonly display: Pick<DocumentDisplay, "columns" | "promoLayout">;
 };
 
 export const DOCUMENT_PRESETS: readonly DocumentPreset[] = [
@@ -27,6 +27,6 @@ export function applyPreset(base: DocumentContent, preset: DocumentPreset): Docu
     ...preset.patch,
     kind: base.kind,
     title: preset.title,
-    display: { ...preset.display, info: base.display?.info || [] }
+    display: { ...DEFAULT_DISPLAY, ...base.display, ...preset.display, info: base.display?.info || [] }
   };
 }

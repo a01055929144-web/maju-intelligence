@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { isValidBusinessRegistrationNumber, normalizeBusinessNumber } from "@/lib/business-number";
+import { findDuplicateCompanyByBusinessNumber } from "@/lib/store/08-company-identity";
 import { COMPANY_DOCUMENT_BUCKET, COMPANY_PROFILE_FIELDS, COMPANY_PROFILE_FILE_KEYS, type CompanyProfileValues } from "@/domains/organization/company-profile";
 import { addCompanyLeadSearchRegion, encodeStoragePath, getCompanyLeadSearchRegions, getSupabaseConfig, isProductionStoreConfigured, normalizeSelectableSalesArea, sanitizeStorageFilename, supabaseRequest, supabaseStorageRequest } from "@/lib/store";
 
@@ -52,6 +54,23 @@ export async function saveCompanyProfile(companyId: string, patch: CompanyProfil
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({ ...patch, company_id: companyId, updated_at: new Date().toISOString(), updated_by: actorName.slice(0, 80) })
   });
+}
+
+export async function saveCompanyBusinessNumber(companyId: string, input: string) {
+  const number = normalizeBusinessNumber(input);
+  if (!isValidBusinessRegistrationNumber(number)) throw new Error("사업자등록번호 10자리를 확인해 주세요.");
+  if (await findDuplicateCompanyByBusinessNumber(
+    (path) => supabaseRequest<Array<{ id: string }>>(path), number, companyId
+  )) throw new Error("이미 등록된 사업자등록번호입니다.");
+  try {
+    await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ business_registration_number: number, updated_at: new Date().toISOString() })
+    });
+  } catch (error) {
+    if (String(error).includes("duplicate key")) throw new Error("이미 등록된 사업자등록번호입니다.");
+    throw error;
+  }
 }
 
 export async function uploadCompanyDocument(input: { companyId: string; fieldKey: string; filename: string; contentType: string; bytes: ArrayBuffer; actorName: string }) {

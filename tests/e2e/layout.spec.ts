@@ -107,6 +107,26 @@ for (const width of [1440, 390]) {
   });
 }
 
+test("category selection stays compact and hides the internal code at 390px", async ({ browser }, testInfo) => {
+  const context = await authenticatedContext(browser, "customer", 390, 844);
+  try {
+    const page = await context.newPage();
+    await page.route("**/api/product-catalog?*", (route) => route.fulfill({ json: { items: [{ id: "30000000-0000-4000-8000-000000000001", name: "양파", code: "P-00005", category: "", unit: "개", isActive: true }] } }));
+    await page.route("**/api/price-sheets/categories?*", (route) => route.fulfill({ json: { items: [{ id: "30000000-0000-4000-8000-000000000001", name: "양파", code: "P-00005", spec: "1kg", unit: "개", category: "", suggestion: "농산 > 채소류" }], options: ["농산", "농산 > 채소류", "축산"] } }));
+    await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0 } }));
+    await page.goto("/revenue/products#product-category-management", { waitUntil: "domcontentloaded" });
+    const manager = page.locator("#product-category-management");
+    await expect(manager.getByLabel("양파 분류 검색 선택")).toBeVisible();
+    await expect(manager.locator("tbody tr").first()).not.toContainText("P-00005");
+    await manager.getByLabel("양파 분류 검색 선택").click();
+    await expect(manager.getByRole("button", { name: "농산", exact: true })).toBeVisible();
+    await manager.getByRole("button", { name: "농산 하위 분류 보기" }).click();
+    await manager.getByRole("button", { name: "농산 › 채소류", exact: true }).click();
+    await expect(manager.getByLabel("양파 분류 검색 선택")).toContainText("농산 › 채소류");
+    await manager.screenshot({ path: testInfo.outputPath("category-picker-390.png") });
+  } finally { await context.close(); }
+});
+
 for (const width of [1440, 390]) {
   test(`sidebar groups open by default and remember a closed group at ${width}px`, async ({ browser }) => {
     const context = await authenticatedContext(browser, "customer", width, 844);

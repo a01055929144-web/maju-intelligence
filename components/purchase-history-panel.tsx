@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { summarizePurchaseHistory, type PurchaseHistoryRow } from "@/domains/pricing/purchase-receipt";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSort } from "@/lib/use-table-sort";
 
 const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
@@ -110,6 +112,18 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
   }
 
   const items = useMemo(() => summarizePurchaseHistory(rows || []), [rows]);
+  const { sortKey, sortDirection, sortedRows: sortedItems, toggleSort } = useTableSort(items, {
+    name: (a, b) => a.name.localeCompare(b.name, "ko"),
+    spec: (a, b) => `${a.spec} ${a.unit}`.localeCompare(`${b.spec} ${b.unit}`, "ko"),
+    supplier: (a, b) => a.supplier.localeCompare(b.supplier, "ko"),
+    date: (a, b) => a.latestDate.localeCompare(b.latestDate),
+    latestCost: (a, b) => a.latestCost - b.latestCost,
+    previousCost: (a, b) => (a.previousCost ?? -1) - (b.previousCost ?? -1),
+    change: (a, b) => (a.changeAmount ?? 0) - (b.changeAmount ?? 0),
+    range: (a, b) => a.minCost - b.minCost || a.maxCost - b.maxCost,
+    quantity: (a, b) => a.totalQuantity - b.totalQuantity,
+    count: (a, b) => a.count - b.count,
+  });
   const dates = useMemo(() => new Set((rows || []).map((row) => row.receipt_date)).size, [rows]);
   const up = items.filter((item) => item.direction === "up").length;
   const down = items.filter((item) => item.direction === "down").length;
@@ -133,10 +147,14 @@ export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly compa
         <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr><th className="px-3 py-2">품목</th><th className="px-3 py-2">규격·단위</th><th className="px-3 py-2">매입처</th><th className="px-3 py-2">최근 매입일</th><th className="px-3 py-2 text-right">최근 단가</th><th className="px-3 py-2 text-right">직전 단가</th><th className="px-3 py-2 text-right">변동</th><th className="px-3 py-2 text-right">기간 최저~최고</th><th className="px-3 py-2 text-right">기간 수량</th><th className="px-3 py-2 text-right">횟수</th></tr>
+              <tr>{([
+                ["name", "품목"], ["spec", "규격·단위"], ["supplier", "매입처"], ["date", "최근 매입일"],
+                ["latestCost", "최근 단가"], ["previousCost", "직전 단가"], ["change", "변동"],
+                ["range", "기간 최저~최고"], ["quantity", "기간 수량"], ["count", "횟수"],
+              ] as const).map(([key, label], index) => <SortableTh active={sortKey === key} className={`px-3 py-2 ${index >= 4 ? "text-right" : ""}`} direction={sortDirection} key={key} label={label} onClick={() => toggleSort(key)} />)}</tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {sortedItems.map((item) => (
                 <Fragment key={item.key}>
                   <tr className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2 font-semibold"><button className="min-h-11 text-left underline-offset-2 hover:underline" onClick={() => {

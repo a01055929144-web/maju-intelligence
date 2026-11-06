@@ -53,6 +53,13 @@ const version: DocumentVersion = {
   unavailablePromotions: [],
 };
 describe("pricing P1 documents", () => {
+  it("shows VAT-inclusive prices only for taxable lines while keeping the stored base price", () => {
+    const taxable = { ...content.lines[0], taxType: "taxable" as const, price: 1000 };
+    const inclusive = { ...version, content: { ...content, lines: [taxable, { ...taxable, productId: "10000000-0000-4000-8000-000000000002", taxType: "exempt" as const }], display: { columns: 1 as const, promoLayout: "cards" as const, info: [], productWidth: 65, priceIncludesTax: true } } };
+    expect(documentOutput(inclusive, "2026-10-30").lines.map((line) => line.price)).toEqual([1100, 1000]);
+    expect(inclusive.content.lines.map((line) => line.price)).toEqual([1000, 1000]);
+    expect(documentOutput(version, "2026-10-30").lines[0].price).toBe(21180);
+  });
   it("whitelists printable fields instead of spreading private records", () => {
     const parsed = parseDocument({
       ...content,

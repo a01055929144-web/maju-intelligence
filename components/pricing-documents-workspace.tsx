@@ -10,6 +10,7 @@ import {
   withMargin,
   type CatalogChoice,
   fillBlankDocumentSpecs,
+  documentDisplayPrice,
   type DocumentContent,
   type DocumentDraft,
   type DocumentKind,
@@ -83,6 +84,7 @@ export function PricingDocumentsWorkspace({
   const [bulkMargin, setBulkMargin] = useState("12"),
     [baselines, setBaselines] = useState<Record<string, number>>({});
   const excelInput = useRef<HTMLInputElement>(null);
+  const draggedLine = useRef<number | null>(null);
   const read = useCallback(
     <T,>(action: string, payload: Record<string, unknown> = {}) =>
       documentRequest<T>(companyId, action, payload).then((r) => r.result),
@@ -395,6 +397,15 @@ export function PricingDocumentsWorkspace({
       j = i + delta;
     if (j < 0 || j >= next.length) return;
     [next[i], next[j]] = [next[j], next[i]];
+    rows(next);
+  }
+  function dropLine(target: number) {
+    if (!draft || draggedLine.current === null) return;
+    const source = draggedLine.current;
+    draggedLine.current = null;
+    if (source === target) return;
+    const next = [...draft.content.lines];
+    next.splice(target, 0, next.splice(source, 1)[0]);
     rows(next);
   }
   async function exportLines() {
@@ -847,9 +858,12 @@ export function PricingDocumentsWorkspace({
                         <tr
                           key={`${l.productId}:${l.promotionId}`}
                           className={`border-t ${picked.has(lineKey(l)) ? "bg-teal-50" : ""} ${l.price < (baselines[l.productId] ?? 0) ? "bg-orange-50 outline outline-1 outline-orange-300" : ""}`}
+                          onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }}
+                          onDrop={(event) => { event.preventDefault(); dropLine(i); }}
                         >
                           <td className="p-2">{editable ? <input aria-label={`품목 ${i + 1} 선택`} checked={picked.has(lineKey(l))} onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(lineKey(l)); else next.delete(lineKey(l)); return next; })} type="checkbox" /> : null}</td>
                           <td className="p-2">
+                            {editable ? <span aria-hidden="true" className="mr-1 cursor-grab text-slate-500" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = i; }} title="끌어서 순서 변경">⠿</span> : null}
                             <label>
                               <input
                                 disabled={!editable}
@@ -974,13 +988,13 @@ export function PricingDocumentsWorkspace({
                               min="0"
                               max="1000000000000"
                               step="1"
-                              value={l.price}
+                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false)}
                               aria-label={`품목 ${i + 1} 판매가`}
                               onChange={(e) =>
                                 rows(
                                   draft.content.lines.map((x, j) =>
                                     j === i
-                                      ? { ...x, price: Number(e.target.value) }
+                                      ? { ...x, price: draft.content.display?.priceIncludesTax && x.taxType === "taxable" ? Math.round(Number(e.target.value) / 1.1) : Number(e.target.value) }
                                       : x,
                                   ),
                                 )
