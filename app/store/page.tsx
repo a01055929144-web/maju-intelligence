@@ -37,5 +37,5 @@ export default async function StorePage({ searchParams }: {
     costAccess = { companyId: "00000000-0000-4000-8000-000000000001",
       storeAccountId: "20000000-0000-4000-8000-000000000001", canManage: params.fixture !== "store-cost-staff" };
   }
-  return <><meta name="referrer" content="no-referrer" /><StorefrontWorkspace costAccess={costAccess} /></>;
+  return <><meta name="referrer" content="no-referrer" /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} /></>;
 }

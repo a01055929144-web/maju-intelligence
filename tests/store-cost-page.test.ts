@@ -28,10 +28,13 @@ new Function("require", "exports", compiled)((name: string) => {
 const StorePage = exports.default;
 const companyId = "00000000-0000-4000-8000-000000000001";
 const storeAccountId = "20000000-0000-4000-8000-000000000001";
-async function access(params = { companyId, storeAccountId }) {
+async function workspace(params = { companyId, storeAccountId }) {
   const page = await StorePage({ searchParams: Promise.resolve(params) });
   const workspace = React.Children.toArray(page.props.children).find(child => React.isValidElement(child) && "costAccess" in (child.props as object)) as React.ReactElement<{ costAccess: unknown }>;
-  return workspace.props.costAccess;
+  return workspace;
+}
+async function access(params = { companyId, storeAccountId }) {
+  return (await workspace(params)).props.costAccess;
 }
 beforeEach(() => {
   vi.resetAllMocks(); mocks.fixture.mockReturnValue(false); mocks.feature.mockReturnValue(false);
@@ -46,6 +49,12 @@ describe("store cost UI permission props", () => {
     mocks.feature.mockReturnValue(true); mocks.member.mockResolvedValue({ role });
     expect(await access({ companyId, storeAccountId, role: "owner" } as never)).toEqual({ companyId, storeAccountId, canManage: role !== "staff" });
     expect(mocks.member).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId });
+  });
+  it("remounts private state when the selected store changes", async () => {
+    mocks.feature.mockReturnValue(true); mocks.member.mockResolvedValue({ role: "owner" });
+    const first = await workspace();
+    const second = await workspace({ companyId, storeAccountId: "20000000-0000-4000-8000-000000000002" });
+    expect(first.key).not.toBe(second.key);
   });
   it("fails closed with guidance on missing membership or failed lookup", async () => {
     mocks.feature.mockReturnValue(true);
