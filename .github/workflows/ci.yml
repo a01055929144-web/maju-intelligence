@@ -256,7 +256,7 @@ jobs:
       - name: Checkout pinned lead-share SQL draft for isolated tests
         uses: actions/checkout@v5
         with:
-          ref: 74991b781a3a72097208b608cd40df28eddb84a8
+          ref: 0833fe91fa37425e12ba9f217c6ceb4d8f0683b8
           path: .ci-lead-share-schema
           persist-credentials: false
 

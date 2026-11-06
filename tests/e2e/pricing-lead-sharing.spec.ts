@@ -15,7 +15,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   let failPrepare = true, failSend = true, prepared = false, sent = false, revoked = false, readError = false, expiredPrice = false;
   const prepareInputs: Record<string, unknown>[] = [], sendInputs: Record<string, unknown>[] = [];
   const token = "synthetic-purpose-signed-token", publicUrl = `/pricing-document#${token}`;
-  const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z" });
+  const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z", recalculation: { publishedAt: published ? "2026-11-06T00:00:00Z" : null, needsRecalculation: false, changedProductCount: 0 } });
   const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision, content: content!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
   await page.route(/\/api\/pricing-documents(?:\/catalog-index)?(?:\?.*)?$/, async route => {
     const request = route.request(), url = new URL(request.url());

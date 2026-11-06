@@ -1,6 +1,6 @@
 # 09 리드 문서 공유 런타임 — 기본 OFF
 
-기준 main 582ab2a. SQL 소유/승인은 별도 Draft #285 (74991b7)이며 이 구현은 운영 DB 적용·기능 활성화·배포 승인이 아니다.
+기준 main 582ab2a. SQL 소유/승인은 별도 Draft #285 (0833fe9)이며 이 구현은 운영 DB 적용·기능 활성화·배포 승인이 아니다.
 
 ## 변경과 보존
 
@@ -34,6 +34,6 @@ CI PG17은 #285 고정 커밋을 별도 경로에 읽기 체크아웃한다. 원
 
 선택 시작 시 이전 versions를 비우고 현재 draft 소속 버전만 공유 패널에 표시한다. 준비 요청은 documentId 일치를 필수로 주장하며 서버가 version.documentId와 일치 여부를 확인한다. 지연/다른 문서 버전 응답은 준비에 사용할 수 없다.
 
-공유 전달은 #285에 보완한 record_pricing_lead_share_delivery(service-only/security invoker) RPC만 사용한다. 공유 행 잠금 안에서 send + lead_actions + send_id 연결을 원자적으로 저장한다. 연락 행 ID는 send ID이며 metadata에는 문서/버전/링크/send/키만 보존한다. 05는 반환된 leadActionId를 재사용하고 같은 연락을 따로 INSERT하지 않는다. actor_name은 서버 인증 세션에서만 결정한다. shareLinkId 없는 기존 record-send는 유지한다.
+공유 전달은 #285에 보완한 record_pricing_lead_share_delivery(service-only/security invoker) RPC만 사용한다. 공유 행 잠금 안에서 send + lead_actions + send_id 연결을 원자적으로 저장한다. 연락 행 ID는 send ID이며 metadata에는 DB 문서에서 정한 documentKind(sheet/quote)와 문서/버전/링크/send/키만 보존한다. 05는 반환된 leadActionId를 재사용하고 같은 연락을 따로 INSERT하지 않는다. actor_name은 서버 인증 세션에서만 결정한다. shareLinkId 없는 기존 record-send는 유지한다.
 
 회수·하드 만료된 링크는 send_id=NULL일 때 새 전달을 거부한다. 이미 연결된 동일 입력 재시도는 기존 send/leadAction ID만 반환하며 링크를 재활성화하지 않는다. #285 SQL 초안에 기존 lead_actions의 metadata 등 컬럼 및 SELECT/INSERT, 리드 행 잠금용 SELECT/UPDATE 권한 의존성을 명시했다. 운영 SQL·기능 ON·배포 승인으로 보지 않는다.
