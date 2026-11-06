@@ -142,6 +142,18 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const recentNew = unique.filter((product) => product.createdAt && Date.parse(product.createdAt) >= Date.now() - 30 * 24 * 60 * 60 * 1000 &&
     (!supplier || products.some((entry) => entry.id === product.id && entry.supplierName === supplier)) &&
     (!search || `${product.code} ${product.name} ${product.spec}`.toLocaleLowerCase("ko").includes(search.toLocaleLowerCase("ko"))));
+  const changeCounts = unique.filter((product) =>
+    (!supplier || products.some((entry) => entry.id === product.id && entry.supplierName === supplier)) &&
+    (!method || (candidates[product.id]?.method || (latestHistory.has(product.id) ? "매입 이력" : "")) === method) &&
+    (!search || `${product.code} ${product.name} ${product.spec}`.toLocaleLowerCase("ko").includes(search.toLocaleLowerCase("ko")))
+  ).reduce((counts, product) => {
+    const candidate = candidates[product.id];
+    const difference = candidate && !candidate.reviewOnly && candidate.cost !== product.cost ? candidate.cost - product.cost : latestHistory.get(product.id)?.changeAmount ?? 0;
+    if (candidate?.reviewOnly || difference) counts.changed++;
+    if (difference > 0) counts.up++;
+    if (difference < 0) counts.down++;
+    return counts;
+  }, { changed: 0, up: 0, down: 0 });
 
   const edit = useCallback((product: CostProduct, raw: string) => {
     if (raw === "") { setCandidates((current) => { const next = { ...current }; delete next[product.id]; return next; }); setSelected((current) => current.filter((id) => id !== product.id)); return; }
@@ -149,7 +161,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (!Number.isFinite(cost) || cost < 0 || cost > 1_000_000_000) return;
     const selectedSupplier = supplier ? products.find((entry) => entry.id === product.id && entry.supplierName === supplier) : product;
     setCandidates((current) => ({ ...current, [product.id]: { cost, rawCost: cost, vatIncluded: false, supplierProductId: selectedSupplier?.supplierProductId, method: "직접", source: "직접 입력" } }));
-    setSelected((current) => current.includes(product.id) ? current : [...current, product.id]);
+    setSelected((current) => cost === product.cost ? current.filter((id) => id !== product.id) : current.includes(product.id) ? current : [...current, product.id]);
   }, [products, supplier]);
 
   /** 11/4: 부가세 포함/별도를 언제든 바꿀 수 있습니다(선택 품목 또는 한 품목). */
@@ -412,7 +424,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     { key: "supplier", label: "매입처", value: (row) => row.supplierName || "-" },
     { key: "current", label: "현재 매입가", align: "right", total: true, value: (row) => row.cost, render: (row) => money(row.cost) },
     { key: "previous", label: "직전 매입가", align: "right", value: (row) => latestHistory.get(row.id)?.previousCost ?? "-", render: (row) => latestHistory.get(row.id)?.previousCost != null ? money(latestHistory.get(row.id)!.previousCost!) : "-" },
-    { key: "next", label: "변경 후", align: "right", total: true, value: (row) => candidates[row.id]?.cost ?? row.cost, render: (row) => <input aria-label={`${row.name} 변경 후 매입가`} className="maju-input w-28" disabled={busy} min="0" max="1000000000" step="0.01" type="number" value={candidates[row.id]?.cost ?? ""} placeholder={String(row.cost)} onChange={(event) => edit(row, event.target.value)} /> },
+    { key: "next", label: "변경 후 매입가", align: "right", total: true, value: (row) => candidates[row.id]?.cost ?? row.cost, render: (row) => candidates[row.id] ? <input aria-label={`${row.name} 변경 후 매입가 수정`} className="maju-input w-28" disabled={busy} min="0" max="1000000000" step="0.01" type="number" value={candidates[row.id].cost} onChange={(event) => edit(row, event.target.value)} /> : <span className="whitespace-nowrap text-slate-500">{money(row.cost)} <button className="text-xs text-teal-700 underline" disabled={busy} onClick={() => edit(row, String(row.cost))} type="button">수정</button></span> },
     { key: "delta", label: "변동", align: "right", value: (row) => candidates[row.id] && !candidates[row.id].reviewOnly ? candidates[row.id].cost - row.cost : latestHistory.get(row.id)?.changeAmount ?? 0, render: (row) => {
       const candidate = candidates[row.id];
       if (candidate?.reviewOnly) return "확인 필요";
@@ -456,10 +468,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3"><PurchaseSheetMapper mapping={mapping} onMapping={setMapping} onVatMode={setVatMode} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {selected.length && tab !== "신규" ? <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600"><span>선택 {selected.length}개 단가 기준</span><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, true)} type="button">부가세 포함으로</button><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, false)} type="button">부가세 별도로</button><span className="font-semibold text-slate-400">저장되는 매입가는 항상 부가세 별도 금액입니다.</span></div> : null}
     <section className="maju-section-card space-y-3 p-4"><h2 className="font-semibold">영향받는 문서</h2><p className="text-sm text-slate-600">확정 전에는 문서와 가격이 바뀌지 않습니다. 저장된 변경은 서버 이력으로 확인합니다. 다시 계산한 초안도 새 버전을 게시할 때까지 표시를 유지합니다.</p><div className="flex flex-wrap gap-2">{documentError ? <span role="alert">{documentError} <button className="underline" type="button" onClick={() => void load().catch(cause => setError(String(cause)))}>다시 시도</button></span> : affected.length ? affected.map(({ document, count, changed }) => <Link className="rounded border p-2 text-sm" href="/revenue/pricing/documents" key={document.id}>{document.content.kind === "sheet" ? "단가표" : "견적서"} · {document.content.title} · {changed ? `${changed}개 품목 다시 계산 필요` : `${count}개 품목 변경 후보`}{changed && count ? ` · 후보 ${count}개` : ""}</Link>) : <span className="text-sm text-slate-500">다시 계산할 문서나 변경 후보와 연결된 문서가 없습니다.</span>}</div></section>
-    <nav aria-label="매입가 보기" className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체", "매입 이력"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "신규" ? ` ${unmatched.length || recentNew.length}${missingTotal ? ` · 단위 빈 칸 ${missingTotal}` : ""}${suspectCount ? ` · 중복 의심 ${suspectCount}` : ""}` : ""}</button>)}</nav>
+    <nav aria-label="매입가 보기" className="flex flex-wrap gap-2">{["변동 있음", "인상", "인하", "신규", "전체", "매입 이력"].map((name) => <button aria-pressed={tab === name} className={tab === name ? "maju-button-primary" : "maju-button-secondary"} key={name} onClick={() => setTab(name)} type="button">{name}{name === "변동 있음" ? ` ${changeCounts.changed}` : name === "인상" ? ` ${changeCounts.up}` : name === "인하" ? ` ${changeCounts.down}` : name === "신규" ? ` ${unmatched.length || recentNew.length}${missingTotal ? ` · 단위 빈 칸 ${missingTotal}` : ""}${suspectCount ? ` · 중복 의심 ${suspectCount}` : ""}` : ""}</button>)}</nav>
     {historyError ? <p className="text-sm text-amber-800" role="alert">{historyError}</p> : null}
     {tab !== "매입 이력" ? <div className="flex flex-wrap items-center gap-2"><select aria-label="매입처" className="maju-input min-h-11" onChange={(event) => setSupplier(event.target.value)} value={supplier}><option value="">매입처 전체</option>{Array.from(new Set(products.map((product) => product.supplierName).filter((name): name is string => Boolean(name)))).map((name) => <option key={name} value={name}>{name}</option>)}</select><select aria-label="바꾼 방법" className="maju-input min-h-11" onChange={(event) => setMethod(event.target.value)} value={method}><option value="">바꾼 방법 전체</option><option>직접</option><option>엑셀</option><option>매입처</option><option>매입 이력</option></select><input aria-label="품목 검색" className="maju-input min-h-11" onChange={(event) => setSearch(event.target.value)} placeholder="품목·코드 검색" value={search} /><button aria-pressed={emptyOnly || (tab === "신규" && newFilter === "unit")} className="maju-button-secondary min-h-11" onClick={() => { if (missingTotal) { setEmptyOnly(false); openFilter("unit"); } else { setEmptyOnly((value) => !value); setTab("전체"); } }} type="button">단위 빈 칸 {missingTotal + unique.filter((product) => !product.unit).length}개 채우기</button></div> : null}
-    {tab !== "매입 이력" && tab !== "신규" ? <p className="text-xs text-slate-600">변동은 저장 전 후보가 있으면 현재 매입가와 변경 후 단가를, 후보가 없으면 직전·최근 매입 이력을 비교합니다.</p> : null}
+    {tab !== "매입 이력" && tab !== "신규" ? <p className="text-xs text-slate-600">변경 후 매입가는 업로드한 값입니다. 잘못 읽힌 값은 이 칸에서 고치고 저장하세요. 후보가 없는 품목은 현재가를 유지하며, 직접 수정 버튼으로 바꿀 수 있습니다. 변동이 없으면 –로 표시합니다.</p> : null}
     {tab === "매입 이력" ? <PurchaseHistoryPanel companyId={companyId} refreshKey={historyKey} /> : tab === "신규" && unmatched.length ? <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
