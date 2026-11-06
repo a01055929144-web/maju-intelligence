@@ -33,6 +33,7 @@ export function toPublicStorefront(store: Storefront) {
       productId: line.productId,
       promotionId: line.promotionId,
       name: line.name,
+      category: line.category,
       brand: line.brand,
       spec: line.spec,
       ...(publicSalesPriceDirection(line.salesPriceDirection) ? { salesPriceDirection: publicSalesPriceDirection(line.salesPriceDirection) } : {}),

@@ -57,7 +57,7 @@ it("matches the newest contract by product AND sales unit consistently with orde
         },
       ];
     if (path.startsWith("product_catalog?"))
-      return [{ id: "product", is_active: true, order_pricing_mode: "fixed" }];
+      return [{ id: "product", is_active: true, order_pricing_mode: "fixed", category: "수산 > 어류 > 선어" }];
     if (path.startsWith("store_order_territory_rules?"))
       return [
         { delivery_weekdays: [0, 1, 2, 3, 4, 5, 6], cutoff_time: "23:59:00" },
@@ -95,8 +95,9 @@ it("matches the newest contract by product AND sales unit consistently with orde
     taxType: "exempt",
     priceIncludesTax: false,
     spec: "18L",
+    category: "수산",
   });
-  expect(toPublicStorefront(store!).lines[0].spec).toBe("18L");
+  expect(toPublicStorefront(store!).lines[0]).toMatchObject({ spec: "18L", category: "수산" });
   expect(seen.some((path) => /purchase_receipt|supplier_cost/.test(path))).toBe(false);
   expect(
     seen.find((path) => path.startsWith("customer_price_agreements?")),

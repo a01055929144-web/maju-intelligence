@@ -2,6 +2,37 @@ import { expect, test } from "@playwright/test";
 const company = "00000000-0000-4000-8000-000000000001";
 
 for (const width of [1440, 390]) {
+  test(`store link uses one catalog for PC controls and mobile price changes at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/storefront", route => route.fulfill({ json: {
+      store: { title: "합성 단가표", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소",
+        version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: false, nextDeliveryDate: null,
+        selectedDeliveryDate: "2099-01-01", notice: "", marketPriceNotice: "",
+        policy: { weekdays: [], holidays: [], cutoffDaysBefore: 1, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+        lines: [
+          { key: "fish", productId: "fish", promotionId: null, name: "합성 생선", category: "수산", brand: "", spec: "1kg", unit: "봉", badge: "", taxType: "exempt", unitPrice: 12000, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null, salesPriceDirection: "up" },
+          { key: "meat", productId: "meat", promotionId: null, name: "합성 고기", category: "축산", brand: "", spec: "1kg", unit: "팩", badge: "", taxType: "exempt", unitPrice: 9000, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null, salesPriceDirection: "down" },
+        ] },
+      orders: [], preferences: [], historyPage: 1, historyHasMore: false,
+    } }));
+    await page.goto("/store#synthetic-catalog-link");
+    await expect(page.getByRole("heading", { name: "판매가 변동" })).toBeVisible();
+    await page.getByRole("button", { name: "변동 품목 주문하기" }).click();
+    await page.getByRole("button", { name: "수산", exact: true }).click();
+    await expect(page.getByText("합성 생선")).toBeVisible();
+    await expect(page.getByText("합성 고기")).toHaveCount(0);
+    if (width === 1440) {
+      await page.getByRole("button", { name: "표형" }).click();
+      await expect(page.getByText("품목 · 규격 · 판매가")).toBeVisible();
+      await page.getByRole("button", { name: "데이터", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "매장 데이터" })).toBeVisible();
+    } else {
+      await expect(page.getByRole("button", { name: "주문", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "데이터", exact: true })).toBeVisible();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  });
+
   test(`company selling price direction consent defaults off in authorized preview at ${width}px`, async ({ page }) => {
     let available = false, optedIn = false, failOnce = true;
     await page.setViewportSize({ width, height: 900 });

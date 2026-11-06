@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MAJU 주문 링크 · 데이터 연결형 와이어프레임</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #182532; background: #f2f5f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .page { max-width: 1370px; margin: auto; padding: 28px 20px 70px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(26px, 3vw, 36px); margin-bottom: 8px; }
+    h2 { font-size: 19px; }
+    .muted { color: #5d6c77; }
+    .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .12em; color: #08786d; }
+    .top { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
+    .badge { border-radius: 100px; padding: 7px 11px; background: #e4f4ef; color: #086d62; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 22px 0; }
+    .flow div { background: #fff; border: 1px solid #dce5e7; border-radius: 12px; padding: 12px; font-size: 12px; }
+    .flow b { display: block; font-size: 13px; margin-bottom: 4px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 18px 0 12px; }
+    .switch { display: flex; gap: 6px; }
+    .switch button, .chip { border: 1px solid #d6e1e3; background: #fff; border-radius: 9px; padding: 9px 12px; }
+    .switch button[aria-pressed="true"], .chip.active { color: #fff; background: #08786d; border-color: #08786d; }
+    .stage { display: grid; grid-template-columns: minmax(0, 1fr) 275px; gap: 18px; align-items: start; }
+    .preview-wrap { min-width: 0; display: flex; justify-content: center; padding: 24px; border: 1px dashed #b5c7ca; border-radius: 18px; background: #eaf0f1; }
+    .store { width: min(100%, 960px); min-height: 650px; background: #fff; border: 1px solid #cedbde; border-radius: 17px; overflow: hidden; box-shadow: 0 14px 40px #173b3c16; }
+    .preview-wrap.mobile .store { display: flex; flex-direction: column; width: 390px; min-height: 730px; }
+    .preview-wrap.mobile .store-nav { order: 3; margin-top: auto; position: sticky; bottom: 0; z-index: 3; border-top: 1px solid #e1e8ea; border-bottom: 0; }
+    .preview-wrap.mobile .screen { order: 2; }
+    .store-head { padding: 19px 22px 14px; border-bottom: 1px solid #e1e8ea; }
+    .brand { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .brand strong { color: #08786d; font-size: 20px; }
+    .store-head h2 { margin: 12px 0 4px; font-size: 20px; }
+    .store-head p { margin: 0; font-size: 13px; }
+    .notice { background: #fdf7e5; color: #735300; border-radius: 9px; padding: 10px 12px; margin-top: 14px; font-size: 13px; }
+    .store-nav { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #e1e8ea; }
+    .store-nav button { min-height: 52px; border: 0; background: #fff; color: #65757b; }
+    .store-nav button[aria-selected="true"] { color: #08786d; font-weight: 800; box-shadow: inset 0 -3px #08786d; }
+    .screen { display: none; padding: 20px 22px 90px; }
+    .screen.active { display: block; }
+    .screen h3 { font-size: 18px; margin-bottom: 12px; }
+    .hero { display: flex; justify-content: space-between; gap: 15px; padding: 16px; background: #e9f5f1; border-radius: 12px; margin-bottom: 14px; }
+    .hero b { display: block; font-size: 16px; margin-bottom: 4px; }
+    .hero p { font-size: 13px; margin: 0; }
+    .button-row { display: flex; gap: 8px; margin-bottom: 18px; }
+    .primary, .secondary { border-radius: 9px; min-height: 46px; padding: 10px 14px; font-weight: 700; }
+    .primary { border: 1px solid #08786d; background: #08786d; color: #fff; }
+    .secondary { border: 1px solid #c7d6d8; background: #fff; color: #25434b; }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .card { padding: 14px; border: 1px solid #dce5e7; border-radius: 12px; background: #fff; }
+    .card small { display: block; color: #65757b; margin-bottom: 6px; }
+    .card strong { display: block; }
+    .card p { margin: 7px 0 0; font-size: 13px; color: #5d6c77; }
+    .chip-row { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0; }
+    .chip { font-size: 13px; padding: 7px 10px; }
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin: 12px 0; }
+    .filter-row select, .filter-row button { min-height: 44px; border: 1px solid #cbdadd; border-radius: 8px; padding: 8px; background: #fff; }
+    .filter-row label { font-size: 13px; }
+    .category-row { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 5px; }
+    .category-row .chip { white-space: nowrap; min-height: 44px; }
+    .product-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .product-list.table-view { display: block; }
+    .product-table-header { display: none; }
+    .product-list.table-view .product-table-header { display: grid; grid-template-columns: 1fr 110px 220px; gap: 10px; padding: 10px 12px; color: #65757b; font-size: 12px; background: #f4f7f8; }
+    .product-list.table-view .product { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .product-list.table-view .product .line { flex: 1; align-items: center; }
+    .product-list.table-view .quantity { margin: 0; }
+    .product[hidden] { display: none !important; }
+    .favorite { min-width: 44px; min-height: 44px; border: 1px solid #cbdadd; border-radius: 8px; background: white; }
+    .favorite[aria-pressed="true"] { color: #a26500; background: #fff6dc; }
+    .history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .history-table th, .history-table td { padding: 12px 8px; border-bottom: 1px solid #dce5e7; text-align: left; }
+    .history-table th { background: #f4f7f8; }
+    .history-table button { min-height: 44px; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .section-head h3 { margin-bottom: 0; }
+    .product { border: 1px solid #dce5e7; border-radius: 11px; padding: 12px; }
+    .product small { display: block; color: #677780; margin-top: 4px; }
+    .product .line { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+    .product .line > span { white-space: nowrap; font-weight: 800; }
+    .product .line strong { display: block; }
+    .trend { display: inline-block; color: #a23535; font-size: 11px; margin-top: 5px; }
+    .trend.down { color: #1b6aab; }
+    .quantity { display: flex; align-items: center; justify-content: end; gap: 7px; margin-top: 10px; }
+    .quantity button { min-width: 44px; min-height: 44px; border: 1px solid #cbdadd; border-radius: 8px; background: #fff; }
+    .quantity output { min-width: 20px; text-align: center; }
+    .cart { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #172732; color: white; border-radius: 10px; padding: 12px; margin-top: 14px; }
+    .cart button { border: 0; border-radius: 8px; min-height: 44px; padding: 8px 13px; color: #172732; background: #fff; font-weight: 800; }
+    .note { font-size: 12px; color: #65757b; margin: 9px 0 0; }
+    .aside { display: grid; gap: 10px; }
+    .aside .card { background: #fafdfe; }
+    .aside h3 { font-size: 14px; margin: 0 0 7px; }
+    .aside p, .aside li { font-size: 12px; line-height: 1.6; }
+    .aside ul { margin: 0; padding-left: 17px; }
+    .legend { margin-top: 22px; padding: 18px; border: 1px solid #dce5e7; background: #fff; border-radius: 13px; }
+    .legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .legend-grid .card { background: #fafcfc; }
+    .status { display: inline-block; font-size: 11px; padding: 3px 7px; border-radius: 100px; background: #e9f5f1; color: #08786d; }
+    .future { background: #fff2d4; color: #765300; }
+    @media (max-width: 980px) { .stage { grid-template-columns: 1fr; } .aside { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 620px) {
+      .page { padding: 17px 12px 40px; }
+      .top { display: block; }
+      .flow { grid-template-columns: 1fr 1fr; }
+      .preview-wrap { padding: 8px; }
+      .store { display: flex; flex-direction: column; width: 100% !important; min-height: 670px; }
+      .store-head { padding: 14px; }
+      .screen { padding: 14px 14px 88px; }
+      .legend-grid, .aside { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr 1fr; }
+      .status-grid { grid-template-columns: 1fr 1fr; }
+      .store-nav { order: 3; margin-top: auto; position: sticky; bottom: 0; z-index: 3; border-top: 1px solid #e1e8ea; border-bottom: 0; }
+      .screen { order: 2; }
+      .store-nav button { min-height: 56px; }
+      [aria-label="보기 방식"] { display: none; }
+      .product-list { grid-template-columns: 1fr; }
+      .product-list.table-view .product { display: block; }
+      .product-list.table-view .product-table-header { display: none; }
+      .product-list.table-view .quantity { margin-top: 8px; }
+      .history-table thead { display: none; }
+      .history-table tr { display: block; padding: 8px 0; border-bottom: 1px solid #dce5e7; }
+      .history-table td { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border: 0; }
+      .history-table td::before { content: attr(data-label); color: #65757b; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="top"><div><p class="eyebrow">MAJU · ORDER LINK WIREFRAME</p><h1>한 화면 틀, 발행 데이터만 교체</h1><p class="muted">기존 /store의 홈·주문·내역·내 정보 틀에 데이터 탭을 더하는 설계 시안입니다. PC·모바일은 같은 데이터와 조작을 사용합니다. 아래 값은 가상 데이터입니다.</p></div><span class="badge">설계 시안 · 저장 기능 없음</span></div>
+    <div class="flow" aria-label="단계별 흐름"><div><b>1 · 고객사 준비</b>매입가 업로드 → 마진 → 판매가 확인</div><div><b>2 · 문서 발행</b>단가표·견적·행사·임박을 게시 버전으로 확정</div><div><b>3 · 링크 발급</b>매장·문서 버전·주문 조건을 연결</div><div><b>4 · 매장 주문</b>같은 매장 화면에 상품·가격을 채워 주문</div><div><b>5 · 주문 이후</b>내역·재주문·배송 상태, 원가관리는 권한 뒤</div></div>
+    <div class="toolbar"><h2>매장이 보는 주문 링크</h2><div class="switch" role="group" aria-label="미리보기 크기"><button type="button" id="mobile" aria-pressed="true">모바일 390px</button><button type="button" id="desktop" aria-pressed="false">PC</button></div></div>
+    <div class="stage">
+      <div class="preview-wrap mobile" id="preview"><div class="store">
+        <header class="store-head"><div class="brand"><strong>MAJU</strong><span class="badge">마주식자재 주문 링크</span></div><h2>○○식당의 이번 주 단가표</h2><p class="muted">마주식자재 · 11월 12일까지 · 게시본 v3</p><div class="notice">⏰ 오늘 22:00 마감 · 금요일 배송　|　📢 11/10 휴무</div></header>
+        <nav class="store-nav" aria-label="매장 메뉴"><button type="button" data-tab="home" aria-selected="true">홈</button><button type="button" data-tab="order" aria-selected="false">주문</button><button type="button" data-tab="history" aria-selected="false">내역</button><button type="button" data-tab="data" aria-selected="false">데이터</button><button type="button" data-tab="info" aria-selected="false">내 정보</button></nav>
+        <section class="screen active" data-screen="home">
+          <div class="hero"><div><b>다음 배송 · 금요일 11/13</b><p>최소 주문 30,000원 · 후결제</p></div><span class="badge">주문 가능</span></div>
+          <div class="button-row"><button class="primary" type="button" data-open="order">주문하기</button><button class="secondary" type="button" data-open="history">지난 주문 다시 담기</button></div>
+          <div class="section-head"><h3>판매가 변동</h3><button class="secondary" type="button" data-open="order">변동 품목 보기</button></div>
+          <p class="note">같은 유통사의 직전 게시 판매가와 비교합니다. 매입가·마진은 표시하지 않습니다.</p>
+          <div class="cards" style="margin:12px 0 20px"><div class="card"><small>판매가 인상</small><strong>2품목</strong></div><div class="card"><small>판매가 인하</small><strong>1품목</strong></div></div>
+          <h3>받은 문서</h3><div class="cards"><article class="card"><small>📋 단가표 · 게시 v3</small><strong>이번 주 식자재</strong><p>일반 품목 32개 · 행사 4개</p></article><article class="card"><small>🧾 견적서 · 매장 전용</small><strong>11월 정기 납품</strong><p>수락한 협의 단가 적용</p></article><article class="card"><small>🔥 행사</small><strong>이번 주 특가</strong><p>기간·남은 수량을 품목에 표시</p></article><article class="card"><small>⏰ 임박</small><strong>소진 예정 품목</strong><p>유효기간·수량을 확인</p></article></div>
+          <h3 style="margin-top:20px">주문 현황</h3><div class="status-grid"><div class="card"><small>신청</small><strong>1건</strong></div><div class="card"><small>접수</small><strong>0건</strong></div><div class="card"><small>배송 중</small><strong>0건</strong></div><div class="card"><small>도착</small><strong>2건</strong></div></div>
+        </section>
+        <section class="screen" data-screen="order">
+          <h3>전체 품목</h3><p class="muted">마주식자재 · 종합 유통 · 이 링크에 게시된 품목만 표시합니다.</p>
+          <div class="category-row" role="group" aria-label="대분류"><button class="chip active" type="button" data-category="전체">전체</button><button class="chip" type="button" data-category="농산">농산</button><button class="chip" type="button" data-category="수산">수산</button><button class="chip" type="button" data-category="축산">축산</button><button class="chip" type="button" data-category="주류">주류</button></div>
+          <div class="filter-row"><button type="button" id="favorites-only" aria-pressed="false">☆ 즐겨찾기만</button><div><label for="sort-key">정렬 </label><select id="sort-key"><option value="name">상품명</option><option value="price">판매가</option></select><button type="button" id="sort-direction" aria-label="내림차순으로 바꾸기">오름차순 ↑</button></div><div role="group" aria-label="보기 방식"><button type="button" id="grid-view" aria-pressed="true">격자형</button><button type="button" id="table-view" aria-pressed="false">표형</button></div></div>
+          <div class="product-list" id="products"><div class="product-table-header"><span>품목 · 규격</span><span>판매가</span><span>즐겨찾기 · 수량</span></div>
+            <article class="product" data-category-name="농산" data-name="국산 감자" data-price="18900"><div class="line"><div><strong>국산 감자</strong><small>10kg · 박스 · 면세</small><span class="trend down">▼ 판매가 인하</span></div><span>18,900원</span></div><div class="quantity"><button class="favorite" type="button" aria-pressed="false" aria-label="국산 감자 즐겨찾기">☆</button><button type="button" data-qty="-1" aria-label="감자 수량 줄이기">−</button><output>0</output><button type="button" data-qty="1" aria-label="감자 수량 늘리기">＋</button></div></article>
+            <article class="product" data-category-name="수산" data-name="냉동 오징어" data-price="8800"><div class="line"><div><strong>냉동 오징어</strong><small>1kg · 봉 · 과세</small><span class="trend">▲ 판매가 인상</span></div><span>8,800원</span></div><div class="quantity"><button class="favorite" type="button" aria-pressed="false" aria-label="냉동 오징어 즐겨찾기">☆</button><button type="button" data-qty="-1" aria-label="오징어 수량 줄이기">−</button><output>0</output><button type="button" data-qty="1" aria-label="오징어 수량 늘리기">＋</button></div></article>
+            <article class="product" data-category-name="축산" data-name="한우 양지" data-price="26800"><div class="line"><div><strong>한우 양지</strong><small>1kg · 팩 · 과세</small><span class="trend">▲ 판매가 인상</span></div><span>26,800원</span></div><div class="quantity"><button class="favorite" type="button" aria-pressed="false" aria-label="한우 양지 즐겨찾기">☆</button><button type="button" data-qty="-1" aria-label="한우 양지 수량 줄이기">−</button><output>0</output><button type="button" data-qty="1" aria-label="한우 양지 수량 늘리기">＋</button></div></article>
+            <article class="product" data-category-name="주류" data-name="생맥주 케그" data-price="52000"><div class="line"><div><strong>생맥주 케그</strong><small>20L · 통 · 과세</small></div><span>52,000원</span></div><div class="quantity"><button class="favorite" type="button" aria-pressed="false" aria-label="생맥주 케그 즐겨찾기">☆</button><button type="button" data-qty="-1" aria-label="생맥주 케그 수량 줄이기">−</button><output>0</output><button type="button" data-qty="1" aria-label="생맥주 케그 수량 늘리기">＋</button></div></article>
+          </div>
+          <p id="products-empty" class="note" hidden>이 대분류에 게시된 품목이 없습니다. 다른 분류를 선택하세요.</p>
+          <div class="cart"><span>담은 품목 <b id="cart-count">0</b>개</span><button type="button" id="checkout">주문 확인 →</button></div>
+          <p class="note">주문 신청은 카카오 매장 구성원 확인과 첫 주문 정보 확인 뒤 진행합니다.</p>
+        </section>
+        <section class="screen" data-screen="history">
+          <h3>주문 내역</h3><p class="muted">같은 매장의 주문을 날짜순으로 확인합니다.</p>
+          <table class="history-table"><thead><tr><th scope="col">주문일 · 배송일</th><th scope="col">상태</th><th scope="col">품목</th><th scope="col">합계</th><th scope="col">다시 담기</th></tr></thead><tbody><tr><td data-label="주문일 · 배송일">11/06 → 11/13</td><td data-label="상태">신청</td><td data-label="품목">감자 외 4품목</td><td data-label="합계">58,300원</td><td data-label="동작"><button class="secondary" type="button" data-open="order">다시 담기</button></td></tr><tr><td data-label="주문일 · 배송일">10/30 → 11/06</td><td data-label="상태">배송 완료</td><td data-label="품목">오징어 외 2품목</td><td data-label="합계">34,100원</td><td data-label="동작"><button class="secondary" type="button" data-open="order">다시 담기</button></td></tr></tbody></table>
+          <p class="note">배송 완료 시 사진·놓은 곳·문제 품목은 주문 상세에서 확인합니다.</p>
+        </section>
+        <section class="screen" data-screen="checkout"><h3>주문 확인</h3><p class="muted">첫 주문에는 카카오로 시작해 매장 정보를 한 번 확인합니다. 이후 같은 링크에서 주문합니다.</p><div class="card"><small>첫 주문 · 카카오 계정 확인</small><strong>카카오로 시작</strong><p>점주·관리자·직원 권한으로 주문자를 기록합니다. 현재 시안에서는 로그인하지 않습니다.</p></div><div class="card" style="margin-top:9px"><small>받는 곳 · 한 번만 확인</small><strong>○○식당 · 매장 안</strong><p>배송지 · 받는 사람 · 연락처 · 출입 방법 · 놓을 곳</p></div><div class="card" style="margin-top:9px"><small>이번 주문</small><strong>금요일 11/13 배송 · 후결제</strong><p>품목별 수량 · 과세/면세 · 배송비 · 합계 · 요청 사항 확인</p></div><div class="button-row" style="margin-top:12px"><button class="secondary" type="button" data-open="order">← 품목으로</button><button class="primary" type="button" disabled title="설계 시안에서는 저장하지 않습니다">주문 신청</button></div></section>
+        <section class="screen" data-screen="data">
+          <h3>매장 데이터</h3><p class="muted">매장 운영에 필요한 주문·원가·참고 자료를 한곳에서 봅니다.</p>
+          <div class="card"><small>현재 연결된 주문 데이터</small><strong>자주 주문한 품목 · 최근 주문 · 판매가 변동</strong><p>이 매장이 주문한 내역과 연결 유통사가 게시한 판매가만 사용합니다.</p><button class="secondary" type="button" data-open="history">주문 내역 보기</button></div>
+          <div class="card" style="margin-top:9px"><small>후속 · 매장 자체 원가관리</small><strong>거래처원장·매입 엑셀 → 열 맞추기 → 메뉴별 원가</strong><p>메뉴 재료의 수량·중량을 한 번 설정하면 이후 입고 가격으로 다시 계산합니다. 카카오 매장 구성원 확인 뒤 제공하며 현재 시안에서는 업로드하지 않습니다.</p></div>
+          <div class="card" style="margin-top:9px"><small>후속 · MAJU 참고 정보</small><strong>주변 행사 · 대기질 · 상권 변화 · 시장 가격</strong><p>관리자가 검증한 정보만 출처·기준일과 함께 표시합니다. 주문 판매가와 재고는 자동 변경하지 않습니다.</p></div>
+        </section>
+        <section class="screen" data-screen="info"><div class="section-head"><h3>내 정보</h3><button class="secondary" type="button" id="settings-button" aria-expanded="false">⚙ 설정</button></div><div id="settings-panel" class="card" hidden style="margin:12px 0"><strong>알림·즐겨찾기·구성원</strong><p>점주는 관리자 지정, 관리자는 직원 초대·내보내기. 권한이 없으면 보기만 합니다. 실제 저장은 후속입니다.</p></div><div class="card" style="margin-top:12px"><small>매장 계정</small><strong>○○식당 · 점주/관리자/직원</strong><p>구성원은 카카오 로그인으로 구분합니다. 주문자 이름이 주문 내역에 남습니다.</p></div><div class="card" style="margin-top:9px"><small>배송 정보</small><strong>서울특별시 ○○구 ○○로</strong><p>받는 곳: 매장 안 · 출입 정보는 배정된 기사에게만</p></div></section>
+      </div></div>
+      <aside class="aside"><div class="card"><h3>같은 틀의 실제 연결</h3><ul><li>기존 StorefrontWorkspace에 데이터 탭만 확장</li><li>고객사별 게시 품목·대분류·판매가</li><li>유효한 링크와 주문 설정, 매장 주문 내역</li><li>모바일·PC는 동일 데이터와 필터 상태</li></ul></div><div class="card"><h3>판매가 변동 기준</h3><p>고객사가 새 게시본을 링크에 반영한 뒤, 같은 품목의 직전 게시 판매가와 비교합니다. 비교할 값이 없으면 변동 정보는 표시하지 않습니다.</p></div><div class="card"><h3>권한 경계</h3><p>문서 열람은 유효한 링크로, 주문과 매장 자체 원가는 카카오 매장 구성원 확인 뒤. 유통사 매입가·마진·매입처는 노출하지 않습니다.</p></div><div class="card"><h3>시안에서 저장하지 않는 것</h3><p>로그인·주문·즐겨찾기·설정·원가 업로드는 실제 저장소와 연결되지 않았습니다. 위 값은 합성 예시입니다.</p></div></aside>
+    </div>
+    <section class="legend"><h2>관리 주체별 같은 데이터 흐름</h2><div class="legend-grid"><div class="card"><span class="status">MAJU 관리자</span><h3>공통 화면·자료 품질</h3><p>매장 화면 블록·외부 참고 자료의 상태를 관리합니다. 고객사별 판매가를 덮어쓰지 않습니다.</p></div><div class="card"><span class="status">유통사 대표·관리자</span><h3>문서·링크·주문 조건</h3><p>자기 회사 매입가·마진을 계산하고, 발행 버전과 링크 공개 범위를 결정합니다.</p></div><div class="card"><span class="status future">매장 구성원</span><h3>주문·내역·자체 원가</h3><p>판매가로 주문합니다. 자체 원가 업로드는 별도 카카오 권한과 승인된 저장 구조가 있어야 합니다.</p></div></div></section>
+  </div>
+  <script>
+    const preview = document.getElementById('preview');
+    for (const id of ['mobile', 'desktop']) document.getElementById(id).addEventListener('click', () => {
+      preview.classList.toggle('mobile', id === 'mobile');
+      for (const button of document.querySelectorAll('.switch button')) button.setAttribute('aria-pressed', String(button.id === id));
+    });
+    function showTab(tab) {
+      for (const button of document.querySelectorAll('[data-tab]')) button.setAttribute('aria-selected', String(button.dataset.tab === tab));
+      for (const screen of document.querySelectorAll('[data-screen]')) screen.classList.toggle('active', screen.dataset.screen === tab);
+    }
+    for (const button of document.querySelectorAll('[data-tab]')) button.addEventListener('click', () => showTab(button.dataset.tab));
+    for (const button of document.querySelectorAll('[data-open]')) button.addEventListener('click', () => showTab(button.dataset.open));
+    const products = document.getElementById('products');
+    let category = '전체';
+    let ascending = true;
+    function refreshProducts() {
+      const favoritesOnly = document.getElementById('favorites-only').getAttribute('aria-pressed') === 'true';
+      const key = document.getElementById('sort-key').value;
+      const rows = [...products.querySelectorAll('.product')];
+      rows.sort((a, b) => (key === 'price'
+        ? Number(a.dataset.price) - Number(b.dataset.price)
+        : a.dataset.name.localeCompare(b.dataset.name, 'ko')) * (ascending ? 1 : -1));
+      for (const row of rows) {
+        products.append(row);
+        row.hidden = (category !== '전체' && row.dataset.categoryName !== category)
+          || (favoritesOnly && row.querySelector('.favorite').getAttribute('aria-pressed') !== 'true');
+      }
+      document.getElementById('products-empty').hidden = rows.some(row => !row.hidden);
+    }
+    for (const button of document.querySelectorAll('[data-category]')) button.addEventListener('click', () => {
+      category = button.dataset.category;
+      for (const item of document.querySelectorAll('[data-category]')) item.classList.toggle('active', item === button);
+      refreshProducts();
+    });
+    for (const button of document.querySelectorAll('.favorite')) button.addEventListener('click', () => {
+      const selected = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(selected));
+      button.textContent = selected ? '★' : '☆';
+      refreshProducts();
+    });
+    document.getElementById('favorites-only').addEventListener('click', event => {
+      const button = event.currentTarget;
+      button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
+      refreshProducts();
+    });
+    document.getElementById('sort-key').addEventListener('change', refreshProducts);
+    document.getElementById('sort-direction').addEventListener('click', event => {
+      ascending = !ascending;
+      event.currentTarget.textContent = ascending ? '오름차순 ↑' : '내림차순 ↓';
+      event.currentTarget.setAttribute('aria-label', ascending ? '내림차순으로 바꾸기' : '오름차순으로 바꾸기');
+      refreshProducts();
+    });
+    for (const id of ['grid-view', 'table-view']) document.getElementById(id).addEventListener('click', () => {
+      products.classList.toggle('table-view', id === 'table-view');
+      for (const button of document.querySelectorAll('#grid-view, #table-view')) button.setAttribute('aria-pressed', String(button.id === id));
+    });
+    for (const button of document.querySelectorAll('[data-qty]')) button.addEventListener('click', () => {
+      const output = button.parentElement.querySelector('output');
+      output.textContent = String(Math.max(0, Number(output.textContent) + Number(button.dataset.qty)));
+      document.getElementById('cart-count').textContent = String([...products.querySelectorAll('output')].reduce((sum, item) => sum + Number(item.textContent), 0));
+    });
+    document.getElementById('settings-button').addEventListener('click', event => {
+      const panel = document.getElementById('settings-panel');
+      panel.hidden = !panel.hidden;
+      event.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+    });
+    document.getElementById('checkout').addEventListener('click', () => showTab('checkout'));
+  </script>
+</body>
+</html>

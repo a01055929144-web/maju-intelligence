@@ -45,6 +45,7 @@ type ProductMode = {
   id: string;
   is_active: boolean;
   order_pricing_mode: "fixed" | "market";
+  category: string | null;
 };
 type Promotion = {
   id: string;
@@ -169,7 +170,7 @@ export async function readStorefront(
           path(
             "product_catalog",
             company,
-            `&id=in.(${productIds.join(",")})&select=id,is_active,order_pricing_mode&limit=100`,
+            `&id=in.(${productIds.join(",")})&select=id,is_active,order_pricing_mode,category&limit=300`,
           ),
         )
       : Promise.resolve([]),
@@ -223,6 +224,9 @@ export async function readStorefront(
   );
   const activeProductIds = new Set(
     productModes.filter((item) => item.is_active).map((item) => item.id),
+  );
+  const categoryByProduct = new Map(
+    productModes.map((item) => [item.id, item.category?.split(">")[0].trim() || "미분류"]),
   );
   const livePromotions = new Map(
     promotions
@@ -320,6 +324,7 @@ export async function readStorefront(
           productId: line.productId,
           promotionId: line.promotionId,
           name: line.displayName,
+          category: categoryByProduct.get(line.productId) ?? "미분류",
           brand: line.brand,
           spec: line.spec,
           salesPriceDirection: !matchingContract && !market ? priceDirections.get(publishedPriceKey(line)) ?? null : null,
