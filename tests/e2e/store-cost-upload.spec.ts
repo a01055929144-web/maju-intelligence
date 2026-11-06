@@ -79,9 +79,6 @@ test("empty and invalid files, row errors and server permission errors never app
   await expect(upload.getByRole("alert")).toContainText("xlsx·xls·csv");
   await file.setInputFiles(csv("적용일,품목명,규격,단위,단가\n"));
   await expect(upload.getByRole("alert")).toContainText("원가 행이 없습니다");
-  await file.setInputFiles(csv(valid.replace("3500", "")));
-  await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
-  await expect(upload.getByRole("button", { name: "서버 미리보기 확인", exact: true })).toBeDisabled();
   await file.setInputFiles(csv(valid.replace("3500", "-1")));
   await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
   await expect(upload.getByRole("button", { name: "서버 미리보기 확인", exact: true })).toBeDisabled();
@@ -94,6 +91,9 @@ test("empty and invalid files, row errors and server permission errors never app
     await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
   }
   await page.screenshot({ path: info.outputPath("store-cost-upload-error.png"), fullPage: true });
+  await file.setInputFiles(csv(valid.replace("3500", "")));
+  await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
+  await expect(upload.getByRole("button", { name: "서버 미리보기 확인", exact: true })).toBeDisabled();
 });
 
 test("xlsx date cells normalize through the 04 parser; a new file resets confirmation and import ID", async ({ page }) => {
