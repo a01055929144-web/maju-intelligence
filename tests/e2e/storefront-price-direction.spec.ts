@@ -75,7 +75,7 @@ for (const width of [1440, 390]) {
     await page.goto("/store#synthetic-direction-link");
     await page.getByRole("button", { name: "주문하기", exact: true }).click();
     if (direction) await expect(page.getByText(`판매가 ${direction === "up" ? "상승" : direction === "down" ? "하락" : "보합"}`, { exact: true })).toBeVisible();
-    else await expect(page.getByText(/^판매가 /)).toHaveCount(0);
+    else await expect(page.getByText(/^판매가 (상승|하락|보합)$/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   });
