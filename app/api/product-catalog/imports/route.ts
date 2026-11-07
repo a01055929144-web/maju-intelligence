@@ -169,6 +169,14 @@ export async function POST(request: NextRequest) {
           body.supplierProductIds || [],
         ),
       );
+    if (body?.action === "create-dated-standards")
+      return NextResponse.json(
+        await createCatalogFromSupplierProducts(
+          scope.companyId!,
+          body.supplierProductIds || [],
+          { initialPurchasePrice: "dated-batch" },
+        ),
+      );
     if (
       body?.action !== "save-import" ||
       !body.fileName ||
