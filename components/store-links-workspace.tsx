@@ -187,8 +187,8 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
-      <button disabled={busy || !versionId || !customerId} className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-        onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</button>
+      <Button disabled={busy || !versionId || !customerId} className="min-h-[44px]"
+        onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</Button>
       {customers.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
         <label className="flex min-h-11 items-center gap-2 font-semibold"><input type="checkbox"
           checked={selectedCustomerIds.length === customers.length}
