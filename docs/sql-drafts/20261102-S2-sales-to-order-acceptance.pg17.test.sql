@@ -20,10 +20,30 @@ create table pricing_document_versions(id uuid primary key,company_id uuid not n
 create unique index pricing_document_versions_company_id_id_uq on pricing_document_versions(company_id,id);
 create table customer_price_agreements(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,product_catalog_id uuid not null,sales_unit text not null,unit_price bigint not null,tax_type text not null,unique(company_id,id));
 alter table customer_price_agreements add column price_includes_tax boolean not null default false, add column effective_from date not null default current_date, add column effective_until date, add column status text not null default 'active', add column created_by_name text, add column ended_at timestamptz, add column updated_at timestamptz not null default now();
-create table storefront_links(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,document_version_id uuid not null,revoked_at timestamptz,can_order boolean not null default true,unique(company_id,id));
+create table storefront_links(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,document_version_id uuid not null,token_nonce text,token_hash text,expires_at timestamptz,issued_by_user_id uuid,revoked_at timestamptz,can_order boolean not null default true,unique(company_id,id));
 create table store_orders(id uuid primary key default gen_random_uuid(),company_id uuid not null,unique(company_id,id));
+create table store_order_settings(company_id uuid primary key references companies(id));
 
 \ir 20261102-S2-sales-to-order-acceptance.sql
+
+-- Production P2 already owns this RPC. The fixture keeps only its reuse/idempotency contract.
+create function issue_storefront_links(p_company uuid,p_document_version uuid,p_links jsonb,p_expires_at timestamptz,p_actor_user_id uuid default null,p_actor_key text default null)
+returns table(issued_customer_id uuid,issued_link_id uuid,issued_token_nonce text,issued_token_hash text,was_created boolean)
+language plpgsql security definer set search_path=public,pg_temp as $$
+declare x jsonb; c uuid; existing storefront_links%rowtype;
+begin
+  perform 1 from companies where id=p_company for update;
+  x:=p_links->0; c:=(x->>'customerId')::uuid;
+  if not exists(select from normalized_customers where company_id=p_company and id=c) then raise exception 'cross_company_customer'; end if;
+  select * into existing from storefront_links where company_id=p_company and customer_id=c and document_version_id=p_document_version and revoked_at is null and expires_at>now();
+  if found then return query select c,existing.id,existing.token_nonce,existing.token_hash,false; return; end if;
+  insert into storefront_links(id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at,issued_by_user_id,can_order)
+  values((x->>'id')::uuid,p_company,c,p_document_version,x->>'nonce',x->>'hash',p_expires_at,p_actor_user_id,false)
+  returning storefront_links.id into existing.id;
+  return query select c,existing.id,x->>'nonce',x->>'hash',true;
+end $$;
+
+\ir 20261108-S2-acceptance-order-link.sql
 
 insert into companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
 insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
@@ -137,6 +157,40 @@ end $$;
 
 update normalized_customers set delivery_drop_location='rear door' where id='10000000-0000-4000-8000-000000000001';
 do $$ begin if (select delivery_drop_location from normalized_customers where id='10000000-0000-4000-8000-000000000001')<>'rear door' then raise exception 'delivery drop location missing'; end if; end $$;
+
+insert into store_order_settings values('00000000-0000-4000-8000-000000000001');
+
+-- Existing customer and retry converge on one acceptance and one active order link.
+do $$ declare a jsonb; b jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000010',repeat('1',64),'store','10000000-0000-4000-8000-000000000001',null,null,false,null,'{}','81000000-0000-4000-8000-000000000001',repeat('1',32),repeat('2',64),now()+interval '1 year');
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000010',repeat('1',64),'store','10000000-0000-4000-8000-000000000001',null,null,false,null,'{}','81000000-0000-4000-8000-000000000002',repeat('3',32),repeat('4',64),now()+interval '1 year');
+  if a<>b or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'existing customer order link retry failed'; end if;
+  if (select count(*) from storefront_links where acceptance_request_id is not null and customer_id='10000000-0000-4000-8000-000000000001')<>1 then raise exception 'retry duplicated storefront link'; end if;
+end $$;
+
+-- New customer creates one customer and receives the same reusable P2 link contract.
+do $$ declare a jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000003',repeat('5',32),repeat('6',64),now()+interval '1 year');
+  if a->>'customerId' is null or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'new customer order link failed'; end if;
+end $$;
+
+-- Ambiguous customer stays review-only and cannot receive an order link.
+do $$ declare a jsonb; before_links integer; begin
+  select count(*) into before_links from storefront_links;
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000012',repeat('7',64),'store',null,null,null,false,null,'{"businessName":"duplicate shop","phone":"010-7777-6666","address":"same address"}','81000000-0000-4000-8000-000000000004',repeat('7',32),repeat('8',64),now()+interval '1 year');
+  if a->>'needsReview'<>'true' or a->>'orderEnabled'<>'false' or a->>'storefrontLinkId' is not null then raise exception 'ambiguous customer order boundary failed'; end if;
+  if (select count(*) from storefront_links)<>before_links then raise exception 'ambiguous customer received link'; end if;
+end $$;
+
+-- Cross-company customer references are rejected before link issuance.
+insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002');
+insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key) values('10000000-0000-4000-8000-000000000099','00000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000002','other','other');
+do $$ begin
+  begin
+    perform accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000014',repeat('a',64),'staff','10000000-0000-4000-8000-000000000099',null,null,false,null,'{}','81000000-0000-4000-8000-000000000006',repeat('b',32),repeat('c',64),now()+interval '1 year');
+    raise exception 'cross-company acceptance was allowed';
+  exception when others then if sqlerrm='cross-company acceptance was allowed' then raise; end if; end;
+end $$;
 
 select 'S2 sales-to-order acceptance PG17 checks passed' as result;
 
