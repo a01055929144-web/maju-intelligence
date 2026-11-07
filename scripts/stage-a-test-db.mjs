@@ -51,8 +51,8 @@ try {
       (select count(*)::int from purchase_receipt_correction_events where company_id=$1) corrections,
       (select purchase_price from product_catalog where company_id=$2 limit 1) other_cost`,[company,other])).rows[0];
     const batch = (await db.query('select id,status,row_count,history_only_product_count,recalc_run_id from purchase_cost_date_batches_v2 where company_id=$1 order by created_at desc,id desc limit 1',[company])).rows[0] || null;
-    const products = (await db.query(`select sp.supplier_code code,c.id,c.purchase_price cost,c.purchase_price_date::text date,c.purchase_unit,c.sales_unit,c.purchase_to_sales_ratio ratio,
-      coalesce(pi.price,0) price from product_catalog c join supplier_product_matches m on m.company_id=c.company_id and m.product_catalog_id=c.id
+    const products = (await db.query(`select sp.supplier_code code,c.product_code catalog_code,c.id,c.purchase_price cost,c.purchase_price_date::text date,c.purchase_unit,c.sales_unit,c.purchase_to_sales_ratio ratio,
+      coalesce(pi.price,0) price from product_catalog c join supplier_product_matches m on m.company_id=c.company_id and m.product_catalog_id=c.id and m.match_status in ('auto','confirmed')
       join supplier_products sp on sp.company_id=m.company_id and sp.id=m.supplier_product_id
       left join pricing_items pi on pi.company_id=c.company_id and pi.product_id=c.id where c.company_id=$1 order by sp.supplier_code`,[company])).rows;
     console.log(JSON.stringify({...counts,batch,items:products}));

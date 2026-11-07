@@ -8,7 +8,7 @@ const company = '00000000-0000-4000-8000-000000000001';
 const date = process.env.STAGE_A_TEST_DATE || new Date().toISOString().slice(0,10);
 const priorDate = new Date(Date.parse(date+'T00:00:00Z')-172800000).toISOString().slice(0,10);
 const units = ['EA','BOX','봉','병'];
-type Product = { code: string; id: string; cost: string; date: string | null; purchase_unit: string; sales_unit: string | null; price: string };
+type Product = { catalog_code: string; code: string; id: string; cost: string; date: string | null; purchase_unit: string; sales_unit: string | null; price: string };
 type State = { products_count: number; unpriced: number; receipts: number; batches: number; price_runs: number; corrections: number; other_cost: string;
   batch: null | { id: string; status: string; row_count: number; history_only_product_count: number; recalc_run_id: string | null }; items: Product[] };
 function db(action: string, value?: number, input?: unknown) {
@@ -51,6 +51,10 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const signature=createHash('sha256').update(`${member}.${process.env.STAGE_A_SESSION_SECRET}`).digest('hex');
     await page.context().addCookies([{...owner,value:`${member}.${signature}`}]);
     expect((await page.request.get(`/api/price-sheets/costs/date-batches?companyId=${company}`)).status()).toBe(403);
+    await page.goto(`/revenue/pricing?companyId=${company}`);
+    await expect(page.getByRole('heading',{name:'요청하신 화면을 찾을 수 없습니다',exact:true})).toBeVisible();
+    await expect(page.getByRole('link',{name:'로그인 화면',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:/③ 저장/})).toHaveCount(0);
     await page.context().addCookies([owner]);
     const bad=await page.request.post('/api/price-sheets/costs/date-batches',{data:{action:'save',companyId:company,batchId:randomUUID(),receiptDate:date,fileName:'scope-check.xlsx',rows:[{
       productId:'20000000-0000-4000-8000-000000999999',priceDate:date,cost:1,selectedSourceRowNumber:2,priceSelected:true,priceHeld:false,
@@ -73,6 +77,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     });
     await page.goto(`/revenue/pricing?companyId=${company}`);
     await expect(page.getByRole('button',{name:'① 엑셀 올리기',exact:true})).toBeVisible();
+    if (!scenario.existing) await expect(page.getByText('상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요.',{exact:true})).toBeVisible();
     const file=syntheticFile(scenario.existing);
     await page.locator('input[type="file"]').setInputFiles({name:'stage-a-synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});
     const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
@@ -118,6 +123,8 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     expect(saved.batch).toMatchObject({id:writes[0].id,status:'completed',row_count:3417,history_only_product_count:scenario.held});
     expect(saved.batch!.recalc_run_id).toBeTruthy();
     expect(JSON.parse(db('verify-source',undefined,file.rows))).toMatchObject({verifiedOriginalRows:3417,allRawValuesAndAmountsPreserved:true});
+    expect(saved.items).toHaveLength(745);
+    expect(new Set(saved.items.map(item=>item.code)).size).toBe(745);
     for(let i=0;i<745;i++) {
       const product=saved.items.find(item=>item.code===code(i))!; expect(product).toBeTruthy();
       const held=i<scenario.held, cost=held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing);
@@ -139,7 +146,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       await page.getByRole('navigation',{name:'매입가 보기',exact:true}).getByRole('button',{name:'전체',exact:true}).click();
       for (const i of [0,12,13,14,744]) {
         const label=name(i,scenario.existing);
-        await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill(label);
+        await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
         const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
         const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
