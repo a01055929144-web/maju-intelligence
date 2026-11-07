@@ -1,4 +1,5 @@
--- REVIEW ONLY. Do not apply to production without DB-APPROVED for fcmdvveqmcgtioelzqun.
+-- OPERATIONS RECORD: applied once as 20261107163553 purchase_cost_date_v2_20261108.
+-- Do not rerun on production. The feature remains OFF and no data batch has been written.
 -- Phase 1 only: existing product_catalog rows. Product creation/raw matching stays a separate approved phase.
 begin;
 
