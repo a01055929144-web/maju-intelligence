@@ -1223,7 +1223,7 @@ export function PricingDocumentsWorkspace({
             <strong className="mr-auto text-base">{preview.content.kind === "sheet" ? "단가표" : "견적서"} 미리보기 · {preview.content.title}{preview.version ? ` · 버전 ${preview.version}` : " · 작성 중"}</strong>
             <span className="text-xs font-bold text-slate-500">글자 크기</span>
             {[1, 1.15, 1.3].map((scale) => <button className={`${box} ${fontScale === scale ? "bg-slate-900 text-white" : ""}`} key={scale} onClick={() => setFontScale(scale)} type="button">{Math.round(scale * 100)}%</button>)}
-            <Button variant="outline" disabled={busy} onClick={() => void task(() => exportLines(preview))}>엑셀 내려받기</Button>
+            <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void task(() => exportLines(preview))}>엑셀 내려받기</Button>
             <button className={`${box} bg-slate-900 text-white`} onClick={() => { setPreview(null); setAutoPrint(false); }} type="button">닫기</button>
           </div>
           {error ? <p role="alert" className="pricing-no-print mx-4 text-red-700">{error} 미리보기를 닫고 버전을 다시 선택하거나 내려받기를 다시 시도해 주세요.</p> : null}

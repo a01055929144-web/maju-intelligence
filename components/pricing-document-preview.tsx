@@ -254,7 +254,7 @@ export function PricingDocumentPreview({
     <section className="space-y-4" aria-label="온라인·오프라인 미리보기">
       <div className="pricing-no-print flex flex-wrap items-center gap-3">
         <h2 className="font-bold">온라인·오프라인 미리보기</h2>
-        <Button variant="outline" disabled={busy} onClick={() => void printDocument()}>PDF·인쇄</Button>
+        <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void printDocument()}>PDF·인쇄</Button>
         <span className="text-sm text-slate-600">
           PNG는 A4 페이지별로 저장합니다.
         </span>
@@ -297,7 +297,7 @@ export function PricingDocumentPreview({
                   <Button
                     variant="outline" disabled={busy}
                     onClick={() => void exportPage(i)}
-                    className="pricing-no-print my-3"
+                    className="pricing-no-print my-3 min-h-[44px]"
                   >
                     {i + 1}쪽 PNG 저장
                   </Button>
