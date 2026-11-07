@@ -158,8 +158,10 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await expect(page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'매입 이력',exact:true}).click();
     const panel=page.getByRole('heading',{name:'매입 이력',exact:true}).locator('xpath=ancestor::section[1]');
-    await expect(panel.getByRole('button',{name:name(0,scenario.existing),exact:true})).toBeVisible();
-    await panel.getByRole('button',{name:name(0,scenario.existing),exact:true}).click();
+    await panel.getByRole('textbox',{name:'이력 검색',exact:true}).fill(name(744,scenario.existing));
+    await panel.getByRole('button',{name:'검색',exact:true}).click();
+    await expect(panel.getByRole('button',{name:name(744,scenario.existing),exact:true})).toBeVisible();
+    await panel.getByRole('button',{name:name(744,scenario.existing),exact:true}).click();
     const correction=panel.getByRole('button',{name:new RegExp(`${date}.*매입 기록 정정`)}).first();
     await correction.click();
     await page.getByLabel('정정 단가',{exact:true}).fill('99');
