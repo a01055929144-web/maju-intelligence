@@ -44,13 +44,16 @@ insert into public.normalized_customers values
  ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','1234567890'),
  ('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','2234567890'),
  ('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','3234567890'),
- ('20000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','4234567890');
-insert into public.app_users values('30000000-0000-4000-8000-000000000001','active');
+ ('20000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','4234567890'),
+ ('20000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','5234567890');
+insert into public.app_users values('30000000-0000-4000-8000-000000000001','active'),
+ ('30000000-0000-4000-8000-000000000002','active');
 insert into public.company_members values
  ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','owner','active'),
  ('40000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','member','staff','active'),
  ('40000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000002','owner','owner','active'),
- ('40000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','owner','owner','active');
+ ('40000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','owner','owner','active'),
+ ('40000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','member','manager','active');
 \ir 20261105-store-kakao-membership.sql
 \ir 20261107-store-owner-activation.sql
 
@@ -88,6 +91,20 @@ do $$ begin
     '1234567890','active',clock_timestamp(),gen_random_uuid()::text); raise exception 'activation_token_reused';
   exception when others then if sqlerrm<>'store_owner_activation_not_available' then raise; end if; end;
 end $$;
+select public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000005',
+  '40000000-0000-4000-8000-000000000005',repeat('f',64));
+select public.activate_store_owner_v1(repeat('f',64),'30000000-0000-4000-8000-000000000002','2026-11-07',clock_timestamp(),
+  '5234567890','active',clock_timestamp(),gen_random_uuid()::text);
+do $$ begin
+  if not exists(
+    select 1 from public.store_accounts a join public.store_account_members m
+      on m.company_id=a.company_id and m.store_account_id=a.id
+    where a.company_id='10000000-0000-4000-8000-000000000001'
+      and a.customer_id='20000000-0000-4000-8000-000000000005'
+      and a.status='active' and m.auth_user_id='30000000-0000-4000-8000-000000000002'
+      and m.role='owner' and m.status='active'
+  ) then raise exception 'manager_prepared_owner_scope_failed'; end if;
+end $$;
 select public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003',
   '40000000-0000-4000-8000-000000000001',repeat('d',64));
 update public.store_owner_activation_requests
@@ -100,8 +117,8 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
-  if (select count(*) from public.store_accounts where status='active' and business_status='active')<>1
-    or (select count(*) from public.store_account_members where role='owner' and status='active')<>1
+  if (select count(*) from public.store_accounts where status='active' and business_status='active')<>2
+    or (select count(*) from public.store_account_members where role='owner' and status='active')<>2
     or not (select relrowsecurity from pg_class where oid='public.store_owner_activation_requests'::regclass)
     or has_function_privilege('anon','public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)','execute')
     or not has_function_privilege('service_role','public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)','execute')
