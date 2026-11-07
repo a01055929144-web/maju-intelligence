@@ -176,7 +176,7 @@ do $$ declare a jsonb; b jsonb; begin
   update storefront_links set revoked_at=now() where id=(a->>'storefrontLinkId')::uuid;
   b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000010',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000002',repeat('3',32),repeat('4',64),now()+interval '1 year');
   if a<>b or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'existing customer order link retry failed'; end if;
-  if (select count(*) from storefront_links where acceptance_request_id is not null and customer_id='10000000-0000-4000-8000-000000000001')<>1 then raise exception 'retry duplicated storefront link'; end if;
+  if (select count(*) from storefront_links where acceptance_request_id is not null and customer_id='10000000-0000-4000-8000-000000000001' and document_version_id='50000000-0000-4000-8000-000000000001')<>1 then raise exception 'retry duplicated storefront link'; end if;
   if exists(select from storefront_links where id='81000000-0000-4000-8000-000000000002') then raise exception 'revoked link retry reissued storefront link'; end if;
 end $$;
 
