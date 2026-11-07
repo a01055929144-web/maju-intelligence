@@ -11,6 +11,8 @@ create table public.companies(id uuid primary key);
 create table public.store_accounts(
   id uuid not null,
   company_id uuid not null references public.companies(id) on delete cascade,
+  business_status text not null default 'active' check(business_status in ('active','closed','suspended')),
+  status text not null default 'active' check(status in ('pending','active','suspended','closed')),
   primary key(company_id,id)
 );
 create table public.store_account_members(
@@ -115,6 +117,54 @@ begin
     raise exception 'missing_item_edit_allowed';
   exception when others then if sqlerrm <> 'store_cost_item_not_found' then raise; end if; end;
 end $$;
+
+do $$ begin
+  update public.store_accounts set status='suspended'
+    where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001';
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      'blocked-status||ea','차단','','EA','2026-11-07',1,null,null,null,null,null
+    );
+    raise exception 'suspended_store_write_allowed';
+  exception when others then if sqlerrm <> 'store_cost_manager_required' then raise; end if; end;
+  update public.store_accounts set status='active', business_status='closed'
+    where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001';
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      'blocked-business||ea','차단','','EA','2026-11-07',1,null,null,null,null,null
+    );
+    raise exception 'closed_business_write_allowed';
+  exception when others then if sqlerrm <> 'store_cost_manager_required' then raise; end if; end;
+  update public.store_accounts set business_status='active'
+    where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001';
+end $$;
+
+-- A concurrent suspension commits before the waiting save can recheck the locked account.
+select dblink_connect('cost_store_suspend','dbname='||current_database());
+select dblink_send_query('cost_store_suspend',$q$
+  with changed as (
+    update public.store_accounts set status='suspended'
+    where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001'
+    returning 1
+  ), waited as (select pg_sleep(1) from changed)
+  select count(*) from waited
+$q$);
+select pg_sleep(0.2);
+do $$ begin
+  begin
+    perform public.save_store_cost(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+      'concurrent-block||ea','차단','','EA','2026-11-07',1,null,null,null,null,null
+    );
+    raise exception 'concurrent_suspension_write_allowed';
+  exception when others then if sqlerrm <> 'store_cost_manager_required' then raise; end if; end;
+end $$;
+select * from dblink_get_result('cost_store_suspend') as t(changed bigint);
+select dblink_disconnect('cost_store_suspend');
+update public.store_accounts set status='active'
+where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001';
 
 select public.save_store_cost(
   '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',

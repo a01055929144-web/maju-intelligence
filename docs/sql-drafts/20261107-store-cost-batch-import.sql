@@ -31,11 +31,13 @@ declare
   v_row jsonb;
   v_total integer;
 begin
-  if not exists (
-    select 1 from public.store_account_members
-    where company_id=p_company_id and store_account_id=p_store_account_id
-      and id=p_actor_member_id and status='active' and role in ('owner','manager')
-  ) then raise exception 'store_cost_manager_required'; end if;
+  perform 1 from public.store_account_members m
+    join public.store_accounts a on a.company_id=m.company_id and a.id=m.store_account_id
+    where m.company_id=p_company_id and m.store_account_id=p_store_account_id
+      and m.id=p_actor_member_id and m.status='active' and m.role in ('owner','manager')
+      and a.status='active' and a.business_status='active'
+    for update of a;
+  if not found then raise exception 'store_cost_manager_required'; end if;
   if p_import_id is null or length(trim(p_file_name)) not between 1 and 255
     or jsonb_typeof(p_rows) <> 'array' then raise exception 'invalid_store_cost_import'; end if;
   v_total := jsonb_array_length(p_rows);

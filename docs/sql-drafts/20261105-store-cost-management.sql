@@ -74,11 +74,13 @@ declare
   v_item_found boolean;
   v_change_kind text := case when p_source_sha256 is null then 'edit' else 'import' end;
 begin
-  if not exists (
-    select 1 from public.store_account_members
-    where company_id=p_company_id and store_account_id=p_store_account_id
-      and id=p_actor_member_id and status='active' and role in ('owner','manager')
-  ) then raise exception 'store_cost_manager_required'; end if;
+  perform 1 from public.store_account_members m
+    join public.store_accounts a on a.company_id=m.company_id and a.id=m.store_account_id
+    where m.company_id=p_company_id and m.store_account_id=p_store_account_id
+      and m.id=p_actor_member_id and m.status='active' and m.role in ('owner','manager')
+      and a.status='active' and a.business_status='active'
+    for update of a;
+  if not found then raise exception 'store_cost_manager_required'; end if;
   if length(p_product_key) not between 3 and 500 or length(p_product_name) not between 1 and 200
     or length(coalesce(p_specification,'')) > 200 or length(p_unit) not between 1 and 40
     or p_effective_on is null or p_cost_krw not between 0 and 1000000000
