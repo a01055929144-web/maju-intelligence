@@ -1,9 +1,13 @@
 -- REVIEW-ONLY DRAFT. Do not apply to production without project approval.
 -- One RPC owns the customer rows and the terminal customer_imports state.
 
+alter table public.customer_imports
+  add column if not exists request_digest text;
+
 create or replace function public.save_customer_import_atomic_draft(
   p_company_id uuid,
   p_import_id uuid,
+  p_request_digest text,
   p_source text,
   p_original_filename text,
   p_quality_score integer,
@@ -28,6 +32,9 @@ begin
   if p_company_id is null or p_import_id is null then
     raise exception 'company_id_and_import_id_required';
   end if;
+  if p_request_digest !~ '^[0-9a-f]{64}$' then
+    raise exception 'sha256_request_digest_required';
+  end if;
   if p_source not in ('manual-customer-master', 'customer-master', 'excel') then
     raise exception 'unsupported_customer_import_source';
   end if;
@@ -36,6 +43,13 @@ begin
   end if;
   if jsonb_typeof(p_raw_rows) <> 'array' or jsonb_typeof(p_column_mappings) <> 'array' then
     raise exception 'raw_rows_and_column_mappings_must_be_arrays';
+  end if;
+  if jsonb_array_length(p_raw_rows) > 5000 or jsonb_array_length(p_column_mappings) > 200 then
+    raise exception 'raw_rows_or_column_mappings_limit_exceeded';
+  end if;
+  if octet_length(p_customers::text) + octet_length(p_raw_rows::text)
+    + octet_length(p_column_mappings::text) > 26214400 then
+    raise exception 'customer_import_payload_too_large';
   end if;
   if not exists (select 1 from public.companies where id = p_company_id) then
     raise exception 'company_not_found';
@@ -53,6 +67,9 @@ begin
     if v_existing_import.company_id <> p_company_id then
       raise exception 'import_company_mismatch';
     end if;
+    if v_existing_import.request_digest is distinct from p_request_digest then
+      raise exception 'import_request_digest_mismatch';
+    end if;
     if v_existing_import.status in ('completed', 'failed') then
       return query select v_existing_import.id, v_existing_import.status,
         v_existing_import.row_count, v_existing_import.error_message;
@@ -66,10 +83,10 @@ begin
   returning id into v_file_id;
 
   insert into public.customer_imports(
-    id, company_id, uploaded_file_id, source, row_count, status,
+    id, company_id, uploaded_file_id, source, row_count, status, request_digest,
     quality_score, duplicate_count, completed_at, error_message
   ) values (
-    p_import_id, p_company_id, v_file_id, p_source, v_row_count, 'processing',
+    p_import_id, p_company_id, v_file_id, p_source, v_row_count, 'processing', p_request_digest,
     greatest(0, least(100, coalesce(p_quality_score, 0))),
     greatest(0, coalesce(p_duplicate_count, 0)), null, null
   );
@@ -219,8 +236,8 @@ end;
 $$;
 
 revoke all on function public.save_customer_import_atomic_draft(
-  uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
+  uuid, uuid, text, text, text, integer, integer, jsonb, jsonb, jsonb
 ) from public;
 grant execute on function public.save_customer_import_atomic_draft(
-  uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
+  uuid, uuid, text, text, text, integer, integer, jsonb, jsonb, jsonb
 ) to service_role;

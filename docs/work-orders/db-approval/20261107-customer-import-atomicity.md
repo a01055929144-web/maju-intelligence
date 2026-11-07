@@ -14,11 +14,11 @@
 
 ## 최소 활용안
 
-1. 서버가 요청마다 UUID `importId`를 먼저 만들고 같은 ID로 RPC를 재시도한다.
+1. 서버가 요청마다 UUID `importId`와 정규화한 요청 본문의 SHA-256 `requestDigest`를 만들고 같은 값으로 RPC를 재시도한다.
 2. 수기·엑셀 거래처 마스터 저장만 이 RPC로 보낸다. 매출 분석 업로드는 현재 경로를 유지한다.
 3. RPC는 파일·`processing` 이력을 만든 뒤 내부 하위 트랜잭션에서 원본 행·매핑·거래처를 저장한다.
 4. 저장 성공 시 `completed`, 실패 시 고객 변경을 되돌리고 `failed`와 오류를 남긴다.
-5. 같은 `importId` 재시도는 기존 `completed/failed` 결과를 반환해 네트워크 응답 유실 시 중복 저장을 막는다.
+5. 같은 `importId`·digest 재시도는 기존 `completed/failed` 결과를 반환하고, digest가 다르면 거부해 다른 업로드 결과로 오인하지 않게 한다.
 6. 앱 코드 전환은 운영 SQL 적용 및 아래 승인 후 별도 PR로 진행한다.
 
 ## 승인표
@@ -30,6 +30,7 @@
 | 기존 `processing` 행 읽기 전용 목록·건별 판정 | 대기 |
 | RPC의 `service_role` 전용 실행 권한 확인 | 대기 |
 | 오류 메시지의 개인정보·원문 데이터 비노출 확인 | 대기 |
+| 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | 대기 |
 | 매출 분석 업로드 제외 범위 확인 | 대기 |
 | 운영 적용 승인 `DB-APPROVED: fcmdvveqmcgtioelzqun YYYY-MM-DD HH:MM KST` | 대기 |
 | 앱 저장 코드 전환 승인 | 대기 |

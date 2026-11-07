@@ -107,6 +107,7 @@ insert into public.companies(id, name) values
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000001',
+  repeat('1', 64),
   'manual-customer-master',
   'manual-customer-master',
   100,
@@ -135,6 +136,7 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000001',
+  repeat('1', 64),
   'manual-customer-master',
   'manual-customer-master', 100, 0,
   '[{"customer_name":"변경 시도","normalized_key":"first","address":"부산"}]'
@@ -144,10 +146,27 @@ do $$ begin
   then raise exception 'idempotent replay changed customer'; end if;
 end $$;
 
+-- Reusing an import ID for different request content is rejected.
+do $$
+begin
+  perform * from public.save_customer_import_atomic_draft(
+    '00000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
+    repeat('9', 64),
+    'manual-customer-master', 'manual-customer-master', 100, 0,
+    '[{"customer_name":"다른 요청","normalized_key":"first"}]'
+  );
+  raise exception 'digest mismatch was accepted';
+exception when others then
+  if sqlerrm = 'digest mismatch was accepted' then raise; end if;
+  if sqlerrm <> 'import_request_digest_mismatch' then raise; end if;
+end $$;
+
 -- An optimistic update succeeds and moves the customer to the new import.
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000002',
+  repeat('2', 64),
   'manual-customer-master',
   'manual-customer-master', 100, 0,
   jsonb_build_array(jsonb_build_object(
@@ -167,6 +186,7 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000003',
+  repeat('3', 64),
   'customer-master',
   'customers.xlsx', 90, 0,
   '[
@@ -195,6 +215,7 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000002',
   '20000000-0000-4000-8000-000000000001',
+  repeat('4', 64),
   'customer-master',
   'customers.xlsx', 100, 0,
   '[{"customer_name":"B 거래처","normalized_key":"first","address":"제주"}]'
@@ -223,6 +244,7 @@ select dblink_send_query('concurrent_import', $query$
   select * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000001',
     '30000000-0000-4000-8000-000000000001',
+    repeat('5', 64),
     'customer-master', 'concurrent.xlsx', 100, 0,
     '[{"customer_name":"동시 거래처","normalized_key":"concurrent"}]'
   )
@@ -231,6 +253,7 @@ select pg_sleep(0.25);
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '30000000-0000-4000-8000-000000000001',
+  repeat('5', 64),
   'customer-master', 'concurrent.xlsx', 100, 0,
   '[{"customer_name":"동시 거래처","normalized_key":"concurrent"}]'
 );
@@ -256,6 +279,7 @@ begin
   perform * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000001',
+    repeat('6', 64),
     'customer-master', 'customers.xlsx', 100, 0,
     '[{"customer_name":"침범","normalized_key":"cross"}]'
   );
@@ -266,9 +290,45 @@ end $$;
 
 do $$
 begin
-  if has_function_privilege('anon', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
+  perform * from public.save_customer_import_atomic_draft(
+    '00000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000001',
+    repeat('7', 64),
+    'customer-master', 'too-many-raw-rows.xlsx', 100, 0,
+    '[{"customer_name":"상한 확인","normalized_key":"limit-raw"}]',
+    (select jsonb_agg(jsonb_build_object('row', number)) from generate_series(1, 5001) number),
+    '[]'
+  );
+  raise exception 'raw row limit was accepted';
+exception when others then
+  if sqlerrm = 'raw row limit was accepted' then raise; end if;
+  if sqlerrm <> 'raw_rows_or_column_mappings_limit_exceeded' then raise; end if;
+end $$;
+
+do $$
+begin
+  perform * from public.save_customer_import_atomic_draft(
+    '00000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000002',
+    repeat('8', 64),
+    'customer-master', 'too-many-mappings.xlsx', 100, 0,
+    '[{"customer_name":"상한 확인","normalized_key":"limit-map"}]',
+    '[]',
+    (select jsonb_agg(jsonb_build_object(
+      'source_header', 'source-' || number, 'target_field', 'target-' || number
+    )) from generate_series(1, 201) number)
+  );
+  raise exception 'mapping limit was accepted';
+exception when others then
+  if sqlerrm = 'mapping limit was accepted' then raise; end if;
+  if sqlerrm <> 'raw_rows_or_column_mappings_limit_exceeded' then raise; end if;
+end $$;
+
+do $$
+begin
+  if has_function_privilege('anon', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'anon can execute draft RPC'; end if;
-  if not has_function_privilege('service_role', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
+  if not has_function_privilege('service_role', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'service_role cannot execute draft RPC'; end if;
 end $$;
 
