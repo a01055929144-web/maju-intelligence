@@ -86,10 +86,10 @@ begin
   select count(*) into before_count from public.purchase_receipt_lines where company_id=c;
   begin
     perform public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000002','2026-11-01',
-      '[{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-01","cost":110,"selectedSourceRowNumber":1,"priceSelected":true},{"productId":"99999999-0000-4000-8000-000000000001","priceDate":"2026-11-01","cost":1,"selectedSourceRowNumber":2,"priceSelected":true}]',
+      '[{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-01","cost":110,"selectedSourceRowNumber":1,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000002","priceDate":"2026-11-01","cost":1,"selectedSourceRowNumber":2,"priceSelected":true}]',
       'tester','atomic.xlsx');
-    raise exception 'unknown product accepted';
-  exception when others then if sqlerrm='unknown product accepted' then raise; end if; end;
+    raise exception 'cross-company product accepted';
+  exception when others then if sqlerrm='cross-company product accepted' then raise; end if; end;
   if (select count(*) from public.purchase_receipt_lines where company_id=c) <> before_count
      or exists(select 1 from public.purchase_cost_date_batches_v2 where company_id=c and id='50000000-0000-4000-8000-000000000002')
   then raise exception 'failed request was not atomic'; end if;
