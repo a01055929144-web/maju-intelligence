@@ -11,6 +11,7 @@ import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, type
 import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
+import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
 import type { PurchaseDateBatch } from "@/lib/pricing/purchase-cost-date";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { PriceState } from "@/domains/pricing/price-rules";
@@ -63,7 +64,6 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [replaceUndatedCurrent, setReplaceUndatedCurrent] = useState(false);
   const [dateMappedIds, setDateMappedIds] = useState<string[]>([]);
   const [dateCreatedCount, setDateCreatedCount] = useState(0);
-  const dateRequest = useRef<{ key: string; id: string } | null>(null);
   // 11/4: 신규 탭 필터 — 켤 때의 행 목록을 고정해 두어, 입력 중에 줄이 사라지지 않게 합니다.
   const [newFilter, setNewFilter] = useState<"all" | "unit" | "suspect">("all");
   const [filterIds, setFilterIds] = useState<string[] | null>(null);
@@ -266,12 +266,24 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const usesDateBatch = importedLines.length > 0 && purchaseDateEnabled;
   useEffect(() => {
     let active = true;
-    setPurchaseDateEnabled(false); setDateBatch(null); setDateUndatedPrices({}); setReplaceUndatedCurrent(false); dateRequest.current = null;
+    setPurchaseDateEnabled(false); setDateBatch(null); setDateUndatedPrices({}); setReplaceUndatedCurrent(false);
     fetch(`/api/price-sheets/costs/date-batches?${new URLSearchParams({ companyId })}`, { cache: "no-store" }).then(async response => {
       if (response.status === 404) return;
       const status = await response.json();
       if (!response.ok) throw new Error(status.message || "날짜별 저장 상태를 확인하지 못했습니다.");
       if (active) { setPurchaseDateEnabled(status.enabled === true); setDateBatch(status.latestBatch || null); setDateUndatedPrices(Object.fromEntries((status.undatedPrices || []).map((item: { productId: string; cost: number }) => [item.productId, item.cost]))); }
+      const pending = pendingDateRequest(companyId);
+      if (pending) {
+        const checked = await fetch(`/api/price-sheets/costs/date-batches?${new URLSearchParams({ companyId, batchId: pending.id })}`, { cache: "no-store" });
+        const result = await checked.json();
+        if (!checked.ok) throw new Error(result.message || "이전 저장 결과를 확인하지 못했습니다.");
+        if (active && result.batch?.status === "completed") {
+          forgetDateRequest(companyId);
+          setMessage(`이전 요청의 원본 거래 ${result.batch.rowCount}행 저장이 이미 완료된 것을 확인했습니다. 이력 전용 ${result.batch.historyOnlyProductCount}품목은 현재가를 유지했습니다. 같은 파일을 다시 저장하지 않아도 됩니다. 목록과 이력을 확인해 주세요.`);
+        } else if (active && result.batch?.status === "restored") {
+          forgetDateRequest(companyId); setMessage("이전 날짜별 저장은 이미 복구됐습니다. 목록과 이력을 확인해 주세요.");
+        }
+      }
     }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "날짜별 저장 상태를 확인하지 못했습니다."); });
     return () => { active = false; };
   }, [companyId]);
@@ -348,7 +360,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const merged = [...importPreview.merged, ...importPreview.conflicts.flatMap(group =>
         group.candidates.filter(line => String(line.rowNumber) === conflictChoices[group.key]))]
         .sort((a, b) => (b.purchaseDate || "").localeCompare(a.purchaseDate || ""));
-      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false); dateRequest.current = null;
+      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false);
       setHeldCount(held.length); setFileHasDates(importPreview.hasDates); setFileHadConflicts(importPreview.conflicts.length > 0); setSaveReview(false); setConfirmedReview("");
       const productByLine = new Map<string, string>();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
@@ -559,18 +571,37 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
       const payload = { action: "save", companyId, receiptDate, fileName: fileName || "매입가 반영", rows };
-      const key = JSON.stringify(payload);
-      const id = dateRequest.current?.key === key ? dateRequest.current.id : crypto.randomUUID();
-      dateRequest.current = { key, id };
+      const digest = await dateRequestDigest(payload);
+      let pending;
+      try { pending = pendingDateRequest(companyId); }
+      catch { throw new Error("브라우저의 이전 저장 요청을 확인하지 못했습니다. 중복 저장을 막기 위해 쓰기를 멈췄습니다. 담당자에게 문의해 주세요."); }
+      if (pending) {
+        const checked = await fetch(`/api/price-sheets/costs/date-batches?${new URLSearchParams({ companyId, batchId: pending.id })}`, { cache: "no-store" });
+        const previous = await checked.json();
+        if (!checked.ok) throw new Error(previous.message || "이전 저장 결과를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요.");
+        if (previous.batch?.status === "completed" || previous.batch?.status === "restored") {
+          forgetDateRequest(companyId); setConfirmedReview(""); setSaveReview(false);
+          setMessage(`이전 요청의 원본 거래 ${previous.batch.rowCount}행은 이미 ${previous.batch.status === "completed" ? "저장 완료" : "복구 완료"}됐습니다. 이력 전용 ${previous.batch.historyOnlyProductCount}품목은 현재가를 유지했습니다. 이번 추가 쓰기는 실행하지 않았습니다. 목록과 이력을 먼저 확인해 주세요.`);
+          if (pending.digest === digest) { setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); }
+          await load(); return;
+        }
+        if (previous.batch?.status === "processing") throw new Error("이전 저장을 처리 중입니다. 잠시 후 같은 요청으로 다시 시도해 주세요.");
+      }
+      // Reuse an unresolved ID even if the edited payload changed: the SQL digest
+      // conflict guard prevents a delayed first request from creating a second batch.
+      const id = pending?.id || crypto.randomUUID();
       const body = JSON.stringify({ ...payload, batchId: id });
       if (new Blob([body]).size > MAX_PURCHASE_DATE_BODY_BYTES) throw new Error("원본을 포함한 저장 요청이 400만 바이트를 초과합니다. 파일을 보관하고 담당자에게 문의해 주세요. 일부 행만 나눠 저장하지 않았습니다.");
+      try { rememberDateRequest(companyId, { digest, id }); }
+      catch { throw new Error("브라우저 임시 저장을 사용할 수 없어 중복 방지 요청을 보관하지 못했습니다. 저장 설정을 확인한 뒤 다시 시도해 주세요."); }
       const response = await fetch("/api/price-sheets/costs/date-batches", { method: "POST", headers: { "Content-Type": "application/json" }, body });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "날짜별 저장에 실패했습니다.");
-      if (result.status !== "completed" || result.batchId !== id || result.rowCount !== rows.length || !(result.recalcRunId === null || typeof result.recalcRunId === "string")) throw new Error("저장 완료 상태를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요.");
-      setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount });
-      dateRequest.current = null; setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
-      setMessage(`원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다.${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${result.historyOnlyProductCount ? ` 저장 전 기준일 미확인 ${result.historyOnlyProductCount}품목이 있습니다. 상품관리에서 현재 매입가와 날짜 적용 결과를 확인해 주세요.` : ""}`);
+      if (result.status !== "completed" || result.batchId !== id || result.rowCount !== rows.length || !Number.isSafeInteger(result.historyOnlyProductCount) || result.historyOnlyProductCount < 0 || result.historyOnlyProductCount > new Set(rows.map(row => row.productId)).size || !(result.recalcRunId === null || typeof result.recalcRunId === "string")) throw new Error("저장 완료 상태를 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요.");
+      setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount });
+      forgetDateRequest(companyId);
+      setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
+      setMessage(`원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
     finally { setBusy(false); }

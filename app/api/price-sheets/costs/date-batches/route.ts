@@ -4,7 +4,7 @@ import { canManagePriceSheets } from "@/domains/pricing/access";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { MAX_PURCHASE_DATE_BODY_BYTES, validDate, validId, validPurchaseDateRows } from "../../../../../domains/pricing/purchase-cost-date";
-import { latestPurchaseDateBatch, purchaseDateEnabled, purchaseDateError, restorePurchaseDateBatch, savePurchaseDateBatch, undatedPurchasePrices } from "../../../../../lib/pricing/purchase-cost-date";
+import { getPurchaseDateBatch, purchaseDateEnabled, purchaseDateError, restorePurchaseDateBatch, savePurchaseDateBatch, undatedPurchasePrices } from "../../../../../lib/pricing/purchase-cost-date";
 export const dynamic = "force-dynamic";
 async function scope(request: NextRequest, companyId?: string) {
   // OFF before session inspection, schema reads, or any RPC.
@@ -19,7 +19,12 @@ export async function GET(request: NextRequest) {
   const checked = await scope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if (checked.error) return checked.error;
   try {
-    const [latestBatch, undatedPrices] = await Promise.all([latestPurchaseDateBatch(checked.auth!.companyId!), undatedPurchasePrices(checked.auth!.companyId!)]);
+    const batchId = request.nextUrl.searchParams.get("batchId");
+    if (batchId) {
+      if (!validId(batchId)) return NextResponse.json({ message: "저장 요청 번호를 확인해 주세요." }, { status: 400 });
+      return NextResponse.json({ enabled: true, batch: await getPurchaseDateBatch(checked.auth!.companyId!, batchId) }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const [latestBatch, undatedPrices] = await Promise.all([getPurchaseDateBatch(checked.auth!.companyId!), undatedPurchasePrices(checked.auth!.companyId!)]);
     return NextResponse.json({ enabled: true, maxRows: 5000, latestBatch, undatedPrices }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ message: "날짜별 저장 상태를 확인하지 못했습니다. 잠시 후 새로고침해 주세요." }, { status: 503 }); }
 }

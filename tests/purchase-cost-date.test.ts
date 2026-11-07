@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", undefined);
   mocks.auth.mockResolvedValue({ ok: true, companyId, customerSession: { name: "대표", workspaceRole: "owner" } });
   mocks.manage.mockReturnValue(true); mocks.feature.mockReturnValue(true);
-  mocks.db.mockImplementation(async (path: string) => path.includes("purchase_price_date=is.null") ? [] : path.startsWith("product_catalog?") ? [{ id: productId(0), sales_unit: "봉" }] : { batchId, recalcRunId: null, status: "completed", rowCount: 1 });
+  mocks.db.mockImplementation(async (path: string) => path.includes("purchase_price_date=is.null") ? [] : path.startsWith("product_catalog?") ? [{ id: productId(0), sales_unit: "봉" }] : { batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 0 });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("passes 3417 original transactions and amounts to one RPC with 745 price selections", async () => {
@@ -45,7 +45,7 @@ it("passes 3417 original transactions and amounts to one RPC with 745 price sele
   mocks.db.mockImplementation(async (path: string, options?: { body: string }) => {
     if (path.startsWith("product_catalog?")) return Array.from({ length: 745 }, (_, index) => ({ id: productId(index), sales_unit: "봉" }));
     const rpc = JSON.parse(options!.body); expect(rpc.p_rows).toEqual(rows); expect(rpc.p_company).toBe(companyId);
-    return { batchId, recalcRunId: null, status: "completed", rowCount: 3417 };
+    return { batchId, recalcRunId: null, status: "completed", rowCount: 3417, historyOnlyProductCount: 0 };
   });
   const response = await post({ ...payload(), rows });
   expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ rowCount: 3417, status: "completed" });
@@ -69,7 +69,7 @@ it("defaults OFF before auth, schema reads and save/restore RPCs", async () => {
 });
 it("scopes latest-batch reads and restores only through the single v2 RPC", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
-  mocks.db.mockResolvedValueOnce([{ id: batchId, status: "completed", recalc_run_id: null, row_count: 1 }]);
+  mocks.db.mockResolvedValueOnce([{ id: batchId, status: "completed", recalc_run_id: null, row_count: 1, history_only_product_count: 0 }]);
   expect(await (await GET(new NextRequest(url))).json()).toMatchObject({ enabled: true, latestBatch: { id: batchId } });
   expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${companyId}`);
   mocks.db.mockResolvedValueOnce({ batchId, status: "restored" });
@@ -144,4 +144,13 @@ it("forwards the explicit expected price and reports stale-current cancellation 
   const writes = mocks.db.mock.calls.filter(([path]) => path.startsWith("rpc/"));
   expect(writes).toHaveLength(1);
   expect(JSON.parse(writes[0][1].body).p_rows[0]).toMatchObject({ replaceUndatedCurrent: true, expectedPurchasePrice: 100 });
+});
+
+it("recovers the exact pending batch in company scope even if a newer batch exists", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockResolvedValueOnce([{ id: batchId, status: "completed", recalc_run_id: null, row_count: 2, history_only_product_count: 1 }]);
+  const result = await GET(new NextRequest(`${url}&batchId=${batchId}`));
+  expect(await result.json()).toMatchObject({ batch: { id: batchId, rowCount: 2, historyOnlyProductCount: 1 } });
+  expect(mocks.db).toHaveBeenCalledTimes(1);
+  expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&id=eq.${batchId}`);
 });

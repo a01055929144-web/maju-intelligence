@@ -60,7 +60,7 @@ for (const width of [1280, 390]) test(`atomic purchase cost save and restore rem
 
 
 // Date UI contracts use only synthetic catalog/receipt/batch responses, never an operating DB.
-async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean } = {}) {
+async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean; loseFirstResponse?: boolean; failFirstSaveThenReload?: boolean; newerLatestBatch?: boolean } = {}) {
   const companyId = "00000000-0000-4000-8000-000000000001";
   const products = Array.from({ length: options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: "1kg", unit: "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
@@ -79,16 +79,25 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
     }
     return route.fulfill({ json: { products: options.newProducts && !registration.standards ? [] : products, changes: [], suppliers: [], batchEnabled: true, purchaseDateEnabled: options.supported !== false, latestBatch: null } });
   });
-  let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number } | null = null;
+  let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number } | null = null;
   await page.route("**/api/price-sheets/costs/date-batches*", route => {
     if (options.supported === false) return route.fulfill({ status: 404, json: {} });
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON(); dateWrites.push(body);
-      if (options.failFirstSave && dateWrites.length === 1) return route.fulfill({ status: 409, json: { message: "합성 원자 저장 실패" } });
-      dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0 };
-      return route.fulfill({ json: { batchId: body.batchId, status: dateBatch.status, recalcRunId: null, rowCount: dateBatch.rowCount, historyOnlyProductCount: options.newProducts ? 1 : 0 } });
+      if ((options.failFirstSave || options.failFirstSaveThenReload) && dateWrites.length === 1) return route.fulfill({ status: 409, json: { message: "합성 원자 저장 실패" } });
+      const groups = new Map<string, PurchaseDateRow[]>();
+      for (const row of (body.rows || []) as PurchaseDateRow[]) { const group = groups.get(row.productId) || []; group.push(row); groups.set(row.productId, group); }
+      const historyOnlyProductCount = Array.from(groups.values()).filter(group => {
+        const latest = group.map(row => row.priceDate).sort().at(-1)!;
+        const chosen = group.find(row => row.priceDate === latest && row.priceSelected);
+        return !chosen || (options.currentDate && latest < options.currentDate) || (options.undatedCurrent && !chosen.replaceUndatedCurrent);
+      }).length;
+      dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0, historyOnlyProductCount };
+      if (options.loseFirstResponse && dateWrites.length === 1) return route.abort("failed");
+      return route.fulfill({ json: { batchId: body.batchId, status: dateBatch.status, recalcRunId: null, rowCount: dateBatch.rowCount, historyOnlyProductCount } });
     }
-    return route.fulfill({ json: { enabled: true, maxRows: 5000, latestBatch: dateBatch, undatedPrices: options.undatedCurrent ? [{ productId: products[0].id, cost: 100 }] : [] } });
+    if (new URL(route.request().url()).searchParams.has("batchId")) return route.fulfill({ json: { enabled: true, batch: dateBatch } });
+    return route.fulfill({ json: { enabled: true, maxRows: 5000, latestBatch: options.newerLatestBatch && dateBatch ? { ...dateBatch, id: "50000000-0000-4000-8000-000000000099", rowCount: 99 } : dateBatch, undatedPrices: options.undatedCurrent ? [{ productId: products[0].id, cost: 100 }] : [] } });
   });
   await page.route(/\/api\/price-sheets(?:\?|$)/, route => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 0, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50 } }));
   await page.route("**/api/price-sheets/receipts*", route => {
@@ -405,4 +414,35 @@ for (const replace of [false, true]) test(`undated existing price needs separate
     expect(dateWrites[0].rows[0]).toMatchObject({ replaceUndatedCurrent: true, expectedPurchasePrice: 100 });
     expect(dateWrites[0].rows[1]).not.toHaveProperty("replaceUndatedCurrent");
   } else expect(dateWrites[0].rows.every(row => row.replaceUndatedCurrent === undefined)).toBe(true);
+  await expect(page.getByRole("status").filter({ hasText: `현재가 반영 ${replace ? 1 : 0}품목 · 이력 전용 ${replace ? 0 : 1}품목(현재가 유지)` })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: replace ? "기준일 미확정 1품목의 현재가 교체를 요청했습니다" : "현재가 교체를 선택하지 않은 기준일 미확정 1품목은 이력 전용 요청입니다" })).toBeVisible();
+});
+
+for (const committed of [false, true]) test(`refresh recovers the exact persisted batch after response failure: committed=${committed}`, async ({ page }) => {
+  const { dateWrites } = await purchaseUpload(page, { loseFirstResponse: committed, failFirstSaveThenReload: !committed, newerLatestBatch: committed });
+  const csv = "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\n";
+  const saveFile = async () => {
+    await selectPurchaseCsv(page, csv);
+    await page.getByRole("button", { name: "② 열 정렬", exact: true }).click();
+    await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
+    const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+    await review.getByRole("checkbox").check();
+    await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  };
+  await saveFile();
+  await expect.poll(() => dateWrites.length).toBe(1);
+  await expect(page.getByRole("alert").filter({ hasText: "상품 등록은 별도 단계" })).toBeVisible();
+  const pending = await page.evaluate(() => JSON.parse(localStorage.getItem("maju:purchase-date-pending:00000000-0000-4000-8000-000000000001")!));
+  expect(Object.keys(pending).sort()).toEqual(["digest", "id"]);
+  expect(pending.id).toBe(dateWrites[0].batchId); expect(pending.digest).toMatch(/^[0-9a-f]{64}$/);
+  await page.reload();
+  if (committed) {
+    await expect(page.getByRole("status").filter({ hasText: "이전 요청의 원본 거래 1행 저장이 이미 완료" })).toBeVisible();
+    expect(dateWrites).toHaveLength(1);
+  } else {
+    await saveFile();
+    await expect.poll(() => dateWrites.length).toBe(2);
+    expect(dateWrites[1]).toEqual(dateWrites[0]);
+  }
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("maju:purchase-date-pending:00000000-0000-4000-8000-000000000001"))).toBeNull();
 });
