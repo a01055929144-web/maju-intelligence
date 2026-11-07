@@ -42,7 +42,7 @@ do $$ begin
     );
     raise exception 'invalid_batch_allowed';
   exception when others then
-    if sqlerrm not in ('invalid_store_cost','invalid_batch_allowed') then raise; end if;
+    if sqlerrm <> 'invalid_store_cost' then raise; end if;
   end;
   if exists(select 1 from public.store_cost_imports) or exists(select 1 from public.store_cost_items)
     or exists(select 1 from public.store_cost_revisions) then raise exception 'failed_batch_was_not_atomic'; end if;
