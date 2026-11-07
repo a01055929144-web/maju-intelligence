@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildStoreCostImportConfirmRequest, buildStoreCostImportPreview, collapseStoreCostDuplicates, parseStoreCostRows, storeCostProductKey, suggestStoreCostMapping } from "../domains/store-cost/store-cost";
+import { buildPurchaseSheet } from "../domains/pricing/purchase-import";
 import { manageStoreCosts, type StoreCostRepository } from "../application/store-cost/manage-store-costs";
 
 const scope = {
@@ -9,6 +10,19 @@ const scope = {
 };
 
 describe("store-owned costs", () => {
+  it("detects a store-only header combination before parsing data rows", () => {
+    const matrix = [
+      ["날짜", "제품명", "원가단위", "원가(원)"],
+      ["2026-11-05", "양파", "망", "18,000원"],
+    ];
+    const sheet = buildPurchaseSheet(matrix);
+    const mapping = suggestStoreCostMapping(sheet.columns.map(column => column.header));
+    expect(sheet.headerRowNumber).toBe(1);
+    expect(parseStoreCostRows(sheet.rows.map(row => matrix[row.rowNumber - 1]), mapping)).toMatchObject([
+      { effectiveOn: "2026-11-05", productName: "양파", unit: "망", costKrw: 18000 },
+    ]);
+  });
+
   it("reuses column mapping semantics and accepts only integer KRW", () => {
     const mapping = suggestStoreCostMapping(["날짜", "상품명", "규격", "단위", "원가(원)"]);
     const rows = parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", "18,000원"]], mapping);
