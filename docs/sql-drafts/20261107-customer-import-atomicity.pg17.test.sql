@@ -164,6 +164,23 @@ exception when others then
   if sqlerrm <> 'import_request_digest_mismatch' then raise; end if;
 end $$;
 
+-- Lookup and stored normalized keys use the same trim rule on updates.
+select * from public.save_customer_import_atomic_draft(
+  '00000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000010',
+  'manual-customer-master',
+  'manual-customer-master', 100, 0,
+  jsonb_build_array(jsonb_build_object(
+    'customer_name', '첫 거래처', 'normalized_key', ' first ', 'address', '서울',
+    'expected_updated_at', (select updated_at from public.normalized_customers where normalized_key = 'first')
+  ))
+);
+do $$ begin
+  if not exists (select 1 from public.normalized_customers where normalized_key = 'first')
+    or exists (select 1 from public.normalized_customers where normalized_key <> btrim(normalized_key))
+  then raise exception 'normalized key trim was not preserved'; end if;
+end $$;
+
 -- An optimistic update succeeds and moves the customer to the new import.
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',

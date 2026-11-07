@@ -154,6 +154,7 @@ begin
         v_candidate.company_id := p_company_id;
         v_candidate.import_id := p_import_id;
         v_candidate.created_at := v_existing.created_at;
+        v_candidate.normalized_key := btrim(v_customer ->> 'normalized_key');
         v_candidate.updated_at := clock_timestamp();
 
         update public.normalized_customers set
