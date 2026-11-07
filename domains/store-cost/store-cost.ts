@@ -18,6 +18,19 @@ export type StoreCostInput = {
   sourceRowNumber?: number;
 };
 
+export type StoreCostImportConfirmRequest = {
+  companyId: string;
+  storeAccountId: string;
+  fileName: string;
+  rows: StoreCostInput[];
+};
+
+export type StoreCostImportPreview = {
+  rows: StoreCostInput[];
+  errors: Array<{ rowNumber: number; message: string }>;
+  duplicateCount: number;
+};
+
 const normalized = (value: unknown) => String(value ?? "").normalize("NFKC").trim();
 const keyPart = (value: unknown) => normalized(value).toLocaleLowerCase("ko").replace(/[\s_\-./()[\]]/g, "");
 
@@ -57,15 +70,39 @@ export function validateStoreCostInput(input: StoreCostInput, rowNumber?: number
 export function parseStoreCostRows(rows: readonly unknown[][], mapping: StoreCostColumnMapping): StoreCostInput[] {
   const missing = STORE_COST_IMPORT_FIELDS.filter(field => field.required && mapping[field.key] === undefined);
   if (missing.length) throw new Error(`필수 열을 골라 주세요: ${missing.map(field => field.label).join(", ")}`);
-  return rows.filter(row => row.some(cell => normalized(cell))).map((row, index) => {
-    const read = (field: StoreCostField) => normalized(row[mapping[field] ?? -1]);
-    const costText = read("costKrw").replace(/[,원\s]/g, "");
-    const costKrw = Number(costText);
-    const effectiveOn = normalizeSheetDate(row[mapping.effectiveOn ?? -1]);
-    const productName = read("productName");
-    const unit = read("unit");
-    return validateStoreCostInput({ costKrw, effectiveOn, productName, sourceRowNumber: index + 2, specification: read("specification"), unit }, index + 2);
-  });
+  return rows.filter(row => row.some(cell => normalized(cell))).map((row, index) => parseStoreCostRow(row, mapping, index + 2));
+}
+
+function parseStoreCostRow(row: readonly unknown[], mapping: StoreCostColumnMapping, rowNumber: number) {
+  const read = (field: StoreCostField) => normalized(row[mapping[field] ?? -1]);
+  const costText = read("costKrw").replace(/[,원₩\s]/g, "");
+  const costKrw = costText ? Number(costText) : NaN;
+  return validateStoreCostInput({ costKrw, effectiveOn: normalizeSheetDate(row[mapping.effectiveOn ?? -1]), productName: read("productName"),
+    sourceRowNumber: rowNumber, specification: read("specification"), unit: read("unit") }, rowNumber);
+}
+
+export function buildStoreCostImportPreview(
+  rows: readonly { rowNumber: number; cells: readonly unknown[] }[],
+  mapping: StoreCostColumnMapping,
+): StoreCostImportPreview {
+  const missing = STORE_COST_IMPORT_FIELDS.filter(field => field.required && mapping[field.key] === undefined);
+  if (missing.length) throw new Error(`필수 열을 골라 주세요: ${missing.map(field => field.label).join(", ")}`);
+  const parsed: StoreCostInput[] = [], errors: StoreCostImportPreview["errors"] = [];
+  for (const row of rows) {
+    if (!row.cells.some(cell => normalized(cell))) continue;
+    try { parsed.push(parseStoreCostRow(row.cells, mapping, row.rowNumber)); }
+    catch (error) { errors.push({ rowNumber: row.rowNumber, message: error instanceof Error ? error.message : `${row.rowNumber}행을 확인해 주세요.` }); }
+  }
+  const deduplicated = collapseStoreCostDuplicates(parsed);
+  return { duplicateCount: parsed.length - deduplicated.length, errors, rows: deduplicated };
+}
+
+export function buildStoreCostImportConfirmRequest(input: StoreCostImportConfirmRequest): StoreCostImportConfirmRequest {
+  const fileName = input.fileName.trim();
+  if (!input.companyId || !input.storeAccountId || !fileName || fileName.length > 255 || !input.rows.length) {
+    throw new Error("회사·매장·파일명과 저장할 행을 확인해 주세요.");
+  }
+  return { ...input, fileName, rows: input.rows.map(row => validateStoreCostInput(row, row.sourceRowNumber)) };
 }
 
 function normalizeSheetDate(value: unknown) {
@@ -73,7 +110,10 @@ function normalizeSheetDate(value: unknown) {
   if (typeof value === "number" && Number.isInteger(value) && value > 0 && value < 3_000_000) {
     return new Date((value - 25_569) * 86_400_000).toISOString().slice(0, 10);
   }
-  return normalized(value);
+  const raw = normalized(value).replace(/[./]/g, "-");
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+  const parts = compact ? compact.slice(1) : raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)?.slice(1);
+  return parts ? `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}` : raw;
 }
 
 export function collapseStoreCostDuplicates(rows: readonly StoreCostInput[]) {
