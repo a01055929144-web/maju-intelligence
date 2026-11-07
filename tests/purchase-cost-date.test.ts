@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", undefined);
   mocks.auth.mockResolvedValue({ ok: true, companyId, customerSession: { name: "대표", workspaceRole: "owner" } });
   mocks.manage.mockReturnValue(true); mocks.feature.mockReturnValue(true);
-  mocks.db.mockImplementation(async (path: string) => path.startsWith("product_catalog?") ? [{ id: productId(0), sales_unit: "봉" }] : { batchId, recalcRunId: null, status: "completed", rowCount: 1 });
+  mocks.db.mockImplementation(async (path: string) => path.includes("purchase_price_date=is.null") ? [] : path.startsWith("product_catalog?") ? [{ id: productId(0), sales_unit: "봉" }] : { batchId, recalcRunId: null, status: "completed", rowCount: 1 });
 });
 afterEach(() => vi.unstubAllEnvs());
 it("passes 3417 original transactions and amounts to one RPC with 745 price selections", async () => {
@@ -123,4 +123,11 @@ it("keeps v1's 100-change limit OFF and blocks all legacy writes during date rol
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
   for (const body of [{ companyId, changes }, { action: "save-batch", companyId, batchId, changes: changes.slice(0, 1) }, { action: "restore-batch", companyId, batchId }]) expect((await legacy(body)).status).toBe(409);
   expect(mocks.legacy).not.toHaveBeenCalled(); expect(mocks.legacySave).not.toHaveBeenCalled(); expect(mocks.legacyRestore).not.toHaveBeenCalled(); expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it("requires an expected price for an explicit undated-current replacement", () => {
+  const row = payload().rows[0];
+  expect(validPurchaseDateRows([{ ...row, replaceUndatedCurrent: true }])).toBe(false);
+  expect(validPurchaseDateRows([{ ...row, replaceUndatedCurrent: true, expectedPurchasePrice: 100 }])).toBe(true);
+  expect(validPurchaseDateRows([{ ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: true, expectedPurchasePrice: 100 }])).toBe(false);
 });

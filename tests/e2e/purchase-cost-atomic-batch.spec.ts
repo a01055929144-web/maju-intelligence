@@ -60,10 +60,10 @@ for (const width of [1280, 390]) test(`atomic purchase cost save and restore rem
 
 
 // Date UI contracts use only synthetic catalog/receipt/batch responses, never an operating DB.
-async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean } = {}) {
+async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean } = {}) {
   const companyId = "00000000-0000-4000-8000-000000000001";
   const products = Array.from({ length: options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: "1kg", unit: "봉", cost: 100, priceDate: options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
+    code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: "1kg", unit: "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
       { ...product, supplierName: "A매입처", supplierProductId: "40000000-0000-4000-8000-000000000001", supplierRawCost: 100 },
       { ...product, supplierName: "B매입처", supplierProductId: "40000000-0000-4000-8000-000000000002", supplierRawCost: 100 }
     ] : [product]);
@@ -88,7 +88,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
       dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0 };
       return route.fulfill({ json: { batchId: body.batchId, status: dateBatch.status, recalcRunId: null, rowCount: dateBatch.rowCount, historyOnlyProductCount: options.newProducts ? 1 : 0 } });
     }
-    return route.fulfill({ json: { enabled: true, maxRows: 5000, latestBatch: dateBatch } });
+    return route.fulfill({ json: { enabled: true, maxRows: 5000, latestBatch: dateBatch, undatedPrices: options.undatedCurrent ? [{ productId: products[0].id, cost: 100 }] : [] } });
   });
   await page.route(/\/api\/price-sheets(?:\?|$)/, route => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 0, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50 } }));
   await page.route("**/api/price-sheets/receipts*", route => {
@@ -384,4 +384,23 @@ test("date rollout blocks direct v1 cost changes without leaving a stale price d
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "직접 원가 수정을 저장할 수 없습니다" })).toBeVisible();
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0); expect(dateWrites).toHaveLength(0);
+});
+
+for (const replace of [false, true]) test(`undated existing price needs separate explicit replacement approval: ${replace}`, async ({ page }) => {
+  const { dateWrites } = await purchaseUpload(page, { undatedCurrent: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\nERP-1,합성 상품,1kg,봉,2026-11-04,200\n");
+  await page.getByRole("button", { name: "② 열 정렬", exact: true }).click();
+  await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await expect(review).toContainText("기준일 미확정 기존가 1품목");
+  await expect(review.getByRole("cell", { name: "100원", exact: true })).toBeVisible();
+  await expect(review.getByRole("cell", { name: "2026-11-07", exact: true })).toBeVisible();
+  if (replace) await review.getByRole("checkbox", { name: "기준일 없는 기존가 교체", exact: true }).check();
+  await review.getByRole("checkbox", { name: "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.", exact: true }).check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  await expect.poll(() => dateWrites.length).toBe(1);
+  if (replace) {
+    expect(dateWrites[0].rows[0]).toMatchObject({ replaceUndatedCurrent: true, expectedPurchasePrice: 100 });
+    expect(dateWrites[0].rows[1]).not.toHaveProperty("replaceUndatedCurrent");
+  } else expect(dateWrites[0].rows.every(row => row.replaceUndatedCurrent === undefined)).toBe(true);
 });

@@ -28,6 +28,14 @@ type LinkInput = { productId: string; rawName: string; spec: string; unit: strin
 type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀" | "매입처"; source: string; reviewOnly?: boolean; fileNote?: string; link?: LinkInput; updateFields?: { name: string; spec: string; unit: string } };
 const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
+type UndatedTarget = { productId: string; name: string; previous: number; cost: number; date: string };
+const undatedColumns: CommonTableColumn<UndatedTarget>[] = [
+  { key: "name", label: "품목", value: row => row.name },
+  { key: "previous", label: "이전 가격", value: row => row.previous, render: row => money(row.previous) },
+  { key: "cost", label: "선택 가격", value: row => row.cost, render: row => money(row.cost) },
+  { key: "date", label: "선택 날짜", value: row => row.date }
+];
+
 export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [products, setProducts] = useState<DatedProduct[]>([]);
   const [pricing, setPricing] = useState<PriceState | null>(null);
@@ -51,6 +59,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [dateSelectedRows, setDateSelectedRows] = useState<number[]>([]);
   const [dateHeldRows, setDateHeldRows] = useState<number[]>([]);
   const [datePartial, setDatePartial] = useState("");
+  const [dateUndatedPrices, setDateUndatedPrices] = useState<Record<string, number>>({});
+  const [replaceUndatedCurrent, setReplaceUndatedCurrent] = useState(false);
   const [dateCreatedIds, setDateCreatedIds] = useState<string[]>([]);
   const dateRequest = useRef<{ key: string; id: string } | null>(null);
   // 11/4: 신규 탭 필터 — 켤 때의 행 목록을 고정해 두어, 입력 중에 줄이 사라지지 않게 합니다.
@@ -255,21 +265,34 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const usesDateBatch = importedLines.length > 0 && purchaseDateEnabled;
   useEffect(() => {
     let active = true;
-    setPurchaseDateEnabled(false); setDateBatch(null); dateRequest.current = null;
+    setPurchaseDateEnabled(false); setDateBatch(null); setDateUndatedPrices({}); setReplaceUndatedCurrent(false); dateRequest.current = null;
     fetch(`/api/price-sheets/costs/date-batches?${new URLSearchParams({ companyId })}`, { cache: "no-store" }).then(async response => {
       if (response.status === 404) return;
       const status = await response.json();
       if (!response.ok) throw new Error(status.message || "날짜별 저장 상태를 확인하지 못했습니다.");
-      if (active) { setPurchaseDateEnabled(status.enabled === true); setDateBatch(status.latestBatch || null); }
+      if (active) { setPurchaseDateEnabled(status.enabled === true); setDateBatch(status.latestBatch || null); setDateUndatedPrices(Object.fromEntries((status.undatedPrices || []).map((item: { productId: string; cost: number }) => [item.productId, item.cost]))); }
     }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : "날짜별 저장 상태를 확인하지 못했습니다."); });
     return () => { active = false; };
   }, [companyId]);
   const dateSaveBlocked = requiresDateContract && !purchaseDateEnabled;
   const priceChangeCount = selected.filter(id => candidates[id] && candidates[id].cost !== unique.find(product => product.id === id)?.cost &&
     !historicalPrice(id)).length;
-  const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier,
+  const undatedTargets = useMemo(() => {
+    const latest = new Map<string, string>();
+    importedLines.forEach(line => { if (line.productId && (line.purchaseDate || "") > (latest.get(line.productId) || "")) latest.set(line.productId, line.purchaseDate || ""); });
+    const held = new Set(importedLines.filter(line => line.productId && dateHeldRows.includes(line.rowNumber) && line.purchaseDate === latest.get(line.productId)).map(line => line.productId));
+    const targets = new Map<string, UndatedTarget>();
+    importedLines.forEach(line => {
+      if (line.productId && dateUndatedPrices[line.productId] > 0 && dateSelectedRows.includes(line.rowNumber) && line.purchaseDate === latest.get(line.productId)
+        && !held.has(line.productId) && (!candidates[line.productId] || selected.includes(line.productId))) {
+        targets.set(line.productId, { productId: line.productId, name: line.name, previous: dateUndatedPrices[line.productId], cost: line.cost, date: line.purchaseDate! });
+      }
+    });
+    return Array.from(targets.values());
+  }, [importedLines, dateUndatedPrices, dateSelectedRows, dateHeldRows, candidates, selected]);
+  const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier, replaceUndatedCurrent, undatedTargets,
     currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) }),
-  [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique]);
+  [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique, replaceUndatedCurrent, undatedTargets]);
   function changeReceiptDate(value: string) {
     setReceiptDate(value); setConfirmedReview("");
     if (!fileHasDates) {
@@ -324,7 +347,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const merged = [...importPreview.merged, ...importPreview.conflicts.flatMap(group =>
         group.candidates.filter(line => String(line.rowNumber) === conflictChoices[group.key]))]
         .sort((a, b) => (b.purchaseDate || "").localeCompare(a.purchaseDate || ""));
-      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateCreatedIds([]); dateRequest.current = null;
+      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateCreatedIds([]); setReplaceUndatedCurrent(false); dateRequest.current = null;
       setHeldCount(held.length); setFileHasDates(importPreview.hasDates); setFileHadConflicts(importPreview.conflicts.length > 0); setSaveReview(false); setConfirmedReview("");
       const productByLine = new Map<string, string>();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
@@ -529,7 +552,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
       if (edited) throw new Error("파일 적용 후 직접 수정한 단가는 날짜별 원문 선택과 다릅니다. 원본 파일에서 단가를 확인하고 다시 올려 주세요.");
-      const rows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]);
+      const rows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
+        const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
+        return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
+      });
       const payload = { action: "save", companyId, receiptDate, fileName: fileName || "매입가 반영", rows };
       const key = JSON.stringify(payload);
       const id = dateRequest.current?.key === key ? dateRequest.current.id : crypto.randomUUID();
@@ -765,6 +791,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       {datePartial ? <p>미가격 상태로 등록한 상품 {dateCreatedIds.length}개 · 날짜별 가격 적용 미완료: {importedLines.length}행 · 연결 미완료 {importedLines.filter(line => !line.productId).length}행. 상품 등록 결과와 구분해 확인해 주세요.</p> : null}
       {saveReview ? <>
         <h3 className="font-semibold">최종 저장 확인</h3><p>가격 변경 {priceChangeCount}건 · 새 상품 {unmatched.length}건 · 원본 거래 {importedLines.length}행의 적용 날짜를 확인해 주세요.</p>
+        {usesDateBatch && undatedTargets.length ? <div>
+          <p>기준일 미확정 기존가 {undatedTargets.length}품목 · 이전 가격과 선택 날짜를 확인해 주세요.</p>
+          <CommonDataTable rows={undatedTargets} columns={undatedColumns} rowKey={row => row.productId} settingsKey={`purchase-date-undated-confirm:${companyId}`} emptyMessage="확인할 기존가가 없습니다." />
+          <label className="flex min-h-[44px] items-center gap-2"><input aria-label="기준일 없는 기존가 교체" type="checkbox" checked={replaceUndatedCurrent} onChange={event => setReplaceUndatedCurrent(event.target.checked)} />기준일 미확정 기존가를 이번 적용일로 교체합니다. 저장 직전 기존 가격이 달라지면 전체 저장을 취소합니다.</label>
+          <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
+        </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.</label>
         <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>

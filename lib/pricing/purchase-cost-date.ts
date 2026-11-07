@@ -10,6 +10,16 @@ export async function latestPurchaseDateBatch(companyId: string): Promise<Purcha
     `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc,id.desc&limit=1`);
   return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count } : null;
 }
+export async function undatedPurchasePrices(companyId: string) {
+  const result: Array<{ productId: string; cost: number }> = [];
+  for (let offset = 0; offset < 10000; offset += 500) {
+    const rows = await supabaseRequest<Array<{ id: string; purchase_price: number }>>(
+      `product_catalog?select=id,purchase_price&company_id=eq.${encodeURIComponent(companyId)}&purchase_price_date=is.null&purchase_price=gt.0&order=id&limit=500&offset=${offset}`);
+    result.push(...rows.map(row => ({ productId: row.id, cost: Number(row.purchase_price) })));
+    if (rows.length < 500) return result;
+  }
+  throw new Error("purchase_catalog_limit");
+}
 export async function savePurchaseDateBatch(companyId: string, batchId: string, date: string, fileName: string, actor: string, rows: PurchaseDateRow[]) {
   // Until SQL validates conversion under the same locks, mismatched units remain blocked.
   const ids = Array.from(new Set(rows.map(row => row.productId)));
@@ -25,7 +35,7 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
     method: "POST", body: JSON.stringify({ p_company: companyId, p_batch: batchId, p_default_receipt_date: date,
       p_rows: rows, p_actor_name: actor, p_source_file_name: fileName })
   });
-  return { ...result, historyOnlyProductCount: Array.from(unknownDates).filter(id => rows.some(row => row.productId === id && row.priceSelected)).length };
+  return { ...result, historyOnlyProductCount: Array.from(unknownDates).filter(id => rows.some(row => row.productId === id && row.priceSelected && !row.replaceUndatedCurrent)).length };
 }
 export function restorePurchaseDateBatch(companyId: string, batchId: string, actor: string) {
   return supabaseRequest<{ batchId: string; status: "restored" }>("rpc/restore_purchase_cost_date_batch_v2", {
@@ -36,6 +46,6 @@ export function purchaseDateError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("purchase_date_unit_conversion_pending")) return "원본 단위와 상품 판매 단위가 다르거나 비어 있습니다. 상품 단위를 확인한 뒤 다시 시도해 주세요.";
   if (message.includes("purchase_cost_date_batch_conflict")) return "같은 요청 번호의 내용이 달라졌습니다. 목록과 원본 파일을 다시 확인해 주세요.";
-  if (message.includes("changed") || message.includes("latest") || message.includes("restored_separately")) return "이후 가격 변경이 있어 처리하지 못했습니다. 목록을 새로고침하고 현재 가격을 확인해 주세요.";
+  if (message.includes("changed") || message.includes("latest") || message.includes("restored_separately")) return "기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다. 화면 전체를 새로고침하고 원본 파일을 다시 올려 현재 가격과 적용일을 확인해 주세요.";
   return "날짜별 매입가 처리가 완료되지 않았습니다. 같은 요청으로 다시 시도하거나 목록을 새로고침해 결과를 확인해 주세요.";
 }

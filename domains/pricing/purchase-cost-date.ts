@@ -3,6 +3,7 @@ import type { PurchaseImportLine } from "./purchase-import";
 export const MAX_PURCHASE_DATE_BODY_BYTES = 4_000_000;
 export type DatedPurchaseLine = PurchaseImportLine & { productId?: string; supplierProductId?: string };
 export type PurchaseDateRow = {
+  replaceUndatedCurrent?: boolean; expectedPurchasePrice?: number;
   productId: string; supplierProductId?: string; priceDate: string; cost: number; supplierCost?: number;
   selectedSourceRowNumber: number; priceSelected: boolean; priceHeld: boolean; lineKey: string;
   productName: string; spec: string; unit: string; supplierName: string; erpCode: string;
@@ -46,10 +47,13 @@ export function validPurchaseDateRows(value: unknown): value is PurchaseDateRow[
   if (!Array.isArray(value) || !value.length || value.length > 5000) return false;
   const sourceRows = new Set<number>();
   const groups = new Map<string, { selected: number; held: number }>();
-  const keys = new Set(["productId", "supplierProductId", "priceDate", "cost", "supplierCost", "selectedSourceRowNumber", "priceSelected", "priceHeld", "lineKey", "productName", "spec", "unit", "supplierName", "erpCode", "quantity", "unitPrice", "priceIncludesVat", "taxType", "supplyAmount", "vatAmount", "totalAmount", "rawValues"]);
+  const keys = new Set(["replaceUndatedCurrent", "expectedPurchasePrice", "productId", "supplierProductId", "priceDate", "cost", "supplierCost", "selectedSourceRowNumber", "priceSelected", "priceHeld", "lineKey", "productName", "spec", "unit", "supplierName", "erpCode", "quantity", "unitPrice", "priceIncludesVat", "taxType", "supplyAmount", "vatAmount", "totalAmount", "rawValues"]);
   for (const row of value) {
     if (!row || typeof row !== "object" || Array.isArray(row) || Object.keys(row).some(key => !keys.has(key))
       || !validId(row.productId) || (row.supplierProductId !== undefined && !validId(row.supplierProductId))
+      || (row.replaceUndatedCurrent !== undefined && typeof row.replaceUndatedCurrent !== "boolean")
+      || (row.replaceUndatedCurrent === true && (!row.priceSelected || !money(row.expectedPurchasePrice)))
+      || (row.expectedPurchasePrice !== undefined && !money(row.expectedPurchasePrice))
       || !validDate(row.priceDate) || !money(row.cost) || !money(row.unitPrice)
       || (row.supplierProductId && !money(row.supplierCost))
       || !Number.isSafeInteger(row.selectedSourceRowNumber) || row.selectedSourceRowNumber < 1 || sourceRows.has(row.selectedSourceRowNumber)
