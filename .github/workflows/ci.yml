@@ -243,6 +243,14 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=store_kakao_membership_test --set=ON_ERROR_STOP=1 --file=20261105-store-kakao-membership.pg17.test.sql
 
+        - name: Verify store owner activation draft on PostgreSQL 17
+          env:
+            PGPASSWORD: postgres
+          run: |
+            createdb store_owner_activation_test
+            cd docs/sql-drafts
+            psql --dbname=store_owner_activation_test --set=ON_ERROR_STOP=1 --file=20261107-store-owner-activation.pg17.test.sql
+
       - name: Verify selling price direction opt-in on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1

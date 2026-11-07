@@ -9,7 +9,7 @@ vi.mock("next/headers", () => ({
   }))
 }));
 
-import { clearStoreSession, getStoreSession, setStoreSession } from "../lib/auth";
+import { clearStoreSession, getStoreOwnerActivationProof, getStoreSession, setStoreOwnerActivationProof, setStoreSession } from "../lib/auth";
 
 const authUserId = "00000000-0000-4000-8000-000000000003";
 
@@ -51,5 +51,15 @@ describe("store member session cookie", () => {
     await expect(getStoreSession()).resolves.toBeNull();
     await clearStoreSession();
     expect(state.values.has("maju_store_session")).toBe(false);
+  });
+
+  it("keeps owner activation terms and token in a short-lived signed HttpOnly cookie", async () => {
+    vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
+    const token = "a".repeat(43);
+    await expect(setStoreOwnerActivationProof(token)).resolves.toBe(true);
+    expect(state.options.get("maju_store_owner_activation")).toMatchObject({ httpOnly: true, sameSite: "lax", path: "/", maxAge: 900 });
+    await expect(getStoreOwnerActivationProof()).resolves.toMatchObject({ token, termsAcceptedAt: "2026-11-07T00:00:00.000Z" });
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token });
+    expect(state.values.has("maju_store_owner_activation")).toBe(false);
   });
 });
