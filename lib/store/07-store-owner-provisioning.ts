@@ -41,19 +41,33 @@ export async function getPreparedStoreOwnerActivation(token: string): Promise<Pr
 export async function resolveOrCreateStoreKakaoUser(input: {
   avatarUrl?: string; email?: string; kakaoUserId: string; name?: string; phoneNumber?: string;
 }) {
-  const existing = await supabaseRequest<Array<{ id: string; status: string }>>(
+  const findExisting = () => supabaseRequest<Array<{ id: string; status: string }>>(
     `app_users?select=id,status&kakao_user_id=eq.${encodeURIComponent(input.kakaoUserId)}&limit=1`
   );
+  const existing = await findExisting();
   if (existing[0]) return existing[0].status === "active" ? existing[0].id : null;
-  const rows = await supabaseRequest<Array<{ id: string }>>("app_users?on_conflict=kakao_user_id", {
-    method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+  const rows = await supabaseRequest<Array<{ id: string; status: string }>>("app_users?on_conflict=kakao_user_id", {
+    method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
     body: JSON.stringify([{ auth_provider: "kakao", avatar_url: input.avatarUrl || null,
       email: input.email || `kakao-${input.kakaoUserId}@maju.local`, kakao_user_id: input.kakaoUserId,
       last_login_at: new Date().toISOString(), name: input.name?.trim() || "매장 점주",
       phone: input.phoneNumber?.replace(/^\+82\s?/, "0").replace(/\D/g, "") || null,
       role: "customer_member", status: "active" }])
   });
-  return rows[0]?.id || null;
+  const resolved = rows[0] || (await findExisting())[0];
+  return resolved?.status === "active" ? resolved.id : null;
+}
+
+export function getStorePublicBaseUrl() {
+  const configured = process.env.STORE_PUBLIC_BASE_URL;
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
 }
 
 export async function activateStoreOwner(input: {

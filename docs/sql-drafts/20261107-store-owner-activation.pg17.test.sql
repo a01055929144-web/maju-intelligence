@@ -8,9 +8,9 @@ do $$ begin
   if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
 end $$;
 create table public.companies(id uuid primary key);
-create table public.normalized_customers(id uuid primary key,company_id uuid not null references public.companies(id),business_registration_number text,unique(company_id,id));
+create table public.normalized_customers(id uuid primary key,company_id uuid not null references public.companies(id) on delete cascade,business_registration_number text,unique(company_id,id));
 create table public.app_users(id uuid primary key,status text not null);
-create table public.company_members(id uuid primary key,company_id uuid not null references public.companies(id),role text not null,permission_role text,status text not null,unique(company_id,id));
+create table public.company_members(id uuid primary key,company_id uuid not null references public.companies(id) on delete cascade,role text not null,permission_role text,status text not null,unique(company_id,id));
 create table public.store_accounts(
   id uuid primary key,company_id uuid not null references public.companies(id),customer_id uuid not null,business_registration_number text not null,
   business_status text not null,business_status_verified_at timestamptz not null,verification_request_id text not null,
@@ -38,16 +38,19 @@ alter table public.store_accounts add constraint store_accounts_terms_member_fk 
 grant all on public.store_accounts,public.store_account_members,public.store_account_member_events,public.app_users to service_role;
 grant select on public.company_members,public.normalized_customers to service_role;
 
-insert into public.companies values('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002');
+insert into public.companies values('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002'),
+ ('10000000-0000-4000-8000-000000000003');
 insert into public.normalized_customers values
  ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','1234567890'),
  ('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','2234567890'),
- ('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','3234567890');
+ ('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','3234567890'),
+ ('20000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','4234567890');
 insert into public.app_users values('30000000-0000-4000-8000-000000000001','active');
 insert into public.company_members values
  ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','owner','active'),
  ('40000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','member','staff','active'),
- ('40000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000002','owner','owner','active');
+ ('40000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000002','owner','owner','active'),
+ ('40000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000003','owner','owner','active');
 \ir 20261105-store-kakao-membership.sql
 \ir 20261107-store-owner-activation.sql
 
@@ -60,6 +63,17 @@ do $$ begin
     '40000000-0000-4000-8000-000000000001',repeat('c',64)); raise exception 'cross_company_customer_prepared';
   exception when others then if sqlerrm<>'store_customer_business_number_required' then raise; end if; end;
 end $$;
+
+select public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
+  '40000000-0000-4000-8000-000000000004',repeat('e',64));
+reset role;
+delete from public.companies where id='10000000-0000-4000-8000-000000000003';
+do $$ begin
+  if exists(select 1 from public.store_owner_activation_requests where company_id='10000000-0000-4000-8000-000000000003') then
+    raise exception 'company_delete_did_not_cascade_owner_activation';
+  end if;
+end $$;
+set role service_role;
 select public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
   '40000000-0000-4000-8000-000000000001',repeat('b',64));
 do $$ begin

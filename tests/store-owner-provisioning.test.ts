@@ -3,11 +3,35 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
-import { activateStoreOwner, getPreparedStoreOwnerActivation, prepareStoreOwnerActivation } from "../lib/store/07-store-owner-provisioning";
+import { activateStoreOwner, getPreparedStoreOwnerActivation, getStorePublicBaseUrl, prepareStoreOwnerActivation,
+  resolveOrCreateStoreKakaoUser } from "../lib/store/07-store-owner-provisioning";
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 
 describe("store owner activation repository", () => {
+  it("does not overwrite an existing Kakao user when concurrent creation wins", async () => {
+    mocks.db.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "existing", status: "active" }]);
+    await expect(resolveOrCreateStoreKakaoUser({ kakaoUserId: "kakao-1", name: "new name" })).resolves.toBe("existing");
+    expect(mocks.db.mock.calls[1][1].headers.Prefer).toBe("resolution=ignore-duplicates,return=representation");
+    expect(mocks.db).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not reactivate an inactive Kakao user found after a concurrent insert", async () => {
+    mocks.db.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "existing", status: "inactive" }]);
+    await expect(resolveOrCreateStoreKakaoUser({ kakaoUserId: "kakao-1" })).resolves.toBeNull();
+  });
+
+  it("accepts only a configured HTTPS origin for public activation links", () => {
+    expect(getStorePublicBaseUrl()).toBeNull();
+    vi.stubEnv("STORE_PUBLIC_BASE_URL", "http://store.example.test");
+    expect(getStorePublicBaseUrl()).toBeNull();
+    vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://store.example.test/path");
+    expect(getStorePublicBaseUrl()).toBeNull();
+    vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://store.example.test/");
+    expect(getStorePublicBaseUrl()).toBe("https://store.example.test");
+  });
   it("stores only a hash of the representative-issued token", async () => {
     mocks.db.mockResolvedValue({ customerId: "c", storeAccountId: "s", expiresAt: "x" });
     await prepareStoreOwnerActivation({ companyId: "company", customerId: "customer", actorCompanyMemberId: "actor", token: "secret" });

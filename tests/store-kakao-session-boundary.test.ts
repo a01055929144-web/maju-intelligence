@@ -23,6 +23,9 @@ describe("store Kakao session route boundary", () => {
     const provision = source("app/api/store/accounts/provision/route.ts");
     const activate = source("app/api/store/accounts/activate/route.ts");
     expect(provision).toContain("getCustomerSession()");
+    expect(provision).toContain("getStorePublicBaseUrl()");
+    expect(provision).not.toContain("new URL(request.url).origin");
+    expect(provision.indexOf("getStorePublicBaseUrl()")).toBeLessThan(provision.indexOf("const prepared = await prepareStoreOwnerActivationForCustomer("));
     expect(provision).not.toContain("authUserId");
     expect(provision).not.toContain("termsAccepted");
     expect(activate).toContain("body.termsAccepted !== true");

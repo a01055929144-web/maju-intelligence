@@ -19,8 +19,8 @@ create table public.store_owner_activation_requests (
   consumed_at timestamptz,
   cancelled_at timestamptz,
   unique(company_id,store_account_id),
-  foreign key(company_id,customer_id) references public.normalized_customers(company_id,id) on delete restrict,
-  foreign key(company_id,prepared_by_company_member_id) references public.company_members(company_id,id) on delete restrict,
+  foreign key(company_id,customer_id) references public.normalized_customers(company_id,id) on delete cascade,
+  foreign key(company_id,prepared_by_company_member_id) references public.company_members(company_id,id) on delete cascade,
   check(expires_at>prepared_at),
   check(num_nonnulls(consumed_at,cancelled_at)<=1)
 );
