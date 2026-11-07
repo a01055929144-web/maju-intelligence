@@ -24,6 +24,7 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await page.getByLabel("링크를 받을 매장").selectOption("customer");
   const create = page.getByRole("button", { name: "링크 만들고 복사", exact: true });
+  expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await create.click();
   await expect(page.getByRole("status")).toContainText("합성 주문 설정 확인 실패");
   expect(issued).toBe(0);
