@@ -1,4 +1,5 @@
 import { supabaseRequest } from "../store";
+import { purchaseDateEnabled } from "./purchase-cost-date";
 import type { PurchaseCostChange, PurchaseCostRepository } from "../../application/pricing/update-purchase-cost";
 import { aliasKey, selectPurchaseCostCandidate, type CostProduct, type PurchaseCostCandidate } from "../../domains/pricing/purchase-cost";
 import { convertedUnitCost } from "../../domains/product/catalog-import";
@@ -29,8 +30,9 @@ async function patchOne(path: string, body: Row) {
 
 export const purchaseCostRepository: PurchaseCostRepository = {
   async list(companyId) {
+    const dated = purchaseDateEnabled(companyId);
     const [catalog, matches, supplierProducts, suppliers] = await Promise.all([
-      pages(`product_catalog?select=id,product_code,canonical_name,spec_value,spec_unit,sales_unit,purchase_price,tax_type,created_at&company_id=eq.${enc(companyId)}&order=id`),
+      pages(`product_catalog?select=id,product_code,canonical_name,spec_value,spec_unit,sales_unit,purchase_price,tax_type,created_at${dated ? ",purchase_price_date" : ""}&company_id=eq.${enc(companyId)}&order=id`),
       pages(`supplier_product_matches?select=product_catalog_id,supplier_product_id,match_status,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${enc(companyId)}&match_status=in.(auto,confirmed)&order=supplier_product_id`),
       pages(`supplier_products?select=id,supplier_id,supplier_code,raw_name,raw_spec,raw_unit,latest_cost,cost_confirmed&company_id=eq.${enc(companyId)}&is_active=eq.true&order=id`),
       pages(`product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&order=id`),
@@ -50,6 +52,7 @@ export const purchaseCostRepository: PurchaseCostRepository = {
         spec: [row.spec_value, row.spec_unit].filter((value) => value != null && value !== "").join(""),
         unit: String(row.sales_unit || ""), cost: Number(row.purchase_price) || 0,
         createdAt: String(row.created_at || ""),
+        ...(dated && row.purchase_price_date ? { priceDate: String(row.purchase_price_date) } : {}),
         ...(row.tax_type === "taxable" || row.tax_type === "exempt" ? { taxType: row.tax_type as "taxable" | "exempt" } : {}),
       };
       const linked = byCatalog.get(base.id) || [];

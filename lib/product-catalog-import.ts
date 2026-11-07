@@ -461,6 +461,11 @@ export async function saveProductCatalogImport(input: {
     return {
       importId,
       supplierId,
+      supplierProductMappings: input.products.flatMap((product) => {
+        const supplierProductId = idByKey.get(product.sourceFingerprint);
+        return supplierProductId ? [{ sourceFingerprint: product.sourceFingerprint, supplierProductId }] : [];
+      }),
+      unresolvedSourceFingerprints: input.products.filter((product) => !idByKey.has(product.sourceFingerprint)).map((product) => product.sourceFingerprint),
       unmatchedSupplierProductIds: supplierProductIds.filter((id) =>
         !existingMatches.some((match) => match.supplier_product_id === id && ["auto", "confirmed"].includes(match.match_status)) &&
         !matches.some((match) => match.supplier_product_id === id && match.match_status === "auto"),
@@ -503,9 +508,11 @@ export async function saveProductCatalogImport(input: {
 export async function createCatalogFromSupplierProducts(
   companyId: string,
   ids: string[],
+  options: { initialPurchasePrice?: "supplier-latest" | "dated-batch" } = {},
 ) {
-  if (!ids.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
-  const products = await collectInChunks(ids, (part) =>
+  const requestedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (!requestedIds.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
+  const products = await collectInChunks(requestedIds, (part) =>
     db<Array<Record<string, unknown>>>(
       `supplier_products?select=*&company_id=eq.${enc(companyId)}&id=in.(${part.map(enc).join(",")})`,
     ),
@@ -530,7 +537,20 @@ export async function createCatalogFromSupplierProducts(
       purchase_product_name: p.raw_name,
       purchase_spec: p.raw_spec || null,
       purchase_unit: p.raw_unit || "EA",
-      purchase_price: p.latest_cost || 0,
+      ...(options.initialPurchasePrice === "dated-batch"
+        ? {
+            sales_unit:
+              !p.parsed_pack_quantity || Number(p.parsed_pack_quantity) === 1
+                ? p.raw_unit || "EA"
+                : null,
+          }
+        : {}),
+      // The dated batch owns the first real cost and its effective date.
+      // Zero is the schema-safe unpriced sentinel; legacy undated nonzero costs stay protected.
+      purchase_price:
+        options.initialPurchasePrice === "dated-batch"
+          ? 0
+          : p.latest_cost || 0,
       canonical_name: p.parsed_name || p.raw_name,
       brand_name: p.parsed_brand || null,
       origin_name: p.parsed_origin || null,
@@ -629,5 +649,10 @@ export async function createCatalogFromSupplierProducts(
   return {
     createdCount: created.length,
     categorySuggestedCount: products.filter((product) => suggestCategory(String(product.parsed_name || product.raw_name || ""), String(product.raw_spec || ""))).length,
+    productMappings: products.flatMap((product) => {
+      const productCatalogId = catalogBySource.get(`standard:${product.id}`);
+      return productCatalogId ? [{ productCatalogId, supplierProductId: String(product.id) }] : [];
+    }),
+    unresolvedSupplierProductIds: requestedIds.filter((id) => !catalogBySource.has(`standard:${id}`)),
   };
 }
