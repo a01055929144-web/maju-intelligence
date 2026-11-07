@@ -278,7 +278,9 @@ begin
   select id into v_after_run from public.price_recalc_runs
     where company_id=p_company order by created_at desc,id desc limit 1;
   if v_after_run is distinct from v_before_run then v_recalc_run:=v_after_run; end if;
-  v_history_only_product_count:=jsonb_object_length(v_product_latest_dates)-jsonb_object_length(v_current_product_ids);
+  v_history_only_product_count:=
+    (select count(*) from jsonb_object_keys(v_product_latest_dates))-
+    (select count(*) from jsonb_object_keys(v_current_product_ids));
   update public.purchase_cost_date_batches_v2 set
     product_snapshots=v_product_snapshots,supplier_snapshots=v_supplier_snapshots,
     supplier_import_ids=v_import_ids,recalc_run_id=v_recalc_run,
