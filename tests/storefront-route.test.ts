@@ -65,7 +65,7 @@ it("takes order scope and prices only from the verified token RPC", async () => 
   expect(payload.p_token_hash).toBe("a".repeat(64));
   expect(payload).not.toHaveProperty("companyId");
   expect(payload).not.toHaveProperty("knownTotal");
-  expect(payload.p_lines).toEqual([{ productId, promotionId: null, quantity: 1 }]);
+  expect(payload.p_lines).toEqual([{ productId, quantity: 1 }]);
 });
 it("rejects cross-origin writes before resolving a link", async () => {
   expect((await PUT(request({}, "https://other.example.test"))).status).toBe(
