@@ -94,6 +94,9 @@ test("empty and invalid files, row errors and server permission errors never app
   await file.setInputFiles(csv(valid.replace("3500", "")));
   await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
   await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
+  await file.setInputFiles(csv(valid.replace("3500", "0")));
+  await expect(upload.getByText("반영 후보 1행 · 오류 0행 · 중복 0행", { exact: true })).toBeVisible();
+  await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeEnabled();
 });
 
 test("xlsx date cells normalize through the 04 parser; a new file resets confirmation and import ID", async ({ page }) => {
@@ -135,4 +138,18 @@ test("staff and 390px keep the upload controls hidden", async ({ page }, info) =
   await expect(page.getByText("PC에서 같은 매장 주소를 열어 주세요.", { exact: false })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath("store-cost-upload-390.png"), fullPage: true });
+});
+
+
+test("merged import API rejects preview and apply while the feature is OFF", async ({ page }) => {
+  await page.goto(`/store?companyId=${companyId}&storeAccountId=${storeAccountId}`);
+  await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
+  const dto = { companyId, storeAccountId, importId: "80000000-0000-4000-8000-000000000001", fileName: "합성-OFF.csv",
+    rows: [{ effectiveOn: "2026-11-07", productName: "합성 OFF 검증", specification: "1kg", unit: "봉", costKrw: 3500, sourceRowNumber: 2 }] };
+  for (const mode of ["preview", "apply"] as const) {
+    // No interception: use the merged server boundary, without credentials or a database.
+    const response = await page.request.post("/api/store/costs/import", { data: { ...dto, mode, ...(mode === "apply" ? { confirmationHash: "0".repeat(64) } : {}) } });
+    expect(response.status()).toBe(404);
+    expect(await response.json()).toEqual({ message: "Not found" });
+  }
 });
