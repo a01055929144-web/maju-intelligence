@@ -104,8 +104,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
       registration.imports++;
       return route.fulfill({ json: { unmatchedSupplierProductIds: [supplierProductId], productMappings: [], supplierProductMappings: [{ sourceFingerprint: body.products[0].sourceFingerprint, supplierProductId }] } });
     }
-    if (body.action === "create-standards") {
-      expect(body.initialPurchasePrice).toBe("dated-batch");
+    if (body.action === "create-dated-standards") {
       registration.standards++;
       return route.fulfill({ json: { createdCount: 1, categorySuggestedCount: 0,
         productMappings: options.unresolvedMapping ? [] : [{ supplierProductId, productCatalogId: products[0].id }],

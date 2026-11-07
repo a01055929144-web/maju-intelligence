@@ -436,7 +436,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const chunks: string[][] = [];
       for (let offset = 0; offset < ids.length; offset += 100) chunks.push(ids.slice(offset, offset + 100));
       const counts = await Promise.all(chunks.map(async (chunk) => {
-        const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create-standards", companyId, supplierProductIds: chunk, ...(onMapped ? { initialPurchasePrice: "dated-batch" } : {}) }) });
+        const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: onMapped ? "create-dated-standards" : "create-standards", companyId, supplierProductIds: chunk }) });
         const created = await createdResponse.json().catch(() => ({}));
         if (!createdResponse.ok) throw new Error(created.message || "상품관리 등록에 실패했습니다.");
         for (const item of created.productMappings || []) mapped.set(item.supplierProductId, item.productCatalogId);
