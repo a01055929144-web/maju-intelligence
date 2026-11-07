@@ -1,10 +1,10 @@
 # 매장 원가관리 SQL 적용·검증·rollback 실행서
 
-> 상태: **승인 대기 / 실행 금지**
+> 상태: **승인·운영 적용·읽기 검증 완료**
 >
 > 대상 프로젝트: `fcmdvveqmcgtioelzqun`
 >
-> 이 문서는 실행 순서만 정리한다. 운영 DB 실행, 배포, `STORE_COSTS` 활성화를 승인하지 않는다.
+> 이 문서는 승인된 운영 적용 순서와 완료 결과를 기록한다. 추가 SQL 실행, 재실행, 배포 또는 `STORE_COSTS` 활성화를 승인하지 않는다.
 
 ## 0. 실행 전 필수 조건
 
@@ -225,6 +225,17 @@ select
 - 기능 플래그가 계속 OFF임을 확인한 결과
 - rollback 담당자
 
+### 2026-11-07 운영 적용 결과
+
+- 대상 프로젝트: `fcmdvveqmcgtioelzqun`
+- 적용 순서: 기본 SQL 적용·읽기 검증 후 batch SQL 적용·읽기 검증
+- 기본 SQL migration history: `20261107024809 store_cost_management_20261107`
+- batch SQL migration history: `20261107024837 store_cost_batch_import_20261107`
+- 데이터 건수: `store_cost_items`, `store_cost_revisions`, `store_cost_imports` 모두 `0`
+- 보안 검증: 세 테이블의 RLS, 역할별 최소 권한, 두 함수의 `SECURITY INVOKER` 확인
+- 쓰기 경계 검증: 두 함수의 활성 매장 가드와 부모 `store_accounts` 행 `FOR UPDATE` 잠금 확인
+- 이 기록을 위해 SQL을 재실행하거나 데이터를 작성하지 않았다.
+
 ## 7. rollback 순서와 범위
 
 rollback은 적용의 역순이다.
@@ -243,7 +254,9 @@ rollback은 적용의 역순이다.
 
 ## 8. 현재 결론
 
-- 운영 적용: **미실행**
+- 운영 적용: **2026-11-07 완료**
+- 읽기 검증: **완료**
 - 기능 활성화: **OFF 유지**
-- 문서 기준 main: `abd7f632` 이상
+- 적용 migration history: `20261107024809`, `20261107024837`
+- 문서 기준 main: `19d36b3` 이상
 - 이 문서의 쿼리: 읽기 검증 전용
