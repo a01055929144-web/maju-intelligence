@@ -242,3 +242,26 @@ describe("runLimited", () => {
     expect(peak).toBe(2);
   });
 });
+
+// The v2 adapter must use these original lines, never merged price candidates,
+// as its receipt source. No database or write RPC participates in this check.
+it("keeps 3417 original transactions and amounts separate from 745 price candidates", () => {
+  const source = Array.from({ length: 3417 }, (_, index) => {
+    const product = index % 745;
+    const quantity = index + 1;
+    return [`ERP-${product + 1}`, `합성 상품 ${product + 1}`, "봉", "2026-11-07", 300, quantity, quantity * 300, quantity * 30, quantity * 330].map(String);
+  });
+  const sheet = buildPurchaseSheet([["ERP 코드", "품목", "단위", "구매일", "단가", "수량", "공급가액", "부가세", "합계"], ...source]);
+  const parsed = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded");
+  const original = structuredClone(parsed.lines);
+  const prices = mergeDuplicateLines(parsed.lines);
+  expect(parsed.skipped).toEqual([]); expect(parsed.dateIssues).toEqual([]);
+  expect(prices).toHaveLength(745); expect(prices.conflicts).toHaveLength(0);
+  expect(parsed.lines).toEqual(original);
+  expect(parsed.lines).toHaveLength(3417);
+  expect(new Set(parsed.lines.map(line => line.rowNumber)).size).toBe(3417);
+  parsed.lines.forEach((line, index) => {
+    expect(line).toMatchObject({ rowNumber: index + 2, code: `ERP-${index % 745 + 1}`, quantity: index + 1,
+      supplyAmount: (index + 1) * 300, vatAmount: (index + 1) * 30, totalAmount: (index + 1) * 330, raw: source[index] });
+  });
+});
