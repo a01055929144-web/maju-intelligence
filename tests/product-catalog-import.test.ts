@@ -6,6 +6,7 @@ vi.mock("../lib/store", () => ({ supabaseRequest }));
 import {
   createCatalogFromSupplierProducts,
   listProductImportWorkspace,
+  saveProductCatalogImport,
   type SupplierProductAdminItem,
 } from "../lib/product-catalog-import";
 import { defaultConversionReviewRatio } from "../lib/product-conversion-review";
@@ -37,7 +38,12 @@ describe("product catalog import data access", () => {
       .mockResolvedValueOnce(undefined);
 
     await expect(createCatalogFromSupplierProducts("company-1", ["supplier-product-1"]))
-      .resolves.toEqual({ categorySuggestedCount: 1, createdCount: 1 });
+      .resolves.toEqual({
+        categorySuggestedCount: 1,
+        createdCount: 1,
+        productMappings: [{ productCatalogId: "catalog-1", supplierProductId: "supplier-product-1" }],
+        unresolvedSupplierProductIds: [],
+      });
     const catalog = JSON.parse(supabaseRequest.mock.calls[3][1].body);
     expect(catalog[0]).toMatchObject({
       product_code: "P-000001", purchase_price: 18_910, tax_type: "taxable",
@@ -45,6 +51,28 @@ describe("product catalog import data access", () => {
     expect(catalog[0]).not.toHaveProperty("category");
     const matches = JSON.parse(supabaseRequest.mock.calls[4][1].body);
     expect(matches[0]).toMatchObject({ product_catalog_id: "catalog-1", match_status: "confirmed" });
+  });
+
+  it("returns the source fingerprint to supplier product ID contract", async () => {
+    supabaseRequest
+      .mockResolvedValueOnce([{ id: "supplier-1" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "import-1" }])
+      .mockResolvedValueOnce([{ id: "supplier-product-1", source_fingerprint: "supplier:name:onion||ea" }])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined);
+
+    const result = await saveProductCatalogImport({
+      companyId: "company-1", createdByName: "대표", excludedCount: 0, fileName: "purchase.xlsx",
+      mapping: { cost: "매입가", productName: "상품명" }, supplierName: "supplier", warnings: [],
+      products: [{ cost: 100, costConfirmed: true, name: "onion", observations: [], rawName: "onion", rawUnit: "EA", sourceFingerprint: "supplier:name:onion||ea", unit: "EA", usageTags: [] }],
+    });
+
+    expect(result.supplierProductMappings).toEqual([{ sourceFingerprint: "supplier:name:onion||ea", supplierProductId: "supplier-product-1" }]);
+    expect(result.unresolvedSourceFingerprints).toEqual([]);
   });
 
   it("splits supplier product and source key filters into bounded requests", async () => {
@@ -62,7 +90,12 @@ describe("product catalog import data access", () => {
 
     await expect(
       createCatalogFromSupplierProducts("company-1", ids),
-    ).resolves.toEqual({ categorySuggestedCount: 0, createdCount: 0 });
+    ).resolves.toEqual({
+      categorySuggestedCount: 0,
+      createdCount: 0,
+      productMappings: ids.map((id) => ({ productCatalogId: `catalog-${id}`, supplierProductId: id })),
+      unresolvedSupplierProductIds: [],
+    });
 
     expect(supabaseRequest).toHaveBeenCalledTimes(5);
     const supplierPaths = supabaseRequest.mock.calls
@@ -85,6 +118,39 @@ describe("product catalog import data access", () => {
     expect(supabaseRequest.mock.calls[4][0]).toContain(
       "supplier_product_matches?on_conflict=",
     );
+  });
+
+  it("returns exact IDs for 745 first-import products without creating duplicate standards", async () => {
+    const ids = Array.from({ length: 745 }, (_, index) => `supplier-${index}`);
+    const products = ids.map((id) => ({ id, raw_name: id, raw_unit: "EA", latest_cost: 100 }));
+    let code = 0;
+    supabaseRequest.mockImplementation(async (path: string, init?: { body?: string; method?: string }) => {
+      const target = String(path || "");
+      if (target.startsWith("supplier_products?select=")) {
+        const requested = decodeURIComponent(target.match(/id=in\.\(([^)]+)\)/)?.[1] || "").split(",");
+        return products.filter((product) => requested.includes(product.id));
+      }
+      if (target.startsWith("product_catalog?select=id,source_key")) return [];
+      if (target === "rpc/next_product_code") return `P-${String(++code).padStart(6, "0")}`;
+      if (target.startsWith("product_catalog?on_conflict=")) {
+        return JSON.parse(init?.body || "[]").map((row: { source_key: string }) => ({ id: `catalog-${row.source_key.slice("standard:".length)}`, source_key: row.source_key }));
+      }
+      return undefined;
+    });
+
+    const result = await createCatalogFromSupplierProducts("company-1", ids);
+
+    expect(result.createdCount).toBe(745);
+    expect(result.productMappings).toHaveLength(745);
+    expect(new Set(result.productMappings.map((mapping) => mapping.productCatalogId)).size).toBe(745);
+    expect(result.unresolvedSupplierProductIds).toEqual([]);
+    expect(supabaseRequest.mock.calls.filter(([path]) => String(path).startsWith("product_catalog?on_conflict=")).length).toBe(3);
+  });
+
+  it("reports requested supplier products that cannot be resolved", async () => {
+    supabaseRequest.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    await expect(createCatalogFromSupplierProducts("company-1", ["missing", "missing"]))
+      .resolves.toMatchObject({ productMappings: [], unresolvedSupplierProductIds: ["missing"] });
   });
 
   it("reuses the approved product import history for the audit list", async () => {
