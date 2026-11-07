@@ -44,7 +44,16 @@ describe("A-0 quote acceptance access boundaries", () => {
   it.todo("matches or creates a lead only inside the token company");
   it.todo("uses one idempotent acceptance path for sheet and quote without duplicate customers");
   it.todo("records staff proxy acceptance with the authenticated company and actor");
-  it.todo("lets only an active store owner invite or export a store employee");
+  it("lets only an active store owner or manager invite or export an allowed store member", () => {
+    const route = source("app/api/store/members/route.ts");
+    const sql = source("docs/sql-drafts/20261108-store-member-removal.sql");
+    expect(route).toContain("getStoreMemberContext");
+    expect(route).toContain('member.role !== "owner" && member.role !== "manager"');
+    expect(route).toContain('body.role === "manager" && member.role !== "owner"');
+    expect(sql).toContain("v_target.role='owner'");
+    expect(sql).toContain("v_actor.role='manager' and v_target.role<>'staff'");
+    expect(sql).toContain("removed_by_member_id=v_actor.id");
+  });
   it.todo("lets an active store employee order but not change payment or store information");
   it.todo("moves ownership only from the current owner or an authorized distributor actor after business-number verification");
   it.todo("blocks an exported member immediately while preserving historical order attribution");

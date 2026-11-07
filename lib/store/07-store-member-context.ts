@@ -2,6 +2,7 @@ import "server-only";
 
 import { getStoreSession } from "../auth";
 import { getStoreCostMemberAccess } from "./08-store-cost-access";
+import { supabaseRequest } from "../store";
 import type { StoreAccountRole } from "../../domains/organization/store-cost-access";
 
 export type StoreMemberContext = {
@@ -20,4 +21,14 @@ export async function getStoreMemberContext(input: { companyId: string; storeAcc
   if (!member) return null;
   return { authUserId: session.authUserId, companyId: input.companyId, memberId: member.id,
     role: member.role, status: "active", storeAccountId: input.storeAccountId };
+}
+
+export async function getStoreOrderMemberContext(input: { companyId: string; customerId: string }) {
+  const rows = await supabaseRequest<Array<{ id: string }>>(
+    `store_accounts?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&status=eq.active&business_status=eq.active&limit=1`
+  );
+  const storeAccountId = rows[0]?.id;
+  if (!storeAccountId) return null;
+  const member = await getStoreMemberContext({ companyId: input.companyId, storeAccountId });
+  return member ? { ...member, customerId: input.customerId } : null;
 }

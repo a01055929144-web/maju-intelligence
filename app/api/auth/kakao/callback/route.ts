@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
 import { activateStoreOwner, getPreparedStoreOwnerActivation, resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
+import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +40,12 @@ export async function GET(request: NextRequest) {
   const linkMode = stateOk && statePayload === "link";
   const storeOwnerMatch = stateOk ? statePayload.match(/^store-owner:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeOwnerMode = Boolean(storeOwnerMatch);
+  const storeInviteMatch = stateOk ? statePayload.match(/^store-invite:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
+  const storeInviteMode = Boolean(storeInviteMatch);
   const storeMatch = stateOk ? statePayload.match(/^store:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeMode = Boolean(storeMatch);
-  const storeFlow = storeMode || storeOwnerMode;
-  const storeCompanyId = storeOwnerMatch?.[1] || storeMatch?.[1] || "";
+  const storeFlow = storeMode || storeOwnerMode || storeInviteMode;
+  const storeCompanyId = storeOwnerMatch?.[1] || storeInviteMatch?.[1] || storeMatch?.[1] || "";
   const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeFlow ? statePayload : "";
 
   if (!stateOk) {
@@ -85,6 +88,24 @@ export async function GET(request: NextRequest) {
         termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
       return redirectStoreScope(request.url, activated.companyId, activated.storeAccountId);
+    }
+
+    if (storeInviteMode && storeInviteMatch) {
+      const proof = await getStoreMemberInvitationProof({ consume: true });
+      const invitation = proof ? await getPreparedStoreMemberInvitation(proof.token) : null;
+      if (!proof || !invitation || invitation.companyId !== storeInviteMatch[1] || invitation.storeAccountId !== storeInviteMatch[2])
+        return redirectStore(request.url, "store_invitation_required");
+      const authUserId = await resolveOrCreateStoreKakaoUser({
+        avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+        email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+        name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+        phoneNumber: kakaoUser.kakao_account?.phone_number
+      });
+      if (!authUserId) return redirectStore(request.url, "store_invitation_required");
+      await acceptStoreMemberInvitation({ authUserId, companyId: invitation.companyId,
+        storeAccountId: invitation.storeAccountId, token: proof.token });
+      if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+      return redirectStoreScope(request.url, invitation.companyId, invitation.storeAccountId);
     }
 
     if (storeMode && storeMatch) {
