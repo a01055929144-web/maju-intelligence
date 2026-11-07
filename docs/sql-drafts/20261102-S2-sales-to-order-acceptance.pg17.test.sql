@@ -170,10 +170,15 @@ do $$ declare a jsonb; b jsonb; begin
   if exists(select from storefront_links where id='81000000-0000-4000-8000-000000000002') then raise exception 'revoked link retry reissued storefront link'; end if;
 end $$;
 
--- New customer creates one customer and receives the same reusable P2 link contract.
-do $$ declare a jsonb; begin
+-- New customer receives a link; a distinct acceptance reuses it without overwriting the first audit link.
+do $$ declare a jsonb; b jsonb; first_request uuid; begin
   a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000003',repeat('5',32),repeat('6',64),now()+interval '1 year');
   if a->>'customerId' is null or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'new customer order link failed'; end if;
+  select acceptance_request_id into first_request from storefront_links where id=(a->>'storefrontLinkId')::uuid;
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000016',repeat('6',64),'staff',(a->>'customerId')::uuid,(a->>'leadId')::uuid,null,false,null,'{}','81000000-0000-4000-8000-000000000009',repeat('9',32),repeat('9',64),now()+interval '1 year');
+  if b->>'storefrontLinkId'<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not reuse active link'; end if;
+  if (select acceptance_request_id from storefront_links where id=(a->>'storefrontLinkId')::uuid)<>first_request then raise exception 'distinct acceptance overwrote first audit link'; end if;
+  if (select result->>'storefrontLinkId' from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000016')<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not preserve per-request link result'; end if;
 end $$;
 
 -- Ambiguous customer stays review-only and cannot receive an order link.

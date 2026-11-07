@@ -45,7 +45,8 @@ begin
     jsonb_build_array(jsonb_build_object('customerId',v_customer,'id',p_link_id,'nonce',p_link_nonce,'hash',p_link_hash)),
     p_link_expires_at,p_actor_user_id,p_actor_key
   );
-  update public.storefront_links set acceptance_request_id=v_request_id,can_order=true
+  update public.storefront_links
+    set acceptance_request_id=coalesce(acceptance_request_id,v_request_id),can_order=true
     where company_id=p_company_id and id=v_link.issued_link_id
       and customer_id=v_customer and document_version_id=p_document_version_id;
   if not found then raise exception 'storefront_link_not_found'; end if;
