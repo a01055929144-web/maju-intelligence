@@ -79,7 +79,7 @@ begin
     if v_product_id is null or v_product_id = any(v_seen_products)
        or (v_supplier_id is not null and v_supplier_id = any(v_seen_suppliers))
        or v_expected is null or v_cost is null or v_expected < 0 or v_cost < 0
-       or v_cost > 1000000000 or v_expected > 1000000000 or v_cost = v_expected
+       or v_cost > 999999999999.99 or v_expected > 999999999999.99 or v_cost = v_expected
        or v_cost <> round(v_cost, 2) or v_expected <> round(v_expected, 2) then
       raise exception 'invalid_purchase_cost_change';
     end if;
@@ -106,9 +106,9 @@ begin
       end if;
       select * into v_match from public.supplier_product_matches
         where company_id = p_company and supplier_product_id = v_supplier_id
-          and product_catalog_id = v_product_id and match_status = 'confirmed'
+          and product_catalog_id = v_product_id and match_status in ('auto', 'confirmed')
         limit 1;
-      if not found then raise exception 'supplier_product_not_confirmed'; end if;
+      if not found then raise exception 'supplier_product_not_linked'; end if;
       if nullif(lower(trim(v_supplier.raw_unit)), '') = nullif(lower(trim(v_product.sales_unit)), '')
          and nullif(trim(v_product.sales_unit), '') is not null then
         v_ratio := 1;
@@ -118,7 +118,7 @@ begin
         raise exception 'purchase_unit_conversion_missing';
       end if;
       v_raw_cost := v_cost * v_ratio;
-      if v_raw_cost > 1000000000 or v_raw_cost <> round(v_raw_cost, 2) then
+      if v_raw_cost > 999999999999.99 or v_raw_cost <> round(v_raw_cost, 2) then
         raise exception 'supplier_unit_cost_not_representable';
       end if;
       update public.supplier_products

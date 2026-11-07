@@ -65,7 +65,7 @@ insert into public.supplier_products(id,company_id,supplier_id,raw_unit,latest_c
  ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','BOX',2000,true),
  ('30000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','BOX',1000,true);
 insert into public.supplier_product_matches(id,company_id,supplier_product_id,product_catalog_id,match_status,purchase_to_sales_ratio,conversion_confirmed) values
- ('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','confirmed',20,true),
+ ('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','auto',20,true),
  ('40000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','confirmed',20,true);
 set local role service_role;
 do $$
@@ -150,7 +150,7 @@ begin
     );
     raise exception 'supplier_cost_conflict_missing';
   exception when raise_exception then
-    if sqlerrm = 'supplier_cost_conflict_missing' then raise; end if;
+    if sqlerrm <> 'supplier_cost_changed' then raise; end if;
   end;
   if (select purchase_price from public.product_catalog where company_id=a) <> 100
      or exists(select 1 from public.purchase_cost_batches
@@ -181,6 +181,30 @@ begin
     join public.supplier_products s on s.company_id=h.company_id and s.id=h.supplier_product_id
     where h.company_id=a and i.supplier_id is distinct from s.supplier_id
   ) then raise exception 'restore_import_wrong_supplier'; end if;
+
+  -- numeric(14,2) accepts more than one billion KRW; the old arbitrary cap must not reject it.
+  perform public.save_purchase_cost_batch_v1(
+    a, '50000000-0000-4000-8000-000000000006',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":1000000001}]',
+    'tester'
+  );
+  if (select latest_cost from public.supplier_products
+      where company_id=a and id='30000000-0000-4000-8000-000000000001') <> 20000000020 then
+    raise exception 'numeric_14_2_valid_cost_rejected'; end if;
+  perform public.restore_purchase_cost_batch_v1(a,'50000000-0000-4000-8000-000000000006','tester');
+  begin
+    perform public.save_purchase_cost_batch_v1(
+      a, '50000000-0000-4000-8000-000000000007',
+      '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":50000000000}]',
+      'tester'
+    );
+    raise exception 'numeric_14_2_overflow_accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'supplier_unit_cost_not_representable' then raise; end if;
+  end;
+  if exists(select 1 from public.purchase_cost_batches
+            where company_id=a and id='50000000-0000-4000-8000-000000000007') then
+    raise exception 'overflow_batch_partially_saved'; end if;
 end $$;
 reset role;
 do $$
