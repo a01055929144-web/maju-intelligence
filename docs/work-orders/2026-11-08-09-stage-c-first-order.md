@@ -15,7 +15,7 @@ Ponytail: 사용함
 ## 소비 계약과 차단점
 - 03 Draft #342의 acceptPricingDocument/PricingAcceptanceResult는 아직 미병합·SQL 미적용이다. 이번 코드는 이를 import하거나 RPC를 호출하지 않는다. 검증된 서버 수락 컨텍스트만 미래 소비 입력이며 브라우저 company/customer/lead/가격은 신뢰하지 않는다.
 - needsReview=true 또는 orderEnabled=false이면 주문 링크가 없다. storefrontLinkId/token은 서버가 성공한 저장 결과에서만 소비한다. 같은 수락 키의 회수·만료·설정 없음 결과를 재시도로 새 링크 발급으로 바꾸지 않는다. 기존 서명 모듈/fragment URL 계약을 사용하고 토큰을 로그·연락 메타데이터·브라우저 저장소에 쓰지 않는다.
-- 07 구성원 경계 PR은 별도 승인 대기다. 이번 변경은 기존 bearer 주문 링크의 회사/customer 경계만 사용하며, 매장 로그인이나 costAccess를 주문 권한으로 승격하지 않는다. 07 인증/구성원 파일과 03 RPC/SQL은 수정하지 않는다.
+- 07 구성원 경계 PR은 별도 승인 대기다. 이번 변경은 기존 bearer 주문 링크의 회사/customer 경계만 사용하며, 매장 로그인이나 costAccess를 주문 권한으로 승격하지 않는다. 07 인증/구성원 파일과 03 RPC/SQL은 수정하지 않는다. bearer 링크와 로그인 매장 일치를 검증할 수 없으므로 fragment가 있는 화면은 기존 로그인/원가관리 props를 소비하지 않는다. 로그인 매장 전용 주소(fragment 없음)의 기존 기능은 유지한다. 합성 점주 컨텍스트+다른 매장 링크 전환에서 원가 API 요청 0건을 검증한다.
 - #342 및 07의 기능 OFF를 유지한다. 승인·적용·인증 어댑터 확정 후 서버 수락→서명 URL→기존 /store 통합 검증이 별도로 필요하다. 이번 PR의 합성 검증은 단계 C 운영 완료 증거가 아니다.
 
 ## 검증 경계
