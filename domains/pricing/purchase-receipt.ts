@@ -1,7 +1,7 @@
 import { purchaseLineKey } from "./purchase-import";
 import { cleanCategory } from "./product-category";
 
-/** 11/4: 매입 기록 한 줄(날짜·매입처·품목 단위로 합칩니다). 순수 규칙만 둡니다. */
+/** 11/4: 매입 기록 원문 한 줄. 순수 규칙만 둡니다. */
 export type PurchaseReceiptInputLine = {
   name: string;
   spec?: string;
@@ -26,10 +26,19 @@ const num = (value: unknown, max = 1_000_000_000_000) => {
   return Number.isFinite(n) && n >= 0 && n <= max ? n : null;
 };
 const text = (value: unknown, max = 200) => String(value ?? "").trim().slice(0, max);
+const rowFingerprint = (line: PurchaseReceiptInputLine) => {
+  const value = [line.rawCost, line.cost, line.quantity, line.supplyAmount, line.vatAmount, line.totalAmount, line.taxType, line.vatIncluded].join("|");
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
 
-export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate: string; fileName: string; actorName: string; lines: readonly PurchaseReceiptInputLine[]; knownProductIds?: ReadonlySet<string> }) {
+export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate: string; fileName: string; actorName: string; lines: readonly PurchaseReceiptInputLine[]; knownProductIds?: ReadonlySet<string>; preserveSourceRows?: boolean }) {
+  // receiptDate is still file-wide; accept a per-line date here only after the parser/API contract adds it.
   const byKey = new Map<string, Record<string, unknown>>();
-  for (const line of input.lines) {
+  const fileName = text(input.fileName).toLowerCase();
+  for (let index = 0; index < input.lines.length; index += 1) {
+    const line = input.lines[index];
     const name = text(line.name);
     const unitPrice = num(line.rawCost, 1_000_000_000);
     const cost = num(line.cost, 1_000_000_000);
@@ -37,7 +46,10 @@ export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate
     const spec = text(line.spec, 120);
     const supplier = text(line.supplier, 120);
     const lineKey = purchaseLineKey(name, `${spec}${text(line.unit, 40)}`);
-    const dedupeKey = `${input.receiptDate}|${purchaseLineKey(supplier, "")}|${lineKey}`.slice(0, 400);
+    const sourceRow = Number.isInteger(line.rowNumber) && Number(line.rowNumber) > 0 ? Number(line.rowNumber) : index + 1;
+    const dedupeKey = (input.preserveSourceRows
+      ? `v2|${input.receiptDate}|${fileName}|${sourceRow}|${rowFingerprint(line)}|${supplier.toLowerCase()}|${lineKey}`
+      : `${input.receiptDate}|${purchaseLineKey(supplier, "")}|${lineKey}`).slice(0, 400);
     const previous = byKey.get(dedupeKey);
     const add = (field: string, value: number | null) => (value === null ? (previous?.[field] as number | null) ?? null : ((previous?.[field] as number | null) ?? 0) + value);
     byKey.set(dedupeKey, {
@@ -45,7 +57,7 @@ export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate
       created_by_name: text(input.actorName, 80),
       dedupe_key: dedupeKey,
       erp_code: text(line.code, 80) || null,
-      file_name: input.fileName || null,
+      file_name: text(input.fileName) || null,
       line_key: lineKey,
       price_includes_vat: Boolean(line.vatIncluded),
       product_catalog_id: line.productId && input.knownProductIds?.has(line.productId) ? line.productId : (previous?.product_catalog_id as string | null) ?? null,
@@ -53,7 +65,7 @@ export function buildPurchaseReceiptRows(input: { companyId: string; receiptDate
       quantity: add("quantity", num(line.quantity)),
       raw_values: Array.isArray(line.raw) ? line.raw.slice(0, 40).map((cell) => text(cell, 200)) : [],
       receipt_date: input.receiptDate,
-      source_row_number: typeof line.rowNumber === "number" ? line.rowNumber : null,
+      source_row_number: sourceRow,
       spec: spec || null,
       supplier_name: supplier || null,
       supply_amount: add("supply_amount", num(line.supplyAmount)),
