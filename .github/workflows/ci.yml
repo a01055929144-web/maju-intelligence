@@ -198,6 +198,16 @@ jobs:
           createdb purchase_cost_batch_test
           psql --dbname=purchase_cost_batch_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261107-purchase-cost-batch.pg17.test.sql
 
+      - name: Verify purchase-date v2 draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb purchase_cost_date_v2_test
+          psql --dbname=purchase_cost_date_v2_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261107-purchase-cost-date-v2.pg17.test.sql
+
       - name: Verify L-2 store area approval on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
