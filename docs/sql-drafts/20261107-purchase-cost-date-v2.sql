@@ -60,6 +60,7 @@ declare
   v_import_id uuid;
   v_price_selected boolean;
   v_apply_current boolean;
+  v_apply_supplier_current boolean;
   v_product_snapshots jsonb := '{}'::jsonb;
   v_supplier_snapshots jsonb := '{}'::jsonb;
   v_import_ids jsonb := '{}'::jsonb;
@@ -142,7 +143,11 @@ begin
           and m.match_status in('auto','confirmed')
         where sp.company_id=p_company and sp.id=v_supplier_id for update of sp;
       if not found then raise exception 'supplier_product_not_linked'; end if;
-      if v_apply_current and not (v_supplier_snapshots ? v_supplier_id::text) then
+      v_apply_supplier_current:=v_date=(
+        select max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))
+        from jsonb_array_elements(p_rows) where value->>'supplierProductId'=v_supplier_id::text
+      ) and (v_supplier.last_seen_date is null or v_date>=v_supplier.last_seen_date);
+      if v_apply_supplier_current and not (v_supplier_snapshots ? v_supplier_id::text) then
         v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text],jsonb_build_object(
           'latestCost',v_supplier.latest_cost,'costConfirmed',v_supplier.cost_confirmed,
           'lastSeenDate',v_supplier.last_seen_date,'updatedAt',v_supplier.updated_at));
@@ -159,7 +164,7 @@ begin
       insert into public.supplier_product_cost_history(
         company_id,supplier_product_id,import_id,price_date,purchase_price
       ) values(p_company,v_supplier_id,v_import_id,v_date,v_supplier_cost);
-      if v_apply_current then
+      if v_apply_supplier_current then
         update public.supplier_products set
           latest_cost=case when last_seen_date is null or v_date>=last_seen_date then v_supplier_cost else latest_cost end,
           cost_confirmed=case when last_seen_date is null or v_date>=last_seen_date then true else cost_confirmed end,

@@ -52,9 +52,11 @@ insert into public.product_catalog(id,company_id,purchase_product_name,purchase_
 insert into public.product_suppliers(id,company_id) values
  ('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
 insert into public.supplier_products(id,company_id,supplier_id,latest_cost,cost_confirmed,last_seen_date) values
- ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',200,true,'2026-10-10');
+ ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',200,true,'2026-10-10'),
+ ('30000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',300,true,'2026-11-01');
 insert into public.supplier_product_matches(company_id,supplier_product_id,product_catalog_id,match_status) values
- ('00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','confirmed');
+ ('00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','confirmed'),
+ ('00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','confirmed');
 
 set local role service_role;
 do $$
@@ -87,6 +89,18 @@ begin
   perform public.restore_purchase_cost_date_batch_v2(c,batch,'tester');
   if exists(select 1 from public.purchase_receipt_lines where company_id=c and purchase_cost_date_batch_id=batch)
   then raise exception 'restore left receipts'; end if;
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000010','2026-11-07',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-11-07","cost":140,"supplierCost":240,"selectedSourceRowNumber":101,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000003","priceDate":"2026-11-06","cost":130,"supplierCost":330,"selectedSourceRowNumber":102,"priceSelected":true}]',
+    'tester','two-suppliers.xlsx');
+  if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>140
+     or (select latest_cost from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000003')<>330
+     or (select last_seen_date from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000003')<>'2026-11-06'
+  then raise exception 'supplier latest cost was incorrectly tied to product latest date'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000010','tester');
+  if (select latest_cost from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000003')<>300
+     or (select last_seen_date from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000003')<>'2026-11-01'
+  then raise exception 'supplier-specific snapshot restore failed'; end if;
+
   update public.product_catalog set purchase_price_date='2026-11-01'
     where company_id=c and id='10000000-0000-4000-8000-000000000001';
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000008','2026-11-07',
