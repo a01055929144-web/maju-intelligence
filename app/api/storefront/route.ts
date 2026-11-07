@@ -321,7 +321,9 @@ export async function PUT(request: NextRequest) {
         body: JSON.stringify({
           p_token_hash: verified.hash,
           p_delivery_date: body.deliveryDate,
-          p_lines: body.lines,
+          p_lines: (body.lines as Record<string, unknown>[]).map(line => ({
+            productId: line.productId, promotionId: line.promotionId ?? null, quantity: line.quantity,
+          })),
           p_idempotency_key: body.idempotencyKey,
           p_order_id: body.orderId ?? null,
           p_expected_revision: body.expectedRevision ?? null,

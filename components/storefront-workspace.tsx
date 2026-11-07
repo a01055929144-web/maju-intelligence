@@ -5,6 +5,7 @@ import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/doma
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 
 type Product = { key: string; productId: string; promotionId: string | null;
@@ -22,6 +23,7 @@ type Store = { title: string; companyName: string; customerName: string;
 type Order = { id: string; deliveryDate: string; status: string; knownTotal: number;
   requestMemo: string; marketPricePending: boolean; submittedAt: string; revision: number;
   lines: { product_id: string; promotion_id: string | null; product_name: string; quantity: number;
+    specification?: string; sales_unit?: string; tax_type?: string;
     unit_price: number | null; total_amount: number | null }[] };
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
@@ -34,6 +36,15 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
 
 export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null }) {
   const [token, setToken] = useState("");
+  useEffect(() => {
+    const read = () => { const value = window.location.hash.slice(1); setToken(value.length <= 200 ? value : ""); };
+    read(); window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  return <StorefrontSession key={token} token={token} costAccess={costAccess} storeLogin={storeLogin} />;
+}
+
+function StorefrontSession({ token, costAccess, storeLogin }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null }) {
   const [data, setData] = useState<Response | null>(null);
   const [tab, setTab] = useState<"home" | "order" | "history" | "data" | "info">("home");
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -52,13 +63,9 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const retryKey = useRef<string | null>(null);
+  const submitting = useRef(false);
   const loadSequence = useRef(0);
   const endpoint = "/api/storefront";
-  useEffect(() => {
-    const value = window.location.hash.slice(1);
-    if (value && value.length <= 200) setToken(value);
-    else setMessage("주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.");
-  }, []);
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
     const sequence = ++loadSequence.current;
@@ -68,8 +75,11 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, deliveryDate: day, historyPage }) });
       const result = await response.json() as Response;
-      if (!response.ok) throw new Error(result.message || "매장 링크를 열 수 없습니다.");
       if (sequence !== loadSequence.current) return;
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) { setData(null); setCart({}); setEditing(null); setMemo(""); retryKey.current = null; }
+        throw new Error(result.message || "매장 링크를 열 수 없습니다.");
+      }
       setData(result);
       setDeliveryDate(result.store.selectedDeliveryDate);
     } catch (error) {
@@ -163,7 +173,8 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
       missing ? ` 현재 문서에 없는 품목 ${missing}개는 담지 않았습니다.` : ""}`);
   }
   async function submit() {
-    if (!store || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    if (submitting.current || !store || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    submitting.current = true;
     setBusy(true); setMessage("");
     if (!retryKey.current) retryKey.current = crypto.randomUUID();
     try {
@@ -183,13 +194,13 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         setMessage("주문은 저장됐습니다. 내역을 불러오지 못했으니 화면을 새로고침해 확인해 주세요.");
       }
     } catch (error) { setMessage(error instanceof Error ? error.message : "주문을 저장하지 못했습니다."); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   }
   const retryLoad = <div className="space-y-2 rounded border p-3 text-sm" aria-live="polite">
     <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
     {loadError && token ? <button disabled={loading || busy} className="min-h-[44px] rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
   </div>;
-  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess || storeLogin ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : message || "매장 정보를 불러오는 중입니다."}</p>}</main>;
+  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess || storeLogin ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : "주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요."}</p>}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
@@ -290,8 +301,8 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <button disabled={!pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full rounded bg-slate-900 text-white disabled:opacity-50"
-        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</button>
+      <Button disabled={!pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full"
+        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
       {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
@@ -302,7 +313,7 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
       </tr></thead><tbody>{data?.orders.map((order) => <tr key={order.id} className="block border-b py-2 md:table-row">
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.status}</span></td>
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><span>{order.lines.map((line) => `${line.product_name} ${line.quantity}`).join(" · ")}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} · {[line.specification, line.sales_unit].filter(Boolean).join(" · ")} · {line.quantity}{line.sales_unit || "개"}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
         <td className="p-2 md:p-3"><div className="flex gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
           {order.status === "submitted" && store.priceAvailable && store.policy.weekdays.length > 0 &&

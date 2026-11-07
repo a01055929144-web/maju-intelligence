@@ -1,6 +1,43 @@
 import { expect, test } from "@playwright/test";
 const company = "00000000-0000-4000-8000-000000000001";
 
+for (const width of [1440, 390]) test(`store links verify settings before issuance at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  const login = await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } });
+  expect(login.ok()).toBeTruthy();
+  let settingsFail = true, issued = 0;
+  await page.route("**/api/pricing-documents*", route => route.fulfill({ json: { result: new URL(route.request().url()).searchParams.get("action") === "versions"
+    ? [{ id: "version", version: 1, content: { title: "합성 발행본" }, publishedAt: "2026-11-08T00:00:00Z" }]
+    : { items: [{ id: "document", revision: 1, content: { title: "합성 문서" } }] } } }));
+  await page.route("**/api/pricing-order-settings*", route => {
+    if (new URL(route.request().url()).searchParams.has("customerQuery")) return route.fulfill({ json: { customers: [{ id: "customer", customer_name: "합성 매장" }] } });
+    return settingsFail ? route.fulfill({ status: 503, json: { message: "합성 주문 설정 확인 실패. 다시 시도해 주세요." } })
+      : route.fulfill({ json: { settings: { cutoff_time: "22:00", minimum_amount: 10000 } } });
+  });
+  await page.route("**/api/pricing-store-links*", route => {
+    if (route.request().method() === "POST") { issued++; return route.fulfill({ json: { url: "https://store.example.test/store#synthetic-first-order-link" } }); }
+    return route.fulfill({ json: { items: [], hasMore: false } });
+  });
+  await page.goto("/revenue/pricing/links");
+  await page.getByLabel("문서 선택", { exact: true }).selectOption("document");
+  await page.getByLabel("발행 버전", { exact: true }).selectOption("version");
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await page.getByLabel("링크를 받을 매장").selectOption("customer");
+  const create = page.getByRole("button", { name: "링크 만들고 복사", exact: true });
+  await create.click();
+  await expect(page.getByRole("status")).toContainText("합성 주문 설정 확인 실패");
+  expect(issued).toBe(0);
+  settingsFail = false;
+  await create.click();
+  await expect(page.getByLabel("방금 만든 매장 링크")).toHaveValue("https://store.example.test/store#synthetic-first-order-link");
+  await expect(page.getByRole("status").filter({ hasText: "저장된 주문 설정 확인" })).toContainText("10,000원");
+  expect(issued).toBe(1);
+  const check = page.getByRole("button", { name: "주문 설정 다시 확인", exact: true });
+  expect((await check.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`stage-c-settings-link-${width}.png`), fullPage: true });
+});
+
 for (const width of [1440, 390]) {
   test(`store catalog controls retain delivery price guards at ${width}px`, async ({ page }, info) => {
     page.setDefaultTimeout(15_000);
@@ -199,10 +236,16 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   const submissions: Record<string, unknown>[] = [], saved = new Set<string>();
   const response = (day: string) => ({
     store: { title: "합성 게시 버전 2", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 2, validUntil: "2099-12-31", priceAvailable: true, canOrder: true, nextDeliveryDate: firstDay, selectedDeliveryDate: day, notice: "", marketPriceNotice: "", policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 }, lines: [{ key: "product:", productId: "product", promotionId: null, name: "합성 주문 품목", brand: "", spec: "18L", unit: "통", badge: "", taxType: "exempt", unitPrice: day === firstDay ? 1000 : 2000, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
-    orders: saved.size ? [{ id: "order", deliveryDate: thirdDay, status: "submitted", knownTotal: 2000, requestMemo: "", marketPricePending: false, submittedAt: "2026-11-06T00:00:00Z", revision: 1, lines: [{ product_id: "product", promotion_id: null, product_name: "합성 주문 품목", quantity: 1, unit_price: 2000, total_amount: 2000 }] }] : [], preferences: [], historyPage: 1, historyHasMore: false,
+    orders: saved.size ? [{ id: "order", deliveryDate: thirdDay, status: "submitted", knownTotal: 2000, requestMemo: "", marketPricePending: false, submittedAt: "2026-11-06T00:00:00Z", revision: 1, lines: [{ product_id: "product", promotion_id: null, product_name: "주문 당시 품목", specification: "주문 당시 규격", sales_unit: "통", tax_type: "exempt", quantity: 1, unit_price: 2000, total_amount: 2000 }] }] : [], preferences: [], historyPage: 1, historyHasMore: false,
   });
   await page.route("**/api/storefront", async route => {
     const body = route.request().postDataJSON();
+    if (body.token === "synthetic-revoked-link") return route.fulfill({ status: 404, json: { message: "사용할 수 없는 매장 링크입니다. 새 링크를 요청해 주세요." } });
+    if (body.token === "synthetic-second-store") {
+      const next = response(firstDay);
+      next.store.companyName = "다른 합성 유통"; next.store.customerName = "두 번째 매장"; next.orders = [];
+      return route.fulfill({ json: next });
+    }
     if (route.request().method() === "PUT") {
       submissions.push(body); saved.add(body.idempotencyKey);
       if (failSubmit) { failSubmit = false; return route.fulfill({ status: 503, json: { message: "합성 주문 응답 실패. 다시 시도해 주세요." } }); }
@@ -256,4 +299,19 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`store-first-order-${width}.png`), fullPage: true });
+  await expect(page.getByText(/주문 당시 품목.*주문 당시 규격.*면세.*2,000원/)).toBeVisible();
+  await page.evaluate(() => { window.location.hash = "synthetic-second-store"; });
+  await expect(page.getByText("다른 합성 유통 · 두 번째 매장", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "내역", exact: true }).click();
+  await expect(page.getByText("아직 주문이 없습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("주문 당시 품목", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "주문", exact: true }).click();
+  await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "합성 주문 품목 수량 늘리기" }).click();
+  await page.evaluate(() => { window.location.hash = "synthetic-revoked-link"; });
+  await expect(page.getByText(/사용할 수 없는 매장 링크입니다/)).toBeVisible();
+  await expect(page.getByText("두 번째 매장", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toHaveCount(0);
+  expect(saved.size).toBe(1);
+
 });
