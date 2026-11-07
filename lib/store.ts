@@ -8043,6 +8043,31 @@ async function finishCustomerImport(importId: string, status: "completed" | "fai
   });
 }
 
+type AtomicCustomerImportResult = { import_id: string; status: "completed" | "failed"; row_count: number; error_message: string | null };
+
+function customerImportAtomicRpcEnabled() {
+  return process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED === "true";
+}
+
+async function saveCustomerImportAtomic(payload: Record<string, unknown>) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await supabaseRequest<AtomicCustomerImportResult[]>("rpc/save_customer_import_atomic_draft", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      if (!result[0]) throw new Error("거래처 원자 저장 결과가 없습니다.");
+      return result[0];
+    } catch (error) {
+      lastError = error;
+      const message = getErrorMessage(error);
+      if (attempt > 0 || (!message.includes("fetch failed") && !/Supabase request failed: 5\d\d/.test(message))) throw error;
+    }
+  }
+  throw lastError;
+}
+
 export async function saveAnalysis(
   rows: CustomerRow[],
   companyName = "업로드 고객사",
@@ -8107,7 +8132,11 @@ export async function saveAnalysis(
   const companyId = options.companyId || getDefaultCompanyId();
   await upsertCompany(companyId, report.companyName || companyName);
 
-  const files = await supabaseRequest<Array<{ id: string }>>("uploaded_files", {
+  const useAtomicCustomerImport = options.uploadType !== "sales-analysis" && customerImportAtomicRpcEnabled();
+  const importId = useAtomicCustomerImport ? randomUUID() : "";
+  let atomicCompletedRows = 0;
+
+  const files = useAtomicCustomerImport ? [] : await supabaseRequest<Array<{ id: string }>>("uploaded_files", {
     method: "POST",
     body: JSON.stringify([
       {
@@ -8117,9 +8146,9 @@ export async function saveAnalysis(
       }
     ])
   });
-  const uploadedFileId = files[0].id;
+  let uploadedFileId = files[0]?.id;
 
-  const imports = await supabaseRequest<Array<{ id: string }>>("customer_imports", {
+  const imports = useAtomicCustomerImport ? [] : await supabaseRequest<Array<{ id: string }>>("customer_imports", {
     method: "POST",
     body: JSON.stringify([
       {
@@ -8133,13 +8162,13 @@ export async function saveAnalysis(
       }
     ])
   });
-  const importId = imports[0].id;
+  const resolvedImportId = importId || imports[0].id;
 
   try {
 
   const mappingRows = Object.entries(options.columnMapping || {}).map(([targetField, sourceHeader]) => ({
     company_id: companyId,
-    import_id: importId,
+    import_id: resolvedImportId,
     source_header: sourceHeader,
     target_field: targetField,
     confidence: 100
@@ -8147,7 +8176,7 @@ export async function saveAnalysis(
 
   const rawRows = (options.rawRows?.length ? options.rawRows : rows).map((row, index) => ({
     company_id: companyId,
-    import_id: importId,
+    import_id: resolvedImportId,
     row_index: index + 1,
     raw_data: row
   }));
@@ -8161,7 +8190,7 @@ export async function saveAnalysis(
   // 왔습니다. 기존 거래처 목록을 한 번에 가져와 이름이 겹치는 행을 사전에 걸러내기 위해 함께
   // 조회합니다(회사당 최대 5000곳까지).
   const [, , , exemptBusinessNumbers, existingCustomersForDuplicateCheck, territoryContext] = await Promise.all([
-    mappingRows.length
+    !useAtomicCustomerImport && mappingRows.length
       ? supabaseRequest("column_mappings", {
           method: "POST",
           body: JSON.stringify(mappingRows)
@@ -8170,7 +8199,7 @@ export async function saveAnalysis(
           return null;
         })
       : Promise.resolve(),
-    rawRows.length
+    !useAtomicCustomerImport && rawRows.length
       ? supabaseRequest("raw_customer_rows", {
           method: "POST",
           body: JSON.stringify(rawRows)
@@ -8233,7 +8262,7 @@ export async function saveAnalysis(
 
       const baseRow: Record<string, unknown> = {
         company_id: companyId,
-        import_id: importId,
+        import_id: resolvedImportId,
         customer_name: row.customerName,
         business_registration_number: businessRegistrationNumber || null,
         representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
@@ -8270,7 +8299,57 @@ export async function saveAnalysis(
 
   const normalizedBatchFailures: Array<{ batch: number; rows: number; message: string }> = [];
   let normalizedRowsSaved = 0;
-  if (normalizedRows.length) {
+  if (useAtomicCustomerImport && normalizedRows.length === 0) {
+    return {
+      persisted: false,
+      companyId,
+      report,
+      pipeline: {
+        rows: rows.length,
+        rawRows: rawRows.length,
+        columnMappings: mappingRows.length,
+        duplicateCount,
+        qualityScore,
+        skippedRowNumbers,
+        duplicateWarnings,
+        normalizedRowsSaved: 0,
+        normalizedBatchFailures
+      }
+    };
+  }
+  if (useAtomicCustomerImport) {
+    const atomicCustomers = normalizedRows.map((row) => {
+      const customer = { ...row };
+      delete customer.company_id;
+      delete customer.import_id;
+      return customer;
+    });
+    const atomicMappings = Object.entries(options.columnMapping || {}).map(([targetField, sourceHeader]) => ({
+      source_header: sourceHeader,
+      target_field: targetField,
+      confidence: 100
+    }));
+    const atomicResult = await saveCustomerImportAtomic({
+      p_company_id: companyId,
+      p_import_id: resolvedImportId,
+      p_source: "customer-master",
+      p_original_filename: options.originalFilename || "browser-upload.xlsx",
+      p_quality_score: qualityScore,
+      p_duplicate_count: duplicateCount,
+      p_customers: atomicCustomers,
+      p_raw_rows: options.rawRows?.length ? options.rawRows : rows,
+      p_column_mappings: atomicMappings
+    });
+    normalizedRowsSaved = atomicResult.status === "completed" ? atomicResult.row_count : 0;
+    atomicCompletedRows = normalizedRowsSaved;
+    if (atomicResult.status === "failed") {
+      normalizedBatchFailures.push({ batch: 1, rows: atomicResult.row_count, message: atomicResult.error_message || "거래처 저장에 실패했습니다." });
+    }
+    const importRows = await supabaseRequest<Array<{ uploaded_file_id: string }>>(
+      `customer_imports?select=uploaded_file_id&id=eq.${encodeURIComponent(resolvedImportId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+    );
+    uploadedFileId = importRows[0]?.uploaded_file_id;
+  } else if (normalizedRows.length) {
     // PostgREST는 한 bulk 요청 안의 모든 JSON 객체가 같은 키 집합을 가져야 합니다. 신규 행에는
     // 권역/담당자 키가 있고 기존 행에는 없어야 기존 배정을 보존할 수 있으므로, 키 집합별 요청으로
     // 분리합니다. sales-analysis의 조건부 delivery_km 역시 같은 방식으로 안전하게 나뉩니다.
@@ -8281,7 +8360,7 @@ export async function saveAnalysis(
         await supabaseRequest("normalized_customers?on_conflict=company_id,normalized_key", {
           method: "POST",
           headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-          body: JSON.stringify(batch)
+          body: JSON.stringify(batch.map(row => ({ ...row, import_id: resolvedImportId })))
         });
         normalizedRowsSaved += batch.length;
       } catch (error) {
@@ -8300,7 +8379,7 @@ export async function saveAnalysis(
       id: string;
       phone: string | null;
     }>>(
-      `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}&import_id=eq.${encodeURIComponent(importId)}&limit=5000`
+      `normalized_customers?select=id,customer_name,business_registration_number,address,phone&company_id=eq.${encodeURIComponent(companyId)}&import_id=eq.${encodeURIComponent(resolvedImportId)}&limit=5000`
     ).catch(() => []);
     for (let offset = 0; offset < importedCustomers.length; offset += 5) {
       await Promise.all(importedCustomers.slice(offset, offset + 5).map((customer) => excludeMatchingLeadsForNewCustomer(
@@ -8328,7 +8407,7 @@ export async function saveAnalysis(
 
   const legacyCustomerRows = rows.map((row) => ({
     company_id: companyId,
-    import_id: importId,
+    import_id: resolvedImportId,
     customer_name: row.customerName,
     region: row.region,
     address: row.address,
@@ -8350,7 +8429,7 @@ export async function saveAnalysis(
           company_id: companyId,
           action: "excel_upload_analyzed",
           target_type: "customer_import",
-          target_id: importId,
+          target_id: resolvedImportId,
           metadata: {
             actorName: options.actorName || "local-mvp-user",
             rows: rows.length,
@@ -8376,7 +8455,7 @@ export async function saveAnalysis(
       body: JSON.stringify([
         {
           company_id: companyId,
-          import_id: importId,
+          import_id: resolvedImportId,
           health_score: report.health.total,
           report
         }
@@ -8431,13 +8510,13 @@ export async function saveAnalysis(
   ]);
 
   const importFailed = normalizedBatchFailures.length > 0 || (options.uploadType !== "sales-analysis" && normalizedRowsSaved === 0);
-  await finishCustomerImport(importId, importFailed ? "failed" : "completed");
+  if (!useAtomicCustomerImport) await finishCustomerImport(resolvedImportId, importFailed ? "failed" : "completed");
 
   return {
     persisted: !importFailed,
     companyId,
     uploadedFileId,
-    importId,
+    importId: resolvedImportId,
     reportId,
     report,
     pipeline: {
@@ -8453,7 +8532,28 @@ export async function saveAnalysis(
     }
   };
   } catch (error) {
-    await finishCustomerImport(importId, "failed").catch(() => null);
+    if (useAtomicCustomerImport && atomicCompletedRows > 0) {
+      console.error(`[saveAnalysis] 원자 거래처 저장 후속 처리 실패 (importId=${resolvedImportId})`);
+      return {
+        persisted: true,
+        companyId,
+        uploadedFileId,
+        importId: resolvedImportId,
+        report,
+        pipeline: {
+          rows: rows.length,
+          rawRows: options.rawRows?.length || rows.length,
+          columnMappings: Object.keys(options.columnMapping || {}).length,
+          duplicateCount,
+          qualityScore,
+          skippedRowNumbers,
+          normalizedRowsSaved: atomicCompletedRows,
+          normalizedBatchFailures: [],
+          postProcessingWarning: "거래처 저장은 완료됐지만 분석 리포트 등 일부 후속 처리를 마치지 못했습니다. 업로드 이력에서 저장 결과를 확인해 주세요."
+        }
+      };
+    }
+    if (!useAtomicCustomerImport) await finishCustomerImport(resolvedImportId, "failed").catch(() => null);
     throw error;
   }
 }

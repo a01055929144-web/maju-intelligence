@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCustomerImportLimitMessage } from "@/domains/customer/customer-import-limits";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { CustomerRow } from "@/lib/sample-data";
 import { ColumnMapping, RawUploadRow, saveAnalysis } from "@/lib/store";
 
 export async function POST(request: NextRequest) {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  const sizeLimitMessage = getCustomerImportLimitMessage({ contentLength, mappingCount: 0, rowCount: 0 });
+  if (sizeLimitMessage) {
+    return NextResponse.json({ message: sizeLimitMessage }, { status: 413 });
+  }
   const body = (await request.json().catch(() => null)) as {
     actorName?: string;
     columnMapping?: ColumnMapping;
@@ -14,6 +20,15 @@ export async function POST(request: NextRequest) {
     rows?: CustomerRow[];
     uploadType?: "customer-master" | "sales-analysis";
   } | null;
+  const parsedBytes = body ? new TextEncoder().encode(JSON.stringify(body)).byteLength : 0;
+  const countLimitMessage = getCustomerImportLimitMessage({
+    contentLength: Math.max(contentLength, parsedBytes),
+    mappingCount: Object.keys(body?.columnMapping || {}).length,
+    rowCount: body?.rows?.length || 0
+  });
+  if (countLimitMessage) {
+    return NextResponse.json({ message: countLimitMessage }, { status: 413 });
+  }
   const scope = await getRequestAuthScope(request, body?.companyId);
   if (!scope.ok) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -44,6 +59,7 @@ export async function POST(request: NextRequest) {
     uploadedFileId: result.uploadedFileId,
     importId: result.importId,
     pipeline: result.pipeline,
+    warning: result.pipeline.postProcessingWarning,
     reportId: result.reportId,
     report: result.report
   });
