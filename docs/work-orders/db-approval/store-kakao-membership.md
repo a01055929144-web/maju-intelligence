@@ -1,6 +1,13 @@
 # 매장 카카오 구성원 가입 RPC 승인표
 
-상태: 운영 미적용, 대표 승인 대기. Owner: organization. Related: store, order.
+상태: 운영 적용 완료(2026-11-07), 재실행 금지, 기능 OFF. Owner: organization. Related: store, order.
+
+운영 migration history: `20261107075454 store_kakao_membership_20261107`. 저장소 기록:
+`supabase/migrations/20261107075454_store_kakao_membership_20261107.sql`.
+
+적용 뒤 읽기 검증에서 FK validated, 활성 구성원·초대 hash UNIQUE 인덱스 2개, RPC 3개의
+service_role 전용 실행권, `store_accounts`·`store_account_members`·`store_account_member_events`
+RLS ON 및 anon/authenticated SELECT 없음까지 확인했다. 운영 owner·초대 행은 생성하지 않았다.
 
 ## 대상
 
