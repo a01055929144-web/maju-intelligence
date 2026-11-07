@@ -74,10 +74,16 @@ type StoreOwnerActivationProof = {
   expiresAt: number;
 };
 
+type StoreMemberInvitationProof = {
+  token: string;
+  expiresAt: number;
+};
+
 const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
 const STORE_COOKIE_NAME = "maju_store_session";
 const STORE_OWNER_ACTIVATION_COOKIE = "maju_store_owner_activation";
+const STORE_MEMBER_INVITATION_COOKIE = "maju_store_member_invitation";
 const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
 const sessionObservationThrottle = new Map<string, number>();
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
@@ -123,9 +129,27 @@ export async function consumeInvitePhoneProof(inviteCode: string) {
   return code === inviteCode && signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
-function encodeSession(session: AdminSession | CustomerSession | StoreSession | StoreOwnerActivationProof) {
+function encodeSession(session: AdminSession | CustomerSession | StoreSession | StoreOwnerActivationProof | StoreMemberInvitationProof) {
   const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
+}
+
+export async function setStoreMemberInvitationProof(token: string) {
+  if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const cookieStore = await cookies();
+  cookieStore.set(STORE_MEMBER_INVITATION_COOKIE, encodeSession({ token, expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function getStoreMemberInvitationProof(options: { consume?: boolean } = {}): Promise<StoreMemberInvitationProof | null> {
+  if (!storeMemberSessionEnabled()) return null;
+  const cookieStore = await cookies();
+  const proof = decodeSession<StoreMemberInvitationProof>(cookieStore.get(STORE_MEMBER_INVITATION_COOKIE)?.value);
+  if (options.consume) cookieStore.delete(STORE_MEMBER_INVITATION_COOKIE);
+  return proof && /^[A-Za-z0-9_-]{43}$/.test(proof.token) && proof.expiresAt > Math.floor(Date.now() / 1000) ? proof : null;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
