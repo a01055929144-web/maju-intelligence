@@ -39,7 +39,15 @@ for (const width of [1440, 390]) {
         { supplierProductId: "box-unit", ratio: 20 }, { supplierProductId: "same-unit", ratio: 1 },
       ]);
       await expect(page.getByRole("button", { name: "매입처 환산 확인 · 미확정 1개" })).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+      const overflow = await page.evaluate(() => ({
+        viewport: innerWidth,
+        page: document.documentElement.scrollWidth,
+        elements: Array.from(document.querySelectorAll<HTMLElement>("body *"))
+          .filter((element) => element.scrollWidth > element.clientWidth + 3 && getComputedStyle(element).overflowX === "visible")
+          .slice(0, 12)
+          .map((element) => ({ tag: element.tagName, className: String(element.className).slice(0, 100), width: element.clientWidth, scroll: element.scrollWidth })),
+      }));
+      expect(overflow.page, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewport + 3);
       await page.screenshot({ path: testInfo.outputPath(`supplier-conversion-${width}.png`), fullPage: true });
     } finally {
       await context.close();
