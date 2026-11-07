@@ -11,6 +11,8 @@ import {
   type CatalogChoice,
   fillBlankDocumentSpecs,
   documentDisplayPrice,
+  documentOutput,
+  refreshedDocumentVersion,
   type DocumentContent,
   type DocumentDraft,
   type DocumentKind,
@@ -21,6 +23,7 @@ import {
   withLivePromotions,
 } from "@/domains/pricing/document";
 import { PricingDocumentPreview } from "./pricing-document-preview";
+import { Button } from "./ui/button";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { PricingProductPicker } from "./pricing-product-picker";
 import { PricingInfoPanel } from "./pricing-info-panel";
@@ -417,23 +420,42 @@ export function PricingDocumentsWorkspace({
     next.splice(target, 0, next.splice(source, 1)[0]);
     rows(next);
   }
-  async function exportLines() {
-    if (!draft) return;
-    const ids = Array.from(new Set(draft.content.lines.map((line) => line.productId)));
-    const current = ids.length ? await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids }) : { items: [] };
-    const codes = new Map(current.items.map((item) => [item.id, customerErpCode(item.productCode)]));
+  async function refreshPreview(selected: DocumentVersion) {
+    if (selected.id.startsWith("preview-")) return withLivePromotions(selected, await read<Promotion[]>("promotions"));
+    const list = await read<DocumentVersion[]>("versions", { id: selected.documentId });
+    const found = list.find(v => v.id === selected.id);
+    if (!found) throw new Error("버전을 다시 선택해 주세요.");
+    return refreshedDocumentVersion(selected, found);
+  }
+  async function exportLines(selected?: DocumentVersion) {
+    if (!draft && !selected) return;
     const XLSX = await import("xlsx");
-    const sheet = XLSX.utils.json_to_sheet(draft.content.lines.map((line) => ({
-      "ERP 코드": codes.get(line.productId) || "", "품목명": line.displayName,
-      "규격": line.spec, "단위": line.unit, "판매가": line.price,
-      "과세": line.taxType === "taxable" ? "과세" : line.taxType === "exempt" ? "면세" : "확인 필요",
-    })));
+    let sheet, title: string;
+    if (selected) {
+      const output = documentOutput(await refreshPreview(selected));
+      sheet = XLSX.utils.json_to_sheet(output.lines.map(line => ({
+        "품목명": line.displayName, "규격": line.spec, "단위": line.unit, "판매가": line.price,
+        "과세": line.taxType === "taxable" ? "과세" : "면세",
+      })));
+      title = `${output.title}-v${selected.version}`;
+    } else {
+      const content = draft!.content;
+      const ids = Array.from(new Set(content.lines.map(line => line.productId)));
+      const current = await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids });
+      const codes = new Map(current.items.map(item => [item.id, customerErpCode(item.productCode)]));
+      sheet = XLSX.utils.json_to_sheet(content.lines.map(line => ({
+        "ERP 코드": codes.get(line.productId) || "", "품목명": line.displayName,
+        "규격": line.spec, "단위": line.unit, "판매가": line.price,
+        "과세": line.taxType === "taxable" ? "과세" : line.taxType === "exempt" ? "면세" : "확인 필요",
+      })));
+      title = content.title || "품목";
+    }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "품목");
     const data = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
     const url = URL.createObjectURL(new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const anchor = document.createElement("a");
-    anchor.href = url; anchor.download = `${draft.content.title || "품목"}.xlsx`; anchor.click();
+    anchor.href = url; anchor.download = `${title}.xlsx`; anchor.click();
     URL.revokeObjectURL(url);
   }
   async function importLines(file: File) {
@@ -537,7 +559,7 @@ export function PricingDocumentsWorkspace({
                     판매가 버전 확정
                   </button>
                   <button disabled={busy} className={box} onClick={() => openPreview(false)} type="button">미리보기</button>
-                  <button disabled={busy} className={`${box} bg-slate-900 text-white`} onClick={() => openPreview(true)} type="button">A4 인쇄</button>
+                  <Button disabled={busy} className="bg-slate-900 text-white" onClick={() => openPreview(true)}>A4 인쇄</Button>
                   <span className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="보기 방식">
                     {([["doc", "문서 보기"], ["table", "표 보기"]] as const).map(([value, label]) => <button aria-pressed={docView === value} className={`h-9 px-3 text-sm font-bold ${docView === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`} key={value} onClick={() => setDocView(value)} type="button">{label}</button>)}
                   </span>
@@ -1201,9 +1223,10 @@ export function PricingDocumentsWorkspace({
             <strong className="mr-auto text-base">{preview.content.kind === "sheet" ? "단가표" : "견적서"} 미리보기 · {preview.content.title}{preview.version ? ` · 버전 ${preview.version}` : " · 작성 중"}</strong>
             <span className="text-xs font-bold text-slate-500">글자 크기</span>
             {[1, 1.15, 1.3].map((scale) => <button className={`${box} ${fontScale === scale ? "bg-slate-900 text-white" : ""}`} key={scale} onClick={() => setFontScale(scale)} type="button">{Math.round(scale * 100)}%</button>)}
-            <button className={box} disabled={busy} onClick={() => void task(exportLines)} type="button">엑셀 내려받기</button>
+            <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void task(() => exportLines(preview))}>엑셀 내려받기</Button>
             <button className={`${box} bg-slate-900 text-white`} onClick={() => { setPreview(null); setAutoPrint(false); }} type="button">닫기</button>
           </div>
+          {error ? <p role="alert" className="pricing-no-print mx-4 text-red-700">{error} 미리보기를 닫고 버전을 다시 선택하거나 내려받기를 다시 시도해 주세요.</p> : null}
           <style>{`@media print{.pricing-preview-modal{position:static!important;overflow:visible!important;background:white!important}.pricing-preview-modal>div{max-width:none!important;padding:0!important}}`}</style>
           <div className="mx-auto max-w-[1400px] p-4">
         <PricingDocumentPreview
@@ -1213,18 +1236,7 @@ export function PricingDocumentsWorkspace({
           version={preview}
           companyId={companyId}
             canManageLinks={manager && storeLinksEnabled && !leadContext}
-          refresh={async () => {
-            if (preview.id.startsWith("preview-")) {
-              const promos = await read<Promotion[]>("promotions");
-              return withLivePromotions(preview, promos);
-            }
-            const list = await read<DocumentVersion[]>("versions", {
-              id: preview.documentId,
-            });
-            const found = list.find((v) => v.id === preview.id);
-            if (!found) throw new Error("버전을 다시 선택해 주세요.");
-            return found;
-          }}
+          refresh={() => refreshPreview(preview)}
         />
           </div>
         </div>
