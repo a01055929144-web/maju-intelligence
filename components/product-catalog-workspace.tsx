@@ -351,7 +351,7 @@ export function ProductCatalogWorkspace({
                 className="maju-button-secondary min-h-11"
                 disabled={loading || !oneToOneVisible.length}
                 onClick={() => {
-                  setConversionSelected((current) => [...new Set([...current, ...oneToOneVisible.map((item) => item.id)])]);
+                  setConversionSelected((current) => Array.from(new Set([...current, ...oneToOneVisible.map((item) => item.id)])));
                   setMessage("단위가 같은 1:1 항목을 선택했습니다. 매입·기본 단위를 확인한 뒤 환산 확정을 눌러 주세요.");
                 }}
                 type="button"
