@@ -1,12 +1,14 @@
 name: Stage A real API PG17 integration
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   stage-a-integration:
-    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
