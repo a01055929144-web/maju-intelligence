@@ -57,6 +57,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
+  const [recalcPending, setRecalcPending] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   useUnsavedChangesWarning(selected.length > 0 || Object.values(candidates).some((candidate) => candidate.method !== "매입처") || Boolean(sheet));
 
@@ -339,6 +340,18 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     return payload as PriceState;
   }
 
+  async function retryRecalculation() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await command("recalculate");
+      setRecalcPending(false);
+      setMessage("판매가를 다시 계산했습니다. 변경 품목과 영향받는 문서를 확인해 주세요.");
+      await load().catch(() => setError("판매가는 재계산됐지만 목록을 불러오지 못했습니다. 목록 새로고침을 눌러 확인해 주세요."));
+    } catch (cause) {
+      setError(`판매가 재계산이 끝나지 않았습니다. 매입가는 다시 저장하지 말고 재계산을 재시도해 주세요. ${cause instanceof Error ? cause.message : ""}`);
+    } finally { setBusy(false); }
+  }
+
   async function save() {
     const changes = selected.filter((id) => candidates[id] && candidates[id].cost !== unique.find((item) => item.id === id)?.cost).map((id) => {
       const product = unique.find((item) => item.id === id)!;
@@ -357,19 +370,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개는 상품관리에서 확인 후 저장` : ""}`);
         setUnmatched([]);
       }
-      let batchId: string | undefined;
       if (changes.length) {
         const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, changes }) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "매입가를 저장하지 못했습니다.");
         notes.push(`매입가 ${changes.length}건 저장`);
         setUndo({ changes: changes.map((change) => ({ productId: change.productId, supplierProductId: change.supplierProductId, expectedCost: change.cost, cost: change.expectedCost })) });
-      }
-      if (changes.length || notes.length) {
-        const previousBatch = pricing?.lastBatch;
-        try { const updated = await command("recalculate"); if (updated.lastBatch && updated.lastBatch !== previousBatch) batchId = updated.lastBatch; notes.push("판매가 재계산 완료"); }
-        catch { notes.push("판매가 재계산은 마진 그룹에서 다시 해 주세요"); }
-        if (batchId) setUndo((current) => (current ? { ...current, batchId } : current));
       }
       setMessage("저장 중… 상품 정보·원문 연결·매입 기록 정리");
       const fresh = await load({ documents: false });
@@ -391,9 +397,22 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (linkResult) notes.push(linkResult.ok ? `원문 연결 ${linkResult.linked}개` : "원문 연결은 다시 시도해 주세요");
       const receiptNote = await saveReceipts(relinked);
       setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
-      void load().catch(() => undefined);
+      if (changes.length || notes.length) {
+        const previousBatch = pricing?.lastBatch;
+        try {
+          const updated = await command("recalculate");
+          const newBatchId = updated.lastBatch;
+          if (newBatchId && newBatchId !== previousBatch) setUndo((current) => current ? { ...current, batchId: newBatchId } : current);
+          setRecalcPending(false);
+          notes.push("판매가 재계산 완료");
+        } catch (cause) {
+          setRecalcPending(true);
+          throw new Error(`판매가 재계산은 실패했습니다. 매입가를 다시 저장하지 말고 아래 '판매가 다시 계산'을 눌러 마무리해 주세요. ${cause instanceof Error ? cause.message : ""}`);
+        }
+      }
+      void load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록 새로고침을 눌러 확인해 주세요."));
       setMessage(`${notes.join(" · ")}${receiptNote}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
-    } catch (cause) { setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
+    } catch (cause) { setMessage(""); setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }
   }
 
@@ -463,7 +482,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal ? `새 상품 ${missingTotal}개에 단위가 비어 있습니다. 단위를 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
     </header>
     <input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); event.target.value = ""; }} ref={fileInput} type="file" />
-    {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">다시 시도</button></p> : null}
+    {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">목록 새로고침</button></p> : null}
+    {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
     {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3"><PurchaseSheetMapper mapping={mapping} onMapping={setMapping} onVatMode={setVatMode} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {selected.length && tab !== "신규" ? <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600"><span>선택 {selected.length}개 단가 기준</span><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, true)} type="button">부가세 포함으로</button><button className="maju-button-secondary h-8 px-2.5 text-xs" disabled={busy} onClick={() => setVatIncluded(selected, false)} type="button">부가세 별도로</button><span className="font-semibold text-slate-400">저장되는 매입가는 항상 부가세 별도 금액입니다.</span></div> : null}
@@ -523,6 +543,6 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       <Link className="text-xs font-bold text-teal-700 underline" href="/revenue/products">상품관리에서 전체 상품 보기</Link>
     </section> : <CommonDataTable columns={columns} emptyMessage={tab === "신규" ? "최근 30일에 등록된 상품이 없습니다. 엑셀을 올려 새 상품을 등록해 주세요." : "상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요."} filename="매입가_변경후보.csv" rowKey={(row) => row.id} rows={tab === "신규" ? recentNew : displayed} settingsKey={`purchase-cost:v2:${companyId}`} />}
     <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {tab === "신규" ? recentNew.length : displayed.length}개 · 현재 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span><button className="maju-button-secondary" disabled={busy || !undo} onClick={() => void restore()} type="button">직전 저장 되돌리기</button><Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>
-    <p className="text-sm text-slate-600">직접 정한 판매가는 그대로 두고, 마진으로 계산하는 상품만 판매가를 다시 계산합니다. 저장 전 후보는 새로고침하면 사라집니다.</p>
+    <p className="text-sm text-slate-600">직접 정한 판매가는 그대로 두고, 마진으로 계산하는 상품만 판매가를 다시 계산합니다. 저장 전 후보는 새로고침하면 사라집니다. 매입가 되돌리기는 저장한 화면에서만 가능하며, 새로고침 뒤에는 매입 이력에서 정정해 주세요.</p>
   </div>;
 }
