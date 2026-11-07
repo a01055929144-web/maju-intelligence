@@ -87,6 +87,29 @@ begin
   perform public.restore_purchase_cost_date_batch_v2(c,batch,'tester');
   if exists(select 1 from public.purchase_receipt_lines where company_id=c and purchase_cost_date_batch_id=batch)
   then raise exception 'restore left receipts'; end if;
+  update public.product_catalog set purchase_price_date='2026-11-01'
+    where company_id=c and id='10000000-0000-4000-8000-000000000001';
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000008','2026-11-07',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-06","cost":110,"selectedSourceRowNumber":81,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-07","cost":120,"selectedSourceRowNumber":82,"priceHeld":true}]',
+    'tester','latest-held.xlsx');
+  if applied->>'recalcRunId' is not null
+     or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
+     or (select price from public.pricing_items where company_id=c and product_id='10000000-0000-4000-8000-000000000001')<>before_price
+  then raise exception 'latest held date promoted an older selected price'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000008','tester');
+
+  update public.product_catalog set purchase_price_date=null
+    where company_id=c and id='10000000-0000-4000-8000-000000000001';
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','2026-11-08',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","cost":130,"selectedSourceRowNumber":91,"priceSelected":true}]',
+    'tester','unknown-baseline-date.xlsx');
+  if applied->>'recalcRunId' is not null
+     or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
+  then raise exception 'undated existing current price was overwritten'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','tester');
+  update public.product_catalog set purchase_price_date='2026-10-10'
+    where company_id=c and id='10000000-0000-4000-8000-000000000001';
+
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000006','2026-11-01',
     '[{"productId":"10000000-0000-4000-8000-000000000001","cost":150,"selectedSourceRowNumber":6,"priceSelected":true}]',
     'tester','new.xlsx');

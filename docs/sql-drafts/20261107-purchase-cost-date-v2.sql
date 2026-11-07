@@ -59,6 +59,7 @@ declare
   v_supplier_id uuid;
   v_import_id uuid;
   v_price_selected boolean;
+  v_apply_current boolean;
   v_product_snapshots jsonb := '{}'::jsonb;
   v_supplier_snapshots jsonb := '{}'::jsonb;
   v_import_ids jsonb := '{}'::jsonb;
@@ -124,7 +125,11 @@ begin
     select * into v_product from public.product_catalog
       where company_id=p_company and id=v_product_id for update;
     if not found then raise exception 'existing_purchase_product_required'; end if;
-    if v_price_selected and not (v_product_snapshots ? v_product_id::text) then
+    v_apply_current:=v_price_selected
+      and v_date=(select max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))
+        from jsonb_array_elements(p_rows) where value->>'productId'=v_product_id::text)
+      and (v_product.purchase_price is null or v_product.purchase_price_date is not null);
+    if v_apply_current and not (v_product_snapshots ? v_product_id::text) then
       v_product_snapshots := jsonb_set(v_product_snapshots,array[v_product_id::text],jsonb_build_object(
         'purchasePrice',v_product.purchase_price,'purchasePriceDate',v_product.purchase_price_date,
         'updatedAt',v_product.updated_at));
@@ -137,7 +142,7 @@ begin
           and m.match_status in('auto','confirmed')
         where sp.company_id=p_company and sp.id=v_supplier_id for update of sp;
       if not found then raise exception 'supplier_product_not_linked'; end if;
-      if not (v_supplier_snapshots ? v_supplier_id::text) then
+      if v_apply_current and not (v_supplier_snapshots ? v_supplier_id::text) then
         v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text],jsonb_build_object(
           'latestCost',v_supplier.latest_cost,'costConfirmed',v_supplier.cost_confirmed,
           'lastSeenDate',v_supplier.last_seen_date,'updatedAt',v_supplier.updated_at));
@@ -154,20 +159,22 @@ begin
       insert into public.supplier_product_cost_history(
         company_id,supplier_product_id,import_id,price_date,purchase_price
       ) values(p_company,v_supplier_id,v_import_id,v_date,v_supplier_cost);
-      update public.supplier_products set
-        latest_cost=case when last_seen_date is null or v_date>=last_seen_date then v_supplier_cost else latest_cost end,
-        cost_confirmed=case when last_seen_date is null or v_date>=last_seen_date then true else cost_confirmed end,
-        last_seen_date=greatest(coalesce(last_seen_date,v_date),v_date),
-        updated_at=case when last_seen_date is null or v_date>=last_seen_date then clock_timestamp() else updated_at end
-      where company_id=p_company and id=v_supplier_id;
-      select * into v_supplier from public.supplier_products
+      if v_apply_current then
+        update public.supplier_products set
+          latest_cost=case when last_seen_date is null or v_date>=last_seen_date then v_supplier_cost else latest_cost end,
+          cost_confirmed=case when last_seen_date is null or v_date>=last_seen_date then true else cost_confirmed end,
+          last_seen_date=greatest(coalesce(last_seen_date,v_date),v_date),
+          updated_at=case when last_seen_date is null or v_date>=last_seen_date then clock_timestamp() else updated_at end
         where company_id=p_company and id=v_supplier_id;
-      v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterLatestCost'],
-        to_jsonb(v_supplier.latest_cost));
-      v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterCostConfirmed'],
-        to_jsonb(v_supplier.cost_confirmed));
-      v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterLastSeenDate'],
-        coalesce(to_jsonb(v_supplier.last_seen_date),'null'::jsonb));
+        select * into v_supplier from public.supplier_products
+          where company_id=p_company and id=v_supplier_id;
+        v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterLatestCost'],
+          to_jsonb(v_supplier.latest_cost));
+        v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterCostConfirmed'],
+          to_jsonb(v_supplier.cost_confirmed));
+        v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text,'afterLastSeenDate'],
+          coalesce(to_jsonb(v_supplier.last_seen_date),'null'::jsonb));
+      end if;
     end if;
 
     insert into public.purchase_receipt_lines(
@@ -187,7 +194,7 @@ begin
       nullif(v_item->>'totalAmount','')::numeric,p_source_file_name,
       (v_item->>'selectedSourceRowNumber')::integer,coalesce(v_item->'rawValues','[]'::jsonb),p_actor_name,p_batch
     );
-    if v_price_selected then
+    if v_apply_current then
       update public.product_catalog set
         purchase_price=case when purchase_price_date is null or v_date>=purchase_price_date then v_cost else purchase_price end,
         purchase_price_date=greatest(coalesce(purchase_price_date,v_date),v_date),
