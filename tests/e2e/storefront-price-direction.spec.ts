@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 const company = "00000000-0000-4000-8000-000000000001";
 
 for (const width of [1440, 390]) test(`store links verify settings before issuance at ${width}px`, async ({ page }, info) => {
+  page.setDefaultTimeout(15_000);
   await page.setViewportSize({ width, height: 900 });
   const login = await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } });
   expect(login.ok()).toBeTruthy();
@@ -19,8 +20,8 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
     return route.fulfill({ json: { items: [], hasMore: false } });
   });
   await page.goto("/revenue/pricing/links");
-  await page.getByLabel("문서 선택", { exact: true }).selectOption("document");
-  await page.getByLabel("발행 버전", { exact: true }).selectOption("version");
+  await page.getByLabel(/^문서 선택/).selectOption("document");
+  await page.getByLabel(/^발행 버전/).selectOption("version");
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await page.getByLabel("링크를 받을 매장").selectOption("customer");
   const create = page.getByRole("button", { name: "링크 만들고 복사", exact: true });
