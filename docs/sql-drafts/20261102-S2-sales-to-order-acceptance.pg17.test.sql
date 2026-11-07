@@ -68,7 +68,7 @@ do $$ begin
   exception when others then if sqlerrm='duplicate product validation did not fail' then raise; end if; end;
 end $$;
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',1,1,'{"kind":"sheet","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
-insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003',1,1,'{"kind":"quote","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
+insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003',1,1,'{"kind":"quote","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","price":1000,"taxType":"taxable"}]}');
 
 insert into pricing_document_sends(company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key)
 values('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','sheet-v1','table','kakao','60000000-0000-4000-8000-000000000001','staff:1');
