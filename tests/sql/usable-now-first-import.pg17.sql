@@ -24,6 +24,10 @@ insert into supplier_products(id,company_id,raw_name,raw_unit,latest_cost,cost_c
 insert into product_catalog(id,company_id,source,source_key,product_code,purchase_product_name,purchase_unit,purchase_price,tax_type)
 select '10000000-0000-4000-8000-000000000001',company_id,'supplier','standard:'||id,'P-000001',raw_name,raw_unit,latest_cost,'taxable'
 from supplier_products where cost_confirmed;
+-- Date-aware uploads defer the first real cost to the atomic dated batch.
+-- The production column is NOT NULL, so zero is the unpriced sentinel.
+insert into product_catalog(id,company_id,source,source_key,product_code,purchase_product_name,purchase_unit,purchase_price,tax_type)
+values ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','supplier','standard:dated-batch-fixture','P-000002','날짜 배치 샘플','EA',0,'taxable');
 insert into supplier_product_matches(company_id,supplier_product_id,product_catalog_id,match_status)
 values ('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','confirmed');
 grant select on supplier_product_matches to service_role;
@@ -32,6 +36,9 @@ set local role service_role;
 do $$
 declare c uuid := '00000000-0000-4000-8000-000000000001';
 begin
+ if (select purchase_price from product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000002')<>0 then
+   raise exception 'Dated batch product is not schema-safe unpriced';
+ end if;
  if (select count(*) from supplier_product_matches where company_id=c and match_status='confirmed')<>1 then
    raise exception 'First standard product is not connected';
  end if;
