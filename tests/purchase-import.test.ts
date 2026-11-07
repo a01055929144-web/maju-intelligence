@@ -49,10 +49,44 @@ describe("purchase import", () => {
     expect(rows.find((row) => row.product_name === "냉동오징어")).toMatchObject({ quantity: 7, supply_amount: 31500 });
   });
 
-  it("rejects undated duplicate items with different prices instead of silently taking the last row", () => {
+  it("returns undated duplicate prices as selection candidates instead of taking the last row", () => {
     const sheet = buildPurchaseSheet(matrix);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded");
-    expect(() => mergeDuplicateLines(lines)).toThrow("날짜가 없어 최신 단가를 알 수 없습니다");
+    const merged = mergeDuplicateLines(lines);
+    expect(merged.some((line) => line.name === "냉동오징어")).toBe(false);
+    expect(merged.conflicts[0]).toMatchObject({ name: "냉동오징어", purchaseDate: undefined });
+    expect(merged.conflicts[0].candidates.map((line) => ({ cost: line.cost, rowNumber: line.rowNumber }))).toEqual([
+      { cost: 4500, rowNumber: 3 },
+      { cost: 4600, rowNumber: 5 }
+    ]);
+  });
+
+  it("uses a purchase-date column per row and keeps different dates as separate prices", () => {
+    const sheet = buildPurchaseSheet([
+      ["품목명", "단가", "구매일"],
+      ["양파 [10kg]", "12000", "2026.11.01"],
+      ["양파 [10kg]", "13000", "2026-11-02"]
+    ]);
+    const mapping = suggestPurchaseMapping(sheet);
+    const merged = mergeDuplicateLines(parsePurchaseLines(sheet, mapping, "excluded").lines);
+    expect(mapping.purchaseDate).toBe(2);
+    expect(merged.map((line) => [line.purchaseDate, line.cost])).toEqual([["2026-11-01", 12000], ["2026-11-02", 13000]]);
+    expect(merged.conflicts).toEqual([]);
+  });
+
+  it("parses Excel serial dates and returns blank or invalid dated rows for confirmation", () => {
+    const sheet = buildPurchaseSheet([
+      ["품목명", "단가", "구매일"],
+      ["양파", "12000", "45231"],
+      ["대파", "3000", ""],
+      ["마늘", "9000", "2026-13-01"],
+      ["감자", "7000", "2026. 11. 1."],
+      ["당근", "8000", "2026년 11월 2일"]
+    ]);
+    const parsed = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded");
+    expect(parsed.lines.map((line) => line.purchaseDate)).toEqual(["2023-11-01", "2026-11-01", "2026-11-02"]);
+    expect(parsed.dateIssues).toEqual([3, 4]);
+    expect(parsed.lines.map((line) => line.name)).toEqual(["양파", "감자", "당근"]);
   });
 
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {

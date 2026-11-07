@@ -15,7 +15,8 @@ export const PURCHASE_IMPORT_FIELDS = [
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
   { key: "totalAmount", label: "합계", aliases: ["합계", "합계금액", "총액", "금액"] },
   { key: "code", label: "ERP 코드", aliases: ["erp코드", "기본코드", "상품코드", "품목코드", "코드"] },
-  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] }
+  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] },
+  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "날짜"] }
 ] as const;
 export type PurchaseImportFieldKey = (typeof PURCHASE_IMPORT_FIELDS)[number]["key"];
 export type PurchaseImportMapping = Partial<Record<PurchaseImportFieldKey, number>>;
@@ -81,6 +82,18 @@ const toNumber = (value: string | undefined) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+const toPurchaseDate = (value: string | undefined) => {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  if (/^\d{5}(?:\.\d+)?$/.test(raw)) return new Date((Number(raw) - 25569) * 86400000).toISOString().slice(0, 10);
+  const normalized = raw.replace(/\s/g, "").replace(/[.일]$/, "").replace(/[년월./]/g, "-");
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return undefined;
+  const date = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const parsed = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return parsed.toISOString().slice(0, 10) === date ? date : undefined;
+};
+
 /** 11/4: 자주 쓰는 단위. 고객사마다 다른 말은 직접 입력하면 됩니다. */
 export const COMMON_UNITS = ["EA", "개", "BOX", "박스", "PACK", "팩", "KG", "G", "L", "ML", "통", "봉", "병", "캔", "판", "단", "망", "포", "미", "마리", "SET", "롤", "장"];
 const UNIT_WORDS = new Set(COMMON_UNITS.map((unit) => unit.toLowerCase()).concat(["ea", "box", "pack", "pk", "kg", "g", "l", "ml", "pcs", "set", "bag", "can", "btl"]));
@@ -144,12 +157,15 @@ export type PurchaseImportLine = {
   raw: string[];
   /** 엑셀 원문 상품명(대괄호 포함 그대로). 원문 연결(별칭)에 씁니다. */
   rawName: string;
+  /** 파일에 구매일 열이 있을 때만 설정됩니다. 없으면 업로드 화면의 날짜를 사용합니다. */
+  purchaseDate?: string;
 };
 
-export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[] } {
+export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[]; dateIssues: number[] } {
   if (mapping.name === undefined || mapping.cost === undefined) throw new Error("필수 열(품목·단가)을 골라 주세요.");
   const lines: PurchaseImportLine[] = [];
   const skipped: number[] = [];
+  const dateIssues: number[] = [];
   const read = (cells: string[], key: PurchaseImportFieldKey) => (mapping[key] === undefined ? "" : cells[mapping[key]!] || "");
   for (const row of sheet.rows) {
     const rawName = read(row.cells, "name");
@@ -159,6 +175,11 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       continue;
     }
     const { name, spec, unit } = splitNameSpec(rawName, read(row.cells, "spec"), read(row.cells, "unit"));
+    const purchaseDate = toPurchaseDate(read(row.cells, "purchaseDate"));
+    if (mapping.purchaseDate !== undefined && !purchaseDate) {
+      dateIssues.push(row.rowNumber);
+      continue;
+    }
     const quantity = toNumber(read(row.cells, "quantity"));
     const supplyAmount = toNumber(read(row.cells, "supplyAmount"));
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
@@ -170,6 +191,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       cost: costExcludingVat(rawCost, vatIncluded),
       lineKey: purchaseLineKey(name, `${spec}${unit}`),
       name,
+      purchaseDate,
       quantity,
       raw: row.cells,
       rawName,
@@ -185,19 +207,40 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       vatIncluded
     });
   }
-  return { lines, skipped };
+  return { lines, skipped, dateIssues };
 }
 
-/** 같은 단가의 중복 행만 합칩니다. 날짜 없는 파일에서 마지막 단가를 최신값으로 추정하지 않습니다. */
-export function mergeDuplicateLines(lines: readonly PurchaseImportLine[]) {
-  const byKey = new Map<string, PurchaseImportLine>();
-  const conflicting = new Set<string>();
+export type PurchasePriceConflict = {
+  key: string;
+  purchaseDate?: string;
+  name: string;
+  spec: string;
+  unit: string;
+  supplier: string;
+  candidates: PurchaseImportLine[];
+};
+
+export type PurchaseImportMergeResult = PurchaseImportLine[] & { conflicts: PurchasePriceConflict[] };
+
+/** 같은 품목·구매일·단가만 합치고, 가격이 다르면 자동 선택하지 않고 후보를 반환합니다. */
+export function mergeDuplicateLines(lines: readonly PurchaseImportLine[]): PurchaseImportMergeResult {
+  const groups = new Map<string, PurchaseImportLine[]>();
   for (const line of lines) {
-    const key = `${line.code ? `code:${norm(line.code)}` : line.lineKey}|${norm(line.supplier)}`;
-    const previous = byKey.get(key);
-    if (previous && previous.cost !== line.cost) conflicting.add(key);
-    byKey.set(key, previous ? { ...line, quantity: (previous.quantity || 0) + (line.quantity || 0) || undefined } : line);
+    const key = `${line.code ? `code:${norm(line.code)}` : line.lineKey}|${norm(line.supplier)}|${line.purchaseDate || "undated"}`;
+    groups.set(key, [...(groups.get(key) || []), line]);
   }
-  if (conflicting.size) throw new Error(`같은 품목에 서로 다른 단가가 ${conflicting.size}건 있습니다. 날짜가 없어 최신 단가를 알 수 없습니다. 품목마다 현재 단가 한 줄만 남긴 파일을 올려 주세요.`);
-  return Array.from(byKey.values());
+  const merged: PurchaseImportLine[] = [];
+  const conflicts: PurchasePriceConflict[] = [];
+  for (const [key, candidates] of Array.from(groups.entries())) {
+    if (new Set(candidates.map((line) => line.cost)).size > 1) {
+      const first = candidates[0];
+      conflicts.push({ key, purchaseDate: first.purchaseDate, name: first.name, spec: first.spec, unit: first.unit, supplier: first.supplier, candidates: [...candidates] });
+      continue;
+    }
+    merged.push(candidates.slice(1).reduce((line, next) => ({
+      ...next,
+      quantity: (line.quantity || 0) + (next.quantity || 0) || undefined
+    }), candidates[0]));
+  }
+  return Object.assign(merged, { conflicts });
 }
