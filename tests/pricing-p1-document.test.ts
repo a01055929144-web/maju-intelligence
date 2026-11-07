@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   parseDocument,
+  refreshedDocumentVersion,
   documentOutput,
   printPages,
   koreaDay,
@@ -302,4 +303,14 @@ it("retains unknown catalog tax until an explicit choice; does not assume taxabl
     parseDocument({ ...content, lines: [{ ...line, taxType: "exempt" }] })
       .lines[0].taxType,
   ).toBe("exempt");
+});
+
+it("refreshes availability without accepting a different publication or mutated sales snapshot", () => {
+  const fresh = { ...version, promotionStock: { live: 3 } };
+  expect(refreshedDocumentVersion(version, fresh).content).toEqual(parseDocument(content));
+  for (const patch of [{ id: "other" }, { documentId: "other" }, { version: 2 }, { revision: 2 }])
+    expect(() => refreshedDocumentVersion(version, { ...fresh, ...patch })).toThrow("게시 버전");
+  for (const patch of [{ productId: "20000000-0000-4000-8000-000000000001" }, { displayName: "바뀐 품목" }, { spec: "99kg" }, { unit: "BOX" }, { price: 9999 }, { taxType: "taxable" as const }])
+    expect(() => refreshedDocumentVersion(version, { ...fresh, content: { ...content, lines: [{ ...content.lines[0], ...patch }] } })).toThrow("게시 버전");
+  expect(version.content.lines[0]).toMatchObject({ displayName: "매장 상품", spec: "1kg", unit: "개", price: 21180, taxType: "exempt" });
 });
