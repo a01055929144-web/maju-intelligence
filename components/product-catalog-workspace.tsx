@@ -30,7 +30,7 @@ import type {
   ProductImportAuditItem,
   SupplierProductAdminItem,
 } from "@/lib/product-catalog-import";
-import { defaultConversionReviewRatio } from "@/lib/product-catalog-import";
+import { defaultConversionReviewRatio } from "@/lib/product-conversion-review";
 import { runLimited } from "@/lib/run-limited";
 
 type Workspace = {
