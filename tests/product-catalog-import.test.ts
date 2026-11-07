@@ -74,6 +74,8 @@ describe("product catalog import data access", () => {
     expect(catalog[0]).toMatchObject({
       product_code: "P-000001",
       purchase_price: 0,
+      purchase_unit: "EA",
+      sales_unit: "EA",
     });
   });
 
@@ -175,8 +177,11 @@ describe("product catalog import data access", () => {
 
   it("returns exact IDs and unpriced rows for 745 dated first-import products", async () => {
     const ids = Array.from({ length: 745 }, (_, index) => `supplier-${index}`);
-    const products = ids.map((id) => ({ id, raw_name: id, raw_unit: "EA", latest_cost: 100 }));
-    const inserted: Array<{ purchase_price: number; source_key: string }> = [];
+    const products = ids.map((id, index) => ({
+      id, raw_name: id, raw_unit: "EA", latest_cost: 100,
+      parsed_pack_quantity: index === 0 ? 20 : null,
+    }));
+    const inserted: Array<{ purchase_price: number; sales_unit: string | null; source_key: string }> = [];
     let code = 0;
     supabaseRequest.mockImplementation(async (path: string, init?: { body?: string; method?: string }) => {
       const target = String(path || "");
@@ -202,6 +207,8 @@ describe("product catalog import data access", () => {
     expect(result.unresolvedSupplierProductIds).toEqual([]);
     expect(inserted).toHaveLength(745);
     expect(inserted.every((row) => row.purchase_price === 0)).toBe(true);
+    expect(inserted[0].sales_unit).toBeNull();
+    expect(inserted.slice(1).every((row) => row.sales_unit === "EA")).toBe(true);
     expect(supabaseRequest.mock.calls.filter(([path]) => String(path).startsWith("product_catalog?on_conflict=")).length).toBe(3);
   });
 
