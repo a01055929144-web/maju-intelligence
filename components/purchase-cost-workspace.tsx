@@ -214,11 +214,29 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         return { ...line, purchaseDate: date };
       });
       const merged = mergeDuplicateLines(lines);
-      return { lines, merged, conflicts: merged.conflicts, skipped: parsed.skipped, hasDates, error: "" };
+      const catalogGroups = new Map<string, { product: CostProduct; lines: PurchaseImportLine[] }>();
+      for (const line of lines) {
+        const product = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products) || matchCostImportRow(line, products)
+          || matchCostImportRow({ ...line, supplier: "" }, unique);
+        if (!product) continue;
+        const key = `${product.id}|${line.purchaseDate}`;
+        const group = catalogGroups.get(key) || { product, lines: [] };
+        group.lines.push(line); catalogGroups.set(key, group);
+      }
+      const supplierConflicts: PurchasePriceConflict[] = [], covered = new Set<number>();
+      for (const [key, group] of Array.from(catalogGroups.entries())) {
+        if (new Set(group.lines.map(line => line.supplier)).size < 2 || new Set(group.lines.map(line => line.cost)).size < 2) continue;
+        supplierConflicts.push({ key: `product:${key}`, name: group.product.name, spec: group.product.spec, unit: group.product.unit,
+          supplier: "여러 매입처", purchaseDate: group.lines[0].purchaseDate, candidates: group.lines });
+        group.lines.forEach(line => covered.add(line.rowNumber));
+      }
+      return { lines, merged: merged.filter(line => !covered.has(line.rowNumber)),
+        conflicts: [...merged.conflicts.filter(group => !group.candidates.some(line => covered.has(line.rowNumber))), ...supplierConflicts],
+        skipped: parsed.skipped, hasDates, error: "" };
     } catch (cause) {
       return { lines: [], merged: [], conflicts: [], skipped: [], hasDates: false, error: cause instanceof Error ? cause.message : "파일과 열 연결을 확인해 주세요." };
     }
-  }, [sheet, mapping, vatMode, receiptDate]);
+  }, [sheet, mapping, vatMode, receiptDate, products, unique]);
   const unresolvedConflicts = importPreview?.conflicts.filter(group => !conflictChoices[group.key]).length || 0;
   const reviewDates = Array.from(importedLines.reduce((dates, line) => {
     const date = line.purchaseDate || receiptDate;
@@ -230,7 +248,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const dateSaveBlocked = requiresDateContract && !purchaseDateEnabled;
   const priceChangeCount = selected.filter(id => candidates[id] && candidates[id].cost !== unique.find(product => product.id === id)?.cost &&
     !historicalPrice(id)).length;
-  const reviewKey = JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier, currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) });
+  const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier,
+    currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) }),
+  [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique]);
   function changeReceiptDate(value: string) {
     setReceiptDate(value); setConfirmedReview("");
     if (!fileHasDates) {
@@ -299,12 +319,18 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       }
       const heldTargets = new Set(held.flatMap(group => group.candidates.filter(line =>
         (line.purchaseDate || receiptDate) === latest.get(target(line))).map(target)));
+      const selectedPrices = new Map<string, Set<number>>();
+      for (const line of merged) {
+        const key = `${target(line)}|${line.purchaseDate}`;
+        const prices = selectedPrices.get(key) || new Set<number>();
+        prices.add(line.cost); selectedPrices.set(key, prices);
+      }
       const next: Record<string, Candidate> = {};
       const missing: NewRow[] = [], seen = new Set<string>();
       for (const line of merged) {
         const key = target(line), date = line.purchaseDate || receiptDate;
         if (date !== latest.get(key) || heldTargets.has(key) || seen.has(key)) continue;
-        if (merged.some(other => other.rowNumber !== line.rowNumber && target(other) === key && other.purchaseDate === line.purchaseDate && other.cost !== line.cost)) {
+        if ((selectedPrices.get(`${key}|${line.purchaseDate}`)?.size || 0) > 1) {
           throw new Error(`${line.name}: 서로 다른 원문이 같은 상품·적용일로 연결됩니다. 원본 파일의 단가를 확인해 한 가지로 정리해 주세요.`);
         }
         seen.add(key);
@@ -629,7 +655,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
               { key: "choice", label: "단가 선택 또는 보류", value: group => conflictChoices[group.key] || "선택 필요", render: group => <select aria-label={`${group.name} ${group.purchaseDate || receiptDate} 적용 단가`} className="maju-input min-h-11 w-full min-w-[220px]" value={conflictChoices[group.key] || ""}
                 onChange={event => setConflictChoices(current => ({ ...current, [group.key]: event.target.value }))}>
                 <option value="">적용할 행을 선택해 주세요</option><option value="hold">이번 가격 반영 보류</option>
-                {group.candidates.map(line => <option key={line.rowNumber} value={String(line.rowNumber)}>{line.rowNumber}행 · {money(line.cost)} · 수량 {line.quantity ?? "-"}</option>)}
+                {group.candidates.map(line => <option key={line.rowNumber} value={String(line.rowNumber)}>{line.supplier || "매입처 미지정"} · {line.rowNumber}행 · {money(line.cost)} · 수량 {line.quantity ?? "-"}</option>)}
               </select> }]} /></section>
         </> : <p>같은 품목·같은 적용일의 상이 단가가 없습니다.</p>}
       </>}
