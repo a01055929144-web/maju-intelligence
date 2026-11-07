@@ -21,6 +21,7 @@ SQL: [20261107-purchase-cost-batch.sql](../../sql-drafts/20261107-purchase-cost-
 - 모든 객체에 회사 ID를 둔다. 배치 테이블은 RLS, `service_role` 전용이다. 브라우저 역할의 함수 실행 권한은 회수한다.
 - 서버 API의 `manage_sales`·회사 격리 검사는 기존대로 유지한다. 함수는 service-role 경계에서만 호출한다.
 - 재시도는 같은 배치 ID와 같은 JSON이면 기존 결과를 반환하고, 다른 내용이면 충돌로 거부한다.
+- 기존 `product_catalog_imports`는 배치 안에서 매입처별 1건만 만들고, 실제 반영 행 수를 `total_rows`와 `updated_count`에 기록한다. 복구 이력도 같은 방식으로 묶는다.
 - 공급 단위 가격은 기본 단위 원가 × 확인된 환산비율로 저장한다. 상품·공급처의 `numeric(14,2)` 상한인 999,999,999,999.99원을 초과하거나 소수 둘째 자리로 정확히 표현되지 않으면 거부한다. 판매가 재계산 함수의 별도 상한도 같은 트랜잭션에서 검사된다.
 - 기존 저장 경로와 같이 `supplier_product_matches.match_status`의 `auto`와 `confirmed`를 모두 허용한다. 단위가 다르면 어느 상태든 `conversion_confirmed=true`와 유효한 환산비율을 요구한다.
 - 공급처 상품이 연결된 행은 원 공급 단위의 예상 원가(`expectedSupplierCost`)를 반드시 보내고, 현재값과 다르면 배치 전체를 취소한다.
@@ -28,7 +29,7 @@ SQL: [20261107-purchase-cost-batch.sql](../../sql-drafts/20261107-purchase-cost-
 
 ## 검증과 남은 경계
 
-- PG17 CI 통과: 비율 20 변환, `auto` 연결, 10억 원 초과 허용·공급 단위 `numeric(14,2)` 초과 거부, 동일 요청 재시도, 상품 또는 공급처 원가 충돌, 회사 격리, 두 번째 행 실패 시 전체 롤백, 판매가·원가 동시 복구, 복구 재시도, 다중 공급처 이력, 익명 접근 거부, 회사 삭제. 실행: CI #2160의 `Verify purchase-cost batch save and restore draft on PostgreSQL 17` 단계. 로컬 Docker는 실행할 수 없었다.
+- PG17 CI #2160 통과: 비율 20 변환, `auto` 연결, 10억 원 초과 허용·공급 단위 `numeric(14,2)` 초과 거부, 동일 요청 재시도, 상품 또는 공급처 원가 충돌, 회사 격리, 두 번째 행 실패 시 전체 롤백, 판매가·원가 동시 복구, 복구 재시도, 다중 공급처 이력, 익명 접근 거부, 회사 삭제. 매입처별 이력 묶음은 후속 CI 확인 전이다. 로컬 Docker는 실행할 수 없었다.
 - 운영의 `product_catalog_imports`→`product_suppliers` FK는 `ON DELETE RESTRICT`이다. PG17 fixture는 이 관계를 재현했고 회사 삭제까지 통과했다.
 - 원자성 범위는 **선택한 최대 100행 한 배치**다. 대표 회사의 748행 파일을 여러 배치로 나누면 파일 전체 저장·복구는 원자적이지 않다. 748행 단일 트랜잭션으로 확대하기 전 잠금 시간·실행 시간·기록량을 측정해야 한다.
 - 화면의 새 상품 생성·원문 연결·매입 전표형 기록도 이 RPC 범위 밖이다. 단계 A의 100% 판정은 실제 파일 업로드부터 가격 재계산·복구까지 별도 E2E를 통과한 뒤에만 한다.

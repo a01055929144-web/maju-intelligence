@@ -169,12 +169,30 @@ begin
     values('30000000-0000-4000-8000-000000000003',a,'20000000-0000-4000-8000-000000000003','BOX',1600,true);
   insert into public.supplier_product_matches(id,company_id,supplier_product_id,product_catalog_id,match_status,purchase_to_sales_ratio,conversion_confirmed)
     values('40000000-0000-4000-8000-000000000003',a,'30000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000003','confirmed',20,true);
+  insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,sales_unit)
+    values('10000000-0000-4000-8000-000000000004',a,'D',70,'EA');
+  insert into public.supplier_products(id,company_id,supplier_id,raw_unit,latest_cost,cost_confirmed)
+    values('30000000-0000-4000-8000-000000000004',a,'20000000-0000-4000-8000-000000000001','BOX',1400,true);
+  insert into public.supplier_product_matches(id,company_id,supplier_product_id,product_catalog_id,match_status,purchase_to_sales_ratio,conversion_confirmed)
+    values('40000000-0000-4000-8000-000000000004',a,'30000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000004','confirmed',20,true);
   perform public.save_purchase_cost_batch_v1(
     a, '50000000-0000-4000-8000-000000000004',
-    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":150},{"productId":"10000000-0000-4000-8000-000000000003","supplierProductId":"30000000-0000-4000-8000-000000000003","expectedCost":80,"expectedSupplierCost":1600,"cost":120}]',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":150},{"productId":"10000000-0000-4000-8000-000000000003","supplierProductId":"30000000-0000-4000-8000-000000000003","expectedCost":80,"expectedSupplierCost":1600,"cost":120},{"productId":"10000000-0000-4000-8000-000000000004","supplierProductId":"30000000-0000-4000-8000-000000000004","expectedCost":70,"expectedSupplierCost":1400,"cost":100}]',
     'tester'
   );
+  if (select count(distinct item->>'importId') from public.purchase_cost_batches b,
+      jsonb_array_elements(b.changes) item where b.company_id=a
+      and b.id='50000000-0000-4000-8000-000000000004'
+      and item->>'supplierProductId' in ('30000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000004')) <> 1
+    or not exists(select 1 from public.product_catalog_imports i
+      where i.company_id=a and i.supplier_id='20000000-0000-4000-8000-000000000001'
+      and i.total_rows=2 and i.updated_count=2) then
+    raise exception 'save_same_supplier_import_not_grouped'; end if;
   perform public.restore_purchase_cost_batch_v1(a,'50000000-0000-4000-8000-000000000004','tester');
+  if not exists(select 1 from public.product_catalog_imports i where i.company_id=a
+      and i.supplier_id='20000000-0000-4000-8000-000000000001'
+      and i.file_name='직전 저장 복구' and i.total_rows=2 and i.updated_count=2) then
+    raise exception 'restore_same_supplier_import_not_grouped'; end if;
   if exists(
     select 1 from public.supplier_product_cost_history h
     join public.product_catalog_imports i on i.company_id=h.company_id and i.id=h.import_id
