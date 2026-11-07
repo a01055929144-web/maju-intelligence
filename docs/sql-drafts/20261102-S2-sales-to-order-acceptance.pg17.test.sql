@@ -68,6 +68,7 @@ do $$ begin
   exception when others then if sqlerrm='duplicate product validation did not fail' then raise; end if; end;
 end $$;
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',1,1,'{"kind":"sheet","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
+insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003',1,1,'{"kind":"quote","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
 
 insert into pricing_document_sends(company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key)
 values('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','sheet-v1','table','kakao','60000000-0000-4000-8000-000000000001','staff:1');
@@ -159,6 +160,15 @@ update normalized_customers set delivery_drop_location='rear door' where id='100
 do $$ begin if (select delivery_drop_location from normalized_customers where id='10000000-0000-4000-8000-000000000001')<>'rear door' then raise exception 'delivery drop location missing'; end if; end $$;
 
 insert into store_order_settings values('00000000-0000-4000-8000-000000000001');
+
+-- Quote acceptance is supported; an expired issued link cannot be replaced by retrying the same acceptance.
+do $$ declare a jsonb; b jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000017',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000010',repeat('a',32),repeat('a',64),now()+interval '1 year');
+  update storefront_links set expires_at=now()-interval '1 second' where id=(a->>'storefrontLinkId')::uuid;
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000017',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000011',repeat('b',32),repeat('b',64),now()+interval '1 year');
+  if a<>b or a->>'kind'<>'quote' then raise exception 'quote expired-link retry changed stored result'; end if;
+  if exists(select from storefront_links where id='81000000-0000-4000-8000-000000000011') then raise exception 'expired link retry reissued storefront link'; end if;
+end $$;
 
 -- Existing customer and retry converge on one acceptance and one active order link.
 do $$ declare a jsonb; b jsonb; begin
