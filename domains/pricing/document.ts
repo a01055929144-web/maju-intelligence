@@ -270,6 +270,13 @@ export function parseDocument(value: unknown): DocumentContent {
     display: parseDisplay(d.display),
   };
 }
+/** Refresh live availability only for the selected, immutable publication. */
+export function refreshedDocumentVersion(expected: DocumentVersion, received: DocumentVersion): DocumentVersion {
+  if (received.id !== expected.id || received.documentId !== expected.documentId || received.version !== expected.version || received.revision !== expected.revision ||
+    JSON.stringify(parseDocument(received.content)) !== JSON.stringify(parseDocument(expected.content)))
+    throw new Error("게시 버전이 달라졌습니다. 미리보기를 닫고 버전을 다시 선택해 주세요.");
+  return { ...received, content: parseDocument(expected.content) };
+}
 export function documentOutput(version: DocumentVersion, day = koreaDay()) {
   const d = parseDocument(version.content),
     expired = day > d.validUntil;

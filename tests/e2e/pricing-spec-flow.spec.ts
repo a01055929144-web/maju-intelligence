@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import * as XLSX from "xlsx";
 import { expect, test } from "@playwright/test";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
@@ -79,6 +81,9 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     let revision = 1;
     let content: DocumentContent = { kind, title: "규격 회귀 문서", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, lines: products.map((item, i) => ({ ...lineFromCatalog({ ...item, spec: " " }), displayName: `합성 품목 ${i + 1}` })) };
     const oldContent = structuredClone(content);
+    content = { ...content, lines: content.lines.map((line, i) => ({ ...line, displayName: `수정 초안 ${i + 1}`, unit: "BOX", price: 2200, taxType: "taxable" })) };
+    let failVersions = false, failAutoRefresh = false, armedPromotionReads = 0;
+    await page.addInitScript(() => { window.print = () => { document.documentElement.dataset.printCount = String(Number(document.documentElement.dataset.printCount || 0) + 1); }; });
     const draft = () => ({ id, revision, content: { ...content, lines: content.lines.map(line => ({ ...line, spec: revision === 1 ? null : line.spec })) }, updatedAt: "2026-11-05T01:00:00Z", recalculation: { publishedAt: "2026-11-05T01:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
     const version = (number: number) => ({ id: `30000000-0000-4000-8000-00000000000${number}`, documentId: id, version: number, revision, publishedAt: "2026-11-05T01:00:00Z", content: number === 1 ? { ...oldContent, lines: oldContent.lines.map(line => ({ ...line, spec: null })) } : structuredClone(content), unavailablePromotions: [], promotionStock: {} });
     let published = false;
@@ -94,6 +99,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       if (action === "list") result = { items: [draft()], total: 1 };
       if (action === "profile") result = { revision: 0, content: { companyName: "합성", contact: "", footer: "" } };
       if (action === "catalog") result = { items: products, total: 16 };
+      if (action === "versions" && failVersions) return route.fulfill({ status: 503, json: { message: "합성 게시 버전 확인 실패" } });
+      if (action === "promotions" && failAutoRefresh && ++armedPromotionReads > 1) return route.fulfill({ status: 503, json: { message: "합성 인쇄 상태 확인 실패" } });
       if (action === "versions") result = published ? [version(2), version(1)] : [version(1)];
       if (action === "save") { content = body.content; revision++; result = draft(); }
       if (action === "publish") { published = true; result = version(2); }
@@ -123,5 +130,32 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     await dialog.getByRole("button", { name: "닫기", exact: true }).click();
     await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
     expect((await page.getByRole("dialog", { name: "미리보기", exact: true }).locator(".pricing-paper").allTextContents()).join("")).not.toContain("18L");
+    const oldPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
+    const downloadEvent = page.waitForEvent("download");
+    await oldPreview.getByRole("button", { name: "엑셀 내려받기", exact: true }).click();
+    const download = await downloadEvent;
+    const workbook = XLSX.read(readFileSync((await download.path())!), { type: "buffer" });
+    const exported = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+    expect(exported).toHaveLength(16);
+    expect(exported[0]).toMatchObject({ 품목명: "합성 품목 1", 규격: "", 단위: "통", 판매가: 1000, 과세: "면세" });
+    expect(JSON.stringify(exported)).not.toMatch(/수정 초안|18L|2200|원가|마진/);
+    const print = oldPreview.getByRole("button", { name: "PDF·인쇄", exact: true });
+    expect((await print.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    failVersions = true; await print.click();
+    await expect(oldPreview.getByRole("alert")).toContainText("합성 게시 버전 확인 실패");
+    expect(await page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(0);
+    failVersions = false; await print.click();
+    await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
+    await oldPreview.getByRole("button", { name: "닫기", exact: true }).click();
+    failAutoRefresh = true;
+    await page.getByRole("button", { name: "A4 인쇄", exact: true }).click();
+    const automatic = page.getByRole("dialog", { name: "미리보기", exact: true });
+    await expect(automatic.getByRole("alert")).toContainText("합성 인쇄 상태 확인 실패");
+    expect(await page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
+    failAutoRefresh = false;
+    await automatic.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+
   });
 }

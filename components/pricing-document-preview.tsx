@@ -1,14 +1,17 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   documentOutput,
+  refreshedDocumentVersion,
   printPages,
   koreaDay,
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
 import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
+import { Button } from "./ui/button";
+
 type OutputLine = DocumentOutput["lines"][number];
 
 /** 11/4: A4·휴대폰·편집 미리보기가 모두 쓰는 한 장. 회사 정보 줄, 행사 블록(카드/표), 품목 격자(1~3열). */
@@ -192,8 +195,17 @@ export function PricingDocumentPreview({
   const papers = useRef<Array<HTMLDivElement | null>>([]);
   const output = documentOutput(current, day),
     pages = printPages(output, fontScale, Boolean(qr));
-  async function prepare() {
-    const latest = refresh ? await refresh() : version;
+  const alive = useRef(false), autoPrinted = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    const cutoff = Date.parse(`${current.content.validUntil}T15:00:00Z`);
+    if (cutoff <= Date.now()) return;
+    const timer = window.setTimeout(() => setDay(koreaDay()), Math.min(2147483647, cutoff - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [current.content.validUntil, day]);
+  const prepare = useCallback(async () => {
+    const latest = refreshedDocumentVersion(version, refresh ? await refresh() : version);
+    if (!alive.current) throw new Error("미리보기를 다시 열어 주세요.");
     flushSync(() => {
       setCurrent(latest);
       setDay(koreaDay());
@@ -202,12 +214,19 @@ export function PricingDocumentPreview({
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
     return latest;
-  }
+  }, [refresh, version]);
+  const printDocument = useCallback(async () => {
+    autoPrinted.current = true;
+    setBusy(true); setError("");
+    try { await prepare(); if (alive.current) window.print(); }
+    catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : "인쇄할 수 없습니다."); }
+    finally { if (alive.current) setBusy(false); }
+  }, [prepare]);
   useEffect(() => {
-    if (!autoPrint) return;
-    const timer = window.setTimeout(() => window.print(), 400);
+    if (!autoPrint || autoPrinted.current) return;
+    const timer = window.setTimeout(() => { if (!autoPrinted.current) void printDocument(); }, 400);
     return () => window.clearTimeout(timer);
-  }, [autoPrint]);
+  }, [autoPrint, printDocument]);
   async function exportPage(index: number) {
     setBusy(true);
     setError("");
@@ -235,24 +254,7 @@ export function PricingDocumentPreview({
     <section className="space-y-4" aria-label="온라인·오프라인 미리보기">
       <div className="pricing-no-print flex flex-wrap items-center gap-3">
         <h2 className="font-bold">온라인·오프라인 미리보기</h2>
-        <button
-          disabled={busy}
-          className="rounded border px-3 py-2"
-          onClick={async () => {
-            setBusy(true);
-            setError("");
-            try {
-              await prepare();
-              window.print();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "인쇄할 수 없습니다.");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          PDF·인쇄
-        </button>
+        <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void printDocument()}>PDF·인쇄</Button>
         <span className="text-sm text-slate-600">
           PNG는 A4 페이지별로 저장합니다.
         </span>
@@ -260,7 +262,7 @@ export function PricingDocumentPreview({
       {companyId && canManageLinks && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} onInsert={setQr} /> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
-          {error}
+          {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
         </p>
       )}
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -292,13 +294,13 @@ export function PricingDocumentPreview({
                         .reduce((n, p) => n + p.lines.length, 0)}
                     />
                   </div>
-                  <button
-                    disabled={busy}
+                  <Button
+                    variant="outline" disabled={busy}
                     onClick={() => void exportPage(i)}
-                    className="pricing-no-print my-3 rounded border px-3 py-2"
+                    className="pricing-no-print my-3 min-h-[44px]"
                   >
                     {i + 1}쪽 PNG 저장
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
