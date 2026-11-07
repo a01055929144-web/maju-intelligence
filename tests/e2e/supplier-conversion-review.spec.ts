@@ -34,7 +34,7 @@ for (const width of [1440, 390]) {
       await page.getByRole("checkbox", { name: "박스 양파 환산 확인 선택" }).check();
       await page.getByRole("button", { name: "선택 2개 환산 확정" }).click();
       await expect(page.getByText("1개 확정 · 1개 실패")).toBeVisible();
-      await expect(page.getByRole("alert")).toContainText("환산값을 다시 확인해 주세요.");
+      await expect(page.getByRole("alert").filter({ hasText: "환산값을 다시 확인해 주세요." })).toBeVisible();
       expect(requests.map(({ supplierProductId, ratio }) => ({ supplierProductId, ratio })).sort((a, b) => a.supplierProductId.localeCompare(b.supplierProductId))).toEqual([
         { supplierProductId: "box-unit", ratio: 20 }, { supplierProductId: "same-unit", ratio: 1 },
       ]);
