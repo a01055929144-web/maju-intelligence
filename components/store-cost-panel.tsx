@@ -104,9 +104,11 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
   return <Card>
     <CardHeader><CardTitle>매장 자체 원가관리</CardTitle><p className="text-sm text-slate-600">매장에서 등록한 원가 자료입니다. 원가 조회와 수정은 PC에서 이용해 주세요.</p></CardHeader>
     <CardContent>
+      {"message" in access && <p role="status">{access.message} 권한을 확인한 뒤 새로고침해 주세요.</p>}
+      {error && <p role="alert">{error}</p>}
       <p className="md:hidden">PC에서 같은 매장 주소를 열어 주세요. 주문과 판매가 변동은 기존 메뉴에서 확인할 수 있습니다.</p>
       <div className="hidden space-y-4 md:block">
-        {"message" in access ? <p role="status">{access.message} 권한을 확인한 뒤 새로고침해 주세요.</p> : <>
+        {!("message" in access) && <>
           <p className="text-sm">{access.canManage ? "점주·관리자는 단건 원가를 수정할 수 있습니다." : "직원은 원가를 조회할 수 있습니다. 수정은 점주·관리자에게 요청해 주세요."}</p>
           {access.canManage && <Button className="min-h-[44px]" variant="outline" disabled={busy || showUpload} onClick={() => { setShowUpload(true); setEditing(null); setHistory(null); setNotice(""); }}>엑셀 원가 업로드</Button>}
           {access.canManage && showUpload && <StoreCostUploadPanel companyId={access.companyId} storeAccountId={access.storeAccountId}
@@ -117,7 +119,7 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
             <label className="text-sm">종료일<input className={control} type="date" value={to} min={from || undefined} disabled={busy} onChange={event => setTo(event.target.value)} /></label>
             <Button className="min-h-[44px]" type="submit" disabled={busy}>다시 조회</Button>
           </form>
-          <div aria-live="polite">{busy && <p>원가 자료를 확인 중입니다.</p>}{notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}</div>
+          <div aria-live="polite">{busy && <p>원가 자료를 확인 중입니다.</p>}{notice && <p role="status">{notice}</p>}</div>
           {loaded && !busy && <><p className="text-sm">현재 불러온 행 {rows.length}건 · 엑셀 내려받기에는 이 행만 포함됩니다.</p><CommonDataTable columns={listColumns} rows={rows} rowKey={row => row.id} settingsKey={`store-costs:${access.companyId}:${access.storeAccountId}`}
             filename="매장-원가-현재불러온행.csv" emptyMessage="등록된 원가가 없습니다. 검색 조건을 바꾸거나 점주에게 자료 등록을 요청해 주세요." />
             {nextOffset !== null && <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void load(applied, nextOffset)}>원가 더 보기</Button>}</>}

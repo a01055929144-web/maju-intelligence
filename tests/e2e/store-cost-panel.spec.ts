@@ -146,3 +146,39 @@ test("cost pages deduplicate overlapping IDs, reset search, and export only load
   expect(queries.at(-1)).toEqual({ product: "검색후", offset: "0" });
   await page.screenshot({ path: info.outputPath("store-cost-paging-reset.png"), fullPage: true });
 });
+
+
+for (const width of [1440, 390]) {
+  test(`store access guidance remains readable without exposing controls at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    let requests = 0;
+    await page.route("**/api/store/costs**", route => { requests++; return route.abort(); });
+    await page.goto("/store?fixture=store-cost-access-error");
+    const guidance = page.getByRole("main").getByRole("status").filter({ hasText: "매장 구성원 로그인" });
+    await expect(guidance).toBeVisible();
+    await expect(guidance).toContainText("권한을 확인한 뒤 새로고침");
+    await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "수정", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("table")).toHaveCount(0);
+    expect(requests).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`store-access-guidance-${width}.png`), fullPage: true });
+  });
+}
+
+test("390px can read API access failures while cost editing stays PC-only", async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let status = 401;
+  await page.route("**/api/store/costs**", route => route.fulfill({ status, json: { message: "Synthetic access error" } }));
+  for (const [code, message] of [[401, "로그인"], [403, "권한"], [404, "담당자"]] as const) {
+    status = code;
+    await page.goto("/store?fixture=store-cost-owner");
+    await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(message);
+    await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toBeHidden();
+    await expect(page.getByRole("button", { name: "다시 조회", exact: true })).toBeHidden();
+    await expect(page.getByRole("table")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`store-access-${code}-390.png`), fullPage: true });
+  }
+});

@@ -37,5 +37,8 @@ export default async function StorePage({ searchParams }: {
     costAccess = { companyId: "00000000-0000-4000-8000-000000000001",
       storeAccountId: "20000000-0000-4000-8000-000000000001", canManage: params.fixture !== "store-cost-staff" };
   }
+  if (isCiLayoutFixturesEnabled() && params.fixture === "store-cost-access-error") {
+    costAccess = { message: "매장 구성원 로그인과 매장 주소를 확인해 주세요." };
+  }
   return <><meta name="referrer" content="no-referrer" /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} /></>;
 }
