@@ -5509,11 +5509,7 @@ export async function upsertCustomerMaster(
   // 그대로 저장하므로 사용자가 나중에 실제 번호로 고칠 수 있습니다).
   const isPlaceholderBusinessNumber = /^(\d)\1{9}$/.test(rawBusinessNumber);
   const businessNumber = isPlaceholderBusinessNumber ? "" : rawBusinessNumber;
-  // import 생성과 예외 사업자번호 조회는 서로 의존하지 않으므로 병렬 실행합니다.
-  const [importId, exemptBusinessNumbers] = await Promise.all([
-    createManualCustomerImport(id),
-    businessNumber ? getExemptBusinessNumberSet(id) : Promise.resolve(new Set<string>())
-  ]);
+  const exemptBusinessNumbers = businessNumber ? await getExemptBusinessNumberSet(id) : new Set<string>();
   // 종사업자번호 등 중복 허용 목록에 등록된 사업자번호는 상호명+주소 기준 key를 사용해,
   // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 병합되지 않도록 합니다.
   const normalizedKey =
@@ -5595,7 +5591,6 @@ export async function upsertCustomerMaster(
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
-    import_id: importId,
     industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
     last_order_days: input.lastOrderDays || 0,
     monthly_revenue: input.monthlyRevenue || 0,
@@ -5650,47 +5645,57 @@ export async function upsertCustomerMaster(
   // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
   // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
   // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
-  const UPSERT_PAYLOAD_TIERS = [
-    {
-      ...customerPayload,
-      ...territoryAssignmentFields,
-      ...placeLinks,
-      ...hoursMenuFields,
-      ...deliveryVehicleField,
-      ...reviewFields,
-      ...accessMethodFields,
-      ...concurrencyFields
-    },
-    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields, ...accessMethodFields },
-    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields },
-    { ...customerPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
-    { ...customerPayload, ...placeLinks, ...hoursMenuFields },
-    { ...customerPayload, ...placeLinks },
-    customerPayload
-  ];
-  let lastUpsertError: unknown;
-  let rows: Array<Record<string, unknown>> | null = null;
-  for (const payload of UPSERT_PAYLOAD_TIERS) {
-    try {
-      rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload, concurrencyCheck);
-      break;
-    } catch (error) {
-      if (!isMissingColumnError(error)) throw error;
-      lastUpsertError = error;
+  const importId = await createManualCustomerImport(id);
+  let savedCustomer: CustomerMasterItem;
+  try {
+    const importPayload = { ...customerPayload, import_id: importId };
+    const UPSERT_PAYLOAD_TIERS = [
+      {
+        ...importPayload,
+        ...territoryAssignmentFields,
+        ...placeLinks,
+        ...hoursMenuFields,
+        ...deliveryVehicleField,
+        ...reviewFields,
+        ...accessMethodFields,
+        ...concurrencyFields
+      },
+      { ...importPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields, ...accessMethodFields },
+      { ...importPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField, ...reviewFields },
+      { ...importPayload, ...placeLinks, ...hoursMenuFields, ...deliveryVehicleField },
+      { ...importPayload, ...placeLinks, ...hoursMenuFields },
+      { ...importPayload, ...placeLinks },
+      importPayload
+    ];
+    let lastUpsertError: unknown;
+    let rows: Array<Record<string, unknown>> | null = null;
+    for (const payload of UPSERT_PAYLOAD_TIERS) {
+      try {
+        rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload, concurrencyCheck);
+        break;
+      } catch (error) {
+        if (!isMissingColumnError(error)) throw error;
+        lastUpsertError = error;
+      }
     }
-  }
-  if (!rows) throw lastUpsertError instanceof Error ? lastUpsertError : new Error(String(lastUpsertError));
+    if (!rows) throw lastUpsertError instanceof Error ? lastUpsertError : new Error(String(lastUpsertError));
   // PATCH가 조건(updated_at=eq.expected)에 맞는 행을 찾지 못했다면(=그 사이 다른 사람이 먼저
   // 저장했다면) rows가 빈 배열로 돌아옵니다. 예외가 아니라 정상 응답이므로 위 컬럼-없음 재시도
   // 루프는 그대로 통과하지만, 저장은 실제로 반영되지 않았으므로 충돌로 보고합니다.
-  if (concurrencyCheck && rows.length === 0) {
-    return {
-      customer: fallbackItem,
-      persisted: false,
-      conflict: true as const
-    };
+    if (concurrencyCheck && rows.length === 0) {
+      await finishCustomerImport(importId, "failed");
+      return {
+        customer: fallbackItem,
+        persisted: false,
+        conflict: true as const
+      };
+    }
+    savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
+    await finishCustomerImport(importId, "completed");
+  } catch (error) {
+    await finishCustomerImport(importId, "failed").catch(() => null);
+    throw error;
   }
-  const savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
 
   await writeAdminAuditLog({
     companyId: id,
@@ -8030,6 +8035,14 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
 }
 
+async function finishCustomerImport(importId: string, status: "completed" | "failed") {
+  await supabaseRequest(`customer_imports?id=eq.${encodeURIComponent(importId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ completed_at: new Date().toISOString(), status })
+  });
+}
+
 export async function saveAnalysis(
   rows: CustomerRow[],
   companyName = "업로드 고객사",
@@ -8114,14 +8127,15 @@ export async function saveAnalysis(
         uploaded_file_id: uploadedFileId,
         source: options.uploadType || "excel",
         row_count: rows.length,
-        status: "completed",
+        status: "processing",
         quality_score: qualityScore,
-        duplicate_count: duplicateCount,
-        completed_at: new Date().toISOString()
+        duplicate_count: duplicateCount
       }
     ])
   });
   const importId = imports[0].id;
+
+  try {
 
   const mappingRows = Object.entries(options.columnMapping || {}).map(([targetField, sourceHeader]) => ({
     company_id: companyId,
@@ -8416,8 +8430,11 @@ export async function saveAnalysis(
       : Promise.resolve()
   ]);
 
+  const importFailed = normalizedBatchFailures.length > 0 || (options.uploadType !== "sales-analysis" && normalizedRowsSaved === 0);
+  await finishCustomerImport(importId, importFailed ? "failed" : "completed");
+
   return {
-    persisted: true,
+    persisted: !importFailed,
     companyId,
     uploadedFileId,
     importId,
@@ -8435,6 +8452,10 @@ export async function saveAnalysis(
       normalizedBatchFailures
     }
   };
+  } catch (error) {
+    await finishCustomerImport(importId, "failed").catch(() => null);
+    throw error;
+  }
 }
 
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
@@ -15100,12 +15121,11 @@ async function createManualCustomerImport(companyId: string) {
     body: JSON.stringify([
       {
         company_id: companyId,
-        completed_at: new Date().toISOString(),
         duplicate_count: 0,
         quality_score: 100,
         row_count: 1,
         source: "manual-customer-master",
-        status: "completed",
+        status: "processing",
         uploaded_file_id: files[0]?.id || null
       }
     ])
