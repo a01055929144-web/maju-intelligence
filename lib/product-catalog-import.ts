@@ -537,6 +537,14 @@ export async function createCatalogFromSupplierProducts(
       purchase_product_name: p.raw_name,
       purchase_spec: p.raw_spec || null,
       purchase_unit: p.raw_unit || "EA",
+      ...(options.initialPurchasePrice === "dated-batch"
+        ? {
+            sales_unit:
+              !p.parsed_pack_quantity || Number(p.parsed_pack_quantity) === 1
+                ? p.raw_unit || "EA"
+                : null,
+          }
+        : {}),
       // The dated batch owns the first real cost and its effective date.
       // Zero is the schema-safe unpriced sentinel; legacy undated nonzero costs stay protected.
       purchase_price:
