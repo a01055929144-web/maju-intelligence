@@ -16,10 +16,12 @@ create table if not exists public.purchase_cost_date_batches_v2 (
   product_snapshots jsonb not null default '{}'::jsonb check(jsonb_typeof(product_snapshots)='object'),
   supplier_snapshots jsonb not null default '{}'::jsonb check(jsonb_typeof(supplier_snapshots)='object'),
   supplier_import_ids jsonb not null default '{}'::jsonb check(jsonb_typeof(supplier_import_ids)='object'),
+  recalc_run_id uuid,
   status text not null check(status in ('processing','completed','restored')),
   created_at timestamptz not null default clock_timestamp(),
   restored_at timestamptz,
-  primary key(company_id,id)
+  primary key(company_id,id),
+  foreign key(company_id,recalc_run_id) references public.price_recalc_runs(company_id,id)
 );
 create index if not exists purchase_cost_date_batches_v2_latest_idx
   on public.purchase_cost_date_batches_v2(company_id,created_at desc,id desc);
@@ -60,6 +62,9 @@ declare
   v_product_snapshots jsonb := '{}'::jsonb;
   v_supplier_snapshots jsonb := '{}'::jsonb;
   v_import_ids jsonb := '{}'::jsonb;
+  v_before_run uuid;
+  v_after_run uuid;
+  v_recalc_run uuid;
 begin
   if p_company is null or p_batch is null or p_default_receipt_date is null
      or length(trim(coalesce(p_actor_name,''))) not between 1 and 100
@@ -76,7 +81,8 @@ begin
     where company_id=p_company and id=p_batch for update;
   if found then
     if v_existing.request_digest<>v_digest then raise exception 'purchase_cost_date_batch_conflict'; end if;
-    return jsonb_build_object('batchId',p_batch,'status',v_existing.status,'rowCount',v_existing.row_count);
+    return jsonb_build_object('batchId',p_batch,'recalcRunId',v_existing.recalc_run_id,
+      'status',v_existing.status,'rowCount',v_existing.row_count);
   end if;
   insert into public.purchase_cost_date_batches_v2(
     company_id,id,request_digest,default_receipt_date,source_file_name,actor_name,row_count,rows,status
@@ -200,11 +206,18 @@ begin
       where h.company_id=p_company and h.import_id=product_catalog_imports.id
     ),completed_at=clock_timestamp()
     where company_id=p_company and id in(select value::text::uuid from jsonb_each_text(v_import_ids));
+  select id into v_before_run from public.price_recalc_runs
+    where company_id=p_company order by created_at desc,id desc limit 1;
+  perform public.pricing_p0_command(p_company,'{"action":"recalculate"}'::jsonb);
+  select id into v_after_run from public.price_recalc_runs
+    where company_id=p_company order by created_at desc,id desc limit 1;
+  if v_after_run is distinct from v_before_run then v_recalc_run:=v_after_run; end if;
   update public.purchase_cost_date_batches_v2 set
     product_snapshots=v_product_snapshots,supplier_snapshots=v_supplier_snapshots,
-    supplier_import_ids=v_import_ids,status='completed'
+    supplier_import_ids=v_import_ids,recalc_run_id=v_recalc_run,status='completed'
     where company_id=p_company and id=p_batch;
-  return jsonb_build_object('batchId',p_batch,'status','completed','rowCount',jsonb_array_length(p_rows));
+  return jsonb_build_object('batchId',p_batch,'recalcRunId',v_recalc_run,
+    'status','completed','rowCount',jsonb_array_length(p_rows));
 end $$;
 
 create or replace function public.restore_purchase_cost_date_batch_v2(
@@ -227,6 +240,15 @@ begin
   if p_batch is distinct from(select id from public.purchase_cost_date_batches_v2
       where company_id=p_company and status='completed' order by created_at desc,id desc limit 1)
   then raise exception 'only_latest_purchase_cost_date_batch'; end if;
+  if v_batch.recalc_run_id is not null then
+    if (select restored from public.price_recalc_runs
+        where company_id=p_company and id=v_batch.recalc_run_id) then
+      raise exception 'price_run_restored_separately';
+    end if;
+  elsif exists(select 1 from public.price_recalc_runs
+               where company_id=p_company and created_at>v_batch.created_at) then
+    raise exception 'price_changed_since_purchase_cost_date_batch';
+  end if;
   for v_pair in select * from jsonb_each(v_batch.product_snapshots) loop
     if not exists(select 1 from public.product_catalog where company_id=p_company and id=v_pair.key::uuid
       and purchase_price is not distinct from nullif(v_pair.value->>'afterPurchasePrice','')::numeric
@@ -240,6 +262,10 @@ begin
       and last_seen_date is not distinct from nullif(v_pair.value->>'afterLastSeenDate','')::date)
     then raise exception 'supplier_changed_since_purchase_cost_date_batch'; end if;
   end loop;
+  if v_batch.recalc_run_id is not null then
+    perform public.pricing_p0_command(
+      p_company,jsonb_build_object('action','restore','batchId',v_batch.recalc_run_id));
+  end if;
   delete from public.purchase_receipt_lines where company_id=p_company and purchase_cost_date_batch_id=p_batch;
   delete from public.product_catalog_imports where company_id=p_company
     and id in(select value::text::uuid from jsonb_each_text(v_batch.supplier_import_ids));

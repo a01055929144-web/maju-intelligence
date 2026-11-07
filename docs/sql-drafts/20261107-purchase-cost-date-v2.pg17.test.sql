@@ -3,6 +3,7 @@
 alter table public.product_catalog
   add column sales_unit text not null default 'EA',
   add column updated_at timestamptz not null default now();
+\ir 20261030-pricing-p0.sql
 \ir ../db-approval/20261104_purchase_receipt_lines.sql
 
 create table public.product_suppliers(
@@ -61,7 +62,13 @@ declare
   c constant uuid := '00000000-0000-4000-8000-000000000001';
   batch constant uuid := '50000000-0000-4000-8000-000000000001';
   rows jsonb := '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":90,"supplierCost":190,"selectedSourceRowNumber":2,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":95,"supplierCost":195,"selectedSourceRowNumber":3,"priceSelected":false}]';
+  before_price bigint;
+  applied jsonb;
 begin
+  perform public.pricing_p0_command(c,'{"action":"defaults","margin":20,"rounding":10}');
+  perform public.pricing_p0_command(c,'{"action":"recalculate"}');
+  select price into before_price from public.pricing_items
+    where company_id=c and product_id='10000000-0000-4000-8000-000000000001';
   perform public.save_purchase_cost_date_batch_v2(c,batch,'2026-11-01',rows,'tester','old.xlsx');
   if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001') <> 100
      or (select latest_cost from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000001') <> 200
@@ -78,6 +85,17 @@ begin
   perform public.restore_purchase_cost_date_batch_v2(c,batch,'tester');
   if exists(select 1 from public.purchase_receipt_lines where company_id=c and purchase_cost_date_batch_id=batch)
   then raise exception 'restore left receipts'; end if;
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000006','2026-11-01',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","cost":150,"selectedSourceRowNumber":6,"priceSelected":true}]',
+    'tester','new.xlsx');
+  if applied->>'recalcRunId' is null
+     or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>150
+     or (select price from public.pricing_items where company_id=c and product_id='10000000-0000-4000-8000-000000000001')=before_price
+  then raise exception 'cost and sales-price transaction incomplete'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000006','tester');
+  if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
+     or (select price from public.pricing_items where company_id=c and product_id='10000000-0000-4000-8000-000000000001')<>before_price
+  then raise exception 'restore did not restore cost and sales price'; end if;
 end $$;
 
 do $$
@@ -126,6 +144,29 @@ begin
     '2026-11-01',payload,'tester','3417.xlsx');
   if (select count(*) from public.purchase_receipt_lines where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004') <> 3417
   then raise exception '3417-row save incomplete'; end if;
+end $$;
+
+reset role;
+create function pg_temp.reject_recalc_run() returns trigger language plpgsql as $$
+begin raise exception 'forced_recalc_failure'; end $$;
+create trigger reject_recalc_run before insert on public.price_recalc_runs
+for each row execute function pg_temp.reject_recalc_run();
+set local role service_role;
+do $$
+declare c constant uuid := '00000000-0000-4000-8000-000000000001';
+begin
+  begin
+    perform public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000007','2026-11-02',
+      '[{"productId":"10000000-0000-4000-8000-000000000001","cost":160,"selectedSourceRowNumber":7,"priceSelected":true}]',
+      'tester','recalc-fails.xlsx');
+    raise exception 'recalc failure accepted';
+  exception when others then
+    if sqlerrm='recalc failure accepted' then raise; end if;
+  end;
+  if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
+     or exists(select 1 from public.purchase_cost_date_batches_v2 where company_id=c and id='50000000-0000-4000-8000-000000000007')
+     or exists(select 1 from public.purchase_receipt_lines where company_id=c and purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000007')
+  then raise exception 'recalc failure left partial cost state'; end if;
 end $$;
 
 reset role;
