@@ -513,6 +513,11 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
   expect(rows[4].priceSelected).toBe(false);
   expect(rows[4].rawValues[5]).toBe("130");
   expect(rows[5]).toMatchObject({ productId: "20000000-0000-4000-8000-000000000005", unit: "병", spec: "750ml" });
+  await nav.getByRole("button", { name: "전체", exact: true }).click();
+  const productRow = (name: string) => page.getByRole("textbox", { name: `${name} 품목명`, exact: true }).locator("xpath=ancestor::tr[1]");
+  await expect(productRow("합성 상품").getByRole("cell", { name: "150원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품 2").getByRole("cell", { name: "80원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품 5").getByRole("cell", { name: "90원", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: "매입 이력", exact: true }).click();
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
   await expect(history.getByRole("button", { name: "합성 상품 2", exact: true })).toBeVisible();
@@ -522,6 +527,10 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
   await page.getByRole("button", { name: "직전 날짜별 매입가·판매가 함께 되돌리기", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "원본 거래를 함께 복구했습니다" })).toBeVisible();
   expect(dateWrites[2]).toMatchObject({ action: "restore", batchId: dateWrites[0].batchId });
+  await page.getByRole("button", { name: "전체", exact: true }).click();
+  await expect(productRow("합성 상품").getByRole("cell", { name: "100원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품 2").getByRole("cell", { name: "100원", exact: true })).toBeVisible();
+  await expect(productRow("합성 상품 5").getByRole("cell", { name: "0원", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "매입 이력", exact: true }).click();
   await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("조회 조건에 맞는 매입 기록이 없습니다");
   expect(registration).toEqual({ imports: 1, standards: 1 });
