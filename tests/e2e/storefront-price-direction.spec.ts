@@ -113,7 +113,7 @@ for (const width of [1440, 390]) {
     await views.getByRole("button", { name: "즐겨찾기", exact: true }).click();
     await expect(rows).toHaveCount(1);
     await page.getByRole("button", { name: "내역", exact: true }).click();
-    await expect(page.getByRole("table")).toContainText("합성 생선 1 · 합성 채소 1");
+    await expect(page.getByRole("table").getByRole("listitem")).toHaveText(["합성 생선 1개 · 12,000원", "합성 채소 1개 · 4,000원"]);
     await expect(page.getByRole("table")).toContainText("16,000원");
     await page.getByRole("button", { name: "다시 담기", exact: true }).click();
     await expect(rows).toHaveCount(4);
