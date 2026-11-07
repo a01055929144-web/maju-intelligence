@@ -5409,6 +5409,27 @@ export async function isCustomerOnTodayRouteForDriver(companyId: string, custome
 
 export type PossibleDuplicateCustomer = { id: string; customerName: string; address: string };
 
+type AtomicManualCustomerResult = {
+  conflict: boolean;
+  customer: Record<string, unknown> | null;
+  error_message: string | null;
+  import_id: string;
+  status: "completed" | "failed";
+};
+
+function customerManualAtomicRpcEnabled() {
+  return process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED === "true";
+}
+
+async function saveCustomerManualAtomic(payload: Record<string, unknown>) {
+  const result = await supabaseRequest<AtomicManualCustomerResult[]>("rpc/save_customer_manual_atomic_draft", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  if (!result[0]) throw new Error("거래처 수기 원자 저장 결과가 없습니다.");
+  return result[0];
+}
+
 export async function upsertCustomerMaster(
   input: CustomerMasterInput,
   companyId?: string,
@@ -5645,7 +5666,8 @@ export async function upsertCustomerMaster(
   // 가장 넓은 페이로드(모든 선택 컬럼 포함)부터 시도하고, "컬럼 없음" 에러를 만나면 그 선택 컬럼
   // 묶음만 제외한 다음 티어로 재시도합니다. 위 getCustomerMaster()의 select 캐스케이드와 동일한
   // 원칙(특정 컬럼 이름을 매칭하지 않고 generic한 42703/does not exist 판별만 사용)을 씁니다.
-  const importId = await createManualCustomerImport(id);
+  const useAtomicManualSave = customerManualAtomicRpcEnabled();
+  const importId = useAtomicManualSave ? randomUUID() : await createManualCustomerImport(id);
   let savedCustomer: CustomerMasterItem;
   try {
     const importPayload = { ...customerPayload, import_id: importId };
@@ -5669,13 +5691,35 @@ export async function upsertCustomerMaster(
     ];
     let lastUpsertError: unknown;
     let rows: Array<Record<string, unknown>> | null = null;
-    for (const payload of UPSERT_PAYLOAD_TIERS) {
-      try {
-        rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload, concurrencyCheck);
-        break;
-      } catch (error) {
-        if (!isMissingColumnError(error)) throw error;
-        lastUpsertError = error;
+    if (useAtomicManualSave) {
+      const atomicCustomer = Object.fromEntries(
+        Object.entries(UPSERT_PAYLOAD_TIERS[0]).filter(([key]) => !["company_id", "import_id"].includes(key))
+      );
+      const result = await saveCustomerManualAtomic({
+        p_company_id: id,
+        p_customer: atomicCustomer,
+        p_customer_id: existingRows[0]?.id || null,
+        p_expected_updated_at: concurrencyCheck?.expectedUpdatedAt || null,
+        p_import_id: importId
+      });
+      if (result.conflict) {
+        return {
+          customer: fallbackItem,
+          persisted: false,
+          conflict: true as const
+        };
+      }
+      if (result.status !== "completed" || !result.customer) throw new Error("거래처 저장에 실패했습니다.");
+      rows = [result.customer];
+    } else {
+      for (const payload of UPSERT_PAYLOAD_TIERS) {
+        try {
+          rows = await upsertNormalizedCustomerWithOptionalPlaceLinks(payload, concurrencyCheck);
+          break;
+        } catch (error) {
+          if (!isMissingColumnError(error)) throw error;
+          lastUpsertError = error;
+        }
       }
     }
     if (!rows) throw lastUpsertError instanceof Error ? lastUpsertError : new Error(String(lastUpsertError));
@@ -5683,7 +5727,7 @@ export async function upsertCustomerMaster(
   // 저장했다면) rows가 빈 배열로 돌아옵니다. 예외가 아니라 정상 응답이므로 위 컬럼-없음 재시도
   // 루프는 그대로 통과하지만, 저장은 실제로 반영되지 않았으므로 충돌로 보고합니다.
     if (concurrencyCheck && rows.length === 0) {
-      await finishCustomerImport(importId, "failed");
+      if (!useAtomicManualSave) await finishCustomerImport(importId, "failed");
       return {
         customer: fallbackItem,
         persisted: false,
@@ -5691,9 +5735,9 @@ export async function upsertCustomerMaster(
       };
     }
     savedCustomer = toCustomerMasterItem(toNormalizedCustomerRow(rows[0]), 0);
-    await finishCustomerImport(importId, "completed");
+    if (!useAtomicManualSave) await finishCustomerImport(importId, "completed");
   } catch (error) {
-    await finishCustomerImport(importId, "failed").catch(() => null);
+    if (!useAtomicManualSave) await finishCustomerImport(importId, "failed").catch(() => null);
     throw error;
   }
 

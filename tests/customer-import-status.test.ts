@@ -15,7 +15,14 @@ let existingCustomer = false;
 let failNormalizedSave = false;
 let failReportSave = false;
 let duplicateImportCustomer = false;
-const originalEnv = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, atomic: process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED };
+let existingUpdatedAt: string | null = null;
+let manualConflict = false;
+const originalEnv = {
+  url: process.env.SUPABASE_URL,
+  key: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  atomic: process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED,
+  manualAtomic: process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED
+};
 let rpcFailures = 0;
 
 function json(value: unknown, status = 200) {
@@ -43,6 +50,12 @@ beforeAll(() => {
       if (rpcFailures-- > 0) return new Response("temporary", { status: 503 });
       return json([{ import_id: body.p_import_id, status: "completed", row_count: body.p_customers.length, error_message: null }]);
     }
+    if (method === "POST" && path === "rpc/save_customer_manual_atomic_draft") {
+      if (manualConflict) return json([{ import_id: body.p_import_id, status: "failed", conflict: true, customer: null, error_message: "customer_conflict" }]);
+      return json([{ import_id: body.p_import_id, status: "completed", conflict: false, error_message: null, customer: {
+        ...body.p_customer, company_id: body.p_company_id, id: body.p_customer_id || "customer-atomic", import_id: body.p_import_id
+      } }]);
+    }
     if (method === "GET" && path.startsWith("customer_imports?select=uploaded_file_id")) return json([{ uploaded_file_id: "file-atomic" }]);
     if (method === "PATCH" && path.startsWith("customer_imports?")) return new Response(null, { status: 204 });
     if (method === "POST" && path.startsWith("normalized_customers?")) {
@@ -53,7 +66,7 @@ beforeAll(() => {
       return json(duplicateImportCustomer ? [{ id: "existing-1", customer_name: "테스트 거래처", address: "부산", normalized_key: "different" }] : []);
     }
     if (method === "GET" && path.startsWith("normalized_customers?select=id,updated_at")) {
-      return json(existingCustomer ? [{ id: "customer-1", updated_at: null, delivery_manager: null, assigned_staff_member_id: null }] : []);
+      return json(existingCustomer ? [{ id: "customer-1", updated_at: existingUpdatedAt, delivery_manager: null, assigned_staff_member_id: null }] : []);
     }
     return json([]);
   }));
@@ -65,14 +78,18 @@ beforeEach(() => {
   failNormalizedSave = false;
   failReportSave = false;
   duplicateImportCustomer = false;
+  existingUpdatedAt = null;
+  manualConflict = false;
   rpcFailures = 0;
   process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "false";
+  process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED = "false";
 });
 
 afterAll(() => {
   if (originalEnv.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = originalEnv.url;
   if (originalEnv.key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = originalEnv.key;
   if (originalEnv.atomic === undefined) delete process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED; else process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = originalEnv.atomic;
+  if (originalEnv.manualAtomic === undefined) delete process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED; else process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED = originalEnv.manualAtomic;
   vi.unstubAllGlobals();
 });
 
@@ -88,6 +105,35 @@ describe("customer import history status", () => {
     failNormalizedSave = true;
     await expect(upsertCustomerMaster({ customerName: "테스트 거래처", address: "서울" }, "company-1")).rejects.toThrow("save failed");
     expect(importStatuses()).toEqual(["processing", "failed"]);
+  });
+
+  it("uses the separate atomic RPC for manual saves without pre-creating history", async () => {
+    process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED = "true";
+    const result = await upsertCustomerMaster({ customerName: "테스트 거래처", address: "서울" }, "company-1");
+    const rpcCall = calls.find(call => call.path === "rpc/save_customer_manual_atomic_draft");
+    expect(result.persisted).toBe(true);
+    expect(rpcCall?.body).toMatchObject({ p_company_id: "company-1", p_customer_id: null, p_expected_updated_at: null });
+    expect((rpcCall?.body as { p_customer: Record<string, unknown> }).p_customer).not.toHaveProperty("company_id");
+    expect(calls.some(call => call.method === "POST" && ["uploaded_files", "customer_imports"].includes(call.path))).toBe(false);
+  });
+
+  it("preserves expectedUpdatedAt conflict detection on the manual atomic path", async () => {
+    process.env.CUSTOMER_MANUAL_ATOMIC_RPC_ENABLED = "true";
+    existingCustomer = true;
+    existingUpdatedAt = "2026-11-07T01:00:00.000Z";
+    manualConflict = true;
+    const result = await upsertCustomerMaster({
+      customerName: "테스트 거래처",
+      address: "서울",
+      expectedUpdatedAt: existingUpdatedAt
+    }, "company-1");
+    const rpcCall = calls.find(call => call.path === "rpc/save_customer_manual_atomic_draft");
+    expect(result).toMatchObject({ persisted: false, conflict: true });
+    expect(rpcCall?.body).toMatchObject({
+      p_company_id: "company-1",
+      p_customer_id: "customer-1",
+      p_expected_updated_at: existingUpdatedAt
+    });
   });
 
   it("moves a successful Excel import from processing to completed", async () => {
