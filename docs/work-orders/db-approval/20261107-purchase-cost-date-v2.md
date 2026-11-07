@@ -2,6 +2,8 @@
 
 상태: **검토 전용 / 기능 OFF / 운영 미적용**
 
+운영 승인 전후 절차는 [20261107-purchase-cost-date-v2-runbook.md](./20261107-purchase-cost-date-v2-runbook.md)를 따릅니다. 이 문서는 승인 없이 운영 SQL 또는 데이터 쓰기를 허용하지 않습니다.
+
 ## 최소 범위
 
 - 이미 `product_catalog`에 존재하고 업로드 전에 매핑이 확정된 품목만 처리합니다.
