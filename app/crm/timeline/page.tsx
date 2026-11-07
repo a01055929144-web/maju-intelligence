@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
+import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -192,7 +192,7 @@ export default function CrmTimelinePage() {
 
   const adminCompanyId = useAdminCompanyId();
   const isAdminPreview = Boolean(adminCompanyId);
-  const { companyName: sessionCompanyName, userName: sessionUserName } = useCustomerIdentity(isAdminPreview);
+  const { companyMemberId, companyName: sessionCompanyName, userName: sessionUserName, workspaceRole } = useCustomerIdentity(isAdminPreview);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [timelineSource, setTimelineSource] = useState<"empty" | "supabase">("empty");
   const [, setDbSummary] = useState<DbSummary>(defaultDbSummary);
@@ -208,6 +208,23 @@ export default function CrmTimelinePage() {
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
   const [customerPage, setCustomerPage] = useState(1);
   const [customerPageSize, setCustomerPageSize] = useState<ListPageSize>(30);
+  const [storeOwnerActivationEnabled, setStoreOwnerActivationEnabled] = useState(false);
+
+  useEffect(() => {
+    if (isAdminPreview || !companyMemberId || !["owner", "manager"].includes(workspaceRole)) {
+      setStoreOwnerActivationEnabled(false);
+      return;
+    }
+    let active = true;
+    fetchWithTimeout("/api/store/accounts/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId: "" })
+    }, 12000)
+      .then((response) => { if (active) setStoreOwnerActivationEnabled(response.status === 403); })
+      .catch(() => { if (active) setStoreOwnerActivationEnabled(false); });
+    return () => { active = false; };
+  }, [companyMemberId, isAdminPreview, workspaceRole]);
 
   useEffect(() => {
     let active = true;
@@ -343,6 +360,7 @@ export default function CrmTimelinePage() {
   };
 
   const selectedCustomer = customers[selectedIndex] || emptyCustomer;
+  const activationBusinessNumberReady = /^[0-9]{10}$/.test(normalizeBusinessRegistrationNumber(selectedCustomer.businessNumber || ""));
   const hasCustomers = customers.length > 0;
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [bulkManagerInput, setBulkManagerInput] = useState("");
@@ -487,6 +505,9 @@ export default function CrmTimelinePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBusinessStatusChecking, setIsBusinessStatusChecking] = useState(false);
   const [businessStatusMessage, setBusinessStatusMessage] = useState("");
+  const [activationUrl, setActivationUrl] = useState("");
+  const [activationMessage, setActivationMessage] = useState("");
+  const [isCreatingActivation, setIsCreatingActivation] = useState(false);
   const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
@@ -522,6 +543,8 @@ export default function CrmTimelinePage() {
     setAddressQuery(selectedCustomer?.address || "");
     setAddressResults([]);
     setAddressSearchMessage("");
+    setActivationUrl("");
+    setActivationMessage("");
     setDetailTab(workspaceSection === "history" ? "history" : "ledger");
   }, [hasCustomers, operationFilter, selectedCustomer, workspaceSection]);
 
@@ -1062,6 +1085,45 @@ export default function CrmTimelinePage() {
     }
   }
 
+  async function copyActivationLink(url = activationUrl) {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setActivationMessage("점주 개통 링크를 복사했습니다. 30분 안에 점주에게 전달하세요.");
+    } catch {
+      setActivationMessage("자동 복사에 실패했습니다. 아래 링크를 길게 눌러 직접 복사하세요.");
+    }
+  }
+
+  async function createStoreOwnerActivation() {
+    if (!selectedCustomer.id || !activationBusinessNumberReady || isCreatingActivation) return;
+    setIsCreatingActivation(true);
+    setActivationMessage("");
+    setActivationUrl("");
+    try {
+      const response = await fetchWithTimeout("/api/store/accounts/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: selectedCustomer.id })
+      }, 12000);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || typeof payload?.activationUrl !== "string") {
+        if (response.status === 404) setStoreOwnerActivationEnabled(false);
+        throw new Error(response.status === 403
+          ? "이 거래처의 점주 개통 링크를 만들 권한이 없습니다. 대표·관리자 권한과 거래처 회사를 확인하세요."
+          : response.status === 503
+            ? "점주 개통 링크를 만들지 못했습니다. 기존 개통 상태를 확인한 뒤 다시 시도하세요."
+            : "점주 개통 링크를 만들지 못했습니다. 잠시 후 다시 시도하세요.");
+      }
+      setActivationUrl(payload.activationUrl);
+      await copyActivationLink(payload.activationUrl);
+    } catch (error) {
+      setActivationMessage(error instanceof Error ? error.message : "점주 개통 링크를 만들지 못했습니다.");
+    } finally {
+      setIsCreatingActivation(false);
+    }
+  }
+
   async function saveNote() {
     if (!selectedCustomer?.id || !newMemo.trim()) return;
     setIsNoteSaving(true);
@@ -1565,6 +1627,15 @@ export default function CrmTimelinePage() {
                         ? "검색어, 등급 또는 운영 필터를 바꿔보세요."
                         : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
                   </p>
+                  {!hasCustomers && customerSource !== "error" ? (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                      <Link className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/")}>거래처 등록·가져오기</Link>
+                      <Link className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/customers/data")}>기존 가져오기 결과 확인</Link>
+                    </div>
+                  ) : null}
+                  {!hasCustomers && customerSource !== "error" && storeOwnerActivationEnabled ? (
+                    <p className="mt-2 text-xs font-bold leading-5 text-slate-500">점주 개통 링크는 10자리 사업자번호가 저장된 거래처를 선택한 뒤 만들 수 있습니다.</p>
+                  ) : null}
                   {hasCustomers && customerSource !== "error" ? (
                     <button
                       className="maju-button-secondary mt-3 min-h-10 text-xs"
@@ -1683,6 +1754,18 @@ export default function CrmTimelinePage() {
                   <Badge className={selectedCustomer.businessStatus === "정상" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
                     사업자 {selectedCustomer.businessStatus || "미확인"}
                   </Badge>
+                  {storeOwnerActivationEnabled && selectedCustomer.id ? (
+                    <button
+                      className="maju-button-secondary min-h-11 w-full hover:border-teal-300 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60 sm:h-8 sm:min-h-0 sm:w-auto"
+                      disabled={isCreatingActivation || !activationBusinessNumberReady}
+                      onClick={() => void createStoreOwnerActivation()}
+                      title={activationBusinessNumberReady ? "이 거래처의 점주 개통 링크 만들기" : "사업자번호 10자리 등록 후 개통할 수 있습니다."}
+                      type="button"
+                    >
+                      <Store className="h-3.5 w-3.5" />
+                      {isCreatingActivation ? "개통 링크 만드는 중..." : activationBusinessNumberReady ? "매장 점주 개통 링크 만들기" : "사업자번호 10자리 등록 후 개통"}
+                    </button>
+                  ) : null}
                   <button
                     className="maju-button-secondary h-8 hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isBusinessStatusChecking || !selectedCustomer.businessNumber}
@@ -1718,6 +1801,26 @@ export default function CrmTimelinePage() {
                 >
                   {businessStatusMessage}
                 </p>
+              ) : null}
+              {storeOwnerActivationEnabled && (activationUrl || activationMessage) ? (
+                <div className={`mt-2 rounded-md border p-3 ${activationUrl ? "border-teal-200 bg-teal-50" : "border-rose-200 bg-rose-50"}`} role={activationUrl ? "status" : "alert"}>
+                  <p className={`text-xs font-bold leading-5 ${activationUrl ? "text-teal-900" : "text-rose-800"}`}>{activationMessage}</p>
+                  {activationUrl ? (
+                    <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row">
+                      <input
+                        aria-label="점주 개통 링크"
+                        className="h-11 min-w-0 flex-1 rounded-md border border-teal-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                        onFocus={(event) => event.currentTarget.select()}
+                        readOnly
+                        value={activationUrl}
+                      />
+                      <button className="maju-button-primary min-h-11 w-full shrink-0 sm:w-auto" onClick={() => void copyActivationLink()} type="button">
+                        <Copy className="h-4 w-4" />
+                        링크 복사
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
 
               <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
@@ -2376,7 +2479,9 @@ function useAdminCompanyId() {
 // /api/customer/me로 실제 로그인한 회사명·이름을 가져와 어떤 고객사든 자기 정보를 보게 합니다.
 function useCustomerIdentity(isAdminPreview: boolean) {
   const [companyName, setCompanyName] = useState("");
+  const [companyMemberId, setCompanyMemberId] = useState("");
   const [userName, setUserName] = useState("");
+  const [workspaceRole, setWorkspaceRole] = useState("");
   useEffect(() => {
     if (isAdminPreview) return;
     let ignore = false;
@@ -2385,14 +2490,16 @@ function useCustomerIdentity(isAdminPreview: boolean) {
       .then((payload) => {
         if (ignore || !payload?.session) return;
         setCompanyName(payload.session.companyName || "");
+        setCompanyMemberId(payload.session.companyMemberId || "");
         setUserName(payload.session.name || "");
+        setWorkspaceRole(payload.session.workspaceRole || "");
       })
       .catch(() => undefined);
     return () => {
       ignore = true;
     };
   }, [isAdminPreview]);
-  return { companyName, userName };
+  return { companyMemberId, companyName, userName, workspaceRole };
 }
 
 
