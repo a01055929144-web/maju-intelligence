@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOAuthState, getCustomerSession, getStoreOwnerActivationProof, storeMemberSessionEnabled } from "@/lib/auth";
+import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
   const storeAccountId = request.nextUrl.searchParams.get("storeAccountId") || "";
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (storeMode && !storeMemberSessionEnabled()) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+  if (storeMode && !isStoreMemberCompanyAllowlisted(companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
   if (storeMode && (linkMode || inviteCode)) return NextResponse.json({ message: "로그인 요청을 확인해 주세요." }, { status: 400 });
   if (storeMode && (!uuid.test(companyId) || !uuid.test(storeAccountId))) return NextResponse.json({ message: "매장 주소를 확인해 주세요." }, { status: 400 });
   if (storeOwnerMode && !(await getStoreOwnerActivationProof())) return NextResponse.json({ message: "점주 개통 링크를 다시 확인해 주세요." }, { status: 400 });

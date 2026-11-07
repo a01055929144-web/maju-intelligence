@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
@@ -41,12 +42,14 @@ export async function GET(request: NextRequest) {
   const storeMatch = stateOk ? statePayload.match(/^store:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeMode = Boolean(storeMatch);
   const storeFlow = storeMode || storeOwnerMode;
+  const storeCompanyId = storeOwnerMatch?.[1] || storeMatch?.[1] || "";
   const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeFlow ? statePayload : "";
 
   if (!stateOk) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
   }
   if (storeFlow && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
+  if (storeFlow && !isStoreMemberCompanyAllowlisted(storeCompanyId)) return redirectStore(request.url, "store_login_unavailable");
   if (!code) {
     return storeFlow ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
