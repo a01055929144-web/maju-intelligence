@@ -7,9 +7,9 @@
  */
 export const PURCHASE_IMPORT_FIELDS = [
   { key: "name", label: "품목", required: true, aliases: ["품목", "품목명", "상품명", "품명", "제품명", "품목명(규격)", "상품명(규격)"] },
-  { key: "cost", label: "단가", required: true, aliases: ["단가", "매입가", "매입단가", "원가"] },
+  { key: "cost", label: "단가", required: true, aliases: ["단가", "매입가", "매입단가", "원가", "원가(원)"] },
   { key: "spec", label: "규격", aliases: ["규격", "상품규격"] },
-  { key: "unit", label: "단위", aliases: ["단위"] },
+  { key: "unit", label: "단위", aliases: ["단위", "원가단위"] },
   { key: "quantity", label: "수량", aliases: ["수량", "입고수량", "매입수량"] },
   { key: "supplyAmount", label: "공급가액", aliases: ["공급가액", "공급가", "공급액"] },
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
