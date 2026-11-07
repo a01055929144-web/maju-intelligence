@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { summarizePurchaseHistory, type PurchaseHistoryRow } from "../../domains/pricing/purchase-receipt";
 import type { PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 import * as XLSX from "xlsx";
 
@@ -60,14 +61,17 @@ for (const width of [1280, 390]) test(`atomic purchase cost save and restore rem
 
 
 // Date UI contracts use only synthetic catalog/receipt/batch responses, never an operating DB.
-async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean; loseFirstResponse?: boolean; failFirstSaveThenReload?: boolean; newerLatestBatch?: boolean } = {}) {
+async function purchaseUpload(page: Page, options: { count?: number; currentDate?: string; supported?: boolean; multipleSuppliers?: boolean; newProducts?: boolean; failFirstSave?: boolean; unresolvedMapping?: boolean; undatedCurrent?: boolean; loseFirstResponse?: boolean; failFirstSaveThenReload?: boolean; newerLatestBatch?: boolean; mixed?: boolean } = {}) {
   const companyId = "00000000-0000-4000-8000-000000000001";
-  const products = Array.from({ length: options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: "1kg", unit: "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
+  const products = Array.from({ length: options.mixed ? 5 : options.count || 1 }, (_, index) => ({ id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    code: `ERP-${index + 1}`, name: index ? `합성 상품 ${index + 1}` : "합성 상품", spec: options.mixed ? ["1kg", "500g", "2kg", "1kg", "750ml"][index] : "1kg", unit: options.mixed ? ["봉", "EA", "BOX", "봉", "병"][index] : "봉", cost: 100, priceDate: options.undatedCurrent ? undefined : options.currentDate || "2026-11-05" })).flatMap(product => options.multipleSuppliers ? [
       { ...product, supplierName: "A매입처", supplierProductId: "40000000-0000-4000-8000-000000000001", supplierRawCost: 100 },
       { ...product, supplierName: "B매입처", supplierProductId: "40000000-0000-4000-8000-000000000002", supplierRawCost: 100 }
     ] : [product]);
   const registration = { imports: 0, standards: 0 };
+  const pricingCommands: unknown[] = [];
+  let historyRows: PurchaseHistoryRow[] = [];
+  let beforePrices: typeof products | null = null;
   const dateWrites: Array<{ action: string; batchId: string; rows: PurchaseDateRow[] }> = [];
   const writes: Array<{ changes: Array<{ cost: number; priceDate: string }> }> = [];
   const receipts: Array<{ lines: Array<{ rawCost: number; purchaseDate: string; rowNumber: number }> }> = [];
@@ -77,7 +81,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
       writes.push(route.request().postDataJSON());
       return route.fulfill({ json: { status: "applied", batchId: "30000000-0000-4000-8000-000000000001" } });
     }
-    return route.fulfill({ json: { products: options.newProducts && !registration.standards ? [] : products, changes: [], suppliers: [], batchEnabled: true, purchaseDateEnabled: options.supported !== false, latestBatch: null } });
+    return route.fulfill({ json: { products: !registration.standards && options.newProducts ? [] : !registration.standards && options.mixed ? products.slice(0, 4) : products, changes: [], suppliers: [], batchEnabled: true, purchaseDateEnabled: options.supported !== false, latestBatch: null } });
   });
   let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number } | null = null;
   await page.route("**/api/price-sheets/costs/date-batches*", route => {
@@ -92,6 +96,22 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
         const chosen = group.find(row => row.priceDate === latest && row.priceSelected);
         return !chosen || (options.currentDate && latest < options.currentDate) || (options.undatedCurrent && !chosen.replaceUndatedCurrent);
       }).length;
+      if (options.mixed) {
+        if (body.action === "save") {
+          beforePrices = structuredClone(products);
+          for (const [id, group] of Array.from(groups)) {
+            const latest = group.map(row => row.priceDate).sort().at(-1)!;
+            const chosen = group.find(row => row.priceDate === latest && row.priceSelected);
+            const product = products.find(item => item.id === id);
+            if (chosen && product) { product.cost = chosen.cost; product.priceDate = chosen.priceDate; }
+          }
+          historyRows = body.rows.map((row: PurchaseDateRow) => ({ id: `60000000-0000-4000-8000-${String(row.selectedSourceRowNumber).padStart(12, "0")}`,
+            product_catalog_id: row.productId, receipt_date: row.priceDate, line_key: row.lineKey, product_name: row.productName, spec: row.spec, unit: row.unit,
+            supplier_name: row.supplierName, quantity: row.quantity ?? null, unit_cost_ex_vat: row.cost, total_amount: row.totalAmount, correctable: true, correctionRevision: 0 }));
+        } else if (body.action === "restore" && beforePrices) {
+          products.forEach((product, index) => Object.assign(product, beforePrices![index])); historyRows = [];
+        }
+      }
       dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0, historyOnlyProductCount };
       if (options.loseFirstResponse && dateWrites.length === 1) return route.abort("failed");
       return route.fulfill({ json: { batchId: body.batchId, status: dateBatch.status, recalcRunId: null, rowCount: dateBatch.rowCount, historyOnlyProductCount } });
@@ -99,14 +119,22 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
     if (new URL(route.request().url()).searchParams.has("batchId")) return route.fulfill({ json: { enabled: true, batch: dateBatch } });
     return route.fulfill({ json: { enabled: true, maxRows: 5000, latestBatch: options.newerLatestBatch && dateBatch ? { ...dateBatch, id: "50000000-0000-4000-8000-000000000099", rowCount: 99 } : dateBatch, undatedPrices: options.undatedCurrent ? [{ productId: products[0].id, cost: 100 }] : [] } });
   });
-  await page.route(/\/api\/price-sheets(?:\?|$)/, route => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 0, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50 } }));
+  await page.route(/\/api\/price-sheets(?:\?|$)/, route => {
+    if (route.request().method() === "POST") pricingCommands.push(route.request().postDataJSON());
+    return route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 0, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50 } });
+  });
   await page.route("**/api/price-sheets/receipts*", route => {
     if (route.request().method() === "POST") receipts.push(route.request().postDataJSON());
+    if (options.mixed && route.request().method() === "GET") {
+      const params = new URL(route.request().url()).searchParams;
+      const rows = params.has("productId") ? historyRows.filter(row => row.product_catalog_id === params.get("productId")) : historyRows;
+      return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
+    }
     return route.fulfill({ json: { summary: [], saved: receipts.at(-1)?.lines.length || 0 } });
   });
   await page.route("**/api/pricing-documents*", route => route.fulfill({ json: { result: { items: [], total: 0 }, manager: true } }));
   await page.route("**/api/product-catalog/imports", route => {
-    if (!options.newProducts) throw new Error("No new product may be created in date UI checks");
+    if (!options.newProducts && !options.mixed) throw new Error("No new product may be created in date UI checks");
     const body = route.request().postDataJSON();
     const supplierProductId = "40000000-0000-4000-8000-000000000001";
     if (body.action === "save-import") {
@@ -115,15 +143,16 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
     }
     if (body.action === "create-dated-standards") {
       registration.standards++;
+      if (options.mixed) products[4].cost = 0;
       return route.fulfill({ json: { createdCount: 1, categorySuggestedCount: 0,
-        productMappings: options.unresolvedMapping ? [] : [{ supplierProductId, productCatalogId: products[0].id }],
+        productMappings: options.unresolvedMapping ? [] : [{ supplierProductId, productCatalogId: products[options.mixed ? 4 : 0].id }],
         unresolvedSupplierProductIds: options.unresolvedMapping ? [supplierProductId] : [] } });
     }
     throw new Error("Unexpected registration action");
   });
   await page.goto(`/revenue/pricing?companyId=${companyId}`);
   await expect(page.getByRole("button", { name: "① 엑셀 올리기", exact: true })).toBeVisible();
-  return { writes, receipts, dateWrites, registration };
+  return { writes, receipts, dateWrites, registration, pricingCommands };
 }
 async function selectPurchaseCsv(page: Page, text: string) {
   await page.locator('input[type="file"]').setInputFiles({ name: "합성-구매일.csv", mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
@@ -445,4 +474,115 @@ for (const committed of [false, true]) test(`refresh recovers the exact persiste
     expect(dateWrites[1]).toEqual(dateWrites[0]);
   }
   await expect.poll(() => page.evaluate(() => localStorage.getItem("maju:purchase-date-pending:00000000-0000-4000-8000-000000000001"))).toBeNull();
+});
+
+for (const width of [1280, 390]) test(`Stage A mixed file preserves all transactions through retry, history and reload restore at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites, writes, receipts, registration, pricingCommands } = await purchaseUpload(page, { mixed: true, failFirstSave: true });
+  const csv = ["ERP 코드,품목,규격,단위,구매일,단가,수량,공급가액,부가세,합계",
+    "ERP-1,합성 상품,1kg,봉,2026-11-07,150,1,150,15,165",
+    "ERP-2,합성 상품 2,500g,EA,2026-11-07,80,2,160,16,176",
+    "ERP-3,합성 상품 3,2kg,BOX,2026-11-07,100,3,300,30,330",
+    "ERP-4,합성 상품 4,1kg,봉,2026-11-07,120,4,480,48,528",
+    "ERP-4,합성 상품 4,1kg,봉,2026-11-07,130,5,650,65,715",
+    "ERP-5,합성 상품 5,750ml,병,2026-11-07,90,6,540,54,594"].join("\n");
+  await selectPurchaseCsv(page, csv);
+  await expect(page.getByRole("button", { name: "② 열 정렬", exact: true })).toBeDisabled();
+  await page.getByLabel("합성 상품 4 2026-11-07 적용 단가", { exact: true }).selectOption("hold");
+  await page.getByRole("button", { name: "② 열 정렬", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "매입가 보기", exact: true });
+  await expect(nav.getByRole("button", { name: "인상 1", exact: true })).toBeVisible();
+  await expect(nav.getByRole("button", { name: "인하 1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "③ 저장 (4건)", exact: true }).click();
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await expect(review).toContainText("원본 거래 6행"); await expect(review).toContainText("가격 반영 보류 1그룹");
+  await review.getByRole("checkbox").check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
+  expect(registration).toEqual({ imports: 1, standards: 1 });
+  await review.getByRole("checkbox").check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "현재가 반영 4품목 · 이력 전용 1품목" })).toBeVisible();
+  expect(dateWrites).toHaveLength(2); expect(dateWrites[1]).toEqual(dateWrites[0]);
+  const rows = dateWrites[1].rows;
+  expect(rows.map(row => [row.selectedSourceRowNumber, row.cost, row.quantity, row.supplyAmount, row.vatAmount, row.totalAmount])).toEqual([
+    [2, 150, 1, 150, 15, 165], [3, 80, 2, 160, 16, 176], [4, 100, 3, 300, 30, 330],
+    [5, 120, 4, 480, 48, 528], [6, 130, 5, 650, 65, 715], [7, 90, 6, 540, 54, 594]
+  ]);
+  expect(rows.filter(row => row.priceSelected)).toHaveLength(4); expect(rows.filter(row => row.priceHeld)).toHaveLength(1);
+  expect(rows[4].priceSelected).toBe(false);
+  expect(rows[4].rawValues[5]).toBe("130");
+  expect(rows[5]).toMatchObject({ productId: "20000000-0000-4000-8000-000000000005", unit: "병", spec: "750ml" });
+  await nav.getByRole("button", { name: "매입 이력", exact: true }).click();
+  const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
+  await expect(history.getByRole("button", { name: "합성 상품 2", exact: true })).toBeVisible();
+  await expect(history).toContainText("500g · EA"); await expect(history).toContainText("2kg · BOX");
+  await page.reload();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "직전 날짜별 매입가·판매가 함께 되돌리기", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "원본 거래를 함께 복구했습니다" })).toBeVisible();
+  expect(dateWrites[2]).toMatchObject({ action: "restore", batchId: dateWrites[0].batchId });
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("조회 조건에 맞는 매입 기록이 없습니다");
+  expect(registration).toEqual({ imports: 1, standards: 1 });
+  expect(pricingCommands).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [1280, 390]) test(`empty catalog, failed retry and forbidden guidance recover without writes at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites, writes, receipts } = await purchaseUpload(page, { supported: false });
+  let status = 200;
+  const pageErrors: string[] = []; page.on("pageerror", error => pageErrors.push(error.message));
+  await page.route("**/api/price-sheets/costs?*", route => route.fulfill({ status, json: status === 200 ? { products: [], changes: [], suppliers: [], batchEnabled: true, latestBatch: null } : { message: status === 403 ? "Forbidden" : "합성 목록 조회 실패" } }));
+  await page.reload();
+  await expect(page.getByText("상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요.", { exact: true })).toBeVisible();
+  status = 503; await page.reload();
+  const alert = page.getByRole("alert").filter({ hasText: "합성 목록 조회 실패" });
+  await expect(alert).toBeVisible();
+  const retry = alert.getByRole("button", { name: "목록 새로고침", exact: true });
+  expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await retry.click(); await expect(alert).toBeVisible();
+  status = 403; await retry.click();
+  await expect(page.getByRole("alert").filter({ hasText: "관리자에게 권한을 확인한 뒤 다시 시도" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "③ 저장 (0건)", exact: true })).toBeDisabled();
+  status = 200; await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /조회 실패|관리자에게 권한/ })).toHaveCount(0);
+  await expect(page.getByText("상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요.", { exact: true })).toBeVisible();
+  expect(pageErrors).toEqual([]); expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [1280, 390]) test(`receipt correction keeps its audit revision separate from current costs at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const { dateWrites, writes, receipts, pricingCommands } = await purchaseUpload(page, { supported: false });
+  const rows: PurchaseHistoryRow[] = [{ id: "60000000-0000-4000-8000-000000000001", product_catalog_id: "20000000-0000-4000-8000-000000000001",
+    receipt_date: "2026-11-07", line_key: "synthetic", product_name: "합성 상품", spec: "1kg", unit: "봉", supplier_name: "합성 매입처",
+    quantity: 2, unit_cost_ex_vat: 100, total_amount: 220, correctionRevision: 0, correctable: true }];
+  const corrections: Array<{ id: string; cost: number; reason: string; expectedRevision: number }> = [];
+  await page.route("**/api/price-sheets/receipts*", route => {
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON(); corrections.push(body);
+      rows[0] = { ...rows[0], unit_cost_ex_vat: body.cost, corrected: true, correctionRevision: 1 };
+      return route.fulfill({ json: { ok: true } });
+    }
+    const params = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
+  });
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
+  const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
+  await history.getByRole("button", { name: "합성 상품", exact: true }).click();
+  await history.getByRole("button", { name: "2026-11-07 합성 상품 매입 기록 정정", exact: true }).click();
+  await expect(page.getByText("엑셀 원본과 청구 금액은 유지합니다.", { exact: false })).toBeVisible();
+  await page.getByLabel("정정 단가", { exact: true }).fill("110");
+  await page.getByLabel("정정 사유", { exact: true }).fill("합성 오입력 정정");
+  await page.getByRole("button", { name: "정정 저장", exact: true }).click();
+  await expect.poll(() => corrections.length).toBe(1);
+  expect(corrections[0]).toMatchObject({ id: rows[0].id, cost: 110, expectedRevision: 0, reason: "합성 오입력 정정" });
+  expect(rows[0]).toMatchObject({ quantity: 2, total_amount: 220, correctionRevision: 1, corrected: true });
+  await expect(history.getByRole("cell", { name: "110원", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "전체", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "100원", exact: true }).first()).toBeVisible();
+  expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]); expect(pricingCommands).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

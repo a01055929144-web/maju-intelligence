@@ -102,6 +102,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     ]);
     const catalog = await catalogResponse.json();
     const price = await pricingResponse.json();
+    if (catalogResponse.status === 403 || pricingResponse.status === 403) throw new Error("대표·관리자 권한이 필요합니다. 관리자에게 권한을 확인한 뒤 다시 시도해 주세요.");
     if (!catalogResponse.ok || !pricingResponse.ok) throw new Error(catalog.message || price.message || "매입가를 불러오지 못했습니다.");
     if (options.documents !== false) {
       const historyPayload = historyResponse?.ok ? await historyResponse.json().catch(() => null) as { summary?: PurchaseHistoryItem[] } | null : null;
@@ -140,6 +141,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     return fresh;
   }, [companyId]);
   useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "매입가를 불러오지 못했습니다.")); }, [load]);
+  async function reloadCatalog() {
+    setError("");
+    try { await load(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "매입가를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."); }
+  }
 
   const unique = useMemo(() => Array.from(new Set(products.map((product) => product.id))).map((id) => {
     const linked = products.filter((product) => product.id === id);
@@ -791,7 +797,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal && !usesDateBatch ? `새 상품 ${missingTotal}개에 단위가 비어 있습니다. 단위를 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
     </header>
     <input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); event.target.value = ""; }} ref={fileInput} type="file" />
-    {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">목록 새로고침</button></p> : null}
+    {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <Button className="min-h-[44px]" variant="outline" onClick={() => void reloadCatalog()}>목록 새로고침</Button></p> : null}
     {batchEnabled ? <p className="text-xs text-slate-600">선택한 매입가 최대 100건과 판매가 계산을 함께 저장합니다. 새 상품·원문 연결·매입 기록은 별도로 저장됩니다.</p> : null}
     {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
