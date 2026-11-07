@@ -38,14 +38,21 @@ describe("purchase import", () => {
   });
 
   it("merges duplicate items in one file and stores one receipt row per day/item", () => {
-    const sheet = buildPurchaseSheet(matrix);
+    const samePrice = matrix.map((row, index) => index === 4 ? ["냉동오징어 [EA]", "2", "4500", "9000", "", "9000"] : row);
+    const sheet = buildPurchaseSheet(samePrice);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded");
     const merged = mergeDuplicateLines(lines);
     expect(merged).toHaveLength(2);
-    expect(merged.find((line) => line.name === "냉동오징어")).toMatchObject({ quantity: 7, rawCost: 4600 });
+    expect(merged.find((line) => line.name === "냉동오징어")).toMatchObject({ quantity: 7, rawCost: 4500 });
     const rows = buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a.xlsx", lines, receiptDate: "2026-11-04" });
     expect(rows).toHaveLength(2);
-    expect(rows.find((row) => row.product_name === "냉동오징어")).toMatchObject({ quantity: 7, supply_amount: 31700 });
+    expect(rows.find((row) => row.product_name === "냉동오징어")).toMatchObject({ quantity: 7, supply_amount: 31500 });
+  });
+
+  it("rejects undated duplicate items with different prices instead of silently taking the last row", () => {
+    const sheet = buildPurchaseSheet(matrix);
+    const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded");
+    expect(() => mergeDuplicateLines(lines)).toThrow("날짜가 없어 최신 단가를 알 수 없습니다");
   });
 
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
