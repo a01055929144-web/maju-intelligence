@@ -108,7 +108,7 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
       <div className="hidden space-y-4 md:block">
         {"message" in access ? <p role="status">{access.message} 권한을 확인한 뒤 새로고침해 주세요.</p> : <>
           <p className="text-sm">{access.canManage ? "점주·관리자는 단건 원가를 수정할 수 있습니다." : "직원은 원가를 조회할 수 있습니다. 수정은 점주·관리자에게 요청해 주세요."}</p>
-          {access.canManage && <Button className="min-h-[44px]" variant="outline" disabled={busy || showUpload} onClick={() => { setShowUpload(true); setEditing(null); setHistory(null); }}>엑셀 원가 업로드</Button>}
+          {access.canManage && <Button className="min-h-[44px]" variant="outline" disabled={busy || showUpload} onClick={() => { setShowUpload(true); setEditing(null); setHistory(null); setNotice(""); }}>엑셀 원가 업로드</Button>}
           {access.canManage && showUpload && <StoreCostUploadPanel companyId={access.companyId} storeAccountId={access.storeAccountId}
             onClose={() => setShowUpload(false)} onSaved={message => { setShowUpload(false); setNotice(message); void load(applied); }} />}
           <form className="flex flex-wrap items-end gap-3" onSubmit={event => { event.preventDefault(); setNotice(""); void load({ product, from, to }); }}>
