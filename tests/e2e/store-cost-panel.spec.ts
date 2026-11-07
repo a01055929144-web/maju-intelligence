@@ -153,9 +153,20 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     let requests = 0;
     await page.route("**/api/store/costs**", route => { requests++; return route.abort(); });
-    await page.goto("/store?fixture=store-cost-access-error");
+    await page.route("**/api/storefront", route => route.fulfill({ json: {
+      store: { title: "합성 주문 링크", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: null,
+        version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: true,
+        nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "", lines: [],
+        policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
+      orders: [], preferences: [], historyPage: 1, historyHasMore: false,
+    } }));
+    await page.goto("/store?fixture=store-cost-access-error#synthetic-access-order");
+    const navigation = page.getByRole("navigation", { name: "매장 메뉴" });
+    await expect(navigation.getByRole("button")).toHaveCount(5);
+    await navigation.getByRole("button", { name: "데이터", exact: true }).click();
     const guidance = page.getByRole("main").getByRole("status").filter({ hasText: "매장 구성원 로그인" });
-    await expect(guidance).toBeVisible();
+    await guidance.scrollIntoViewIfNeeded();
+    await expect(guidance).toBeInViewport({ ratio: 1 });
     await expect(guidance).toContainText("권한을 확인한 뒤 새로고침");
     await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "수정", exact: true })).toHaveCount(0);
@@ -163,6 +174,11 @@ for (const width of [1440, 390]) {
     expect(requests).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`store-access-guidance-${width}.png`), fullPage: true });
+    await navigation.getByRole("button", { name: "주문", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "주문하기", exact: true })).toBeVisible();
+    await expect(page.getByLabel("배송일", { exact: true })).toHaveValue("2099-01-05");
+    await expect(guidance).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath(`store-access-order-${width}.png`), fullPage: true });
   });
 }
 
