@@ -173,9 +173,10 @@ describe("product catalog import data access", () => {
     );
   });
 
-  it("returns exact IDs for 745 first-import products without creating duplicate standards", async () => {
+  it("returns exact IDs and unpriced rows for 745 dated first-import products", async () => {
     const ids = Array.from({ length: 745 }, (_, index) => `supplier-${index}`);
     const products = ids.map((id) => ({ id, raw_name: id, raw_unit: "EA", latest_cost: 100 }));
+    const inserted: Array<{ purchase_price: number; source_key: string }> = [];
     let code = 0;
     supabaseRequest.mockImplementation(async (path: string, init?: { body?: string; method?: string }) => {
       const target = String(path || "");
@@ -186,17 +187,21 @@ describe("product catalog import data access", () => {
       if (target.startsWith("product_catalog?select=id,source_key")) return [];
       if (target === "rpc/next_product_code") return `P-${String(++code).padStart(6, "0")}`;
       if (target.startsWith("product_catalog?on_conflict=")) {
-        return JSON.parse(init?.body || "[]").map((row: { source_key: string }) => ({ id: `catalog-${row.source_key.slice("standard:".length)}`, source_key: row.source_key }));
+        const rows = JSON.parse(init?.body || "[]");
+        inserted.push(...rows);
+        return rows.map((row: { source_key: string }) => ({ id: `catalog-${row.source_key.slice("standard:".length)}`, source_key: row.source_key }));
       }
       return undefined;
     });
 
-    const result = await createCatalogFromSupplierProducts("company-1", ids);
+    const result = await createCatalogFromSupplierProducts("company-1", ids, { initialPurchasePrice: "dated-batch" });
 
     expect(result.createdCount).toBe(745);
     expect(result.productMappings).toHaveLength(745);
     expect(new Set(result.productMappings.map((mapping) => mapping.productCatalogId)).size).toBe(745);
     expect(result.unresolvedSupplierProductIds).toEqual([]);
+    expect(inserted).toHaveLength(745);
+    expect(inserted.every((row) => row.purchase_price === 0)).toBe(true);
     expect(supabaseRequest.mock.calls.filter(([path]) => String(path).startsWith("product_catalog?on_conflict=")).length).toBe(3);
   });
 
