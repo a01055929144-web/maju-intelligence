@@ -24,7 +24,7 @@
 
 **책임**: 매출 거래 매칭, 파이프라인 후보, AI 영업 어시스턴트 초안, AI 리포트.
 
-- 함수: `getSalesTransactions`, `matchSalesTransactionsToCustomer`, `getRevenuePipeline`, `getSalesAssistantDrafts`, `saveAnalysis`, `getLatestReport`, `getReportById`, `getLatestBriefing`
+- 함수: `getSalesTransactions`, `matchSalesTransactionsToCustomer`, `getRevenuePipeline`, `getSalesAssistantDrafts`, `saveAnalysis`, `getLatestReport`, `getReportById`, `getLatestBriefing`; 거래처 가져오기 요청 상한은 `domains/customer/customer-import-limits.ts`
 - 테이블: `sales_transactions`, `ai_reports`
 - 관련 파일: `lib/analysis.ts`
 

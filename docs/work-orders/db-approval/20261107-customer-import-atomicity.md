@@ -1,6 +1,6 @@
 # 거래처 저장·가져오기 이력 원자성 DB 적용 기록
 
-- 상태: **운영 적용 완료 · 앱 전환 대기**
+- 상태: **운영 적용 완료 · 앱 전환 코드 준비(기본 OFF)**
 - 기준 커밋: `107f79e`
 - 대상 프로젝트: `fcmdvveqmcgtioelzqun`
 - 적용 원문: `supabase/migrations/20261107081350_customer_import_atomicity_20261107.sql`
@@ -30,12 +30,12 @@
 | 운영 스키마의 선택 컬럼/제약과 초안 비교 | PASS (`normalized_customers.updated_at` 없음 반영) |
 | 기존 `processing` 행 읽기 전용 목록·건별 판정 | PASS (41건 모두 `completed`, `processing` 0건) |
 | RPC의 `service_role` 전용 실행 권한 확인 | PASS (`anon`·`authenticated` 명시 회수) |
-| 오류 메시지의 개인정보·원문 데이터 비노출 확인 | 대기 |
-| 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | 대기 |
-| 매출 분석 업로드 제외 범위 확인 | 대기 |
+| 오류 메시지의 개인정보·원문 데이터 비노출 확인 | PASS (RPC는 SQLSTATE 기반 오류만 반환) |
+| 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | PASS (PG17 + 앱 경계 테스트) |
+| 매출 분석 업로드 제외 범위 확인 | PASS (기존 REST 경로 유지) |
 | 운영 적용 | 완료 (2026-11-07) |
 | 적용 후 읽기 검증 | PASS (`request_digest` nullable, RPC 1개, 권한·기존 41건 보존) |
-| 앱 저장 코드 전환 승인 | 대기 |
+| 앱 저장 코드 전환 승인 | 대기 (`CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED=false`) |
 
 ## 운영 경계
 
@@ -45,3 +45,7 @@
 - 기존 `processing` 이력을 자동 수정하거나 고객 데이터를 복구·삭제하지 않는다.
 - 적용 후에도 기존 41건은 모두 `completed`·digest `null`이고, `processing` 및 연결 데이터 3종은 0건이다.
 - 앱 전환 전까지 현재 REST 저장 흐름은 그대로다.
+- 앱 코드는 기본 OFF 플래그에서만 원자 RPC를 호출하며, 같은 import ID와 본문으로 일시적 5xx/네트워크 실패를 한 번 재시도한다.
+- 저장 가능한 거래처가 0개면 RPC·파일·이력을 만들지 않고 `persisted=false` 무변경 결과를 반환한다.
+- RPC 완료 뒤 리드 정리·분석 리포트 등 후속 작업이 실패해도 이미 커밋된 거래처 저장은 성공으로 응답하고, 내부 DB 오류나 행 값을 포함하지 않는 고정 `postProcessingWarning`을 반환한다. 원자성 범위는 파일·가져오기 이력·원본 행·매핑·거래처 저장까지다.
+- 운영 플래그 전환과 운영 쓰기 시험은 이 PR 범위에 포함하지 않는다.
