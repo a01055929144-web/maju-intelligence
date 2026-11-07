@@ -856,6 +856,12 @@ export default async function AdminSystemPage({
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2">
             {[
+              ["Import", "PR #317 CI(42358248519) 통과 상태 확인"],
+              ["Import", "원자 저장 RPC는 service_role 전용이며 anon/authenticated 권한이 회수됐는지 확인"],
+              ["Import", "요청 상한 25MB · 5,000행 · 매핑 200개 유지"],
+              ["Import", "기존 customer_imports processing 0건 확인"],
+              ["Import", "postProcessingWarning은 import ID만으로 추적하고 고객 원문·DB 오류는 노출하지 않음"],
+              ["Rollback", "이상 시 CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED=false로 되돌려 재배포하고 SQL 롤백·기존 41건 재처리는 하지 않음"],
               ["DB", "Supabase 프로젝트 생성 및 schema.sql 실행"],
               ["DB", "20260725_customer_place_links.sql 실행 후 매장 외부 링크 컬럼 확인"],
               ["DB", "companies, normalized_customers, customer_imports 테이블 카운트 확인"],
