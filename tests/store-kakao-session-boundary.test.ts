@@ -9,6 +9,8 @@ describe("store Kakao session route boundary", () => {
     const start = source("app/api/auth/kakao/start/route.ts");
     const callback = source("app/api/auth/kakao/callback/route.ts");
     expect(start).toContain("storeMemberSessionEnabled()");
+    expect(start).toContain("isStoreMemberCompanyAllowlisted(companyId)");
+    expect(callback).toContain("isStoreMemberCompanyAllowlisted(storeCompanyId)");
     expect(start).toContain('`store:${companyId}:${storeAccountId}`');
     expect(start).toContain('`store-owner:${companyId}:${storeAccountId}`');
     expect(callback).toContain("activation.companyId !== storeOwnerMatch[1]");
@@ -23,12 +25,14 @@ describe("store Kakao session route boundary", () => {
     const provision = source("app/api/store/accounts/provision/route.ts");
     const activate = source("app/api/store/accounts/activate/route.ts");
     expect(provision).toContain("getCustomerSession()");
+    expect(provision).toContain("isStoreMemberCompanyAllowlisted(session.companyId)");
     expect(provision).toContain("getStorePublicBaseUrl()");
     expect(provision).not.toContain("new URL(request.url).origin");
     expect(provision.indexOf("getStorePublicBaseUrl()")).toBeLessThan(provision.indexOf("const prepared = await prepareStoreOwnerActivationForCustomer("));
     expect(provision).not.toContain("authUserId");
     expect(provision).not.toContain("termsAccepted");
     expect(activate).toContain("body.termsAccepted !== true");
+    expect(activate).toContain("isStoreMemberCompanyAllowlisted(activation.companyId)");
     expect(activate).toContain("setStoreOwnerActivationProof(body.token)");
     expect(activate).not.toContain("ownerAuthUserId");
   });
