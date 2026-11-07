@@ -614,6 +614,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   async function save() {
+    if (!catalogReady) { setError("상품 목록을 정상적으로 불러온 뒤 적용 날짜와 가격을 다시 확인해 주세요."); return; }
     if (purchaseDateEnabled && !importedLines.length) { setError("날짜별 저장 사용 중에는 직접 원가 수정을 저장할 수 없습니다. 적용일과 단가가 있는 파일을 올려 날짜별 저장으로 진행해 주세요."); return; }
     if (importedLines.length && confirmedReview !== reviewKey) { setSaveReview(true); setError("적용 날짜와 건수를 확인하고 동의한 뒤 저장해 주세요."); return; }
     if (importedLines.some(line => !line.purchaseDate || !/^\d{4}-\d{2}-\d{2}$/.test(line.purchaseDate))) { setError("저장할 원본 거래의 적용일을 확인해 주세요."); return; }
@@ -838,7 +839,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
         </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.</label>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
+        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
     </section> : null}

@@ -501,6 +501,17 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
   await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
   expect(registration).toEqual({ imports: 1, standards: 1 });
   await review.getByRole("checkbox").check();
+  const deniedRoute = "**/api/price-sheets/costs?*";
+  await page.route(deniedRoute, route => route.fulfill({ status: 403, json: { message: "Forbidden" } }));
+  await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "관리자에게 권한을 확인한 뒤 다시 시도" })).toBeVisible();
+  await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
+  expect(dateWrites).toHaveLength(1);
+  await page.unroute(deniedRoute);
+  await page.getByRole("button", { name: "목록 새로고침", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "관리자에게 권한" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "③ 저장 (4건)", exact: true })).toBeEnabled();
+  await review.getByRole("checkbox").check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "현재가 반영 4품목 · 이력 전용 1품목" })).toBeVisible();
   expect(dateWrites).toHaveLength(2); expect(dateWrites[1]).toEqual(dateWrites[0]);
