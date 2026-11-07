@@ -73,7 +73,7 @@ declare
   a uuid := '00000000-0000-4000-8000-000000000001';
   b uuid := '00000000-0000-4000-8000-000000000002';
   batch uuid := '50000000-0000-4000-8000-000000000001';
-  request jsonb := '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"cost":200,"fileName":"test.xlsx"}]';
+  request jsonb := '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":200,"fileName":"test.xlsx"}]';
   result jsonb;
 begin
   perform public.pricing_p0_command(a, '{"action":"defaults","margin":20,"rounding":10}');
@@ -139,6 +139,27 @@ begin
     raise exception 'restore_values_or_audit';
   end if;
 
+  -- A supplier-only concurrent cost change must reject the whole save.
+  update public.supplier_products set latest_cost=2200
+    where company_id=a and id='30000000-0000-4000-8000-000000000001';
+  begin
+    perform public.save_purchase_cost_batch_v1(
+      a, '50000000-0000-4000-8000-000000000005',
+      '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":150}]',
+      'tester'
+    );
+    raise exception 'supplier_cost_conflict_missing';
+  exception when raise_exception then
+    if sqlerrm = 'supplier_cost_conflict_missing' then raise; end if;
+  end;
+  if (select purchase_price from public.product_catalog where company_id=a) <> 100
+     or exists(select 1 from public.purchase_cost_batches
+               where company_id=a and id='50000000-0000-4000-8000-000000000005') then
+    raise exception 'supplier_cost_conflict_not_atomic';
+  end if;
+  update public.supplier_products set latest_cost=2000
+    where company_id=a and id='30000000-0000-4000-8000-000000000001';
+
   -- Two supplier lines must retain their own supplier in each compensating import.
   insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,sales_unit)
     values('10000000-0000-4000-8000-000000000003',a,'C',80,'EA');
@@ -150,7 +171,7 @@ begin
     values('40000000-0000-4000-8000-000000000003',a,'30000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000003','confirmed',20,true);
   perform public.save_purchase_cost_batch_v1(
     a, '50000000-0000-4000-8000-000000000004',
-    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"cost":150},{"productId":"10000000-0000-4000-8000-000000000003","supplierProductId":"30000000-0000-4000-8000-000000000003","expectedCost":80,"cost":120}]',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"expectedSupplierCost":2000,"cost":150},{"productId":"10000000-0000-4000-8000-000000000003","supplierProductId":"30000000-0000-4000-8000-000000000003","expectedCost":80,"expectedSupplierCost":1600,"cost":120}]',
     'tester'
   );
   perform public.restore_purchase_cost_batch_v1(a,'50000000-0000-4000-8000-000000000004','tester');

@@ -36,6 +36,7 @@ declare
   v_seen_products uuid[] := '{}';
   v_seen_suppliers uuid[] := '{}';
   v_expected numeric;
+  v_expected_supplier_raw numeric;
   v_cost numeric;
   v_raw_cost numeric;
   v_ratio numeric;
@@ -73,6 +74,7 @@ begin
     v_product_id := (v_item->>'productId')::uuid;
     v_supplier_id := nullif(v_item->>'supplierProductId', '')::uuid;
     v_expected := (v_item->>'expectedCost')::numeric;
+    v_expected_supplier_raw := (v_item->>'expectedSupplierCost')::numeric;
     v_cost := (v_item->>'cost')::numeric;
     if v_product_id is null or v_product_id = any(v_seen_products)
        or (v_supplier_id is not null and v_supplier_id = any(v_seen_suppliers))
@@ -93,9 +95,15 @@ begin
     v_raw_cost := null;
     v_supplier_after := null;
     if v_supplier_id is not null then
+      if not (v_item ? 'expectedSupplierCost') then
+        raise exception 'expected_supplier_cost_required';
+      end if;
       select * into v_supplier from public.supplier_products
         where company_id = p_company and id = v_supplier_id for update;
       if not found then raise exception 'supplier_product_not_found'; end if;
+      if v_supplier.latest_cost is distinct from v_expected_supplier_raw then
+        raise exception 'supplier_cost_changed';
+      end if;
       select * into v_match from public.supplier_product_matches
         where company_id = p_company and supplier_product_id = v_supplier_id
           and product_catalog_id = v_product_id and match_status = 'confirmed'
