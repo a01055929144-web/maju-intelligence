@@ -1,9 +1,10 @@
-# 거래처 저장·가져오기 이력 원자성 DB 승인 대기
+# 거래처 저장·가져오기 이력 원자성 DB 적용 기록
 
-- 상태: **운영 적용 승인됨 · 이 PR에서는 미실행**
+- 상태: **운영 적용 완료 · 앱 전환 대기**
 - 기준 커밋: `107f79e`
 - 대상 프로젝트: `fcmdvveqmcgtioelzqun`
-- 적용 후보: `docs/sql-drafts/20261107-customer-import-atomicity.sql`
+- 적용 원문: `supabase/migrations/20261107081350_customer_import_atomicity_20261107.sql`
+- migration history: `20261107081350 customer_import_atomicity_20261107`
 - 검증: `docs/sql-drafts/20261107-customer-import-atomicity.pg17.test.sql`
 
 ## 조사 결과
@@ -32,14 +33,15 @@
 | 오류 메시지의 개인정보·원문 데이터 비노출 확인 | 대기 |
 | 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | 대기 |
 | 매출 분석 업로드 제외 범위 확인 | 대기 |
-| 운영 적용 승인 | 승인됨 (2026-11-07, 적용은 별도 채팅에서 진행) |
+| 운영 적용 | 완료 (2026-11-07) |
+| 적용 후 읽기 검증 | PASS (`request_digest` nullable, RPC 1개, 권한·기존 41건 보존) |
 | 앱 저장 코드 전환 승인 | 대기 |
 
 ## 운영 경계
 
-- 이 PR은 `supabase/migrations` 파일을 추가하지 않고 운영 DB에 실행하지 않는다.
+- 이 PR의 migration 파일은 이미 운영에 적용된 SQL 원문을 기록한 것이며 재실행하지 않는다.
 - 적용 SQL은 `BEGIN`/`COMMIT`으로 컬럼 추가와 함수 생성을 한 트랜잭션으로 묶는다.
 - 운영 `normalized_customers`에는 `updated_at`이 없으므로 해당 참조를 제거했고, 입력의 `expected_updated_at`은 실패 처리한다.
 - 기존 `processing` 이력을 자동 수정하거나 고객 데이터를 복구·삭제하지 않는다.
-- 운영 적용 전 기존 `processing` 건은 생성 시각, 연결 고객 수, 원본 파일을 읽기 전용으로 대사해 건별 승인한다.
+- 적용 후에도 기존 41건은 모두 `completed`·digest `null`이고, `processing` 및 연결 데이터 3종은 0건이다.
 - 앱 전환 전까지 현재 REST 저장 흐름은 그대로다.
