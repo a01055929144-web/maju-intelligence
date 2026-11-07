@@ -8,10 +8,12 @@ export function StoreMemberInvitationPanel() {
   const token = useRef("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     token.current = window.location.hash.slice(1);
     window.history.replaceState(null, "", window.location.pathname);
-    if (!/^[A-Za-z0-9_-]{43}$/.test(token.current)) setError("초대 링크를 확인할 수 없습니다. 점주에게 새 링크를 요청해 주세요.");
+    if (/^[A-Za-z0-9_-]{43}$/.test(token.current)) setReady(true);
+    else setError("초대 링크를 확인할 수 없습니다. 점주에게 새 링크를 요청해 주세요.");
   }, []);
   async function accept() {
     if (busy || !token.current) return;
@@ -32,6 +34,6 @@ export function StoreMemberInvitationPanel() {
   return <Card><CardHeader><CardTitle>매장 구성원 초대</CardTitle></CardHeader><CardContent className="space-y-4">
     <p className="text-sm">초대한 매장의 관리자 또는 직원 계정을 카카오로 연결합니다.</p>
     {error && <p role="alert">{error}</p>}
-    <Button className="min-h-[44px]" disabled={busy || Boolean(error)} onClick={() => void accept()}>{busy ? "초대 확인 중" : "카카오로 초대 수락"}</Button>
+    <Button className="min-h-[44px]" disabled={busy || !ready} onClick={() => void accept()}>{busy ? "초대 확인 중" : "카카오로 초대 수락"}</Button>
   </CardContent></Card>;
 }

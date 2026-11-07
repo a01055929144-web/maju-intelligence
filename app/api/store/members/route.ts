@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
     const member = await getStoreMemberContext({ companyId: String(body.companyId), storeAccountId: String(body.storeAccountId) });
     if (!member || (member.role !== "owner" && member.role !== "manager") || (body.role === "manager" && member.role !== "owner"))
       return NextResponse.json({ message: "구성원을 초대할 권한이 없습니다." }, { status: 403 });
-    const token = await createStoreMemberInvitation({ actorMemberId: member.memberId, companyId: member.companyId,
-      role: body.role, storeAccountId: member.storeAccountId });
     const origin = getStorePublicBaseUrl();
     if (!origin) return NextResponse.json({ message: "구성원 초대가 아직 준비되지 않았습니다." }, { status: 503 });
+    const token = await createStoreMemberInvitation({ actorMemberId: member.memberId, companyId: member.companyId,
+      role: body.role, storeAccountId: member.storeAccountId });
     const inviteUrl = new URL("/store/member-invite", origin);
     inviteUrl.hash = token;
     return NextResponse.json({ inviteUrl: inviteUrl.toString() }, { headers: { "Cache-Control": "no-store" } });
