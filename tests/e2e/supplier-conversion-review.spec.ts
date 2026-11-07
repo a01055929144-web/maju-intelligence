@@ -43,9 +43,9 @@ for (const width of [1440, 390]) {
         viewport: innerWidth,
         page: document.documentElement.scrollWidth,
         elements: Array.from(document.querySelectorAll<HTMLElement>("body *"))
-          .filter((element) => element.scrollWidth > element.clientWidth + 3 && getComputedStyle(element).overflowX === "visible")
-          .slice(0, 12)
-          .map((element) => ({ tag: element.tagName, className: String(element.className).slice(0, 100), width: element.clientWidth, scroll: element.scrollWidth })),
+          .filter((element) => element.getBoundingClientRect().right > innerWidth + 3)
+          .slice(0, 25)
+          .map((element) => ({ tag: element.tagName, className: String(element.className).slice(0, 90), right: Math.round(element.getBoundingClientRect().right), overflow: getComputedStyle(element).overflowX })),
       }));
       expect(overflow.page, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.viewport + 3);
       await page.screenshot({ path: testInfo.outputPath(`supplier-conversion-${width}.png`), fullPage: true });
