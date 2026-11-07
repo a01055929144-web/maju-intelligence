@@ -75,7 +75,8 @@ export function parseStoreCostRows(rows: readonly unknown[][], mapping: StoreCos
 
 function parseStoreCostRow(row: readonly unknown[], mapping: StoreCostColumnMapping, rowNumber: number) {
   const read = (field: StoreCostField) => normalized(row[mapping[field] ?? -1]);
-  const costKrw = Number(read("costKrw").replace(/[,원₩\s]/g, ""));
+  const costText = read("costKrw").replace(/[,원₩\s]/g, "");
+  const costKrw = costText ? Number(costText) : NaN;
   return validateStoreCostInput({ costKrw, effectiveOn: normalizeSheetDate(row[mapping.effectiveOn ?? -1]), productName: read("productName"),
     sourceRowNumber: rowNumber, specification: read("specification"), unit: read("unit") }, rowNumber);
 }

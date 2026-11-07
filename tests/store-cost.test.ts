@@ -13,6 +13,8 @@ describe("store-owned costs", () => {
     const mapping = suggestStoreCostMapping(["날짜", "상품명", "규격", "단위", "원가(원)"]);
     const rows = parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", "18,000원"]], mapping);
     expect(rows).toEqual([{ effectiveOn: "2026-11-05", productName: "양파", sourceRowNumber: 2, specification: "15kg", unit: "망", costKrw: 18000 }]);
+    expect(parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", 0]], mapping)[0].costKrw).toBe(0);
+    for (const empty of ["", "   ", null]) expect(() => parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", empty]], mapping)).toThrow("원 단위 정수");
     expect(() => parseStoreCostRows([["2026-11-05", "양파", "15kg", "망", "18.5"]], mapping)).toThrow("원 단위 정수");
   });
 
