@@ -7,7 +7,6 @@ alter table public.customer_imports
 create or replace function public.save_customer_import_atomic_draft(
   p_company_id uuid,
   p_import_id uuid,
-  p_request_digest text,
   p_source text,
   p_original_filename text,
   p_quality_score integer,
@@ -28,12 +27,10 @@ declare
   v_file_id uuid;
   v_row_count integer := jsonb_array_length(p_customers);
   v_existing_import public.customer_imports%rowtype;
+  v_request_digest text;
 begin
   if p_company_id is null or p_import_id is null then
     raise exception 'company_id_and_import_id_required';
-  end if;
-  if p_request_digest !~ '^[0-9a-f]{64}$' then
-    raise exception 'sha256_request_digest_required';
   end if;
   if p_source not in ('manual-customer-master', 'customer-master', 'excel') then
     raise exception 'unsupported_customer_import_source';
@@ -55,6 +52,14 @@ begin
     raise exception 'company_not_found';
   end if;
 
+  v_request_digest := encode(extensions.digest(
+    p_company_id::text || E'\n' || p_import_id::text || E'\n' || p_source || E'\n'
+    || coalesce(p_original_filename, '') || E'\n' || coalesce(p_quality_score, 0)::text || E'\n'
+    || coalesce(p_duplicate_count, 0)::text || E'\n' || p_customers::text || E'\n'
+    || p_raw_rows::text || E'\n' || p_column_mappings::text,
+    'sha256'
+  ), 'hex');
+
   -- The same client-generated import ID is one operation, including concurrent retries.
   perform pg_advisory_xact_lock(hashtextextended(p_import_id::text, 0));
 
@@ -67,7 +72,7 @@ begin
     if v_existing_import.company_id <> p_company_id then
       raise exception 'import_company_mismatch';
     end if;
-    if v_existing_import.request_digest is distinct from p_request_digest then
+    if v_existing_import.request_digest is distinct from v_request_digest then
       raise exception 'import_request_digest_mismatch';
     end if;
     if v_existing_import.status in ('completed', 'failed') then
@@ -86,7 +91,7 @@ begin
     id, company_id, uploaded_file_id, source, row_count, status, request_digest,
     quality_score, duplicate_count, completed_at, error_message
   ) values (
-    p_import_id, p_company_id, v_file_id, p_source, v_row_count, 'processing', p_request_digest,
+    p_import_id, p_company_id, v_file_id, p_source, v_row_count, 'processing', v_request_digest,
     greatest(0, least(100, coalesce(p_quality_score, 0))),
     greatest(0, coalesce(p_duplicate_count, 0)), null, null
   );
@@ -236,8 +241,8 @@ end;
 $$;
 
 revoke all on function public.save_customer_import_atomic_draft(
-  uuid, uuid, text, text, text, integer, integer, jsonb, jsonb, jsonb
+  uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
 ) from public;
 grant execute on function public.save_customer_import_atomic_draft(
-  uuid, uuid, text, text, text, integer, integer, jsonb, jsonb, jsonb
+  uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
 ) to service_role;

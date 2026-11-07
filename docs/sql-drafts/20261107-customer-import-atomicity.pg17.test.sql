@@ -1,4 +1,5 @@
-create extension if not exists pgcrypto;
+create schema extensions;
+create extension if not exists pgcrypto with schema extensions;
 create extension if not exists dblink;
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
@@ -109,7 +110,6 @@ insert into public.companies(id, name) values
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000001',
-  repeat('1', 64),
   'manual-customer-master',
   'manual-customer-master',
   100,
@@ -134,14 +134,15 @@ begin
   ) then raise exception 'successful customer write missing'; end if;
 end $$;
 
--- The same request ID is a read-only replay even if the payload changes.
+-- The same request ID and payload are a read-only replay.
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000001',
-  repeat('1', 64),
   'manual-customer-master',
   'manual-customer-master', 100, 0,
-  '[{"customer_name":"변경 시도","normalized_key":"first","address":"부산"}]'
+  '[{"customer_name":"첫 거래처","normalized_key":"first","address":"서울"}]',
+  '[{"상호명":"첫 거래처"}]',
+  '[]'
 );
 do $$ begin
   if (select address from public.normalized_customers where normalized_key = 'first') <> '서울'
@@ -154,7 +155,6 @@ begin
   perform * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
-    repeat('9', 64),
     'manual-customer-master', 'manual-customer-master', 100, 0,
     '[{"customer_name":"다른 요청","normalized_key":"first"}]'
   );
@@ -168,7 +168,6 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000002',
-  repeat('2', 64),
   'manual-customer-master',
   'manual-customer-master', 100, 0,
   jsonb_build_array(jsonb_build_object(
@@ -188,7 +187,6 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000003',
-  repeat('3', 64),
   'customer-master',
   'customers.xlsx', 90, 0,
   '[
@@ -217,7 +215,6 @@ end $$;
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000002',
   '20000000-0000-4000-8000-000000000001',
-  repeat('4', 64),
   'customer-master',
   'customers.xlsx', 100, 0,
   '[{"customer_name":"B 거래처","normalized_key":"first","address":"제주"}]'
@@ -246,7 +243,6 @@ select dblink_send_query('concurrent_import', $query$
   select * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000001',
     '30000000-0000-4000-8000-000000000001',
-    repeat('5', 64),
     'customer-master', 'concurrent.xlsx', 100, 0,
     '[{"customer_name":"동시 거래처","normalized_key":"concurrent"}]'
   )
@@ -255,7 +251,6 @@ select pg_sleep(0.25);
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '30000000-0000-4000-8000-000000000001',
-  repeat('5', 64),
   'customer-master', 'concurrent.xlsx', 100, 0,
   '[{"customer_name":"동시 거래처","normalized_key":"concurrent"}]'
 );
@@ -281,7 +276,6 @@ begin
   perform * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000001',
-    repeat('6', 64),
     'customer-master', 'customers.xlsx', 100, 0,
     '[{"customer_name":"침범","normalized_key":"cross"}]'
   );
@@ -295,7 +289,6 @@ begin
   perform * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000001',
     '40000000-0000-4000-8000-000000000001',
-    repeat('7', 64),
     'customer-master', 'too-many-raw-rows.xlsx', 100, 0,
     '[{"customer_name":"상한 확인","normalized_key":"limit-raw"}]',
     (select jsonb_agg(jsonb_build_object('row', number)) from generate_series(1, 5001) number),
@@ -312,7 +305,6 @@ begin
   perform * from public.save_customer_import_atomic_draft(
     '00000000-0000-4000-8000-000000000001',
     '40000000-0000-4000-8000-000000000002',
-    repeat('8', 64),
     'customer-master', 'too-many-mappings.xlsx', 100, 0,
     '[{"customer_name":"상한 확인","normalized_key":"limit-map"}]',
     '[]',
@@ -328,9 +320,9 @@ end $$;
 
 do $$
 begin
-  if has_function_privilege('anon', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
+  if has_function_privilege('anon', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'anon can execute draft RPC'; end if;
-  if not has_function_privilege('service_role', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
+  if not has_function_privilege('service_role', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'service_role cannot execute draft RPC'; end if;
 end $$;
 
