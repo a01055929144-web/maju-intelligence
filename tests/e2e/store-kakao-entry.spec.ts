@@ -17,7 +17,7 @@ for (const width of [1440, 390]) {
       expect(url.searchParams.get("storeAccountId")).toBe(storeAccountId);
       expect(url.searchParams.get("activation")).toBe(activation ? "1" : null);
       expect(url.toString()).not.toContain(token);
-      return route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" });
+      return route.fulfill({ contentType: "text/html; charset=utf-8", body: "<main>합성 카카오 인증 경계</main>" });
     });
     await page.route("**/api/store/accounts/activate", route => {
       posts++;
