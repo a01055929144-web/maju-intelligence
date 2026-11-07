@@ -129,7 +129,7 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
       {preview?.data && <>
         <p aria-live="polite">반영 후보 {preview.data.rows.length}행 · 오류 {preview.data.errors.length}행 · 중복 {preview.data.duplicateCount}행</p>
         {preview.data.duplicateCount > 0 && <p>같은 일자·품목의 중복은 마지막 행으로 합쳤습니다. 원가와 원본 행을 확인해 주세요.</p>}
-        {preview.data.errors.length > 0 && <div role="alert"><p>오류가 있는 행은 반영할 수 없습니다. 파일이나 열 연결을 수정해 주세요.</p><ul>{preview.data.errors.map(item => <li key={item.rowNumber}>{item.rowNumber}행: {item.message}</li>)}</ul></div>}
+        {preview.data.errors.length > 0 && <div role="alert"><p>오류가 1건이라도 있으면 반영하지 않습니다. 파일이나 열 연결을 수정해 모든 오류를 해결해 주세요.</p><ul>{preview.data.errors.map(item => <li key={item.rowNumber}>{item.rowNumber}행: {item.message}</li>)}</ul></div>}
         <p className="text-sm">미리보기 내려받기에는 아래 반영 후보 행만 포함됩니다.</p>
         <CommonDataTable columns={columns} rows={server?.rows ?? preview.data.rows} rowKey={row => String(row.sourceRowNumber)} settingsKey="store-cost-upload-preview" filename="매장-원가-반영후보.csv" />
         <Button className="min-h-[44px]" disabled={busy || !preview.data.rows.length || preview.data.errors.length > 0} onClick={() => void requestPreview()}>반영 전 최종 확인</Button>
