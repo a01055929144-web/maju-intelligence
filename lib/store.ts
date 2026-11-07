@@ -4928,11 +4928,25 @@ export async function purgeExpiredStaffLocationEvents(): Promise<{ cutoff: strin
 
 export async function getSystemDiagnostics(): Promise<SystemStatus> {
   const system = getSystemStatus();
+  const atomicImportFlagCheck = checkCustomerImportAtomicFlag();
 
   if (!isProductionStoreConfigured()) {
     return {
       ...system,
       databaseChecks: [
+        atomicImportFlagCheck,
+        {
+          name: "원자 저장 RPC 적용",
+          status: "fallback",
+          count: null,
+          description: "Supabase 연결 전에는 RPC 적용 여부를 읽기 전용으로 확인할 수 없습니다."
+        },
+        {
+          name: "처리 중 거래처 업로드",
+          status: "fallback",
+          count: null,
+          description: "Supabase 연결 전에는 processing 건수를 읽기 전용으로 확인할 수 없습니다."
+        },
         {
           name: "Supabase 연결",
           status: "fallback",
@@ -4954,7 +4968,10 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 
   const [checks, storageChecks, databaseUsageRows] = await Promise.all([
     Promise.all([
-    countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
+      Promise.resolve(atomicImportFlagCheck),
+      checkCustomerImportAtomicRpc(),
+      checkCustomerImportProcessing(),
+      countTableRows("companies", "고객사", "등록된 고객사 수입니다."),
     countTableRows("customer_imports", "업로드/분석 이력", "엑셀 업로드 후 생성되는 import job입니다."),
     countTableRows("normalized_customers", "정제 거래처", "정제되어 저장된 거래처 row입니다."),
     countTableRows("customer_notes", "거래처 메모", "거래처별 상담, 배송 특이사항, 후속 액션 기록입니다."),
@@ -7797,6 +7814,79 @@ async function countTableRows(table: string, name: string, description: string, 
       status: "missing",
       count: null,
       description: `${description} ${getErrorMessage(error)}`
+    };
+  }
+}
+
+function checkCustomerImportAtomicFlag(): DatabaseCheck {
+  const enabled = customerImportAtomicRpcEnabled();
+  return {
+    name: "원자 저장 운영 플래그",
+    status: enabled ? "fallback" : "ready",
+    count: null,
+    description: enabled
+      ? "CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED가 켜져 있습니다. 승인된 전환인지 확인하세요."
+      : "CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED가 기본 OFF 상태입니다."
+  };
+}
+
+async function checkCustomerImportAtomicRpc(): Promise<DatabaseCheck> {
+  const config = getSupabaseConfig();
+  if (!config) {
+    return {
+      name: "원자 저장 RPC 적용",
+      status: "fallback",
+      count: null,
+      description: "Supabase 연결 전에는 RPC 적용 여부를 읽기 전용으로 확인할 수 없습니다."
+    };
+  }
+
+  try {
+    const response = await fetch(`${config.url}/rest/v1/`, {
+      headers: {
+        apikey: config.serviceRoleKey,
+        Authorization: `Bearer ${config.serviceRoleKey}`
+      },
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error("OpenAPI lookup failed");
+    const schema = (await response.json()) as { paths?: Record<string, unknown> };
+    const applied = Boolean(schema.paths?.["/rpc/save_customer_import_atomic_draft"]);
+    return {
+      name: "원자 저장 RPC 적용",
+      status: applied ? "ready" : "missing",
+      count: null,
+      description: applied
+        ? "서비스 역할의 읽기 전용 API 명세에서 save_customer_import_atomic_draft RPC를 확인했습니다."
+        : "서비스 역할의 읽기 전용 API 명세에서 원자 저장 RPC를 찾지 못했습니다."
+    };
+  } catch {
+    return {
+      name: "원자 저장 RPC 적용",
+      status: "missing",
+      count: null,
+      description: "원자 저장 RPC 적용 여부를 읽기 전용으로 확인하지 못했습니다."
+    };
+  }
+}
+
+async function checkCustomerImportProcessing(): Promise<DatabaseCheck> {
+  try {
+    const count = await supabaseExactCount("customer_imports?status=eq.processing");
+    return {
+      name: "처리 중 거래처 업로드",
+      status: count === 0 ? "ready" : "fallback",
+      count,
+      description: count === 0
+        ? "기존 customer_imports processing 작업이 0건입니다."
+        : "전환 전에 processing 작업이 모두 종료되었는지 확인하세요."
+    };
+  } catch {
+    return {
+      name: "처리 중 거래처 업로드",
+      status: "missing",
+      count: null,
+      description: "processing 건수를 읽기 전용으로 확인하지 못했습니다."
     };
   }
 }
