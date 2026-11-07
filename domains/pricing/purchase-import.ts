@@ -86,7 +86,10 @@ const toPurchaseDate = (value: string | undefined) => {
   const raw = value?.trim();
   if (!raw) return undefined;
   if (/^\d{5}(?:\.\d+)?$/.test(raw)) return new Date((Number(raw) - 25569) * 86400000).toISOString().slice(0, 10);
-  const normalized = raw.replace(/\s/g, "").replace(/[.일]$/, "").replace(/[년월./]/g, "-");
+  const monthFirst = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const normalized = monthFirst
+    ? `${monthFirst[3]}-${monthFirst[1]}-${monthFirst[2]}`
+    : raw.replace(/\s/g, "").replace(/[.일]$/, "").replace(/[년월./]/g, "-");
   const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!match) return undefined;
   const date = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;

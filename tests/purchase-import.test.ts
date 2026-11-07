@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
 import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
 import { matchCostImportRow } from "../domains/pricing/purchase-cost";
 import { buildPurchaseReceiptRows } from "../domains/pricing/purchase-receipt";
@@ -87,6 +88,25 @@ describe("purchase import", () => {
     expect(parsed.lines.map((line) => line.purchaseDate)).toEqual(["2023-11-01", "2026-11-01", "2026-11-02"]);
     expect(parsed.dateIssues).toEqual([3, 4]);
     expect(parsed.lines.map((line) => line.name)).toEqual(["양파", "감자", "당근"]);
+  });
+
+  it("accepts the four-digit US date emitted by Excel but leaves two-digit years for confirmation", () => {
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["품목명", "단가", "구매일"],
+      ["양파", 12000, new Date(Date.UTC(2026, 10, 7))],
+      ["대파", 3000, new Date(Date.UTC(2026, 10, 7))]
+    ]);
+    worksheet.C2.z = "m/d/yyyy";
+    worksheet.C3.z = "m/d/yy";
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "매입");
+    const reopened = XLSX.read(XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }), { type: "buffer", cellDates: true });
+    const values = XLSX.utils.sheet_to_json<unknown[]>(reopened.Sheets["매입"], { header: 1, defval: "", raw: false });
+    expect(values.slice(1).map((row) => row[2])).toEqual(["11/7/2026", "11/7/26"]);
+
+    const parsed = parsePurchaseLines(buildPurchaseSheet(values), { name: 0, cost: 1, purchaseDate: 2 }, "excluded");
+    expect(parsed.lines.map((line) => [line.name, line.purchaseDate])).toEqual([["양파", "2026-11-07"]]);
+    expect(parsed.dateIssues).toEqual([3]);
   });
 
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
