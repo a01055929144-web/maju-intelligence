@@ -76,7 +76,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       if(path==='/api/price-sheets')standalonePricingWrites++;
     });
     await page.goto(`/revenue/pricing?companyId=${company}`);
-    await expect(page.getByRole('button',{name:'① 엑셀 올리기',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'① 엑셀 올리기',exact:true})).toBeEnabled();
     if (!scenario.existing) await expect(page.getByText('상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요.',{exact:true})).toBeVisible();
     const file=syntheticFile(scenario.existing);
     await page.locator('input[type="file"]').setInputFiles({name:'stage-a-synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});

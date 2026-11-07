@@ -155,6 +155,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
   return { writes, receipts, dateWrites, registration, pricingCommands };
 }
 async function selectPurchaseCsv(page: Page, text: string) {
+  await expect(page.getByRole("button", { name: "① 엑셀 올리기", exact: true })).toBeEnabled();
   await page.locator('input[type="file"]').setInputFiles({ name: "합성-구매일.csv", mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
 }
 
