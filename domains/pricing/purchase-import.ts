@@ -188,13 +188,16 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
   return { lines, skipped };
 }
 
-/** 한 파일 안에 같은 품목이 여러 줄이면 하나로 합칩니다(수량은 더하고 단가는 마지막 줄). */
+/** 같은 단가의 중복 행만 합칩니다. 날짜 없는 파일에서 마지막 단가를 최신값으로 추정하지 않습니다. */
 export function mergeDuplicateLines(lines: readonly PurchaseImportLine[]) {
   const byKey = new Map<string, PurchaseImportLine>();
+  const conflicting = new Set<string>();
   for (const line of lines) {
     const key = `${line.code ? `code:${norm(line.code)}` : line.lineKey}|${norm(line.supplier)}`;
     const previous = byKey.get(key);
+    if (previous && previous.cost !== line.cost) conflicting.add(key);
     byKey.set(key, previous ? { ...line, quantity: (previous.quantity || 0) + (line.quantity || 0) || undefined } : line);
   }
+  if (conflicting.size) throw new Error(`같은 품목에 서로 다른 단가가 ${conflicting.size}건 있습니다. 날짜가 없어 최신 단가를 알 수 없습니다. 품목마다 현재 단가 한 줄만 남긴 파일을 올려 주세요.`);
   return Array.from(byKey.values());
 }
