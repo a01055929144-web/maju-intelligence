@@ -243,7 +243,7 @@ export function ProductCatalogWorkspace({
     .filter((item) => !item.matchedCatalogId && item.costConfirmed)
     .map((item) => item.id);
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         <div className="flex max-w-full gap-1 overflow-x-auto">
           {(
