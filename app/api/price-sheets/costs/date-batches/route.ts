@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (origin) {
-    try { if (new URL(origin).origin !== request.nextUrl.origin) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 }); }
+    try {
+      const parsed = new URL(origin);
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.host.toLowerCase() !== (request.headers.get("host") || request.nextUrl.host).toLowerCase()) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 }); }
     catch { return NextResponse.json({ message: "요청을 확인해 주세요." }, { status: 403 }); }
   }
   if (Number(request.headers.get("content-length")) > MAX_PURCHASE_DATE_BODY_BYTES) return NextResponse.json({ message: "파일의 저장 요청이 너무 큽니다. 원본을 보관하고 담당자에게 문의해 주세요." }, { status: 413 });

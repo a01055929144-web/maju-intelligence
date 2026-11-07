@@ -166,3 +166,15 @@ it("blocks an unconfirmed multipack price while allowing held receipt history", 
   expect((await post({ ...input, rows: [{ ...input.rows[0], priceSelected: false, priceHeld: true }] })).status).toBe(200);
   expect(mocks.db.mock.calls.at(-1)?.[0]).toBe("rpc/save_purchase_cost_date_batch_v2");
 });
+
+it("checks browser origin against the request host when the server URL is internal", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  const send = (origin: string) => POST(new NextRequest("http://localhost:3101/api/price-sheets/costs/date-batches", {
+    method: "POST", body: JSON.stringify(payload()), headers: { host: "127.0.0.1:3101", origin }
+  }));
+  expect((await send("http://127.0.0.1:3101")).status).toBe(200);
+  const writes = mocks.db.mock.calls.length;
+  expect((await send("https://evil.test")).status).toBe(403);
+  expect((await send("ftp://127.0.0.1:3101")).status).toBe(403);
+  expect(mocks.db).toHaveBeenCalledTimes(writes);
+});
