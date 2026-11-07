@@ -2,7 +2,9 @@
 \ir ../../tests/sql/pricing-p0-fixture.sql
 alter table public.product_catalog
   add column sales_unit text not null default 'EA',
-  add column updated_at timestamptz not null default now();
+  add column updated_at timestamptz not null default now(),
+  alter column purchase_price set default 0,
+  alter column purchase_price set not null;
 \ir 20261030-pricing-p0.sql
 \ir ../db-approval/20261104_purchase_receipt_lines.sql
 
@@ -48,7 +50,8 @@ insert into public.companies(id) values
  ('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
 insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,purchase_price_date,sales_unit) values
  ('10000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','A',100,'2026-10-10','EA'),
- ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002','B',50,'2026-10-10','EA');
+ ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002','B',50,'2026-10-10','EA'),
+ ('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','신규 미가격',0,null,'EA');
 insert into public.product_suppliers(id,company_id) values
  ('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
 insert into public.supplier_products(id,company_id,supplier_id,latest_cost,cost_confirmed,last_seen_date) values
@@ -123,6 +126,20 @@ begin
   perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','tester');
   update public.product_catalog set purchase_price_date='2026-10-10'
     where company_id=c and id='10000000-0000-4000-8000-000000000001';
+
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000011','2026-11-08',
+    '[{"productId":"10000000-0000-4000-8000-000000000003","cost":77,"selectedSourceRowNumber":111,"priceSelected":true}]',
+    'tester','new-zero-priced.xlsx');
+  if applied->>'recalcRunId' is null
+     or not exists(select 1 from public.product_catalog
+       where company_id=c and id='10000000-0000-4000-8000-000000000003'
+       and purchase_price=77 and purchase_price_date='2026-11-08')
+  then raise exception 'zero-priced new product did not receive dated current price'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000011','tester');
+  if not exists(select 1 from public.product_catalog
+      where company_id=c and id='10000000-0000-4000-8000-000000000003'
+      and purchase_price=0 and purchase_price_date is null)
+  then raise exception 'zero-priced new product restore failed'; end if;
 
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000006','2026-11-01',
     '[{"productId":"10000000-0000-4000-8000-000000000001","cost":150,"selectedSourceRowNumber":6,"priceSelected":true}]',

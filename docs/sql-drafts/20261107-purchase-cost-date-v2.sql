@@ -146,7 +146,7 @@ begin
     if not found then raise exception 'existing_purchase_product_required'; end if;
     v_apply_current:=v_price_selected
       and v_date=(v_product_latest_dates->>v_product_id::text)::date
-      and (v_product.purchase_price is null or v_product.purchase_price_date is not null);
+      and (v_product.purchase_price=0 or v_product.purchase_price_date is not null);
     if v_apply_current and not (v_product_snapshots ? v_product_id::text) then
       v_product_snapshots := jsonb_set(v_product_snapshots,array[v_product_id::text],jsonb_build_object(
         'purchasePrice',v_product.purchase_price,'purchasePriceDate',v_product.purchase_price_date,
