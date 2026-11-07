@@ -147,7 +147,109 @@ do $$ begin
   then raise exception 'concurrent_closed_store_write_recorded'; end if;
 end $$;
 
-delete from public.companies where id='00000000-0000-4000-8000-000000000001';
+-- Two real sessions submit the exact same batch while the second waits on the account lock.
+select dblink_connect('cost_same_batch','dbname='||current_database());
+select dblink_exec('cost_same_batch','set statement_timeout = 15000');
+create temporary table batch_peer as
+  select * from dblink('cost_same_batch','select pg_backend_pid()') as t(pid integer);
+create temporary table concurrent_batch_results(kind text primary key, result jsonb not null);
+do $$ declare waiting boolean := false; begin
+  perform 1 from public.store_accounts
+    where company_id='00000000-0000-4000-8000-000000000001' and id='10000000-0000-4000-8000-000000000001'
+    for update;
+  perform dblink_send_query('cost_same_batch',$q$
+    select public.import_store_cost_batch(
+      '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000006','concurrent.xlsx',
+      '[{"sourceRowNumber":2,"productKey":"batch-concurrent-a||ea","productName":"동시 A","unit":"EA","effectiveOn":"2026-11-07","costKrw":100},{"sourceRowNumber":3,"productKey":"batch-concurrent-b||ea","productName":"동시 B","unit":"EA","effectiveOn":"2026-11-07","costKrw":200}]'::jsonb)
+  $q$);
+  for attempt in 1..500 loop
+    perform pg_stat_clear_snapshot();
+    if exists(select 1 from pg_stat_activity where pid=(select pid from batch_peer) and wait_event_type='Lock') then
+      waiting := true; exit;
+    end if;
+    perform pg_sleep(0.01);
+  end loop;
+  if not waiting then raise exception 'batch_peer_did_not_wait_on_lock'; end if;
+  insert into concurrent_batch_results values('first', public.import_store_cost_batch(
+    '00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+    '20000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000006','concurrent.xlsx',
+    '[{"sourceRowNumber":2,"productKey":"batch-concurrent-a||ea","productName":"동시 A","unit":"EA","effectiveOn":"2026-11-07","costKrw":100},{"sourceRowNumber":3,"productKey":"batch-concurrent-b||ea","productName":"동시 B","unit":"EA","effectiveOn":"2026-11-07","costKrw":200}]'::jsonb));
+end $$;
+insert into concurrent_batch_results
+  select 'second', result from dblink_get_result('cost_same_batch') as t(result jsonb);
+select dblink_disconnect('cost_same_batch');
+do $$ begin
+  if not exists(select 1 from concurrent_batch_results where kind='first' and result @> '{"imported":2,"replayed":0,"total":2}')
+    or not exists(select 1 from concurrent_batch_results where kind='second' and result @> '{"imported":0,"replayed":2,"total":2}')
+    or (select count(distinct result->>'importDigest') from concurrent_batch_results)<>1
+    or (select count(*) from public.store_cost_imports where import_id='40000000-0000-4000-8000-000000000006')<>1
+    or (select count(*) from public.store_cost_items where product_key like 'batch-concurrent-%')<>2
+    or exists(select 1 from public.store_cost_items where product_key like 'batch-concurrent-%' and revision<>1)
+    or (select count(*) from public.store_cost_revisions r join public.store_cost_items i
+      on i.company_id=r.company_id and i.store_account_id=r.store_account_id and i.id=r.store_cost_item_id
+      where i.product_key like 'batch-concurrent-%')<>2
+  then raise exception 'concurrent_batch_not_idempotent'; end if;
+end $$;
+
+-- Reuse an import ID, product and source row across both tenant axes, including the same store UUID in another company.
+insert into public.companies(id) values('00000000-0000-4000-8000-000000000002');
+insert into public.store_accounts(company_id,id) values
+  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'),
+  ('00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001');
+insert into public.store_account_members(company_id,store_account_id,id,role,status) values
+  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003','manager','active'),
+  ('00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000004','owner','active');
+create temporary table batch_scopes(company_id uuid, store_id uuid, member_id uuid, cost bigint);
+insert into batch_scopes values
+  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',101),
+  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003',202),
+  ('00000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000004',303);
+do $$ declare scope record; rows jsonb; result jsonb; begin
+  for scope in select * from batch_scopes loop
+    rows := jsonb_build_array(jsonb_build_object('sourceRowNumber',2,'productKey','batch-isolation||ea',
+      'productName','격리 품목','unit','EA','effectiveOn','2026-11-07','costKrw',scope.cost));
+    result := public.import_store_cost_batch(scope.company_id,scope.store_id,scope.member_id,
+      '40000000-0000-4000-8000-000000000007','isolation.xlsx',rows);
+    if not (result @> '{"imported":1,"replayed":0,"total":1}') then raise exception 'scoped_batch_not_imported'; end if;
+    result := public.import_store_cost_batch(scope.company_id,scope.store_id,scope.member_id,
+      '40000000-0000-4000-8000-000000000007','renamed.xlsx',rows);
+    if not (result @> '{"imported":0,"replayed":1,"total":1}') then raise exception 'scoped_batch_not_replayed'; end if;
+  end loop;
+  if (select count(*) from public.store_cost_imports where import_id='40000000-0000-4000-8000-000000000007')<>3
+    or (select count(distinct import_digest) from public.store_cost_imports where import_id='40000000-0000-4000-8000-000000000007')<>3
+    or (select count(*) from public.store_cost_items where product_key='batch-isolation||ea')<>3
+    or (select count(*) from batch_scopes s join public.store_cost_items i on i.company_id=s.company_id
+      and i.store_account_id=s.store_id where i.product_key='batch-isolation||ea' and i.cost_krw=s.cost and i.revision=1)<>3
+    or (select count(*) from batch_scopes s join public.store_cost_revisions r on r.company_id=s.company_id
+      and r.store_account_id=s.store_id where r.product_name='격리 품목' and r.cost_krw=s.cost and r.actor_member_id=s.member_id and r.revision=1)<>3
+  then raise exception 'batch_scope_isolation_failed'; end if;
+end $$;
+
+-- A member from another store/company, or a forged company/store pair, cannot create any records.
+do $$ declare scope record; imports_before bigint; items_before bigint; revisions_before bigint; begin
+  select count(*) into imports_before from public.store_cost_imports;
+  select count(*) into items_before from public.store_cost_items;
+  select count(*) into revisions_before from public.store_cost_revisions;
+  for scope in select * from (values
+    ('00000000-0000-4000-8000-000000000001'::uuid,'10000000-0000-4000-8000-000000000001'::uuid,'20000000-0000-4000-8000-000000000003'::uuid),
+    ('00000000-0000-4000-8000-000000000001'::uuid,'10000000-0000-4000-8000-000000000001'::uuid,'20000000-0000-4000-8000-000000000004'::uuid),
+    ('00000000-0000-4000-8000-000000000002'::uuid,'10000000-0000-4000-8000-000000000002'::uuid,'20000000-0000-4000-8000-000000000004'::uuid)
+  ) as scopes(company_id,store_id,member_id) loop
+    begin
+      perform public.import_store_cost_batch(scope.company_id,scope.store_id,scope.member_id,
+        '40000000-0000-4000-8000-000000000008','forged.xlsx',
+        '[{"sourceRowNumber":2,"productKey":"forged-scope||ea","productName":"위조 범위","unit":"EA","effectiveOn":"2026-11-07","costKrw":999}]'::jsonb);
+      raise exception 'cross_scope_batch_allowed';
+    exception when others then if sqlerrm <> 'store_cost_manager_required' then raise; end if; end;
+  end loop;
+  if (select count(*) from public.store_cost_imports)<>imports_before
+    or (select count(*) from public.store_cost_items)<>items_before
+    or (select count(*) from public.store_cost_revisions)<>revisions_before
+  then raise exception 'cross_scope_batch_changed_data'; end if;
+end $$;
+
+delete from public.companies where id in ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002');
 \ir 20261107-store-cost-batch-import.down.sql
 \ir 20261105-store-cost-management.down.sql
 do $$ begin
