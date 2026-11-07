@@ -60,6 +60,8 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   expect(requests[2].importId).toBe(requests[1].importId);
   expect(requests[2].rows).toEqual(requests[1].rows);
   await expect(upload).toHaveCount(0);
+  const savedRow = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "합성 채소", exact: true }) });
+  await expect(savedRow.getByRole("cell", { name: "3900", exact: true })).toBeVisible();
   const storage = await page.evaluate(() => [...Object.values(localStorage), ...Object.values(sessionStorage)].join("\n"));
   expect(storage).not.toContain("原文_ONLY"); expect(storage).not.toContain("합성 채소");
   await page.getByRole("button", { name: "엑셀 원가 업로드", exact: true }).click();
@@ -75,6 +77,14 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   expect(requests).toHaveLength(5);
   expect(requests[4].importId).not.toBe(requests[3].importId);
   await page.screenshot({ path: info.outputPath("store-cost-upload-reopened.png"), fullPage: true });
+  await upload.getByRole("button", { name: "업로드 닫기", exact: true }).click();
+  const reloadRead = page.waitForRequest(request => request.method() === "GET" && new URL(request.url()).pathname === "/api/store/costs");
+  await page.reload();
+  await reloadRead;
+  await expect(savedRow.getByRole("cell", { name: "3900", exact: true })).toBeVisible();
+  await expect(upload).toHaveCount(0);
+  expect(requests).toHaveLength(5);
+  await page.screenshot({ path: info.outputPath("store-cost-upload-reloaded.png"), fullPage: true });
 });
 
 test("empty and invalid files, row errors and server permission errors never apply rows", async ({ page }, info) => {
