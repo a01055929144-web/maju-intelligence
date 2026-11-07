@@ -32,7 +32,8 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   await page.getByRole("button", { name: "엑셀 원가 업로드", exact: true }).click();
   const upload = page.getByRole("region", { name: "엑셀 원가 업로드", exact: true });
   await expect(upload.getByText("선택한 파일이 없습니다.", { exact: false })).toBeVisible();
-  await upload.getByLabel("원가 파일 선택").setInputFiles(csv("적용일,품목명,규격,단위,매장매입금액,메모\n2026.11.07,합성 채소,1kg,봉,3500,原文_ONLY\n2026-11-07,합성 채소,1kg,봉,3900,原文_ONLY\n"));
+  const file = csv("적용일,품목명,규격,단위,매장매입금액,메모\n2026.11.07,합성 채소,1kg,봉,3500,原文_ONLY\n2026-11-07,합성 채소,1kg,봉,3900,原文_ONLY\n");
+  await upload.getByLabel("원가 파일 선택").setInputFiles(file);
   await expect(upload.getByRole("alert")).toContainText("필수 열");
   const costMapping = upload.getByTitle("E · 매장매입금액", { exact: true }).locator("xpath=../../..").getByRole("combobox");
   await costMapping.selectOption("costKrw");
@@ -61,6 +62,19 @@ test("PC maps columns, previews duplicates, requires confirmation and retries th
   await expect(upload).toHaveCount(0);
   const storage = await page.evaluate(() => [...Object.values(localStorage), ...Object.values(sessionStorage)].join("\n"));
   expect(storage).not.toContain("原文_ONLY"); expect(storage).not.toContain("합성 채소");
+  await page.getByRole("button", { name: "엑셀 원가 업로드", exact: true }).click();
+  await expect(upload.getByText("선택한 파일이 없습니다.", { exact: false })).toBeVisible();
+  await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "중복 저장하지 않았습니다" })).toHaveCount(0);
+  expect(requests).toHaveLength(4);
+  await upload.getByLabel("원가 파일 선택").setInputFiles(file);
+  await costMapping.selectOption("costKrw");
+  await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
+  await expect(upload.getByRole("checkbox", { name: "미리보기 원가와 중복 처리 내용을 확인했습니다." })).not.toBeChecked();
+  await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
+  expect(requests).toHaveLength(5);
+  expect(requests[4].importId).not.toBe(requests[3].importId);
+  await page.screenshot({ path: info.outputPath("store-cost-upload-reopened.png"), fullPage: true });
 });
 
 test("empty and invalid files, row errors and server permission errors never apply rows", async ({ page }, info) => {
