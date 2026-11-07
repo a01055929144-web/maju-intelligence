@@ -64,6 +64,8 @@ declare
   v_product_snapshots jsonb := '{}'::jsonb;
   v_supplier_snapshots jsonb := '{}'::jsonb;
   v_import_ids jsonb := '{}'::jsonb;
+  v_product_latest_dates jsonb := '{}'::jsonb;
+  v_supplier_latest_dates jsonb := '{}'::jsonb;
   v_before_run uuid;
   v_after_run uuid;
   v_recalc_run uuid;
@@ -104,6 +106,22 @@ begin
       or (selected_count=0 and held_count<>1)
       or (selected_count=1 and held_count<>0)
   ) then raise exception 'purchase_cost_price_selection_required'; end if;
+  select coalesce(jsonb_object_agg(product_id,latest_date),'{}'::jsonb)
+    into v_product_latest_dates
+  from(
+    select value->>'productId' product_id,
+      max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))::text latest_date
+    from jsonb_array_elements(p_rows) group by value->>'productId'
+  ) grouped;
+  select coalesce(jsonb_object_agg(supplier_product_id,latest_date),'{}'::jsonb)
+    into v_supplier_latest_dates
+  from(
+    select value->>'supplierProductId' supplier_product_id,
+      max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))::text latest_date
+    from jsonb_array_elements(p_rows)
+    where nullif(value->>'supplierProductId','') is not null
+    group by value->>'supplierProductId'
+  ) grouped;
 
   for v_item in select value from jsonb_array_elements(p_rows) loop
     if exists(select 1 from jsonb_object_keys(v_item) key where key not in(
@@ -127,8 +145,7 @@ begin
       where company_id=p_company and id=v_product_id for update;
     if not found then raise exception 'existing_purchase_product_required'; end if;
     v_apply_current:=v_price_selected
-      and v_date=(select max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))
-        from jsonb_array_elements(p_rows) where value->>'productId'=v_product_id::text)
+      and v_date=(v_product_latest_dates->>v_product_id::text)::date
       and (v_product.purchase_price is null or v_product.purchase_price_date is not null);
     if v_apply_current and not (v_product_snapshots ? v_product_id::text) then
       v_product_snapshots := jsonb_set(v_product_snapshots,array[v_product_id::text],jsonb_build_object(
@@ -143,10 +160,8 @@ begin
           and m.match_status in('auto','confirmed')
         where sp.company_id=p_company and sp.id=v_supplier_id for update of sp;
       if not found then raise exception 'supplier_product_not_linked'; end if;
-      v_apply_supplier_current:=v_date=(
-        select max(coalesce(nullif(value->>'priceDate','')::date,p_default_receipt_date))
-        from jsonb_array_elements(p_rows) where value->>'supplierProductId'=v_supplier_id::text
-      ) and (v_supplier.last_seen_date is null or v_date>=v_supplier.last_seen_date);
+      v_apply_supplier_current:=v_date=(v_supplier_latest_dates->>v_supplier_id::text)::date
+        and (v_supplier.last_seen_date is null or v_date>=v_supplier.last_seen_date);
       if v_apply_supplier_current and not (v_supplier_snapshots ? v_supplier_id::text) then
         v_supplier_snapshots := jsonb_set(v_supplier_snapshots,array[v_supplier_id::text],jsonb_build_object(
           'latestCost',v_supplier.latest_cost,'costConfirmed',v_supplier.cost_confirmed,

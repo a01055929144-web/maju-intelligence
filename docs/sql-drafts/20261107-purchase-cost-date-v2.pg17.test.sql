@@ -170,6 +170,7 @@ insert into public.product_catalog(id,company_id,purchase_product_name,purchase_
 select ('60000000-0000-4000-8000-'||lpad(g::text,12,'0'))::uuid,
  '00000000-0000-4000-8000-000000000001','bulk-'||g,1,'2026-01-01','EA'
 from generate_series(1,745) g;
+\timing on
 do $$
 declare payload jsonb;
 begin
@@ -184,6 +185,7 @@ begin
   if (select count(*) from public.purchase_receipt_lines where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004') <> 3417
   then raise exception '3417-row save incomplete'; end if;
 end $$;
+\timing off
 
 reset role;
 create function pg_temp.reject_recalc_run() returns trigger language plpgsql as $$
