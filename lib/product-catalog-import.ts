@@ -49,12 +49,6 @@ export type SupplierProductAdminItem = {
   conversionConfirmed: boolean;
 };
 
-export function defaultConversionReviewRatio(item: SupplierProductAdminItem) {
-  const source = item.rawUnit?.trim().toLowerCase();
-  const target = item.matchedCatalogUnit?.trim().toLowerCase();
-  return source && target && source === target ? "1" : "";
-}
-
 export type ProductImportAuditItem = {
   id: string;
   supplierName: string;
