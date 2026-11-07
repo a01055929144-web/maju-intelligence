@@ -1,6 +1,6 @@
 # 거래처 저장·가져오기 이력 원자성 DB 승인 대기
 
-- 상태: **미적용 초안**
+- 상태: **운영 적용 승인됨 · 이 PR에서는 미실행**
 - 기준 커밋: `107f79e`
 - 대상 프로젝트: `fcmdvveqmcgtioelzqun`
 - 적용 후보: `docs/sql-drafts/20261107-customer-import-atomicity.sql`
@@ -25,19 +25,21 @@
 
 | 확인 항목 | 상태 |
 |---|---|
-| PostgreSQL 17 성공·실패·재시도·동시성·digest 충돌·회사 격리 검증 | PASS (PR #312 CI) |
-| 운영 스키마의 선택 컬럼/제약과 초안 비교 | 대기 |
-| 기존 `processing` 행 읽기 전용 목록·건별 판정 | 대기 |
-| RPC의 `service_role` 전용 실행 권한 확인 | 대기 |
+| PostgreSQL 17 성공·실패·재시도·동시성·digest 충돌·회사 격리 검증 | PASS (PR #315 CI) |
+| 운영 스키마의 선택 컬럼/제약과 초안 비교 | PASS (`normalized_customers.updated_at` 없음 반영) |
+| 기존 `processing` 행 읽기 전용 목록·건별 판정 | PASS (41건 모두 `completed`, `processing` 0건) |
+| RPC의 `service_role` 전용 실행 권한 확인 | PASS (`anon`·`authenticated` 명시 회수) |
 | 오류 메시지의 개인정보·원문 데이터 비노출 확인 | 대기 |
 | 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | 대기 |
 | 매출 분석 업로드 제외 범위 확인 | 대기 |
-| 운영 적용 승인 `DB-APPROVED: fcmdvveqmcgtioelzqun YYYY-MM-DD HH:MM KST` | 대기 |
+| 운영 적용 승인 | 승인됨 (2026-11-07, 적용은 별도 채팅에서 진행) |
 | 앱 저장 코드 전환 승인 | 대기 |
 
 ## 운영 경계
 
 - 이 PR은 `supabase/migrations` 파일을 추가하지 않고 운영 DB에 실행하지 않는다.
+- 적용 SQL은 `BEGIN`/`COMMIT`으로 컬럼 추가와 함수 생성을 한 트랜잭션으로 묶는다.
+- 운영 `normalized_customers`에는 `updated_at`이 없으므로 해당 참조를 제거했고, 입력의 `expected_updated_at`은 실패 처리한다.
 - 기존 `processing` 이력을 자동 수정하거나 고객 데이터를 복구·삭제하지 않는다.
 - 운영 적용 전 기존 `processing` 건은 생성 시각, 연결 고객 수, 원본 파일을 읽기 전용으로 대사해 건별 승인한다.
 - 앱 전환 전까지 현재 REST 저장 흐름은 그대로다.

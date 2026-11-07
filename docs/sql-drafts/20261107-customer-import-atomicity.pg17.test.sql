@@ -4,6 +4,7 @@ create extension if not exists dblink;
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
 end $$;
 
 create table public.companies(
@@ -97,9 +98,19 @@ create table public.normalized_customers(
   delivery_vehicle_id uuid,
   delivery_territory_id uuid,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
   unique(company_id, normalized_key)
 );
+
+-- CREATE OR REPLACE preserves an existing ACL, so simulate explicit browser-role grants.
+create function public.save_customer_import_atomic_draft(
+  p_company_id uuid, p_import_id uuid, p_source text, p_original_filename text,
+  p_quality_score integer, p_duplicate_count integer, p_customers jsonb,
+  p_raw_rows jsonb default '[]'::jsonb, p_column_mappings jsonb default '[]'::jsonb
+) returns table(import_id uuid, status text, row_count integer, error_message text)
+language sql as $$ select null::uuid, null::text, null::integer, null::text where false $$;
+grant execute on function public.save_customer_import_atomic_draft(
+  uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
+) to anon, authenticated;
 
 \ir 20261107-customer-import-atomicity.sql
 
@@ -170,10 +181,7 @@ select * from public.save_customer_import_atomic_draft(
   '10000000-0000-4000-8000-000000000010',
   'manual-customer-master',
   'manual-customer-master', 100, 0,
-  jsonb_build_array(jsonb_build_object(
-    'customer_name', '첫 거래처', 'normalized_key', ' first ', 'address', '서울',
-    'expected_updated_at', (select updated_at from public.normalized_customers where normalized_key = 'first')
-  ))
+  '[{"customer_name":"첫 거래처","normalized_key":" first ","address":"서울"}]'
 );
 do $$ begin
   if not exists (select 1 from public.normalized_customers where normalized_key = 'first')
@@ -181,16 +189,13 @@ do $$ begin
   then raise exception 'normalized key trim was not preserved'; end if;
 end $$;
 
--- An optimistic update succeeds and moves the customer to the new import.
+-- An update succeeds and moves the customer to the new import.
 select * from public.save_customer_import_atomic_draft(
   '00000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000002',
   'manual-customer-master',
   'manual-customer-master', 100, 0,
-  jsonb_build_array(jsonb_build_object(
-    'customer_name', '첫 거래처', 'normalized_key', 'first', 'address', '인천',
-    'expected_updated_at', (select updated_at from public.normalized_customers where normalized_key = 'first')
-  ))
+  '[{"customer_name":"첫 거래처","normalized_key":"first","address":"인천"}]'
 );
 do $$ begin
   if not exists (
@@ -198,6 +203,24 @@ do $$ begin
     where normalized_key = 'first' and address = '인천'
       and import_id = '10000000-0000-4000-8000-000000000002'
   ) then raise exception 'optimistic update missing'; end if;
+end $$;
+
+-- The production table has no updated_at column; callers cannot silently request that contract.
+select * from public.save_customer_import_atomic_draft(
+  '00000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000011',
+  'manual-customer-master',
+  'manual-customer-master', 100, 0,
+  '[{"customer_name":"첫 거래처","normalized_key":"first","address":"부산","expected_updated_at":"2026-11-07T00:00:00Z"}]'
+);
+do $$ begin
+  if (select address from public.normalized_customers where normalized_key = 'first') <> '인천'
+    or not exists (
+      select 1 from public.customer_imports
+      where id = '10000000-0000-4000-8000-000000000011' and status = 'failed'
+        and error_message = 'customer_import_failed:P0001'
+    )
+  then raise exception 'unsupported expected_updated_at was not rejected'; end if;
 end $$;
 
 -- A later row failure rolls back every customer mutation but leaves one failed import.
@@ -339,6 +362,8 @@ do $$
 begin
   if has_function_privilege('anon', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'anon can execute draft RPC'; end if;
+  if has_function_privilege('authenticated', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
+  then raise exception 'authenticated can execute draft RPC'; end if;
   if not has_function_privilege('service_role', 'public.save_customer_import_atomic_draft(uuid,uuid,text,text,integer,integer,jsonb,jsonb,jsonb)', 'EXECUTE')
   then raise exception 'service_role cannot execute draft RPC'; end if;
 end $$;
