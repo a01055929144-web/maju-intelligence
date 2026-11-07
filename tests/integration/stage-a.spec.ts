@@ -151,7 +151,10 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
         const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
         const effectiveDate=restored?(i<scenario.existing?priorDate:null):saved.items.find(item=>item.code===code(i))!.date;
-        if(effectiveDate)await expect(row.getByRole('cell',{name:effectiveDate,exact:true})).toBeVisible();
+        const headers=await row.locator('xpath=ancestor::table[1]').getByRole('columnheader').allTextContents();
+        const dateColumn=headers.findIndex(label=>label.trim().startsWith('적용일'));
+        expect(dateColumn).toBeGreaterThanOrEqual(0);
+        await expect(row.getByRole('cell').nth(dateColumn)).toHaveText(effectiveDate || '-');
       }
       await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill('');
     };
