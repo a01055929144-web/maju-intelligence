@@ -61,7 +61,7 @@ do $$
 declare
   c constant uuid := '00000000-0000-4000-8000-000000000001';
   batch constant uuid := '50000000-0000-4000-8000-000000000001';
-  rows jsonb := '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":90,"supplierCost":190,"selectedSourceRowNumber":2,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":95,"supplierCost":195,"selectedSourceRowNumber":3,"priceSelected":false}]';
+  rows jsonb := '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":90,"supplierCost":190,"selectedSourceRowNumber":2,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":95,"supplierCost":195,"selectedSourceRowNumber":3,"priceSelected":false},{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","priceDate":"2026-10-09","cost":90,"supplierCost":190,"selectedSourceRowNumber":4,"priceSelected":false}]';
   before_price bigint;
   applied jsonb;
 begin
@@ -73,7 +73,9 @@ begin
   if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001') <> 100
      or (select latest_cost from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000001') <> 200
   then raise exception 'past date overwrote current price'; end if;
-  if (select count(*) from public.purchase_receipt_lines where company_id=c and receipt_date='2026-10-09') <> 2
+  if (select count(*) from public.purchase_receipt_lines where company_id=c and receipt_date='2026-10-09') <> 3
+     or (select array_agg(source_row_number order by source_row_number) from public.purchase_receipt_lines
+         where company_id=c and receipt_date='2026-10-09') <> array[2,3,4]
      or (select count(*) from public.supplier_product_cost_history where company_id=c and price_date='2026-10-09') <> 1
      or (select purchase_price from public.supplier_product_cost_history where company_id=c and price_date='2026-10-09') <> 190
   then raise exception 'past date history was not saved'; end if;
