@@ -4,6 +4,23 @@ begin;
 
 alter table public.product_catalog add column if not exists purchase_price_date date;
 
+create or replace function public.guard_purchase_price_date_v2()
+returns trigger language plpgsql security invoker set search_path=pg_catalog,public
+as $$
+begin
+  if current_setting('maju.purchase_price_date_explicit',true) is distinct from 'on'
+     and new.purchase_price is distinct from old.purchase_price
+     and new.purchase_price_date is not distinct from old.purchase_price_date then
+    new.purchase_price_date:=null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists guard_purchase_price_date_v2 on public.product_catalog;
+create trigger guard_purchase_price_date_v2
+before update of purchase_price,purchase_price_date on public.product_catalog
+for each row execute function public.guard_purchase_price_date_v2();
+revoke all on function public.guard_purchase_price_date_v2() from public,anon,authenticated;
+
 create table if not exists public.purchase_cost_date_batches_v2 (
   company_id uuid not null references public.companies(id) on delete cascade,
   id uuid not null,
@@ -61,6 +78,8 @@ declare
   v_price_selected boolean;
   v_apply_current boolean;
   v_apply_supplier_current boolean;
+  v_replace_undated boolean;
+  v_expected_purchase_price numeric;
   v_product_snapshots jsonb := '{}'::jsonb;
   v_supplier_snapshots jsonb := '{}'::jsonb;
   v_import_ids jsonb := '{}'::jsonb;
@@ -69,6 +88,7 @@ declare
   v_before_run uuid;
   v_after_run uuid;
   v_recalc_run uuid;
+  v_prior_date_guard text;
 begin
   if p_company is null or p_batch is null or p_default_receipt_date is null
      or length(trim(coalesce(p_actor_name,''))) not between 1 and 100
@@ -122,11 +142,14 @@ begin
     where nullif(value->>'supplierProductId','') is not null
     group by value->>'supplierProductId'
   ) grouped;
+  v_prior_date_guard:=current_setting('maju.purchase_price_date_explicit',true);
+  perform set_config('maju.purchase_price_date_explicit','on',true);
 
   for v_item in select value from jsonb_array_elements(p_rows) loop
     if exists(select 1 from jsonb_object_keys(v_item) key where key not in(
       'productId','supplierProductId','priceDate','cost','supplierCost','selectedSourceRowNumber',
-      'priceSelected','priceHeld','lineKey','productName','spec','unit','supplierName',
+      'priceSelected','priceHeld','replaceUndatedCurrent','expectedPurchasePrice',
+      'lineKey','productName','spec','unit','supplierName',
       'erpCode','quantity','unitPrice','priceIncludesVat','taxType','supplyAmount','vatAmount',
       'totalAmount','rawValues')) then raise exception 'unsupported_purchase_cost_date_field'; end if;
     v_product_id := nullif(v_item->>'productId','')::uuid;
@@ -135,6 +158,8 @@ begin
     v_cost := nullif(v_item->>'cost','')::numeric;
     v_supplier_cost := nullif(v_item->>'supplierCost','')::numeric;
     v_price_selected := coalesce((v_item->>'priceSelected')::boolean,false);
+    v_replace_undated := coalesce((v_item->>'replaceUndatedCurrent')::boolean,false);
+    v_expected_purchase_price := nullif(v_item->>'expectedPurchasePrice','')::numeric;
     if v_product_id is null or v_date is null or v_cost is null or v_cost<0 or v_cost>999999999999.99
        or v_cost<>round(v_cost,2) or coalesce((v_item->>'selectedSourceRowNumber')::integer,0)<1
        or (v_supplier_id is not null and (v_supplier_cost is null or v_supplier_cost<0
@@ -144,9 +169,15 @@ begin
     select * into v_product from public.product_catalog
       where company_id=p_company and id=v_product_id for update;
     if not found then raise exception 'existing_purchase_product_required'; end if;
+    if v_price_selected and v_date=(v_product_latest_dates->>v_product_id::text)::date
+       and v_product.purchase_price<>0 and v_product.purchase_price_date is null
+       and v_replace_undated
+       and v_expected_purchase_price is distinct from v_product.purchase_price then
+      raise exception 'purchase_cost_expected_current_mismatch';
+    end if;
     v_apply_current:=v_price_selected
       and v_date=(v_product_latest_dates->>v_product_id::text)::date
-      and (v_product.purchase_price=0 or v_product.purchase_price_date is not null);
+      and (v_product.purchase_price=0 or v_product.purchase_price_date is not null or v_replace_undated);
     if v_apply_current and not (v_product_snapshots ? v_product_id::text) then
       v_product_snapshots := jsonb_set(v_product_snapshots,array[v_product_id::text],jsonb_build_object(
         'purchasePrice',v_product.purchase_price,'purchasePriceDate',v_product.purchase_price_date,
@@ -243,6 +274,7 @@ begin
     product_snapshots=v_product_snapshots,supplier_snapshots=v_supplier_snapshots,
     supplier_import_ids=v_import_ids,recalc_run_id=v_recalc_run,status='completed'
     where company_id=p_company and id=p_batch;
+  perform set_config('maju.purchase_price_date_explicit',coalesce(v_prior_date_guard,''),true);
   return jsonb_build_object('batchId',p_batch,'recalcRunId',v_recalc_run,
     'status','completed','rowCount',jsonb_array_length(p_rows));
 end $$;
@@ -255,6 +287,7 @@ as $$
 declare
   v_batch public.purchase_cost_date_batches_v2%rowtype;
   v_pair record;
+  v_prior_date_guard text;
 begin
   if p_company is null or p_batch is null or length(trim(coalesce(p_actor_name,''))) not between 1 and 100
   then raise exception 'invalid_purchase_cost_date_restore'; end if;
@@ -293,6 +326,8 @@ begin
     perform public.pricing_p0_command(
       p_company,jsonb_build_object('action','restore','batchId',v_batch.recalc_run_id));
   end if;
+  v_prior_date_guard:=current_setting('maju.purchase_price_date_explicit',true);
+  perform set_config('maju.purchase_price_date_explicit','on',true);
   delete from public.purchase_receipt_lines where company_id=p_company and purchase_cost_date_batch_id=p_batch;
   delete from public.product_catalog_imports where company_id=p_company
     and id in(select value::text::uuid from jsonb_each_text(v_batch.supplier_import_ids));
@@ -309,6 +344,7 @@ begin
   end loop;
   update public.purchase_cost_date_batches_v2 set status='restored',restored_at=clock_timestamp()
     where company_id=p_company and id=p_batch;
+  perform set_config('maju.purchase_price_date_explicit',coalesce(v_prior_date_guard,''),true);
   return jsonb_build_object('batchId',p_batch,'status','restored');
 end $$;
 

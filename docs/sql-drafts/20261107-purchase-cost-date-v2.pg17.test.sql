@@ -124,7 +124,42 @@ begin
      or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
   then raise exception 'undated existing current price was overwritten'; end if;
   perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','tester');
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000013','2026-11-08',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","cost":130,"selectedSourceRowNumber":131,"priceSelected":true,"replaceUndatedCurrent":true,"expectedPurchasePrice":100}]',
+    'tester','confirmed-undated-baseline.xlsx');
+  if applied->>'recalcRunId' is null
+     or not exists(select 1 from public.product_catalog
+       where company_id=c and id='10000000-0000-4000-8000-000000000001'
+       and purchase_price=130 and purchase_price_date='2026-11-08')
+  then raise exception 'confirmed undated baseline was not replaced'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000013','tester');
+  begin
+    perform public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000014','2026-11-08',
+      '[{"productId":"10000000-0000-4000-8000-000000000001","cost":130,"selectedSourceRowNumber":141,"priceSelected":true,"replaceUndatedCurrent":true,"expectedPurchasePrice":99}]',
+      'tester','stale-undated-baseline.xlsx');
+    raise exception 'stale expected purchase price accepted';
+  exception when others then
+    if sqlerrm='stale expected purchase price accepted' then raise; end if;
+  end;
+  if exists(select 1 from public.purchase_cost_date_batches_v2
+      where company_id=c and id='50000000-0000-4000-8000-000000000014')
+  then raise exception 'stale expected purchase price left a partial batch'; end if;
   update public.product_catalog set purchase_price_date='2026-10-10'
+    where company_id=c and id='10000000-0000-4000-8000-000000000001';
+
+  update public.product_catalog set purchase_price=180
+    where company_id=c and id='10000000-0000-4000-8000-000000000001';
+  if (select purchase_price_date from public.product_catalog
+      where company_id=c and id='10000000-0000-4000-8000-000000000001') is not null
+  then raise exception 'undated legacy writer left a stale price date'; end if;
+  applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000012','2026-11-09',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","cost":170,"selectedSourceRowNumber":121,"priceSelected":true}]',
+    'tester','after-manual-write.xlsx');
+  if (select purchase_price from public.product_catalog
+      where company_id=c and id='10000000-0000-4000-8000-000000000001')<>180
+  then raise exception 'dated import overwrote an undated manual current price'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000012','tester');
+  update public.product_catalog set purchase_price=100,purchase_price_date='2026-10-10'
     where company_id=c and id='10000000-0000-4000-8000-000000000001';
 
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000011','2026-11-08',
