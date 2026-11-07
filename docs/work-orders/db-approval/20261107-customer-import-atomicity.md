@@ -25,14 +25,14 @@
 
 | 확인 항목 | 상태 |
 |---|---|
-| PostgreSQL 17 성공·실패·재시도·동시성·digest 충돌·회사 격리 검증 | PASS (PR #312 CI) |
+| PostgreSQL 17 성공·실패·재시도·동시성·digest 충돌·회사 격리 검증 | PASS (PR #315 CI) |
 | 운영 스키마의 선택 컬럼/제약과 초안 비교 | PASS (`normalized_customers.updated_at` 없음 반영) |
 | 기존 `processing` 행 읽기 전용 목록·건별 판정 | PASS (41건 모두 `completed`, `processing` 0건) |
-| RPC의 `service_role` 전용 실행 권한 확인 | 대기 |
+| RPC의 `service_role` 전용 실행 권한 확인 | PASS (`anon`·`authenticated` 명시 회수) |
 | 오류 메시지의 개인정보·원문 데이터 비노출 확인 | 대기 |
 | 요청 digest 산출 규칙과 25MB/5,000행/매핑 200개 상한 확인 | 대기 |
 | 매출 분석 업로드 제외 범위 확인 | 대기 |
-| 운영 적용 승인 `DB-APPROVED: fcmdvveqmcgtioelzqun YYYY-MM-DD HH:MM KST` | 대기 |
+| 운영 적용 승인 | 승인됨 (2026-11-07, 적용은 별도 채팅에서 진행) |
 | 앱 저장 코드 전환 승인 | 대기 |
 
 ## 운영 경계
