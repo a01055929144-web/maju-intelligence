@@ -19,7 +19,7 @@ const leadId = "30000000-0000-4000-8000-000000000001", customerId = "40000000-00
 const key = "50000000-0000-4000-8000-000000000001", email = "synthetic@example.test";
 const actor = createHash("sha256").update(`${company}:customer:${email}`).digest("hex");
 const scope = { companyId: company, actor, manager: false };
-const input = { action: "record-send", documentVersionId: versionId, leadId, templateId: "sheet-v1", channel: "staff", idempotencyKey: key, delivered: true };
+const input = { action: "record-send", documentVersionId: versionId, leadId: null, customerId, templateId: "sheet-v1", channel: "staff", idempotencyKey: key, delivered: true };
 const service = pricingDocuments(pricingDocumentsRepository);
 type Row = Record<string, string | null> & { id: string };
 let rows: Map<string, Row>, kind: string, owner: string, documentCompany: string, targetCompany: string;
@@ -71,8 +71,8 @@ it("returns the four-field consumer contract and persists server identity/layout
   const result = (await response.json()).result;
   expect(result).toEqual({ sendId: expect.any(String), documentId, documentVersionId: versionId, publicUrl: null });
   const saved = [...rows.values()][0];
-  expect(saved).toMatchObject({ company_id: company, document_id: documentId, document_version_id: versionId, lead_id: leadId,
-    customer_id: null, template_id: "sheet-v1", channel: "staff", layout: "cards", sent_by_key: actor });
+  expect(saved).toMatchObject({ company_id: company, document_id: documentId, document_version_id: versionId, lead_id: null,
+    customer_id: customerId, template_id: "sheet-v1", channel: "staff", layout: "cards", sent_by_key: actor });
   expect(saved).not.toHaveProperty("publicUrl");
   expect(mocks.db.mock.calls.every(([path]) => !String(path).includes("storefront_links"))).toBe(true);
 });
@@ -82,7 +82,7 @@ it("concurrent same-input retries retain one record and sendId", async () => {
   expect(new Set(results.map(result => JSON.stringify(result))).size).toBe(1);
   expect(rows.size).toBe(1);
 });
-it.each([{ channel: "print" }, { templateId: "other-template" }, { leadId: null, customerId }, { documentVersionId: otherVersionId }])("rejects changed input for the same key without updating the first record: %j", async change => {
+it.each([{ channel: "print" }, { templateId: "other-template" }, { customerId: other }, { documentVersionId: otherVersionId }])("rejects changed input for the same key without updating the first record: %j", async change => {
   await POST(request()); const before = structuredClone([...rows.values()]);
   expect((await POST(request({ ...input, ...change }))).status).toBe(409);
   expect([...rows.values()]).toEqual(before);
@@ -99,9 +99,15 @@ it("supports the existing customer target without creating an order link", async
   expect(response.status).toBe(200); expect((await response.json()).result.publicUrl).toBeNull();
   expect([...rows.values()][0]).toMatchObject({ lead_id: null, customer_id: customerId });
 });
-it.each([{ delivered: false }, { delivered: "true" }, { delivered: undefined }, { leadId: null }, { customerId }, { leadId: "bad" },
+it.each([{ delivered: false }, { delivered: "true" }, { delivered: undefined }, { customerId: null }, { leadId }, { leadId: "bad" },
   { documentVersionId: "bad" }, { idempotencyKey: "bad" }, { channel: "email" }, { templateId: "" }, { templateId: "x".repeat(101) }])("rejects invalid or unconfirmed delivery before SQL: %j", async change => {
   expect((await POST(request({ ...input, ...change }))).status).toBe(400); expect(mocks.db).not.toHaveBeenCalled();
+});
+it("requires a prepared share link for lead delivery before any database write", async () => {
+  const response = await POST(request({ ...input, leadId, customerId: null }));
+  expect(response.status).toBe(400);
+  expect((await response.json()).message).toBe("리드에게 전달할 공유 링크를 먼저 준비해 주세요.");
+  expect(mocks.db).not.toHaveBeenCalled();
 });
 it("canonicalizes UUID and template whitespace for retry comparison", () => {
   expect(parseDocumentSend({ ...input, templateId: " sheet-v1 ", idempotencyKey: key.toUpperCase() })).toMatchObject({ templateId: "sheet-v1", idempotencyKey: key });
