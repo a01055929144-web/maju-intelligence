@@ -12,6 +12,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   let releaseOtherVersions: (() => void) | undefined;
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 공개 품목", displayName: "합성 공개 품목", brand: "합성 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
   let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
+  let linkExpiresAt = "2099-01-01T00:00:00Z";
   let failPrepare = true, failSend = true, prepared = false, sent = false, revoked = false, readError = false, expiredPrice = false;
   const prepareInputs: Record<string, unknown>[] = [], sendInputs: Record<string, unknown>[] = [];
   const token = "synthetic-purpose-signed-token", publicUrl = `/pricing-document#${token}`;
@@ -55,7 +56,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     if (readError) return route.fulfill({ status: 503, json: { message: "합성 열람 확인 실패. 다시 시도해 주세요." } });
     const v = version();
     if (expiredPrice) v.content = { ...v.content, validUntil: "2020-01-01" };
-    return route.fulfill({ json: { document: publicDocumentOutput(v), expiresAt: "2099-01-01T00:00:00Z" } });
+    return route.fulfill({ json: { document: publicDocumentOutput(v), expiresAt: linkExpiresAt } });
   };
   await page.route("**/api/pricing-documents/public", publicHandler);
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
@@ -90,6 +91,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const viewer = await viewerContext.newPage();
   await viewer.setViewportSize({ width, height: 900 });
   await viewer.route("**/api/pricing-documents/public", publicHandler);
+  await viewer.clock.install({ time: new Date("2026-11-08T00:00:00Z") });
   await viewer.goto(new URL(publicUrl, page.url()).href);
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
   await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
@@ -100,7 +102,14 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.screenshot({ path: info.outputPath(`public-${kind}-${width}.png`), fullPage: true });
   readError = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
   await expect(viewer.getByRole("status")).toContainText("합성 열람 확인 실패"); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
-  readError = false; expiredPrice = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
+  readError = false; linkExpiresAt = "2026-11-08T00:01:00Z";
+  await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
+  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await viewer.clock.fastForward(61_000);
+  await expect(viewer.getByRole("status")).toContainText("유효기간을 다시 확인");
+  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
   await expect(viewer.getByText("유효기간이 지나 가격을 표시하지 않습니다.", { exact: true })).toBeVisible();
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible(); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
   await share.getByRole("button", { name: "링크 회수", exact: true }).click();
