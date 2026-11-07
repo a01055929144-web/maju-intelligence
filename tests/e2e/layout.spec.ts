@@ -87,6 +87,7 @@ for (const width of [1440, 390]) {
       await page.route("**/api/pricing-documents?*", async (route) => {
         await route.fulfill({ json: { result: { items: [], total: 0 }, manager: true } });
       });
+      await page.route("**/api/price-sheets/receipts*", route => route.fulfill({ json: { summary: [], saved: 1 } }));
       const catalogReady = page.waitForResponse(response => response.url().includes("/api/price-sheets/costs?") && response.ok());
       const response = await page.goto("/revenue/pricing", { waitUntil: "domcontentloaded" });
       await catalogReady;
@@ -98,6 +99,11 @@ for (const width of [1440, 390]) {
       await expect.poll(async () => (await page.locator('[role="status"],[role="alert"]').allTextContents()).join(" | ")).toContain("변경 후보 1개");
       expect(saved).toHaveLength(0);
       await page.getByRole("button", { name: "③ 저장 (1건)" }).click();
+      const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+      await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
+      expect(saved).toHaveLength(0);
+      await review.getByRole("checkbox").check();
+      await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);
       expect(saved[0].cost).toBe(12000);
