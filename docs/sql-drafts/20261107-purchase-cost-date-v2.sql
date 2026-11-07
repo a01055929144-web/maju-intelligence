@@ -29,6 +29,7 @@ create table if not exists public.purchase_cost_date_batches_v2 (
   source_file_name text not null check(length(trim(source_file_name)) between 1 and 255),
   actor_name text not null check(length(trim(actor_name)) between 1 and 100),
   row_count integer not null check(row_count between 1 and 5000),
+  history_only_product_count integer not null default 0 check(history_only_product_count>=0),
   rows jsonb not null check(jsonb_typeof(rows)='array'),
   product_snapshots jsonb not null default '{}'::jsonb check(jsonb_typeof(product_snapshots)='object'),
   supplier_snapshots jsonb not null default '{}'::jsonb check(jsonb_typeof(supplier_snapshots)='object'),
@@ -85,6 +86,8 @@ declare
   v_import_ids jsonb := '{}'::jsonb;
   v_product_latest_dates jsonb := '{}'::jsonb;
   v_supplier_latest_dates jsonb := '{}'::jsonb;
+  v_current_product_ids jsonb := '{}'::jsonb;
+  v_history_only_product_count integer;
   v_before_run uuid;
   v_after_run uuid;
   v_recalc_run uuid;
@@ -106,7 +109,8 @@ begin
   if found then
     if v_existing.request_digest<>v_digest then raise exception 'purchase_cost_date_batch_conflict'; end if;
     return jsonb_build_object('batchId',p_batch,'recalcRunId',v_existing.recalc_run_id,
-      'status',v_existing.status,'rowCount',v_existing.row_count);
+      'status',v_existing.status,'rowCount',v_existing.row_count,
+      'historyOnlyProductCount',v_existing.history_only_product_count);
   end if;
   insert into public.purchase_cost_date_batches_v2(
     company_id,id,request_digest,default_receipt_date,source_file_name,actor_name,row_count,rows,status
@@ -177,7 +181,11 @@ begin
     end if;
     v_apply_current:=v_price_selected
       and v_date=(v_product_latest_dates->>v_product_id::text)::date
-      and (v_product.purchase_price=0 or v_product.purchase_price_date is not null or v_replace_undated);
+      and (v_product.purchase_price=0 or v_product.purchase_price_date is not null or v_replace_undated)
+      and (v_product.purchase_price_date is null or v_date>=v_product.purchase_price_date);
+    if v_apply_current then
+      v_current_product_ids:=jsonb_set(v_current_product_ids,array[v_product_id::text],'true'::jsonb);
+    end if;
     if v_apply_current and not (v_product_snapshots ? v_product_id::text) then
       v_product_snapshots := jsonb_set(v_product_snapshots,array[v_product_id::text],jsonb_build_object(
         'purchasePrice',v_product.purchase_price,'purchasePriceDate',v_product.purchase_price_date,
@@ -270,13 +278,16 @@ begin
   select id into v_after_run from public.price_recalc_runs
     where company_id=p_company order by created_at desc,id desc limit 1;
   if v_after_run is distinct from v_before_run then v_recalc_run:=v_after_run; end if;
+  v_history_only_product_count:=jsonb_object_length(v_product_latest_dates)-jsonb_object_length(v_current_product_ids);
   update public.purchase_cost_date_batches_v2 set
     product_snapshots=v_product_snapshots,supplier_snapshots=v_supplier_snapshots,
-    supplier_import_ids=v_import_ids,recalc_run_id=v_recalc_run,status='completed'
+    supplier_import_ids=v_import_ids,recalc_run_id=v_recalc_run,
+    history_only_product_count=v_history_only_product_count,status='completed'
     where company_id=p_company and id=p_batch;
   perform set_config('maju.purchase_price_date_explicit',coalesce(v_prior_date_guard,''),true);
   return jsonb_build_object('batchId',p_batch,'recalcRunId',v_recalc_run,
-    'status','completed','rowCount',jsonb_array_length(p_rows));
+    'status','completed','rowCount',jsonb_array_length(p_rows),
+    'historyOnlyProductCount',v_history_only_product_count);
 end $$;
 
 create or replace function public.restore_purchase_cost_date_batch_v2(

@@ -74,7 +74,9 @@ begin
   perform public.pricing_p0_command(c,'{"action":"recalculate"}');
   select price into before_price from public.pricing_items
     where company_id=c and product_id='10000000-0000-4000-8000-000000000001';
-  perform public.save_purchase_cost_date_batch_v2(c,batch,'2026-11-01',rows,'tester','old.xlsx');
+  applied:=public.save_purchase_cost_date_batch_v2(c,batch,'2026-11-01',rows,'tester','old.xlsx');
+  if (applied->>'historyOnlyProductCount')::integer<>1
+  then raise exception 'past-date history-only count mismatch'; end if;
   if (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001') <> 100
      or (select latest_cost from public.supplier_products where company_id=c and id='30000000-0000-4000-8000-000000000001') <> 200
   then raise exception 'past date overwrote current price'; end if;
@@ -109,7 +111,7 @@ begin
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000008','2026-11-07',
     '[{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-06","cost":110,"selectedSourceRowNumber":81,"priceSelected":true},{"productId":"10000000-0000-4000-8000-000000000001","priceDate":"2026-11-07","cost":120,"selectedSourceRowNumber":82,"priceHeld":true}]',
     'tester','latest-held.xlsx');
-  if applied->>'recalcRunId' is not null
+  if applied->>'recalcRunId' is not null or (applied->>'historyOnlyProductCount')::integer<>1
      or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
      or (select price from public.pricing_items where company_id=c and product_id='10000000-0000-4000-8000-000000000001')<>before_price
   then raise exception 'latest held date promoted an older selected price'; end if;
@@ -120,14 +122,14 @@ begin
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','2026-11-08',
     '[{"productId":"10000000-0000-4000-8000-000000000001","cost":130,"selectedSourceRowNumber":91,"priceSelected":true}]',
     'tester','unknown-baseline-date.xlsx');
-  if applied->>'recalcRunId' is not null
+  if applied->>'recalcRunId' is not null or (applied->>'historyOnlyProductCount')::integer<>1
      or (select purchase_price from public.product_catalog where company_id=c and id='10000000-0000-4000-8000-000000000001')<>100
   then raise exception 'undated existing current price was overwritten'; end if;
   perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000009','tester');
   applied:=public.save_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000013','2026-11-08',
     '[{"productId":"10000000-0000-4000-8000-000000000001","cost":130,"selectedSourceRowNumber":131,"priceSelected":true,"replaceUndatedCurrent":true,"expectedPurchasePrice":100}]',
     'tester','confirmed-undated-baseline.xlsx');
-  if applied->>'recalcRunId' is null
+  if applied->>'recalcRunId' is null or (applied->>'historyOnlyProductCount')::integer<>0
      or not exists(select 1 from public.product_catalog
        where company_id=c and id='10000000-0000-4000-8000-000000000001'
        and purchase_price=130 and purchase_price_date='2026-11-08')
@@ -235,7 +237,10 @@ begin
     '00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004',
     '2026-11-01',payload,'tester','3417.xlsx');
   if (select count(*) from public.purchase_receipt_lines where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004') <> 3417
-  then raise exception '3417-row save incomplete'; end if;
+     or (select history_only_product_count from public.purchase_cost_date_batches_v2
+         where company_id='00000000-0000-4000-8000-000000000001'
+           and id='50000000-0000-4000-8000-000000000004')<>0
+  then raise exception '3417-row save incomplete or history-only count mismatch'; end if;
 end $$;
 \timing off
 
