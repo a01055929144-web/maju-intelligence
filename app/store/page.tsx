@@ -20,7 +20,7 @@ export default async function StorePage({ searchParams }: {
   let costAccess: StoreCostAccess = null;
   const companyId = typeof params.companyId === "string" ? params.companyId : "";
   const storeAccountId = typeof params.storeAccountId === "string" ? params.storeAccountId : "";
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (isFeatureEnabled("STORE_COSTS", companyId)) {
     costAccess = { message: "매장 구성원 로그인과 매장 주소를 확인해 주세요." };
     if (uuid.test(companyId) && uuid.test(storeAccountId)) {

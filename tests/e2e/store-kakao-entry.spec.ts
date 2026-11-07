@@ -90,7 +90,7 @@ test("feature OFF keeps scoped login and activation controls disabled with zero 
   let calls = 0;
   await page.route("**/api/auth/kakao/start**", route => { calls++; return route.abort(); });
   await page.route("**/api/store/accounts/activate", route => { calls++; return route.abort(); });
-  await page.goto(`/store?companyId=${companyId}&storeAccountId=${storeAccountId}`);
+  await page.goto(`/store?companyId=${companyId.replace("4000", "7000")}&storeAccountId=${storeAccountId.replace("4000", "8000")}`);
   await expect(page.getByRole("button", { name: "카카오로 매장 로그인", exact: true })).toBeDisabled();
   await page.goto(`/store/activate#${token}`);
   await expect(page.getByRole("button", { name: "동의하고 카카오로 시작", exact: true })).toBeDisabled();
