@@ -1,6 +1,8 @@
 -- REVIEW-ONLY DRAFT. Do not apply to production without project approval.
 -- One RPC owns the customer rows and the terminal customer_imports state.
 
+begin;
+
 alter table public.customer_imports
   add column if not exists request_digest text;
 
@@ -132,7 +134,7 @@ begin
           'delivery_vehicle', 'review_summary', 'review_keywords', 'review_source',
           'reviews_updated_at', 'relationship_status', 'relationship_status_updated_at',
           'relationship_status_note', 'assigned_staff_member_id',
-          'delivery_vehicle_id', 'delivery_territory_id', 'expected_updated_at'
+          'delivery_vehicle_id', 'delivery_territory_id'
         )
       ) then
         raise exception 'unsupported_customer_field';
@@ -145,17 +147,12 @@ begin
       for update;
 
       if found then
-        if v_customer ? 'expected_updated_at'
-          and v_existing.updated_at is distinct from (v_customer ->> 'expected_updated_at')::timestamptz then
-          raise exception 'customer_write_conflict';
-        end if;
-        v_candidate := jsonb_populate_record(v_existing, v_customer - 'expected_updated_at');
+        v_candidate := jsonb_populate_record(v_existing, v_customer);
         v_candidate.id := v_existing.id;
         v_candidate.company_id := p_company_id;
         v_candidate.import_id := p_import_id;
         v_candidate.created_at := v_existing.created_at;
         v_candidate.normalized_key := btrim(v_customer ->> 'normalized_key');
-        v_candidate.updated_at := clock_timestamp();
 
         update public.normalized_customers set
           import_id = v_candidate.import_id,
@@ -203,11 +200,10 @@ begin
           relationship_status_note = v_candidate.relationship_status_note,
           assigned_staff_member_id = v_candidate.assigned_staff_member_id,
           delivery_vehicle_id = v_candidate.delivery_vehicle_id,
-          delivery_territory_id = v_candidate.delivery_territory_id,
-          updated_at = v_candidate.updated_at
+          delivery_territory_id = v_candidate.delivery_territory_id
         where id = v_existing.id;
       else
-        v_candidate := jsonb_populate_record(null::public.normalized_customers, v_customer - 'expected_updated_at');
+        v_candidate := jsonb_populate_record(null::public.normalized_customers, v_customer);
         v_candidate.id := gen_random_uuid();
         v_candidate.company_id := p_company_id;
         v_candidate.import_id := p_import_id;
@@ -219,7 +215,6 @@ begin
         v_candidate.delivery_km := coalesce(v_candidate.delivery_km, 0);
         v_candidate.review_keywords := coalesce(v_candidate.review_keywords, '{}'::text[]);
         v_candidate.created_at := clock_timestamp();
-        v_candidate.updated_at := clock_timestamp();
         insert into public.normalized_customers select (v_candidate).*;
       end if;
     end loop;
@@ -243,7 +238,9 @@ $$;
 
 revoke all on function public.save_customer_import_atomic_draft(
   uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
-) from public;
+) from public, anon, authenticated, service_role;
 grant execute on function public.save_customer_import_atomic_draft(
   uuid, uuid, text, text, integer, integer, jsonb, jsonb, jsonb
 ) to service_role;
+
+commit;
