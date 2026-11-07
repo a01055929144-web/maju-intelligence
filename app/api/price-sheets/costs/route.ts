@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
   if (checked.error) return checked.error;
   try {
     const companyId = checked.auth!.companyId!;
+    if ((process.env.FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId)) {
+      return NextResponse.json({ message: "날짜별 저장을 사용하는 회사입니다. 날짜별 저장·복구 화면으로 다시 진행해 주세요." }, { status: 409 });
+    }
     const actorName = checked.auth!.customerSession?.name || checked.auth!.adminSession?.name || "운영자";
     if (body?.action) {
       if (!purchaseCostBatchEnabled(companyId)) return NextResponse.json({ message: "원자적 저장 기능을 사용할 수 없습니다." }, { status: 404 });
