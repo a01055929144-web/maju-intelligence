@@ -6,10 +6,24 @@ vi.mock("../lib/store", () => ({ supabaseRequest }));
 import {
   createCatalogFromSupplierProducts,
   listProductImportWorkspace,
+  type SupplierProductAdminItem,
 } from "../lib/product-catalog-import";
+import { defaultConversionReviewRatio } from "../lib/product-conversion-review";
 
 describe("product catalog import data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
+
+  it("suggests 1:1 only when the supplier and basic units match", () => {
+    const item = {
+      id: "supplier-product-1", supplierId: "supplier-1", supplierName: "샘플상사",
+      rawName: "양파", rawUnit: "EA", latestCost: 100, costConfirmed: true,
+      matchStatus: "confirmed", matchedCatalogId: "catalog-1",
+      matchedCatalogUnit: "ea", suggestedRatio: 20, conversionConfirmed: false,
+    } satisfies SupplierProductAdminItem;
+    expect(defaultConversionReviewRatio(item)).toBe("1");
+    expect(defaultConversionReviewRatio({ ...item, matchedCatalogUnit: "kg" })).toBe("");
+    expect(defaultConversionReviewRatio({ ...item, matchedCatalogUnit: undefined })).toBe("");
+  });
 
   it("creates the first standard product with imported cost and a confirmed match", async () => {
     supabaseRequest
@@ -111,5 +125,17 @@ describe("product catalog import data access", () => {
       "product_catalog_imports?select=",
     );
     expect(supabaseRequest.mock.calls[4][0]).not.toContain("import_jobs");
+  });
+
+  it("shows the matched catalog basic unit for human conversion review", async () => {
+    supabaseRequest
+      .mockResolvedValueOnce([{ id: "supplier-1", name: "샘플상사" }])
+      .mockResolvedValueOnce([{ id: "supplier-product-1", supplier_id: "supplier-1", raw_name: "양파", raw_unit: "BOX" }])
+      .mockResolvedValueOnce([{ supplier_product_id: "supplier-product-1", product_catalog_id: "catalog-1", match_status: "confirmed", conversion_confirmed: false }])
+      .mockResolvedValueOnce([{ id: "catalog-1", canonical_name: "양파", sales_unit: "EA" }])
+      .mockResolvedValueOnce([]);
+    const workspace = await listProductImportWorkspace("company-1");
+    expect(workspace.items[0]).toMatchObject({ rawUnit: "BOX", matchedCatalogUnit: "EA", conversionConfirmed: false });
+    expect(supabaseRequest.mock.calls[3][0]).toContain("sales_unit");
   });
 });

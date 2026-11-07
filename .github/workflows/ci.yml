@@ -355,7 +355,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-lead-sharing.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-lead-sharing.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001

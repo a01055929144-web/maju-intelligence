@@ -44,6 +44,7 @@ export type SupplierProductAdminItem = {
   matchStatus: "auto" | "candidate" | "confirmed" | "unmatched";
   matchedCatalogId?: string;
   matchedCatalogName?: string;
+  matchedCatalogUnit?: string;
   suggestedRatio?: number;
   conversionConfirmed: boolean;
 };
@@ -96,7 +97,7 @@ export async function listProductImportWorkspace(companyId: string) {
       `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status,candidate_rank,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${enc(companyId)}&order=candidate_rank.asc.nullslast`,
     ),
     db<Array<Record<string, unknown>>>(
-      `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
+      `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,sales_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
     ),
     db<Array<Record<string, unknown>>>(
       `product_catalog_imports?select=id,supplier_id,file_name,status,total_rows,created_count,updated_count,excluded_count,warning_count,created_by_name,created_at,completed_at,error_message&company_id=eq.${enc(companyId)}&order=created_at.desc&limit=1000`,
@@ -109,6 +110,7 @@ export async function listProductImportWorkspace(companyId: string) {
       String(x.canonical_name || x.purchase_product_name || ""),
     ]),
   );
+  const catalogUnits = new Map(catalog.map((x) => [String(x.id), String(x.sales_unit || "")]));
   const matchMap = new Map<string, (typeof matches)[number]>();
   for (const m of matches) {
     if (!matchMap.has(m.supplier_product_id) || m.match_status !== "candidate")
@@ -150,6 +152,7 @@ export async function listProductImportWorkspace(companyId: string) {
         matchedCatalogName: m
           ? catalogNames.get(m.product_catalog_id)
           : undefined,
+        matchedCatalogUnit: m ? catalogUnits.get(m.product_catalog_id) : undefined,
         suggestedRatio:
           m?.purchase_to_sales_ratio == null
             ? p.parsed_pack_quantity == null
