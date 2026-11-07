@@ -160,7 +160,7 @@ begin
   if v_after_run is distinct from v_before_run then v_price_run := v_after_run; end if;
 
   insert into public.purchase_cost_batches(company_id, id, request_digest, changes, price_run_id, actor_name)
-    values(p_company, p_batch, v_digest, v_snapshots, v_price_run);
+    values(p_company, p_batch, v_digest, v_snapshots, v_price_run, p_actor_name);
   return jsonb_build_object('batchId', p_batch, 'priceRunId', v_price_run, 'status', 'applied');
 end $$;
 
@@ -230,6 +230,9 @@ begin
       set purchase_price = (v_item->>'beforeProductCost')::numeric, updated_at = clock_timestamp()
       where company_id = p_company and id = (v_item->>'productId')::uuid;
     if v_item->>'supplierProductId' is not null then
+      select * into v_supplier from public.supplier_products
+        where company_id = p_company and id = (v_item->>'supplierProductId')::uuid for update;
+      if not found then raise exception 'supplier_product_not_found'; end if;
       update public.supplier_products
         set latest_cost = (v_item->>'beforeSupplierCost')::numeric,
             cost_confirmed = (v_item->>'beforeSupplierConfirmed')::boolean,

@@ -17,7 +17,7 @@ create table public.product_catalog_imports(
   total_rows integer not null default 0, updated_count integer not null default 0,
   status text not null, created_by_name text, completed_at timestamptz,
   unique(company_id, id),
-  foreign key(company_id, supplier_id) references public.product_suppliers(company_id, id) on delete cascade
+  foreign key(company_id, supplier_id) references public.product_suppliers(company_id, id) on delete restrict
 );
 create table public.supplier_products(
   id uuid primary key, company_id uuid not null references public.companies(id) on delete cascade,
@@ -44,11 +44,11 @@ create table public.supplier_product_cost_history(
   foreign key(company_id, import_id) references public.product_catalog_imports(company_id, id) on delete cascade,
   unique(company_id, supplier_product_id, import_id, price_date)
 );
-grant select, update on public.product_catalog to service_role;
+grant select, insert, update on public.product_catalog to service_role;
 grant select, insert on public.product_catalog_imports, public.supplier_product_cost_history to service_role;
-grant select, update on public.supplier_products to service_role;
-grant select on public.supplier_product_matches to service_role;
-grant select on public.product_suppliers to service_role;
+grant select, insert, update on public.supplier_products to service_role;
+grant select, insert on public.supplier_product_matches to service_role;
+grant select, insert on public.product_suppliers to service_role;
 \ir 20261107-purchase-cost-batch.sql
 
 begin;
@@ -138,6 +138,28 @@ begin
     or (select count(*) from public.supplier_product_cost_history where company_id=a) <> 2 then
     raise exception 'restore_values_or_audit';
   end if;
+
+  -- Two supplier lines must retain their own supplier in each compensating import.
+  insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,sales_unit)
+    values('10000000-0000-4000-8000-000000000003',a,'C',80,'EA');
+  insert into public.product_suppliers(id,company_id)
+    values('20000000-0000-4000-8000-000000000003',a);
+  insert into public.supplier_products(id,company_id,supplier_id,raw_unit,latest_cost,cost_confirmed)
+    values('30000000-0000-4000-8000-000000000003',a,'20000000-0000-4000-8000-000000000003','BOX',1600,true);
+  insert into public.supplier_product_matches(id,company_id,supplier_product_id,product_catalog_id,match_status,purchase_to_sales_ratio,conversion_confirmed)
+    values('40000000-0000-4000-8000-000000000003',a,'30000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000003','confirmed',20,true);
+  perform public.save_purchase_cost_batch_v1(
+    a, '50000000-0000-4000-8000-000000000004',
+    '[{"productId":"10000000-0000-4000-8000-000000000001","supplierProductId":"30000000-0000-4000-8000-000000000001","expectedCost":100,"cost":150},{"productId":"10000000-0000-4000-8000-000000000003","supplierProductId":"30000000-0000-4000-8000-000000000003","expectedCost":80,"cost":120}]',
+    'tester'
+  );
+  perform public.restore_purchase_cost_batch_v1(a,'50000000-0000-4000-8000-000000000004','tester');
+  if exists(
+    select 1 from public.supplier_product_cost_history h
+    join public.product_catalog_imports i on i.company_id=h.company_id and i.id=h.import_id
+    join public.supplier_products s on s.company_id=h.company_id and s.id=h.supplier_product_id
+    where h.company_id=a and i.supplier_id is distinct from s.supplier_id
+  ) then raise exception 'restore_import_wrong_supplier'; end if;
 end $$;
 reset role;
 do $$
