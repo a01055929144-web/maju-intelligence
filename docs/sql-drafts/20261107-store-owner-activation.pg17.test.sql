@@ -36,7 +36,7 @@ create table public.store_account_member_events(
 alter table public.store_accounts add constraint store_accounts_terms_member_fk foreign key(company_id,id,terms_accepted_by_member_id)
   references public.store_account_members(company_id,store_account_id,id) deferrable initially deferred;
 grant all on public.store_accounts,public.store_account_members,public.store_account_member_events,public.app_users to service_role;
-grant select on public.company_members,public.normalized_customers to service_role;
+grant all on public.company_members,public.normalized_customers to service_role;
 
 insert into public.companies values('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002'),
  ('10000000-0000-4000-8000-000000000003');
