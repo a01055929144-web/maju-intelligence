@@ -260,7 +260,9 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
     }
     return route.fulfill({ json: response(day) });
   });
-  await page.goto("/store#synthetic-order-link");
+  let costRequests = 0;
+  await page.route("**/api/store/costs**", route => { costRequests++; return route.abort(); });
+  await page.goto("/store?fixture=store-cost-owner#synthetic-order-link");
   await expect(page.getByText("합성 최초 조회 실패")).toBeVisible();
   await page.getByRole("button", { name: "다시 불러오기", exact: true }).click();
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
@@ -302,6 +304,11 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByText(/주문 당시 품목.*주문 당시 규격.*면세.*2,000원/)).toBeVisible();
   await page.evaluate(() => { window.location.hash = "synthetic-second-store"; });
   await expect(page.getByText("다른 합성 유통 · 두 번째 매장", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "데이터", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("로그인한 매장의 전용 주소");
+  await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "매장 카카오 로그인", exact: false })).toHaveCount(0);
+  expect(costRequests).toBe(0);
   await page.getByRole("button", { name: "내역", exact: true }).click();
   await expect(page.getByText("아직 주문이 없습니다.", { exact: true })).toBeVisible();
   await expect(page.getByText("주문 당시 품목", { exact: false })).toHaveCount(0);
@@ -313,5 +320,6 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByText("두 번째 매장", { exact: false })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toHaveCount(0);
   expect(saved.size).toBe(1);
+  expect(costRequests).toBe(0);
 
 });

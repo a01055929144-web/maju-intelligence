@@ -35,13 +35,15 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
 }).format(new Date(value));
 
 export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null }) {
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
-    const read = () => { const value = window.location.hash.slice(1); setToken(value.length <= 200 ? value : ""); };
+    const read = () => { const value = window.location.hash.slice(1); setToken(value.length <= 200 ? value : "invalid-link"); };
     read(); window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);
-  return <StorefrontSession key={token} token={token} costAccess={costAccess} storeLogin={storeLogin} />;
+  if (token === null) return <p role="status">매장 주소를 확인 중입니다.</p>;
+  // A bearer link does not prove that its customer matches the signed-in store account.
+  return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} />;
 }
 
 function StorefrontSession({ token, costAccess, storeLogin }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null }) {
@@ -343,7 +345,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       </div>
       {storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}
       {costAccess ? <StoreCostPanel access={costAccess} /> : <div className="rounded border p-4"><h3 className="font-semibold">매장 자체 원가관리</h3>
-        <p className="mt-2 text-sm text-slate-600">매장 자체 원가관리는 준비 중입니다. 현재 주문 링크에서는 원가 자료를 제공하지 않습니다.</p></div>}
+        <p role="status" className="mt-2 text-sm text-slate-600">현재 주문 링크에서는 원가 자료를 제공하지 않습니다. 원가관리는 로그인한 매장의 전용 주소에서 확인해 주세요.</p></div>}
     </section>}
     {tab === "info" && <section className="space-y-3 p-4 md:p-6"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">매장 정보</h2>
       <button className="min-h-[44px] rounded border px-3" aria-expanded={showSettings} onClick={() => setShowSettings((value) => !value)}>설정</button></div>
