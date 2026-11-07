@@ -12,6 +12,8 @@ export type CostProduct = {
   supplierName?: string;
   /** 매입처 상품이 기억하는 엑셀 원문 키(원문 상품명|규격|단위). 이름을 고쳐도 원문으로 다시 찾습니다. */
   supplierRawKey?: string;
+  /** Raw supplier-unit amount for the atomic batch's optimistic concurrency check. */
+  supplierRawCost?: number | null;
 };
 
 export type PurchaseCostCandidate = {
