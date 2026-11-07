@@ -131,3 +131,17 @@ it("requires an expected price for an explicit undated-current replacement", () 
   expect(validPurchaseDateRows([{ ...row, replaceUndatedCurrent: true, expectedPurchasePrice: 100 }])).toBe(true);
   expect(validPurchaseDateRows([{ ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: true, expectedPurchasePrice: 100 }])).toBe(false);
 });
+
+it("forwards the explicit expected price and reports stale-current cancellation without another write", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockImplementation(async (path: string) => {
+    if (path.startsWith("product_catalog?")) return [{ id: productId(0), sales_unit: "봉", purchase_price: 150, purchase_price_date: null }];
+    throw new Error("purchase_cost_date_expected_price_changed");
+  });
+  const input = payload();
+  const response = await post({ ...input, rows: [{ ...input.rows[0], replaceUndatedCurrent: true, expectedPurchasePrice: 100 }] });
+  expect(response.status).toBe(409); expect((await response.json()).message).toContain("화면 전체를 새로고침");
+  const writes = mocks.db.mock.calls.filter(([path]) => path.startsWith("rpc/"));
+  expect(writes).toHaveLength(1);
+  expect(JSON.parse(writes[0][1].body).p_rows[0]).toMatchObject({ replaceUndatedCurrent: true, expectedPurchasePrice: 100 });
+});

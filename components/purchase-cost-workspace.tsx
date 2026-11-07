@@ -61,7 +61,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [datePartial, setDatePartial] = useState("");
   const [dateUndatedPrices, setDateUndatedPrices] = useState<Record<string, number>>({});
   const [replaceUndatedCurrent, setReplaceUndatedCurrent] = useState(false);
-  const [dateCreatedIds, setDateCreatedIds] = useState<string[]>([]);
+  const [dateMappedIds, setDateMappedIds] = useState<string[]>([]);
+  const [dateCreatedCount, setDateCreatedCount] = useState(0);
   const dateRequest = useRef<{ key: string; id: string } | null>(null);
   // 11/4: 신규 탭 필터 — 켤 때의 행 목록을 고정해 두어, 입력 중에 줄이 사라지지 않게 합니다.
   const [newFilter, setNewFilter] = useState<"all" | "unit" | "suspect">("all");
@@ -294,7 +295,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) }),
   [receiptDate, importedLines, candidates, selected, unmatched, newSupplier, unique, replaceUndatedCurrent, undatedTargets]);
   function changeReceiptDate(value: string) {
-    setReceiptDate(value); setConfirmedReview("");
+    setReceiptDate(value); setConfirmedReview(""); setReplaceUndatedCurrent(false);
     if (!fileHasDates) {
       setImportedLines(current => current.map(line => ({ ...line, purchaseDate: value })));
       setCandidates(current => Object.fromEntries(Object.entries(current).map(([id, candidate]) => [id,
@@ -347,7 +348,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const merged = [...importPreview.merged, ...importPreview.conflicts.flatMap(group =>
         group.candidates.filter(line => String(line.rowNumber) === conflictChoices[group.key]))]
         .sort((a, b) => (b.purchaseDate || "").localeCompare(a.purchaseDate || ""));
-      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateCreatedIds([]); setReplaceUndatedCurrent(false); dateRequest.current = null;
+      setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false); dateRequest.current = null;
       setHeldCount(held.length); setFileHasDates(importPreview.hasDates); setFileHadConflicts(importPreview.conflicts.length > 0); setSaveReview(false); setConfirmedReview("");
       const productByLine = new Map<string, string>();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
@@ -439,6 +440,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         const createdResponse = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: onMapped ? "create-dated-standards" : "create-standards", companyId, supplierProductIds: chunk }) });
         const created = await createdResponse.json().catch(() => ({}));
         if (!createdResponse.ok) throw new Error(created.message || "상품관리 등록에 실패했습니다.");
+        if (onMapped) setDateCreatedCount(current => current + Number(created.createdCount || 0));
         for (const item of created.productMappings || []) mapped.set(item.supplierProductId, item.productCatalogId);
         publishMappings();
         if (onMapped && created.unresolvedSupplierProductIds?.length) throw new Error("일부 상품 연결이 확정되지 않았습니다. 등록된 상품을 확인한 뒤 다시 시도해 주세요.");
@@ -543,7 +545,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         await createNewProducts(pending, (key, productId, supplierProductId) => {
           mappedLines = mappedLines.map(line => lineKey(line) === key ? { ...line, productId, supplierProductId } : line);
           setImportedLines(mappedLines);
-          setDateCreatedIds(current => current.includes(productId) ? current : [...current, productId]);
+          setDateMappedIds(current => current.includes(productId) ? current : [...current, productId]);
           setDatePartial("상품 등록 단계가 진행됐습니다. 날짜별 가격·거래 저장은 아직 완료되지 않았습니다. 같은 파일에서 다시 시도해 주세요.");
         });
         if (mappedLines.some(line => !line.productId)) throw new Error(`상품 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ")}. 이름으로 추정하지 않습니다. 상품 연결을 확인해 주세요.`);
@@ -788,8 +790,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       {batchEnabled && !usesDateBatch && priceChangeCount > 100 ? <p role="alert">가격 변경 {priceChangeCount}건은 최대 100건을 초과합니다. 저장 전 선택 건수를 줄여 주세요. 새 상품·이력을 먼저 저장하지 않습니다.</p> : null}
       {dateSaveBlocked ? <p role="status">구매일 기준 저장은 준비 중입니다. 현재 가격일보다 과거인 단가는 현재 매입가에 반영하지 않는 저장 경로가 필요합니다.</p> : null}
       {datePartial ? <p role="status">{datePartial}</p> : null}
-      {datePartial ? <p>미가격 상태로 등록한 상품 {dateCreatedIds.length}개 · 날짜별 가격 적용 미완료: {importedLines.length}행 · 연결 미완료 {importedLines.filter(line => !line.productId).length}행. 상품 등록 결과와 구분해 확인해 주세요.</p> : null}
+      {datePartial ? <p>확정 연결 상품 {dateMappedIds.length}개 · 새로 등록한 미가격 상품 {dateCreatedCount}개 · 날짜별 가격 적용 미완료: {importedLines.length}행 · 연결 미완료 {importedLines.filter(line => !line.productId).length}행. 상품 등록 결과와 구분해 확인해 주세요.</p> : null}
       {saveReview ? <>
+        {usesDateBatch && importedLines.some(line => !line.productId) ? <p>연결 미완료 원문 {importedLines.filter(line => !line.productId).length}행은 먼저 상품 연결을 확정합니다. 가격 반영을 보류한 품목도 원문 연결에 필요한 새 미가격 상품이 등록될 수 있습니다.</p> : null}
         <h3 className="font-semibold">최종 저장 확인</h3><p>가격 변경 {priceChangeCount}건 · 새 상품 {unmatched.length}건 · 원본 거래 {importedLines.length}행의 적용 날짜를 확인해 주세요.</p>
         {usesDateBatch && undatedTargets.length ? <div>
           <p>기준일 미확정 기존가 {undatedTargets.length}품목 · 이전 가격과 선택 날짜를 확인해 주세요.</p>

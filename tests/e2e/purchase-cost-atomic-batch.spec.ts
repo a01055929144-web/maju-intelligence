@@ -350,7 +350,7 @@ for (const width of [1280, 390]) test(`new-product mapping survives failed v2 sa
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "합성 원자 저장 실패" })).toBeVisible();
   await expect(review).toContainText("날짜별 가격 적용 미완료: 2행");
-  await expect(review).toContainText("미가격 상태로 등록한 상품 1개");
+  await expect(review).toContainText("새로 등록한 미가격 상품 1개");
   expect(registration).toEqual({ imports: 1, standards: 1 });
   expect(dateWrites[0].rows.every(row => row.productId === "20000000-0000-4000-8000-000000000001")).toBe(true);
   await review.getByRole("checkbox").check();
@@ -385,7 +385,8 @@ test("date rollout blocks direct v1 cost changes without leaving a stale price d
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0); expect(dateWrites).toHaveLength(0);
 });
 
-for (const replace of [false, true]) test(`undated existing price needs separate explicit replacement approval: ${replace}`, async ({ page }) => {
+for (const replace of [false, true]) test(`undated existing price needs separate explicit replacement approval: ${replace}`, async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 900 });
   const { dateWrites } = await purchaseUpload(page, { undatedCurrent: true });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\nERP-1,합성 상품,1kg,봉,2026-11-04,200\n");
   await page.getByRole("button", { name: "② 열 정렬", exact: true }).click();
@@ -395,6 +396,8 @@ for (const replace of [false, true]) test(`undated existing price needs separate
   await expect(review.getByRole("cell", { name: "100원", exact: true })).toBeVisible();
   await expect(review.getByRole("cell", { name: "2026-11-07", exact: true })).toBeVisible();
   if (replace) await review.getByRole("checkbox", { name: "기준일 없는 기존가 교체", exact: true }).check();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (replace) await page.screenshot({ path: info.outputPath("purchase-date-undated-current-390.png"), fullPage: true });
   await review.getByRole("checkbox", { name: "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.", exact: true }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
