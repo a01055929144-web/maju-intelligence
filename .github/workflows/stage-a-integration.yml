@@ -1,0 +1,71 @@
+name: Stage A real API PG17 integration
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage-a-integration:
+    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: maju_stage_a_integration
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d maju_stage_a_integration"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      postgrest:
+        image: postgrest/postgrest:v12.2.8
+        env:
+          PGRST_DB_URI: postgres://postgres:postgres@postgres:5432/maju_stage_a_integration
+          PGRST_DB_SCHEMAS: public
+          PGRST_DB_ANON_ROLE: anon
+          PGRST_JWT_SECRET: stage-a-isolated-postgrest-secret-2026
+          PGRST_DB_MAX_ROWS: 1000
+        ports:
+          - 3002:3000
+    env:
+      STAGE_A_INTEGRATION: isolated
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: maju_stage_a_integration
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      SUPABASE_URL: http://127.0.0.1:3001
+      PGRST_JWT_SECRET: stage-a-isolated-postgrest-secret-2026
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Load canonical contracts into disposable PG17
+        run: node scripts/setup-stage-a-integration.mjs
+      - name: Build isolated test application
+        run: npm run build
+        env:
+          SUPABASE_URL: ""
+          SUPABASE_SERVICE_ROLE_KEY: ""
+          CI_LAYOUT_FIXTURES: enabled
+          PRICE_SHEETS_ENABLED: "true"
+          FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+      - run: npx playwright install chromium
+      - name: Exercise real browser API PostgREST PG17 path
+        run: npx playwright test --config playwright.stage-a.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage-a-real-api-pg17-report
+          path: |
+            stage-a-report
+            test-results/stage-a
+          if-no-files-found: ignore
+          retention-days: 14

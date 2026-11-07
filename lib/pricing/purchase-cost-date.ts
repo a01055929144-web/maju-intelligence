@@ -24,12 +24,16 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
   // Until SQL validates conversion under the same locks, mismatched units remain blocked.
   const ids = Array.from(new Set(rows.map(row => row.productId)));
   const units = new Map<string, string>();
+  const unconfirmedPacks = new Set<string>();
   for (let offset = 0; offset < ids.length; offset += 100) {
-    const products = await supabaseRequest<Array<{ id: string; sales_unit: string | null }>>(
-      `product_catalog?select=id,sales_unit&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${ids.slice(offset, offset + 100).join(",")})`);
-    products.forEach(product => units.set(product.id, (product.sales_unit || "").trim().toLowerCase()));
+    const products = await supabaseRequest<Array<{ id: string; sales_unit: string | null; purchase_to_sales_ratio?: number | null }>>(
+      `product_catalog?select=id,sales_unit,purchase_to_sales_ratio&company_id=eq.${encodeURIComponent(companyId)}&id=in.(${ids.slice(offset, offset + 100).join(",")})`);
+    products.forEach(product => {
+      units.set(product.id, (product.sales_unit || "").trim().toLowerCase());
+      if (!product.sales_unit && Number(product.purchase_to_sales_ratio) > 1) unconfirmedPacks.add(product.id);
+    });
   }
-  if (rows.some(row => row.unit.trim() && units.get(row.productId) && units.get(row.productId) !== row.unit.trim().toLowerCase())) throw new Error("purchase_date_unit_conversion_pending");
+  if (rows.some(row => row.priceSelected && (unconfirmedPacks.has(row.productId) || (row.unit.trim() && units.get(row.productId) && units.get(row.productId) !== row.unit.trim().toLowerCase())))) throw new Error("purchase_date_unit_conversion_pending");
   const result = await supabaseRequest<{ batchId: string; recalcRunId: string | null; status: "completed" | "restored"; rowCount: number; historyOnlyProductCount: number }>("rpc/save_purchase_cost_date_batch_v2", {
     method: "POST", body: JSON.stringify({ p_company: companyId, p_batch: batchId, p_default_receipt_date: date,
       p_rows: rows, p_actor_name: actor, p_source_file_name: fileName })
@@ -43,7 +47,7 @@ export function restorePurchaseDateBatch(companyId: string, batchId: string, act
 }
 export function purchaseDateError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("purchase_date_unit_conversion_pending")) return "원본 단위와 상품 판매 단위가 다르거나 비어 있습니다. 상품 단위를 확인한 뒤 다시 시도해 주세요.";
+  if (message.includes("purchase_date_unit_conversion_pending")) return "매입처 단위와 판매 단위의 환산을 먼저 확인해 주세요. 확인 전에는 해당 상품의 가격을 반영하지 않았습니다.";
   if (message.includes("purchase_cost_date_batch_conflict")) return "같은 요청 번호의 내용이 달라졌습니다. 목록과 원본 파일을 다시 확인해 주세요.";
   if (message.includes("changed") || message.includes("latest") || message.includes("restored_separately")) return "기존 가격이나 이후 변경 내역이 달라 처리하지 못했습니다. 화면 전체를 새로고침하고 원본 파일을 다시 올려 현재 가격과 적용일을 확인해 주세요.";
   return "날짜별 매입가 처리가 완료되지 않았습니다. 같은 요청으로 다시 시도하거나 목록을 새로고침해 결과를 확인해 주세요.";

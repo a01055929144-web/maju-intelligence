@@ -154,3 +154,15 @@ it("recovers the exact pending batch in company scope even if a newer batch exis
   expect(mocks.db).toHaveBeenCalledTimes(1);
   expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&id=eq.${batchId}`);
 });
+
+it("blocks an unconfirmed multipack price while allowing held receipt history", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]);
+  const response = await post(payload());
+  expect(response.status).toBe(409); expect((await response.json()).message).toContain("환산을 먼저 확인");
+  expect(mocks.db.mock.calls.some(([path]) => path.startsWith("rpc/"))).toBe(false);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]);
+  const input = payload();
+  expect((await post({ ...input, rows: [{ ...input.rows[0], priceSelected: false, priceHeld: true }] })).status).toBe(200);
+  expect(mocks.db.mock.calls.at(-1)?.[0]).toBe("rpc/save_purchase_cost_date_batch_v2");
+});
