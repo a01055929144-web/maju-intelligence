@@ -82,6 +82,10 @@ test("empty and invalid files, row errors and server permission errors never app
   await file.setInputFiles(csv(valid.replace("3500", "-1")));
   await expect(upload.getByText("반영 후보 0행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
   await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
+  await file.setInputFiles(csv(valid + "2026-11-07,합성 오류 행,1kg,봉,-1\n"));
+  await expect(upload.getByText("반영 후보 1행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
+  await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
+  await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
   expect(posts).toBe(0);
   await file.setInputFiles(csv(valid));
   for (const [code, message] of [[401, "로그인"], [403, "점주·관리자"], [404, "아직 사용할 수 없습니다"], [400, "열 연결"], [503, "다시 시도"]] as const) {
@@ -123,6 +127,11 @@ test("xlsx date cells normalize through the 04 parser; a new file resets confirm
   await upload.getByRole("button", { name: "반영 전 최종 확인", exact: true }).click();
   await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toBeDisabled();
   expect(previews[0].importId).not.toBe(previews[1].importId);
+  await upload.getByLabel("원가 파일 선택").setInputFiles(csv(valid + "2026-11-07,합성 오류 행,1kg,봉,-1\n"));
+  await expect(upload.getByText("반영 후보 1행 · 오류 1행 · 중복 0행", { exact: true })).toBeVisible();
+  await expect(upload.getByRole("button", { name: "확인 후 반영", exact: true })).toHaveCount(0);
+  await expect(upload.getByRole("button", { name: "반영 전 최종 확인", exact: true })).toBeDisabled();
+  expect(previews).toHaveLength(2);
 });
 
 test("staff and 390px keep the upload controls hidden", async ({ page }, info) => {

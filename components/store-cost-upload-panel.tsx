@@ -46,6 +46,8 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
     catch (error) { return { data: null, error: error instanceof Error ? error.message : "필수 열을 연결해 주세요." }; }
   }, [fieldMap, headers, sheet, sourceRows]);
 
+  const previewValid = Boolean(preview?.data?.rows.length && preview.data.errors.length === 0);
+
   function invalidate() { setServer(null); setConfirmed(false); setError(""); importId.current = crypto.randomUUID(); }
   async function readFile(file: File | undefined) {
     if (!file || busy) return;
@@ -87,7 +89,7 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
     finally { setBusy(false); }
   }
   async function apply() {
-    if (!server || !confirmed || busy) return;
+    if (!server || !confirmed || busy || !previewValid) return;
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/store/costs/import", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -135,7 +137,7 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
       {server && <div className="space-y-3">
         <p>반영할 {server.rows.length}행을 확인했습니다. 원가와 중복 처리 내용을 확인한 뒤 반영해 주세요.</p>
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} />미리보기 원가와 중복 처리 내용을 확인했습니다.</label>
-        <Button className="min-h-[44px]" disabled={busy || !confirmed} onClick={() => void apply()}>확인 후 반영</Button>
+        <Button className="min-h-[44px]" disabled={busy || !confirmed || !previewValid} onClick={() => void apply()}>확인 후 반영</Button>
       </div>}
     </>}
   </section>;
