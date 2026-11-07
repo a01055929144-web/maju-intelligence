@@ -435,8 +435,8 @@ export function ProductCatalogWorkspace({
                                 `환산 ${item.suggestedRatio || 1}:1 확정`
                               ) : canConfirmConversion(item) ? (
                                 <div className="flex min-w-52 flex-wrap items-center gap-2">
-                                  <label className="sr-only" htmlFor={`conversion-${item.id}`}>매입 1{item.rawUnit || "단위"}당 기본 단위 수</label>
                                   <input
+                                    aria-label={`매입 1${item.rawUnit || "단위"}당 기본 단위 수`}
                                     className="maju-input min-h-11 w-24"
                                     id={`conversion-${item.id}`}
                                     min="0.001"
