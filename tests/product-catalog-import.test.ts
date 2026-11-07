@@ -5,10 +5,10 @@ vi.mock("../lib/store", () => ({ supabaseRequest }));
 
 import {
   createCatalogFromSupplierProducts,
-  defaultConversionReviewRatio,
   listProductImportWorkspace,
   type SupplierProductAdminItem,
 } from "../lib/product-catalog-import";
+import { defaultConversionReviewRatio } from "../lib/product-conversion-review";
 
 describe("product catalog import data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
