@@ -90,7 +90,9 @@ do $$ begin
 end $$;
 select public.prepare_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000003',
   '40000000-0000-4000-8000-000000000001',repeat('d',64));
-update public.store_owner_activation_requests set expires_at=clock_timestamp()-interval '1 second' where invite_token_hash=repeat('d',64);
+update public.store_owner_activation_requests
+  set prepared_at=clock_timestamp()-interval '2 minutes',expires_at=clock_timestamp()-interval '1 minute'
+  where invite_token_hash=repeat('d',64);
 do $$ begin
   begin perform public.activate_store_owner_v1(repeat('d',64),'30000000-0000-4000-8000-000000000001','2026-11-07',clock_timestamp(),
     '3234567890','active',clock_timestamp(),gen_random_uuid()::text); raise exception 'expired_activation_used';
