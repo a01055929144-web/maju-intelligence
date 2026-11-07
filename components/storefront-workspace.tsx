@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
+import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 
@@ -31,7 +32,7 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));
 
-export function StorefrontWorkspace({ costAccess = null }: { costAccess?: StoreCostAccess }) {
+export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null }) {
   const [token, setToken] = useState("");
   const [data, setData] = useState<Response | null>(null);
   const [tab, setTab] = useState<"home" | "order" | "history" | "data" | "info">("home");
@@ -56,7 +57,7 @@ export function StorefrontWorkspace({ costAccess = null }: { costAccess?: StoreC
   useEffect(() => {
     const value = window.location.hash.slice(1);
     if (value && value.length <= 200) setToken(value);
-    else setMessage("매장 링크를 확인해 주세요.");
+    else setMessage("주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.");
   }, []);
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
@@ -188,7 +189,7 @@ export function StorefrontWorkspace({ costAccess = null }: { costAccess?: StoreC
     <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
     {loadError && token ? <button disabled={loading || busy} className="min-h-[44px] rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
   </div>;
-  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : message || "매장 정보를 불러오는 중입니다."}</p>}</main>;
+  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess || storeLogin ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : message || "매장 정보를 불러오는 중입니다."}</p>}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
@@ -329,6 +330,7 @@ export function StorefrontWorkspace({ costAccess = null }: { costAccess?: StoreC
           <p className="mt-2 text-2xl">{data?.preferences.filter((item) => item.isFavorite && !item.isHidden).length ?? 0}품목</p>
           <button className="mt-3 min-h-[44px] rounded border px-3" onClick={() => { setPriceChangesOnly(false); setCategory("전체"); setProductView("favorites"); setTab("order"); }}>즐겨찾기 보기</button></div>
       </div>
+      {storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}
       {costAccess ? <StoreCostPanel access={costAccess} /> : <div className="rounded border p-4"><h3 className="font-semibold">매장 자체 원가관리</h3>
         <p className="mt-2 text-sm text-slate-600">매장 자체 원가관리는 준비 중입니다. 현재 주문 링크에서는 원가 자료를 제공하지 않습니다.</p></div>}
     </section>}

@@ -9,6 +9,7 @@ import * as accessRules from "../domains/organization/store-cost-access";
 const dependencies: Record<string, unknown> = {
   "react/jsx-runtime": jsxRuntime,
   "next/navigation": { notFound: () => { throw new Error("404"); } },
+  "@/lib/auth": { storeMemberSessionEnabled: () => false },
   "@/lib/pricing/feature": { priceSheetsEnabled: () => true },
   "@/lib/pricing/store-order-feature": { storeOrderingEnabled: () => true },
   "@/lib/feature-flags": { isFeatureEnabled: mocks.feature, hasFeatureRollout: mocks.rollout },
