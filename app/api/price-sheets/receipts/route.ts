@@ -178,9 +178,12 @@ export async function POST(request: NextRequest) {
     companyId: auth.companyId,
     fileName: String(body?.fileName || "").slice(0, 200),
     lines: lines.map((line) => ({ ...line, supplier: line.supplier?.trim() || "기본 매입처" })),
+    preserveSourceRows: (process.env.FEATURE_PURCHASE_RECEIPT_SOURCE_ROW_COMPANY_IDS || "")
+      .split(",").some((id) => id.trim() === auth.companyId),
     receiptDate
   });
   if (!rows.length) return NextResponse.json({ saved: 0 });
+  let saved = 0;
   try {
     for (let offset = 0; offset < rows.length; offset += 500) {
       await supabaseRequest("purchase_receipt_lines?on_conflict=company_id,dedupe_key", {
@@ -188,6 +191,7 @@ export async function POST(request: NextRequest) {
         headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify(rows.slice(offset, offset + 500))
       });
+      saved += Math.min(500, rows.length - offset);
     }
     // 상품 과세 구분 채우기(비어 있는 상품만).
     const plan = planProductTaxTypes(lines, products);
@@ -212,9 +216,9 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({ ...item.values, updated_at: new Date().toISOString() })
       }).then(() => { fieldsFilled += 1; }).catch(() => null);
     });
-    return NextResponse.json({ fieldsFilled, saved: rows.length, taxConflicts: plan.conflicts.length, taxFilled });
+    return NextResponse.json({ fieldsFilled, saved, taxConflicts: plan.conflicts.length, taxFilled });
   } catch (error) {
     const missing = error instanceof Error && /purchase_receipt_lines|PGRST205|42P01|404/.test(error.message);
-    return NextResponse.json({ message: missing ? "DB 승인 후 시작됩니다" : "저장하지 못했습니다" }, { status: missing ? 503 : 500 });
+    return NextResponse.json({ failed: rows.length - saved, message: missing ? "DB 승인 후 시작됩니다" : saved ? `${saved}줄은 저장됐고 ${rows.length - saved}줄은 저장되지 않았습니다. 다시 시도해 주세요.` : "저장하지 못했습니다", saved }, { status: missing ? 503 : 500 });
   }
 }

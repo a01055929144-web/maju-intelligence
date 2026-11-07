@@ -9,7 +9,7 @@ vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: () => true }));
 vi.mock("@/lib/pricing/feature", () => ({ priceSheetsEnabled: () => true }));
 vi.mock("@/domains/pricing/purchase-receipt", () => import("../domains/pricing/purchase-receipt"));
 vi.mock("@/lib/run-limited", () => ({ runLimited: vi.fn() }));
-import { GET, PATCH } from "../app/api/price-sheets/receipts/route";
+import { GET, PATCH, POST } from "../app/api/price-sheets/receipts/route";
 
 const company = "00000000-0000-4000-8000-000000000001";
 beforeEach(() => {
@@ -88,4 +88,21 @@ it("shows the corrected effective item while retaining the raw receipt row", asy
   const response = await GET(new NextRequest("https://example.test/api/price-sheets/receipts"));
   expect(await response.json()).toMatchObject({ canCorrect: true, rows: [{ product_name: "정정", unit_cost_ex_vat: 90, corrected: true }] });
   expect(String(mocks.db.mock.calls[0][0])).toContain("purchase_receipt_effective?");
+});
+
+it("reports how many receipt rows remain after a later chunk fails", async () => {
+  vi.stubEnv("FEATURE_PURCHASE_RECEIPT_SOURCE_ROW_COMPANY_IDS", company);
+  let writes = 0;
+  mocks.db.mockImplementation(async (path: string) => {
+    if (!path.startsWith("purchase_receipt_lines?")) return [];
+    writes += 1;
+    if (writes === 2) throw new Error("write failed");
+    return [];
+  });
+  const lines = Array.from({ length: 501 }, (_, index) => ({ name: `품목 ${index}`, rawCost: 100, cost: 100, rowNumber: index + 2 }));
+  const response = await POST(new NextRequest("https://example.test/api/price-sheets/receipts", {
+    method: "POST", body: JSON.stringify({ fileName: "매입.xlsx", lines, receiptDate: "2026-11-07" })
+  }));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ failed: 1, saved: 500 });
 });
