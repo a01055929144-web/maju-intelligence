@@ -432,7 +432,22 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     }
     const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량" };
     for (const [supplierName, items] of Array.from(groups.entries())) {
-      const raw = items.map((row) => ({ 상품명: row.rawName || row.name, 규격: row.rawName ? row.fileSpec : row.spec, 단위: row.rawName ? row.fileUnit : row.unit, 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" }));
+      // Registration may reuse an explicit, unambiguous unit for the same ERP identity.
+      // Original receipt units and callback keys stay untouched, including blank cells.
+      const sourceUnits = new Map<string, Set<string>>();
+      const identity = (row: NewRow) => JSON.stringify([row.code || row.rawName || row.name, row.fileSpec ?? row.spec]);
+      if (onMapped) for (const row of items) {
+        const unit = (row.fileUnit || row.unit || "").trim();
+        if (!unit) continue;
+        const values = sourceUnits.get(identity(row)) || new Set<string>();
+        values.add(unit); sourceUnits.set(identity(row), values);
+      }
+      const raw = items.map((row) => {
+        const known = sourceUnits.get(identity(row));
+        const unit = row.rawName ? row.fileUnit : row.unit;
+        return { 상품명: row.rawName || row.name, 규격: row.rawName ? row.fileSpec : row.spec,
+          단위: unit || (known?.size === 1 ? Array.from(known)[0] : ""), 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" };
+      });
       const preview = buildCatalogPreview(raw, catalogMapping, supplierName);
       const response = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save-import", companyId, fileName: fileName || "매입가 반영", supplierName, mapping: catalogMapping, products: preview.products, excludedCount: preview.excludedCount, warnings: preview.warnings }) });
       const saved = await response.json().catch(() => ({}));

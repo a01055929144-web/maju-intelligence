@@ -135,6 +135,19 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     expect(standalonePricingWrites).toBe(0); expect(Number(saved.other_cost)).toBe(999);
     console.info(`stage-a real-api PG17 width=${scenario.width} existing=${scenario.existing} rows=3417 products=745 conflicts=188 emptyUnits=1552 savedMs=${Date.now()-started}`);
     await page.reload();
+    const checkVisibleCosts = async (restored: boolean) => {
+      await page.getByRole('navigation',{name:'매입가 보기',exact:true}).getByRole('button',{name:'전체',exact:true}).click();
+      for (const i of [0,12,13,14,744]) {
+        const label=name(i,scenario.existing);
+        await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill(label);
+        const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
+        const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
+        await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
+      }
+      await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill('');
+    };
+    await checkVisibleCosts(false);
+    await page.screenshot({path:info.outputPath('real-stage-a-saved.png')});
     await expect(page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'매입 이력',exact:true}).click();
     const panel=page.getByRole('heading',{name:'매입 이력',exact:true}).locator('xpath=ancestor::section[1]');
@@ -156,6 +169,8 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       const product=restored.items.find(item=>item.code===code(i))!, cost=i<scenario.existing?100:0;
       expect(Number(product.cost)).toBe(cost); expect(Number(product.price)).toBe(i<scenario.existing?120:0);
     }
+    await checkVisibleCosts(true);
+    await page.screenshot({path:info.outputPath('real-stage-a-restored.png')});
     expect(Number(restored.other_cost)).toBe(999); expect(standalonePricingWrites).toBe(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   });
