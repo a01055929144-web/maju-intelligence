@@ -13,8 +13,13 @@ type RequestCall = { body: unknown; method: string; path: string };
 const calls: RequestCall[] = [];
 let existingCustomer = false;
 let failNormalizedSave = false;
-let failReportSave = false;
+let reportFailures = 0;
 let duplicateImportCustomer = false;
+let snapshotFailures = 0;
+let recommendationFailures = 0;
+let savedReport = false;
+let savedSnapshot = false;
+let savedRecommendations = false;
 const originalEnv = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY, atomic: process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED };
 let rpcFailures = 0;
 
@@ -48,7 +53,24 @@ beforeAll(() => {
     if (method === "POST" && path.startsWith("normalized_customers?")) {
       return failNormalizedSave ? new Response("save failed", { status: 500 }) : json([{ id: "customer-1", customer_name: "테스트 거래처", address: "서울" }], 201);
     }
-    if (method === "POST" && path === "ai_reports") return failReportSave ? new Response("report failed", { status: 500 }) : json([{ id: "report-1" }], 201);
+    if (method === "GET" && path.startsWith("ai_reports?select=id")) return json(savedReport ? [{ id: "report-1" }] : []);
+    if (method === "POST" && path === "ai_reports") {
+      if (reportFailures-- > 0) return new Response("report failed", { status: 500 });
+      savedReport = true;
+      return json([{ id: "report-1" }], 201);
+    }
+    if (method === "GET" && path.startsWith("health_score_snapshots?select=id")) return json(savedSnapshot ? [{ id: "snapshot-1" }] : []);
+    if (method === "POST" && path === "health_score_snapshots") {
+      if (snapshotFailures-- > 0) return new Response("snapshot failed", { status: 500 });
+      savedSnapshot = true;
+      return json([{ id: "snapshot-1" }], 201);
+    }
+    if (method === "GET" && path.startsWith("lead_recommendations?select=id")) return json(savedRecommendations ? [{ id: "lead-1" }] : []);
+    if (method === "POST" && path === "lead_recommendations") {
+      if (recommendationFailures-- > 0) return new Response("recommendation failed", { status: 500 });
+      savedRecommendations = true;
+      return json([{ id: "lead-1" }], 201);
+    }
     if (method === "GET" && path.startsWith("normalized_customers?select=id,customer_name,address,normalized_key")) {
       return json(duplicateImportCustomer ? [{ id: "existing-1", customer_name: "테스트 거래처", address: "부산", normalized_key: "different" }] : []);
     }
@@ -63,8 +85,13 @@ beforeEach(() => {
   calls.length = 0;
   existingCustomer = false;
   failNormalizedSave = false;
-  failReportSave = false;
+  reportFailures = 0;
   duplicateImportCustomer = false;
+  snapshotFailures = 0;
+  recommendationFailures = 0;
+  savedReport = false;
+  savedSnapshot = false;
+  savedRecommendations = false;
   rpcFailures = 0;
   process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "false";
 });
@@ -140,7 +167,7 @@ describe("customer import history status", () => {
 
   it("keeps an atomic customer save successful when report post-processing fails", async () => {
     process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "true";
-    failReportSave = true;
+    reportFailures = 2;
     const result = await saveAnalysis([{ companyName: "테스트", customerName: "테스트 거래처", region: "서울", address: "서울",
       industry: "한식", monthlyRevenue: 1, lastOrderDays: 1, visitCount: 1, deliveryKm: 1 }], "테스트", {
       companyId: "company-1", uploadType: "customer-master"
@@ -148,5 +175,46 @@ describe("customer import history status", () => {
     expect(result.persisted).toBe(true);
     expect(result.pipeline.postProcessingWarning).toContain("거래처 저장은 완료");
     expect(result.pipeline.postProcessingWarning).not.toContain("report failed");
+  });
+
+  it("retries a failed report with the same import without duplicating later artifacts", async () => {
+    process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "true";
+    reportFailures = 1;
+    const result = await saveAnalysis([{ companyName: "테스트", customerName: "테스트 거래처", region: "서울", address: "서울",
+      industry: "한식", monthlyRevenue: 1, lastOrderDays: 1, visitCount: 1, deliveryKm: 1 }], "테스트", {
+      companyId: "company-1", uploadType: "customer-master"
+    });
+    expect(result.persisted).toBe(true);
+    expect(calls.filter(call => call.method === "POST" && call.path === "ai_reports")).toHaveLength(2);
+    expect(calls.filter(call => call.method === "POST" && call.path === "health_score_snapshots")).toHaveLength(1);
+    expect(calls.filter(call => call.method === "POST" && call.path === "lead_recommendations")).toHaveLength(1);
+  });
+
+  it("retries a failed health snapshot without duplicating the report or recommendations", async () => {
+    process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "true";
+    snapshotFailures = 1;
+    const result = await saveAnalysis([{ companyName: "테스트", customerName: "테스트 거래처", region: "서울", address: "서울",
+      industry: "한식", monthlyRevenue: 1, lastOrderDays: 1, visitCount: 1, deliveryKm: 1 }], "테스트", {
+      companyId: "company-1", uploadType: "customer-master"
+    });
+    expect(result.persisted).toBe(true);
+    expect(result.pipeline.postProcessingWarning).toBeUndefined();
+    expect(calls.filter(call => call.method === "POST" && call.path === "ai_reports")).toHaveLength(1);
+    expect(calls.filter(call => call.method === "POST" && call.path === "health_score_snapshots")).toHaveLength(2);
+    expect(calls.filter(call => call.method === "POST" && call.path === "lead_recommendations")).toHaveLength(1);
+  });
+
+  it("retries failed recommendations without duplicating the report or health snapshot", async () => {
+    process.env.CUSTOMER_IMPORT_ATOMIC_RPC_ENABLED = "true";
+    recommendationFailures = 1;
+    const result = await saveAnalysis([{ companyName: "테스트", customerName: "테스트 거래처", region: "서울", address: "서울",
+      industry: "한식", monthlyRevenue: 1, lastOrderDays: 1, visitCount: 1, deliveryKm: 1 }], "테스트", {
+      companyId: "company-1", uploadType: "customer-master"
+    });
+    expect(result.persisted).toBe(true);
+    expect(result.pipeline.postProcessingWarning).toBeUndefined();
+    expect(calls.filter(call => call.method === "POST" && call.path === "ai_reports")).toHaveLength(1);
+    expect(calls.filter(call => call.method === "POST" && call.path === "health_score_snapshots")).toHaveLength(1);
+    expect(calls.filter(call => call.method === "POST" && call.path === "lead_recommendations")).toHaveLength(2);
   });
 });

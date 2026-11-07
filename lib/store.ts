@@ -8068,6 +8068,73 @@ async function saveCustomerImportAtomic(payload: Record<string, unknown>) {
   throw lastError;
 }
 
+async function saveAtomicCustomerImportArtifacts(
+  companyId: string,
+  importId: string,
+  report: AnalysisResult
+) {
+  const existingReports = await supabaseRequest<Array<{ id: string }>>(
+    `ai_reports?select=id&company_id=eq.${encodeURIComponent(companyId)}&import_id=eq.${encodeURIComponent(importId)}&order=created_at.asc&limit=1`
+  );
+  const reports = existingReports.length ? existingReports : await supabaseRequest<Array<{ id: string }>>("ai_reports", {
+    method: "POST",
+    body: JSON.stringify([{ company_id: companyId, import_id: importId, health_score: report.health.total, report }])
+  });
+  const reportId = reports[0]?.id;
+  if (!reportId) throw new Error("후속 분석 결과를 저장하지 못했습니다.");
+
+  const [snapshots, recommendations] = await Promise.all([
+    supabaseRequest<Array<{ id: string }>>(
+      `health_score_snapshots?select=id&company_id=eq.${encodeURIComponent(companyId)}&report_id=eq.${encodeURIComponent(reportId)}&limit=1`
+    ),
+    supabaseRequest<Array<{ id: string }>>(
+      `lead_recommendations?select=id&company_id=eq.${encodeURIComponent(companyId)}&report_id=eq.${encodeURIComponent(reportId)}&limit=1`
+    )
+  ]);
+  const leads = report.leadRecommendations.map((lead) => ({
+    company_id: companyId,
+    report_id: reportId,
+    name: lead.name,
+    region: lead.region,
+    score: lead.score,
+    reasons: lead.reasons,
+    status: lead.score >= 90 ? "today" : "this-week"
+  }));
+  await Promise.all([
+    snapshots.length ? Promise.resolve() : supabaseRequest("health_score_snapshots", {
+      method: "POST",
+      body: JSON.stringify([{
+        company_id: companyId,
+        report_id: reportId,
+        total: report.health.total,
+        sales_power: report.health.salesPower,
+        delivery_efficiency: report.health.deliveryEfficiency,
+        crm_management: report.health.crmManagement,
+        new_sales: report.health.newSales,
+        concentration: report.health.concentration,
+        risk: report.health.risk,
+        formula_version: "v1"
+      }])
+    }),
+    recommendations.length || !leads.length ? Promise.resolve() : supabaseRequest("lead_recommendations", {
+      method: "POST",
+      body: JSON.stringify(leads)
+    })
+  ]);
+  return reportId;
+}
+
+async function retryAtomicCustomerImportArtifacts(companyId: string, importId: string, report: AnalysisResult) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await saveAtomicCustomerImportArtifacts(companyId, importId, report);
+    } catch {
+      if (attempt > 0) throw new Error("거래처 저장 후속 처리를 완료하지 못했습니다.");
+    }
+  }
+  throw new Error("거래처 저장 후속 처리를 완료하지 못했습니다.");
+}
+
 export async function saveAnalysis(
   rows: CustomerRow[],
   companyName = "업로드 고객사",
@@ -8450,7 +8517,7 @@ export async function saveAnalysis(
           body: JSON.stringify(legacyCustomerRows)
         }).catch(() => null)
       : Promise.resolve(null),
-    supabaseRequest<Array<{ id: string }>>("ai_reports", {
+    useAtomicCustomerImport ? retryAtomicCustomerImportArtifacts(companyId, resolvedImportId, report).then(id => [{ id }]) : supabaseRequest<Array<{ id: string }>>("ai_reports", {
       method: "POST",
       body: JSON.stringify([
         {
@@ -8477,7 +8544,7 @@ export async function saveAnalysis(
   // 건강도 스냅샷과 리드 저장도 서로 독립적이므로 병렬로 실행합니다. ai_reports는 이미 저장이
   // 끝난 상태이므로, 이 두 부가 정보 중 하나가 실패해도 다른 하나까지 함께 날아가거나
   // saveAnalysis() 전체가 실패한 것처럼 보이지 않도록 각각 개별적으로 catch합니다.
-  await Promise.all([
+  if (!useAtomicCustomerImport) await Promise.all([
     supabaseRequest("health_score_snapshots", {
       method: "POST",
       body: JSON.stringify([
