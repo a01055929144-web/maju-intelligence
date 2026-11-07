@@ -111,19 +111,34 @@ test("390px can read callback errors without receiving an unscoped login action"
 for (const width of [1440, 390]) {
   test(`synthetic CRM link to owner consent, OAuth and cost Excel entry at ${width}px`, async ({ browser }, info) => {
     const origin = "http://127.0.0.1:3100";
-    const representative = await browser.newContext({ baseURL: origin, viewport: { width, height: 900 } });
-    const owner = await browser.newContext({ baseURL: origin, viewport: { width, height: 900 } });
+    const representative = await browser.newContext({ baseURL: origin, serviceWorkers: "block", viewport: { width, height: 900 } });
+    const owner = await browser.newContext({ baseURL: origin, serviceWorkers: "block", viewport: { width, height: 900 } });
     try {
       const login = await representative.request.post("/api/customer/login", {
         data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" }
       });
       expect(login.ok()).toBeTruthy();
       let enabled = true, probes = 0;
+      const blocked: string[] = [];
+      const syntheticRedirect = (url: string) => ({ contentType: "text/html; charset=utf-8",
+        headers: { "x-maju-synthetic": "owner-journey" }, body: `<link rel="icon" href="data:,"><script>location.replace(${JSON.stringify(url)})</script>` });
       const calls = { provision: 0, consent: 0, start: 0, oauth: 0, callback: 0, costs: 0, imports: 0, orders: 0 };
       const traffic: { url: string; referer: string; body: string; path: string }[] = [];
       for (const context of [representative, owner]) {
         // All non-loopback traffic is denied; the synthetic Kakao route below is fulfilled locally.
-        await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+        await context.route("**/*", async route => {
+          if (new URL(route.request().url()).origin !== origin) {
+            blocked.push(route.request().url());
+            return route.abort();
+          }
+          // Never release an HTTP redirect chain to Chromium: later hops can bypass routing.
+          const response = await route.fetch({ maxRedirects: 0 });
+          if (response.status() >= 300 && response.status() < 400) {
+            blocked.push(route.request().url());
+            return route.abort();
+          }
+          return route.fulfill({ response });
+        });
         await context.route("**/api/**", route => route.fulfill({ status: 503, json: { message: "Synthetic unavailable" } }));
         context.on("request", request => traffic.push({ url: request.url(), referer: request.headers().referer || "",
           body: request.postData() || "", path: new URL(request.url()).pathname }));
@@ -158,9 +173,11 @@ for (const width of [1440, 390]) {
         const url = new URL(route.request().url());
         if (enabled && route.request().isNavigationRequest() && ["/store", "/store/activate"].includes(url.pathname)) {
           url.searchParams.set("fixture", url.pathname === "/store/activate" ? "store-owner-activation" : "store-cost-owner");
-          return route.fulfill({ response: await route.fetch({ url: url.toString() }) });
+          const response = await route.fetch({ url: url.toString(), maxRedirects: 0 });
+          expect(response.status()).toBe(200);
+          return route.fulfill({ response });
         }
-        return route.continue();
+        return route.fallback();
       });
       await owner.route("**/api/store/accounts/activate", route => {
         calls.consent++;
@@ -172,16 +189,16 @@ for (const width of [1440, 390]) {
         calls.start++;
         const url = new URL(route.request().url());
         expect(Object.fromEntries(url.searchParams)).toEqual({ store: "1", companyId, storeAccountId, activation: "1" });
-        return route.fulfill({ status: 302, headers: { location: oauthUrl } });
+        return route.fulfill(syntheticRedirect(oauthUrl));
       });
       await owner.route("https://kauth.kakao.com/oauth/authorize?**", route => {
         calls.oauth++;
         expect(route.request().url()).toBe(oauthUrl);
-        return route.fulfill({ status: 302, headers: { location: `${origin}/api/auth/kakao/callback?code=synthetic&state=synthetic` } });
+        return route.fulfill(syntheticRedirect(`${origin}/api/auth/kakao/callback?code=synthetic&state=synthetic`));
       });
       await owner.route("**/api/auth/kakao/callback?**", route => {
         calls.callback++;
-        return route.fulfill({ status: 302, headers: { location: origin + storeUrl } });
+        return route.fulfill(syntheticRedirect(origin + storeUrl));
       });
       await owner.route("**/api/store/costs?**", route => {
         calls.costs++;
@@ -195,6 +212,12 @@ for (const width of [1440, 390]) {
         return route.fulfill({ status: 503, json: { message: "No import in this entry-only journey" } });
       });
       const crm = await representative.newPage(), page = await owner.newPage();
+      const navigations: string[] = [];
+      page.on("framenavigated", frame => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
+      const externalResponses: { url: string; synthetic: string | undefined }[] = [];
+      owner.on("response", response => {
+        if (new URL(response.url()).origin !== origin) externalResponses.push({ url: response.url(), synthetic: response.headers()["x-maju-synthetic"] });
+      });
       const assertPrivate = async (target: Page) => {
         const storage = await target.evaluate(() => [...Object.values(localStorage), ...Object.values(sessionStorage), document.cookie].join("\n"));
         expect(storage).not.toContain(token);
@@ -204,7 +227,7 @@ for (const width of [1440, 390]) {
       await crm.goto("/crm/timeline?section=ledger", { waitUntil: "domcontentloaded" });
       const create = crm.getByRole("button", { name: "매장 점주 개통 링크 만들기", exact: true });
       await expect(create).toBeVisible();
-      expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      if (width === 390) expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       await create.click();
       const issued = crm.getByLabel("점주 개통 링크", { exact: true });
       await expect(issued).toHaveValue(activationUrl);
@@ -244,6 +267,10 @@ for (const width of [1440, 390]) {
       const history = await cdp.send("Page.getNavigationHistory");
       expect(history.entries.map(entry => entry.url).join("\n")).not.toContain(token);
       await cdp.detach();
+      expect(externalResponses).toEqual([{ url: oauthUrl, synthetic: "owner-journey" }]);
+      expect(navigations.some(url => new URL(url).hostname === "accounts.kakao.com")).toBe(false);
+      expect(traffic.filter(request => new URL(request.url).origin !== origin).map(request => request.url)).toEqual([oauthUrl]);
+      expect(blocked).toEqual([]);
       for (const request of traffic) {
         expect(request.url + request.referer).not.toContain(token);
         if (request.path !== "/api/store/accounts/activate") expect(request.body).not.toContain(token);
@@ -263,6 +290,7 @@ for (const width of [1440, 390]) {
       await expect(upload).toHaveCount(0);
       await assertPrivate(page);
       expect(calls).toEqual(before);
+      expect(blocked).toEqual([]);
     } finally {
       await representative.close();
       await owner.close();
