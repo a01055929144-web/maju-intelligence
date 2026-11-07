@@ -22,20 +22,29 @@ begin
     p_request_fingerprint,p_accepted_via,p_customer_id,p_lead_id,p_send_id,
     p_needs_review,p_review_reason,null,p_customer_profile
   );
+  select id into v_request_id from public.pricing_document_acceptance_requests
+    where company_id=p_company_id and idempotency_key=p_idempotency_key for update;
+  if v_result ? 'orderEnabled' then
+    return v_result;
+  end if;
   v_customer := nullif(v_result->>'customerId','')::uuid;
   if v_customer is null then
-    return v_result || jsonb_build_object('orderEnabled',false);
+    v_result := v_result || jsonb_build_object('orderEnabled',false);
+    update public.pricing_document_acceptance_requests set result=v_result
+      where company_id=p_company_id and id=v_request_id;
+    return v_result;
   end if;
   if not exists(select 1 from public.store_order_settings where company_id=p_company_id) then
-    return v_result || jsonb_build_object('orderEnabled',false,'orderSetupRequired',true);
+    v_result := v_result || jsonb_build_object('orderEnabled',false,'orderSetupRequired',true);
+    update public.pricing_document_acceptance_requests set result=v_result
+      where company_id=p_company_id and id=v_request_id;
+    return v_result;
   end if;
   select * into v_link from public.issue_storefront_links(
     p_company_id,p_document_version_id,
     jsonb_build_array(jsonb_build_object('customerId',v_customer,'id',p_link_id,'nonce',p_link_nonce,'hash',p_link_hash)),
     p_link_expires_at,p_actor_user_id,p_actor_key
   );
-  select id into v_request_id from public.pricing_document_acceptance_requests
-    where company_id=p_company_id and idempotency_key=p_idempotency_key for update;
   update public.storefront_links set acceptance_request_id=v_request_id,can_order=true
     where company_id=p_company_id and id=v_link.issued_link_id
       and customer_id=v_customer and document_version_id=p_document_version_id;
