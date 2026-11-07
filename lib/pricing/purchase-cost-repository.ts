@@ -53,7 +53,7 @@ export const purchaseCostRepository: PurchaseCostRepository = {
         ...(row.tax_type === "taxable" || row.tax_type === "exempt" ? { taxType: row.tax_type as "taxable" | "exempt" } : {}),
       };
       const linked = byCatalog.get(base.id) || [];
-      return linked.length ? linked.map((supplier) => ({ ...base, supplierProductId: String(supplier.id), supplierCode: String(supplier.supplier_code || ""), supplierName: supplierNames.get(String(supplier.supplier_id)) || "", supplierRawKey: aliasKey(String(supplier.raw_name || ""), String(supplier.raw_spec || ""), String(supplier.raw_unit || "")) })) : [base];
+      return linked.length ? linked.map((supplier) => ({ ...base, supplierProductId: String(supplier.id), supplierCode: String(supplier.supplier_code || ""), supplierName: supplierNames.get(String(supplier.supplier_id)) || "", supplierRawKey: aliasKey(String(supplier.raw_name || ""), String(supplier.raw_spec || ""), String(supplier.raw_unit || "")), supplierRawCost: supplier.latest_cost == null ? null : Number(supplier.latest_cost) })) : [base];
     });
     const changes = catalog.map((row) => {
       const productId = String(row.id);

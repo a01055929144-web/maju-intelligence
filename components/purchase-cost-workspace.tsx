@@ -58,7 +58,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [message, setMessage] = useState("");
   const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
   const [recalcPending, setRecalcPending] = useState(false);
+  const [batchEnabled, setBatchEnabled] = useState(false);
+  const [latestBatch, setLatestBatch] = useState<{ id: string; restoredAt: string | null } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const batchRequest = useRef<{ key: string; id: string } | null>(null);
   useUnsavedChangesWarning(selected.length > 0 || Object.values(candidates).some((candidate) => candidate.method !== "매입처") || Boolean(sheet));
 
   const load = useCallback(async (options: { documents?: boolean } = {}) => {
@@ -78,6 +81,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setHistoryError(historyPayload ? "" : "최근 매입 변동을 확인하지 못했습니다. 새로고침해 주세요.");
     }
     setProducts(catalog.products);
+    setBatchEnabled(catalog.batchEnabled === true);
+    setLatestBatch(catalog.latestBatch || null);
     const serverCandidates = Object.fromEntries(((catalog.changes || []) as PurchaseCostCandidate[]).map((change) => [change.productId, {
       cost: change.cost,
       method: "매입처" as const,
@@ -370,7 +375,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개는 상품관리에서 확인 후 저장` : ""}`);
         setUnmatched([]);
       }
-      if (changes.length) {
+      if (changes.length && !batchEnabled) {
         const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, changes }) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "매입가를 저장하지 못했습니다.");
@@ -399,8 +404,25 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (editResult === false) warnings.push("상품 정보 수정 실패: 상품관리에서 품목명·규격·단위를 확인해 주세요");
       const receipt = await saveReceipts(relinked);
       if (!receipt.ok) warnings.push(`${receipt.note}. 매입 기록은 다시 저장할 수 있습니다`);
+      if (changes.length && batchEnabled) {
+        const batchChanges = changes.map((change) => ({
+          ...change,
+          ...(change.supplierProductId ? { expectedSupplierCost: products.find((product) => product.id === change.productId && product.supplierProductId === change.supplierProductId)?.supplierRawCost ?? null } : {})
+        }));
+        const key = JSON.stringify(batchChanges);
+        const batchId = batchRequest.current?.key === key ? batchRequest.current.id : crypto.randomUUID();
+        batchRequest.current = { key, id: batchId };
+        const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save-batch", companyId, batchId, changes: batchChanges }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(`매입가·판매가 일괄 저장 실패: ${result.message || "다시 확인해 주세요"}`);
+        if (!['applied', 'already_applied'].includes(result.status)) throw new Error("이미 복구된 저장 요청입니다. 목록을 새로고침해 현재 가격을 확인해 주세요.");
+        batchRequest.current = null;
+        setLatestBatch({ id: batchId, restoredAt: null });
+        setUndo(null);
+        notes.push(`매입가 ${changes.length}건·판매가 함께 저장`);
+      }
       setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
-      if (changes.length || notes.length) {
+      if ((changes.length || notes.length) && (!batchEnabled || !changes.length)) {
         const previousBatch = pricing?.lastBatch;
         try {
           const updated = await command("recalculate");
@@ -424,9 +446,21 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   async function restore() {
-    if (!undo || !window.confirm("직전 매입가 변경과 판매가 계산을 되돌릴까요?")) return;
+    const atomicBatchId = batchEnabled && latestBatch && !latestBatch.restoredAt ? latestBatch.id : null;
+    if ((!undo && !atomicBatchId) || !window.confirm("직전 매입가 변경과 판매가 계산을 되돌릴까요?")) return;
     setBusy(true); setError("");
     try {
+      if (atomicBatchId) {
+        const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "restore-batch", companyId, batchId: atomicBatchId }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "원자적 복구에 실패했습니다.");
+        setLatestBatch({ id: atomicBatchId, restoredAt: new Date().toISOString() });
+        setUndo(null);
+        await load();
+        setMessage("직전 매입가·판매가를 함께 복구했습니다.");
+        return;
+      }
+      if (!undo) return;
       if (undo.batchId) await command("restore", undo.batchId);
       const response = await fetch("/api/price-sheets/costs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, changes: undo.changes.map((change) => ({ ...change, fileName: "직전 저장 복구" })) }) });
       const result = await response.json();
@@ -483,13 +517,14 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">매입일<input aria-label="매입일" className="maju-input h-9" onChange={(event) => setReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
         <button className={`${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">② 열 정렬</button>
-        <button className={`maju-button-primary ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={busy || Boolean(sheet) || missingTotal > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => void save()} title={missingTotal ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${selected.length + unmatched.length}건)`}</button>
+        <button className={`maju-button-primary ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || missingTotal > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => void save()} title={missingTotal ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${selected.length + unmatched.length}건)`}</button>
         <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
       </div>
       <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal ? `새 상품 ${missingTotal}개에 단위가 비어 있습니다. 단위를 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
     </header>
     <input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); event.target.value = ""; }} ref={fileInput} type="file" />
     {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <button className="underline" onClick={() => void load()} type="button">목록 새로고침</button></p> : null}
+    {batchEnabled ? <p className="text-xs text-slate-600">선택한 매입가 최대 100건과 판매가 계산을 함께 저장합니다. 새 상품·원문 연결·매입 기록은 별도로 저장됩니다.</p> : null}
     {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
     {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3"><PurchaseSheetMapper mapping={mapping} onMapping={setMapping} onVatMode={setVatMode} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
@@ -549,7 +584,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       })}</tbody></table></div> : <p className="text-sm text-slate-500">새 상품이 없습니다.</p>}
       <Link className="text-xs font-bold text-teal-700 underline" href="/revenue/products">상품관리에서 전체 상품 보기</Link>
     </section> : <CommonDataTable columns={columns} emptyMessage={tab === "신규" ? "최근 30일에 등록된 상품이 없습니다. 엑셀을 올려 새 상품을 등록해 주세요." : "상품이 없습니다. 엑셀을 올리거나 상품관리에서 상품을 등록해 주세요."} filename="매입가_변경후보.csv" rowKey={(row) => row.id} rows={tab === "신규" ? recentNew : displayed} settingsKey={`purchase-cost:v2:${companyId}`} />}
-    <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {tab === "신규" ? recentNew.length : displayed.length}개 · 현재 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span><button className="maju-button-secondary" disabled={busy || !undo} onClick={() => void restore()} type="button">직전 저장 되돌리기</button><Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>
-    <p className="text-sm text-slate-600">직접 정한 판매가는 그대로 두고, 마진으로 계산하는 상품만 판매가를 다시 계산합니다. 저장 전 후보는 새로고침하면 사라집니다. 매입가 되돌리기는 저장한 화면에서만 가능하며, 새로고침 뒤에는 매입 이력에서 정정해 주세요.</p>
+    <div className="flex flex-wrap items-center gap-3 text-sm"><span>상품 {tab === "신규" ? recentNew.length : displayed.length}개 · 현재 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + row.cost, 0))} · 변경 후 합 {money((tab === "신규" ? recentNew : displayed).reduce((sum, row) => sum + (candidates[row.id]?.cost ?? row.cost), 0))}</span><button className="maju-button-secondary" disabled={busy || !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo} onClick={() => void restore()} type="button">{batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)"}</button><Link className="text-teal-700 underline" href="/revenue/pricing/margins">마진 그룹 설정</Link></div>
+    <p className="text-sm text-slate-600">직접 정한 판매가는 그대로 두고, 마진으로 계산하는 상품만 판매가를 다시 계산합니다. 저장 전 후보는 새로고침하면 사라집니다. {batchEnabled ? "원자적으로 저장한 직전 매입가·판매가는 새로고침 뒤에도 함께 되돌릴 수 있습니다." : "매입가 되돌리기는 저장한 화면에서만 가능하며, 새로고침 뒤에는 매입 이력에서 정정해 주세요."}</p>
   </div>;
 }
