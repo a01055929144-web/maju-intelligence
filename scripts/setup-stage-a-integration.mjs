@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, appendFileSync } from 'node:fs';
 import { Client } from 'pg';
+import { randomBytes } from 'node:crypto';
 
 assert.equal(process.env.STAGE_A_INTEGRATION, 'isolated');
 assert.equal(process.env.PGHOST, '127.0.0.1');
@@ -49,6 +50,11 @@ try {
     grant usage,select on all sequences in schema public to service_role;
     notify pgrst, 'reload schema';`);
   assert(process.env.GITHUB_ENV, 'Use only in the isolated CI job');
+  for (const name of ['STAGE_A_OWNER_PASSWORD', 'STAGE_A_ADMIN_PASSWORD', 'STAGE_A_SESSION_SECRET', 'PGRST_JWT_SECRET']) {
+    const value = randomBytes(32).toString('hex');
+    process.stdout.write(`::add-mask::${value}\n`);
+    appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
+  }
   appendFileSync(process.env.GITHUB_ENV, `STAGE_A_TEST_DATE=${new Date().toISOString().slice(0,10)}\n`);
   console.log(JSON.stringify({ pgMajor: 17, canonicalContractsLoaded: true, operatingDatabase: false }));
 } finally { await db.end(); }

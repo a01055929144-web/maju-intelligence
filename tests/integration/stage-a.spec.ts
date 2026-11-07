@@ -42,13 +42,13 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.setViewportSize({width:scenario.width,height:900});
     await page.route('**/*',route=>new URL(route.request().url()).host==='127.0.0.1:3101'?route.continue():route.abort());
     expect((await request.get(`/api/price-sheets/costs/date-batches?companyId=${company}`)).status()).toBe(401);
-    const login=await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:'ci-stage-a-owner-password-2026'}});
+    const login=await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}});
     expect(login.status()).toBe(200);
     const owner=(await page.context().cookies()).find(cookie=>cookie.name==='maju_customer_session')!;
     expect(owner).toBeTruthy();
     const decoded=JSON.parse(Buffer.from(owner.value.split('.')[0],'base64url').toString('utf8'));
     const member=Buffer.from(JSON.stringify({...decoded,role:'member',workspaceRole:'member'})).toString('base64url');
-    const signature=createHash('sha256').update(`${member}.ci-stage-a-session-secret-not-for-production`).digest('hex');
+    const signature=createHash('sha256').update(`${member}.${process.env.STAGE_A_SESSION_SECRET}`).digest('hex');
     await page.context().addCookies([{...owner,value:`${member}.${signature}`}]);
     expect((await page.request.get(`/api/price-sheets/costs/date-batches?companyId=${company}`)).status()).toBe(403);
     await page.context().addCookies([owner]);
@@ -163,7 +163,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
 
 test('real dated multipack registration stays unpriced until conversion is confirmed', async ({page})=>{
   db('seed',0);
-  expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:'ci-stage-a-owner-password-2026'}})).status()).toBe(200);
+  expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   const preview=buildCatalogPreview([{상품명:'검증 다입수 제트',규격:'100g*10EA',단위:'BOX',매입가:100}],{productName:'상품명',spec:'규격',unit:'단위',cost:'매입가'},'합성 매입처');
   expect(preview.products[0].packQuantity).toBeGreaterThan(1);
   const imported=await page.request.post('/api/product-catalog/imports',{data:{action:'save-import',companyId:company,fileName:'multipack-check.xlsx',supplierName:'합성 매입처',mapping:{productName:'상품명',cost:'매입가'},products:preview.products,excludedCount:0,warnings:[]}});

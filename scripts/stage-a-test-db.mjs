@@ -10,6 +10,7 @@ const supplier = '30000000-0000-4000-8000-000000000001';
 const uuid = (prefix,n) => `${prefix}0000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const testDate = process.env.STAGE_A_TEST_DATE || new Date().toISOString().slice(0,10);
 const priorDate = new Date(Date.parse(testDate+'T00:00:00Z')-172800000).toISOString().slice(0,10);
+assert(process.env.STAGE_A_OWNER_PASSWORD && process.env.STAGE_A_ADMIN_PASSWORD);
 const db = new Client(); await db.connect();
 try {
   assert.equal((await db.query('select current_database() name')).rows[0].name, 'maju_stage_a_integration');
@@ -34,8 +35,8 @@ try {
     await db.query(`insert into product_catalog(id,company_id,purchase_product_name,canonical_name,purchase_price,purchase_price_date,sales_unit)
       values($1,$2,'CI Other Sentinel','CI Other Sentinel',999,$3::date,'EA')`,[uuid('2',999999),other,priorDate]);
     await db.query(`insert into auth_credentials(id,customer_email,customer_password,customer_company_id,admin_email,admin_password)
-      values('maju-default','ci-owner@example.test','ci-stage-a-owner-password-2026',$1,'ci-admin@example.test','ci-stage-a-admin-password-2026')
-      on conflict(id) do update set customer_password=excluded.customer_password,customer_company_id=excluded.customer_company_id`,[company]);
+      values('maju-default','ci-owner@example.test',$2,$1,'ci-admin@example.test',$3)
+      on conflict(id) do update set customer_password=excluded.customer_password,customer_company_id=excluded.customer_company_id`,[company,process.env.STAGE_A_OWNER_PASSWORD,process.env.STAGE_A_ADMIN_PASSWORD]);
     console.log(JSON.stringify({seededExisting:count,otherCompanySentinel:true}));
   } else if (action === 'fail-on' || action === 'fail-off') {
     await db.query('update stage_a_failure_control set fail_recalculation=$2 where company_id=$1',[company,action==='fail-on']);

@@ -7,9 +7,9 @@ export default defineConfig({
   webServer: {
     command: 'node scripts/run-stage-a-integration.mjs', url: 'http://127.0.0.1:3101/dashboard/login', reuseExistingServer: false, timeout: 120_000,
     env: {
-      ADMIN_EMAIL: 'ci-admin@example.test', ADMIN_PASSWORD: 'ci-stage-a-admin-password-2026',
-      ADMIN_SESSION_SECRET: 'ci-stage-a-session-secret-not-for-production',
-      CUSTOMER_EMAIL: 'ci-owner@example.test', CUSTOMER_PASSWORD: 'ci-stage-a-owner-password-2026',
+      ADMIN_EMAIL: 'ci-admin@example.test', ADMIN_PASSWORD: process.env.STAGE_A_ADMIN_PASSWORD!,
+      ADMIN_SESSION_SECRET: process.env.STAGE_A_SESSION_SECRET!,
+      CUSTOMER_EMAIL: 'ci-owner@example.test', CUSTOMER_PASSWORD: process.env.STAGE_A_OWNER_PASSWORD!,
       CUSTOMER_COMPANY_ID: '00000000-0000-4000-8000-000000000001',
       PRICE_SHEETS_ENABLED: 'true', FEATURE_PRICING_COMPANY_IDS: '00000000-0000-4000-8000-000000000001',
       FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS: '00000000-0000-4000-8000-000000000001',
