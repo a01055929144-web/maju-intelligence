@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest: request }));
@@ -7,7 +7,8 @@ import { purchaseCostRepository } from "../lib/pricing/purchase-cost-repository"
 const productId = "11111111-1111-4111-8111-111111111111";
 const supplierProductId = "22222222-2222-4222-8222-222222222222";
 
-beforeEach(() => request.mockReset());
+beforeEach(() => { request.mockReset(); vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", undefined); });
+afterEach(() => vi.unstubAllEnvs());
 
 it("lists only confirmed same-unit or confirmed-conversion changes and breaks equal-cost ties by supplier product id", async () => {
   request.mockImplementation(async (path: string) => {
@@ -82,4 +83,15 @@ it("writes supplier-unit cost and reads the same base-unit cost for a confirmed 
   expect(history).toEqual([2400]);
   const result = await purchaseCostRepository.list("company") as { changes: unknown[] };
   expect(result.changes).toEqual([]);
+});
+
+it("reads current effective dates only for companies enabled for the date contract", async () => {
+  request.mockImplementation(async (path: string) => path.startsWith("product_catalog?") ? [{ id: productId, canonical_name: "상품", purchase_price: 100, purchase_price_date: "2026-11-07" }] : []);
+  const off = await purchaseCostRepository.list("company") as { products: Array<{ priceDate?: string }> };
+  expect(request.mock.calls[0][0]).not.toContain("purchase_price_date");
+  expect(off.products[0].priceDate).toBeUndefined();
+  request.mockClear(); vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", "company");
+  const on = await purchaseCostRepository.list("company") as { products: Array<{ priceDate?: string }> };
+  expect(request.mock.calls[0][0]).toContain("purchase_price_date");
+  expect(on.products[0].priceDate).toBe("2026-11-07");
 });

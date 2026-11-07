@@ -150,6 +150,8 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
         const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
         const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
+        const effectiveDate=restored?(i<scenario.existing?priorDate:null):saved.items.find(item=>item.code===code(i))!.date;
+        if(effectiveDate)await expect(row.getByRole('cell',{name:effectiveDate,exact:true})).toBeVisible();
       }
       await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill('');
     };
