@@ -46,6 +46,7 @@ declare
   v_product_after timestamptz;
   v_supplier_after timestamptz;
   v_supplier_import uuid;
+  v_supplier_count integer;
   v_imports jsonb := '{}'::jsonb;
   v_snapshots jsonb := '[]'::jsonb;
   v_before_run uuid;
@@ -130,19 +131,20 @@ begin
         returning updated_at into v_supplier_after;
       v_supplier_import := (v_imports->>v_supplier.supplier_id::text)::uuid;
       if v_supplier_import is null then
+        select count(*) into v_supplier_count
+          from jsonb_array_elements(p_changes) j
+          join public.supplier_products sp
+            on sp.company_id = p_company and sp.id = (j->>'supplierProductId')::uuid
+          where sp.supplier_id = v_supplier.supplier_id;
         insert into public.product_catalog_imports(
           company_id, supplier_id, file_name, mapping, total_rows, updated_count,
           status, created_by_name, completed_at
         ) values (
           p_company, v_supplier.supplier_id,
           left(coalesce(nullif(v_item->>'fileName', ''), '매입가 변경'), 255),
-          '{}'::jsonb, 1, 1, 'completed', p_actor_name, clock_timestamp()
+          '{}'::jsonb, v_supplier_count, v_supplier_count, 'completed', p_actor_name, clock_timestamp()
         ) returning id into v_supplier_import;
         v_imports := jsonb_set(v_imports, array[v_supplier.supplier_id::text], to_jsonb(v_supplier_import));
-      else
-        update public.product_catalog_imports
-          set total_rows = total_rows + 1, updated_count = updated_count + 1
-          where company_id = p_company and id = v_supplier_import;
       end if;
       insert into public.supplier_product_cost_history(
         company_id, supplier_product_id, import_id, price_date, purchase_price
@@ -192,6 +194,7 @@ declare
   v_product public.product_catalog%rowtype;
   v_supplier public.supplier_products%rowtype;
   v_import uuid;
+  v_supplier_count integer;
   v_imports jsonb := '{}'::jsonb;
 begin
   if p_company is null or p_batch is null or length(trim(coalesce(p_actor_name, ''))) not between 1 and 100 then
@@ -259,18 +262,19 @@ begin
         where company_id = p_company and id = (v_item->>'supplierProductId')::uuid;
       v_import := (v_imports->>v_supplier.supplier_id::text)::uuid;
       if v_import is null then
+        select count(*) into v_supplier_count
+          from jsonb_array_elements(v_batch.changes) j
+          join public.supplier_products sp
+            on sp.company_id = p_company and sp.id = (j->>'supplierProductId')::uuid
+          where sp.supplier_id = v_supplier.supplier_id;
         insert into public.product_catalog_imports(
           company_id, supplier_id, file_name, mapping, total_rows, updated_count,
           status, created_by_name, completed_at
         ) values(
           p_company, v_supplier.supplier_id, '직전 저장 복구', '{}'::jsonb,
-          1, 1, 'completed', p_actor_name, clock_timestamp()
+          v_supplier_count, v_supplier_count, 'completed', p_actor_name, clock_timestamp()
         ) returning id into v_import;
         v_imports := jsonb_set(v_imports, array[v_supplier.supplier_id::text], to_jsonb(v_import));
-      else
-        update public.product_catalog_imports
-          set total_rows = total_rows + 1, updated_count = updated_count + 1
-          where company_id = p_company and id = v_import;
       end if;
       if v_item->>'beforeSupplierCost' is not null then
         insert into public.supplier_product_cost_history(
