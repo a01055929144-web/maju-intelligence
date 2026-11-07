@@ -508,6 +508,7 @@ export async function saveProductCatalogImport(input: {
 export async function createCatalogFromSupplierProducts(
   companyId: string,
   ids: string[],
+  options: { initialPurchasePrice?: "supplier-latest" | "dated-batch" } = {},
 ) {
   const requestedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
   if (!requestedIds.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
@@ -536,7 +537,20 @@ export async function createCatalogFromSupplierProducts(
       purchase_product_name: p.raw_name,
       purchase_spec: p.raw_spec || null,
       purchase_unit: p.raw_unit || "EA",
-      purchase_price: p.latest_cost || 0,
+      ...(options.initialPurchasePrice === "dated-batch"
+        ? {
+            sales_unit:
+              !p.parsed_pack_quantity || Number(p.parsed_pack_quantity) === 1
+                ? p.raw_unit || "EA"
+                : null,
+          }
+        : {}),
+      // The dated batch owns the first real cost and its effective date.
+      // Zero is the schema-safe unpriced sentinel; legacy undated nonzero costs stay protected.
+      purchase_price:
+        options.initialPurchasePrice === "dated-batch"
+          ? 0
+          : p.latest_cost || 0,
       canonical_name: p.parsed_name || p.raw_name,
       brand_name: p.parsed_brand || null,
       origin_name: p.parsed_origin || null,
