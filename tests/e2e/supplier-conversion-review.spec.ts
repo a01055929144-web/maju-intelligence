@@ -27,8 +27,10 @@ for (const width of [1440, 390]) {
       await expect(page.getByLabel("매입 1EA당 기본 단위 수")).toHaveValue("1");
       await expect(page.getByLabel("매입 1BOX당 기본 단위 수")).toHaveValue("");
       await expect(page.getByRole("checkbox", { name: "박스 양파 환산 확인 선택" })).toBeDisabled();
+      await page.getByRole("button", { name: "검색 결과의 1:1 항목 선택 (1)" }).click();
+      await expect(page.getByRole("checkbox", { name: "양파 환산 확인 선택", exact: true })).toBeChecked();
+      await expect(page.getByRole("checkbox", { name: "박스 양파 환산 확인 선택" })).not.toBeChecked();
       await page.getByLabel("매입 1BOX당 기본 단위 수").fill("20");
-      await page.getByRole("checkbox", { name: "양파 환산 확인 선택", exact: true }).check();
       await page.getByRole("checkbox", { name: "박스 양파 환산 확인 선택" }).check();
       await page.getByRole("button", { name: "선택 2개 환산 확정" }).click();
       await expect(page.getByText("1개 확정 · 1개 실패")).toBeVisible();

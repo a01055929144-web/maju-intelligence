@@ -236,6 +236,9 @@ export function ProductCatalogWorkspace({
     return !query || [item.rawName, item.supplierName, item.matchedCatalogName, item.productCode]
       .some((value) => value?.toLowerCase().includes(query));
   });
+  const oneToOneVisible = visibleItems.filter((item) =>
+    canConfirmConversion(item) && defaultConversionReviewRatio(item) === "1" && reviewRatio(item) === "1",
+  );
   const readyToCreate = items
     .filter((item) => !item.matchedCatalogId && item.costConfirmed)
     .map((item) => item.id);
@@ -343,6 +346,17 @@ export function ProductCatalogWorkspace({
                 type="button"
               >
                 {showAllSupplierItems ? `미확정 ${unconfirmed.length}개만 보기` : "전체 매입처 상품 보기"}
+              </button>
+              <button
+                className="maju-button-secondary min-h-11"
+                disabled={loading || !oneToOneVisible.length}
+                onClick={() => {
+                  setConversionSelected((current) => [...new Set([...current, ...oneToOneVisible.map((item) => item.id)])]);
+                  setMessage("단위가 같은 1:1 항목을 선택했습니다. 매입·기본 단위를 확인한 뒤 환산 확정을 눌러 주세요.");
+                }}
+                type="button"
+              >
+                검색 결과의 1:1 항목 선택 ({oneToOneVisible.length})
               </button>
               <button
                 className="maju-button-primary min-h-11"
