@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "./ui/button";
+import NextLink from "next/link";
 
 type Draft = { id: string; content: { title: string }; revision: number };
 type Version = { id: string; version: number; content: { title: string }; publishedAt: string };
@@ -28,6 +30,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [createdUrl, setCreatedUrl] = useState("");
+  const [settingsNotice, setSettingsNotice] = useState("");
   const base = `companyId=${encodeURIComponent(companyId)}`;
   const loadLinks = useCallback(async () => {
     const response = await fetch(`/api/pricing-store-links?${base}&page=${page}`, { cache: "no-store" });
@@ -42,11 +45,24 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         setDocuments(result.result?.items ?? [])).catch(() => setMessage("발행 문서를 불러오지 못했습니다."));
   }, [base]);
   useEffect(() => {
-    if (!documentId) { setVersions([]); return; }
+    let active = true;
+    setVersions([]);
+    if (!documentId) return;
     void fetch(`/api/pricing-documents?${base}&action=versions&id=${encodeURIComponent(documentId)}`, { cache: "no-store" })
-      .then((response) => response.json()).then((result: { result?: Version[] }) =>
-        setVersions(result.result ?? [])).catch(() => setMessage("문서 버전을 불러오지 못했습니다."));
+      .then(async (response) => { if (!response.ok) throw new Error(); return response.json(); }).then((result: { result?: Version[] }) => {
+        if (active) setVersions(result.result ?? []);
+      }).catch(() => { if (active) setMessage("문서 버전을 불러오지 못했습니다. 문서를 다시 선택해 주세요."); });
+    return () => { active = false; };
   }, [base, documentId]);
+  async function checkSettings() {
+    setSettingsNotice("");
+    const response = await fetch(`/api/pricing-order-settings?${base}`, { cache: "no-store" });
+    const result = await response.json() as { settings?: { cutoff_time: string; minimum_amount: number } | null; message?: string };
+    if (!response.ok) throw new Error(result.message || "주문 설정을 확인하지 못했습니다. 다시 시도해 주세요.");
+    setSettingsNotice(result.settings
+      ? `저장된 주문 설정 확인 · 마감 ${result.settings.cutoff_time} · 최소 ${result.settings.minimum_amount.toLocaleString()}원. 실제 배송일과 금액은 매장별 권역·거래처 설정으로 다시 확인합니다.`
+      : "저장된 회사 주문 설정이 없습니다. 기존 기본값을 사용하며, 배송 권역·요일은 주문 설정 화면에서 확인해 주세요.");
+  }
   async function searchCustomers() {
     try {
       const response = await fetch(`/api/pricing-order-settings?${base}&customerQuery=${encodeURIComponent(customerQuery)}`);
@@ -59,6 +75,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   async function action(payload: Record<string, unknown>) {
     setBusy(true); setMessage("");
     try {
+      if (payload.action === "create" || payload.action === "create-batch") await checkSettings();
       const response = await fetch("/api/pricing-store-links", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...payload }) });
       const result = await response.json() as { message?: string; url?: string;
@@ -89,6 +106,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     let created = 0;
     const output: string[] = [];
     try {
+      await checkSettings();
       for (let page = 0; page < 1000; page += 1) {
         const params = new URLSearchParams({ companyId, customerPage: "1" });
         if (afterId) params.set("afterId", afterId);
@@ -150,6 +168,12 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     {createdUrl && <textarea aria-label="방금 만든 매장 링크" readOnly value={createdUrl} rows={Math.min(8, createdUrl.split("\n").length)}
       onFocus={(event) => event.currentTarget.select()} className="w-full rounded border p-2 text-sm" />}
     <section className="space-y-3 rounded border p-4"><h2 className="font-semibold">링크 만들기</h2>
+      <div className="space-y-2 text-sm" aria-label="주문 설정 확인">
+        <p>링크를 만들기 전에 배송 요일·마감·최소 주문금액을 확인해 주세요.</p>
+        <NextLink className="inline-flex min-h-[44px] items-center underline" href={`/revenue/pricing/order-settings?${base}`}>주문 설정 열기</NextLink>
+        <Button className="ml-2 min-h-[44px]" variant="outline" disabled={busy} onClick={() => { setBusy(true); setMessage(""); void checkSettings().catch(error => setMessage(error instanceof Error ? error.message : "설정을 다시 확인해 주세요.")).finally(() => setBusy(false)); }}>주문 설정 다시 확인</Button>
+        {settingsNotice && <p role="status">{settingsNotice}</p>}
+      </div>
       <label className="block text-sm">문서 선택<select className="mt-1 w-full rounded border p-2" value={documentId}
         onChange={(event) => { setDocumentId(event.target.value); setVersionId(""); }}>
         <option value="">문서 선택</option>{documents.map((item) => <option key={item.id} value={item.id}>{item.content.title}</option>)}
