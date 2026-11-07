@@ -25,6 +25,7 @@ const publicRoutes = new Map([
   ["leads/permits/sync/route.ts", "retired endpoint that always returns HTTP 410"],
   ["public/quotes/[token]/route.ts", "token-based public quote lookup validates UUID and expiry while excluding cost and margin fields"],
   ["staff/invite-preview/route.ts", "rate-limited invite preview required before sign-in"],
+  ["store/accounts/activate/route.ts", "default-OFF one-time owner token plus explicit terms acceptance; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
   ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"]
 ]);
 

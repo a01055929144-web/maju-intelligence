@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { randomUUID } from "crypto";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
-import { hasActiveStoreMembership, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
+import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
+import { activateStoreOwner, getPreparedStoreOwnerActivation, resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -33,33 +36,60 @@ export async function GET(request: NextRequest) {
   const rawState = request.nextUrl.searchParams.get("state") || "";
   const { ok: stateOk, payload: statePayload } = await consumeOAuthState(rawState);
   const linkMode = stateOk && statePayload === "link";
-  const storeMode = stateOk && statePayload === "store";
-  const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeMode ? statePayload : "";
+  const storeOwnerMatch = stateOk ? statePayload.match(/^store-owner:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
+  const storeOwnerMode = Boolean(storeOwnerMatch);
+  const storeMatch = stateOk ? statePayload.match(/^store:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
+  const storeMode = Boolean(storeMatch);
+  const storeFlow = storeMode || storeOwnerMode;
+  const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeFlow ? statePayload : "";
 
   if (!stateOk) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
   }
-  if (storeMode && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
+  if (storeFlow && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
   if (!code) {
-    return storeMode ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
+    return storeFlow ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
 
   try {
     const token = await exchangeKakaoCode(code);
     if (!token.access_token) {
-      return redirectJoin(request.url, inviteCode, token.error || "kakao_token_failed");
+      return storeFlow ? redirectStore(request.url, "kakao_token_failed") : redirectJoin(request.url, inviteCode, token.error || "kakao_token_failed");
     }
 
     const kakaoUser = await getKakaoUser(token.access_token);
     if (!kakaoUser.id) {
-      return redirectJoin(request.url, inviteCode, "kakao_user_failed");
+      return storeFlow ? redirectStore(request.url, "kakao_user_failed") : redirectJoin(request.url, inviteCode, "kakao_user_failed");
     }
 
-    if (storeMode) {
+    if (storeOwnerMode) {
+      const proof = await getStoreOwnerActivationProof({ consume: true });
+      const activation = proof ? await getPreparedStoreOwnerActivation(proof.token) : null;
+      if (!proof || !activation || !storeOwnerMatch || activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2])
+        return redirectStore(request.url, "store_activation_required");
+      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
+      const status = results.get(activation.businessRegistrationNumber);
+      if (failedNumbers.has(activation.businessRegistrationNumber) || status?.label !== "정상")
+        return redirectStore(request.url, "business_status_verification_required");
+      const authUserId = await resolveOrCreateStoreKakaoUser({
+        avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+        email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+        name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+        phoneNumber: kakaoUser.kakao_account?.phone_number
+      });
+      if (!authUserId) return redirectStore(request.url, "store_activation_required");
+      const activated = await activateStoreOwner({ authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
+        termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
+      if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+      return redirectStoreScope(request.url, activated.companyId, activated.storeAccountId);
+    }
+
+    if (storeMode && storeMatch) {
       const authUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
-      if (!authUserId || !(await hasActiveStoreMembership(authUserId)) || !(await setStoreSession(authUserId)))
+      const companyId = storeMatch[1], storeAccountId = storeMatch[2];
+      if (!authUserId || !(await getStoreCostMemberAccess({ authUserId, companyId, storeAccountId })) || !(await setStoreSession(authUserId)))
         return redirectStore(request.url, "store_membership_required");
-      return NextResponse.redirect(new URL("/store", request.url));
+      return redirectStoreScope(request.url, companyId, storeAccountId);
     }
 
     if (linkMode) {
@@ -113,12 +143,19 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Kakao staff callback failed:", error);
     const message = error instanceof Error ? error.message : "kakao_callback_failed";
-    return storeMode ? redirectStore(request.url, "kakao_callback_failed") : redirectJoin(request.url, inviteCode, message);
+    return storeFlow ? redirectStore(request.url, "kakao_callback_failed") : redirectJoin(request.url, inviteCode, message);
   }
 }
 
 function redirectStore(baseUrl: string, error: string) {
   return NextResponse.redirect(new URL(`/store?error=${encodeURIComponent(error)}`, baseUrl));
+}
+
+function redirectStoreScope(baseUrl: string, companyId: string, storeAccountId: string) {
+  const url = new URL("/store", baseUrl);
+  url.searchParams.set("companyId", companyId);
+  url.searchParams.set("storeAccountId", storeAccountId);
+  return NextResponse.redirect(url);
 }
 
 async function exchangeKakaoCode(code: string): Promise<KakaoTokenResponse> {

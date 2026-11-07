@@ -18,7 +18,7 @@ create table public.companies(id uuid primary key);
 create table public.normalized_customers(
   id uuid primary key, company_id uuid not null references public.companies(id) on delete cascade, unique(company_id,id)
 );
-create table public.app_users(id uuid primary key);
+create table public.app_users(id uuid primary key,status text not null);
 create table public.company_members(
   id uuid primary key, company_id uuid not null references public.companies(id) on delete cascade,
   role text not null, permission_role text, status text not null, unique(company_id,id)
@@ -66,8 +66,9 @@ insert into public.store_accounts(id,company_id,customer_id,status) values
   ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','active'),
   ('30000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','active');
 insert into public.app_users values
-  ('40000000-0000-4000-8000-000000000001'),('40000000-0000-4000-8000-000000000002'),
-  ('40000000-0000-4000-8000-000000000003'),('40000000-0000-4000-8000-000000000004');
+  ('40000000-0000-4000-8000-000000000001','active'),('40000000-0000-4000-8000-000000000002','active'),
+  ('40000000-0000-4000-8000-000000000003','active'),('40000000-0000-4000-8000-000000000004','active'),
+  ('40000000-0000-4000-8000-000000000005','inactive');
 insert into public.company_members(id,company_id,role,permission_role,status) values
   ('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','owner','active'),
   ('50000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','manager','manager','active'),
@@ -94,6 +95,15 @@ select public.provision_store_owner_v1(
 );
 
 do $$ begin
+  begin
+    perform public.provision_store_owner_v1(
+      '10000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000002',
+      '40000000-0000-4000-8000-000000000005','50000000-0000-4000-8000-000000000002'
+    );
+    raise exception 'inactive_auth_user_provisioned';
+  exception when others then
+    if sqlerrm<>'auth_user_not_found' then raise; end if;
+  end;
   begin
     perform public.provision_store_owner_v1(
       '10000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000002',
@@ -146,6 +156,15 @@ do $$ declare owner_id uuid; begin
 end $$;
 
 do $$ begin
+  begin
+    perform public.accept_store_member_invitation_v1(
+      '10000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',
+      '40000000-0000-4000-8000-000000000005',encode(digest('invite-one','sha256'),'hex')
+    );
+    raise exception 'inactive_auth_user_accepted_invite';
+  exception when others then
+    if sqlerrm<>'auth_user_not_found' then raise; end if;
+  end;
   begin
     perform public.accept_store_member_invitation_v1(
       '10000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000002',

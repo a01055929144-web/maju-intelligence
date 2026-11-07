@@ -36,7 +36,7 @@ begin
   perform 1 from public.store_accounts
     where company_id=p_company_id and id=p_store_account_id and status in ('pending','active') for update;
   if not found then raise exception 'store_account_not_available'; end if;
-  perform 1 from public.app_users where id=p_auth_user_id;
+  perform 1 from public.app_users where id=p_auth_user_id and status='active';
   if not found then raise exception 'auth_user_not_found'; end if;
   if exists(select 1 from public.store_account_members where company_id=p_company_id and store_account_id=p_store_account_id and role='owner' and status='active') then
     raise exception 'active_store_owner_exists';
@@ -84,7 +84,7 @@ begin
   end if;
   perform 1 from public.store_accounts where company_id=p_company_id and id=p_store_account_id and status='active' for update;
   if not found then raise exception 'store_account_not_active'; end if;
-  perform 1 from public.app_users where id=p_auth_user_id;
+  perform 1 from public.app_users where id=p_auth_user_id and status='active';
   if not found then raise exception 'auth_user_not_found'; end if;
   select * into v_member from public.store_account_members
     where company_id=p_company_id and store_account_id=p_store_account_id

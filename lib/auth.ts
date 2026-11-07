@@ -68,9 +68,16 @@ export type StoreSession = {
   expiresAt: number;
 };
 
+type StoreOwnerActivationProof = {
+  token: string;
+  termsAcceptedAt: string;
+  expiresAt: number;
+};
+
 const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
 const STORE_COOKIE_NAME = "maju_store_session";
+const STORE_OWNER_ACTIVATION_COOKIE = "maju_store_owner_activation";
 const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
 const sessionObservationThrottle = new Map<string, number>();
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
@@ -116,7 +123,7 @@ export async function consumeInvitePhoneProof(inviteCode: string) {
   return code === inviteCode && signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
-function encodeSession(session: AdminSession | CustomerSession | StoreSession) {
+function encodeSession(session: AdminSession | CustomerSession | StoreSession | StoreOwnerActivationProof) {
   const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
@@ -137,6 +144,26 @@ export async function getStoreSession(): Promise<StoreSession | null> {
     !Number.isSafeInteger(session.expiresAt) || session.issuedAt > now + 60 || session.expiresAt <= now ||
     session.expiresAt <= session.issuedAt || session.expiresAt - session.issuedAt > STORE_SESSION_SECONDS) return null;
   return session;
+}
+
+export async function setStoreOwnerActivationProof(token: string) {
+  if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const cookieStore = await cookies();
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, termsAcceptedAt: new Date().toISOString(), expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function getStoreOwnerActivationProof(options: { consume?: boolean } = {}): Promise<StoreOwnerActivationProof | null> {
+  if (!storeMemberSessionEnabled()) return null;
+  const cookieStore = await cookies();
+  const proof = decodeSession<StoreOwnerActivationProof>(cookieStore.get(STORE_OWNER_ACTIVATION_COOKIE)?.value);
+  if (options.consume) cookieStore.delete(STORE_OWNER_ACTIVATION_COOKIE);
+  const now = Math.floor(Date.now() / 1000);
+  return proof && /^[A-Za-z0-9_-]{43}$/.test(proof.token) && proof.expiresAt > now &&
+    !Number.isNaN(Date.parse(proof.termsAcceptedAt)) ? proof : null;
 }
 
 function decodeSession<TSession>(value?: string): TSession | null {
