@@ -180,7 +180,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   async function saveReceipts(lines: Array<PurchaseImportLine & { productId?: string }>) {
-    if (!lines.length) return "";
+    if (!lines.length) return { ok: true, note: "" };
     const response = await fetch("/api/price-sheets/receipts", {
       body: JSON.stringify({ companyId, fileName, lines: lines.map((line) => ({ ...line, supplier: line.supplier || newSupplier.trim() || products.find((product) => product.id === line.productId)?.supplierName || "기본 매입처", raw: line.raw.slice(0, 40) })), receiptDate }),
       headers: { "Content-Type": "application/json" },
@@ -189,9 +189,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     const payload = (await response?.json().catch(() => null)) as { fieldsFilled?: number; saved?: number; message?: string; taxConflicts?: number; taxFilled?: number } | null;
     if (response?.ok) {
       setImportedLines([]);
-      return ` · 매입 기록 ${payload?.saved ?? 0}줄 보관${payload?.taxFilled ? ` · 상품 과세 구분 ${payload.taxFilled}개 채움` : ""}${payload?.fieldsFilled ? ` · 상품 빈 칸(규격·단위) ${payload.fieldsFilled}개 채움` : ""}${payload?.taxConflicts ? ` · 과세 구분이 기존과 다른 상품 ${payload.taxConflicts}개는 그대로 둠(상품관리에서 확인)` : ""}`;
+      return { ok: true, note: ` · 매입 기록 ${payload?.saved ?? 0}줄 보관${payload?.taxFilled ? ` · 상품 과세 구분 ${payload.taxFilled}개 채움` : ""}${payload?.fieldsFilled ? ` · 상품 빈 칸(규격·단위) ${payload.fieldsFilled}개 채움` : ""}${payload?.taxConflicts ? ` · 과세 구분이 기존과 다른 상품 ${payload.taxConflicts}개는 그대로 둠(상품관리에서 확인)` : ""}` };
     }
-    return ` · 매입 기록(수량 등) 보관은 ${payload?.message || "다음에 다시 시도"}`;
+    return { ok: false, note: `매입 기록(수량 등) 보관 실패: ${payload?.message || "다시 시도해 주세요"}` };
   }
 
   async function readFile(file: File) {
@@ -390,12 +390,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         if (product) edits.push({ id: product.id, name: row.name, spec: row.spec, unit: row.unit, ...(row.taxType ? { taxType: row.taxType } : {}) });
       }
       // 원문 연결과 상품 정보 반영을 동시에(저장 속도)
-      const [linkResult] = await Promise.all([
+      const [linkResult, editResult] = await Promise.all([
         links.length ? fetch("/api/price-sheets/links", { body: JSON.stringify({ companyId, fileName, links }), headers: { "Content-Type": "application/json" }, method: "POST" }).then(async (response) => ({ ok: response.ok, linked: ((await response.json().catch(() => null)) as { linked?: number } | null)?.linked ?? 0 })).catch(() => ({ ok: false, linked: 0 })) : Promise.resolve(null),
-        edits.length ? fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, items: edits }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).catch(() => null) : Promise.resolve(null)
+        edits.length ? fetch("/api/price-sheets/products", { body: JSON.stringify({ companyId, items: edits }), headers: { "Content-Type": "application/json" }, method: "PATCH" }).then((response) => response.ok).catch(() => false) : Promise.resolve(null)
       ]);
-      if (linkResult) notes.push(linkResult.ok ? `원문 연결 ${linkResult.linked}개` : "원문 연결은 다시 시도해 주세요");
-      const receiptNote = await saveReceipts(relinked);
+      const warnings: string[] = [];
+      if (linkResult) linkResult.ok ? notes.push(`원문 연결 ${linkResult.linked}개`) : warnings.push("원문 연결 실패: 엑셀을 다시 올려 연결을 확인해 주세요");
+      if (editResult === false) warnings.push("상품 정보 수정 실패: 상품관리에서 품목명·규격·단위를 확인해 주세요");
+      const receipt = await saveReceipts(relinked);
+      if (!receipt.ok) warnings.push(`${receipt.note}. 매입 기록은 다시 저장할 수 있습니다`);
       setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
       if (changes.length || notes.length) {
         const previousBatch = pricing?.lastBatch;
@@ -411,7 +414,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         }
       }
       void load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록 새로고침을 눌러 확인해 주세요."));
-      setMessage(`${notes.join(" · ")}${receiptNote}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
+      if (warnings.length) {
+        setError(`일부만 저장됐습니다: ${notes.join(" · ") || "매입가 변경 없음"}. ${warnings.join(" · ")}. 저장된 매입가는 다시 올리지 말고 실패 항목만 확인해 주세요.`);
+      } else {
+        setMessage(`${notes.join(" · ")}${receipt.note}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
+      }
     } catch (cause) { setMessage(""); setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }
   }
