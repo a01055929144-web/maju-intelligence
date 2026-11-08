@@ -39,13 +39,19 @@ try {
       customer_email text,customer_password text,customer_company_id uuid,updated_at timestamptz default now());
     create table if not exists public.login_throttle_attempts(identifier text primary key,failures integer not null default 0,
       first_failure_at timestamptz not null default now(),locked_until timestamptz);
-    create table public.stage_a_failure_control(company_id uuid primary key,fail_recalculation boolean not null default false);
+    create table public.stage_a_failure_control(company_id uuid primary key,fail_recalculation boolean not null default false,fail_receipts boolean not null default false);
     create function public.stage_a_fail_recalculation() returns trigger language plpgsql as $$ begin
       if exists(select 1 from public.stage_a_failure_control where company_id=new.company_id and fail_recalculation)
       then raise exception 'stage_a_isolated_recalculation_failure'; end if;
       return new;
     end $$;
     create trigger stage_a_failure before update on public.pricing_items for each row execute function public.stage_a_fail_recalculation();
+    create function public.stage_a_fail_receipts() returns trigger language plpgsql as $$ begin
+      if exists(select 1 from public.stage_a_failure_control where company_id=new.company_id and fail_receipts)
+      then raise exception 'stage_a_isolated_receipt_failure'; end if;
+      return new;
+    end $$;
+    create trigger stage_a_receipt_failure before insert on public.purchase_receipt_lines for each row execute function public.stage_a_fail_receipts();
     grant usage on schema public to service_role;
     grant all on all tables in schema public to service_role;
     grant usage,select on all sequences in schema public to service_role;

@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   stage-a-integration:
-    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || startsWith(github.head_ref, 'codex/04-history-only-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || startsWith(github.head_ref, 'codex/04-history-only-') || startsWith(github.head_ref, 'codex/04-stage-a-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

@@ -202,8 +202,15 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
   });
 }
 
-test('history-only default preserves matched receipts without recalculation or current-price writes', async ({page})=>{
+for (const width of [1280,390]) test(`history-only default retries, reloads and restores 3389 matched receipts at ${width}px`, async ({page})=>{
   db('seed',741);
+  await page.setViewportSize({width,height:900});
+  const writes: Array<{id:string;digest:string;rows:number}>=[];
+  page.on('request',request=>{
+    if(request.method()!=='POST'||new URL(request.url()).pathname!=='/api/price-sheets/costs/date-batches')return;
+    const body=request.postDataJSON();
+    if(body.action==='save')writes.push({id:body.batchId,digest:createHash('sha256').update(request.postData()!).digest('hex'),rows:body.rows?.length||0});
+  });
   expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   await page.goto(`/revenue/pricing?companyId=${company}`);
   await expect(page.getByRole('button',{name:'① 엑셀 올리기',exact:true})).toBeEnabled();
@@ -225,13 +232,34 @@ test('history-only default preserves matched receipts without recalculation or c
   await expect(review).toContainText('매입 이력 3389행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 28행 제외');
   await expect(review).toContainText('2026-11-01 · 3389행');
   await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  db('receipt-fail-on');
+  await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
+  await expect(page.getByRole('alert').filter({hasText:'날짜별 매입가 처리가 완료되지 않았습니다'})).toBeVisible();
+  expect(state()).toMatchObject({receipts:0,batches:0,price_runs:0});
+  expect(writes).toHaveLength(1);
+  db('receipt-fail-off');
+  await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect.poll(()=>state().batches).toBe(1);
+  expect(writes).toHaveLength(2); expect(writes[1]).toEqual(writes[0]); expect(writes[1].rows).toBe(3389);
   const saved=state();
   expect(saved.receipts).toBe(3389); expect(saved.price_runs).toBe(0);
   expect([saved.receipt_min_date,saved.receipt_max_date]).toEqual(['2026-11-01','2026-11-01']);
   expect(saved.batch).toMatchObject({status:'completed',row_count:3389,history_only_product_count:741,recalc_run_id:null});
   expect(saved.items.every(item=>Number(item.cost)===100 && item.date===priorDate)).toBe(true);
+  await page.reload();
+  const summary=await page.request.get(`/api/price-sheets/receipts?companyId=${company}&summary=1`);
+  expect(summary.status()).toBe(200);
+  expect((await summary.json()).summary.reduce((sum:number,item:{count:number})=>sum+item.count,0)).toBe(3389);
+  await expect(page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true})).toBeEnabled();
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'원본 거래를 함께 복구했습니다'})).toBeVisible();
+  const restored=state();
+  expect(restored.receipts).toBe(0); expect(restored.batch).toMatchObject({status:'restored',row_count:3389,history_only_product_count:741,recalc_run_id:null});
+  expect(restored.items.every(item=>Number(item.cost)===100 && item.date===priorDate)).toBe(true);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
 test('real dated multipack registration stays unpriced until conversion is confirmed', async ({page})=>{
