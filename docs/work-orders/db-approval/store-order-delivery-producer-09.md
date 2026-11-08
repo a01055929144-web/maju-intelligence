@@ -125,6 +125,23 @@ down은 호출자를 먼저 중지하고 새 네 테이블이 **비어 있을 �
 4. 승인 적용 후에도 플래그 OFF 상태에서 **읽기만** 수행한다. pg_proc의 정확한 서명/proargnames/SECURITY INVOKER/proconfig, 신규 4개 표의 RLS와 policy·ACL, PUBLIC/anon/authenticated 차단과 service_role SELECT/INSERT/EXECUTE만 허용됨을 확인한다. 원본 주문 함수 OID/본문/ACL 불변, 복합 증빙 FK·지연 설정·UNIQUE/CHECK와 인덱스 유효성도 확인한다.
 5. PostgREST schema cache가 새 완료 10인자/주문 wrapper 11인자를 인식하는지는 catalog/OpenAPI 등 읽기 방식으로 확인한다. 이 확인을 위해 주문·완료 RPC를 운영에서 호출하지 않는다. 증빙 없는 완료 7인자 overload 또는 구형 fallback이 있으면 차단한다. 읽기 결과에 불일치가 있으면 플래그를 켜지 않고 사전 승인된 복구/데이터 보존 절차로 판단한다.
 
+## 실행 시간·잠금 및 읽기 검증 기록 기준
+
+운영 실행 시간은 **미산정**이다. CI의 작은 합성 표 소요 시간을 운영 예상치로 사용하지 않는다. 운영 규모/쓰기 부하·잠금 상태를 아직 조회하지 않았으므로 숫자를 임의로 제시하지 않는다.
+
+| 단계 | 읽기 확인/기록 | 통과·중단 기준 |
+| --- | --- | --- |
+| 시간 산정 전 | customer_attachments의 pg_class.reltuples(추정치), pg_total_relation_size, 동등/충돌 인덱스, pg_stat_activity의 transaction age·wait, pg_locks와 pg_blocking_pids. 고객 행·증빙 내용·query 원문은 공개 기록에 넣지 않음 | 예상/최대 실행 시간, 허용 잠금 대기, 작업 창, 담당자·중단 승인자가 정해지기 전 적용 차단 |
+| 인덱스 영향 | 일반 CREATE UNIQUE INDEX의 SHARE 잠금은 첨부 INSERT/UPDATE/DELETE를 대기시킬 수 있음. 일반 SELECT와 달리 쓰기는 영향 대상. FK 생성의 참조 표 잠금도 있으므로 companies/storefront_links/store_orders/normalized_customers/customer_notes/customer_attachments의 진행 중 작업을 함께 점검 | 첨부 업로드·메모/주문 저장을 허용 가능한 시간만큼 중지/대기시킬 합의 없으면 보류. 임의 CONCURRENTLY 변경/부분 적용 금지 |
+| 승인 작업 감시 | 작업자는 시작/종료·잠금 대기·statement 경과·COMMIT/ROLLBACK 결과만 기록. 합의한 lock_timeout/statement_timeout 적용 방식과 상한을 실행 승인에 명시 | 상한 초과·예상 밖 차단·오류이면 승인된 취소/ROLLBACK. blocked 세션 강제 종료나 자동 재시도는 별도 판단. 연결이 끊기면 성공/실패를 추측하지 않고 객체 상태부터 읽음 |
+| 적용 전 객체 | 기존 7/10인자 주문 함수 정의/OID/ACL·기본값 백업, 02 칸/CHECK/trigger/index와 기존 증빙 복합 키, service_role의 읽기/행 잠금 권한, 신규 객체 이름 부재 | 선행 snapshot/guard 미적용 또는 원문·기존 객체/권한 불일치면 적용 금지 |
+| 적용 후 객체/RLS | pg_proc의 정확한 11/10인자 argtypes/proargnames/prosecdef=false/proconfig, 4개 표의 relrowsecurity·pg_policies, 기존 주문 함수 OID/본문/ACL 불변 | 항목별 일치 전 OFF 유지. 단순 표 존재만으로 완료 표시하지 않음 |
+| 적용 후 권한 | pg_class/pg_proc ACL 및 PUBLIC grantee=0, has_table_privilege/has_function_privilege로 anon/authenticated와 service_role 확인 | PUBLIC/anon/authenticated 접근 없음. 새 표 service_role SELECT/INSERT만, 새 함수 EXECUTE만; 새 표 UPDATE/DELETE/TRUNCATE 불허 |
+| 적용 후 proof FK | pg_constraint의 convalidated·복합 키 열·참조 표·pg_get_constraintdef·condeferrable/condeferred 및 pg_index의 indisunique/indisvalid/indisready | 주문/이벤트/회사 및 note/attachment 회사·거래처 참조, 회사 CASCADE/부모 지연 NO ACTION, 주문 UNIQUE/revision CHECK 일치. 실제 삭제/소유권 변경을 운영에서 시험하지 않음 |
+| 스키마 캐시 | PostgreSQL catalog의 10인자 완료 함수 및 11인자 wrapper와 읽기 전용 PostgREST OpenAPI 노출/인자 이름 대조. 함수 인식 지연 시 권한·승인된 캐시 갱신 절차 확인 | 증빙 없는 완료 서명·구형 fallback 또는 cache/catalog 불일치면 OFF 유지. 운영 주문/완료 RPC 호출로 확인하지 않음 |
+
+잠금 근거: [PostgreSQL 17 명시적 잠금](https://www.postgresql.org/docs/17/explicit-locking.html), [CREATE INDEX](https://www.postgresql.org/docs/17/sql-createindex.html). 위 과정은 승인 후 실행자의 확인 절차이며 이번 문서 작업에서 운영 DB 쓰기·잠금 시험·RPC 호출을 하지 않았다.
+
 ## 02 API→PostgREST→PG17 합성 fixture와 기대 결과
 
 09 파일: `tests/sql/store-order-delivery-api-09.pg17.fixture.sql`. 빈 폐기 DB의 정확한 이름은 `store_member_order_test_delivery_09_api`, psql HOST는 127.0.0.1, PG17만 허용한다. 기존 09 기반 fixture와 같은 실제 주문/증빙 migration·02 snapshot DDL·이 SQL Draft를 로드한다. 운영 환경변수/운영 DB에 연결하지 않는다.
