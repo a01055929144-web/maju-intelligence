@@ -386,6 +386,18 @@ jobs:
           node scripts/test-store-member-order-concurrency.mjs
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-full-journey.pg17.sql
 
+      - name: Verify order delivery producer draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: store_member_order_test_delivery_09
+        run: |
+          createdb store_member_order_test_delivery_09
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-delivery-producer-09.pg17.fixture.sql
+          node scripts/test-store-order-delivery-producer-09.mjs
+
       - name: Verify disposable storefront fixture on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1

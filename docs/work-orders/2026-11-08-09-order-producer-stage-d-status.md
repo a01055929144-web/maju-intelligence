@@ -22,4 +22,16 @@ Ponytail: 사용함
 - 완료는 상태 문자열이나 방문 메모에서 추정하지 않는다. 02의 명시적 completionEventId/completedAt/orderIds와 회사·주문 revision/취소 경계를 확정한 별도 생산자 계약이 필요하다. TMS에서 store_orders를 임의 PATCH하는 경로를 추가하지 않는다.
 - 02 후보 소비는 기존 계약대로 submitted/received/in_delivery만 포함하고 cancelled/delivered는 제외한다. snapshot 없는 행은 missing_delivery_snapshot 확인 대상으로 유지한다.
 
-필요한 09 생산자 up/down·권한·원자성/동시성/멱등 PG17 검증과 승인표는 별도 후속 PR 범위다. 이번 C fixture PR은 새 SQL을 작성하거나 운영에 적용하지 않으며 Stage D를 ON하지 않는다. C의 문서 수락/첫 주문 fixture 통과를 배송 완료나 실제 주문 성공으로 보고하지 않는다.
+## D 생산자 후속 초안
+
+B #400(main 44c4213), C #406(main a386667)의 fixture 구현 이후 별도 Draft에서 09 생산자 SQL을 준비했다. 기존 조사 표는 현재 HTTP 런타임 기준이며 여전히 snapshot/완료 호출은 연결되지 않았다.
+
+- [별도 승인표·입출력 계약](db-approval/store-order-delivery-producer-09.md)
+- up: docs/sql-drafts/20261108-09-order-delivery-producer.sql
+- down: docs/sql-drafts/20261108-09-order-delivery-producer.down.sql
+- PG17 fixture: tests/sql/store-order-delivery-producer-09.pg17.fixture.sql
+- 원자성·동시성 실행: scripts/test-store-order-delivery-producer-09.mjs
+
+새 wrapper는 기존 7/10인자 함수를 한 트랜잭션에서 호출한다. 새 완료 함수는 명시적 이벤트와 주문 revision으로 상태를 확정하는 제안이다. 완료 허용 상태와 검증된 기사/코스 입력 경계는 02/03 검토 후 확정해야 한다. 02 소유 SQL/소비자 파일은 수정하지 않았다.
+
+이 Draft의 격리 PG17 통과와 운영 승인은 별개다. 운영 미적용·API 미연결·Stage D OFF이며, C의 수락/첫 주문 fixture 통과를 실제 주문·배송 완료로 보고하지 않는다.
