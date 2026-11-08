@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("retries a temporary store member invitation failure without the URL fragment", async ({ page }) => {
+for (const viewport of [{ name: "PC", width: 1280, height: 720 }, { name: "390px", width: 390, height: 844 }]) test(`retries a temporary store member invitation failure on ${viewport.name}`, async ({ page }) => {
+  await page.setViewportSize(viewport);
   let attempts = 0;
   await page.route("**/api/store/members/accept", async route => {
     attempts += 1;
