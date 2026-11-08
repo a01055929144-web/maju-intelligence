@@ -272,6 +272,7 @@ it("exposes acceptance only for delivered, unexpired shares inside all company g
   const read = async () => (await (await publicPost(request({ token: token(p.publicUrl) }))).json()).acceptanceAvailable;
   vi.stubEnv("QUOTE_ACCEPTANCE", "true"); vi.stubEnv("QUOTE_ACCEPTANCE_COMPANY_IDS", company);
   vi.stubEnv("STORE_ORDERING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_ORDERING_COMPANY_IDS", company);
+  vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://store.example.test");
   expect(await read()).toBe(false);
   links[0].send_id = "60000000-0000-4000-8000-000000000001";
   expect(await read()).toBe(true);
