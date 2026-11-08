@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   stage-a-integration:
-    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || startsWith(github.head_ref, 'codex/04-history-only-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -54,6 +54,7 @@ jobs:
           CI_LAYOUT_FIXTURES: enabled
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
       - run: npx playwright install chromium
       - name: Exercise real browser API PostgREST PG17 path
         run: npx playwright test --config playwright.stage-a.config.ts
