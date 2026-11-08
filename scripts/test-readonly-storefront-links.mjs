@@ -24,6 +24,8 @@ const metadata = "select oid::text,proacl::text,prosecdef,md5(pg_get_functiondef
 try {
   assert.equal((await a.query('show server_version_num')).rows[0].server_version_num.slice(0,2), '17');
   const before = (await a.query(metadata)).rows[0];
+  const acceptanceDefinition = "select proname,md5(pg_get_functiondef(oid)) hash from pg_proc where pronamespace='public'::regnamespace and proname in ('record_pricing_document_acceptance','accept_pricing_document_and_issue_storefront_link') order by proname";
+  const acceptanceBefore = (await a.query(acceptanceDefinition)).rows;
   const up = await readFile(new URL('../docs/sql-drafts/20261108-09-readonly-storefront-links.sql', import.meta.url), 'utf8');
   const down = await readFile(new URL('../docs/sql-drafts/20261108-09-readonly-storefront-links.down.sql', import.meta.url), 'utf8');
   await a.query(up); await a.query(down);
@@ -43,8 +45,25 @@ try {
   assert.equal((await b.query('select count(*) n from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].n, '0');
   await a.query('commit');
   assert.equal((await b.query('select can_order from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].can_order, false);
+  const acceptanceKey = randomUUID();
+  const accept = async () => {
+    const link = item(customer);
+    return (await a.query(`select accept_pricing_document_and_issue_storefront_link(
+      $1,$2,$3,$4,$5,'staff',$6,'b0000000-0000-4000-8000-000000000001',null,false,null,'{}'::jsonb,$7,$8,$9,$10,null,$11) result`,
+      [company,'70000000-0000-4000-8000-000000000001',version,acceptanceKey,'a'.repeat(64),customer,link.id,link.nonce,link.hash,expiry,'b'.repeat(64)])).rows[0].result;
+  };
+  const acceptanceStateSql = `select
+    (select count(*) from pricing_document_acceptance_requests) requests,
+    (select count(*) from customer_pricing_document_links) price_links,
+    (select count(*) from customer_price_agreements) agreements,
+    (select to_jsonb(l) from business_permit_leads l where id='b0000000-0000-4000-8000-000000000001') lead`;
+  const acceptanceState = (await b.query(acceptanceStateSql)).rows;
+  await assert.rejects(accept(), /orderable_link_existing_readonly_conflict/);
+  assert.deepEqual((await b.query(acceptanceStateSql)).rows,acceptanceState);
+  assert.equal((await b.query('select can_order from storefront_links where id=$1',[readonly.issued_link_id])).rows[0].can_order,false);
   assert.equal((await issue(a, [item(customer, false)])).rows[0].issued_link_id, readonly.issued_link_id);
-  assert.equal((await issue(a, [item(customer)])).rows[0].issued_link_id, readonly.issued_link_id);
+  await assert.rejects(issue(a, [item(customer)]), /orderable_link_existing_readonly_conflict/);
+  await assert.rejects(issue(a, [item(customer, true)]), /orderable_link_existing_readonly_conflict/);
   assert.equal((await b.query('select can_order from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].can_order, false);
   for (const value of [null, 'false', 0]) await assert.rejects(issue(a, [item(secondCustomer, value)]), /Invalid link issue row/);
   await assert.rejects(issue(a, [item(secondCustomer, false), item(otherCustomer, false)]), /Duplicate or cross-company customer/);
@@ -57,6 +76,12 @@ try {
   assert.equal(recovered.hash,readonly.issued_token_hash); assert.equal(verifyStoreLinkToken(recovered.token)?.id,readonly.issued_link_id);
   await a.query('update storefront_links set revoked_at=now(),can_order=false where id=$1',[readonly.issued_link_id]);
   assert.equal((await a.query('select record_storefront_view($1,$2) recorded',[recovered.hash,'desktop'])).rows[0].recorded,false);
+  const accepted = await accept(); assert.equal(accepted.orderEnabled,true);
+  assert.notEqual(accepted.storefrontLinkId,readonly.issued_link_id);
+  assert.equal((await b.query('select can_order from storefront_links where id=$1',[accepted.storefrontLinkId])).rows[0].can_order,true);
+  assert.equal((await b.query('select count(*) n from customer_price_agreements')).rows[0].n,'1');
+  assert.deepEqual(await accept(),accepted);
+  assert.deepEqual((await a.query(acceptanceDefinition)).rows,acceptanceBefore);
   assert.equal((await a.query('select count(*) n from store_orders')).rows[0].n,'0');
   await a.query('reset role'); await a.query(down);
   assert.deepEqual((await a.query(metadata)).rows[0],before);

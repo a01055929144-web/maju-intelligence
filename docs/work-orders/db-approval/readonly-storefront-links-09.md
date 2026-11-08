@@ -15,20 +15,25 @@ Ponytail: 사용함
 | up | docs/sql-drafts/20261108-09-readonly-storefront-links.sql | 초안·실행 금지 |
 | down | docs/sql-drafts/20261108-09-readonly-storefront-links.down.sql | 원문 복원 초안 |
 | 함수 영향 | issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text) 본문만 교체 | 6인자/반환/OID/소유/ACL/SECURITY INVOKER 보존 검증 대상 |
-| 새 설정 | READ_ONLY_STORE_LINKS_ENABLED=false | 기본 OFF·운영 설정 변경 없음 |
+| 새 설정 | READ_ONLY_STORE_LINKS_ENABLED=false + 빈 READ_ONLY_STORE_LINKS_COMPANY_IDS | 기본 OFF·운영 설정 변경 없음 |
 | 운영 적용 | 별도 DB 승인 → 원문/권한 백업 → SQL 적용 → 읽기 검증 | 미승인·미실행 |
 | 기능 사용 | SQL 적용·읽기 검증 후 별도 허용이 있어야 설정 ON | 현재 금지 |
 | 운영 고객·링크 시험 | 자동 배송 후보/감사 흔적 위험으로 중단 | 생성 금지 |
 
 ## 동작 계약
 
-- canOrder 생략/true는 일반 발급의 기존 기본 true 유지. 기존 활성 링크 재사용 계약도 유지한다. 기존 false 링크를 일반 요청으로 다시 켜지 않는다.
+- canOrder 생략/true는 일반 발급의 기존 기본 true 유지. 기존 활성 링크 재사용 계약도 유지한다. 기존 false 링크는 false 요청에만 재사용한다. 일반 true/생략 요청은 orderable_link_existing_readonly_conflict로 거부하고 회수 후 재발급을 안내한다. false를 조용히 승격하거나 일반 발급 성공으로 돌려주지 않는다.
 - false는 신규 INSERT의 can_order 칸에 같은 트랜잭션으로 저장한다. 발급 뒤 PATCH로 끄지 않는다.
 - false 요청에 기존 활성 true 링크가 있으면 readonly_link_existing_orderable_conflict로 전체 요청을 거부한다. 기존 주문 가능 링크를 임의 변경하지 않는다.
 - null/문자열/숫자 canOrder는 거부한다. 회사·고객·문서 권한 검사와 회사 행 잠금/기존 멱등 재사용은 유지한다.
-- API는 단일 create만 false opt-in을 허용하며 서버 설정 OFF에서 DB 읽기/발급 전에 거부한다. bulk는 false를 거부한다. 일반 요청은 새 JSON 값을 보내지 않는다.
+- API는 단일 create만 false opt-in을 허용하며 서버 설정 OFF 또는 인증된 companyId가 서버 allowlist에 없으면 DB 읽기/발급 전에 거부한다. 요청 body의 회사값으로 허용 여부를 결정하지 않는다. bulk는 false를 거부한다. 일반 요청은 새 JSON 값을 보내지 않는다.
 - 기존 인증 화면은 서버 허용 시에만 한 매장용 열람 전용 선택을 보여 준다. 테스트 fixture는 기존 CI 전용 조건에서만 사용하며 실제 API/운영 설정을 켜지 않는다.
-- 03 수락 경로는 새 값을 보내지 않아 기존 기본 true 유지. 03/07 파일은 수정하지 않는다.
+- 03 수락 경로는 새 값을 보내지 않아 기본 true이며 기존 false와 충돌하면 전체 수락을 롤백한다. 실제 03 RPC를 재사용해 수락 요청/가격 링크/협의 단가/리드 변경의 전체 롤백과 회수 후 정상 수락·재시도를 검증한다. 03/07 파일은 수정하지 않는다. 03 API의 새 충돌 코드 안내 문구는 03 소유자의 계약 검토 대상이다.
+
+## 대안 승인 경계
+
+- #365: 기존 함수 호출+UPDATE를 같은 트랜잭션으로 묶는 one-off 검증 초안. PG17/CI 통과했으나 안전한 운영 runner가 없어 실행 불가. 선택 경로가 아니며 두 SQL을 함께 적용하지 않는다.
+- #368: 이 문서의 영구 함수 최소 패치+기존 API opt-in 대안. 권장 후보이며 SQL 미승인·미적용, 설정 OFF·allowlist 비어 있음. 최종 검토 전 Draft 유지.
 
 ## 적용/복구 순서
 

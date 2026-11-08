@@ -47,6 +47,7 @@ const oldEnv = Object.fromEntries(
     "FEATURE_PRICING_COMPANY_IDS",
     "FEATURE_STORE_ORDERING_COMPANY_IDS",
     "READ_ONLY_STORE_LINKS_ENABLED",
+    "READ_ONLY_STORE_LINKS_COMPANY_IDS",
   ].map((key) => [key, process.env[key]]),
 );
 
@@ -54,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.canManage = true;
   process.env.READ_ONLY_STORE_LINKS_ENABLED = "false";
+  process.env.READ_ONLY_STORE_LINKS_COMPANY_IDS = company;
   process.env.PRICE_SHEETS_ENABLED = "true";
   process.env.STORE_ORDERING_ENABLED = "true";
   process.env.STORE_LINK_SECRET =
@@ -329,4 +331,19 @@ it("reports an existing orderable link conflict without a fallback write", async
   const response = await POST(readonlyRequest(false)); expect(response.status).toBe(400);
   expect((await response.json()).message).toContain("회수");
   expect(mocks.db.mock.calls.filter(([path]) => path === "rpc/issue_storefront_links")).toHaveLength(1);
+});
+
+it.each(["", "00000000-0000-4000-8000-000000000099"])("requires the authenticated company in the readonly allowlist: %s", async allowlist => {
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "true"; process.env.READ_ONLY_STORE_LINKS_COMPANY_IDS = allowlist;
+  expect((await POST(readonlyRequest(false))).status).toBe(400); expect(mocks.db).not.toHaveBeenCalled();
+});
+it("rejects ordinary issuance against an existing readonly link without promoting it", async () => {
+  mockIssue(); const issue = mocks.db.getMockImplementation()!;
+  mocks.db.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path === "rpc/issue_storefront_links") throw new Error("Supabase request failed: orderable_link_existing_readonly_conflict");
+    return issue(path, init);
+  });
+  const response = await POST(readonlyRequest(undefined)); expect(response.status).toBe(400);
+  expect((await response.json()).message).toContain("열람 전용");
+  expect(mocks.db.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
 });

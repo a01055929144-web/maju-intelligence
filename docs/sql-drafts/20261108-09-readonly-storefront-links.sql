@@ -70,6 +70,9 @@ begin
       if not v_can_order and v_existing_can_order then
         raise exception 'readonly_link_existing_orderable_conflict';
       end if;
+      if v_can_order and not v_existing_can_order then
+        raise exception 'orderable_link_existing_readonly_conflict';
+      end if;
       return query select v_customer,v_existing_id,v_existing_nonce,v_existing_hash,false;
     else
       update public.storefront_links l set revoked_at = now(),can_order = false

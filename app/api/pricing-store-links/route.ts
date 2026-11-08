@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
     if (body.action === "create" || body.action === "create-batch") {
       if (body.canOrder !== undefined && typeof body.canOrder !== "boolean")
         throw new Error("주문 허용 여부를 확인해 주세요.");
-      if (body.canOrder === false && (!readOnlyStoreLinksEnabled() || body.action !== "create"))
+      if (body.canOrder === false && (!readOnlyStoreLinksEnabled(company) || body.action !== "create"))
         throw new Error("열람 전용 링크 발급은 아직 사용할 수 없습니다.");
       const publicBase = storePublicBase();
       const customerIds =
@@ -456,6 +456,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.includes("readonly_link_existing_orderable_conflict"))
       return NextResponse.json({ message: "같은 버전의 기존 링크는 주문 가능합니다. 회수를 확인한 뒤 열람 전용 링크를 발급해 주세요." }, { status: 400 });
+    if (error instanceof Error && error.message.includes("orderable_link_existing_readonly_conflict"))
+      return NextResponse.json({ message: "같은 버전에 열람 전용 링크가 있습니다. 회수를 확인한 뒤 주문 가능한 링크를 다시 발급해 주세요." }, { status: 400 });
     return NextResponse.json(
       {
         message:

@@ -21,6 +21,6 @@ export default async function StoreLinksPage({ searchParams }: {
   const companyId = resolvePageCompanyId(customer, admin, params?.companyId);
   if (!companyId || !(isFeatureEnabled("PRICING", companyId) && isFeatureEnabled("STORE_ORDERING", companyId)) ||
     (customer && !canManagePriceSheets(customer))) notFound();
-  const readOnlyAvailable = readOnlyStoreLinksEnabled() || (isCiLayoutFixturesEnabled() && params?.fixture === "read-only-link-issuance");
+  const readOnlyAvailable = readOnlyStoreLinksEnabled(companyId) || (isCiLayoutFixturesEnabled() && params?.fixture === "read-only-link-issuance");
   return <main className="mx-auto max-w-6xl p-4"><StoreLinksWorkspace companyId={companyId} readOnlyAvailable={readOnlyAvailable} /></main>;
 }
