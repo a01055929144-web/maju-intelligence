@@ -174,4 +174,23 @@ describe("shared pricing acceptance API contract", () => {
     expect(rpcBodies[0].p_request_fingerprint).toBe(rpcBodies[1].p_request_fingerprint);
     expect(rpcBodies[2].p_request_fingerprint).not.toBe(rpcBodies[1].p_request_fingerprint);
   });
+
+  it.each([
+    "readonly_link_existing_orderable_conflict",
+    "orderable_link_existing_readonly_conflict",
+  ])("guides %s conflicts to revoke and reissue without hiding the rollback", async conflict => {
+    const base = requests.getMockImplementation()!;
+    requests.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "rpc/accept_pricing_document_and_issue_storefront_link") throw new Error(conflict);
+      return base(path, init);
+    });
+
+    const response = await POST(request(token.token));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      message: "기존 링크를 회수한 뒤 다시 수락해 새 주문 링크를 발급해 주세요.",
+    });
+    expect(rpcBodies).toHaveLength(0);
+  });
 });
