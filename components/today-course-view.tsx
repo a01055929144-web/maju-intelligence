@@ -18,6 +18,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { GeoPoint } from "@/lib/navigation-links";
 import { estimateFuelCostWon, formatDistanceKmLabel, formatMinutes, getStoreTotals, gradeBadgeClass, readLocalJson, roundToSix, saveLocalJson } from "@/lib/route-map-utils";
 import type { DeliveryVehicle } from "@/lib/store";
+import type { RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import {
   CourseSummary,
   DeliveryProof,
@@ -45,6 +46,7 @@ export function TodayCourseView({
   onSummaryChange,
   onSelectStore,
   onSelectVehicle,
+  orderLinkStatus,
   pendingAddStoreId,
   selectedStoreId,
   selectedVehicle,
@@ -68,6 +70,7 @@ export function TodayCourseView({
   readonly onSummaryChange: (summary: CourseSummary) => void;
   readonly onSelectStore: (storeId: string) => void;
   readonly onSelectVehicle: (vehicleId: string) => void;
+  readonly orderLinkStatus: RouteOrderLinkStatus;
   /** 지도 홈에서 "경유지 추가"를 눌러 이 탭으로 넘어온 거래처 id — 마운트/변경 시 오늘 경유 선택에 자동 포함시킵니다. */
   readonly pendingAddStoreId?: string;
   readonly selectedStoreId: string;
@@ -569,6 +572,7 @@ export function TodayCourseView({
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
+            {orderLinkStatus === "unavailable" ? <p className="m-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" role="status">주문 연결 정보를 확인하지 못했습니다. 기존 수동 코스는 그대로 표시합니다.</p> : null}
             <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
               <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-950">{selectedDriver} 경유 순서</p>
@@ -1001,6 +1005,7 @@ export function TodayCourseView({
                           <span className="block truncate text-sm font-semibold text-slate-950">{store.name}</span>
                           <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                           <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
+                          {store.orderIds?.length ? <span className="mt-1 block text-xs font-semibold text-violet-700">주문 {store.orderIds.length}건 · revision {Math.max(...Object.values(store.orderRevisions || {}))}</span> : null}
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-2">
                           <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
