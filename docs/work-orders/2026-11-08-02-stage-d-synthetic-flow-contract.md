@@ -5,10 +5,13 @@
 ## 흐름
 
 1. 09 주문 DTO의 `customerId`, `deliveryDate`, `orderIds`, `orderRevisions`, 배송지 snapshot을 읽는다.
+   `buildOrderRouteConsumer`가 검증한 `companyId`와 `deliveryDate` 범위도 함께 전달하며 합성 흐름에서 다시 일치 확인한다.
 2. 기존 정류장에 없는 주문은 코스에 자동 추가하지 않고 `unassigned`로 분리한다.
 3. 기존 정류장만 주문 묶음과 연결하며 수동 순서·기사·차량을 그대로 유지한다.
 4. 배송지 snapshot이 다르면 `destination_mismatch`로 차단한다.
 5. 명시적 완료 이벤트 ID, `completedAt`, 정확히 일치하는 `orderIds`가 있을 때만 완료 이력을 만든다.
+
+완료 이벤트의 빈 주문 ID나 중복 주문 ID는 입력 오류로 거부하며 조용히 제거하지 않는다.
 
 주문 상태 문자열이나 거래처 메모로 완료를 추정하지 않는다. 취소로 주문 후보가 0건이 되어도 기존 수동 정류장을 삭제하지 않는다.
 

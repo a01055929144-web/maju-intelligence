@@ -139,5 +139,19 @@ describe("Stage D synthetic delivery flow", () => {
     expect(() => build({ ...assigned, completionEvents: [{ ...event, companyId: "company-b" }] })).toThrow("다른 회사");
     expect(() => build({ orderRead: orderRead([order]), completionEvents: [event] })).toThrow("미배정");
     expect(() => build({ ...assigned, completionEvents: [{ ...event, orderIds: ["order-b"] }] })).toThrow("주문 ID");
+    expect(() => build({ ...assigned, completionEvents: [{ ...event, orderIds: ["order-a", "order-a"] }] }))
+      .toThrow("중복");
+  });
+
+  it("rejects order reads validated for a different company or delivery date", () => {
+    const otherCompanyRead = buildOrderRouteConsumer({
+      companyId: "company-b", deliveryDate: "2026-11-08", candidates: [], existingCustomerIds: []
+    });
+    const otherDateRead = buildOrderRouteConsumer({
+      companyId: "company-a", deliveryDate: "2026-11-09", candidates: [], existingCustomerIds: []
+    });
+
+    expect(() => build({ orderRead: otherCompanyRead })).toThrow("회사·배송일");
+    expect(() => build({ orderRead: otherDateRead })).toThrow("회사·배송일");
   });
 });

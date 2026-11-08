@@ -25,6 +25,8 @@ export type RouteStopOrderRead = {
 };
 
 export type OrderRouteConsumerResult = {
+  companyId: string;
+  deliveryDate: string;
   blockedCustomerIds: string[];
   orderRefsByCustomerId: Record<string, RouteStopOrderRead>;
   visibleCustomerIds: string[];
@@ -90,7 +92,13 @@ export function buildOrderRouteConsumer(input: {
     }
   });
 
-  return { blockedCustomerIds, orderRefsByCustomerId, visibleCustomerIds };
+  return {
+    companyId: input.companyId,
+    deliveryDate: input.deliveryDate,
+    blockedCustomerIds,
+    orderRefsByCustomerId,
+    visibleCustomerIds
+  };
 }
 
 function uniqueNonEmpty(values: string[]) {

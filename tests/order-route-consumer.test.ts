@@ -36,6 +36,8 @@ describe("order route consumer", () => {
 
   it("preserves manual stops when there are no order candidates", () => {
     expect(build([])).toEqual({
+      companyId: "company-a",
+      deliveryDate: "2026-11-08",
       blockedCustomerIds: [],
       orderRefsByCustomerId: {},
       visibleCustomerIds: ["manual-customer"]

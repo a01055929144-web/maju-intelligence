@@ -48,6 +48,9 @@ export function buildStageDDeliveryFlow(input: {
 }): StageDDeliveryFlow {
   if (!input.companyId.trim()) throw new Error("회사 ID가 필요합니다.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate)) throw new Error("배송일을 확인해 주세요.");
+  if (input.orderRead.companyId !== input.companyId || input.orderRead.deliveryDate !== input.deliveryDate) {
+    throw new Error("주문 읽기 범위의 회사·배송일이 다릅니다.");
+  }
 
   const stopByCustomerId = new Map<string, StageDRouteStop>();
   const routeStops = input.existingStops.map((stop) => {
@@ -83,7 +86,12 @@ export function buildStageDDeliveryFlow(input: {
     const stop = stopByCustomerId.get(event.customerId);
     if (!stop) throw new Error("미배정 주문을 완료할 수 없습니다.");
     if (stop.conflict) throw new Error("배송지 충돌 주문을 완료할 수 없습니다.");
-    if (stableIds(event.orderIds).join("|") !== stableIds(stop.orderIds).join("|")) {
+    const eventOrderIds = event.orderIds.map((orderId) => orderId.trim());
+    if (eventOrderIds.some((orderId) => !orderId) || new Set(eventOrderIds).size !== eventOrderIds.length) {
+      throw new Error("완료 이벤트의 주문 ID가 중복되었거나 비어 있습니다.");
+    }
+    eventOrderIds.sort();
+    if (eventOrderIds.join("|") !== stableIds(stop.orderIds).join("|")) {
       throw new Error("완료 이벤트의 주문 ID가 정류장과 다릅니다.");
     }
 
@@ -93,7 +101,7 @@ export function buildStageDDeliveryFlow(input: {
       completionEventId: event.eventId,
       customerId: stop.customerId,
       deliveryDate: input.deliveryDate,
-      orderIds: stableIds(event.orderIds),
+      orderIds: eventOrderIds,
       completedAt: event.completedAt,
       driverId: stop.driverId,
       vehicleId: stop.vehicleId
