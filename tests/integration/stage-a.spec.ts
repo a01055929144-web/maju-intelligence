@@ -233,12 +233,12 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   await expect(review).toContainText('2026-11-01 · 3389행');
   await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  db('fail-on');
+  db('receipt-fail-on');
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'날짜별 매입가 처리가 완료되지 않았습니다'})).toBeVisible();
   expect(state()).toMatchObject({receipts:0,batches:0,price_runs:0});
   expect(writes).toHaveLength(1);
-  db('fail-off');
+  db('receipt-fail-off');
   await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect.poll(()=>state().batches).toBe(1);

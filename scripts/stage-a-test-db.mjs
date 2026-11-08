@@ -20,7 +20,7 @@ try {
     await db.query('truncate public.companies cascade; truncate public.stage_a_failure_control');
     await db.query(`insert into companies(id,name,owner_name,status) values($1,'CI Stage A','CI Owner','active'),($2,'CI Other','CI Other Owner','active')`, [company,other]);
     await db.query(`insert into product_suppliers(id,company_id,name) values($1,$2,'합성 매입처')`, [supplier,company]);
-    await db.query('insert into stage_a_failure_control(company_id,fail_recalculation) values($1,false)',[company]);
+    await db.query('insert into stage_a_failure_control(company_id,fail_recalculation,fail_receipts) values($1,false,false)',[company]);
     const records = Array.from({length:count},(_,i)=>({ id:uuid('2',i+1),sp:uuid('4',i+1),code:`ERP-${String(i+1).padStart(4,'0')}`,name:`합성 기존 품목 ${i+1}`,unit:['EA','BOX','봉','병'][i%4] }));
     await db.query(`insert into product_catalog(id,company_id,source,source_key,product_code,canonical_name,purchase_product_name,
       purchase_spec,purchase_unit,sales_unit,purchase_price,purchase_price_date,spec_value,spec_unit,category,created_at)
@@ -41,6 +41,9 @@ try {
   } else if (action === 'fail-on' || action === 'fail-off') {
     await db.query('update stage_a_failure_control set fail_recalculation=$2 where company_id=$1',[company,action==='fail-on']);
     console.log(JSON.stringify({failureEnabled:action==='fail-on'}));
+  } else if (action === 'receipt-fail-on' || action === 'receipt-fail-off') {
+    await db.query('update stage_a_failure_control set fail_receipts=$2 where company_id=$1',[company,action==='receipt-fail-on']);
+    console.log(JSON.stringify({receiptFailureEnabled:action==='receipt-fail-on'}));
   } else if (action === 'state') {
     const counts = (await db.query(`select
       (select count(*)::int from product_catalog where company_id=$1) products_count,
