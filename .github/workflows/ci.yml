@@ -274,6 +274,17 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=store_kakao_membership_test --set=ON_ERROR_STOP=1 --file=20261105-store-kakao-membership.pg17.test.sql
 
+      - name: Verify store member removal draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb store_member_removal_test
+          cd docs/sql-drafts
+          psql --dbname=store_member_removal_test --set=ON_ERROR_STOP=1 --file=20261108-store-member-removal.pg17.test.sql
+
       - name: Verify store owner activation draft on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -328,6 +339,27 @@ jobs:
           createdb lead_share_policy_test
           psql --dbname=lead_share_policy_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share.pg17.test.sql
 
+      - name: Verify lead document share draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb pricing_lead_document_share_test
+          psql --dbname=pricing_lead_document_share_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share.pg17.test.sql
+          createdb pricing_lead_document_share_migrations_test
+          psql --dbname=pricing_lead_document_share_migrations_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share-migrations.pg17.test.sql
+          psql --dbname=pricing_lead_document_share_migrations_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-atomic.pg17.test.sql
+          createdb pricing_lead_share_company_delete_test
+          psql --dbname=pricing_lead_share_company_delete_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-company-delete.pg17.test.sql
+
+      - name: Setup Node for member-order concurrency checks
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Verify member-bound ordering on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -338,7 +370,6 @@ jobs:
         run: |
           createdb store_member_order_test
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-order.pg17.test.sql
-          # This job uses only psql plus Node; reuse the build job's installed dependency via npm below.
           npm ci --ignore-scripts
           node scripts/test-store-member-order-concurrency.mjs
 

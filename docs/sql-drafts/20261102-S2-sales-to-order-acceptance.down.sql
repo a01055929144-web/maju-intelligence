@@ -17,6 +17,7 @@ end $$;
 drop trigger if exists pricing_s2_validate_published_version on public.pricing_document_versions;
 drop function if exists public.pricing_s2_validate_published_version();
 drop function if exists public.pricing_s2_public_request_guard(uuid,text,text,jsonb,integer);
+drop function if exists public.accept_pricing_document_and_issue_storefront_link(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,jsonb,uuid,text,text,timestamptz,uuid,text);
 drop function if exists public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb);
 drop index if exists public.storefront_links_acceptance_request_uq;
 alter table public.storefront_links drop constraint if exists storefront_links_acceptance_request_fk, drop column if exists acceptance_request_id;
