@@ -266,3 +266,19 @@ it.each(["revoked", "expired"])("rejects new %s delivery but restores the origin
   const retry = await privatePost(request(input)); expect(retry.status).toBe(200); expect(await retry.json()).toEqual(first);
   expect(sends).toHaveLength(1); expect(actions).toHaveLength(1);
 });
+
+it("exposes acceptance only for delivered, unexpired shares inside all company gates", async () => {
+  const p = await prepared();
+  const read = async () => (await (await publicPost(request({ token: token(p.publicUrl) }))).json()).acceptanceAvailable;
+  vi.stubEnv("QUOTE_ACCEPTANCE", "true"); vi.stubEnv("QUOTE_ACCEPTANCE_COMPANY_IDS", company);
+  vi.stubEnv("STORE_ORDERING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_ORDERING_COMPANY_IDS", company);
+  vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://store.example.test");
+  expect(await read()).toBe(false);
+  links[0].send_id = "60000000-0000-4000-8000-000000000001";
+  expect(await read()).toBe(true);
+  vi.stubEnv("QUOTE_ACCEPTANCE_COMPANY_IDS", other); expect(await read()).toBe(false);
+  vi.stubEnv("QUOTE_ACCEPTANCE_COMPANY_IDS", company);
+  vi.stubEnv("QUOTE_ACCEPTANCE", "false"); expect(await read()).toBe(false);
+  vi.stubEnv("QUOTE_ACCEPTANCE", "true");
+  content.validUntil = "2020-01-01"; expect(await read()).toBe(false);
+});

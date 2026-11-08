@@ -5,6 +5,7 @@ import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent
 import { publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
+import { quoteAcceptanceEnabled } from "./acceptance-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 
 type ShareRow = {
@@ -154,5 +155,6 @@ export async function readPublicDocument(token: string, requester: string) {
     `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
   });
-  return { document: output, expiresAt: row.expires_at };
+  return { document: output, expiresAt: row.expires_at,
+    acceptanceAvailable: Boolean(row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)) };
 }
