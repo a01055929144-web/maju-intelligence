@@ -1,6 +1,12 @@
 import { expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/store", () => ({
+  getSupabaseConfig: () => ({
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    url: process.env.SUPABASE_URL
+  })
+}));
 import { getStageFQueue } from "../app/admin/operations/stage-f-read";
 
 it.runIf(process.env.ADMIN_STAGE_F_POSTGREST === "isolated")("runs all six bounded queries against isolated PostgREST", async () => {
