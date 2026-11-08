@@ -22,6 +22,7 @@ type Store = { title: string; companyName: string; customerName: string;
   selectedDeliveryDate: string;
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string; status: string; knownTotal: number;
+  authorLabel?: string;
   requestMemo: string; marketPricePending: boolean; submittedAt: string; revision: number;
   lines: { product_id: string; promotion_id: string | null; product_name: string; quantity: number;
     specification?: string; sales_unit?: string; tax_type?: string;
@@ -29,6 +30,7 @@ type Order = { id: string; deliveryDate: string; status: string; knownTotal: num
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
 type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  memberLogin?: StoreKakaoLogin;
   memberManagement?: { href: string } | { message: string };
   historyPage: number; historyHasMore: boolean; message?: string };
 const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
@@ -216,7 +218,11 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       {(["home", "order", "history", "data", "info"] as const).map((item, index) =>
         <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
           onClick={() => setTab(item)}>{["홈", "주문", "내역", "데이터", "내 정보"][index]}</button>)}</nav>
-    {message && <p role="status" className="mx-4 mt-3 rounded border p-3 text-sm">{message}</p>}
+      {message && <p role="status" className="mx-4 mt-3 rounded border p-3 text-sm">{message}</p>}
+      {!loading && !loadError && data?.memberLogin && <section className="space-y-2 p-4" aria-label="주문 구성원 로그인">
+        <StoreKakaoLoginPanel access={data.memberLogin} newWindow />
+        <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
+      </section>}
     {tab === "home" && <section className="space-y-4 p-4 md:max-w-3xl md:p-6">
       <p>다음 배송일: <strong>{store.nextDeliveryDate || "권역 배송일 설정 필요"}</strong></p>
       {changedPrices.length > 0 && <div className="rounded border p-3">
@@ -315,7 +321,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         <th scope="col" className="p-3 text-left">주문일 · 배송일</th><th scope="col" className="p-3 text-left">상태</th>
         <th scope="col" className="p-3 text-left">품목</th><th scope="col" className="p-3 text-left">합계</th><th scope="col" className="p-3 text-left">동작</th>
       </tr></thead><tbody>{data?.orders.map((order) => <tr key={order.id} className="block border-b py-2 md:table-row">
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.status}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>

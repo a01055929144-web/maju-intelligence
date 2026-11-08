@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
-export type StoreKakaoLogin = { enabled: boolean; companyId?: string; storeAccountId?: string; errorCode?: string };
+export type StoreKakaoLogin = { enabled: boolean; companyId?: string; storeAccountId?: string; errorCode?: string; message?: string };
 
 function loginError(code: string) {
   if (code === "store_login_unavailable") return "매장 로그인은 아직 준비 중입니다. 담당자에게 이용 가능 여부를 확인해 주세요.";
@@ -14,16 +14,17 @@ function loginError(code: string) {
   return "카카오 로그인을 완료하지 못했습니다. 받은 매장 전용 주소에서 다시 시도해 주세요.";
 }
 
-export function StoreKakaoLoginPanel({ access }: { access: StoreKakaoLogin }) {
+export function StoreKakaoLoginPanel({ access, newWindow = false }: { access: StoreKakaoLogin; newWindow?: boolean }) {
   const scoped = Boolean(access.companyId && access.storeAccountId);
   return <Card>
     <CardHeader><CardTitle>매장 카카오 로그인</CardTitle></CardHeader>
     <CardContent className="space-y-3">
       {access.errorCode && <p role="alert">{loginError(access.errorCode)}</p>}
       <p className="text-sm">점주·매장 구성원은 받은 전용 주소에서 카카오로 로그인해 주세요. 주문은 기존 주문 링크에서 이용할 수 있습니다.</p>
-      {!access.enabled ? <p role="status">매장 로그인은 아직 준비 중입니다. 담당자의 안내 후 이용해 주세요.</p> :
+      {access.message ? <p role="status">{access.message}</p> : !access.enabled ? <p role="status">매장 로그인은 아직 준비 중입니다. 담당자의 안내 후 이용해 주세요.</p> :
         !scoped ? <p role="status">회사·매장이 지정된 전용 주소가 필요합니다. 받은 주소를 다시 열어 주세요.</p> : null}
-      {access.enabled && scoped ? <form action="/api/auth/kakao/start" method="get">
+      {newWindow && <p className="text-sm">새 탭에서 로그인한 뒤 이 주문 탭으로 돌아와 로그인 상태를 다시 확인해 주세요.</p>}
+      {access.enabled && scoped ? <form action="/api/auth/kakao/start" method="get" target={newWindow ? "_blank" : undefined} rel={newWindow ? "noopener noreferrer" : undefined}>
         <input type="hidden" name="store" value="1" />
         <input type="hidden" name="companyId" value={access.companyId} />
         <input type="hidden" name="storeAccountId" value={access.storeAccountId} />
