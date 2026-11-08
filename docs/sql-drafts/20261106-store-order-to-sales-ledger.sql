@@ -69,6 +69,20 @@ begin
   from public.business_documents
   where company_id = p_company_id and source_type = 'order' and source_key = v_source_key;
   if found then
+    if v_document.status='draft' then
+      if (select count(*) from public.inventory_resolve_document_lines(p_company_id,v_document.id))
+           <> (select count(*) from public.business_document_lines
+               where company_id=p_company_id and document_id=v_document.id)
+        or exists (
+          select 1 from public.inventory_resolve_document_lines(p_company_id,v_document.id)
+          where resolve_status<>'ok'
+        ) then
+        raise exception 'all store order lines must resolve for inventory before sales confirmation';
+      end if;
+      v_document:=public.confirm_business_document(
+        p_company_id,v_document.id,p_actor_user_id,btrim(p_actor_name)
+      );
+    end if;
     return jsonb_build_object(
       'storeOrderId', p_store_order_id,
       'completionEventId', p_completion_event_id,
@@ -154,11 +168,14 @@ begin
     ) then
     raise exception 'all store order lines must resolve for inventory before sales confirmation';
   end if;
+  v_document:=public.confirm_business_document(
+    p_company_id,v_document.id,p_actor_user_id,btrim(p_actor_name)
+  );
 
   return jsonb_build_object(
     'storeOrderId',v_order.id,'completionEventId',p_completion_event_id,'completedAt',v_completed_at,
     'salesDocumentId',v_document.id,'status',v_document.status,
-    'alreadyCreated',false,'ledgerPosted',false
+    'alreadyCreated',false,'ledgerPosted',true
   );
 end;
 $$;

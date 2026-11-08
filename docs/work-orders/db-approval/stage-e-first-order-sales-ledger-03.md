@@ -14,7 +14,7 @@
 - 전표 확정·원장 기록: 기존 `confirm_business_document`
 - 중복 방지: `business_documents(company_id, source_type, source_key)` 부분 UNIQUE
 
-따라서 Stage E 첫 경로는 **배송 단계가 제공하는 출고 가능 상태를 잠근 뒤 주문 스냅샷으로 매출전표를 한 번 만들고 기존 확정 함수를 호출하는 service-role RPC 1개**가 최소 범위다. 새 화면, 새 전표/원장 테이블, 원장 잔액 컬럼, 주문 금액 재계산은 필요 없다.
+따라서 Stage E 첫 경로는 **배송 단계가 제공하는 출고 가능 상태를 잠근 뒤 주문 스냅샷으로 매출전표를 한 번 만들고, 전체 재고 해석 성공을 확인한 다음 기존 확정 함수를 같은 DB 트랜잭션에서 호출하는 service-role RPC 1개**가 최소 범위다. 새 화면, 새 전표/원장 테이블, 원장 잔액 컬럼, 주문 금액 재계산은 필요 없다.
 
 ## 선행 차단
 
@@ -77,6 +77,7 @@ RPC 이름은 Stage D 생산자 계약 병합 후 확정한다. 04에 전달하�
 - 주문 추적은 `source_type='order'`, `source_id=order_id`, `source_key`로 하며 같은 회사에서 주문당 매출전표는 하나다.
 - 전표 확정과 원장 생성은 한 DB 트랜잭션에서 모두 성공하거나 모두 롤백한다.
 - inventory resolve 결과 수는 전표 줄 수와 같아야 하고 모든 줄이 `ok`여야 한다. 하나라도 실패하면 전표·원장·재고를 모두 남기지 않는다.
+- 주문 source key 재시도는 같은 confirmed 전표를 반환하고 `document:{id}:confirm` 원장과 문서별 inventory position을 다시 만들지 않는다.
 
 ## 완료 취소·반품 이벤트 생산자 계약 초안
 
@@ -117,7 +118,7 @@ RPC 이름은 Stage D 생산자 계약 병합 후 확정한다. 04에 전달하�
 ### 첫 주문 → 매출전표
 
 - [x] `delivered` 주문과 같은 completion event·completed revision 관계가 있을 때만 전표 생성
-- [x] 같은 주문 재시도에 같은 전표 반환
+- [x] 같은 주문 재시도에 같은 confirmed 전표 반환, 원장·`sale_out` 각각 1건 유지
 - [ ] 같은 주문의 동시 요청에도 전표·원장 각각 1건
 - [x] 다른 회사 주문 참조 거부
 - [ ] 시가 품목·빈 단가·0줄 주문·합계 불일치 전체 거부
@@ -126,7 +127,7 @@ RPC 이름은 Stage D 생산자 계약 병합 후 확정한다. 04에 전달하�
 
 ### 거래처원장·입금
 
-- [x] 전표 확정 시 `sale` 원장 1건과 미수 증가
+- [x] 전표 생성·전체 inventory resolve·확정이 같은 트랜잭션이며 `sale` 원장 1건과 미수 증가
 - [ ] 기존 `record_partner_payment` 재시도에 입금 1건
 - [ ] 전표·입금 후 원장 합계와 화면 기초/기말 잔액 일치
 - [ ] 다른 회사 거래처 입금 거부와 공개 역할 실행 거부
@@ -170,8 +171,11 @@ RPC 이름은 Stage D 생산자 계약 병합 후 확정한다. 04에 전달하�
 ## 승인
 
 - 03 읽기 검토: 완료
-- #384 격리 PG17·CI 검증: 완료, Draft 유지
+- #384 격리 PG17·CI 검증: 완료 — 전표·원장·재고 원자 처리, 주문 source key 재시도, 부분 inventory resolve 전체 롤백, return/void 순서 경계 PASS; Draft 유지
 - Stage D #410 생산자 DB 승인·병합·적용 순서: 대기
+- 03 opt-in wrapper와 회사별 Stage E 플래그 호출 주체: 문서 결정 완료, 서버/SQL 연결 미구현
+- void/return 원천 이벤트 생산자·revision·증빙 계약: 03 소비 경계 초안 완료, 09 생산자 구현·통합 검증 대기
+- 여러 주문을 한 completion event로 처리할 때 중간 주문 실패 전체 롤백·동시 재시도: 실제 #410 함수와의 격리 PG17 통합 검증 대기
 - SQL 초안 병합 승인: 대기
 - 운영 DB 적용 승인: 없음
 - 기능 ON 승인: 없음

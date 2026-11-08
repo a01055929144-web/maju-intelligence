@@ -120,19 +120,19 @@ do $$ declare a jsonb; b jsonb; v_document uuid; v_return uuid:=gen_random_uuid(
  v_document:=(a->>'salesDocumentId')::uuid;
  if a->>'alreadyCreated'<>'false' or b->>'alreadyCreated'<>'true' or a->>'salesDocumentId'<>b->>'salesDocumentId'
    or a->>'completionEventId'<>'90000000-0000-4000-8000-000000000001' or a->>'completedAt' is null
+   or a->>'status'<>'confirmed' or a->>'ledgerPosted'<>'true'
    then raise exception 'idempotency failed'; end if;
  if (select total_amount from public.business_documents where id=v_document)<>1100 then raise exception 'document total failed'; end if;
  if (select total_amount from public.business_document_lines where document_id=v_document)<>1100 then raise exception 'generated line total failed'; end if;
- if exists(select 1 from public.partner_ledger_entries where source_document_id=v_document) then raise exception 'draft posted ledger'; end if;
+ if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'atomic ledger post failed'; end if;
  -- Once the draft exists, the order is non-editable; the real P2 RPC must reject a revision.
  begin
   perform public.place_store_order(repeat('1',64),'2099-01-01','[{"productId":"20000000-0000-4000-8000-000000000001","promotionId":null,"quantity":2}]','80000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',1,'edit');
   raise exception 'order changed after document draft';
  exception when others then if sqlerrm='order changed after document draft' then raise; end if; end;
- perform public.confirm_business_document('00000000-0000-4000-8000-000000000001',v_document,gen_random_uuid(),'tester');
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  if b->>'status'<>'confirmed' or b->>'ledgerPosted'<>'true' then raise exception 'confirmed ledger result failed'; end if;
- if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'ledger count failed'; end if;
+ if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'ledger idempotency failed'; end if;
  if (select count(*) from public.inventory_movements where source_document_id=v_document and movement_type='sale_out')<>1
    or (select count(*) from public.inventory_document_positions where source_document_id=v_document)<>1
    then raise exception 'sale inventory was not applied exactly once'; end if;
