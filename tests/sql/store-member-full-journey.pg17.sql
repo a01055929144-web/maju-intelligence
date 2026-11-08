@@ -26,6 +26,9 @@ insert into storefront_links(id,company_id,customer_id,document_version_id,token
 values('c4000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',
   'c1000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',repeat('e',32),repeat('e',64),'2099-12-31');
 
+-- The production application service role already reads the customer master.
+grant select on normalized_customers to service_role;
+
 set role service_role;
 do $$
 declare
