@@ -179,7 +179,7 @@ async function historyRead() {
   mocks.read.mockResolvedValue({ ...viewScope, priceAvailable: true, lines: [], policy: { weekdays: [], holidays: [] } });
   return POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" }, body: JSON.stringify({ token: "signed", companyId: "forged", storeAccountId: "forged", memberId: "forged" }) }));
 }
-it.each(["owner", "staff"])("shows stored authors only to a verified same-store %s", async role => {
+it.each(["owner", "manager", "staff"])("shows stored authors only to a verified same-store %s", async role => {
   mocks.orderContext.mockResolvedValue({ ...viewMember, role });
   mocks.db.mockImplementation(async (path: string) => {
     if (path.startsWith("store_orders?")) return [
