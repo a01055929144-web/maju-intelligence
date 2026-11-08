@@ -137,6 +137,29 @@ describe("Stage D synthetic delivery flow", () => {
     }]);
   });
 
+  it("completes one of two orders and leaves the other order on the assigned stop", () => {
+    const result = build({
+      existingStops: [{ customerId: "customer-a", driverId: "driver-a", vehicleId: "vehicle-a" }],
+      orderRead: orderRead([order, { ...order, orderId: "order-b", orderRevision: 2 }], ["customer-a"]),
+      completionEvents: [{
+        eventId: "completion-a",
+        companyId: "company-a",
+        customerId: "customer-a",
+        deliveryDate: "2026-11-08",
+        orderIds: ["order-a"],
+        completedAt: "2026-11-08T03:00:00.000Z"
+      }]
+    });
+
+    expect(result.routeStops[0]).toMatchObject({
+      customerId: "customer-a",
+      orderIds: ["order-b"],
+      orderRevisions: { "order-b": 2 }
+    });
+    expect(result.routeStops[0].completionEventId).toBeUndefined();
+    expect(result.history).toMatchObject([{ completionEventId: "completion-a", orderIds: ["order-a"] }]);
+  });
+
   it("keeps destination conflicts visible and blocks completion", () => {
     const conflictingRead = orderRead([
       order,
