@@ -6,14 +6,15 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
   await page.setViewportSize({ width, height: 900 });
   const login = await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } });
   expect(login.ok()).toBeTruthy();
-  let settingsFail = true, issued = 0;
+  let settingsFail = true, customersAvailable = false, issued = 0;
+  let minimumAmount: number | null = null;
   await page.route("**/api/pricing-documents*", route => route.fulfill({ json: { result: new URL(route.request().url()).searchParams.get("action") === "versions"
     ? [{ id: "version", version: 1, content: { title: "합성 발행본" }, publishedAt: "2026-11-08T00:00:00Z" }]
     : { items: [{ id: "document", revision: 1, content: { title: "합성 문서" } }] } } }));
   await page.route("**/api/pricing-order-settings*", route => {
-    if (new URL(route.request().url()).searchParams.has("customerQuery")) return route.fulfill({ json: { customers: [{ id: "customer", customer_name: "합성 매장" }] } });
+    if (new URL(route.request().url()).searchParams.has("customerQuery")) return route.fulfill({ json: { customers: customersAvailable ? [{ id: "customer", customer_name: "합성 매장" }] : [] } });
     return settingsFail ? route.fulfill({ status: 503, json: { message: "합성 주문 설정 확인 실패. 다시 시도해 주세요." } })
-      : route.fulfill({ json: { settings: { cutoff_time: "22:00", minimum_amount: 10000 } } });
+      : route.fulfill({ json: { settings: { cutoff_time: "22:00", minimum_amount: minimumAmount } } });
   });
   await page.route("**/api/pricing-store-links*", route => {
     if (route.request().method() === "POST") { issued++; return route.fulfill({ json: { url: "https://store.example.test/store#synthetic-first-order-link" } }); }
@@ -22,9 +23,16 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
   await page.goto("/revenue/pricing/links");
   await page.getByLabel(/^문서 선택/).selectOption("document");
   await page.getByLabel(/^발행 버전/).selectOption("version");
+  const create = page.getByRole("button", { name: "링크 만들고 복사", exact: true });
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await expect(page.getByText("검색된 거래처가 없습니다.", { exact: false })).toBeVisible();
+  await expect(create).toBeDisabled();
+  expect(issued).toBe(0);
+  await expect(page.getByText("표시할 매장 링크가 없습니다.", { exact: false })).toBeVisible();
+  await page.screenshot({ path: info.outputPath(`stage-c-empty-customers-${width}.png`), fullPage: true });
+  customersAvailable = true;
   await page.getByRole("button", { name: "검색", exact: true }).click();
   await page.getByLabel("링크를 받을 매장").selectOption("customer");
-  const create = page.getByRole("button", { name: "링크 만들고 복사", exact: true });
   expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await create.click();
   await expect(page.getByRole("status")).toContainText("합성 주문 설정 확인 실패");
@@ -32,12 +40,21 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
   settingsFail = false;
   await create.click();
   await expect(page.getByLabel("방금 만든 매장 링크")).toHaveValue("https://store.example.test/store#synthetic-first-order-link");
-  await expect(page.getByRole("status").filter({ hasText: "저장된 주문 설정 확인" })).toContainText("10,000원");
+  await expect(page.getByRole("status").filter({ hasText: "저장된 주문 설정 확인" })).toContainText("최소 확인 필요");
   expect(issued).toBe(1);
   const check = page.getByRole("button", { name: "주문 설정 다시 확인", exact: true });
   expect((await check.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  minimumAmount = 10000;
+  await check.click();
+  await expect(page.getByRole("status").filter({ hasText: "저장된 주문 설정 확인" })).toContainText("10,000원");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`stage-c-settings-link-${width}.png`), fullPage: true });
+  customersAvailable = false;
+  await page.getByRole("button", { name: "검색", exact: true }).click();
+  await expect(page.getByText("검색된 거래처가 없습니다.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("링크를 받을 매장")).toHaveValue("");
+  await expect(create).toBeDisabled();
+  expect(issued).toBe(1);
 });
 
 for (const width of [1440, 390]) {
