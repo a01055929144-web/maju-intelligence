@@ -28,6 +28,14 @@ create extension if not exists pgcrypto;
 \ir ../../tests/sql/store-order-sales-ledger-fixture.pg17.sql
 \ir ../../supabase/migrations/20261016190000_erp_phase_1_documents_ledger.sql
 \ir ../../supabase/migrations/20261016200000_erp_phase_1b_v2.sql
+-- Inventory resolver parses its purchase branch even though this regression uses sales only.
+-- The real object is owned by the product-mapping migration; keep only its read interface here.
+create table public.supplier_product_matches(
+  company_id uuid not null,
+  supplier_product_id uuid not null,
+  product_catalog_id uuid not null,
+  match_status text not null
+);
 \ir ../../supabase/migrations/20261016202000_inventory_phase_1.sql
 \ir ../../supabase/migrations/20261102114602_pricing_p2_store_ordering.sql
 -- Minimal 09 completion producer interface. #410 owns the real Draft objects.
