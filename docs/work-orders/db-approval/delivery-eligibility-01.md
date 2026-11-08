@@ -3,7 +3,7 @@
 상태: **승인 전 · 운영 적용/백필 금지 · 기능 OFF**
 
 - 설계: `docs/work-orders/2026-11-08-01-delivery-eligibility.md`
-- SQL 초안: `docs/sql-drafts/20261108-01-delivery-eligibility.sql`
+- SQL 초안: `docs/sql-drafts/20261108-01-delivery-eligibility.review.sql`
 - 소유: 01 지도 홈
 
 ## 승인 대상

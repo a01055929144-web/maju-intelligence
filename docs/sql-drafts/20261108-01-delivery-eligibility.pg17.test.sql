@@ -13,7 +13,7 @@ insert into public.normalized_customers(id, company_id, customer_name) values
   ('10000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001', '기존 배정 거래처'),
   ('10000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000001', '기존 미배정 거래처');
 
-\ir 20261108-01-delivery-eligibility.sql
+\ir 20261108-01-delivery-eligibility.review.sql
 
 do $$
 begin

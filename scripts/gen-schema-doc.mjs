@@ -7,7 +7,7 @@ const sources = [
   ["draft", join(root, "docs/sql-drafts")],
 ];
 const tables = new Map();
-const ignored = /(?:test|fixture|rollback|down|backup)\.sql$/i;
+const ignored = /(?:test|fixture|rollback|down|backup|review)\.sql$/i;
 
 function part(table, kind) {
   if (!tables.has(table)) tables.set(table, { migration: { columns: new Set(), fks: new Set(), rls: false, files: new Set(), confirmed: false }, draft: { columns: new Set(), fks: new Set(), rls: false, files: new Set() } });
