@@ -862,7 +862,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </>}
     </section> : null}
     {importedLines.length ? <section aria-label="저장 전 적용일 확인" className="maju-section-card space-y-3 p-4">
-      <p>매입 이력 {importedLines.length}행 · 현재 가격 변경 {updateCurrentPrices ? selected.length : 0}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}. 완료 전에는 원본 파일을 보관해 주세요.</p>
+      <p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
       {importedLines.some(line => !line.unit.trim()) ? <p>단위 미기재 {importedLines.filter(line => !line.unit.trim()).length}행은 원문 그대로 보관합니다. 상품관리에서 단위를 확인해 주세요.</p> : null}
       <ul>{reviewDates.map(([date, count]) => <li key={date}>{date || "날짜 없음"} · {count}행</li>)}</ul>
       {batchEnabled && !usesDateBatch && priceChangeCount > 100 ? <p role="alert">가격 변경 {priceChangeCount}건은 최대 100건을 초과합니다. 저장 전 선택 건수를 줄여 주세요. 새 상품·이력을 먼저 저장하지 않습니다.</p> : null}
@@ -871,14 +871,14 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       {datePartial ? <p>확정 연결 상품 {dateMappedIds.length}개 · 새로 등록한 미가격 상품 {dateCreatedCount}개 · 날짜별 가격 적용 미완료: {importedLines.length}행 · 연결 미완료 {importedLines.filter(line => !line.productId).length}행. 상품 등록 결과와 구분해 확인해 주세요.</p> : null}
       {saveReview ? <>
         {usesDateBatch && importedLines.some(line => !line.productId) ? <p>연결 미완료 원문 {importedLines.filter(line => !line.productId).length}행은 먼저 상품 연결을 확정합니다. 가격 반영을 보류한 품목도 원문 연결에 필요한 새 미가격 상품이 등록될 수 있습니다.</p> : null}
-        <h3 className="font-semibold">최종 저장 확인</h3><p>현재 가격 변경 {priceChangeCount}건 · 매입 이력 {importedLines.length}행{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}. 적용 날짜를 확인해 주세요.</p>
+        <h3 className="font-semibold">최종 저장 확인</h3><p>{historyOnlyDefaultEnabled ? <>현재 가격 변경 {priceChangeCount}건 · 매입 이력 {importedLines.length}행{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}. 적용 날짜를 확인해 주세요.</> : <>가격 변경 {priceChangeCount}건 · 새 상품 {unmatched.length}건 · 원본 거래 {importedLines.length}행의 적용 날짜를 확인해 주세요.</>}</p>
         {usesDateBatch && undatedTargets.length ? <div>
           <p>기준일 미확정 기존가 {undatedTargets.length}품목 · 이전 가격과 선택 날짜를 확인해 주세요.</p>
           <CommonDataTable rows={undatedTargets} columns={undatedColumns} rowKey={row => row.productId} settingsKey={`purchase-date-undated-confirm:${companyId}`} emptyMessage="확인할 기존가가 없습니다." />
           <label className="flex min-h-[44px] items-center gap-2"><input aria-label="기준일 없는 기존가 교체" type="checkbox" checked={replaceUndatedCurrent} onChange={event => setReplaceUndatedCurrent(event.target.checked)} />기준일 미확정 기존가를 이번 적용일로 교체합니다. 저장 직전 기존 가격이 달라지면 전체 저장을 취소합니다.</label>
           <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
         </div> : null}
-        <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.</label>
+        <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
         <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
