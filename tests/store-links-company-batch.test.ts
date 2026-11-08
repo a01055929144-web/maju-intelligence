@@ -2,14 +2,14 @@ vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), db: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), db: vi.fn(), canManage: true }));
 vi.mock("@/lib/auth", () => ({
   getRequestAuthScope: mocks.auth,
   getCustomerOperationalName: () => "대표",
 }));
 vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.db }));
 vi.mock("@/domains/pricing/access", () => ({
-  canManagePriceSheets: () => true,
+  canManagePriceSheets: () => mocks.canManage,
 }));
 vi.mock("@/lib/pricing/feature", () => ({
   priceSheetsEnabled: () => process.env.PRICE_SHEETS_ENABLED === "true",
@@ -46,11 +46,14 @@ const oldEnv = Object.fromEntries(
     "STORE_PUBLIC_BASE_URL",
     "FEATURE_PRICING_COMPANY_IDS",
     "FEATURE_STORE_ORDERING_COMPANY_IDS",
+    "READ_ONLY_STORE_LINKS_ENABLED",
   ].map((key) => [key, process.env[key]]),
 );
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.canManage = true;
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "false";
   process.env.PRICE_SHEETS_ENABLED = "true";
   process.env.STORE_ORDERING_ENABLED = "true";
   process.env.STORE_LINK_SECRET =
@@ -272,4 +275,58 @@ it.each(["FEATURE_PRICING_COMPANY_IDS", "FEATURE_STORE_ORDERING_COMPANY_IDS"])("
   expect((await GET(new NextRequest("http://localhost/api/pricing-store-links"))).status).toBe(404);
   expect((await POST(new NextRequest("http://localhost/api/pricing-store-links",{method:"POST",body:JSON.stringify({action:"create",companyId:"other-company",customerId:customer,documentVersionId:version})}))).status).toBe(404);
   expect(mocks.db).not.toHaveBeenCalled();
+});
+
+function readonlyRequest(canOrder: unknown, action = "create") {
+  return new NextRequest("http://localhost/api/pricing-store-links", { method: "POST", headers: { origin: "http://localhost" }, body: JSON.stringify({ companyId: company, action, customerId: customer, customerIds: [customer], documentVersionId: version, canOrder }) });
+}
+function mockIssue() {
+  mocks.db.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path.startsWith("normalized_customers?")) return [{ id: customer }];
+    if (path.startsWith("pricing_document_versions?")) return [{ id: version, document_id: version }];
+    if (path.startsWith("pricing_documents?")) return [{ id: version, kind: "sheet" }];
+    if (path === "rpc/issue_storefront_links") {
+      const link = JSON.parse(String(init?.body)).p_links[0];
+      return [{ issued_customer_id: customer, issued_link_id: link.id, issued_token_nonce: link.nonce, issued_token_hash: link.hash, was_created: true }];
+    }
+    throw new Error(`Unexpected query ${path}`);
+  });
+}
+it("blocks readonly issuance before DB reads with the default OFF flag", async () => {
+  expect((await POST(readonlyRequest(false))).status).toBe(400);
+  expect(mocks.db).not.toHaveBeenCalled();
+});
+it("passes explicit false inside the existing issuer RPC without a later PATCH", async () => {
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "true"; mockIssue();
+  const response = await POST(readonlyRequest(false)); expect(response.status).toBe(200);
+  const calls = mocks.db.mock.calls.filter(([path]) => path === "rpc/issue_storefront_links");
+  expect(calls).toHaveLength(1); expect(JSON.parse(String(calls[0][1].body)).p_links[0].canOrder).toBe(false);
+  expect(mocks.db.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+  expect(verifyStoreLinkToken(new URL((await response.json()).url).hash.slice(1))).not.toBeNull();
+});
+it.each([undefined, true])("keeps ordinary %s issuance on the legacy default", async canOrder => {
+  mockIssue(); expect((await POST(readonlyRequest(canOrder))).status).toBe(200);
+  const call = mocks.db.mock.calls.find(([path]) => path === "rpc/issue_storefront_links")!;
+  expect(JSON.parse(String(call[1].body)).p_links[0]).not.toHaveProperty("canOrder");
+});
+it.each([null, "false", 0])("rejects a nonboolean readonly value %# before DB reads", async value => {
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "true";
+  expect((await POST(readonlyRequest(value))).status).toBe(400); expect(mocks.db).not.toHaveBeenCalled();
+});
+it("rejects readonly bulk issuance and unauthorized managers before DB reads", async () => {
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "true";
+  expect((await POST(readonlyRequest(false, "create-batch"))).status).toBe(400); expect(mocks.db).not.toHaveBeenCalled();
+  mocks.canManage = false;
+  expect((await POST(readonlyRequest(false))).status).toBe(403); expect(mocks.db).not.toHaveBeenCalled();
+});
+it("reports an existing orderable link conflict without a fallback write", async () => {
+  process.env.READ_ONLY_STORE_LINKS_ENABLED = "true"; mockIssue();
+  const issue = mocks.db.getMockImplementation()!;
+  mocks.db.mockImplementation(async (path: string, init?: RequestInit) => {
+    if (path === "rpc/issue_storefront_links") throw new Error("Supabase request failed: readonly_link_existing_orderable_conflict");
+    return issue(path, init);
+  });
+  const response = await POST(readonlyRequest(false)); expect(response.status).toBe(400);
+  expect((await response.json()).message).toContain("회수");
+  expect(mocks.db.mock.calls.filter(([path]) => path === "rpc/issue_storefront_links")).toHaveLength(1);
 });

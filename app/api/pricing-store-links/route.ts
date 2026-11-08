@@ -8,6 +8,7 @@ import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { supabaseRequest } from "@/lib/store";
 import { isId } from "@/domains/pricing/document";
+import { readOnlyStoreLinksEnabled } from "../../../lib/pricing/read-only-store-links-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -323,6 +324,10 @@ export async function POST(request: NextRequest) {
     "운영자";
   try {
     if (body.action === "create" || body.action === "create-batch") {
+      if (body.canOrder !== undefined && typeof body.canOrder !== "boolean")
+        throw new Error("주문 허용 여부를 확인해 주세요.");
+      if (body.canOrder === false && (!readOnlyStoreLinksEnabled() || body.action !== "create"))
+        throw new Error("열람 전용 링크 발급은 아직 사용할 수 없습니다.");
       const publicBase = storePublicBase();
       const customerIds =
         body.action === "create" ? [body.customerId] : body.customerIds;
@@ -375,6 +380,7 @@ export async function POST(request: NextRequest) {
             id: item.id,
             nonce: item.nonce,
             hash: item.hash,
+            ...(body.canOrder === false ? { canOrder: false } : {}),
           })),
           p_expires_at: expires,
           p_actor_key: actor,
@@ -448,6 +454,8 @@ export async function POST(request: NextRequest) {
     }
     throw new Error("링크 요청을 확인해 주세요.");
   } catch (error) {
+    if (error instanceof Error && error.message.includes("readonly_link_existing_orderable_conflict"))
+      return NextResponse.json({ message: "같은 버전의 기존 링크는 주문 가능합니다. 회수를 확인한 뒤 열람 전용 링크를 발급해 주세요." }, { status: 400 });
     return NextResponse.json(
       {
         message:

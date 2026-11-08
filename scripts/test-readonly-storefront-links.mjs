@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { Client } from 'pg';
+import { issueStoreLinkToken, verifyStoreLinkToken } from '../lib/pricing/store-link-token.ts';
+
+assert.equal(process.env.PGHOST, '127.0.0.1');
+assert.equal(process.env.PGDATABASE, 'readonly_link_patch_test');
+process.env.STORE_LINK_SECRET = 'synthetic-readonly-issuer-test-secret-not-for-production';
+const a = new Client(), b = new Client();
+await a.connect(); await b.connect();
+const company = '00000000-0000-4000-8000-000000000001';
+const customer = '20000000-0000-4000-8000-000000000001';
+const otherCustomer = '20000000-0000-4000-8000-000000000002';
+const secondCustomer = '20000000-0000-4000-8000-000000000003';
+const version = '80000000-0000-4000-8000-000000000001';
+const expiry = new Date(Date.now() + 86_400_000).toISOString();
+const item = (customerId, canOrder) => {
+  const id = randomUUID(), signed = issueStoreLinkToken(id);
+  return { id, customerId, nonce: signed.nonce, hash: signed.hash, ...(canOrder !== undefined ? { canOrder } : {}) };
+};
+const issue = (client, links) => client.query('select * from issue_storefront_links($1,$2,$3,$4,null,$5)', [company, version, JSON.stringify(links), expiry, 'b'.repeat(64)]);
+const metadata = "select oid::text,proacl::text,prosecdef,md5(pg_get_functiondef(oid)) hash from pg_proc where oid='public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text)'::regprocedure";
+try {
+  assert.equal((await a.query('show server_version_num')).rows[0].server_version_num.slice(0,2), '17');
+  const before = (await a.query(metadata)).rows[0];
+  const up = await readFile(new URL('../docs/sql-drafts/20261108-09-readonly-storefront-links.sql', import.meta.url), 'utf8');
+  const down = await readFile(new URL('../docs/sql-drafts/20261108-09-readonly-storefront-links.down.sql', import.meta.url), 'utf8');
+  await a.query(up); await a.query(down);
+  assert.deepEqual((await a.query(metadata)).rows[0], before);
+  await a.query(up);
+  const after = (await a.query(metadata)).rows[0];
+  assert.equal(after.oid, before.oid); assert.equal(after.proacl, before.proacl); assert.equal(after.prosecdef, false);
+  await a.query('set role service_role'); await b.query('set role service_role');
+  const normal = (await issue(a, [item(customer)])).rows[0];
+  assert.equal((await b.query('select can_order from storefront_links where id=$1', [normal.issued_link_id])).rows[0].can_order, true);
+  assert.equal((await issue(a, [item(customer)])).rows[0].issued_link_id, normal.issued_link_id);
+  await assert.rejects(issue(a, [item(customer, false)]), /readonly_link_existing_orderable_conflict/);
+  assert.equal((await b.query('select can_order from storefront_links where id=$1', [normal.issued_link_id])).rows[0].can_order, true);
+  await a.query('update storefront_links set revoked_at=now(),can_order=false where id=$1', [normal.issued_link_id]);
+  await a.query('begin');
+  const readonly = (await issue(a, [item(customer, false)])).rows[0];
+  assert.equal((await b.query('select count(*) n from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].n, '0');
+  await a.query('commit');
+  assert.equal((await b.query('select can_order from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].can_order, false);
+  assert.equal((await issue(a, [item(customer, false)])).rows[0].issued_link_id, readonly.issued_link_id);
+  assert.equal((await issue(a, [item(customer)])).rows[0].issued_link_id, readonly.issued_link_id);
+  assert.equal((await b.query('select can_order from storefront_links where id=$1', [readonly.issued_link_id])).rows[0].can_order, false);
+  for (const value of [null, 'false', 0]) await assert.rejects(issue(a, [item(secondCustomer, value)]), /Invalid link issue row/);
+  await assert.rejects(issue(a, [item(secondCustomer, false), item(otherCustomer, false)]), /Duplicate or cross-company customer/);
+  assert.equal((await a.query('select count(*) n from storefront_links where customer_id=$1', [secondCustomer])).rows[0].n, '0');
+  const [left,right] = await Promise.all([issue(a,[item(secondCustomer,false)]),issue(b,[item(secondCustomer,false)])]);
+  assert.equal(left.rows[0].issued_link_id,right.rows[0].issued_link_id);
+  assert.equal((await a.query('select count(*) n from storefront_links where customer_id=$1', [secondCustomer])).rows[0].n,'1');
+  assert.equal((await a.query('select can_order from storefront_links where id=$1',[left.rows[0].issued_link_id])).rows[0].can_order,false);
+  const recovered = issueStoreLinkToken(readonly.issued_link_id,readonly.issued_token_nonce);
+  assert.equal(recovered.hash,readonly.issued_token_hash); assert.equal(verifyStoreLinkToken(recovered.token)?.id,readonly.issued_link_id);
+  await a.query('update storefront_links set revoked_at=now(),can_order=false where id=$1',[readonly.issued_link_id]);
+  assert.equal((await a.query('select record_storefront_view($1,$2) recorded',[recovered.hash,'desktop'])).rows[0].recorded,false);
+  assert.equal((await a.query('select count(*) n from store_orders')).rows[0].n,'0');
+  await a.query('reset role'); await a.query(down);
+  assert.deepEqual((await a.query(metadata)).rows[0],before);
+  assert.equal((await a.query('select can_order from storefront_links where id=$1',[left.rows[0].issued_link_id])).rows[0].can_order,false);
+  console.log('readonly_storefront_issuer_default_true_atomic_false_acl_isolation_retry_revoke_down_pg17_pass');
+} finally {
+  await a.query('rollback').catch(()=>{});
+  await a.end(); await b.end();
+}

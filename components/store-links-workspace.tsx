@@ -14,7 +14,8 @@ type Link = { id: string; customerName: string; documentTitle: string; documentV
 type Event = { id: string; event_type: string; occurred_at: string;
   device_class: string | null; actor_name: string | null };
 
-export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
+export function StoreLinksWorkspace({ companyId, readOnlyAvailable = false }: { companyId: string; readOnlyAvailable?: boolean }) {
+  const [readOnly, setReadOnly] = useState(false);
   const [documents, setDocuments] = useState<Draft[]>([]);
   const [documentId, setDocumentId] = useState("");
   const [versions, setVersions] = useState<Version[]>([]);
@@ -105,7 +106,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     finally { setBusy(false); }
   }
   async function issueCompanyLinks() {
-    if (!versionId || busy || !window.confirm(
+    if (!versionId || busy || (readOnlyAvailable && readOnly) || !window.confirm(
       "회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 문서 링크는 재사용합니다. 계속할까요?",
     )) return;
     setBusy(true); setMessage(""); setCreatedUrl("");
@@ -200,8 +201,9 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
+      {readOnlyAvailable && <label className="flex min-h-[44px] items-center gap-2 text-sm"><input type="checkbox" checked={readOnly} disabled={busy} onChange={event => setReadOnly(event.target.checked)} />주문 없이 열람만 가능한 링크 (한 매장)</label>}
       <Button disabled={busy || !versionId || !customers.some(customer => customer.id === customerId)} className="min-h-[44px]"
-        onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</Button>
+        onClick={() => void action({ action: "create", customerId, documentVersionId: versionId, ...(readOnlyAvailable && readOnly ? { canOrder: false } : {}) })}>링크 만들고 복사</Button>
       {customers.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
         <label className="flex min-h-11 items-center gap-2 font-semibold"><input type="checkbox"
           checked={selectedCustomerIds.length === customers.length}
@@ -212,14 +214,14 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
             checked={selectedCustomerIds.includes(item.id)} onChange={(event) => setSelectedCustomerIds((old) =>
               event.target.checked ? [...old, item.id] : old.filter((id) => id !== item.id))} />
             {item.customer_name}</label>)}</div>
-        <button disabled={busy || !versionId || selectedCustomerIds.length === 0}
+        <button disabled={busy || (readOnlyAvailable && readOnly) || !versionId || selectedCustomerIds.length === 0}
           className="min-h-11 rounded bg-slate-900 px-4 text-white disabled:opacity-50"
           onClick={() => void action({ action: "create-batch", customerIds: selectedCustomerIds,
             documentVersionId: versionId })}>선택한 {selectedCustomerIds.length}곳 링크 일괄 발급</button>
         <p className="text-slate-600">한 번에 최대 30곳의 검색 결과를 발급합니다. 각 링크는 해당 매장에만 전달해 주세요.</p>
       </div>}
       <div className="rounded border p-3 text-sm">
-        <button disabled={busy || !versionId} className="min-h-11 rounded border px-4 disabled:opacity-50"
+          <button disabled={busy || (readOnlyAvailable && readOnly) || !versionId} className="min-h-11 rounded border px-4 disabled:opacity-50"
           onClick={() => void issueCompanyLinks()}>회사 전체 매장 링크 발급</button>
         <p className="mt-2 text-slate-600">50곳씩 처리합니다. 중간에 끊겨 다시 눌러도 활성 링크를 재사용하며 자동 발송은 하지 않습니다.</p>
       </div>
