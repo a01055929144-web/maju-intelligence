@@ -104,6 +104,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import type { RouteOrderFields, RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
@@ -240,7 +241,7 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
   return { id: customerId, name: result.name };
 }
 
-export type StoreRow = RoutePlanStop & {
+export type StoreRow = RoutePlanStop & RouteOrderFields & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
   birthDate: string;
@@ -367,6 +368,7 @@ type SalesRouteMapWorkspaceProps = {
    * 네트워크 왕복을 없앱니다. */
   readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
+  readonly orderLinkStatus?: RouteOrderLinkStatus;
   readonly routePlan: RoutePlan;
   readonly staffVehicleLocations?: StaffVehicleLocation[];
   readonly staffInvitations?: StaffInvitation[];
@@ -474,7 +476,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, orderLinkStatus = "off", routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -3832,6 +3834,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
+          orderLinkStatus={orderLinkStatus}
           pendingAddStoreId={pendingCourseStoreId}
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
