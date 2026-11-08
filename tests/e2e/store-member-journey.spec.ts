@@ -15,6 +15,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   let signedIn = false, accepted = 0, orderAttempts = 0, costRequests = 0, lostResponse = false;
   const saved = new Map<string, string>();
   const requests: Record<string, unknown>[] = [];
+  let releaseOrderResponse = () => {};
   await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: { document, expiresAt: "2099-01-01T00:00:00Z", acceptanceAvailable: true } }));
   await page.route("**/api/pricing-document-acceptance", route => {
     expect(route.request().postDataJSON().shareToken).toBe("synthetic-document-token"); accepted++;
@@ -29,7 +30,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
     return route.fulfill({ contentType: "text/html; charset=utf-8", body: "<main>합성 카카오 인증 완료</main>" });
   });
   await context.route("**/api/store/costs**", route => { costRequests++; return route.abort(); });
-  await page.route("**/api/storefront", route => {
+  await page.route("**/api/storefront", async route => {
     const input = route.request().postDataJSON(); expect(input.token).toBe("synthetic-order-token");
     if (route.request().method() === "PUT") {
       orderAttempts++; requests.push(input);
@@ -40,6 +41,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
       if (!saved.has(input.idempotencyKey)) saved.set(input.idempotencyKey, "synthetic-order");
       if (!lostResponse) {
         lostResponse = true;
+        await new Promise<void>(resolve => { releaseOrderResponse = resolve; });
         return route.fulfill({ status: 503, json: { message: "합성 주문 저장 후 응답 유실. 같은 요청으로 다시 시도해 주세요." } });
       }
       return route.fulfill({ json: { id: saved.get(input.idempotencyKey) } });
@@ -72,7 +74,17 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await page.getByRole("button", { name: "로그인 상태 다시 확인", exact: true }).click();
   await expect(page.getByRole("button", { name: "카카오로 매장 로그인", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
+  await expect(page.getByRole("button", { name: "저장 중", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "합성 품목 수량 줄이기", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("배송일", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("요청 사항", { exact: true })).toBeDisabled();
+  await expect.poll(() => saved.size).toBe(1);
+  releaseOrderResponse();
   await expect(page.getByRole("status").filter({ hasText: "합성 주문 저장 후 응답 유실" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true })).toBeEnabled();
+  await expect(page.getByLabel("배송일", { exact: true })).toBeEnabled();
+  await expect(page.getByLabel("요청 사항", { exact: true })).toBeEnabled();
   expect(saved.size).toBe(1);
   await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
   await expect(page.getByRole("heading", { name: "주문 내역", exact: true })).toBeVisible();
