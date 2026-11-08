@@ -9,7 +9,7 @@ declare
   select id into v_after_run from public.price_recalc_runs
     where company_id=p_company order by created_at desc,id desc limit 1;
   if v_after_run is distinct from v_before_run then v_recalc_run:=v_after_run; end if;$old$;
-  v_new constant text := $new$  if jsonb_object_length(v_current_product_ids)>0 then
+  v_new constant text := $new$  if v_current_product_ids<>'{}'::jsonb then
     select id into v_before_run from public.price_recalc_runs
       where company_id=p_company order by created_at desc,id desc limit 1;
     perform public.pricing_p0_command(p_company,'{"action":"recalculate"}'::jsonb);
