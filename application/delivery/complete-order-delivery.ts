@@ -17,7 +17,7 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   const encodedCustomer = encodeURIComponent(input.customerId);
   const encodedIds = orderIds.join(",");
 
-  const [confirmations, customers, orders, notes, attachments, completions] = await Promise.all([
+  const [confirmations, customers, orders, notes, attachments] = await Promise.all([
     request<Array<{ customer_ids: unknown; driver_name: string }>>(
       `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodedCompany}&route_date=eq.${encodeURIComponent(input.deliveryDate)}`
     ),
@@ -32,9 +32,6 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
     ) : Promise.resolve([]),
     request<Array<{ attachment_type: string; id: string }>>(
       `customer_attachments?select=id,attachment_type&company_id=eq.${encodedCompany}&customer_id=eq.${encodedCustomer}&id=in.(${attachmentIds.join(",")})&limit=100`
-    ),
-    request<Array<{ actor_key: string; result: unknown }>>(
-      `store_order_delivery_completions_09?select=actor_key,result&company_id=eq.${encodedCompany}&completion_event_id=eq.${encodeURIComponent(input.completionEventId)}&limit=1`
     )
   ]);
 
@@ -50,9 +47,6 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   if (attachments.length !== attachmentIds.length || attachments.some((item) => item.attachment_type !== "delivery_proof")) {
     throw new DeliveryCompletionError("배송 완료 사진을 확인해 주세요.");
   }
-
-  const cached = completions[0];
-  if (cached) return validateResult(cached.result, input, actor, cached.actor_key);
 
   if (orders.length !== input.orders.length) throw new DeliveryCompletionError("완료할 주문을 찾을 수 없습니다.");
   const revisionById = new Map(input.orders.map((order) => [order.orderId, order.orderRevision]));
@@ -83,12 +77,11 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   return validateResult(result, input, actor);
 }
 
-function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, actor: Actor, storedActorKey?: string) {
+function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, actor: Actor) {
   const result = value as {
     companyId?: string; completedAt?: string; completionEventId?: string; deliveryDate?: string;
     orderIds?: string[]; orderRevisions?: Record<string, number>;
   };
-  if (storedActorKey !== undefined && storedActorKey !== actor.actorKey) throw new DeliveryCompletionError("다른 기사의 배송 완료 이벤트입니다.");
   if (result.companyId !== actor.companyId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || result.completedAt !== input.completedAt) {
     throw new DeliveryCompletionError("배송 완료 결과 범위가 요청과 다릅니다.");
   }
