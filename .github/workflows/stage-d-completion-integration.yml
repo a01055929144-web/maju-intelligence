@@ -1,0 +1,62 @@
+name: Stage D completion API PG17 integration
+on:
+  pull_request:
+    paths:
+      - application/delivery/complete-order-delivery.ts
+      - tests/integration/stage-d-completion-postgrest.test.ts
+      - tests/sql/stage-d-completion-api.pg17.setup.sql
+      - .github/workflows/stage-d-completion-integration.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage-d-completion:
+    if: startsWith(github.head_ref, 'codex/02-stage-d-completion-api') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: store_member_order_test_delivery_09
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d store_member_order_test_delivery_09"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: store_member_order_test_delivery_09
+      PGUSER: postgres
+      PGRST_JWT_SECRET: stage-d-disposable-pg17-secret-must-be-at-least-32-characters
+      STAGE_D_COMPLETION_INTEGRATION: isolated
+      STAGE_D_POSTGREST_URL: http://127.0.0.1:3002
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: ee75b0cc95fa52609662fd5907871d21a2f6fbd3
+          path: delivery09-contract
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Load pinned 09 contract into disposable PG17
+        run: |
+          psql --set=ON_ERROR_STOP=1 --file=delivery09-contract/tests/sql/store-order-delivery-producer-09.pg17.fixture.sql
+          psql --set=ON_ERROR_STOP=1 --file=delivery09-contract/docs/sql-drafts/20261108-09-order-delivery-producer.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/stage-d-completion-api.pg17.setup.sql
+      - name: Start isolated PostgREST
+        run: >-
+          docker run --detach --network host
+          --env PGRST_DB_URI=postgres://postgres@127.0.0.1:5432/store_member_order_test_delivery_09
+          --env PGRST_DB_SCHEMAS=public --env PGRST_DB_ANON_ROLE=anon
+          --env PGRST_JWT_SECRET --env PGRST_DB_MAX_ROWS=1000 --env PGRST_SERVER_PORT=3002
+          postgrest/postgrest:v12.2.8
+      - name: Verify application to PostgREST to PG17 completion
+        run: npx vitest run tests/integration/stage-d-completion-postgrest.test.ts
+
