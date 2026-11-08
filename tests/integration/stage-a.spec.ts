@@ -100,9 +100,9 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.getByRole('button',{name:'② 열 정렬',exact:true}).click();
     await page.getByRole('button',{name:/③ 저장/}).click();
     const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
-    await expect(review).toContainText('원본 거래 3417행');
+    await expect(review).toContainText('매입 이력 3417행');
     await expect(review).toContainText('단위 미기재 1552행');
-    await review.getByRole('checkbox',{name:'적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.',exact:true}).check();
+    await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath('real-stage-a-review.png'),fullPage:true});
     db('fail-on');
@@ -114,7 +114,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     expect(Number(failed.other_cost)).toBe(999);
     expect(writes).toHaveLength(1);
     db('fail-off');
-    await review.getByRole('checkbox',{name:'적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다.',exact:true}).check();
+    await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
     const started=Date.now();
     await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
     await expect(page.getByRole('status').filter({hasText:`현재가 반영 ${745-scenario.held}품목 · 이력 전용 ${scenario.held}품목`})).toBeVisible();

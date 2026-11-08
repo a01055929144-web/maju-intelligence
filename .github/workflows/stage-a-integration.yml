@@ -54,6 +54,7 @@ jobs:
           CI_LAYOUT_FIXTURES: enabled
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
       - run: npx playwright install chromium
       - name: Exercise real browser API PostgREST PG17 path
         run: npx playwright test --config playwright.stage-a.config.ts
