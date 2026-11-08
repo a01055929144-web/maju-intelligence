@@ -7,12 +7,13 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { chromium, expect } from "@playwright/test";
+const readonlySmoke = process.env.P2_READONLY_PG17_SMOKE === "true";
 const db = process.env.PRICING_P2_LOCAL_DATABASE_URL;
 if (!db) throw new Error("Initialized disposable PG16 DB required");
 const target = new URL(db);
 if (
   !["127.0.0.1", "localhost", "[::1]"].includes(target.hostname) ||
-  !target.pathname.startsWith("/pricing_p2_test")
+  !(readonlySmoke ? target.pathname === "/readonly_storefront_browser_test" : target.pathname.startsWith("/pricing_p2_test"))
 )
   throw new Error("Loopback pricing_p2_test DB only");
 // Match PostgREST JSON: int8/numeric values are numbers; DATE stays a KST calendar string.
@@ -63,7 +64,7 @@ const tokenFor = (id) => {
 const tokens = Object.fromEntries(
   ["link", "otherLink", "expiredLink"].map((k) => [k, tokenFor(ids[k])]),
 );
-const artifacts = resolve("../outputs/pricing-p2-browser");
+const artifacts = resolve(readonlySmoke ? "test-results/readonly-pg17" : "../outputs/pricing-p2-browser");
 await mkdir(artifacts, { recursive: true });
 await writeFile(
   resolve(artifacts, "result.json"),
@@ -97,8 +98,8 @@ function identifier(table, name) {
 }
 try {
   const v = await pool.query("show server_version_num");
-  if (Math.floor(Number(v.rows[0].server_version_num) / 10000) !== 16)
-    throw new Error("PG16 required");
+  if (Math.floor(Number(v.rows[0].server_version_num) / 10000) !== (readonlySmoke ? 17 : 16))
+    throw new Error("Expected disposable PostgreSQL version required");
   await pool.query("insert into companies(id) values($1)", [ids.company]);
   await pool.query(
     "insert into delivery_territories(id,company_id) values($1,$2)",
@@ -107,7 +108,7 @@ try {
   for (const [id, name] of [
     [ids.customer, "합성 매장 A"],
     [ids.otherCustomer, "합성 매장 B"],
-  ])
+  ].slice(0, readonlySmoke ? 1 : 2))
     await pool.query(
       "insert into normalized_customers(id,company_id,customer_name,address,delivery_territory_id) values($1,$2,$3,'합성 배송지',$4)",
       [id, ids.company, name, ids.territory],
@@ -138,8 +139,8 @@ try {
     taxType: "exempt",
   });
   const content = {
-    kind: "sheet",
-    title: "P2 공개 주문",
+    kind: readonlySmoke ? "quote" : "sheet",
+    title: readonlySmoke ? "합성 PG17 18품목 견적" : "P2 공개 주문",
     companyName: "합성 유통",
     footer: "합성 안내",
     showPrice: true,
@@ -150,14 +151,19 @@ try {
       line(ids.market, "공개 시세 상품", 1500),
     ],
   };
+  if (readonlySmoke) for (let i=4;i<=18;i++) {
+    const id=randomUUID();
+    await pool.query("insert into product_catalog(id,company_id,purchase_product_name,purchase_price,sales_product_name,sales_unit,tax_type,order_pricing_mode) values($1,$2,'INTERNAL-PURCHASE',18910,$3,'개','exempt','fixed')",[id,ids.company,`합성 PG17 품목${i}`]);
+    content.lines.push(line(id,`합성 PG17 품목${i}`,1000));
+  }
   await pool.query(
-    "insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values($1,$2,$3,'sheet',1,$4)",
-    [ids.document, ids.company, "b".repeat(64), content],
+    "insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values($1,$2,$3,$4,1,$5)",
+    [ids.document, ids.company, "b".repeat(64), content.kind, content],
   );
   for (const [id, c, n] of [
     [ids.version, content, 1],
     [ids.expiredVersion, { ...content, validUntil: "2000-01-01" }, 2],
-  ])
+  ].slice(0, readonlySmoke ? 1 : 2))
     await pool.query(
       "insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values($1,$2,$3,$4,$4,$5)",
       [id, ids.company, ids.document, n, c],
@@ -166,7 +172,11 @@ try {
     ["link", ids.customer, ids.version],
     ["otherLink", ids.otherCustomer, ids.version],
     ["expiredLink", ids.customer, ids.expiredVersion],
-  ])
+  ].slice(0, readonlySmoke ? 1 : 3)) {
+    if (readonlySmoke) {
+      await pool.query("insert into storefront_links(id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at,can_order) values($1,$2,$3,$4,$5,$6,$7,false)",[ids[key],ids.company,customerId,versionId,tokens[key].nonce,tokens[key].hash,new Date(Date.now()+86400000).toISOString()]);
+      continue;
+    }
     await pool.query("select * from issue_storefront_links($1,$2,$3,$4,null)", [
       ids.company,
       versionId,
@@ -180,6 +190,7 @@ try {
       ]),
       new Date(Date.now() + 86400000).toISOString(),
     ]);
+  }
   await pool.query(
     "insert into store_order_settings(company_id,minimum_amount,minimum_policy,delivery_fee) values($1,2000,'fee',500)",
     [ids.company],
@@ -188,11 +199,11 @@ try {
     "insert into store_order_territory_rules(company_id,territory_id,delivery_weekdays,cutoff_days_before,cutoff_time) values($1,$2,array[0,1,2,3,4,5,6]::smallint[],0,'23:59')",
     [ids.company, ids.territory],
   );
-  await pool.query(
+  if (!readonlySmoke) await pool.query(
     "insert into customer_price_agreements(id,company_id,customer_id,product_catalog_id,sales_unit,unit_price,tax_type,status,effective_from) values($1,$2,$3,$4,'개',900,'exempt','active','2020-01-01')",
     [randomUUID(), ids.company, ids.customer, ids.plain],
   );
-  for (let i = 0; i < 11; i++)
+  for (let i = 0; i < (readonlySmoke ? 0 : 11); i++)
     await pool.query("select place_store_order($1,$2,$3,$4)", [
       tokens.link.hash,
       day,
@@ -211,6 +222,9 @@ try {
     columns.get(r.table_name).add(r.column_name);
   }
   bridge = createServer(async (req, res) => {
+    if (readonlySmoke && (req.headers.apikey!=="local-test-only" || req.headers.authorization!=="Bearer local-test-only")) {
+      res.writeHead(401).end(); return;
+    }
     const u = new URL(req.url, "http://127.0.0.1");
     const table = u.pathname.replace(/^\/rest\/v1\//, "");
     reads.push(table);
@@ -230,6 +244,7 @@ try {
       if (table.startsWith("rpc/")) {
         const b = JSON.parse(raw || "{}");
         const name = table.slice(4);
+        if (readonlySmoke && !["record_storefront_view","store_recent_dispatch_prices"].includes(name)) throw new Error("Readonly smoke forbids mutation RPC");
         const calls = {
           place_store_order: [
             "select place_store_order($1,$2,$3,$4,$5,$6,$7) value",
@@ -330,6 +345,7 @@ try {
           req.method === "POST" &&
           table === "store_product_preferences"
         ) {
+          if (readonlySmoke) throw new Error("Readonly smoke forbids preference writes");
           const body = JSON.parse(raw),
             keys = Object.keys(body);
           const conflict = (u.searchParams.get("on_conflict") || "")
@@ -386,6 +402,9 @@ try {
         STORE_ORDERING_ENABLED: "true",
         STORE_LINK_SECRET: secret,
         STORE_PUBLIC_BASE_URL: "https://store.example.test",
+        FEATURE_PRICING_COMPANY_IDS: ids.company,
+        FEATURE_STORE_ORDERING_COMPANY_IDS: ids.company,
+        ...(readonlySmoke ? { STORE_MEMBER_SESSION_ENABLED: "false", READ_ONLY_STORE_LINKS_ENABLED: "false", READ_ONLY_STORE_LINKS_COMPANY_IDS: "", CI_LAYOUT_FIXTURES: "disabled" } : {}),
         HOLD_MODULES_ENABLED_COMPANY_IDS: ids.company,
         SUPABASE_URL: `http://127.0.0.1:${bridgePort}`,
         SUPABASE_SERVICE_ROLE_KEY: "local-test-only",
@@ -423,6 +442,40 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   const requestPaths = [];
   page.on("request", (r) => requestPaths.push(r.url()));
+  if (readonlySmoke) {
+    await page.goto(base + "/store#" + tokens.link.token);
+    await expect(page.getByRole("heading", { name: content.title, exact: true })).toBeVisible();
+    const response = await context.request.post(base + "/api/storefront", { headers: { origin: base }, data: { token: tokens.link.token } });
+    expect(response.status()).toBe(200);
+    const data = await response.json();
+    expect(data.store.lines).toHaveLength(18); expect(data.store.canOrder).toBe(false);
+    expect(data.store.customerName).toBe("합성 매장 A");
+    expect(data.store.lines.find(l=>l.productId===ids.plain).unitPrice).toBe(1000);
+    for (const privateValue of ["INTERNAL","18910","purchaseCost","supplier","margin","objectKey","accessPassword"]) expect(JSON.stringify(data)).not.toContain(privateValue);
+    for (const width of [1440,390]) {
+      await page.setViewportSize({width,height:900});
+      await page.getByRole("button",{name:"주문",exact:true}).click();
+      await expect(page.getByText("합성 PG17 품목18",{exact:true})).toBeVisible();
+      await expect(page.getByRole("button",{name:"후결제로 주문 신청",exact:true})).toBeDisabled();
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
+      await page.screenshot({path:resolve(artifacts,`readonly-pg17-${width}.png`),fullPage:true});
+      await page.getByRole("button",{name:"데이터",exact:true}).click();
+      await expect(page.getByText("현재 주문 링크에서는 원가 자료를 제공하지 않습니다.",{exact:false})).toBeVisible();
+      await expect(page.getByRole("button",{name:"엑셀 원가 업로드",exact:true})).toHaveCount(0);
+    }
+    const counts=(await pool.query("select (select count(*) from companies) companies,(select count(*) from normalized_customers) customers,(select count(*) from pricing_document_versions) versions,(select count(*) from storefront_links) links,(select count(*) from store_orders) orders,(select count(*) from store_order_requests) requests,(select count(*) from store_order_lines) lines,(select count(*) from store_product_preferences) preferences")).rows[0];
+    expect(counts).toEqual({companies:1,customers:1,versions:1,links:1,orders:0,requests:0,lines:0,preferences:0});
+    expect(Number((await pool.query('select view_count from storefront_links where id=$1',[ids.link])).rows[0].view_count)).toBeGreaterThan(0);
+    expect(requestPaths.some(url=>url.includes('/api/store/costs'))).toBe(false);
+    expect(reads.some(name=>/onboarding|supplier|vault/.test(name))).toBe(false);
+    expect(requestPaths.some(url=>url.includes(encodeURIComponent(tokens.link.token)))).toBe(false);
+    await pool.query('update storefront_links set revoked_at=now(),can_order=false where id=$1',[ids.link]);
+    await page.reload();
+    await expect(page.getByText("매장 링크를 사용할 수 없습니다.",{exact:false})).toBeVisible();
+    expect(errors).toEqual([]); expect(bridgeErrors).toEqual([]);
+    await writeFile(resolve(artifacts,'result.json'),JSON.stringify({passed:true,database:'loopback PG17',products:18,widths:[1440,390],orders:0,requests:0,preferences:0,revoked:true,productionChanged:false},null,2));
+    console.log('PASS readonly browser -> Next API -> service_role -> PG17: 18 products, PC/390, no orders, revoke');
+  } else {
   await page.goto(base + "/store#" + tokens.link.token);
   await expect(
     page.getByRole("heading", { name: "P2 공개 주문", exact: true }),
@@ -621,12 +674,15 @@ try {
   console.log(
     "PASS public browser -> API -> service_role -> PG16: order/edit/reorder, privacy, tenant, mobile, expiry",
   );
+  }
 } catch (e) {
+  let safeMessage=e.message;
+  for (const value of Object.values(tokens)) safeMessage=safeMessage.replaceAll(value.token,"[redacted]");
   await writeFile(
     resolve(artifacts, "result.json"),
-    JSON.stringify({ passed: false, error: e.message, bridgeErrors }),
+    JSON.stringify({ passed: false, error: safeMessage, bridgeErrors }),
   );
-  throw e;
+  throw readonlySmoke ? new Error(safeMessage) : e;
 } finally {
   if (browser) await browser.close();
   if (server) {
