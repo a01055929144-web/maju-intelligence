@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/02-stage-d-snapshot-pg17.yml"
       - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.down.sql"
       - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.pg17.test.sql"
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - ".github/workflows/02-stage-d-snapshot-pg17.yml"
       - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.down.sql"
       - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.pg17.test.sql"
 
 jobs:

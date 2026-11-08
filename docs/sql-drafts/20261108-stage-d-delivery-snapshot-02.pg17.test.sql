@@ -1,13 +1,21 @@
 \set ON_ERROR_STOP on
 
+create table public.companies (
+  id uuid primary key
+);
+
 create table public.store_orders (
   id uuid primary key,
-  company_id uuid not null,
+  company_id uuid not null references public.companies(id) on delete cascade,
   customer_id uuid not null,
   delivery_date date not null,
   status text not null check (status in ('submitted', 'received', 'in_delivery', 'delivered', 'cancelled')),
   revision integer not null default 1
 );
+
+insert into public.companies(id) values
+  ('a0000000-0000-4000-8000-000000000001'),
+  ('b0000000-0000-4000-8000-000000000001');
 
 insert into public.store_orders(id, company_id, customer_id, delivery_date, status)
 values (
@@ -68,6 +76,14 @@ begin
     raise exception 'legacy_blocked_order_not_visible';
   end if;
 
+  delete from public.companies where id = company_b;
+  if exists (select 1 from public.store_orders where company_id = company_b) then
+    raise exception 'company_delete_left_delivery_rows';
+  end if;
+  if (select count(*) from public.store_orders where company_id = company_a) <> 4 then
+    raise exception 'company_delete_crossed_tenant_boundary';
+  end if;
+
   begin
     insert into public.store_orders(
       id, company_id, customer_id, delivery_date, status,
@@ -92,3 +108,26 @@ begin
 end $$;
 
 rollback;
+
+\ir 20261108-stage-d-delivery-snapshot-02.down.sql
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'store_orders'
+      and column_name like 'delivery_%_snapshot'
+  ) then
+    raise exception 'down_left_snapshot_columns';
+  end if;
+  if to_regprocedure('public.guard_store_order_delivery_snapshot_02()') is not null then
+    raise exception 'down_left_snapshot_guard';
+  end if;
+  if not exists (
+    select 1 from public.store_orders
+    where id = '10000000-0000-4000-8000-000000000001'
+  ) then
+    raise exception 'down_removed_legacy_order';
+  end if;
+end $$;
