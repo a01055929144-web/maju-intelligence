@@ -388,6 +388,18 @@ jobs:
           psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=supabase/migrations/20261102114602_pricing_p2_store_ordering.sql
           psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-synthetic-fixture.pg17.sql
 
+      - name: Verify delivery eligibility draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: delivery_eligibility_test
+        run: |
+          createdb delivery_eligibility_test
+          psql --set=ON_ERROR_STOP=1 --file=20261108-01-delivery-eligibility.pg17.test.sql
+
   build:
     runs-on: ubuntu-latest
     services:
