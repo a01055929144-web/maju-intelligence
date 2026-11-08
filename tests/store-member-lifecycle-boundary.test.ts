@@ -7,6 +7,7 @@ vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
 
 import { getStoreMemberContext, getStoreOrderMemberContext } from "../lib/store/07-store-member-context";
 import { acceptStoreMemberInvitation, removeStoreMember } from "../lib/store/07-store-member-management";
+import { activateStoreOwner } from "../lib/store/07-store-owner-provisioning";
 
 const companyId = "10000000-0000-4000-8000-000000000001";
 const customerId = "20000000-0000-4000-8000-000000000001";
@@ -26,6 +27,7 @@ describe("store member lifecycle boundary", () => {
     mocks.session.mockResolvedValue({ authUserId });
     mocks.db.mockReset();
     mocks.db.mockImplementation(async (path: string, init?: { body?: string }) => {
+      if (path === "rpc/activate_store_owner_v1") { role = "owner"; status = "active"; return {}; }
       if (path === "rpc/accept_store_member_invitation_v1") { status = "active"; return {}; }
       if (path === "rpc/remove_store_member_v1") { status = "removed"; return {}; }
       if (path.startsWith("store_accounts?select=id"))
@@ -41,12 +43,19 @@ describe("store member lifecycle boundary", () => {
     });
   });
 
-  it.each(["owner", "manager", "staff"] as const)("grants %s only after acceptance, keeps retries stable, and revokes immediately", async nextRole => {
+  it.each(["owner", "manager", "staff"] as const)("grants %s only after activation or acceptance, keeps retries stable, and revokes immediately", async nextRole => {
     role = nextRole;
     const scope = { companyId, customerId };
+    mocks.session.mockResolvedValueOnce(null);
     await expect(getStoreOrderMemberContext(scope)).resolves.toBeNull();
+    expect(status).toBe("invited");
+    expect(mocks.db.mock.calls.map(([path]) => path)).not.toContain("rpc/activate_store_owner_v1");
+    expect(mocks.db.mock.calls.map(([path]) => path)).not.toContain("rpc/accept_store_member_invitation_v1");
 
-    await acceptStoreMemberInvitation({ authUserId, companyId, storeAccountId, token: "a".repeat(43) });
+    if (role === "owner") await activateStoreOwner({ authUserId, businessRegistrationNumber: "1234567890",
+      termsAcceptedAt: "2026-11-08T00:00:00.000Z", token: "a".repeat(43),
+      verificationRequestId: "60000000-0000-4000-8000-000000000001", verifiedAt: "2026-11-08T00:00:00.000Z" });
+    else await acceptStoreMemberInvitation({ authUserId, companyId, storeAccountId, token: "a".repeat(43) });
     const expected = { authUserId, companyId, customerId, memberId, role, status: "active", storeAccountId };
     await expect(getStoreOrderMemberContext(scope)).resolves.toEqual(expected);
     await expect(getStoreOrderMemberContext(scope)).resolves.toEqual(expected);
