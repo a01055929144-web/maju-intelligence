@@ -13,6 +13,16 @@ export type SourceFunnelRow = {
   orderIds: string[];
 };
 
+type AvailableMetric = { state: "available"; value: number };
+type UnavailableMetric = { state: "unavailable"; reason: "delivery_source_id_missing" };
+
+export type SourceFunnelMetrics = {
+  documentsSent: AvailableMetric;
+  documentsAccepted: AvailableMetric;
+  ordersPlaced: AvailableMetric;
+  deliveriesCompleted: UnavailableMetric;
+};
+
 /** Joins only explicit source IDs. Missing or mismatched links stay unconnected. */
 export function joinSourceFunnel(input: SourceFunnelInput): SourceFunnelRow[] {
   return input.sends.map((send) => {
@@ -38,4 +48,13 @@ export function joinSourceFunnel(input: SourceFunnelInput): SourceFunnelRow[] {
 
 function only<T>(rows: T[]) {
   return rows.length === 1 ? rows[0] : undefined;
+}
+
+export function summarizeSourceFunnel(rows: SourceFunnelRow[]): SourceFunnelMetrics {
+  return {
+    documentsSent: { state: "available", value: new Set(rows.map((row) => `${row.companyId}:${row.sendId}`)).size },
+    documentsAccepted: { state: "available", value: new Set(rows.flatMap((row) => row.acceptanceRequestId ? [`${row.companyId}:${row.acceptanceRequestId}`] : [])).size },
+    ordersPlaced: { state: "available", value: new Set(rows.flatMap((row) => row.orderIds.map((id) => `${row.companyId}:${id}`))).size },
+    deliveriesCompleted: { state: "unavailable", reason: "delivery_source_id_missing" }
+  };
 }

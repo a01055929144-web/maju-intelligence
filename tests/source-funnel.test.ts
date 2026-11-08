@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { joinSourceFunnel, type SourceFunnelInput } from "../application/analytics/source-funnel";
+import { joinSourceFunnel, summarizeSourceFunnel, type SourceFunnelInput } from "../application/analytics/source-funnel";
 
 const complete: SourceFunnelInput = {
   sends: [{ id: "send-1", companyId: "company-1", documentVersionId: "version-1" }],
@@ -37,5 +37,15 @@ describe("joinSourceFunnel", () => {
       ...complete,
       acceptances: [...complete.acceptances, { ...complete.acceptances[0], id: "accept-2" }]
     })).toEqual([{ companyId: "company-1", sendId: "send-1", orderIds: [] }]);
+  });
+
+  it("counts only joined source IDs and leaves delivery unavailable", () => {
+    const rows = joinSourceFunnel(complete);
+    expect(summarizeSourceFunnel([...rows, rows[0]])).toEqual({
+      documentsSent: { state: "available", value: 1 },
+      documentsAccepted: { state: "available", value: 1 },
+      ordersPlaced: { state: "available", value: 1 },
+      deliveriesCompleted: { state: "unavailable", reason: "delivery_source_id_missing" }
+    });
   });
 });
