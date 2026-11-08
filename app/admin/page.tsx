@@ -43,6 +43,13 @@ export default async function AdminPage() {
       label: "시스템 상태",
       ready: dashboard.source === "supabase",
       value: dashboard.source === "supabase" ? "연결됨" : "확인 필요"
+    },
+    {
+      description: "회사별 적재·품목·링크·주문의 명시적 원천 오류를 확인합니다.",
+      href: "/admin/operations",
+      label: "Stage F 오류 큐",
+      ready: process.env.ADMIN_STAGE_F_QUEUE_ENABLED === "true",
+      value: process.env.ADMIN_STAGE_F_QUEUE_ENABLED === "true" ? "조회 가능" : "기본 OFF"
     }
   ];
   const uploadIssues = dashboard.uploadHistory.filter(
