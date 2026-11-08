@@ -1,9 +1,17 @@
 -- 승인 전 초안. 운영 실행 금지.
 begin;
 
+do $$ begin
+  if to_regclass('public.store_order_delivery_completions_09') is null
+    or to_regclass('public.store_order_delivery_completion_orders_09') is null then
+    raise exception 'store_order_delivery_completion_contract_required';
+  end if;
+end $$;
+
 create or replace function public.create_sales_document_from_store_order(
   p_company_id uuid,
   p_store_order_id uuid,
+  p_completion_event_id uuid,
   p_actor_user_id uuid,
   p_actor_name text
 ) returns jsonb
@@ -20,8 +28,13 @@ declare
   v_exempt bigint;
   v_tax bigint;
   v_total bigint;
+  v_completed_revision integer;
+  v_completed_at timestamptz;
   v_source_key text := 'store_order:' || p_store_order_id::text;
 begin
+  if p_completion_event_id is null then
+    raise exception 'store order completion relation not verified';
+  end if;
   if nullif(btrim(p_actor_name), '') is null then
     raise exception 'actor name is required';
   end if;
@@ -35,8 +48,18 @@ begin
   where company_id = p_company_id and id = p_store_order_id
   for update;
   if not found then raise exception 'store order not found'; end if;
-  if v_order.status not in ('received','in_delivery','delivered') then
-    raise exception 'editable or cancelled store order cannot become a sales document';
+  if v_order.status <> 'delivered' then
+    raise exception 'only a delivered store order can become a sales document';
+  end if;
+  select co.completed_revision,c.completed_at into v_completed_revision,v_completed_at
+  from public.store_order_delivery_completion_orders_09 co
+  join public.store_order_delivery_completions_09 c
+    on c.company_id=co.company_id and c.completion_event_id=co.completion_event_id
+  where co.company_id=p_company_id and co.completion_event_id=p_completion_event_id
+    and co.order_id=p_store_order_id
+  for share of co,c;
+  if not found or v_completed_revision<>v_order.revision then
+    raise exception 'store order completion relation not verified';
   end if;
 
   select * into v_document
@@ -45,6 +68,8 @@ begin
   if found then
     return jsonb_build_object(
       'storeOrderId', p_store_order_id,
+      'completionEventId', p_completion_event_id,
+      'completedAt', v_completed_at,
       'salesDocumentId', v_document.id,
       'status', v_document.status,
       'alreadyCreated', true,
@@ -119,15 +144,16 @@ begin
   end if;
 
   return jsonb_build_object(
-    'storeOrderId',v_order.id,'salesDocumentId',v_document.id,'status',v_document.status,
+    'storeOrderId',v_order.id,'completionEventId',p_completion_event_id,'completedAt',v_completed_at,
+    'salesDocumentId',v_document.id,'status',v_document.status,
     'alreadyCreated',false,'ledgerPosted',false
   );
 end;
 $$;
 
-revoke all on function public.create_sales_document_from_store_order(uuid,uuid,uuid,text)
+revoke all on function public.create_sales_document_from_store_order(uuid,uuid,uuid,uuid,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.create_sales_document_from_store_order(uuid,uuid,uuid,text)
+grant execute on function public.create_sales_document_from_store_order(uuid,uuid,uuid,uuid,text)
   to service_role;
 
 commit;

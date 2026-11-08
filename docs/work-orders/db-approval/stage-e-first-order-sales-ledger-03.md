@@ -18,9 +18,9 @@
 
 ## 선행 차단
 
-#397로 Stage D의 주문 ID·부분 완료 소비자 계약은 병합됐지만, 09 소유의 단일 완료 상태/RPC와 주소 snapshot 생산자 계약은 아직 확정되지 않았다. 현재 `store_orders.status`에는 `closed`가 없고 기존 문서끼리도 매출전표 생성 시점을 `received`, `in_delivery` 또는 출고 확정으로 표현한다. #384의 세 상태는 폐기형 PG17 후보 fixture일 뿐 운영 계약이 아니다. 아래 생산자 계약이 병합되기 전에는 Ready 전환·병합·운영 적용·호출 코드 연결을 하지 않는다. 서버 호출 코드와 회사별 활성화가 없으므로 기능은 OFF다. 오래된 #281은 #384로 대체되어 종료했으며 두 SQL을 함께 적용하지 않는다.
+#397로 Stage D의 주문 ID·부분 완료 소비자 계약은 병합됐다. 09 #410 Draft는 `delivered` 전환과 주문별 `(company_id, completion_event_id, order_id, completed_revision)` 관계를 제안하고 검증했지만 아직 DB 승인·병합·운영 적용 전이다. #384는 이 인터페이스를 03 폐기형 PG17 fixture로만 소비하며, 주문과 완료 관계를 함께 잠그고 현재 revision이 completed_revision과 일치할 때만 매출전표를 만든다. #410 생산자 계약이 승인·병합되고 운영 적용 순서가 정해지기 전에는 #384 Ready 전환·병합·운영 적용·호출 코드 연결을 하지 않는다. 서버 호출 코드와 회사별 활성화가 없으므로 기능은 OFF다. 오래된 #281은 #384로 대체되어 종료했으며 두 SQL을 함께 적용하지 않는다.
 
-1. 전표 생성이 허용되는 단일 주문 상태와 전환 주체
+1. 전표 생성이 허용되는 단일 주문 상태 `delivered`와 #410 완료 관계의 DB 승인·적용
 2. 취소 주문·미확정 시가 품목·수정 중 주문의 거부 규칙
 3. 배송 완료와 출고 확정의 순서 및 재시도 계약
 4. 재고 `sale_out` 소유 RPC와 전표 생성의 같은 트랜잭션 여부
@@ -31,8 +31,8 @@
 
 | 항목 | 최소안 | 제외 |
 | --- | --- | --- |
-| 진입점 | 주문 ID·멱등 키·행위자를 받는 service-role RPC 1개 | 09 주문 API/UI 수정 |
-| 잠금 | `(company_id, order_id)` 주문을 잠그고 승인된 출고 상태 확인 | TMS 상태 복제 |
+| 진입점 | 회사·주문 ID·completion event ID·행위자를 받는 service-role RPC 1개 | 09 주문 API/UI 수정 |
+| 잠금 | `(company_id, order_id)` 주문과 #410 완료 관계를 잠그고 `delivered`·completed revision 확인 | TMS 상태 복제 |
 | 전표 | 기존 `business_documents`에 `document_type='sale'`, `source_type='order'`, `source_id=order_id`, `source_key='store_order:' || order_id` | 새 매출 테이블 |
 | 전표 줄 | `store_order_lines`의 상품명·규격·단위·수량·단가·과세 스냅샷을 그대로 복사 | 현재 상품/가격 재조회·재계산 |
 | 원장 | 기존 `confirm_business_document`를 호출해 `document:{id}:confirm` 1건 생성 | 별도 원장 INSERT 경로 |
@@ -40,7 +40,7 @@
 | 회사 경계 | 주문·거래처·상품·전표를 모두 입력 회사로 검증 | 공개/클라이언트 직접 실행 |
 | 기능 제어 | 회사별 Stage E 플래그 기본 OFF, 승인 회사만 서버에서 호출 | 전체 회사 기본 ON |
 
-RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정한다. 이름을 먼저 고정하거나 미래 발주·입고까지 한 함수에 넣지 않는다.
+RPC 이름은 Stage D 생산자 계약 병합 후 확정한다. 04에 전달하는 인터페이스는 회사·주문 ID·검증된 completion event ID·completed revision이며, 재고 `sale_out`의 호출 주체와 같은 트랜잭션 여부는 별도 승인 전까지 구현하지 않는다. 미래 발주·입고까지 한 함수에 넣지 않는다.
 
 ## 금액·추적 불변식
 
@@ -55,7 +55,7 @@ RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정�
 
 ### 첫 주문 → 매출전표
 
-- [x] 현재 허용 후보 상태의 주문만 전표 생성, `submitted/cancelled` 거부
+- [x] `delivered` 주문과 같은 completion event·completed revision 관계가 있을 때만 전표 생성
 - [x] 같은 주문 재시도에 같은 전표 반환
 - [ ] 같은 주문의 동시 요청에도 전표·원장 각각 1건
 - [x] 다른 회사 주문 참조 거부
@@ -109,7 +109,7 @@ RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정�
 
 - 03 읽기 검토: 완료
 - #384 격리 PG17·CI 검증: 완료, Draft 유지
-- Stage D 상태 계약: 대기
+- Stage D #410 생산자 DB 승인·병합·적용 순서: 대기
 - SQL 초안 병합 승인: 대기
 - 운영 DB 적용 승인: 없음
 - 기능 ON 승인: 없음
