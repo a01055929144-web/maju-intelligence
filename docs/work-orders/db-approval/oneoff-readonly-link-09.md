@@ -52,4 +52,4 @@ tests/sql/oneoff-readonly-link.pg17.test.sql은 합성 DB oneoff_readonly_link_t
 - 커밋 후 기존 서명 helper로 토큰 복원/hash 검증(출력 없음), 회수 후 열람 기록 거부.
 - 기존 함수 OID/본문 hash/EXECUTE ACL/SECURITY INVOKER 불변, 주문·이벤트 생성 0건.
 
-상태: 합성 CI 검증 대기. 운영 실행·영구 함수 적용 없음.
+검증 결과는 PR의 해당 커밋 CI에서 확인한다. 운영 실행·영구 함수 적용 없음.

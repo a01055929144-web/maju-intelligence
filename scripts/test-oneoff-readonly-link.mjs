@@ -42,11 +42,14 @@ try {
   const before = (await a.query(identitySql)).rows;
   await a.query('set role service_role');
   const normal = makeInput(); delete normal[0].canOrder;
+  normal[0].customerId = '20000000-0000-4000-8000-000000000003';
   await a.query('select * from issue_storefront_links($1,$2,$3,$4,null,$5)', [company, version, JSON.stringify(normal), expiry, 'b'.repeat(64)]);
   assert.equal((await b.query('select can_order from storefront_links where id=$1', [normal[0].id])).rows[0].can_order, true);
-  await assert.rejects(run(makeInput()), /oneoff_existing_link_conflict/);
+  const conflicting = makeInput(); conflicting[0].customerId = normal[0].customerId;
+  await assert.rejects(run(conflicting), /oneoff_existing_link_conflict/);
   assert.equal((await b.query('select can_order from storefront_links where id=$1', [normal[0].id])).rows[0].can_order, true);
   await a.query('update storefront_links set revoked_at=now(),can_order=false where id=$1', [normal[0].id]);
+  await assert.rejects(run(conflicting), /oneoff_existing_link_conflict/);
   for (const failAt of ['issue', 'update']) {
     const input = makeInput();
     await assert.rejects(run(input, failAt), /synthetic_failure_after_/);

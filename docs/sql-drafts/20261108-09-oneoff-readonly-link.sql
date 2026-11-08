@@ -28,8 +28,8 @@ begin
   if not found then raise exception 'oneoff_company_missing'; end if;
   if exists(select from public.storefront_links l where l.company_id=i.company_id
     and l.customer_id=requested_customer and l.document_version_id=i.document_version_id
-    and l.revoked_at is null and l.expires_at>now()
     and (l.id is distinct from requested_id or l.can_order
+      or l.revoked_at is not null or l.expires_at<=now()
       or l.token_nonce is distinct from i.links->0->>'nonce'
       or l.token_hash is distinct from i.links->0->>'hash')) then
     raise exception 'oneoff_existing_link_conflict';
