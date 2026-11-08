@@ -1,39 +1,48 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ db: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.db }));
+vi.mock("@/lib/store", () => ({ getSupabaseConfig: () => ({ url: "https://example.supabase.co", serviceRoleKey: "test-key" }) }));
 
 import { getStageFQueue } from "../app/admin/operations/stage-f-read";
 
-beforeEach(() => vi.clearAllMocks());
+function response(ids: string[], total = ids.length, ok = true) {
+  return { headers: new Headers({ "content-range": `0-${Math.max(0, ids.length - 1)}/${total}` }), json: async () => ids.map((id) => ({ id })), ok, status: ok ? 200 : 500 } as Response;
+}
 
-it("returns company-scoped issue counts and source IDs", async () => {
-  mocks.db.mockImplementation(async (path: string) => {
-    expect(path).toContain("company_id=eq.company-1");
-    if (path.startsWith("customer_imports?")) return [{ id: "import-1", status: "failed", quality_score: 100, duplicate_count: 0, ai_reports: [] }];
-    if (path.startsWith("product_catalog?")) return [{ id: "product-1", canonical_name: "상품", purchase_product_name: "상품", sales_unit: null, tax_type: "taxable" }];
-    if (path.startsWith("supplier_products?")) return [{ id: "supplier-product-1" }];
-    if (path.startsWith("supplier_product_matches?")) return [{ supplier_product_id: "supplier-product-1", match_status: "confirmed", conversion_confirmed: false }];
-    if (path.startsWith("storefront_links?")) return [{ id: "link-1", can_order: true, expires_at: "2099-01-01T00:00:00Z", revoked_at: "2026-01-01T00:00:00Z" }];
-    if (path.startsWith("store_orders?")) return [{ id: "order-1", customer_id: "customer-1", document_version_id: "version-1", link_id: "missing-link" }];
-    throw new Error(`Unexpected query: ${path}`);
+beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("fetch", mocks.fetch); });
+
+it("returns exact issue counts and at most 20 source IDs", async () => {
+  mocks.fetch.mockImplementation(async (input: string | URL | Request) => {
+    const url = String(input);
+    expect(url).toContain("company_id=eq.company-1");
+    expect(url).toContain("limit=20");
+    if (url.includes("customer_imports?")) return response(["import-1"], 21);
+    if (url.includes("product_catalog?")) return response(["product-1"], 1);
+    if (url.includes("active_match=is.null")) return response(["supplier-unmatched"], 1);
+    if (url.includes("conversion_confirmed=eq.false")) return response(["supplier-unconfirmed"], 1);
+    if (url.includes("storefront_links?")) return response(["link-1"], 1);
+    if (url.includes("store_orders?")) return response(["order-1"], 1);
+    throw new Error(`Unexpected query: ${url}`);
   });
-
   const queue = await getStageFQueue("company-1");
   expect(queue.map(({ count, ids, key, status }) => ({ count, ids, key, status }))).toEqual([
-    { count: 1, ids: ["import-1"], key: "uploads", status: "ready" },
-    { count: 2, ids: ["product-1", "supplier-product-1"], key: "products", status: "ready" },
+    { count: 21, ids: ["import-1"], key: "uploads", status: "ready" },
+    { count: 3, ids: ["product-1", "supplier-unmatched", "supplier-unconfirmed"], key: "products", status: "ready" },
     { count: 1, ids: ["link-1"], key: "links", status: "ready" },
     { count: 1, ids: ["order-1"], key: "orders", status: "ready" }
   ]);
 });
 
+it("keeps every source query isolated to the selected company", async () => {
+  mocks.fetch.mockResolvedValue(response([], 0));
+  await getStageFQueue("company/a");
+  expect(mocks.fetch).toHaveBeenCalledTimes(6);
+  for (const [url] of mocks.fetch.mock.calls) expect(String(url)).toContain("company_id=eq.company%2Fa");
+});
+
 it("reports a failed source instead of a normal zero", async () => {
-  mocks.db.mockImplementation(async (path: string) => {
-    if (path.startsWith("customer_imports?")) throw new Error("synthetic read failure");
-    return [];
-  });
+  mocks.fetch.mockImplementation(async (input: string | URL | Request) => String(input).includes("customer_imports?") ? response([], 0, false) : response([], 0));
   const [uploads] = await getStageFQueue("company-1");
   expect(uploads).toMatchObject({ count: null, ids: [], key: "uploads", status: "error" });
 });
