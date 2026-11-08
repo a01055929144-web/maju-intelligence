@@ -58,12 +58,14 @@ it("takes order scope and prices only from the verified token RPC", async () => 
   mocks.read.mockResolvedValue({ companyId: "verified-company" });
   mocks.db.mockResolvedValue({ id: "saved" });
   expect(
-    (await PUT(request({ companyId: "forged-company", knownTotal: 1 }))).status,
+    (await PUT(request({ companyId: "forged-company", knownTotal: 1,
+      lines: [{ productId, quantity: 1, unitPrice: 1, taxType: "exempt", companyId: "forged-company", cost: 7 }] }))).status,
   ).toBe(200);
   const payload = JSON.parse(mocks.db.mock.calls[0][1].body);
   expect(payload.p_token_hash).toBe("a".repeat(64));
   expect(payload).not.toHaveProperty("companyId");
   expect(payload).not.toHaveProperty("knownTotal");
+  expect(payload.p_lines).toEqual([{ productId, quantity: 1 }]);
 });
 it("rejects cross-origin writes before resolving a link", async () => {
   expect((await PUT(request({}, "https://other.example.test"))).status).toBe(

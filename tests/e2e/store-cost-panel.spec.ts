@@ -164,10 +164,10 @@ for (const width of [1440, 390]) {
     const navigation = page.getByRole("navigation", { name: "매장 메뉴" });
     await expect(navigation.getByRole("button")).toHaveCount(5);
     await navigation.getByRole("button", { name: "데이터", exact: true }).click();
-    const guidance = page.getByRole("main").getByRole("status").filter({ hasText: "매장 구성원 로그인" });
+    const guidance = page.getByRole("main").getByRole("status").filter({ hasText: "현재 주문 링크에서는 원가 자료를 제공하지 않습니다" });
     await guidance.scrollIntoViewIfNeeded();
     await expect(guidance).toBeInViewport({ ratio: 1 });
-    await expect(guidance).toContainText("권한을 확인한 뒤 새로고침");
+    await expect(guidance).toContainText("로그인한 매장의 전용 주소");
     await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "수정", exact: true })).toHaveCount(0);
     await expect(page.getByRole("table")).toHaveCount(0);
