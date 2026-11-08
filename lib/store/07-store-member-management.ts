@@ -15,6 +15,26 @@ export type PreparedStoreMemberInvitation = {
   storeAccountId: string;
 };
 
+export type StoreMemberListItem = {
+  id: string;
+  joinedAt: string | null;
+  name: string;
+  role: StoreAccountRole;
+  status: "active" | "invited";
+};
+
+export async function listStoreMembers(input: { companyId: string; storeAccountId: string }): Promise<StoreMemberListItem[]> {
+  const rows = await supabaseRequest<Array<{
+    app_users: { name: string | null } | null;
+    id: string;
+    joined_at: string | null;
+    role: StoreAccountRole;
+    status: "active" | "invited";
+  }>>(`store_account_members?select=id,role,status,joined_at,app_users(name)&company_id=eq.${encodeURIComponent(input.companyId)}&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}&status=in.(active,invited)&order=role.asc,joined_at.asc.nullslast`);
+  return rows.map(row => ({ id: row.id, joinedAt: row.joined_at, name: row.app_users?.name?.trim() || "초대 대기",
+    role: row.role, status: row.status }));
+}
+
 export async function createStoreMemberInvitation(input: {
   actorMemberId: string;
   companyId: string;

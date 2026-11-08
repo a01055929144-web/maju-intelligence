@@ -27,3 +27,7 @@
 | 주문 구성원 인증 | 가능 | 가능 | 가능 |
 
 owner 내보내기·소유권 이전과 고객사 직원의 대리 지정/해제는 별도 사업자 확인·감사 RPC 승인 전 보류한다.
+
+## 09 화면 연결 계약
+
+09는 주문 링크로 서버에서 확인한 `companyId/storeAccountId`가 있을 때 `/store/members?companyId=...&storeAccountId=...` 링크만 노출한다. 또는 독립 컴포넌트 `StoreMemberManagementPanel`에 같은 두 값을 전달할 수 있다. 컴포넌트와 `GET /api/store/members`는 브라우저 역할 값을 신뢰하지 않고 매장 세션과 활성 구성원을 서버에서 다시 검증한다. 기능 플래그 OFF 또는 미허용 회사에서는 관리 진입점을 노출하지 않는다.
