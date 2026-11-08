@@ -14,6 +14,7 @@ import { loadTodayRouteOrderProjection } from "@/application/route/today-route-o
 import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { getCompanySettings, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -30,12 +31,13 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const assignmentKeys = getCustomerAssignmentKeys(session, { forceScope: deliveryOwner });
   const isScopedStaffView = shouldScopeCustomerData(session) || deliveryOwner;
   const driverName = getCustomerOperationalName(session);
+  const deliveryDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
   const [routePlan, companySettings, completionEvents] = await Promise.all([
     getTodayRoutePlan(session.companyId, { assignmentKeys }),
     getCompanySettings(session.companyId, session.companyName),
     getDeliveryCompletionEvents(session.companyId, { deliveryVehicle: session.assignedVehicle, driverName, hours: 20 })
   ]);
-  const orderProjection = await loadTodayRouteOrderProjection(session.companyId, routePlan);
+  const orderProjection = await loadTodayRouteOrderProjection(session.companyId, routePlan, deliveryDate);
   const projectedRoutePlan = orderProjection.routePlan;
   const sourceReady = projectedRoutePlan.source === "supabase";
   const normalizedDriverName = driverName.trim();
@@ -169,6 +171,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             />
             <section>
               <MobileDeliveryProofPanel
+                companyId={session.companyId}
                 companyName={companySettings.name || session.companyName}
                 customerId={selectedStop.id}
                 key={selectedStop.id}
@@ -176,11 +179,15 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 deliveryCompleteMessage={companySettings.deliveryCompleteMessage}
                 deliveryIssueMessage={companySettings.deliveryIssueMessage}
                 deliveryPartialMessage={companySettings.deliveryPartialMessage}
+                deliveryDate={deliveryDate}
                 loadingPosition={selectedStop.loadingPosition}
                 nextCustomerId={nextPendingStop?.id}
                 nextCustomerName={nextPendingStop?.name}
                 notificationPhone={companySettings.notificationPhone}
                 notificationSenderName={companySettings.notificationSenderName}
+                orderCompletionEnabled={isFeatureEnabled("STAGE_D_ORDER_COMPLETION", session.companyId)}
+                orderIds={selectedStop.orderIds || []}
+                orderRevisions={selectedStop.orderRevisions || {}}
                 driverName={driverName}
                 driverPhone={session.operationalPhone}
                 structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}
