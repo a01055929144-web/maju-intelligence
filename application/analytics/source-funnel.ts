@@ -66,7 +66,7 @@ export function summarizeSourceFunnel(rows: SourceFunnelRow[]): SourceFunnelMetr
     for (const order of row.orders) orders.set(order.id, order.submittedAt);
     ordersByCustomer.set(key, orders);
   }
-  const orderCounts = [...ordersByCustomer.values()].map((orders) => orders.size).filter(Boolean);
+  const orderCounts = Array.from(ordersByCustomer.values(), (orders) => orders.size).filter(Boolean);
   return {
     documentsSent: { state: "available", value: new Set(rows.map((row) => `${row.companyId}:${row.sendId}`)).size },
     documentsViewed: { state: "available", value: new Set(rows.filter((row) => ["viewed", "accepted"].includes(row.sendStatus)).map((row) => `${row.companyId}:${row.sendId}`)).size },
