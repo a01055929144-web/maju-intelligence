@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true }));
+vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreOrderMemberContext: mocks.orderContext }));
 vi.mock("@/lib/pricing/store-order-member", () => ({ getStoreOrderActor: mocks.member }));
 vi.mock("@/lib/auth", () => ({ storeMemberSessionEnabled: () => mocks.memberEnabled }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: () => mocks.memberCompany }));
@@ -23,7 +24,7 @@ vi.mock(
   "@/lib/pricing/storefront-public",
   () => import("../lib/pricing/storefront-public"),
 );
-import { PUT } from "../app/api/storefront/route";
+import { POST, PUT } from "../app/api/storefront/route";
 const productId = "10000000-0000-4000-8000-000000000001";
 const body = {
   token: "signed-link",
@@ -45,6 +46,7 @@ beforeEach(() => {
   mocks.memberEnabled = true;
   mocks.memberCompany = true;
   mocks.member.mockResolvedValue(null);
+  mocks.orderContext.mockResolvedValue(null);
 });
 it("keeps order submission dormant before any link or DB read", async () => {
   mocks.enabled = false;
@@ -130,4 +132,45 @@ it("rejects cross-origin writes before resolving a link", async () => {
   );
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.db).not.toHaveBeenCalled();
+});
+
+const viewScope = { companyId: "00000000-0000-4000-8000-000000000001", customerId: "20000000-0000-4000-8000-000000000001" };
+const viewMember = { ...viewScope, status: "active", role: "owner", storeAccountId: "30000000-0000-4000-8000-000000000001", memberId: "40000000-0000-4000-8000-000000000001", authUserId: "50000000-0000-4000-8000-000000000001" };
+async function view() {
+  mocks.read.mockResolvedValue({ ...viewScope, priceAvailable: false, lines: [], policy: { weekdays: [], holidays: [] } });
+  mocks.db.mockResolvedValue([]);
+  return POST(new NextRequest("https://store.example.test/api/storefront", {
+    method: "POST", headers: { origin: "https://store.example.test" },
+    body: JSON.stringify({ token: "signed", companyId: "forged", customerId: "forged", role: "owner" }),
+  }));
+}
+it.each(["owner", "manager"])("returns a verified same-store management link only for %s", async role => {
+  mocks.orderContext.mockResolvedValue({ ...viewMember, role });
+  const response = await view();
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.memberManagement).toEqual({ href: `/store/members?companyId=${viewScope.companyId}&storeAccountId=${viewMember.storeAccountId}` });
+  expect(mocks.orderContext).toHaveBeenCalledExactlyOnceWith(viewScope);
+  expect(JSON.stringify(result)).not.toMatch(/authUserId|memberId|p_auth_user_id/);
+});
+it.each([null, { ...viewMember, role: "staff" }, { ...viewMember, companyId: "other" }, { ...viewMember, customerId: "other" }, { ...viewMember, status: "removed" }])("withholds management entry for unauthorized context %#", async context => {
+  mocks.orderContext.mockResolvedValue(context);
+  const response = await view();
+  expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.memberManagement).toEqual({ message: expect.stringContaining("점주·관리자로 로그인") });
+  expect(result.memberManagement).not.toHaveProperty("href");
+});
+it.each(["memberEnabled", "memberCompany"] as const)("leaves management dormant with no auth lookup when %s is OFF", async flag => {
+  mocks[flag] = false;
+  const response = await view();
+  expect(response.status).toBe(200);
+  expect((await response.json()).memberManagement).toBeUndefined();
+  expect(mocks.orderContext).not.toHaveBeenCalled();
+});
+it("keeps public viewing readable and withholds the entry on a membership lookup failure", async () => {
+  mocks.orderContext.mockRejectedValue(new Error("private lookup failure"));
+  const response = await view();
+  expect(response.status).toBe(200);
+  expect((await response.json()).memberManagement).toEqual({ message: expect.stringContaining("다시 확인") });
 });

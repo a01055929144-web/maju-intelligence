@@ -5,6 +5,7 @@ import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { readStorefront } from "@/lib/pricing/storefront";
 import { getStoreOrderActor } from "@/lib/pricing/store-order-member";
+import { getStoreOrderMemberContext } from "@/lib/store/07-store-member-context";
 import { toPublicStorefront } from "@/lib/pricing/storefront-public";
 import { verifyStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
@@ -84,6 +85,19 @@ export async function POST(request: NextRequest) {
       );
     const store = await readStorefront(token, requestedDate);
     if (!store) return unavailable();
+    let memberManagement: { href: string } | { message: string } | undefined;
+    if (storeMemberSessionEnabled() && isStoreMemberCompanyAllowlisted(store.companyId)) {
+      try {
+        const member = await getStoreOrderMemberContext({ companyId: store.companyId, customerId: store.customerId });
+        memberManagement = member && member.status === "active" && member.companyId === store.companyId &&
+          member.customerId === store.customerId && isId(member.storeAccountId) &&
+          (member.role === "owner" || member.role === "manager")
+          ? { href: `/store/members?${new URLSearchParams({ companyId: store.companyId, storeAccountId: member.storeAccountId })}` }
+          : { message: "구성원 관리는 이 매장의 점주·관리자로 로그인한 뒤 이용해 주세요." };
+      } catch {
+        memberManagement = { message: "구성원 권한을 확인하지 못했습니다. 잠시 후 다시 확인해 주세요." };
+      }
+    }
     const orders = store.priceAvailable
       ? await supabaseRequest<
           {
@@ -156,6 +170,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(memberManagement ? { memberManagement } : {}),
         preferences: preferences.map((item) => ({
           productId: item.product_id,
           isFavorite: item.is_favorite,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
@@ -28,6 +29,7 @@ type Order = { id: string; deliveryDate: string; status: string; knownTotal: num
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
 type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  memberManagement?: { href: string } | { message: string };
   historyPage: number; historyHasMore: boolean; message?: string };
 const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
@@ -352,6 +354,12 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       {showSettings && <div className="rounded border p-3 text-sm"><p>즐겨찾기와 숨긴 품목은 주문 탭에서 변경할 수 있습니다.</p>
         <button className="mt-2 min-h-[44px] rounded border px-3" onClick={() => { setCategory("전체"); setPriceChangesOnly(false); setProductView("hidden"); setTab("order"); }}>숨긴 품목 보기</button></div>}
       <p>매장: {store.customerName}</p><p>배송지: {store.deliveryAddress || "등록되지 않음"}</p>
+      {loadError ? retryLoad : null}
+      {!loading && !loadError && data?.memberManagement && <div className="space-y-2 rounded border p-3 text-sm" aria-label="구성원 관리 안내">
+        {"href" in data.memberManagement
+          ? <Link className="inline-flex min-h-[44px] items-center underline" href={data.memberManagement.href}>구성원 관리</Link>
+          : <><p role="status">{data.memberManagement.message}</p><Button variant="outline" className="min-h-[44px]" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>권한 다시 확인</Button></>}
+      </div>}
       <p className="text-sm text-slate-600">배송지와 출입 정보 변경은 담당자에게 요청해 주세요.</p>
     </section>}
   </main>;
