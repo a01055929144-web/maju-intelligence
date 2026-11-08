@@ -1,4 +1,5 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { Client } from "pg";
 import { describe, expect, it } from "vitest";
 import { completeOrderDelivery } from "../../application/delivery/complete-order-delivery";
@@ -20,6 +21,13 @@ function token(secret: string) {
 
 describe.runIf(process.env.STAGE_D_COMPLETION_INTEGRATION === "isolated")("Stage D application -> PostgREST -> PG17", () => {
   it("commits one proof-bound completion and preserves its idempotent boundary", async () => {
+    const manifestLine = readFileSync(process.env.STAGE_D_FIXTURE_MANIFEST!, "utf8").split(/\r?\n/).find((line) => line.startsWith("delivery_completion_09_fixture_manifest="));
+    expect(manifestLine).toBeTruthy();
+    const manifest = JSON.parse(manifestLine!.slice("delivery_completion_09_fixture_manifest=".length)) as {
+      command: Parameters<typeof completeOrderDelivery>[0];
+      countsAfterSuccessOrReplay: { attachmentRelations: number; events: number; orderRelations: number; orders: number };
+      negativeReferences: { otherCustomerAttachmentId: string };
+    };
     const baseUrl = process.env.STAGE_D_POSTGREST_URL!;
     const jwt = token(process.env.PGRST_JWT_SECRET!);
     const headers = { apikey: jwt, authorization: `Bearer ${jwt}`, "content-type": "application/json" };
@@ -40,35 +48,21 @@ describe.runIf(process.env.STAGE_D_COMPLETION_INTEGRATION === "isolated")("Stage
       await db.query("update normalized_customers set delivery_manager=$1,delivery_vehicle=$2 where company_id=$3 and id=$4", ["fixture-driver", "1호차", companyId, customerId]);
       await db.query("insert into route_plan_confirmations(company_id,driver_name,route_date,customer_ids) values($1,$2,$3,$4::jsonb)", [companyId, "fixture-driver", deliveryDate, JSON.stringify([customerId])]);
       await db.query("notify pgrst,'reload schema'");
-
-      const order = await rest<{ id: string; revision: number }>("rpc/place_store_order_with_delivery_snapshot_09", {
-        method: "POST",
-        body: JSON.stringify({
-          p_token_hash: "a".repeat(64), p_delivery_date: deliveryDate,
-          p_lines: [{ productId: "60000000-0000-4000-8000-000000000001", quantity: 1 }],
-          p_idempotency_key: randomUUID(),
-          p_snapshot: { deliveryCustomerNameSnapshot: "synthetic store", deliveryAddressSnapshot: "synthetic delivery address" },
-          p_memo: ""
-        })
-      });
-      const eventId = randomUUID();
-      const completedAt = new Date(Date.now() + 1000).toISOString();
-      const command = {
-        companyId, customerId, deliveryDate, completionEventId: eventId, idempotencyKey: eventId, completedAt,
-        orders: [{ orderId: order.id, orderRevision: order.revision }], proof: { noteId, attachmentIds }
-      };
+      const command = manifest.command;
+      const eventId = command.completionEventId;
 
       const first = await completeOrderDelivery(command, actor, rest);
       const retry = await completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [...attachmentIds].reverse() } }, actor, rest);
       expect(retry).toEqual(first);
       await expect(completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [attachmentIds[0]] } }, actor, rest)).rejects.toThrow("기존 완료 정보와 다릅니다");
+      await expect(completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [manifest.negativeReferences.otherCustomerAttachmentId] } }, actor, rest)).rejects.toThrow();
       await expect(completeOrderDelivery({ ...command, companyId: otherCompanyId }, { ...actor, companyId: otherCompanyId }, rest)).rejects.toThrow();
       await expect(completeOrderDelivery({ ...command, customerId: otherCustomerId }, actor, rest)).rejects.toThrow();
 
-      const state = await db.query("select status,revision from store_orders where id=$1", [order.id]);
-      expect(state.rows).toEqual([{ status: "delivered", revision: order.revision + 1 }]);
-      const links = await db.query("select (select count(*)::integer from store_order_delivery_completions_09 where completion_event_id=$1) events,(select count(*)::integer from store_order_delivery_completion_attachments_09 where completion_event_id=$1) photos", [eventId]);
-      expect(links.rows).toEqual([{ events: 1, photos: 2 }]);
+      const state = await db.query("select status,revision from store_orders where id=any($1::uuid[]) order by id", [command.orders.map((order) => order.orderId)]);
+      expect(state.rows).toEqual(command.orders.map(() => ({ status: "delivered", revision: 2 })));
+      const links = await db.query("select (select count(*)::integer from store_orders) orders,(select count(*)::integer from store_order_delivery_completions_09 where completion_event_id=$1) events,(select count(*)::integer from store_order_delivery_completion_orders_09 where completion_event_id=$1) \"orderRelations\",(select count(*)::integer from store_order_delivery_completion_attachments_09 where completion_event_id=$1) \"attachmentRelations\"", [eventId]);
+      expect(links.rows).toEqual([manifest.countsAfterSuccessOrReplay]);
       await expect(db.query("delete from customer_notes where id=$1", [noteId])).rejects.toThrow();
       await expect(db.query("delete from customer_attachments where id=$1", [attachmentIds[0]])).rejects.toThrow();
     } finally {

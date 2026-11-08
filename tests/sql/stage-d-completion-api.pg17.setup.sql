@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 do $$ begin
-  if current_database()<>'store_member_order_test_delivery_09'
+  if current_database()<>'store_member_order_test_delivery_09_api'
     or current_setting('server_version_num')::integer/10000<>17 then
     raise exception 'disposable_stage_d_completion_pg17_required';
   end if;
