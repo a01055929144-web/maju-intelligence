@@ -56,7 +56,9 @@ export async function loadTodayRouteOrderProjection(
             : stop)
         }))
       },
-      status: deliveryRead.blocked.length || orderRead.blockedCustomerIds.length || completions.status === "unavailable" ? "partial" : "ready"
+      status: completions.status === "unavailable"
+        ? "unavailable"
+        : deliveryRead.blocked.length || orderRead.blockedCustomerIds.length ? "partial" : "ready"
     };
   } catch {
     return { routePlan, status: "unavailable" };

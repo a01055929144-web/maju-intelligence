@@ -56,4 +56,20 @@ describe("today route order projection", () => {
     expect(result.status).toBe("ready");
     expect(request.mock.calls[0][0]).toContain("company_id=eq.company-a&delivery_date=eq.2026-11-08");
   });
+
+  it("keeps the projected manual route but exposes a completion-history permission error", async () => {
+    vi.stubEnv("FEATURE_STAGE_D_ORDER_IDS_COMPANY_IDS", "company-a");
+    const request = vi.fn(async <T>(path: string): Promise<T> => {
+      if (path.startsWith("store_orders") && path.includes("status=in.")) return [{
+        id: "order-a", company_id: "company-a", customer_id: "customer-a", delivery_date: "2026-11-08", revision: 2, status: "in_delivery",
+        delivery_customer_name_snapshot: "기존 코스", delivery_address_snapshot: "서울",
+        delivery_address_detail_snapshot: null, delivery_recipient_phone_snapshot: null, delivery_loading_position_snapshot: null
+      }] as T;
+      throw new Error("permission denied");
+    });
+
+    const result = await loadTodayRouteOrderProjection("company-a", routePlan, "2026-11-08", request);
+    expect(result.status).toBe("unavailable");
+    expect(result.routePlan.groups[0].stops[0]).toMatchObject({ id: "customer-a", orderIds: ["order-a"] });
+  });
 });
