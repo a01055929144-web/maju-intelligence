@@ -2,9 +2,10 @@ import { buildOrderRouteConsumer, type OrderRouteConsumerResult } from "../deliv
 import { toOrderDeliveryCandidates, type StoreOrderDeliveryRow } from "../delivery/store-order-delivery-adapter";
 import { isFeatureEnabled } from "../../lib/feature-flags";
 import { supabaseRequest, type RoutePlan, type RoutePlanGroup, type RoutePlanStop } from "../../lib/store";
+import { loadTodayRouteCompletionReadModel, type RouteCompletionSummary } from "./today-route-completion-read-model";
 
 export type RouteOrderLinkStatus = "off" | "ready" | "partial" | "unavailable";
-export type RouteOrderFields = { orderIds?: string[]; orderRevisions?: Record<string, number> };
+export type RouteOrderFields = { completionHistory?: RouteCompletionSummary[]; orderIds?: string[]; orderRevisions?: Record<string, number> };
 export type OrderLinkedRoutePlan = Omit<RoutePlan, "groups"> & {
   groups: Array<Omit<RoutePlanGroup, "stops"> & { stops: Array<RoutePlanStop & RouteOrderFields> }>;
 };
@@ -43,9 +44,19 @@ export async function loadTodayRouteOrderProjection(
       deliveryDate: date,
       existingCustomerIds: routePlan.groups.flatMap((group) => group.stops.map((stop) => stop.id))
     });
+    const projected = projectOrderRefsOntoExistingRoute(routePlan, orderRead);
+    const completions = await loadTodayRouteCompletionReadModel(companyId, projected, date, request);
     return {
-      routePlan: projectOrderRefsOntoExistingRoute(routePlan, orderRead),
-      status: deliveryRead.blocked.length || orderRead.blockedCustomerIds.length ? "partial" : "ready"
+      routePlan: {
+        ...projected,
+        groups: projected.groups.map((group) => ({
+          ...group,
+          stops: group.stops.map((stop) => completions.byCustomerId[stop.id]?.length
+            ? { ...stop, completionHistory: completions.byCustomerId[stop.id] }
+            : stop)
+        }))
+      },
+      status: deliveryRead.blocked.length || orderRead.blockedCustomerIds.length || completions.status === "unavailable" ? "partial" : "ready"
     };
   } catch {
     return { routePlan, status: "unavailable" };
