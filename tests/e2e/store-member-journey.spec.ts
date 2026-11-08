@@ -13,6 +13,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
     lines: [lineFromCatalog({ id: productId, name: "합성 품목", displayName: "합성 품목", brand: "", spec: "1kg", unit: "봉", price: 1000, taxType: "exempt" })] };
   const document = publicDocumentOutput({ id: "version", documentId: "document", version: 1, revision: 1, publishedAt: "2026-11-08T00:00:00Z", content, unavailablePromotions: [] });
   let signedIn = false, accepted = 0, orderAttempts = 0, costRequests = 0, lostResponse = false;
+  let deliveryConfigured = false, failDeliveryRefresh = true;
   const saved = new Map<string, string>();
   const requests: Record<string, unknown>[] = [];
   let releaseOrderResponse = () => {};
@@ -47,8 +48,12 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
       return route.fulfill({ json: { id: saved.get(input.idempotencyKey) } });
     }
     expect(route.request().method()).toBe("POST");
-    return route.fulfill({ json: { store: { title: "합성 매장 주문", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: true, nextDeliveryDate: deliveryDate, selectedDeliveryDate: deliveryDate, notice: "", marketPriceNotice: "",
-      policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+    if (deliveryConfigured && failDeliveryRefresh) {
+      failDeliveryRefresh = false;
+      return route.fulfill({ status: 503, json: { message: "합성 배송 설정 확인 실패. 다시 확인해 주세요." } });
+    }
+    return route.fulfill({ json: { store: { title: "합성 매장 주문", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: deliveryConfigured, nextDeliveryDate: deliveryConfigured ? deliveryDate : null, selectedDeliveryDate: deliveryDate, notice: "", marketPriceNotice: "",
+      policy: { weekdays: deliveryConfigured ? [0,1,2,3,4,5,6] : [], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
       lines: [{ key: `${productId}:`, productId, promotionId: null, name: "합성 품목", category: "", brand: "", spec: "1kg", unit: "봉", badge: "", taxType: "exempt", unitPrice: 1000, priceIncludesTax: true, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
       ...(!signedIn ? { memberLogin: { enabled: true, companyId, storeAccountId: accountId } } : {}),
       orders: saved.size ? [{ id: "synthetic-order", deliveryDate, status: "submitted", knownTotal: 1000, requestMemo: "", marketPricePending: false, submittedAt: "2026-11-08T00:00:00Z", revision: 1, authorLabel: author,
@@ -64,6 +69,23 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
   await page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true }).click();
+  const deliveryGuide = page.getByRole("region", { name: "배송 요일 설정 안내", exact: true });
+  await expect(deliveryGuide).toContainText("이 거래처의 배송 요일이 설정되지 않아 주문할 수 없습니다.");
+  const refreshDelivery = page.getByRole("button", { name: "배송 설정 다시 확인", exact: true });
+  expect((await refreshDelivery.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
+  expect(orderAttempts).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(deliveryGuide).toBeInViewport();
+  await page.screenshot({ path: info.outputPath(`delivery-settings-${role}-${width}.png`), fullPage: true });
+  deliveryConfigured = true;
+  await refreshDelivery.click();
+  await expect(page.getByText("합성 배송 설정 확인 실패. 다시 확인해 주세요.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
+  await refreshDelivery.click();
+  await expect(refreshDelivery).toHaveCount(0);
+  await expect(page.getByLabel("합성 품목 수량", { exact: true })).toHaveText("1");
+  expect(orderAttempts).toBe(0);
   await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "매장 구성원으로 로그인" })).toBeVisible();
   const popupPromise = context.waitForEvent("page");

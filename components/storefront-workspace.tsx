@@ -243,6 +243,10 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
     {tab === "order" && <section className="space-y-4 p-4 md:p-6">
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
+      {store.policy.weekdays.length === 0 && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
+        <p role="status">이 거래처의 배송 요일이 설정되지 않아 주문할 수 없습니다. 담당자에게 배송 요일 설정을 요청한 뒤 다시 확인해 주세요.</p>
+        <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
+      </section>}
       {!pricesReady ? retryLoad : null}
       <label className="block text-sm">배송일
         <input disabled={busy} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
