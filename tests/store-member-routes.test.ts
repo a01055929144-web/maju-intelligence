@@ -15,7 +15,7 @@ vi.mock("@/lib/store/07-store-member-management", () => ({
 vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ getStorePublicBaseUrl: mocks.origin }));
 
 import { POST as acceptInvitation } from "../app/api/store/members/accept/route";
-import { GET as listMembers, POST as createInvitation } from "../app/api/store/members/route";
+import { DELETE as removeMember, GET as listMembers, POST as createInvitation } from "../app/api/store/members/route";
 
 const companyId = "00000000-0000-4000-8000-000000000001";
 const storeAccountId = "00000000-0000-4000-8000-000000000002";
@@ -44,6 +44,34 @@ describe("store member route feature boundaries", () => {
     const response = await createInvitation(request("/api/store/members", { companyId, role: "staff", storeAccountId }));
     expect(response.status).toBe(503);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["owner", "manager", 200], ["owner", "staff", 200], ["manager", "manager", 403],
+    ["manager", "staff", 200], ["staff", "staff", 403]
+  ] as const)("allows %s to invite %s only when permitted", async (actorRole, invitedRole, status) => {
+    mocks.context.mockResolvedValue({ companyId, memberId: "actor", role: actorRole, storeAccountId });
+    mocks.origin.mockReturnValue("https://store.test");
+    mocks.create.mockResolvedValue("a".repeat(43));
+    const response = await createInvitation(request("/api/store/members", { companyId, role: invitedRole, storeAccountId }));
+    expect(response.status).toBe(status);
+    expect(mocks.create).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+  });
+
+  it("uses the verified actor scope for removal and blocks staff", async () => {
+    const targetMemberId = "00000000-0000-4000-8000-000000000003";
+    mocks.context.mockResolvedValue({ companyId, memberId: "verified-actor", role: "manager", storeAccountId });
+    const response = await removeMember(request("/api/store/members", {
+      actorMemberId: "forged-actor", companyId, storeAccountId, targetMemberId
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({ actorMemberId: "verified-actor", companyId, storeAccountId, targetMemberId });
+
+    vi.clearAllMocks();
+    mocks.allowlisted.mockReturnValue(true);
+    mocks.context.mockResolvedValue({ companyId, memberId: "staff", role: "staff", storeAccountId });
+    expect((await removeMember(request("/api/store/members", { companyId, storeAccountId, targetMemberId }))).status).toBe(403);
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
 
   it("lists members only after verifying an owner or manager session", async () => {
