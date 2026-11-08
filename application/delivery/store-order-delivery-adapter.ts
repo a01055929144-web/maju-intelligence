@@ -14,18 +14,28 @@ export type StoreOrderDeliveryRow = {
   delivery_loading_position_snapshot?: string | null;
 };
 
-export function toOrderDeliveryCandidates(rows: readonly StoreOrderDeliveryRow[]): OrderDeliveryCandidate[] {
-  return rows.flatMap((row) => {
-    if (row.status === "cancelled" || row.status === "delivered") return [];
+export type StoreOrderDeliveryRead = {
+  candidates: OrderDeliveryCandidate[];
+  blocked: Array<{ orderId: string; reason: "missing_delivery_snapshot" }>;
+};
+
+export function toOrderDeliveryCandidates(rows: readonly StoreOrderDeliveryRow[]): StoreOrderDeliveryRead {
+  const result: StoreOrderDeliveryRead = { candidates: [], blocked: [] };
+
+  for (const row of rows) {
+    if (row.status === "cancelled" || row.status === "delivered") continue;
     if (!row.id || !row.company_id || !row.customer_id || !/^\d{4}-\d{2}-\d{2}$/.test(row.delivery_date)) {
       throw new Error("주문 배송 식별 정보를 확인해 주세요.");
     }
     if (!Number.isInteger(row.revision) || row.revision < 1) throw new Error("주문 revision을 확인해 주세요.");
     const customerName = row.delivery_customer_name_snapshot?.trim();
     const address = row.delivery_address_snapshot?.trim();
-    if (!customerName || !address) return [];
+    if (!customerName || !address) {
+      result.blocked.push({ orderId: row.id, reason: "missing_delivery_snapshot" });
+      continue;
+    }
 
-    return [{
+    result.candidates.push({
       companyId: row.company_id,
       orderId: row.id,
       customerId: row.customer_id,
@@ -44,6 +54,8 @@ export function toOrderDeliveryCandidates(rows: readonly StoreOrderDeliveryRow[]
           ? { loadingPosition: row.delivery_loading_position_snapshot }
           : {})
       }
-    }];
-  });
+    });
+  }
+
+  return result;
 }

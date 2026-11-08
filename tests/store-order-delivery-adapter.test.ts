@@ -20,20 +20,23 @@ const baseRow: StoreOrderDeliveryRow = {
 
 describe("store order delivery adapter", () => {
   it("maps the read-only order and destination fields into the delivery DTO", () => {
-    expect(toOrderDeliveryCandidates([baseRow])).toEqual([{
-      companyId: "company-a",
-      orderId: "order-a",
-      customerId: "customer-a",
-      deliveryDate: "2026-11-08",
-      orderRevision: 2,
-      destination: {
-        customerName: "가 매장",
-        address: "서울 강남구 테헤란로 1",
-        addressDetail: "101호",
-        recipientPhone: "010-1111-2222",
-        loadingPosition: "후문 냉장고 앞"
-      }
-    }]);
+    expect(toOrderDeliveryCandidates([baseRow])).toEqual({
+      candidates: [{
+        companyId: "company-a",
+        orderId: "order-a",
+        customerId: "customer-a",
+        deliveryDate: "2026-11-08",
+        orderRevision: 2,
+        destination: {
+          customerName: "가 매장",
+          address: "서울 강남구 테헤란로 1",
+          addressDetail: "101호",
+          recipientPhone: "010-1111-2222",
+          loadingPosition: "후문 냉장고 앞"
+        }
+      }],
+      blocked: []
+    });
   });
 
   it("keeps multiple active orders and does not add route or driver assignments", () => {
@@ -42,8 +45,9 @@ describe("store order delivery adapter", () => {
       { ...baseRow, id: "order-b", revision: 1, status: "received" }
     ]);
 
-    expect(result.map((candidate) => candidate.orderId)).toEqual(["order-a", "order-b"]);
-    expect(result.every((candidate) => !("driverId" in candidate) && !("routeId" in candidate))).toBe(true);
+    expect(result.candidates.map((candidate) => candidate.orderId)).toEqual(["order-a", "order-b"]);
+    expect(result.candidates.every((candidate) => !("driverId" in candidate) && !("routeId" in candidate))).toBe(true);
+    expect(result.blocked).toEqual([]);
   });
 
   it("excludes cancelled and delivered orders without mutating the source rows", () => {
@@ -53,7 +57,7 @@ describe("store order delivery adapter", () => {
     ];
     const before = structuredClone(rows);
 
-    expect(toOrderDeliveryCandidates(rows)).toEqual([]);
+    expect(toOrderDeliveryCandidates(rows)).toEqual({ candidates: [], blocked: [] });
     expect(rows).toEqual(before);
   });
 
@@ -67,7 +71,10 @@ describe("store order delivery adapter", () => {
       status: "submitted"
     };
 
-    expect(toOrderDeliveryCandidates([currentStoreOrder])).toEqual([]);
+    expect(toOrderDeliveryCandidates([currentStoreOrder])).toEqual({
+      candidates: [],
+      blocked: [{ orderId: "legacy-order", reason: "missing_delivery_snapshot" }]
+    });
   });
 
   it("keeps the order-time address after the customer master address changes", () => {
@@ -75,7 +82,7 @@ describe("store order delivery adapter", () => {
     const result = toOrderDeliveryCandidates([baseRow]);
 
     expect(changedCustomerAddress).not.toBe(baseRow.delivery_address_snapshot);
-    expect(result[0].destination.address).toBe("서울 강남구 테헤란로 1");
+    expect(result.candidates[0].destination.address).toBe("서울 강남구 테헤란로 1");
   });
 
   it("rejects invalid order identifiers before they reach the route consumer", () => {
