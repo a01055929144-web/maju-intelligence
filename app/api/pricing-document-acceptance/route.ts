@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
       return reply(error.status, error.message);
     if (error instanceof Error && /Idempotency conflict/i.test(error.message))
       return reply(409, "같은 재시도 키에 다른 수락 요청이 있습니다.");
+    if (error instanceof Error && /(readonly_link_existing_orderable_conflict|orderable_link_existing_readonly_conflict)/.test(error.message))
+      return reply(409, "기존 링크를 회수한 뒤 다시 수락해 새 주문 링크를 발급해 주세요.");
     console.error("Pricing document acceptance failed.");
     return reply(500, "문서를 수락하지 못했습니다.");
   }
