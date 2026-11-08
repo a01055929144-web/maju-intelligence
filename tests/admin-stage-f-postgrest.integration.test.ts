@@ -15,7 +15,8 @@ it.runIf(process.env.ADMIN_STAGE_F_POSTGREST === "isolated")("runs all six bound
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     urls.push(url);
-    const response = await actualFetch(input, init);
+    const upstream = url.replace("http://127.0.0.1:3002/rest/v1/", "http://127.0.0.1:3002/");
+    const response = await actualFetch(upstream, init);
     if (!response.ok) console.error(url, response.status, await response.clone().text());
     return response;
   });
