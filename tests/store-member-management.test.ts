@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
 
-import { acceptStoreMemberInvitation, createStoreMemberInvitation, getPreparedStoreMemberInvitation, removeStoreMember } from "../lib/store/07-store-member-management";
+import { acceptStoreMemberInvitation, createStoreMemberInvitation, getPreparedStoreMemberInvitation, listStoreMembers, removeStoreMember } from "../lib/store/07-store-member-management";
 
 describe("store member management", () => {
   beforeEach(() => mocks.db.mockReset());
@@ -32,5 +32,14 @@ describe("store member management", () => {
     expect(await getPreparedStoreMemberInvitation("b".repeat(43))).toEqual({ companyId: "company", memberId: "member", role: "manager", storeAccountId: "store" });
     expect(mocks.db.mock.calls[0][0]).toContain("status=eq.invited");
     expect(mocks.db.mock.calls[0][0]).toContain("store_accounts.business_status=eq.active");
+  });
+
+  it("maps only display-safe roster fields", async () => {
+    mocks.db.mockResolvedValue([{ app_users: { name: " 매장 직원 " }, auth_user_id: "private", id: "member",
+      joined_at: "2026-11-08T00:00:00Z", role: "staff", status: "active" }]);
+    await expect(listStoreMembers({ companyId: "company", storeAccountId: "store" })).resolves.toEqual([{
+      id: "member", joinedAt: "2026-11-08T00:00:00Z", name: "매장 직원", role: "staff", status: "active"
+    }]);
+    expect(mocks.db.mock.calls[0][0]).toContain("company_id=eq.company&store_account_id=eq.store&status=in.(active,invited)");
   });
 });
