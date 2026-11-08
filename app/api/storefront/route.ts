@@ -3,6 +3,8 @@ import { dateField, isId } from "@/domains/pricing/document";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
+import { storeOrderDeliverySnapshotEnabled } from "@/lib/pricing/store-order-delivery-feature";
+import { parseStoreOrderDeliverySnapshot } from "@/domains/order/store-order-delivery-snapshot";
 import { readStorefront } from "@/lib/pricing/storefront";
 import { getStoreOrderActor } from "@/lib/pricing/store-order-member";
 import { getStoreOrderMemberContext } from "@/lib/store/07-store-member-context";
@@ -357,12 +359,23 @@ export async function PUT(request: NextRequest) {
       : null;
     if (memberOrdering && !member) return NextResponse.json({ message: "이 매장의 활성 구성원으로 로그인한 뒤 주문해 주세요." },
       { status: 403, headers: { "Cache-Control": "no-store" } });
+    const snapshotOrdering = storeOrderDeliverySnapshotEnabled(store.companyId);
+    let snapshot: ReturnType<typeof parseStoreOrderDeliverySnapshot> | undefined;
+    if (snapshotOrdering) {
+      try { snapshot = parseStoreOrderDeliverySnapshot(body.deliverySnapshot); }
+      catch {
+        return NextResponse.json({ message: "배송지 정보를 확인한 뒤 같은 주문 화면에서 다시 시도해 주세요." },
+          { status: 400, headers: { "Cache-Control": "no-store" } });
+      }
+    }
     const result = await supabaseRequest<Record<string, unknown>>(
-      memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
+      snapshotOrdering ? "rpc/place_store_order_with_delivery_snapshot_09" :
+        memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
       {
         method: "POST",
         body: JSON.stringify({
           p_token_hash: verified.hash,
+          ...(snapshot ? { p_snapshot: snapshot } : {}),
           ...(member ? {
             p_store_account_id: member.storeAccountId,
             p_member_id: member.memberId,
@@ -393,7 +406,7 @@ export async function PUT(request: NextRequest) {
         ? "최소 주문금액을 확인해 주세요."
         : /Promotion unavailable/.test(message)
           ? "행사 품목의 기간·재고를 다시 확인해 주세요."
-          : /Idempotency conflict|Order cannot be edited/.test(message)
+          : /Idempotency conflict|Order cannot be edited|delivery_snapshot_/.test(message)
             ? "이미 변경된 주문입니다. 내역을 새로고침해 주세요."
             : "주문을 저장하지 못했습니다. 품목과 가격을 새로고침해 주세요.";
     return NextResponse.json({ message: friendly }, { status: 409 });

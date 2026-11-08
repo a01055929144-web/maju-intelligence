@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true, snapshotEnabled: false }));
+vi.mock("@/lib/pricing/store-order-delivery-feature", () => ({ storeOrderDeliverySnapshotEnabled: () => mocks.snapshotEnabled }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreOrderMemberContext: mocks.orderContext }));
 vi.mock("@/lib/pricing/store-order-member", () => ({ getStoreOrderActor: mocks.member }));
 vi.mock("@/lib/auth", () => ({ storeMemberSessionEnabled: () => mocks.memberEnabled }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   mocks.enabled = true;
   mocks.memberEnabled = true;
   mocks.memberCompany = true;
+  mocks.snapshotEnabled = false;
   mocks.member.mockResolvedValue(null);
   mocks.orderContext.mockResolvedValue(null);
 });
@@ -132,6 +134,47 @@ it("rejects cross-origin writes before resolving a link", async () => {
   );
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.db).not.toHaveBeenCalled();
+});
+
+const deliverySnapshot = { deliveryCustomerNameSnapshot: " 합성 매장 ", deliveryAddressSnapshot: " 합성 주소 ",
+  deliveryAddressDetailSnapshot: "", deliveryRecipientPhoneSnapshot: null, deliveryLoadingPositionSnapshot: " 앞 " };
+it.each([true, false])("uses the new wrapper with server member context=%s and keeps the result contract", async memberOrdering => {
+  mocks.snapshotEnabled = true;
+  mocks.memberCompany = memberOrdering;
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  const result = { id: "saved", revision: 1, knownTotal: 1200, marketPricePending: false };
+  mocks.db.mockResolvedValue(result);
+  const response = await PUT(request({ deliverySnapshot, memberId: "forged", companyId: "forged" }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ result });
+  expect(mocks.db).toHaveBeenCalledTimes(1);
+  expect(mocks.db.mock.calls[0][0]).toBe("rpc/place_store_order_with_delivery_snapshot_09");
+  const payload = JSON.parse(mocks.db.mock.calls[0][1].body);
+  expect(payload.p_snapshot).toEqual({ ...deliverySnapshot, deliveryCustomerNameSnapshot: "합성 매장", deliveryAddressSnapshot: "합성 주소",
+    deliveryAddressDetailSnapshot: null, deliveryLoadingPositionSnapshot: "앞" });
+  if (memberOrdering) expect(payload.p_member_id).toBe("verified-member");
+  else expect(payload).not.toHaveProperty("p_member_id");
+  expect(payload).not.toHaveProperty("companyId");
+});
+it("rejects missing snapshots before SQL and never falls back if the wrapper fails", async () => {
+  mocks.snapshotEnabled = true;
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  expect((await PUT(request())).status).toBe(400);
+  expect(mocks.db).not.toHaveBeenCalled();
+  mocks.db.mockRejectedValue(new Error("delivery_snapshot_idempotency_conflict"));
+  expect((await PUT(request({ deliverySnapshot }))).status).toBe(409);
+  expect(mocks.db).toHaveBeenCalledTimes(1);
+  expect(mocks.db.mock.calls[0][0]).toBe("rpc/place_store_order_with_delivery_snapshot_09");
+});
+it("ignores snapshot input when OFF and retains the existing order RPC", async () => {
+  mocks.memberCompany = false;
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  mocks.db.mockResolvedValue({ id: "saved" });
+  expect((await PUT(request({ deliverySnapshot: { companyId: "forged" } }))).status).toBe(200);
+  expect(mocks.db.mock.calls[0][0]).toBe("rpc/place_store_order");
+  expect(JSON.parse(mocks.db.mock.calls[0][1].body)).not.toHaveProperty("p_snapshot");
 });
 
 const viewScope = { companyId: "00000000-0000-4000-8000-000000000001", customerId: "20000000-0000-4000-8000-000000000001" };
