@@ -219,28 +219,66 @@ begin
   perform public.restore_purchase_cost_date_batch_v2(c,'50000000-0000-4000-8000-000000000005','tester');
 end $$;
 
--- Functional proof that one transaction accepts the representative 745 mapped products / 3,417 selected rows.
+-- Representative-scale synthetic proof. No production names, files, or prices.
 insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,purchase_price_date,sales_unit)
 select ('60000000-0000-4000-8000-'||lpad(g::text,12,'0'))::uuid,
- '00000000-0000-4000-8000-000000000001','bulk-'||g,1,'2026-01-01','EA'
-from generate_series(1,745) g;
+ '00000000-0000-4000-8000-000000000001','synthetic-'||g,100,'2026-01-01','EA'
+from generate_series(1,741) g;
 \timing on
 do $$
-declare payload jsonb;
+declare
+  payload jsonb;
+  applied jsonb;
+  started_at timestamptz := clock_timestamp();
+  elapsed_ms numeric;
+  payload_bytes integer;
+  before_price bigint;
+  changed_price bigint;
 begin
+  perform public.pricing_p0_command(
+    '00000000-0000-4000-8000-000000000001','{"action":"recalculate"}');
+  select price into before_price from public.pricing_items
+    where company_id='00000000-0000-4000-8000-000000000001'
+      and product_id='60000000-0000-4000-8000-000000000189';
   select jsonb_agg(jsonb_build_object(
-    'productId','60000000-0000-4000-8000-'||lpad((((g-1)%745)+1)::text,12,'0'),
+    'productId','60000000-0000-4000-8000-'||lpad((((g-1)%741)+1)::text,12,'0'),
     'priceDate','2026-11-01',
-    'cost',g,'selectedSourceRowNumber',g,'priceSelected',g<=745) order by g) into payload
-  from generate_series(1,3417) g;
-  perform public.save_purchase_cost_date_batch_v2(
+    'cost',case when ((g-1)%741)+1=189 then 150 else 100 end,
+    'selectedSourceRowNumber',g,
+    'priceHeld',g<=188,
+    'priceSelected',g between 189 and 741) order by g) into payload
+  from generate_series(1,3389) g;
+  payload_bytes:=octet_length(payload::text);
+  if payload_bytes>=4*1024*1024 then raise exception 'representative payload exceeded 4MB'; end if;
+  applied:=public.save_purchase_cost_date_batch_v2(
     '00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004',
-    '2026-11-01',payload,'tester','3417.xlsx');
-  if (select count(*) from public.purchase_receipt_lines where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004') <> 3417
+    '2026-11-01',payload,'tester','synthetic.xlsx');
+  elapsed_ms:=extract(epoch from clock_timestamp()-started_at)*1000;
+  select price into changed_price from public.pricing_items
+    where company_id='00000000-0000-4000-8000-000000000001'
+      and product_id='60000000-0000-4000-8000-000000000189';
+  if (select count(*) from public.purchase_receipt_lines where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004') <> 3389
+     or (select count(distinct product_catalog_id) from public.purchase_receipt_lines
+         where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004')<>741
      or (select history_only_product_count from public.purchase_cost_date_batches_v2
          where company_id='00000000-0000-4000-8000-000000000001'
-           and id='50000000-0000-4000-8000-000000000004')<>0
-  then raise exception '3417-row save incomplete or history-only count mismatch'; end if;
+           and id='50000000-0000-4000-8000-000000000004')<>188
+     or applied->>'recalcRunId' is null
+     or (select purchase_price from public.product_catalog
+         where id='60000000-0000-4000-8000-000000000189')<>150
+     or changed_price=before_price
+  then raise exception 'representative-scale save, link, hold, or recalc mismatch'; end if;
+  perform public.restore_purchase_cost_date_batch_v2(
+    '00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004','tester');
+  if exists(select 1 from public.purchase_receipt_lines
+      where purchase_cost_date_batch_id='50000000-0000-4000-8000-000000000004')
+     or (select purchase_price from public.product_catalog
+         where id='60000000-0000-4000-8000-000000000189')<>100
+     or (select price from public.pricing_items
+         where company_id='00000000-0000-4000-8000-000000000001'
+           and product_id='60000000-0000-4000-8000-000000000189')<>before_price
+  then raise exception 'representative-scale restore mismatch'; end if;
+  raise notice 'representative payload: % bytes, save+recalc: % ms',payload_bytes,round(elapsed_ms,1);
 end $$;
 \timing off
 
