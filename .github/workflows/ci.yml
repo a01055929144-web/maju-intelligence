@@ -373,6 +373,21 @@ jobs:
           npm ci --ignore-scripts
           node scripts/test-store-member-order-concurrency.mjs
 
+      - name: Verify disposable storefront fixture on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb storefront_synthetic_fixture_test
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p1-fixture.sql
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=supabase/migrations/20261102114600_pricing_p0.sql
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=supabase/migrations/20261102114601_pricing_p1.sql
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p2-fixture.sql
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=supabase/migrations/20261102114602_pricing_p2_store_ordering.sql
+          psql --dbname=storefront_synthetic_fixture_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-synthetic-fixture.pg17.sql
+
   build:
     runs-on: ubuntu-latest
     steps:
