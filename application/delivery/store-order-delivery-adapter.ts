@@ -7,11 +7,11 @@ export type StoreOrderDeliveryRow = {
   delivery_date: string;
   revision: number;
   status: "submitted" | "received" | "in_delivery" | "delivered" | "cancelled";
-  delivery_customer_name_snapshot: string | null;
-  delivery_address_snapshot: string | null;
-  delivery_address_detail_snapshot: string | null;
-  delivery_recipient_phone_snapshot: string | null;
-  delivery_loading_position_snapshot: string | null;
+  delivery_customer_name_snapshot?: string | null;
+  delivery_address_snapshot?: string | null;
+  delivery_address_detail_snapshot?: string | null;
+  delivery_recipient_phone_snapshot?: string | null;
+  delivery_loading_position_snapshot?: string | null;
 };
 
 export function toOrderDeliveryCandidates(rows: readonly StoreOrderDeliveryRow[]): OrderDeliveryCandidate[] {

@@ -57,12 +57,17 @@ describe("store order delivery adapter", () => {
     expect(rows).toEqual(before);
   });
 
-  it("does not return legacy orders without an immutable delivery snapshot", () => {
-    expect(toOrderDeliveryCandidates([{
-      ...baseRow,
-      delivery_customer_name_snapshot: null,
-      delivery_address_snapshot: null
-    }])).toEqual([]);
+  it("returns zero candidates for current store_orders rows without snapshot columns", () => {
+    const currentStoreOrder: StoreOrderDeliveryRow = {
+      id: "legacy-order",
+      company_id: "company-a",
+      customer_id: "customer-a",
+      delivery_date: "2026-11-08",
+      revision: 1,
+      status: "submitted"
+    };
+
+    expect(toOrderDeliveryCandidates([currentStoreOrder])).toEqual([]);
   });
 
   it("keeps the order-time address after the customer master address changes", () => {
