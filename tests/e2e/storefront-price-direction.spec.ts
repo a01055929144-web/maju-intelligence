@@ -28,6 +28,9 @@ for (const width of [1440, 390]) test(`store links verify settings before issuan
   await expect(page.getByText("검색된 거래처가 없습니다.", { exact: false })).toBeVisible();
   await expect(create).toBeDisabled();
   expect(issued).toBe(0);
+  const registration = page.getByRole("link", { name: "거래처 등록 화면 열기", exact: true });
+  await expect(registration).toHaveAttribute("href", "/");
+  expect((await registration.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(page.getByText("표시할 매장 링크가 없습니다.", { exact: false })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`stage-c-empty-customers-${width}.png`), fullPage: true });
   customersAvailable = true;

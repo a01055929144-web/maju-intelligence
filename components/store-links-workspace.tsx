@@ -192,7 +192,11 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <div className="flex gap-2"><input aria-label="거래처 검색" disabled={busy} className="min-w-0 flex-1 rounded border p-2" value={customerQuery}
         onChange={(event) => { setCustomerQuery(event.target.value); setCustomerId(""); setSelectedCustomerIds([]); setCustomers([]); setCustomersSearched(false); }} placeholder="매장 이름 검색" />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void searchCustomers()}>검색</Button></div>
-      {customersSearched && !customers.length && <p role="status" className="text-sm text-slate-600">검색된 거래처가 없습니다. 검색어를 바꾸거나 거래처 등록 상태를 확인한 뒤 다시 검색해 주세요.</p>}
+      {customersSearched && !customers.length && <div role="status" className="text-sm text-slate-600">
+        <p>검색된 거래처가 없습니다. 검색어를 바꾸거나 거래처 등록 상태를 확인한 뒤 다시 검색해 주세요.</p>
+        <NextLink href="/" className="inline-flex min-h-[44px] items-center underline">거래처 등록 화면 열기</NextLink>
+        <p>기존 화면의 ‘매장 및 거래처 등록 → 엑셀 대량’을 이용할 수 있습니다.</p>
+      </div>}
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
