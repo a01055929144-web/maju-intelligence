@@ -125,6 +125,9 @@ function sameInstant(left: unknown, right: string) {
 }
 
 function validateCommand(input: OrderDeliveryCompletionCommand, companyId: string) {
+  if (!input || typeof input !== "object" || !Array.isArray(input.orders) || !input.proof || typeof input.proof !== "object" || !Array.isArray(input.proof.attachmentIds)) {
+    throw new DeliveryCompletionError("배송 완료 요청 형식을 확인해 주세요.");
+  }
   if (input.companyId !== companyId || !UUID.test(input.customerId) || !UUID.test(input.completionEventId) || input.idempotencyKey !== input.completionEventId) {
     throw new DeliveryCompletionError("배송 완료 요청 범위를 확인해 주세요.");
   }

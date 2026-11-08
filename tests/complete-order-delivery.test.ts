@@ -96,4 +96,8 @@ describe("complete order delivery", () => {
   it("maps the known SQL idempotency conflict to a safe validation error", async () => {
     await expect(completeOrderDelivery(command, actor, repository({ conflict: true }))).rejects.toThrow("기존 완료 정보와 다릅니다");
   });
+
+  it("rejects malformed authenticated JSON as a validation error", async () => {
+    await expect(completeOrderDelivery({ companyId } as OrderDeliveryCompletionCommand, actor, repository())).rejects.toThrow("요청 형식");
+  });
 });
