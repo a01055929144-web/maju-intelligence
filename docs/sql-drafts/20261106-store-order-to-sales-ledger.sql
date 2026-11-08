@@ -8,7 +8,7 @@ create or replace function public.create_sales_document_from_store_order(
   p_actor_name text
 ) returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 declare

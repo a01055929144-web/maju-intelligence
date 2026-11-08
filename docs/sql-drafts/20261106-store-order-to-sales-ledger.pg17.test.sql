@@ -78,6 +78,12 @@ do $$ declare a jsonb; b jsonb; v_document uuid; begin
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  if b->>'status'<>'confirmed' or b->>'ledgerPosted'<>'true' then raise exception 'confirmed ledger result failed'; end if;
  if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'ledger count failed'; end if;
+ perform public.cancel_business_document('00000000-0000-4000-8000-000000000001',v_document,gen_random_uuid(),'tester','cancel regression');
+ b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
+ if b->>'status'<>'cancelled' or b->>'alreadyCreated'<>'true' or b->>'ledgerPosted'<>'true' then raise exception 'cancelled retry result failed'; end if;
+ if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>2
+   or (select sum(amount) from public.partner_ledger_entries where source_document_id=v_document)<>0
+   then raise exception 'cancel reversal failed'; end if;
 end $$;
 
 do $$ begin
@@ -98,5 +104,5 @@ end $$;
 do $$ begin
  if to_regprocedure('public.create_sales_document_from_store_order(uuid,uuid,uuid,text)') is not null then raise exception 'down left function'; end if;
  if (select count(*) from public.business_documents where source_type='order')<>1 then raise exception 'down removed document'; end if;
- if (select count(*) from public.partner_ledger_entries)<>1 then raise exception 'down removed ledger'; end if;
+ if (select count(*) from public.partner_ledger_entries)<>2 then raise exception 'down removed ledger'; end if;
 end $$;

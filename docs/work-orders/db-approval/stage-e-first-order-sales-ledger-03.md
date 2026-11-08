@@ -18,7 +18,7 @@
 
 ## 선행 차단
 
-Stage D의 주문 상태 계약이 아직 확정되지 않았다. 현재 `store_orders.status`에는 `closed`가 없고 기존 문서끼리도 매출전표 생성 시점을 `in_delivery` 또는 출고 확정으로 표현한다. #384는 이 경계를 검증하기 위한 **승인 전 Draft**이며, 아래 생산자 계약이 병합되기 전에는 Ready 전환·병합·운영 적용·호출 코드 연결을 하지 않는다. 오래된 #281은 #384로 대체되어 종료했으며 두 SQL을 함께 적용하지 않는다.
+#397로 Stage D의 주문 ID·부분 완료 소비자 계약은 병합됐지만, 09 소유의 단일 완료 상태/RPC와 주소 snapshot 생산자 계약은 아직 확정되지 않았다. 현재 `store_orders.status`에는 `closed`가 없고 기존 문서끼리도 매출전표 생성 시점을 `received`, `in_delivery` 또는 출고 확정으로 표현한다. #384의 세 상태는 폐기형 PG17 후보 fixture일 뿐 운영 계약이 아니다. 아래 생산자 계약이 병합되기 전에는 Ready 전환·병합·운영 적용·호출 코드 연결을 하지 않는다. 오래된 #281은 #384로 대체되어 종료했으며 두 SQL을 함께 적용하지 않는다.
 
 1. 전표 생성이 허용되는 단일 주문 상태와 전환 주체
 2. 취소 주문·미확정 시가 품목·수정 중 주문의 거부 규칙
@@ -55,17 +55,17 @@ RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정�
 
 ### 첫 주문 → 매출전표
 
-- [ ] 허용 상태의 주문만 전표 생성
-- [ ] 같은 주문·같은 요청 재시도에 같은 전표 반환
+- [x] 현재 허용 후보 상태의 주문만 전표 생성, `submitted/cancelled` 거부
+- [x] 같은 주문 재시도에 같은 전표 반환
 - [ ] 같은 주문의 동시 요청에도 전표·원장 각각 1건
-- [ ] 다른 회사 주문·거래처·상품 참조 거부
+- [x] 다른 회사 주문 참조 거부
 - [ ] 시가 품목·빈 단가·0줄 주문·합계 불일치 전체 거부
-- [ ] 주문 가격·과세·수량 스냅샷과 전표 줄·헤더 합계 일치
-- [ ] 주문 ID로 전표와 원장을 역추적 가능
+- [x] 지원 범위의 주문 가격·과세·수량 스냅샷과 전표 줄·헤더 합계 일치
+- [x] 주문 ID로 전표와 원장을 역추적 가능
 
 ### 거래처원장·입금
 
-- [ ] 전표 확정 시 `sale` 원장 1건과 미수 증가
+- [x] 전표 확정 시 `sale` 원장 1건과 미수 증가
 - [ ] 기존 `record_partner_payment` 재시도에 입금 1건
 - [ ] 전표·입금 후 원장 합계와 화면 기초/기말 잔액 일치
 - [ ] 다른 회사 거래처 입금 거부와 공개 역할 실행 거부
@@ -73,7 +73,7 @@ RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정�
 ### 취소·반품
 
 - [ ] 출고 전 주문 취소는 매출전표를 만들지 않음
-- [ ] 확정 전표 취소는 기존 `cancel_business_document` reversal 1건
+- [x] 확정 전표 취소는 기존 `cancel_business_document` reversal 1건, 재조회는 같은 취소 전표 반환
 - [ ] 반품은 원전표·같은 거래처의 `sale_return`으로 기록되고 누적 반품이 원전표 합계를 넘지 않음
 - [ ] 취소·반품·입금 조합 후 원장 순액 일치
 
@@ -94,12 +94,14 @@ RPC 이름과 정확한 상태값은 Stage D 생산자 계약 병합 후 확정�
 
 ## 변경 파일 예상
 
-승인과 Stage D 계약 병합 뒤에도 최소 네 파일로 제한한다. 현재 #384는 아래 SQL·down·PG17 세 파일만 담고 있으며 앱 호출 코드는 포함하지 않는다.
+최신 main 기준 최소 초안은 아래 네 파일로 제한하며 앱 호출 코드는 포함하지 않는다.
 
-1. `docs/sql-drafts/<date>-stage-e-order-sales-ledger.sql`
-2. `docs/sql-drafts/<date>-stage-e-order-sales-ledger.down.sql`
-3. `docs/sql-drafts/<date>-stage-e-order-sales-ledger.pg17.test.sql`
-4. 03 소유 서버 호출 모듈 또는 API 한 곳 — 09가 주문 완료 계약을 제공한 뒤 소비자 연결만 추가
+1. `docs/sql-drafts/20261106-store-order-to-sales-ledger.sql`
+2. `docs/sql-drafts/20261106-store-order-to-sales-ledger.down.sql`
+3. `docs/sql-drafts/20261106-store-order-to-sales-ledger.pg17.test.sql`
+4. `tests/sql/store-order-sales-ledger-fixture.pg17.sql`
+
+앱 호출 코드는 Stage D 상태 계약과 SQL 승인 뒤 별도 PR로 추가한다.
 
 `lib/store.ts`, 09의 링크/주문 화면·API, 01 TMS, 07 인증 helper, 중앙 승인표는 이 작업에서 수정하지 않는다. UI 변경이 없으므로 별도 PC/390px 화면은 만들지 않고 기존 ERP 원장 화면의 회귀 스모크만 수행한다.
 
