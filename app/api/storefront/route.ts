@@ -344,6 +344,10 @@ export async function PUT(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    if (/Store member unavailable/.test(message)) return NextResponse.json(
+      { message: "매장 구성원 권한이 변경됐습니다. 다시 로그인한 뒤 주문해 주세요." },
+      { status: 403, headers: { "Cache-Control": "no-store" } },
+    );
     const friendly = /Delivery date unavailable/.test(message)
       ? "배송 가능일과 마감 시각을 다시 확인해 주세요."
       : /Minimum order not met/.test(message)

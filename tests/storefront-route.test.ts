@@ -81,6 +81,15 @@ it("rejects a public token alone and ignores caller-supplied member scope before
   expect(mocks.member).toHaveBeenCalledWith({ companyId: "verified-company", customerId: "verified-customer" });
   expect(mocks.db).not.toHaveBeenCalled();
 });
+it("fails closed when membership is revoked between server lookup and the order transaction", async () => {
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  mocks.db.mockRejectedValue(new Error("Store member unavailable"));
+  const response = await PUT(request());
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ message: "매장 구성원 권한이 변경됐습니다. 다시 로그인한 뒤 주문해 주세요." });
+  expect(mocks.db).toHaveBeenCalledTimes(1);
+});
 it("rejects cross-origin writes before resolving a link", async () => {
   expect((await PUT(request({}, "https://other.example.test"))).status).toBe(
     403,
