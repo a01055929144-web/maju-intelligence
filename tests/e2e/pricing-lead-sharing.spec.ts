@@ -86,6 +86,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("button", { name: "초안 저장", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+  await expect(page.getByRole("button", { name: /버전 1 미리보기/ })).toBeVisible();
   const frozenVersion = JSON.stringify(version());
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
