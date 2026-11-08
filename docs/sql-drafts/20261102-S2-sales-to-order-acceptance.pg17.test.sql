@@ -228,3 +228,21 @@ select 'S2 sales-to-order acceptance PG17 checks passed' as result;
 do $$ begin
   if to_regclass('public.pricing_document_sends') is null then raise exception 'destructive down was not refused'; end if;
 end $$;
+
+-- 데이터가 없는 승인된 복구 경로는 후속 wrapper를 먼저 제거한 뒤 기반 S-2 객체를 되돌린다.
+truncate table
+  pricing_document_sends, pricing_document_acceptance_requests, pricing_public_request_audit,
+  customer_pricing_document_links, store_account_member_events, store_account_members,
+  store_accounts, storefront_links, store_orders, customer_price_agreements cascade;
+update normalized_customers set delivery_recipient_name=null,delivery_contact_phone=null,
+  preferred_delivery_time=null,delivery_drop_location=null;
+ir 20261102-S2-sales-to-order-acceptance.down.sql
+do $$ begin
+  if to_regprocedure('public.accept_pricing_document_and_issue_storefront_link(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,jsonb,uuid,text,text,timestamptz,uuid,text)') is not null
+    then raise exception 'acceptance order-link wrapper survived down'; end if;
+  if to_regprocedure('public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)') is not null
+    then raise exception 'base acceptance function survived down'; end if;
+  if to_regclass('public.pricing_document_sends') is not null then raise exception 'S2 tables survived down'; end if;
+  if exists(select from information_schema.columns where table_schema='public' and table_name='storefront_links' and column_name='acceptance_request_id')
+    then raise exception 'storefront acceptance column survived down'; end if;
+end $$;
