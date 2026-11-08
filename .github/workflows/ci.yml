@@ -384,6 +384,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-order.pg17.test.sql
           npm ci --ignore-scripts
           node scripts/test-store-member-order-concurrency.mjs
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-full-journey.pg17.sql
 
       - name: Verify disposable storefront fixture on PostgreSQL 17
         env:
