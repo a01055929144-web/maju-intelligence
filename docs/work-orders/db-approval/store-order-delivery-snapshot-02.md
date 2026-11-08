@@ -5,6 +5,7 @@
 - SQL 초안: [`20261108-stage-d-delivery-snapshot-02.sql`](../../sql-drafts/20261108-stage-d-delivery-snapshot-02.sql)
 - Down 초안: [`20261108-stage-d-delivery-snapshot-02.down.sql`](../../sql-drafts/20261108-stage-d-delivery-snapshot-02.down.sql)
 - PG17 검증: [`20261108-stage-d-delivery-snapshot-02.pg17.test.sql`](../../sql-drafts/20261108-stage-d-delivery-snapshot-02.pg17.test.sql)
+- 09 입력 인계: [`2026-11-08-02-stage-d-09-snapshot-input-handoff.md`](../2026-11-08-02-stage-d-09-snapshot-input-handoff.md)
 
 현재 `store_orders`에는 아래 snapshot 컬럼이 하나도 없다. 따라서 승인된 컬럼 추가와 주문 생성 시 기록, 기존 주문의 확인·backfill이 끝나기 전까지 실제 `store_orders`에서 만들어지는 배차 후보는 **0건**이다. 활성 주문은 사라지지 않고 `missing_delivery_snapshot` 차단 목록에 남아 미배정·주소 확인 화면에서 사용할 수 있다.
 
@@ -22,8 +23,11 @@
 
 | 항목 | 상태 |
 | --- | --- |
-| 09 주문 생성 RPC가 snapshot을 같은 transaction에서 기록 | 승인 필요 |
-| 기존 주문 backfill 기준과 주소 확인 담당자 | 승인 필요 |
+| 09 주문 생성 RPC가 snapshot을 같은 transaction에서 기록 | 09 인수·승인 필요 |
+| 기존 주문 기본 처리 | **확정:** 자동 backfill 금지, `missing_delivery_snapshot`으로 차단 유지 |
+| 기존 주문을 확인 후 살릴 범위 | **미결정:** 대상 기간·상태·고객 공지 기준을 운영 책임자가 승인해야 함 |
+| 주소 확인 담당 | **미결정:** 회사 관리자/배차 담당자 제안, 최종 역할과 대리 권한 승인 필요 |
+| 확인 기록 | **미결정:** 확인자·확인 시각·근거·정정 사유의 저장 위치를 09가 제안해야 함 |
 | snapshot 없는 기존 주문은 자동 배차 금지 | 확정 |
 | 거래처 마스터 변경 시 기존 주문 snapshot 불변 | 확정 |
 | 운영 SQL 적용·자동 배차·플래그 ON | 이번 PR 제외 |
@@ -56,3 +60,10 @@
 - 주문 생성 후 거래처 마스터 변경값으로 snapshot을 덮어쓰지 않는다.
 - 기존 주문은 현재 거래처 주소로 자동 backfill하지 않는다. 확인된 주문만 전체 snapshot을 한 번에 기록한다.
 - 09는 주문 저장 실패 시 snapshot도 함께 rollback하고, snapshot 저장 실패 시 주문만 남기지 않는다.
+
+## 기존 주문 승인 전 운영 원칙
+
+- 현재 거래처 주소를 과거 주문 주소로 추정하지 않는다.
+- 미확인 주문은 배차 후보 0건으로 처리하되 주문 자체는 차단 목록에 보존한다.
+- backfill 승인이 나더라도 필수 snapshot 전체를 한 번에 기록하고 확인자·시각·근거를 남긴다.
+- 주소 확인 담당과 감사 기록 위치가 정해지기 전에는 기존 주문 backfill UI/RPC를 만들지 않는다.
