@@ -322,7 +322,7 @@ for (const width of [1280, 390]) test(`past imports default to history only with
   await expect(preview).toContainText("상이 단가 188품목의 모든 원문 행을 매입 이력에 보존합니다");
   const align = page.getByRole("button", { name: "② 열 정렬", exact: true });
   await expect(align).toBeEnabled(); await align.click();
-  await page.getByRole("button", { name: /③ 저장/ }).click();
+  await page.getByRole("button", { name: "③ 저장 (376건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("매입 이력 376행 · 현재 가격 변경 0품목");
   await review.getByRole("checkbox", { name: "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.", exact: true }).check();
