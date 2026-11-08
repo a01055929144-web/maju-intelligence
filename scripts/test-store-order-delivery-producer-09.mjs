@@ -141,6 +141,15 @@ try {
   await rejectCompletion({ at: new Date(Date.now() + 600000).toISOString() }, /store_order_completion_invalid/);
   await rejectCompletion({ ids: [legacy.id], revisions: { [legacy.id]: 1 } }, /store_order_completion_snapshot_required/);
   await rejectCompletion({ ids: [ids[0], cancelled.id], revisions: { [ids[0]]: revisions[ids[0]], [cancelled.id]: 1 } }, /store_order_completion_unavailable/);
+  const otherCustomerOrder = randomUUID();
+  await admin.query(`insert into store_orders(id,company_id,customer_id,link_id,document_version_id,delivery_date,idempotency_key,
+    submitted_at,delivery_customer_name_snapshot,delivery_address_snapshot)
+    select $1,company_id,'20000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000002',
+      document_version_id,delivery_date,$2,submitted_at,'other store','other synthetic address' from store_orders where id=$3`,
+    [otherCustomerOrder, randomUUID(), ids[0]]);
+  await rejectCompletion({ ids: [ids[0], otherCustomerOrder], revisions: { [ids[0]]: revisions[ids[0]], [otherCustomerOrder]: 1 } },
+    /store_order_completion_customer_mismatch/);
+  assert.deepEqual(await states([otherCustomerOrder]), [{ id: otherCustomerOrder, status: 'submitted', revision: 1 }]);
 
   await admin.query(`create function public.delivery09_fail_completion() returns trigger language plpgsql as $$ begin
     if new.status='delivered' then raise exception 'fixture_forced_completion_failure'; end if; return new; end $$;

@@ -49,7 +49,19 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 **02/03 검토가 필요한 제안**: 기존 후보 계약에 맞춰 submitted/received/in_delivery를 완료 가능한 상태로 두었다. 실제 완료 호출자는 검증한 기사·코스·회사·배송일·정확한 주문 묶음과 revision을 먼저 확정해야 한다. SQL의 service_role 권한 자체는 기사/코스 인증을 대신하지 않는다. 배송 예정일은 주문과 일치해야 하지만 completedAt의 달력 날짜와 같도록 강제하지 않는다. 제출 전 시각·5분 초과 미래·취소/기완료·회사/날짜/revision 불일치·snapshot 누락은 거부한다. 이 상태 전이와 지연 완료 시각 정책이 합의되기 전에는 연결하지 않는다.
 
-대표 오류: store_order_completion_invalid / unavailable / revision_conflict / snapshot_required. 방문 메모·상태 추정·주소 문자열로 완료를 만들지 않는다. TMS 배정·ERP·재고·원장 호출은 추가하지 않았다.
+같은 회사라도 서로 다른 customer_id 주문을 한 이벤트에 섞으면 store_order_completion_customer_mismatch로 전부 거부한다. 같은 거래처라는 사실만으로 동일 정류장임을 증명하지는 않는다.
+
+## API 연결 전 필수 미완료 항목
+
+아래 항목은 이번 SQL 초안이 완료하지 않았으며, 연결 전에 02/03과 계약·원자성 검증을 마쳐야 한다.
+
+- 인증 기사·확정 코스·차량·정류장과 정확한 주문 묶음 검증. actor_key는 클라이언트 입력을 받지 않고 서버 세션에서 산출.
+- noteId·attachmentIds의 회사·거래처 검증 및 완료 이벤트와 같은 트랜잭션 연결. 메모/첨부가 따로 성공한 것을 완료 성공으로 취급하지 않음.
+- completionEventId와 별도 idempotencyKey의 관계 확정. 현재 SQL은 completionEventId 자체를 이벤트 멱등 키로 사용하며 별도 키를 받지 않음.
+- #405 DTO의 pre/post revision 매핑. 현재 입력은 expectedRevisions, 결과는 완료 뒤 orderRevisions이며 DTO 연결은 미구현.
+- 명시적 완료 이력 projection과 재조회 계약. 현재 SQL의 이벤트 기록을 화면 이력/API로 연결하지 않음.
+
+대표 오류: store_order_completion_invalid / unavailable / revision_conflict / snapshot_required / customer_mismatch. 방문 메모·상태 추정·주소 문자열로 완료를 만들지 않는다. TMS 배정·ERP·재고·원장 호출은 추가하지 않았다.
 
 ## 검증과 되돌리기
 

@@ -186,6 +186,9 @@ begin
   perform 1 from public.store_orders where company_id=p_company and id=any(v_ids) order by id for update;
   get diagnostics v_count=row_count;
   if v_count<>cardinality(v_ids) then raise exception 'store_order_completion_unavailable'; end if;
+  if (select count(distinct customer_id) from public.store_orders where company_id=p_company and id=any(v_ids))<>1 then
+    raise exception 'store_order_completion_customer_mismatch';
+  end if;
   for v_order in select * from public.store_orders where company_id=p_company and id=any(v_ids) order by id loop
     if v_order.status not in('submitted','received','in_delivery') or v_order.delivery_date<>p_delivery_date
       or p_completed_at<v_order.submitted_at then raise exception 'store_order_completion_unavailable'; end if;

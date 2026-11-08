@@ -12,3 +12,6 @@ update public.normalized_customers set address='synthetic delivery address'
   where id='20000000-0000-4000-8000-000000000001';
 update public.normalized_customers set address='other synthetic address'
   where id in('20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000003');
+insert into public.storefront_links(id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at) values
+ ('90000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
+  '80000000-0000-4000-8000-000000000001',repeat('c',32),repeat('c',64),'2099-12-31');
