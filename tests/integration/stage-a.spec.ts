@@ -33,6 +33,16 @@ function syntheticFile(existing: number) {
   XLSX.utils.book_append_sheet(workbook,sheet,'합성 매입');
   return { rows, buffer: XLSX.write(workbook,{type:'buffer',bookType:'xlsx',cellDates:true}) as Buffer };
 }
+function historyOnlyFile() {
+  const header = 'ERP 코드,품목,규격,단위,구매일,단가';
+  const rows = Array.from({length:3389},(_,index)=>{
+    const i=index<741?index:index<929?index-741:(index-929)%741;
+    const cost=i<188 && index>=741 && index<929?120:100;
+    return `${code(i)},${name(i,741)},1kg,${units[i%4]},${date},${cost}`;
+  });
+  for(let i=0;i<28;i++) rows.push(`MISS-${i%4+1},검증 미연결 ${i%4+1},1kg,EA,${date},100`);
+  return Buffer.from(`${header}\n${rows.join('\n')}`,'utf8');
+}
 
 // These are real Next APIs -> prefix gateway -> PostgREST -> disposable PG17.
 // No core endpoint is fulfilled with a mock response.
@@ -195,21 +205,20 @@ test('history-only default preserves matched receipts without recalculation or c
   db('seed',741);
   expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   await page.goto(`/revenue/pricing?companyId=${company}`);
-  const file=syntheticFile(741);
-  await page.locator('input[type="file"]').setInputFiles({name:'stage-a-history-only.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});
+  await page.locator('input[type="file"]').setInputFiles({name:'stage-a-history-only.csv',mimeType:'text/csv',buffer:historyOnlyFile()});
   const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
   await expect(preview.getByRole('checkbox',{name:'현재 가격도 변경',exact:true})).not.toBeChecked();
   await expect(preview).toContainText('상이 단가 188품목의 모든 원문 행을 매입 이력에 보존합니다');
   await page.getByRole('button',{name:'② 열 정렬',exact:true}).click();
   await page.getByRole('button',{name:/③ 저장/}).click();
   const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
-  await expect(review).toContainText('매입 이력 3401행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 16행 제외');
+  await expect(review).toContainText('매입 이력 3389행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 28행 제외');
   await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect.poll(()=>state().batches).toBe(1);
   const saved=state();
-  expect(saved.receipts).toBe(3401); expect(saved.price_runs).toBe(0);
-  expect(saved.batch).toMatchObject({status:'completed',row_count:3401,history_only_product_count:741,recalc_run_id:null});
+  expect(saved.receipts).toBe(3389); expect(saved.price_runs).toBe(0);
+  expect(saved.batch).toMatchObject({status:'completed',row_count:3389,history_only_product_count:741,recalc_run_id:null});
   expect(saved.items.every(item=>Number(item.cost)===100 && item.date===priorDate)).toBe(true);
 });
 
