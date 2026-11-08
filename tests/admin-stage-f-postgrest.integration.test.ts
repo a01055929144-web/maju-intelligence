@@ -16,9 +16,7 @@ it.runIf(process.env.ADMIN_STAGE_F_POSTGREST === "isolated")("runs all six bound
     const url = String(input);
     urls.push(url);
     const upstream = url.replace("http://127.0.0.1:3002/rest/v1/", "http://127.0.0.1:3002/");
-    const response = await actualFetch(upstream, init);
-    if (!response.ok) console.error(url, response.status, await response.clone().text());
-    return response;
+    return actualFetch(upstream, init);
   });
 
   const queue = await getStageFQueue("00000000-0000-4000-8000-0000000000a1");
