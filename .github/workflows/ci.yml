@@ -390,6 +390,19 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    services:
+      readonly-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -444,6 +457,18 @@ jobs:
           PRICE_SHEETS_ENABLED: "true"
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
+      - name: Readonly 18-product storefront against isolated PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          P2_READONLY_PG17_SMOKE: "true"
+          PRICING_P2_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/readonly_storefront_browser_test
+        run: |
+          createdb readonly_storefront_browser_test
+          psql --dbname=readonly_storefront_browser_test --set=ON_ERROR_STOP=1 --file=tests/sql/readonly-storefront-browser.pg17.fixture.sql
+          node scripts/test-pricing-p2-browser.mjs
+
       - name: Upload responsive layout report
         if: always()
         uses: actions/upload-artifact@v4
@@ -452,5 +477,6 @@ jobs:
           path: |
             playwright-report
             test-results/layout
+            test-results/readonly-pg17
           if-no-files-found: ignore
           retention-days: 14
