@@ -75,6 +75,8 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   expect((await refreshDelivery.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
   expect(orderAttempts).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(deliveryGuide).toBeInViewport();
   await page.screenshot({ path: info.outputPath(`delivery-settings-${role}-${width}.png`), fullPage: true });
   deliveryConfigured = true;
   await refreshDelivery.click();
