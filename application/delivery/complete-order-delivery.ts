@@ -51,16 +51,18 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   if (orders.length !== input.orders.length) throw new DeliveryCompletionError("완료할 주문을 찾을 수 없습니다.");
   const revisionById = new Map(input.orders.map((order) => [order.orderId, order.orderRevision]));
   for (const order of orders) {
-    if (order.customer_id !== input.customerId || order.delivery_date !== input.deliveryDate || !ACTIVE.has(order.status)) {
+    const expectedRevision = revisionById.get(order.id)!;
+    const isPendingCompletion = ACTIVE.has(order.status) && order.revision === expectedRevision;
+    const isCompletionRetry = order.status === "delivered" && order.revision === expectedRevision + 1;
+    if (order.customer_id !== input.customerId || order.delivery_date !== input.deliveryDate || (!isPendingCompletion && !isCompletionRetry)) {
       throw new DeliveryCompletionError("현재 정류장에서 완료할 수 없는 주문입니다.");
     }
-    if (order.revision !== revisionById.get(order.id)) throw new DeliveryCompletionError("주문 revision이 변경되었습니다.");
     if (!order.delivery_customer_name_snapshot || !order.delivery_address_snapshot) throw new DeliveryCompletionError("배송지 snapshot을 확인해 주세요.");
   }
 
   const expectedRevisions = Object.fromEntries(input.orders.map((order) => [order.orderId, order.orderRevision]));
   const result = await request<{
-    companyId: string; completedAt: string; completionEventId: string; deliveryDate: string;
+    attachmentIds: string[]; companyId: string; completedAt: string; completionEventId: string; customerId: string; deliveryDate: string; noteId: string;
     orderIds: string[]; orderRevisions: Record<string, number>;
   }>("rpc/complete_store_order_delivery_09", {
     method: "POST",
@@ -69,8 +71,11 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
       p_company: actor.companyId,
       p_completed_at: input.completedAt,
       p_completion_event_id: input.completionEventId,
+      p_customer_id: input.customerId,
       p_delivery_date: input.deliveryDate,
       p_expected_revisions: expectedRevisions,
+      p_note_id: input.proof.noteId,
+      p_attachment_ids: attachmentIds,
       p_order_ids: orderIds
     })
   });
@@ -79,12 +84,15 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
 
 function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, actor: Actor) {
   const result = value as {
-    companyId?: string; completedAt?: string; completionEventId?: string; deliveryDate?: string;
+    attachmentIds?: string[]; companyId?: string; completedAt?: string; completionEventId?: string; customerId?: string; deliveryDate?: string; noteId?: string;
     orderIds?: string[]; orderRevisions?: Record<string, number>;
   };
-  if (result.companyId !== actor.companyId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || result.completedAt !== input.completedAt) {
+  if (result.companyId !== actor.companyId || result.customerId !== input.customerId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || result.completedAt !== input.completedAt || result.noteId !== input.proof.noteId) {
     throw new DeliveryCompletionError("배송 완료 결과 범위가 요청과 다릅니다.");
   }
+  const requestedAttachments = [...input.proof.attachmentIds].sort();
+  const returnedAttachments = Array.isArray(result.attachmentIds) ? [...result.attachmentIds].sort() : [];
+  if (returnedAttachments.join("|") !== requestedAttachments.join("|")) throw new DeliveryCompletionError("배송 완료 결과의 증빙이 요청과 다릅니다.");
   const requestedIds = input.orders.map((order) => order.orderId).sort();
   const returnedIds = Array.isArray(result.orderIds) ? [...result.orderIds].sort() : [];
   if (returnedIds.join("|") !== requestedIds.join("|")) throw new DeliveryCompletionError("배송 완료 결과의 주문이 요청과 다릅니다.");
@@ -111,7 +119,7 @@ function validateCommand(input: OrderDeliveryCompletionCommand, companyId: strin
   if (input.orders.some((order) => !UUID.test(order.orderId) || !Number.isInteger(order.orderRevision) || order.orderRevision < 1)) {
     throw new DeliveryCompletionError("주문 ID와 revision을 확인해 주세요.");
   }
-  if (!input.proof.noteId || !UUID.test(input.proof.noteId) || !input.proof.attachmentIds.length || input.proof.attachmentIds.some((id) => !UUID.test(id))) {
+  if (!input.proof.noteId || !UUID.test(input.proof.noteId) || !input.proof.attachmentIds.length || new Set(input.proof.attachmentIds).size !== input.proof.attachmentIds.length || input.proof.attachmentIds.some((id) => !UUID.test(id))) {
     throw new DeliveryCompletionError("배송 완료 증빙을 확인해 주세요.");
   }
 }
