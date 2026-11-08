@@ -74,12 +74,10 @@ Stage E는 **delivered 단일 상태**만 소비한다. submitted/received/in_de
 
 ## API 연결 전 필수 미완료 항목
 
-아래 항목은 이번 SQL 초안이 완료하지 않았으며, 연결 전에 02/03과 계약·원자성 검증을 마쳐야 한다.
+비운영 연결 증거와 운영 활성화 전 차단 조건을 구분한다.
 
-- 인증 기사·확정 코스·차량·정류장과 정확한 주문 묶음 검증. actor_key는 클라이언트 입력을 받지 않고 서버 세션에서 산출.
-- #414가 새 증빙 인자/결과와 영속 관계를 소비하도록 연결하고 API→실제 격리 PG17에서 검증. SQL Draft의 증빙 원자 저장과 API 연결 완료를 구분.
-- #405의 별도 idempotencyKey를 위 단일 완료 이벤트 키 계약으로 변환/검증하는 adapter와 UUID 형식 검사. 동일 재시도에서도 기사/코스 인증을 먼저 다시 검증.
-- #405 DTO의 pre/post revision 매핑. 현재 입력은 expectedRevisions, 결과는 완료 뒤 orderRevisions이며 DTO 연결은 미구현.
+- #414의 서버 세션 기반 actor·기사/코스/차량/정류장 검증은 구현됐지만, 운영 권한/배정 매핑과 상태·지연 시각 업무 정책 확인 전에는 활성화하지 않는다.
+- #414 dee7158에서 증빙 인자/결과·영속 관계·단일 멱등 키/UUID·pre/post revision·매번 권한 재검증 연결을 확인했다. 폐기형 통합 검증은 아래 증거를 참조하며 운영 연결 완료와 구분한다.
 - 명시적 완료 이력 projection과 재조회 계약. 현재 SQL의 이벤트 기록을 화면 이력/API로 연결하지 않음.
 
 대표 오류: store_order_completion_invalid / unavailable / revision_conflict / snapshot_required / customer_mismatch / proof_invalid / proof_unavailable. 방문 메모·상태 추정·주소 문자열로 완료를 만들지 않는다. TMS 배정·ERP·재고·원장 호출은 추가하지 않았다.
@@ -96,6 +94,7 @@ down은 호출자를 먼저 중지하고 새 네 테이블이 **비어 있을 �
 
 | 확인 항목 | 적용/활성화 전 확인할 내용 | 상태 |
 | --- | --- | --- |
+| 승인 SQL 원문 | 아래 고정 커밋의 up/down Git blob ID와 적용 원문 동일성. 임의 재작성·부분 실행·이전 증빙 없는 서명 사용 금지 | 원문 일치 확인 / 운영 적용 미승인 |
 | 02 snapshot prerequisite | 5개 text 칸, complete CHECK, 활성 immutable trigger 및 함수, 후보 index. 02 별도 승인표 확인 | 운영 미확인 |
 | 원본 주문 prerequisite | 원본 7인자/회원 10인자 to_regprocedure 존재, OID/본문 hash/ACL 사전 백업 및 적용 후 일치 | 운영 미확인 |
 | 기존 증빙 prerequisite | customer_notes/customer_attachments의 UUID·company_id·customer_id·종류 칸. N1 메모 UNIQUE(company_id,customer_id,id). service_role의 기존 SELECT/행 잠금 권한 | 운영 미확인 |
@@ -109,6 +108,22 @@ down은 호출자를 먼저 중지하고 새 네 테이블이 **비어 있을 �
 | API schema cache | 승인 SQL 적용 뒤 PostgREST가 정확한 새 서명을 인식하는지 확인. 조회 실패 시 구형 완료 RPC fallback 금지 | 승인 후 확인 |
 | 보존/되돌리기 | 증빙/이벤트 보존 정책, 참조 삭제/재배치 제한, 비어 있지 않으면 down 거부. 운영 TRUNCATE 금지 | 승인 대기 |
 | 플래그/실행 | #414 기본 OFF·모바일 호출 미연결, 운영 첫 주문/배송·배포는 별도 승인. /orders 임시 화면 추가 없음 | OFF 유지 |
+
+최종 비운영 증거: #410 `220b9c1011368570873f61be467e651cf22a6cec`의 [CI #2524](https://github.com/a01055929144-web/maju-intelligence/actions/runs/42505242427), #414 `dee7158653efede215e9445724b4f9ea2606c4fe`의 [Stage D 통합](https://github.com/a01055929144-web/maju-intelligence/actions/runs/42505701088)·[CI #2530](https://github.com/a01055929144-web/maju-intelligence/actions/runs/42505701176) 성공을 확인했다. 02 구현/테스트 문서를 복제하지 않고 해당 PR과 workflow를 참조한다.
+
+승인 원문 식별:
+
+- up `20261108-09-order-delivery-producer.sql`: Git blob `cb7ce54a51888f650378db3d71b5b74d19cc3e1f`
+- down `20261108-09-order-delivery-producer.down.sql`: Git blob `d4bd1eae6c209bdc966122f3007c606b3888e262`
+- ee75b0c → 220b9c1 사이 두 SQL 파일 diff 없음. 이 식별자는 소스 원문 확인용이며 운영 함수 정의/ACL 백업을 대신하지 않는다.
+
+적용 순서의 차단 조건:
+
+1. 02 snapshot DDL의 별도 승인·적용 여부를 **읽기로** 확인한다. 5개 칸/complete CHECK/활성 불변 trigger/후보 index가 다르면 이 SQL을 실행하지 않는다. 원본 7/10인자 함수와 증빙/N1 복합 키·행 잠금 권한도 pg_catalog/권한 함수로 확인하고 원본 정의/OID/ACL을 백업한다. 이번 점검에서는 운영 DB에 연결하지 않았다.
+2. 신규 객체/인덱스 이름 또는 동등 인덱스가 이미 있는지 확인한다. 현재 up은 일반 CREATE UNIQUE INDEX이며 CONCURRENTLY가 아니다. customer_attachments에 SHARE 잠금이 필요해 INSERT/UPDATE/DELETE를 막을 수 있고, BEGIN부터 COMMIT까지 다른 DDL 잠금과 함께 유지된다. 테이블 규모/진행 중 쓰기·장기 트랜잭션을 읽어 영향과 작업 시간을 합의하지 못하면 적용을 보류한다. 타임아웃/중단·재시도 조건도 운영 승인에 포함하며 SQL을 임의로 CONCURRENTLY나 부분 실행으로 바꾸지 않는다.
+3. 별도 명시 적용 승인 전에는 Draft/OFF를 유지한다. 승인된 전체 transaction만 실행하며 오류 시 롤백한다. 기존 객체가 남은 상태에 무조건 재실행하거나 증빙 행을 지워 통과시키지 않는다.
+4. 승인 적용 후에도 플래그 OFF 상태에서 **읽기만** 수행한다. pg_proc의 정확한 서명/proargnames/SECURITY INVOKER/proconfig, 신규 4개 표의 RLS와 policy·ACL, PUBLIC/anon/authenticated 차단과 service_role SELECT/INSERT/EXECUTE만 허용됨을 확인한다. 원본 주문 함수 OID/본문/ACL 불변, 복합 증빙 FK·지연 설정·UNIQUE/CHECK와 인덱스 유효성도 확인한다.
+5. PostgREST schema cache가 새 완료 10인자/주문 wrapper 11인자를 인식하는지는 catalog/OpenAPI 등 읽기 방식으로 확인한다. 이 확인을 위해 주문·완료 RPC를 운영에서 호출하지 않는다. 증빙 없는 완료 7인자 overload 또는 구형 fallback이 있으면 차단한다. 읽기 결과에 불일치가 있으면 플래그를 켜지 않고 사전 승인된 복구/데이터 보존 절차로 판단한다.
 
 ## 02 API→PostgREST→PG17 합성 fixture와 기대 결과
 
@@ -129,4 +144,4 @@ manifest에는 command, expectedSqlResult, expectedApiResult, 초기/성공 후 
 | 동일 요청 동시 호출 | 완료 행 1개, 주문 관계 2개, 첨부 관계 2개로 유지. 응답 유실/관측 시점 차이는 원 command 재시도로 같은 최종 결과 확인 |
 | 증빙 삭제/회사·거래처 재배치 | 완료 후 FK로 거부. 같은 회사 전체 삭제 경로는 기존 09 PG17 회귀로 별도 확인 |
 
-#414 eaa0c91의 diff는 새 필수 인자/증빙 결과 검사·sameInstant·영속 pre/completed 관계 재시도·RPC 재호출을 연결한다. API 캐시 성공 우회는 보이지 않는다. 이는 읽기 대조 결과이며, 위 실제 API→PostgREST→PG17 완료·변경 증빙 충돌의 통합 PASS를 대신하지 않는다. API 파일은 09에서 수정하지 않는다.
+#414 dee7158의 새 필수 인자/증빙 결과 검사·sameInstant·영속 pre/completed 관계 재시도·RPC 재호출과 폐기형 통합 workflow 성공을 확인했다. 동일 이벤트·변경 증빙의 충돌을 API 캐시 성공으로 우회하지 않는다는 증거는 위 02 PR/통합 workflow를 참조한다. 이는 운영 prerequisite·적용 승인·적용 후 읽기 확인을 대신하지 않는다. API 파일은 09에서 수정하지 않는다.
