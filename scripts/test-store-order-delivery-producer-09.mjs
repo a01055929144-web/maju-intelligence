@@ -202,6 +202,15 @@ try {
   await assert.rejects(admin.query(down), /store_order_delivery_09_down_refused_data_exists/);
   await admin.query('rollback');
   assert.equal(await completionCount(), 2);
+  const beforeCompanyDelete = await counts();
+  await admin.query('begin');
+  await admin.query('delete from companies where id=$1', [company]);
+  // Force all deferred checks now, proving the transaction could commit; roll back to reuse this disposable fixture.
+  await admin.query('set constraints all immediate');
+  assert.deepEqual(await counts(), { orders: 0, lines: 0, requests: 0, snapshots: 0, completions: 0, completionOrders: 0 });
+  assert.equal(await value(admin, 'select count(*)::integer result from companies where id=$1', [otherCompany]), 1);
+  await admin.query('rollback');
+  assert.deepEqual(await counts(), beforeCompanyDelete);
   // Fixture-only discard in the exact guarded database, never an operating rollback procedure.
   await admin.query('truncate public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09');
   await admin.query(down);

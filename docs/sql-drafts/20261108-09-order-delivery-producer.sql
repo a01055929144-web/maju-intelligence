@@ -38,13 +38,14 @@ create table public.store_order_delivery_completions_09 (
   primary key(company_id,completion_event_id)
 );
 create table public.store_order_delivery_completion_orders_09 (
-  company_id uuid not null, completion_event_id uuid not null, order_id uuid not null,
+  company_id uuid not null references public.companies(id) on delete cascade,
+  completion_event_id uuid not null, order_id uuid not null,
   pre_revision integer not null check(pre_revision between 1 and 2147483646),
   completed_revision integer not null check(completed_revision=pre_revision+1),
   primary key(company_id,completion_event_id,order_id),
   unique(company_id,order_id),
-  foreign key(company_id,completion_event_id) references public.store_order_delivery_completions_09(company_id,completion_event_id) on delete restrict,
-  foreign key(company_id,order_id) references public.store_orders(company_id,id) on delete restrict
+  foreign key(company_id,completion_event_id) references public.store_order_delivery_completions_09(company_id,completion_event_id) on delete no action deferrable initially deferred,
+  foreign key(company_id,order_id) references public.store_orders(company_id,id) on delete no action deferrable initially deferred
 );
 alter table public.store_order_delivery_completion_orders_09 enable row level security;
 alter table public.store_order_delivery_requests_09 enable row level security;

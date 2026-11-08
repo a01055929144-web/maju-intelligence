@@ -49,7 +49,7 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 **completionEventId가 유일한 완료 멱등 키**다. 서버 생성/검증 UUID이며 별도 idempotencyKey는 이 SQL에서 받지 않는다. #405 adapter는 별도 키를 독립적으로 재사용하지 못하도록 이 계약에 맞춰야 한다.
 
-완료 관계는 JSON만 검색하지 않는다. `store_order_delivery_completion_orders_09`에 company_id/completion_event_id/order_id/pre_revision/completed_revision을 저장한다. 회사+이벤트와 회사+주문 복합 FK, 주문당 완료 1개 UNIQUE, completed_revision=pre_revision+1 CHECK를 둔다. 완료 시각은 부모 이벤트의 고정 completed_at 칸에 저장해 FK join으로 조회한다. 관계·이벤트·주문 상태는 같은 트랜잭션이며 실패하면 모두 롤백한다. 원 주문/이벤트 삭제는 FK RESTRICT로 거부한다.
+완료 관계는 JSON만 검색하지 않는다. `store_order_delivery_completion_orders_09`에 company_id/completion_event_id/order_id/pre_revision/completed_revision을 저장한다. 회사+이벤트와 회사+주문 복합 FK, 주문당 완료 1개 UNIQUE, completed_revision=pre_revision+1 CHECK를 둔다. 완료 시각은 부모 이벤트의 고정 completed_at 칸에 저장해 FK join으로 조회한다. 관계·이벤트·주문 상태는 같은 트랜잭션이며 실패하면 모두 롤백한다. 관계의 회사 FK는 ON DELETE CASCADE, 주문/이벤트 복합 FK는 NO ACTION DEFERRABLE INITIALLY DEFERRED다. 따라서 관계를 남기는 개별 주문/이벤트 삭제는 트랜잭션 종료 때 거부하고, 회사 삭제는 기존 부모/자식 cascade를 마친 뒤 검사한다. 이는 회사 이용 종료 경로와의 호환성이지 이 PR의 운영 삭제 승인이 아니다.
 
 Stage E는 **delivered 단일 상태**만 소비한다. submitted/received/in_delivery는 완료 함수의 입력 후보일 뿐 전표 생성 조건이 아니다. 후속 E 호출은 회사+주문+완료 이벤트+completed_revision의 영속 관계와 현재 delivered/revision을 잠그고 검증해야 한다. 매출전표 중복은 주문 ID source key(`store_order:<order_id>`)로 막는다. 이번 PR에 전표 호출은 없다. 반품은 별도 return_event_id/idempotency_key·원 매출전표·주문·반품 줄/수량 계약이며, 완료 정정/무효화가 필요하면 별도 void event 계약을 승인해야 한다. 이 Draft에 반품/무효화 구현을 추가하지 않는다.
 
@@ -71,6 +71,6 @@ Stage E는 **delivered 단일 상태**만 소비한다. submitted/received/in_de
 
 ## 검증과 되돌리기
 
-CI의 정확한 폐기 DB `store_member_order_test_delivery_09` 및 127.0.0.1만 허용한다. 실제 PG17에서 기존 회원 회귀, 원본 함수 OID/본문/ACL, snapshot 원자성·불변·회사 경계·제거 회원·동시 동일/충돌 재시도, 완료 실패 원자성·중복/동시 이벤트·revision·취소/회사/날짜 경계, up/down/up을 확인한다. 실행 결과는 PR의 CI 링크에 기록한다. 운영 DB로 이 fixture를 실행하면 안 된다.
+CI의 정확한 폐기 DB `store_member_order_test_delivery_09` 및 127.0.0.1만 허용한다. 실제 PG17에서 기존 회원 회귀, 원본 함수 OID/본문/ACL, snapshot 원자성·불변·회사 경계·제거 회원·동시 동일/충돌 재시도, 완료 실패 원자성·중복/동시 이벤트·revision·취소/회사/날짜/거래처 경계, 영속 관계 FK/UNIQUE/revision/시각·개별 삭제 차단·회사 cascade, up/down/up을 확인한다. 회사 삭제 테스트는 완료 기록이 있는 합성 회사에 DELETE 후 SET CONSTRAINTS ALL IMMEDIATE로 지연 제약까지 검사하고 다른 회사를 보존한 뒤, fixture 재사용을 위해 롤백한다. 실행 결과는 PR의 CI 링크에 기록한다. 운영 DB로 이 fixture를 실행하면 안 된다.
 
 down은 호출자를 먼저 중지하고 새 세 테이블이 **비어 있을 때만** 새 객체를 제거한다. 데이터가 있으면 store_order_delivery_09_down_refused_data_exists로 거부한다. 기존 주문·02 snapshot 칸/trigger·기존 함수는 유지한다. 기록이 생긴 운영 환경은 데이터를 보존하고 별도 보존/정리 승인으로 처리하며 테스트의 TRUNCATE 절차를 따라 하면 안 된다.
