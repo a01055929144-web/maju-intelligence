@@ -3,4 +3,3 @@ export function storeOrderDeliverySnapshotEnabled(companyId: string) {
   return Boolean(companyId) && process.env.STORE_ORDER_DELIVERY_SNAPSHOT_ENABLED === "true" &&
     (process.env.STORE_ORDER_DELIVERY_COMPANY_IDS || "").split(",").map(id => id.trim()).includes(companyId);
 }
-
