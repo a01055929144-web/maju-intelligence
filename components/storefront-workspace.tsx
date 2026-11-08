@@ -65,6 +65,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
   const [priceChangesOnly, setPriceChangesOnly] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [message, setMessage] = useState("");
+  const [memberAccessChanged, setMemberAccessChanged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -87,6 +88,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         throw new Error(result.message || "매장 링크를 열 수 없습니다.");
       }
       setData(result);
+      setMemberAccessChanged(false);
       setDeliveryDate(result.store.selectedDeliveryDate);
     } catch (error) {
       if (sequence === loadSequence.current) setLoadError(error instanceof Error ? error.message : "매장 정보를 불러오지 못했습니다.");
@@ -190,7 +192,10 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
           lines: selected.map((line) => ({ productId: line.productId,
             promotionId: line.promotionId, quantity: cart[line.key] })) }) });
       const result = await response.json() as { message?: string };
-      if (!response.ok) throw new Error(result.message || "주문을 저장하지 못했습니다.");
+      if (!response.ok) {
+        if (response.status === 403) setMemberAccessChanged(true);
+        throw new Error(result.message || "주문을 저장하지 못했습니다.");
+      }
       retryKey.current = null; setCart({}); setEditing(null); setMemo("");
       setTab("history");
       try {
@@ -218,7 +223,10 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       {(["home", "order", "history", "data", "info"] as const).map((item, index) =>
         <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
           onClick={() => setTab(item)}>{["홈", "주문", "내역", "데이터", "내 정보"][index]}</button>)}</nav>
-      {message && <p role="status" className="mx-4 mt-3 rounded border p-3 text-sm">{message}</p>}
+      {message && <div role="status" className="mx-4 mt-3 space-y-2 rounded border p-3 text-sm"><p>{message}</p>
+        {memberAccessChanged && <Button variant="outline" className="min-h-[44px]" disabled={busy || loading}
+          onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>}
+      </div>}
       {!loading && !loadError && data?.memberLogin && <section className="space-y-2 p-4" aria-label="주문 구성원 로그인">
         <StoreKakaoLoginPanel access={data.memberLogin} newWindow />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
