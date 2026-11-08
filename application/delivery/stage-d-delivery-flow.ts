@@ -87,16 +87,23 @@ export function buildStageDDeliveryFlow(input: {
     if (!stop) throw new Error("미배정 주문을 완료할 수 없습니다.");
     if (stop.conflict) throw new Error("배송지 충돌 주문을 완료할 수 없습니다.");
     const eventOrderIds = event.orderIds.map((orderId) => orderId.trim());
-    if (eventOrderIds.some((orderId) => !orderId) || new Set(eventOrderIds).size !== eventOrderIds.length) {
+    if (!eventOrderIds.length || eventOrderIds.some((orderId) => !orderId) || new Set(eventOrderIds).size !== eventOrderIds.length) {
       throw new Error("완료 이벤트의 주문 ID가 중복되었거나 비어 있습니다.");
     }
     eventOrderIds.sort();
-    if (eventOrderIds.join("|") !== stableIds(stop.orderIds).join("|")) {
+    const remainingOrderIds = stableIds(stop.orderIds);
+    if (eventOrderIds.some((orderId) => !remainingOrderIds.includes(orderId))) {
       throw new Error("완료 이벤트의 주문 ID가 정류장과 다릅니다.");
     }
 
-    stop.completionEventId = event.eventId;
-    stop.completedAt = event.completedAt;
+    stop.orderIds = remainingOrderIds.filter((orderId) => !eventOrderIds.includes(orderId));
+    stop.orderRevisions = Object.fromEntries(
+      Object.entries(stop.orderRevisions).filter(([orderId]) => !eventOrderIds.includes(orderId))
+    );
+    if (!stop.orderIds.length) {
+      stop.completionEventId = event.eventId;
+      stop.completedAt = event.completedAt;
+    }
     history.push({
       completionEventId: event.eventId,
       customerId: stop.customerId,
