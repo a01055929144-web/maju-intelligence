@@ -39,12 +39,12 @@ Ponytail: 사용함
 
 운영 적용 및 테스트는 이번 작업 범위가 아니다. 미래 승인 시 먼저 SQL을 적용하고 원문/ACL·6인자·false 생성/회사 경계 읽기 검증을 마친 후에만 새 설정을 허용한다. **설정을 먼저 켜면 미적용 함수는 false를 무시하므로 금지**한다.
 
-복구는 READ_ONLY_STORE_LINKS_ENABLED를 먼저 OFF로 하고 승인된 원문을 복원한다. down은 기존 링크 행을 변경하지 않으며 false 링크를 true로 전환하거나 삭제하지 않는다. 같은 버전 true 링크와 충돌 시 사용자에게 회수 확인 후 재발급을 안내한다. 회수/고객 정리도 별도 운영 승인 범위다.
+복구는 READ_ONLY_STORE_LINKS_ENABLED를 먼저 OFF로 하고 발급 요청을 멈추고 활성 false 링크를 승인된 회수 절차로 닫은 뒤 원문을 복원한다. down은 활성 false 링크가 남아 있으면 readonly_issuer_down_refused_active_readonly_links로 거부하며, 기존 링크 행을 변경하지 않고 false 링크를 true로 전환하거나 삭제하지 않는다. 같은 버전 true 링크와 충돌 시 사용자에게 회수 확인 후 재발급을 안내한다. 회수/고객 정리도 별도 운영 승인 범위다.
 
 ## 검증
 
 - API: 기본 OFF, 기본 생략/true, 명시 false 단일 RPC, 잘못된 타입, 권한 없음, bulk false 거부, 기존 true 충돌 후 추가 쓰기 없음.
-- PG17 loopback readonly_link_patch_test: up/down/up, OID/ACL 보존, 기본 true·명시 false, 커밋 전 외부 비노출, 다른 회사 batch 전체 롤백, 2연결 false 발급 재시도 1건, 토큰 복원, 회수, down 후 false 행 보존.
+- PG17 loopback readonly_link_patch_test: up/down/up, OID/ACL 보존, 기본 true·명시 false, 커밋 전 외부 비노출, 다른 회사 batch 전체 롤백, 2연결 false 발급 재시도 1건, 토큰 복원, 회수, 활성 false 링크가 있으면 down 거부, 회수 후 down·false 행 보존.
 - PC1440/390: 기존 발급 화면 OFF 선택 숨김, CI 전용 opt-in 선택·일괄 차단, 합성 18품목 /store 열람·주문 불가·회수 404. 제품 API에는 합성 응답만 사용한다.
 - 별도 격리 PG17 실데이터→/store UI 검증은 후속으로 분리한다. 운영 첫 주문/실제 인증/발송/수락/주문 성공이라고 보고하지 않는다.
 

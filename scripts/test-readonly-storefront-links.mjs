@@ -83,7 +83,12 @@ try {
   assert.deepEqual(await accept(),accepted);
   assert.deepEqual((await a.query(acceptanceDefinition)).rows,acceptanceBefore);
   assert.equal((await a.query('select count(*) n from store_orders')).rows[0].n,'0');
-  await a.query('reset role'); await a.query(down);
+  await a.query('reset role');
+  await assert.rejects(a.query(down),/readonly_issuer_down_refused_active_readonly_links/);
+  await a.query('rollback');
+  assert.equal((await a.query(metadata)).rows[0].hash,after.hash);
+  await a.query('update storefront_links set revoked_at=now(),can_order=false where id=$1',[left.rows[0].issued_link_id]);
+  await a.query(down);
   assert.deepEqual((await a.query(metadata)).rows[0],before);
   assert.equal((await a.query('select can_order from storefront_links where id=$1',[left.rows[0].issued_link_id])).rows[0].can_order,false);
   console.log('readonly_storefront_issuer_default_true_atomic_false_acl_isolation_retry_revoke_down_pg17_pass');

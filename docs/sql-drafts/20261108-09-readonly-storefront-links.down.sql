@@ -3,6 +3,16 @@
 -- Restore the repository baseline function; do not enable or delete existing links.
 begin;
 
+-- Disable the opt-in and drain issuance traffic before rollback.
+lock table public.storefront_links in share row exclusive mode;
+do $$
+begin
+  if exists(select from public.storefront_links where can_order=false
+    and revoked_at is null and expires_at>now()) then
+    raise exception 'readonly_issuer_down_refused_active_readonly_links';
+  end if;
+end $$;
+
 do $$
 begin
   if to_regprocedure('public.issue_storefront_links(uuid,uuid,jsonb,timestamptz,uuid,text)') is null then
