@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildOrderRouteConsumer, type OrderDeliveryCandidate } from "../application/delivery/order-route-consumer";
 import { buildStageDDeliveryFlow } from "../application/delivery/stage-d-delivery-flow";
+import { toOrderDeliveryCandidates, type StoreOrderDeliveryRow } from "../application/delivery/store-order-delivery-adapter";
 
 const order: OrderDeliveryCandidate = {
   companyId: "company-a",
@@ -9,6 +10,17 @@ const order: OrderDeliveryCandidate = {
   deliveryDate: "2026-11-08",
   orderRevision: 1,
   destination: { customerName: "가 매장", address: "서울 강남구 1" }
+};
+
+const storeOrder: StoreOrderDeliveryRow = {
+  id: "order-a",
+  company_id: "company-a",
+  customer_id: "customer-a",
+  delivery_date: "2026-11-08",
+  revision: 1,
+  status: "received",
+  delivery_customer_name_snapshot: "가 매장",
+  delivery_address_snapshot: "서울 강남구 1"
 };
 
 function orderRead(candidates: OrderDeliveryCandidate[], existingCustomerIds: string[] = []) {
@@ -32,6 +44,29 @@ function build(input: Partial<Parameters<typeof buildStageDDeliveryFlow>[0]> = {
 }
 
 describe("Stage D synthetic delivery flow", () => {
+  it("keeps accepted, cancelled and address-changed orders safe across the read chain", () => {
+    const accepted = toOrderDeliveryCandidates([storeOrder]);
+    const acceptedFlow = build({ orderRead: orderRead(accepted.candidates) });
+    expect(acceptedFlow.unassigned).toMatchObject([{ customerId: "customer-a", orderIds: ["order-a"] }]);
+    expect(acceptedFlow.routeStops.map((stop) => stop.customerId)).toEqual(["manual-customer"]);
+
+    const cancelled = toOrderDeliveryCandidates([{ ...storeOrder, status: "cancelled" }]);
+    const cancelledFlow = build({ orderRead: orderRead(cancelled.candidates, ["manual-customer"]) });
+    expect(cancelledFlow.routeStops.map((stop) => stop.customerId)).toEqual(["manual-customer"]);
+    expect(cancelledFlow.unassigned).toEqual([]);
+
+    const changed = toOrderDeliveryCandidates([
+      storeOrder,
+      { ...storeOrder, id: "order-b", delivery_address_snapshot: "서울 송파구 2" }
+    ]);
+    const changedFlow = build({
+      existingStops: [{ customerId: "customer-a", driverId: "driver-a", vehicleId: "vehicle-a" }],
+      orderRead: orderRead(changed.candidates, ["customer-a"])
+    });
+    expect(changedFlow.routeStops[0].conflict).toBe("destination_mismatch");
+    expect(changedFlow.blocked).toMatchObject([{ customerId: "customer-a", conflict: "destination_mismatch" }]);
+  });
+
   it("preserves manual stops, order ids, drivers and vehicles when there are no candidates", () => {
     expect(build()).toMatchObject({
       routeStops: [{
