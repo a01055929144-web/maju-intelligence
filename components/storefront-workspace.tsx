@@ -245,7 +245,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!pricesReady ? retryLoad : null}
       <label className="block text-sm">배송일
-        <input className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
+        <input disabled={busy} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
           min={store.nextDeliveryDate || undefined}
           onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
             if (day) void load(day).catch(() => undefined);
@@ -297,12 +297,12 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
             {preferences.get(line.productId)?.isHidden ? "다시 표시" : "품목 숨기기"}</button>
         </div>
         <div className="mt-3 flex items-center justify-end gap-2 md:mt-0">
-          <button aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
+          <button disabled={busy} aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
           <span aria-label={`${line.name} 수량`} className="min-w-8 text-center">{cart[line.key] || 0}</span>
-          <button aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
+          <button disabled={busy} aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
         </div>
       </li>)}</ul>
-      <label className="block text-sm">요청 사항<textarea className="mt-1 w-full rounded border p-2" maxLength={500}
+      <label className="block text-sm">요청 사항<textarea disabled={busy} className="mt-1 w-full rounded border p-2" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
       {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
