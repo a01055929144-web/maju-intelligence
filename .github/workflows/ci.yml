@@ -274,6 +274,17 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=store_kakao_membership_test --set=ON_ERROR_STOP=1 --file=20261105-store-kakao-membership.pg17.test.sql
 
+      - name: Verify store member removal draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb store_member_removal_test
+          cd docs/sql-drafts
+          psql --dbname=store_member_removal_test --set=ON_ERROR_STOP=1 --file=20261108-store-member-removal.pg17.test.sql
+
       - name: Verify store owner activation draft on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
