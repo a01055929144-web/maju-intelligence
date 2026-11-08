@@ -1,12 +1,11 @@
 -- 02 Stage D draft only. Do not apply to an operating database without approval.
 begin;
 
-alter table public.store_orders
-  add column if not exists delivery_customer_name_snapshot text,
-  add column if not exists delivery_address_snapshot text,
-  add column if not exists delivery_address_detail_snapshot text,
-  add column if not exists delivery_recipient_phone_snapshot text,
-  add column if not exists delivery_loading_position_snapshot text;
+alter table public.store_orders add column if not exists delivery_customer_name_snapshot text;
+alter table public.store_orders add column if not exists delivery_address_snapshot text;
+alter table public.store_orders add column if not exists delivery_address_detail_snapshot text;
+alter table public.store_orders add column if not exists delivery_recipient_phone_snapshot text;
+alter table public.store_orders add column if not exists delivery_loading_position_snapshot text;
 
 do $$
 begin
