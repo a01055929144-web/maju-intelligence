@@ -108,7 +108,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(JSON.stringify(version())).toBe(frozenVersion);
   await page.screenshot({ path: info.outputPath(`stage-b-print-qr-${kind}-${width}.png`), fullPage: true });
   await preview.getByRole("button", { name: "닫기", exact: true }).click();
-  await page.goto(`/revenue/pricing/documents?leadId=${leadId}`);
+  await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
+  await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
   await page.getByRole("button", { name: content!.title, exact: true }).click();
   const share = page.getByRole("region", { name: "리드 문서 공유", exact: true });
   await expect(share).toBeVisible(); expect(sent).toBe(false);
