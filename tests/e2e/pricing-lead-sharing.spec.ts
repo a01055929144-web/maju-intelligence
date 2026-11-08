@@ -91,7 +91,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const frozenVersion = JSON.stringify(version());
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
-  await page.getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
   const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
@@ -111,7 +111,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "닫기", exact: true }).click();
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  await page.getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   const share = page.getByRole("region", { name: "리드 문서 공유", exact: true });
   await expect(share).toBeVisible(); expect(sent).toBe(false);
   await share.getByRole("button", { name: "링크 준비", exact: true }).click();
