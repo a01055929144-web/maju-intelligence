@@ -146,7 +146,7 @@ do $$ declare a jsonb; begin
 end $$;
 
 -- A placeholder customer can accept an existing quote before ordering without duplicating links or agreements.
-do $$ declare a jsonb; b jsonb; customer_count integer; lead_count integer; customer_id uuid; lead_id uuid; begin
+do $$ declare a jsonb; b jsonb; customer_count integer; lead_count integer; v_customer_id uuid; v_lead_id uuid; begin
   select count(*) into customer_count from normalized_customers where company_id='00000000-0000-4000-8000-000000000001';
   select count(*) into lead_count from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001';
   a:=record_pricing_document_acceptance(
@@ -158,18 +158,18 @@ do $$ declare a jsonb; b jsonb; customer_count integer; lead_count integer; cust
     '70000000-0000-4000-8000-000000000019',repeat('8',64),'store',null,null,null,false,null,null,
     '{"businessName":"[TEST-NO-MATCH]-03","phone":"010-0000-0303","address":"TEST-ONLY-03"}');
   if a<>b or a->>'needsReview'<>'false' or a->>'kind'<>'quote' then raise exception 'placeholder acceptance retry changed result'; end if;
-  customer_id:=(a->>'customerId')::uuid; lead_id:=(a->>'leadId')::uuid;
+  v_customer_id:=(a->>'customerId')::uuid; v_lead_id:=(a->>'leadId')::uuid;
   if (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001')<>customer_count+1
     or (select count(*) from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001')<>lead_count+1
     then raise exception 'placeholder retry duplicated customer or lead'; end if;
-  if not exists(select from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001' and id=lead_id
-      and matched_customer_id=customer_id and is_duplicate and status='거래처 전환')
-    or (select count(*) from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001'
-      and customer_id=customer_id and document_version_id='50000000-0000-4000-8000-000000000003' and document_kind='quote' and active)<>1
-    or (select count(*) from customer_price_agreements where company_id='00000000-0000-4000-8000-000000000001'
-      and customer_id=customer_id and source_pricing_document_version_id='50000000-0000-4000-8000-000000000003' and status='active')<>1
+  if not exists(select from business_permit_leads l where l.company_id='00000000-0000-4000-8000-000000000001' and l.id=v_lead_id
+      and l.matched_customer_id=v_customer_id and l.is_duplicate and l.status='거래처 전환')
+    or (select count(*) from customer_pricing_document_links p where p.company_id='00000000-0000-4000-8000-000000000001'
+      and p.customer_id=v_customer_id and p.document_version_id='50000000-0000-4000-8000-000000000003' and p.document_kind='quote' and p.active)<>1
+    or (select count(*) from customer_price_agreements p where p.company_id='00000000-0000-4000-8000-000000000001'
+      and p.customer_id=v_customer_id and p.source_pricing_document_version_id='50000000-0000-4000-8000-000000000003' and p.status='active')<>1
     then raise exception 'placeholder customer quote linkage incomplete'; end if;
-  if exists(select from storefront_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id=customer_id)
+  if exists(select from storefront_links s where s.company_id='00000000-0000-4000-8000-000000000001' and s.customer_id=v_customer_id)
     or exists(select from store_orders where company_id='00000000-0000-4000-8000-000000000001')
     or a->>'storefrontLinkId' is not null
     then raise exception 'placeholder customer reached ordering before link issuance'; end if;
