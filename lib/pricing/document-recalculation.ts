@@ -4,7 +4,7 @@ import { changedCostEvents, documentRecalculation, type ProductPriceChange } fro
 
 type CostRow = { id: string; supplier_product_id: string; purchase_price: number; created_at: string;
   import_id: string; source: { supplier_id: string; mapping: { contract?: string } } | null };
-const costFields = "id,supplier_product_id,purchase_price,created_at,import_id,source:product_catalog_imports(supplier_id,mapping)";
+const costFields = "id,supplier_product_id,purchase_price,created_at,import_id,source:product_catalog_imports!supplier_product_cost_history_import_fk(supplier_id,mapping)";
 type VersionRow = { id: string; versions: { published_at: string; content: { lines: { productId: string }[] } }[] };
 const enc = encodeURIComponent;
 const parts = <T,>(rows: T[]) => Array.from({ length: Math.ceil(rows.length / 100) }, (_, i) => rows.slice(i * 100, i * 100 + 100));
@@ -77,13 +77,16 @@ export async function withDocumentRecalculations<T>(companyId: string, result: T
           supabaseRequest<{ id: string; baseline: CostRow[] }[]>(`supplier_products?company_id=eq.${company}&id=in.(${supplierFilter})&select=id,baseline:supplier_product_cost_history(${costFields})&baseline.company_id=eq.${company}&baseline.created_at=lte.${enc(since)}&baseline.order=created_at.desc,id.desc&baseline.limit=1&limit=100`),
         ]);
         const ignored = await historyOnlyImports(company, [...history, ...baselines.flatMap(row => row.baseline)]);
+        const currentBaselines = new Map(baselines.map(row => [row.id, row.baseline[0]]));
+        const fallbackIds = baselines.filter(row => row.baseline[0] && ignored.has(row.baseline[0].import_id)).map(row => row.id);
+        if (fallbackIds.length) {
+          const older = await pages<CostRow>(`supplier_product_cost_history?company_id=eq.${company}&supplier_product_id=in.(${fallbackIds.map(enc).join(",")})&created_at=lte.${enc(since)}&select=${costFields}&order=created_at.desc,id.desc`);
+          const olderIgnored = await historyOnlyImports(company, older);
+          fallbackIds.forEach(id => currentBaselines.delete(id));
+          for (const row of older) if (!olderIgnored.has(row.import_id) && !currentBaselines.has(row.supplier_product_id)) currentBaselines.set(row.supplier_product_id, row);
+        }
         for (const supplierId of supplierBatch) {
-          let baseline = baselines.find(row => row.id === supplierId)?.baseline[0];
-          if (baseline && ignored.has(baseline.import_id)) {
-            const older = await pages<CostRow>(`supplier_product_cost_history?company_id=eq.${company}&supplier_product_id=eq.${enc(supplierId)}&created_at=lte.${enc(since)}&select=${costFields}&order=created_at.desc,id.desc`);
-            const olderIgnored = await historyOnlyImports(company, older);
-            baseline = older.find(row => !olderIgnored.has(row.import_id));
-          }
+          const baseline = currentBaselines.get(supplierId);
           const events = changedCostEvents(history.filter(row => row.supplier_product_id === supplierId && !ignored.has(row.import_id)), baseline?.purchase_price);
           for (const match of matches.filter(row => row.supplier_product_id === supplierId)) for (const event of events) changes.push({ productId: match.product_catalog_id, changedAt: event.created_at });
         }

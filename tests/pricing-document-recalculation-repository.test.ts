@@ -66,6 +66,23 @@ describe("server document status read model",()=>{
   });
   expect((await list()).items[0].recalculation.needsRecalculation).toBe(false);
  });
+ it("fetches older valid baselines for 100 affected supplier products in one batch instead of per product",async()=>{
+  const suppliers=Array.from({length:100},(_,i)=>`60000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`);
+  const oldReceipts=suppliers.map((id,i)=>({...datedHistory,id:`old-${i}`,supplier_product_id:id,created_at:"2026-11-02T00:30:00Z"}));
+  const actualBaselines=suppliers.map((id,i)=>({id:`actual-${i}`,supplier_product_id:id,purchase_price:67891,created_at:"2026-11-01T00:00:00Z"}));
+  db.mockImplementation(async(path:string)=>{
+   if(path.startsWith("supplier_product_matches?"))return suppliers.map(id=>({product_catalog_id:product,supplier_product_id:id}));
+   if(path.startsWith("supplier_products?"))return suppliers.map((id,i)=>({id,baseline:[oldReceipts[i]]}));
+   if(path.startsWith("supplier_product_cost_history?"))return path.includes("created_at=lte.")
+    ?[...oldReceipts,...actualBaselines]:actualBaselines.map(row=>({...row,id:"new-"+row.id,created_at:"2026-11-02T02:00:00Z"}));
+   return datedFixture(path);
+  });
+  expect((await list()).items[0].recalculation.needsRecalculation).toBe(false);
+  const fallback=db.mock.calls.filter(([path])=>path.startsWith("supplier_product_cost_history?")&&path.includes("created_at=lte."));
+  expect(fallback).toHaveLength(1);
+  expect(fallback[0][0]).toContain(`supplier_product_id=in.(${suppliers.join(",")})`);
+  expect(fallback[0][0]).toContain("source:product_catalog_imports!supplier_product_cost_history_import_fk(supplier_id,mapping)");
+ });
  it("fails visibly if a dated import has no matching completed same-company batch or its lookup fails",async()=>{
   for(const records of [[],[{...historyBatch,supplier_import_ids:{[supplierOwner]:"foreign-import"}}]]){
    db.mockImplementation(async(path:string)=>path.startsWith("purchase_cost_date_batches_v2?")?records:datedFixture(path));
