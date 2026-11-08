@@ -106,6 +106,7 @@ import type {
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
+import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
   QUOTE_MARGIN_PRESETS,
@@ -355,6 +356,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
+  readonly documentEntry?: LeadDocumentEntryAccess;
   readonly holdModulesEnabled?: boolean;
   readonly initialCustomerId?: string;
   readonly initialLeadId?: string;
@@ -472,7 +474,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -3602,6 +3604,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 {previewLeadId ? (
                   <PermitLeadMapQuickCard
                     allStores={allStores}
+                    documentEntry={documentEntry}
                     headerOffsetPx={mapHeaderHeightPx}
                     lead={
                       leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
@@ -7779,6 +7782,7 @@ function getRecommendedDelivery(
 
 function PermitLeadMapQuickCard({
   allStores,
+  documentEntry,
   headerOffsetPx,
   lead,
   leftPanelCollapsed,
@@ -7791,6 +7795,7 @@ function PermitLeadMapQuickCard({
 }: {
   /** 배송담당자·배송차 추천(getRecommendedDelivery)에 씁니다. */
   readonly allStores: StoreRow[];
+  readonly documentEntry: LeadDocumentEntryAccess;
   /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
   readonly headerOffsetPx?: number;
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
@@ -8107,8 +8112,18 @@ function PermitLeadMapQuickCard({
           </button>
           {onOpenQuote ? (
             <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
-              견적서 작성
+              임시 견적
             </button>
+          ) : null}
+          {documentEntry.canCreateSheet ? (
+            <Link className="maju-button-secondary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("sheet", lead.id))}>
+              단가표 만들기
+            </Link>
+          ) : null}
+          {documentEntry.canCreateQuote ? (
+            <Link className="maju-button-primary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("quote", lead.id))}>
+              견적서 만들기
+            </Link>
           ) : null}
           <button className="maju-button-primary h-8 justify-center text-xs disabled:opacity-60" disabled={isConverting} onClick={() => void convert()} type="button">
             {isConverting ? "전환 중..." : "거래처로 전환"}

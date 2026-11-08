@@ -34,4 +34,16 @@ describe("lead document entry links", () => {
     expect(entry).not.toContain("record-send");
     expect(entry).not.toContain("발송 완료");
   });
+
+  it("reuses the same guarded document links from the map lead card", () => {
+    const source = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+    const start = source.indexOf("function PermitLeadMapQuickCard");
+    const end = source.indexOf("function QuoteDrawer", start);
+    const entry = source.slice(start, end);
+    expect(entry).toContain('leadDocumentEntryHref("sheet", lead.id)');
+    expect(entry).toContain('leadDocumentEntryHref("quote", lead.id)');
+    expect(entry).toContain("documentEntry.canCreateSheet");
+    expect(entry).toContain("documentEntry.canCreateQuote");
+    expect(entry).not.toContain("record-send");
+  });
 });

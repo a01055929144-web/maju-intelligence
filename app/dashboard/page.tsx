@@ -9,6 +9,7 @@ import { loadTodayTaskCounts } from "@/application/dashboard/today-task-counts";
 import { getCompanyProfile } from "@/lib/company-profile-store";
 import { companyProfileProgress } from "@/domains/organization/company-profile";
 import { canManagePriceSheets } from "@/domains/pricing/access";
+import { leadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
@@ -51,6 +52,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   if (customerSession?.workspaceRole === "driver") redirect("/mobile/today");
   const showHoldModules = areHoldModulesEnabled(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const documentEntry = leadDocumentEntryAccess({
+    admin: isAdminPreview,
+    pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", companyId),
+    workspaceRole: customerSession?.workspaceRole
+  });
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
@@ -162,6 +168,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
           holdModulesEnabled={showHoldModules}
+          documentEntry={documentEntry}
           initialView={initialView}
           initialLeadId={params.lead}
           initialLeadType={params.type === "keyword" ? "sales" : "new"}
