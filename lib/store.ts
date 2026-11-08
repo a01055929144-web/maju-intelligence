@@ -28,6 +28,7 @@ import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
 import { getStoreAreaSqmFilterBounds, mergePendingInsertStoreArea, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
 import { resolveStaffWorkWindow } from "../domains/delivery/staff-location";
+import { isCustomerEligibleForTodayRoute, type DeliveryEligibility } from "../domains/route/delivery-eligibility";
 import {
   LEAD_CONTACT_ACTION_TYPES,
   isLeadContactActionType,
@@ -199,7 +200,7 @@ export type CustomerMasterItem = {
   businessStatus?: string;
   businessStatusCheckedAt?: string;
   customerName: string;
-  deliveryEligibility?: "eligible" | "not_ready";
+  deliveryEligibility?: DeliveryEligibility;
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -12690,7 +12691,7 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
   const planned = customerMaster.customers
-    .filter((customer) => isCustomerEligibleForTodayRoute(customer, deliveryEligibilityEnabled))
+    .filter((customer) => isCustomerEligibleForTodayRoute(customer.deliveryEligibility, deliveryEligibilityEnabled))
     .map((customer, index) => {
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
       const cached = routeCache.get(address);
@@ -12781,13 +12782,6 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
     totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
     totalStops: planned.length
   };
-}
-
-export function isCustomerEligibleForTodayRoute(
-  customer: Pick<CustomerMasterItem, "deliveryEligibility">,
-  deliveryEligibilityEnabled: boolean
-) {
-  return !deliveryEligibilityEnabled || customer.deliveryEligibility === "eligible";
 }
 
 export async function getCompanyOriginAddress(companyId?: string) {

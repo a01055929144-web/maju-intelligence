@@ -5,7 +5,6 @@ import {
   filterCustomersByAssignment,
   groupRowsByColumnSignature,
   makeCustomerKey,
-  isCustomerEligibleForTodayRoute,
   normalizeBusinessNumber,
   normalizeNameForDuplicateCheck,
   resolveExistingCustomerStaffAssignment,
@@ -13,19 +12,6 @@ import {
   shouldAutoApplyKakaoPhone,
   shouldClearKakaoPhoneOnReject
 } from "../lib/store";
-
-describe("today route delivery eligibility", () => {
-  it("preserves every existing route candidate while the rollout is off", () => {
-    expect(isCustomerEligibleForTodayRoute({}, false)).toBe(true);
-    expect(isCustomerEligibleForTodayRoute({ deliveryEligibility: "not_ready" }, false)).toBe(true);
-  });
-
-  it("requires explicit eligibility after rollout, regardless of implicit customer data", () => {
-    expect(isCustomerEligibleForTodayRoute({}, true)).toBe(false);
-    expect(isCustomerEligibleForTodayRoute({ deliveryEligibility: "not_ready" }, true)).toBe(false);
-    expect(isCustomerEligibleForTodayRoute({ deliveryEligibility: "eligible" }, true)).toBe(true);
-  });
-});
 
 describe("extractCustomerAdministrativeArea", () => {
   it("normalizes province aliases and excludes the detailed address", () => {
