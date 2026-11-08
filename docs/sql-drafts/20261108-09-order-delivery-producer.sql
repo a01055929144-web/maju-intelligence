@@ -23,7 +23,6 @@ create table public.store_order_delivery_requests_09 (
   company_id uuid not null references public.companies(id) on delete cascade,
   link_id uuid not null, idempotency_key uuid not null, order_id uuid not null,
   request_fingerprint text not null check(request_fingerprint ~ '^[0-9a-f]{32}$'),
-  snapshot jsonb not null check(jsonb_typeof(snapshot)='object'),
   created_at timestamptz not null default clock_timestamp(),
   primary key(company_id,link_id,idempotency_key),
   foreign key(company_id,link_id) references public.storefront_links(company_id,id) on delete cascade,
@@ -89,7 +88,15 @@ begin
     where company_id=v_link.company_id and link_id=v_link.id and idempotency_key=p_idempotency_key;
   v_replay:=found;
   if v_replay then
-    if v_cached.request_fingerprint<>v_fingerprint or v_cached.snapshot is distinct from v_snapshot then
+    if v_cached.request_fingerprint<>v_fingerprint then
+      raise exception 'delivery_snapshot_idempotency_conflict';
+    end if;
+    select * into v_order from public.store_orders where company_id=v_link.company_id
+      and customer_id=v_link.customer_id and id=v_cached.order_id;
+    if not found then raise exception 'delivery_snapshot_result_unconfirmed'; end if;
+    if jsonb_build_object('deliveryCustomerNameSnapshot',v_order.delivery_customer_name_snapshot,
+      'deliveryAddressSnapshot',v_order.delivery_address_snapshot,'deliveryAddressDetailSnapshot',v_order.delivery_address_detail_snapshot,
+      'deliveryRecipientPhoneSnapshot',v_order.delivery_recipient_phone_snapshot,'deliveryLoadingPositionSnapshot',v_order.delivery_loading_position_snapshot) is distinct from v_snapshot then
       raise exception 'delivery_snapshot_idempotency_conflict';
     end if;
   else
@@ -132,8 +139,8 @@ begin
         and delivery_customer_name_snapshot is null and delivery_address_snapshot is null;
     if not found then raise exception 'delivery_snapshot_result_unconfirmed'; end if;
   end if;
-  insert into public.store_order_delivery_requests_09(company_id,link_id,idempotency_key,order_id,request_fingerprint,snapshot)
-    values(v_link.company_id,v_link.id,p_idempotency_key,(v_result->>'id')::uuid,v_fingerprint,v_snapshot);
+  insert into public.store_order_delivery_requests_09(company_id,link_id,idempotency_key,order_id,request_fingerprint)
+    values(v_link.company_id,v_link.id,p_idempotency_key,(v_result->>'id')::uuid,v_fingerprint);
   return v_result;
 end $$;
 

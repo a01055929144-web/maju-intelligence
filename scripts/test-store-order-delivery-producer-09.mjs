@@ -48,6 +48,7 @@ try {
   const original = await definitions();
   await admin.query(up); await admin.query(down); await admin.query(up);
   assert.deepEqual(await definitions(), original);
+  assert.equal(await value(admin, "select count(*)::integer result from pg_attribute where attrelid='store_order_delivery_requests_09'::regclass and attname='snapshot' and not attisdropped"), 0);
   for (const signature of newSignatures) {
     for (const role of ['anon', 'authenticated']) {
       assert.equal(await value(admin, 'select has_function_privilege($1,$2,$3) result', [role, signature, 'EXECUTE']), false);

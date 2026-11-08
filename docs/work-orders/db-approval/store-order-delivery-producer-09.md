@@ -12,7 +12,7 @@ Ponytail: 사용함
 | 추가 객체 | 새 wrapper·완료 함수 각 1개, 배송지 멱등 요청·완료 이벤트 테이블 각 1개 |
 | 기존 보존 | 7인자 place_store_order와 10인자 place_store_member_order의 OID/본문/ACL 변경 없음. 새 wrapper에서 동일 트랜잭션으로 호출 |
 | 권한 | SECURITY INVOKER, RLS, service_role만 함수 실행·새 테이블 SELECT/INSERT. anon/authenticated 접근 금지. UPDATE/DELETE 권한 없음 |
-| 개인정보 | 이름·주소·상세주소·전화·하차 위치가 주문 및 멱등 기록에 저장됨. 보존·삭제 정책과 운영 접근자는 적용 전에 별도 확인 |
+| 개인정보 | 이름·주소·상세주소·전화·하차 위치는 원본 주문 snapshot에만 저장. 새 멱등 기록에는 식별자·fingerprint·생성 시각만 저장하며 배송지 사본 없음. 보존·삭제 정책과 운영 접근자는 적용 전에 별도 확인 |
 | 실행 승인 | 운영 프로젝트·대상 회사·선행 DDL·검증 결과를 확인한 별도 명시 승인 필요. API 전환·기능 ON·배포 승인과 분리 |
 
 ## 주문 입력과 결과
@@ -31,7 +31,7 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 신규 주문의 이름·기본 주소는 링크의 회사/거래처 등록값과 일치해야 한다. 다른 배송지 선택은 이번 계약에 없다. 회원 권한·가격·주문 revision·작성자는 기존 함수가 검증/생성한다. 결과도 기존 `{id,revision,knownTotal,marketPricePending}` 그대로다.
 
-정규화한 5개 값과 주문 입력·회원 문맥·expectedRevision을 새 멱등 기록에 묶는다. 같은 키의 다른 입력은 delivery_snapshot_idempotency_conflict다. 기존 함수만 사용한 키는 delivery_snapshot_existing_request로 거부하고 과거 주문을 보완하지 않는다. 기존 주문 편집은 5개 snapshot이 전부 동일할 때만 허용하며 누락은 delivery_snapshot_required, 변경은 delivery_snapshot_immutable로 거부한다. 최초 생성·snapshot·기존/신규 멱등 기록은 한 트랜잭션이며 어느 단계든 실패하면 모두 롤백한다.
+정규화한 5개 값과 주문 입력·회원 문맥·expectedRevision을 fingerprint에 묶고, 재시도는 연결된 원본 주문 snapshot과도 비교한다. 같은 키의 다른 입력은 delivery_snapshot_idempotency_conflict다. 기존 함수만 사용한 키는 delivery_snapshot_existing_request로 거부하고 과거 주문을 보완하지 않는다. 기존 주문 편집은 5개 snapshot이 전부 동일할 때만 허용하며 누락은 delivery_snapshot_required, 변경은 delivery_snapshot_immutable로 거부한다. 최초 생성·snapshot·기존/신규 멱등 기록은 한 트랜잭션이며 어느 단계든 실패하면 모두 롤백한다.
 
 ## 02에 전달할 완료 입력과 결과
 
