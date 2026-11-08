@@ -1,6 +1,7 @@
 \set ON_ERROR_STOP on
 do $$ begin
-  if current_database()<>'store_member_order_test_delivery_09' or current_setting('server_version_num')::integer/10000<>17 then
+  if current_database() not in('store_member_order_test_delivery_09','store_member_order_test_delivery_09_api')
+    or current_setting('server_version_num')::integer/10000<>17 then
     raise exception 'disposable_delivery_09_pg17_database_required';
   end if;
 end $$;

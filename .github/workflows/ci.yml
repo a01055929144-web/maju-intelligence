@@ -397,6 +397,8 @@ jobs:
           createdb store_member_order_test_delivery_09
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-delivery-producer-09.pg17.fixture.sql
           node scripts/test-store-order-delivery-producer-09.mjs
+          createdb store_member_order_test_delivery_09_api
+          PGDATABASE=store_member_order_test_delivery_09_api psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-delivery-api-09.pg17.fixture.sql
 
       - name: Verify disposable storefront fixture on PostgreSQL 17
         env:

@@ -89,3 +89,44 @@ Stage E는 **delivered 단일 상태**만 소비한다. submitted/received/in_de
 CI의 정확한 폐기 DB `store_member_order_test_delivery_09` 및 127.0.0.1만 허용한다. 실제 PG17에서 기존 회원 회귀, 원본 함수 OID/본문/ACL, snapshot 원자성·불변·회사 경계·제거 회원·동시 동일/충돌 재시도, 완료 실패 원자성·중복/동시 이벤트·revision·취소/회사/날짜/거래처 경계, 영속 관계 FK/UNIQUE/revision/시각·개별 삭제 차단·회사 cascade, up/down/up을 확인한다. 회사 삭제 테스트는 완료 기록이 있는 합성 회사에 DELETE 후 SET CONSTRAINTS ALL IMMEDIATE로 지연 제약까지 검사하고 다른 회사를 보존한 뒤, fixture 재사용을 위해 롤백한다. 실행 결과는 PR의 CI 링크에 기록한다. 운영 DB로 이 fixture를 실행하면 안 된다.
 
 down은 호출자를 먼저 중지하고 새 네 테이블이 **비어 있을 때만** 새 객체와 새 첨부 복합 인덱스를 제거한다. 데이터가 있으면 store_order_delivery_09_down_refused_data_exists로 거부한다. 기존 주문·02 snapshot 칸/trigger·기존 함수·기존 메모/첨부 행·N1 메모 복합 UNIQUE는 유지한다. 기록이 생긴 운영 환경은 데이터를 보존하고 별도 보존/정리 승인으로 처리하며 테스트의 TRUNCATE 절차를 따라 하면 안 된다.
+
+## 운영 승인 대기 확인표
+
+아래는 **운영 읽기 확인 전의 대기표**다. fixture 통과를 운영 객체 존재/적용 완료로 대체하지 않는다.
+
+| 확인 항목 | 적용/활성화 전 확인할 내용 | 상태 |
+| --- | --- | --- |
+| 02 snapshot prerequisite | 5개 text 칸, complete CHECK, 활성 immutable trigger 및 함수, 후보 index. 02 별도 승인표 확인 | 운영 미확인 |
+| 원본 주문 prerequisite | 원본 7인자/회원 10인자 to_regprocedure 존재, OID/본문 hash/ACL 사전 백업 및 적용 후 일치 | 운영 미확인 |
+| 기존 증빙 prerequisite | customer_notes/customer_attachments의 UUID·company_id·customer_id·종류 칸. N1 메모 UNIQUE(company_id,customer_id,id). service_role의 기존 SELECT/행 잠금 권한 | 운영 미확인 |
+| 신규 함수 | snapshot wrapper 11인자 및 증빙 포함 완료 10인자. SECURITY INVOKER, 고정 search_path/완료 UTC, 증빙 없는 7인자 완료 overload 없음 | 운영 미적용 |
+| 신규 테이블 | store_order_delivery_requests_09, store_order_delivery_completions_09, store_order_delivery_completion_orders_09, store_order_delivery_completion_attachments_09 | 운영 미적용 |
+| 키/참조 | 회사 포함 PK/FK, 주문당 완료 UNIQUE, pre/completed revision CHECK, 증빙 회사/거래처 FK, 회사 CASCADE 및 부모 NO ACTION DEFERRABLE INITIALLY DEFERRED. pg_get_constraintdef와 condeferrable/condeferred 확인 | 운영 미적용 |
+| 신규 인덱스 | customer_attachments_delivery_09_scope_uq의 회사·거래처·ID UNIQUE와 indisvalid/indisready. 기존 인덱스/새 제약 이름 충돌 및 인덱스 생성 잠금 시간 확인 | 운영 미적용 |
+| RLS | 신규 4개 표 모두 pg_class.relrowsecurity=true. 공개 허용 policy 없음 | 운영 미적용 |
+| 함수 권한 | anon/authenticated EXECUTE=false, PUBLIC(grantee=0) EXECUTE 없음, service_role만 승인 실행 권한. 기존 함수 ACL 불변 | 운영 미적용 |
+| 표 권한 | 새 표 anon/authenticated 접근 없음, PUBLIC grant 없음, service_role SELECT/INSERT만 허용, UPDATE/DELETE/TRUNCATE 불허 | 운영 미적용 |
+| API schema cache | 승인 SQL 적용 뒤 PostgREST가 정확한 새 서명을 인식하는지 확인. 조회 실패 시 구형 완료 RPC fallback 금지 | 승인 후 확인 |
+| 보존/되돌리기 | 증빙/이벤트 보존 정책, 참조 삭제/재배치 제한, 비어 있지 않으면 down 거부. 운영 TRUNCATE 금지 | 승인 대기 |
+| 플래그/실행 | #414 기본 OFF·모바일 호출 미연결, 운영 첫 주문/배송·배포는 별도 승인. /orders 임시 화면 추가 없음 | OFF 유지 |
+
+## 02 API→PostgREST→PG17 합성 fixture와 기대 결과
+
+09 파일: `tests/sql/store-order-delivery-api-09.pg17.fixture.sql`. 빈 폐기 DB의 정확한 이름은 `store_member_order_test_delivery_09_api`, psql HOST는 127.0.0.1, PG17만 허용한다. 기존 09 기반 fixture와 같은 실제 주문/증빙 migration·02 snapshot DDL·이 SQL Draft를 로드한다. 운영 환경변수/운영 DB에 연결하지 않는다.
+
+02 runner는 해당 DB를 만든 뒤 이 파일을 psql ON_ERROR_STOP으로 실행하고, 출력 중 `delivery_completion_09_fixture_manifest=` 한 줄의 JSON을 읽는다. command의 시각·이벤트·원 pre revision·증빙을 재시도까지 그대로 보존한다. 별도 영속 fixture 표/운영 객체를 추가하지 않으며 SQL은 완료를 미리 실행하지 않는다. 02가 인증 기사 세션·확정 코스/차량/정류장 fixture, PostgREST 인증/역할 설정, API 서버와 HTTP runner를 소유한다. 09 seed 자체는 기사 권한 증명이 아니다.
+
+manifest에는 command, expectedSqlResult, expectedApiResult, 초기/성공 후 건수와 유효 대체 메모·다른 회사/거래처/잘못된 종류 증빙·취소/다른 거래처 주문 ID가 있다. 정상 주문 2개(pre=1, submitted/in_delivery), 취소 1개, 다른 거래처 1개를 만들며 실제 고객/파일/배송은 없다.
+
+| 통합 사례 | 기대 결과/DB 불변 조건 |
+| --- | --- |
+| 최초 완료 | HTTP 결과가 expectedApiResult와 같고 completedAt은 같은 instant. SQL 결과의 거래처·메모·첨부 집합도 요청과 일치. events=1/orderRelations=2/attachmentRelations=2, 대상 두 주문 delivered/revision=2 |
+| 커밋 후 응답 유실 → 같은 command 재전송 | 같은 이벤트/원 pre=1/같은 증빙으로 RPC에 도달해 같은 결과. 위 건수와 주문 revision 유지. API 캐시만 반환하지 않음 |
+| 첨부 순서만 반전 | 같은 집합이므로 같은 결과와 건수 |
+| 동일 이벤트 + 다른 유효 noteId 또는 첨부 부분집합 | SQL store_order_completion_idempotency_conflict. 성공 캐시/원 증빙으로 덮어쓰기 금지. 저장 상태/증빙/건수 유지. 02는 알려진 충돌의 HTTP 매핑도 확인 |
+| 다른 회사/거래처/종류·없는 증빙 | 새 이벤트로 시도 시 검증 거부, event/관계 추가 없음. 기존 이벤트에 다른 입력이면 충돌이며 성공으로 취급하지 않음 |
+| 취소/다른 거래처 주문·다른 revision/actor/시각 | 검증 또는 SQL 충돌, 대상 밖 주문 상태 불변. 정상 완료를 다른 이벤트로 반복해도 추가 완료 없음 |
+| 동일 요청 동시 호출 | 완료 행 1개, 주문 관계 2개, 첨부 관계 2개로 유지. 응답 유실/관측 시점 차이는 원 command 재시도로 같은 최종 결과 확인 |
+| 증빙 삭제/회사·거래처 재배치 | 완료 후 FK로 거부. 같은 회사 전체 삭제 경로는 기존 09 PG17 회귀로 별도 확인 |
+
+#414 eaa0c91의 diff는 새 필수 인자/증빙 결과 검사·sameInstant·영속 pre/completed 관계 재시도·RPC 재호출을 연결한다. API 캐시 성공 우회는 보이지 않는다. 이는 읽기 대조 결과이며, 위 실제 API→PostgREST→PG17 완료·변경 증빙 충돌의 통합 PASS를 대신하지 않는다. API 파일은 09에서 수정하지 않는다.
