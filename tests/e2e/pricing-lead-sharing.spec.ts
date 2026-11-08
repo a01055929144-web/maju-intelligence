@@ -56,6 +56,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     }
     if (action === "record-send") {
       expect(b.documentId).toBeUndefined(); expect(prepared).toBe(true); expect(b.delivered).toBe(true); expect(b.shareLinkId).toBe(shareLinkId); sent = true; sendInputs.push(b);
+      expect(b).toMatchObject({ documentVersionId: versionId, leadId, templateId: "pricing-doc-paper-v1", channel: "link" });
+      expect(b.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
       const fingerprint = JSON.stringify(b);
       if (deliveryRecords.has(b.idempotencyKey)) expect(deliveryRecords.get(b.idempotencyKey)).toBe(fingerprint);
       deliveryRecords.set(b.idempotencyKey, fingerprint);
