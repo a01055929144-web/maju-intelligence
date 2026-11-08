@@ -26,6 +26,54 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllGlobals();delete process.env.SUPABASE_URL;delete process.env.SUPABASE_SERVICE_ROLE_KEY});
 const list=()=>pricingDocumentsRepository.request<List>(scope,"list",{page:1});
 describe("server document status read model",()=>{
+ const importId="40000000-0000-4000-8000-000000000001",supplierOwner="50000000-0000-4000-8000-000000000001";
+ const datedHistory={id:"dated-history",supplier_product_id:supplier,purchase_price:12345,created_at:"2026-11-02T02:00:00Z",import_id:importId,source:{supplier_id:supplierOwner,mapping:{contract:"purchase-cost-date-v2"}}};
+ const historyBatch={supplier_import_ids:{[supplierOwner]:importId},product_snapshots:{},supplier_snapshots:{},recalc_run_id:null,history_only_product_count:1};
+ function datedFixture(path:string){
+  if(path.startsWith("supplier_product_cost_history?"))return [datedHistory];
+  if(path.startsWith("purchase_cost_date_batches_v2?")){
+   const url=new URL("https://synthetic.test/"+path);
+   expect(url.searchParams.get("status")).toBe("eq.completed");
+   expect(url.searchParams.get("or")).toBe(`(supplier_import_ids->>${supplierOwner}.eq.${importId})`);
+   return [historyBatch];
+  }
+  return fixture(path);
+ }
+ it("ignores a proven history-only batch across reads without hiding actual recalculation changes",async()=>{
+  db.mockImplementation(async(path:string)=>datedFixture(path));
+  for(let read=0;read<2;read++)expect((await list()).items[0].recalculation).toMatchObject({needsRecalculation:false,changedProductCount:0});
+  for(const [path] of db.mock.calls)expect(path).toContain(`company_id=eq.${company}`);
+  expect(JSON.stringify(await list())).not.toContain("12345");
+  recalculated=true;expect((await list()).items[0].recalculation.changedProductCount).toBe(1);
+ });
+ it.each([
+  {product_snapshots:{[product]:{purchasePrice:67891}}},
+  {supplier_snapshots:{[supplier]:{latestCost:67891}}},
+  {recalc_run_id:"60000000-0000-4000-8000-000000000001"},
+  {history_only_product_count:0},
+ ])("keeps history when any no-current-change condition is absent: %j",async(patch)=>{
+  db.mockImplementation(async(path:string)=>path.startsWith("purchase_cost_date_batches_v2?")?[{...historyBatch,...patch}]:datedFixture(path));
+  expect((await list()).items[0].recalculation.changedProductCount).toBe(1);
+ });
+ it("does not let an older history-only receipt replace the actual pre-publication cost baseline",async()=>{
+  const oldReceipt={...datedHistory,created_at:"2026-11-02T00:30:00Z"};
+  const actualBaseline={id:"actual-baseline",supplier_product_id:supplier,purchase_price:67891,created_at:"2026-11-01T00:00:00Z"};
+  db.mockImplementation(async(path:string)=>{
+   if(path.startsWith("supplier_products?"))return [{id:supplier,baseline:[oldReceipt]}];
+   if(path.startsWith("supplier_product_cost_history?"))return path.includes("created_at=lte.")
+    ?[oldReceipt,actualBaseline]:[{...actualBaseline,id:"same-current-cost",created_at:"2026-11-02T02:00:00Z"}];
+   return datedFixture(path);
+  });
+  expect((await list()).items[0].recalculation.needsRecalculation).toBe(false);
+ });
+ it("fails visibly if a dated import has no matching completed same-company batch or its lookup fails",async()=>{
+  for(const records of [[],[{...historyBatch,supplier_import_ids:{[supplierOwner]:"foreign-import"}}]]){
+   db.mockImplementation(async(path:string)=>path.startsWith("purchase_cost_date_batches_v2?")?records:datedFixture(path));
+   await expect(list()).rejects.toThrow("현재가 반영 상태");
+  }
+  db.mockImplementation(async(path:string)=>{if(path.startsWith("purchase_cost_date_batches_v2?"))throw Error("batch unavailable");return datedFixture(path)});
+  await expect(list()).rejects.toThrow("batch unavailable");
+ });
  it("persists status across independent reads and only clears after republishing",async()=>{
   expect((await list()).items[0].recalculation.needsRecalculation).toBe(false);changed=true;
   expect((await list()).items[0].recalculation.changedProductCount).toBe(1);recalculated=true;
