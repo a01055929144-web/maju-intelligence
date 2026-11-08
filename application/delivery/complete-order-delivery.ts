@@ -6,6 +6,7 @@ const ACTIVE = new Set(["submitted", "received", "in_delivery"]);
 type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
 type Actor = { actorKey: string; companyId: string; driverKeys: string[]; staffMemberId?: string; vehicleKeys: string[] };
 type OrderRow = { id: string; customer_id: string; delivery_date: string; revision: number; status: string; delivery_customer_name_snapshot: string | null; delivery_address_snapshot: string | null };
+type CompletionOrderRow = { completed_revision: number; order_id: string; pre_revision: number };
 
 export class DeliveryCompletionError extends Error {}
 
@@ -17,7 +18,7 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   const encodedCustomer = encodeURIComponent(input.customerId);
   const encodedIds = orderIds.join(",");
 
-  const [confirmations, customers, orders, notes, attachments] = await Promise.all([
+  const [confirmations, customers, orders, notes, attachments, completionOrders] = await Promise.all([
     request<Array<{ customer_ids: unknown; driver_name: string }>>(
       `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodedCompany}&route_date=eq.${encodeURIComponent(input.deliveryDate)}`
     ),
@@ -32,6 +33,9 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
     ) : Promise.resolve([]),
     request<Array<{ attachment_type: string; id: string }>>(
       `customer_attachments?select=id,attachment_type&company_id=eq.${encodedCompany}&customer_id=eq.${encodedCustomer}&id=in.(${attachmentIds.join(",")})&limit=100`
+    ),
+    request<CompletionOrderRow[]>(
+      `store_order_delivery_completion_orders_09?select=order_id,pre_revision,completed_revision&company_id=eq.${encodedCompany}&completion_event_id=eq.${encodeURIComponent(input.completionEventId)}&order_id=in.(${encodedIds})&limit=100`
     )
   ]);
 
@@ -50,10 +54,13 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
 
   if (orders.length !== input.orders.length) throw new DeliveryCompletionError("완료할 주문을 찾을 수 없습니다.");
   const revisionById = new Map(input.orders.map((order) => [order.orderId, order.orderRevision]));
+  const completionByOrder = new Map(completionOrders.map((row) => [row.order_id, row]));
   for (const order of orders) {
     const expectedRevision = revisionById.get(order.id)!;
     const isPendingCompletion = ACTIVE.has(order.status) && order.revision === expectedRevision;
-    const isCompletionRetry = order.status === "delivered" && order.revision === expectedRevision + 1;
+    const completion = completionByOrder.get(order.id);
+    const isCompletionRetry = order.status === "delivered" && order.revision === expectedRevision + 1
+      && completion?.pre_revision === expectedRevision && completion.completed_revision === order.revision;
     if (order.customer_id !== input.customerId || order.delivery_date !== input.deliveryDate || (!isPendingCompletion && !isCompletionRetry)) {
       throw new DeliveryCompletionError("현재 정류장에서 완료할 수 없는 주문입니다.");
     }
@@ -87,7 +94,7 @@ function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, a
     attachmentIds?: string[]; companyId?: string; completedAt?: string; completionEventId?: string; customerId?: string; deliveryDate?: string; noteId?: string;
     orderIds?: string[]; orderRevisions?: Record<string, number>;
   };
-  if (result.companyId !== actor.companyId || result.customerId !== input.customerId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || result.completedAt !== input.completedAt || result.noteId !== input.proof.noteId) {
+  if (result.companyId !== actor.companyId || result.customerId !== input.customerId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || !sameInstant(result.completedAt, input.completedAt) || result.noteId !== input.proof.noteId) {
     throw new DeliveryCompletionError("배송 완료 결과 범위가 요청과 다릅니다.");
   }
   const requestedAttachments = [...input.proof.attachmentIds].sort();
@@ -106,6 +113,10 @@ function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, a
     completedAt: result.completedAt,
     orders: returnedIds.map((orderId) => ({ orderId, orderRevision: result.orderRevisions![orderId] }))
   };
+}
+
+function sameInstant(left: unknown, right: string) {
+  return typeof left === "string" && Date.parse(left) === Date.parse(right);
 }
 
 function validateCommand(input: OrderDeliveryCompletionCommand, companyId: string) {

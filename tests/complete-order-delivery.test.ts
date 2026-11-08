@@ -27,7 +27,7 @@ const actor = {
   vehicleKeys: ["1호차"]
 };
 
-function repository(options: { customerId?: string; noteType?: string; responseAttachmentId?: string; route?: boolean; status?: string; vehicle?: string } = {}) {
+function repository(options: { customerId?: string; noteType?: string; responseAttachmentId?: string; responseCompletedAt?: string; retryRelation?: boolean; route?: boolean; status?: string; vehicle?: string } = {}) {
   return vi.fn(async <T>(path: string, init?: RequestInit): Promise<T> => {
     let result: unknown;
     if (path.startsWith("route_plan_confirmations")) result = options.route === false ? [] : [{ driver_name: "기사 A", customer_ids: [customerId] }];
@@ -35,6 +35,7 @@ function repository(options: { customerId?: string; noteType?: string; responseA
     else if (path.startsWith("store_orders")) result = [{ id: orderId, customer_id: options.customerId || customerId, delivery_date: "2026-11-09", revision: options.status === "delivered" ? 4 : 3, status: options.status || "in_delivery", delivery_customer_name_snapshot: "매장 A", delivery_address_snapshot: "서울" }];
     else if (path.startsWith("customer_notes")) result = [{ id: noteId, note_type: options.noteType || "delivery" }];
     else if (path.startsWith("customer_attachments")) result = [{ id: attachmentId, attachment_type: "delivery_proof" }];
+    else if (path.startsWith("store_order_delivery_completion_orders_09")) result = options.retryRelation ? [{ order_id: orderId, pre_revision: 3, completed_revision: 4 }] : [];
     if (path === "rpc/complete_store_order_delivery_09") {
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
@@ -47,7 +48,7 @@ function repository(options: { customerId?: string; noteType?: string; responseA
         p_attachment_ids: [attachmentId],
         p_order_ids: [orderId]
       });
-      result = { attachmentIds: [options.responseAttachmentId || attachmentId], companyId, completionEventId: eventId, customerId, deliveryDate: "2026-11-09", completedAt: command.completedAt, noteId, orderIds: [orderId], orderRevisions: { [orderId]: 4 } };
+      result = { attachmentIds: [options.responseAttachmentId || attachmentId], companyId, completionEventId: eventId, customerId, deliveryDate: "2026-11-09", completedAt: options.responseCompletedAt || command.completedAt, noteId, orderIds: [orderId], orderRevisions: { [orderId]: 4 } };
     }
     if (result === undefined) throw new Error(`unexpected path: ${path}`);
     return result as T;
@@ -76,10 +77,18 @@ describe("complete order delivery", () => {
   });
 
   it("passes an identical delivered retry to the SQL idempotency contract", async () => {
-    await expect(completeOrderDelivery(command, actor, repository({ status: "delivered" }))).resolves.toMatchObject({ completionEventId: eventId });
+    await expect(completeOrderDelivery(command, actor, repository({ retryRelation: true, status: "delivered" }))).resolves.toMatchObject({ completionEventId: eventId });
+  });
+
+  it("rejects a delivered order without the matching persisted event relation", async () => {
+    await expect(completeOrderDelivery(command, actor, repository({ status: "delivered" }))).rejects.toThrow("현재 정류장");
   });
 
   it("rejects a result whose stored proof differs from the request", async () => {
     await expect(completeOrderDelivery(command, actor, repository({ responseAttachmentId: "60000000-0000-4000-8000-000000000002" }))).rejects.toThrow("증빙이 요청과 다릅니다");
+  });
+
+  it("accepts the same completed instant with a different ISO offset representation", async () => {
+    await expect(completeOrderDelivery(command, actor, repository({ responseCompletedAt: "2026-11-09T03:00:00+00:00" }))).resolves.toMatchObject({ completionEventId: eventId });
   });
 });
