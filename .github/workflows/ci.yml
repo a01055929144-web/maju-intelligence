@@ -392,12 +392,22 @@ jobs:
         working-directory: docs/sql-drafts
         env:
           PGHOST: 127.0.0.1
-          PGPORT: 5432
+          PGPORT: 55432
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: delivery_eligibility_test
         run: |
-          createdb delivery_eligibility_test
+          docker run --detach --rm --name delivery-eligibility-pg17 --network host \
+            -e POSTGRES_DB=delivery_eligibility_test \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            postgres:17-alpine -c port=55432
+          trap 'docker stop delivery-eligibility-pg17 >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..30}; do
+            if pg_isready --host=127.0.0.1 --port=55432 --username=postgres --dbname=delivery_eligibility_test; then break; fi
+            if [ "$attempt" = 30 ]; then exit 1; fi
+            sleep 1
+          done
           psql --set=ON_ERROR_STOP=1 --file=20261108-01-delivery-eligibility.pg17.test.sql
 
   build:

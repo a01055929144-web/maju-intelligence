@@ -1,7 +1,17 @@
 \set ON_ERROR_STOP on
 
-drop schema if exists public cascade;
-create schema public;
+do $$
+begin
+  if current_database() <> 'delivery_eligibility_test' then
+    raise exception 'refusing_non_test_database:%', current_database();
+  end if;
+  if current_setting('server_version_num')::integer not between 170000 and 179999 then
+    raise exception 'postgres_17_required:%', current_setting('server_version');
+  end if;
+  if inet_server_addr() not in (inet '127.0.0.1', inet '::1') then
+    raise exception 'loopback_server_required:%', inet_server_addr();
+  end if;
+end $$;
 
 create table public.normalized_customers (
   id uuid primary key,
