@@ -288,7 +288,8 @@ test("purchase rows older than the current price remain history-only", async ({ 
 });
 
 
-test("all 188 conflicting groups remain selectable across pages without automatic writes", async ({ page }) => {
+for (const width of [1280, 390]) test(`all 188 conflicting groups can be held together and individually changed at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
   const { writes, receipts } = await purchaseUpload(page, { count: 188 });
   const rows = Array.from({ length: 188 }, (_, index) => [150, 220].map(cost =>
     `ERP-${index + 1},${index ? `합성 상품 ${index + 1}` : "합성 상품"},1kg,봉,${cost}`)).flat();
@@ -297,13 +298,15 @@ test("all 188 conflicting groups remain selectable across pages without automati
   await expect(preview.getByRole("status")).toContainText("미선택 188그룹");
   await expect(page.getByRole("button", { name: "② 열 정렬", exact: true })).toBeDisabled();
   const conflicts = page.getByRole("region", { name: "상이 단가 선택", exact: true });
-  const lastChoice = conflicts.getByRole("combobox", { name: /합성 상품 188.*적용 단가/ });
-  for (let pageNumber = 0; pageNumber < 10 && await lastChoice.count() === 0; pageNumber++) {
-    await conflicts.getByRole("button", { name: "다음", exact: true }).click();
-  }
-  await expect(lastChoice).toHaveValue("");
-  await lastChoice.selectOption("hold");
-  await expect(preview.getByRole("status")).toContainText("미선택 187그룹");
+  const firstChoice = conflicts.getByRole("combobox", { name: /합성 상품 2026.*적용 단가/ }).first();
+  await preview.getByRole("button", { name: "미선택 188개 모두 이번 가격 반영 보류", exact: true }).click();
+  await expect(preview.getByRole("status")).toContainText("미선택 0그룹");
+  await expect(firstChoice).toHaveValue("hold");
+  await firstChoice.selectOption("2");
+  await expect(firstChoice).toHaveValue("2");
+  await expect(preview.getByRole("status")).toContainText("미선택 0그룹");
+  await expect(page.getByRole("button", { name: "② 열 정렬", exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
 });
 
