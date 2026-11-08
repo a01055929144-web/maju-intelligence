@@ -11,14 +11,11 @@ const baseRow: StoreOrderDeliveryRow = {
   delivery_date: "2026-11-08",
   revision: 2,
   status: "submitted",
-  normalized_customers: {
-    customer_name: "가 매장",
-    address: "서울 강남구 테헤란로 1",
-    delivery_contact_phone: "010-1111-2222",
-    phone: "02-111-2222",
-    delivery_drop_location: "후문 냉장고 앞",
-    loading_position: "후문"
-  }
+  delivery_customer_name_snapshot: "가 매장",
+  delivery_address_snapshot: "서울 강남구 테헤란로 1",
+  delivery_address_detail_snapshot: "101호",
+  delivery_recipient_phone_snapshot: "010-1111-2222",
+  delivery_loading_position_snapshot: "후문 냉장고 앞"
 };
 
 describe("store order delivery adapter", () => {
@@ -32,6 +29,7 @@ describe("store order delivery adapter", () => {
       destination: {
         customerName: "가 매장",
         address: "서울 강남구 테헤란로 1",
+        addressDetail: "101호",
         recipientPhone: "010-1111-2222",
         loadingPosition: "후문 냉장고 앞"
       }
@@ -59,27 +57,23 @@ describe("store order delivery adapter", () => {
     expect(rows).toEqual(before);
   });
 
-  it("falls back to the existing customer phone and loading position", () => {
-    const result = toOrderDeliveryCandidates([{
+  it("does not return legacy orders without an immutable delivery snapshot", () => {
+    expect(toOrderDeliveryCandidates([{
       ...baseRow,
-      normalized_customers: {
-        ...baseRow.normalized_customers,
-        delivery_contact_phone: null,
-        delivery_drop_location: null
-      }
-    }]);
-
-    expect(result[0].destination).toMatchObject({
-      recipientPhone: "02-111-2222",
-      loadingPosition: "후문"
-    });
+      delivery_customer_name_snapshot: null,
+      delivery_address_snapshot: null
+    }])).toEqual([]);
   });
 
-  it("rejects incomplete delivery rows before they reach the route consumer", () => {
+  it("keeps the order-time address after the customer master address changes", () => {
+    const changedCustomerAddress = "서울 송파구 올림픽로 2";
+    const result = toOrderDeliveryCandidates([baseRow]);
+
+    expect(changedCustomerAddress).not.toBe(baseRow.delivery_address_snapshot);
+    expect(result[0].destination.address).toBe("서울 강남구 테헤란로 1");
+  });
+
+  it("rejects invalid order identifiers before they reach the route consumer", () => {
     expect(() => toOrderDeliveryCandidates([{ ...baseRow, revision: 0 }])).toThrow("revision");
-    expect(() => toOrderDeliveryCandidates([{
-      ...baseRow,
-      normalized_customers: { ...baseRow.normalized_customers, address: null }
-    }])).toThrow("배송지");
   });
 });
