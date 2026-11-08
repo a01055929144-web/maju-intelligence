@@ -40,6 +40,10 @@ select
   case when n % 2 = 0 then 'taxable' else 'exempt' end
 from generate_series(10, 27) n;
 
+-- The production API service role already reads customer master rows. The
+-- minimal P2 fixture declares the table but intentionally omits that grant.
+grant select on public.normalized_customers to service_role;
+
 set local role service_role;
 do $$
 declare
