@@ -47,8 +47,8 @@
 ## 2026-11-09 운영 배포 확인
 
 - 00:53:55 KST에 main 05b912a 배포가 READY가 됐고 운영 도메인 별칭이 해당 배포를 가리킨다. 운영 DB·기능 플래그 변경은 없었다.
-- 배포 URL에서 /login, /admin/login, /dashboard, /leads, /map, /revenue/pricing, /revenue/pricing/documents, /revenue/pricing/links, /revenue/products, /store, /mobile/today이 200으로 응답했다. 이는 인증 후 화면의 실사용 확인이 아니라 경로 응답 검사다.
-- /orders는 새 배포와 직전 배포 모두 404다. 현재 주문관리 메뉴가 없는 기존 미구현 경로이며 이번 배포 회귀가 아니다. 09방 후속으로 기록했다.
+- 배포 URL에서 /login, /admin/login, /dashboard, /leads, /map, /revenue/pricing, /revenue/pricing/documents, /revenue/pricing/links, /revenue/products, /store, /mobile/today, /mobile/sales, /admin/companies/new가 200으로 응답했다. 이는 인증 후 화면의 실사용 확인이 아니라 경로 응답 검사다.
+- /orders와 /products는 새 배포와 직전 배포 모두 404다. 실제 메뉴 경로는 각각 주문관리 미구현, /revenue/products이며 이번 배포 회귀가 아니다. /orders는 09방 후속으로 기록했다.
 - 로컬 DNS 조회가 실패해 직접 curl 검사는 수행하지 못했고 Vercel 배포 URL 조회로 상태를 확인했다. 응답 검증에서 새 회귀가 없어 롤백하지 않았다.
 
 ## A 단계 대표 파일 확정값
