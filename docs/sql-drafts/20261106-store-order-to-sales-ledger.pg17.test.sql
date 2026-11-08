@@ -77,7 +77,7 @@ insert into public.store_order_lines(
  ('70000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',true,false),
  ('70000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false);
 
-do $$ declare a jsonb; b jsonb; v_document uuid; begin
+do $$ declare a jsonb; b jsonb; v_document uuid; v_return uuid:=gen_random_uuid(); begin
  a:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  v_document:=(a->>'salesDocumentId')::uuid;
@@ -94,12 +94,53 @@ do $$ declare a jsonb; b jsonb; v_document uuid; begin
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  if b->>'status'<>'confirmed' or b->>'ledgerPosted'<>'true' then raise exception 'confirmed ledger result failed'; end if;
  if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'ledger count failed'; end if;
+
+ insert into public.business_documents(
+   id,company_id,document_type,document_number,document_date,status,customer_id,original_document_id,
+   partner_name_snapshot,partner_address_snapshot,partner_contact_snapshot,
+   source_type,source_id,source_key,created_by_user_id,created_by_name
+ ) values (
+   v_return,'00000000-0000-4000-8000-000000000001','sale_return',
+   public.next_erp_number('00000000-0000-4000-8000-000000000001','sale_return','2099-01-01'),
+   '2099-01-01','draft','10000000-0000-4000-8000-000000000001',v_document,
+   'alpha','Seoul','01000000000','order','50000000-0000-4000-8000-000000000001',
+   'store_order:50000000-0000-4000-8000-000000000001:return:1',gen_random_uuid(),'tester'
+ );
+ insert into public.business_document_lines(
+   company_id,document_id,product_catalog_id,product_name_snapshot,unit_snapshot,
+   tax_type_snapshot,quantity,unit_price
+ ) values (
+   '00000000-0000-4000-8000-000000000001',v_return,
+   '20000000-0000-4000-8000-000000000001','item','BOX','taxable',1,500
+ );
+ perform public.confirm_business_document('00000000-0000-4000-8000-000000000001',v_return,gen_random_uuid(),'tester');
+ if not exists(
+   select 1 from public.business_documents
+   where company_id='00000000-0000-4000-8000-000000000001' and id=v_return
+     and original_document_id=v_document and source_type='order'
+     and source_id='50000000-0000-4000-8000-000000000001' and status='confirmed'
+ ) or not exists(
+   select 1 from public.partner_ledger_entries
+   where company_id='00000000-0000-4000-8000-000000000001'
+     and source_document_id=v_return and entry_type='sale_return' and amount=-550
+ ) then raise exception 'order return tracing or ledger failed'; end if;
+ begin
+   perform public.cancel_business_document('00000000-0000-4000-8000-000000000001',v_document,gen_random_uuid(),'tester','must wait for return');
+   raise exception 'sale cancelled before confirmed return';
+ exception when others then if sqlerrm='sale cancelled before confirmed return' then raise; end if; end;
+ perform public.cancel_business_document('00000000-0000-4000-8000-000000000001',v_return,gen_random_uuid(),'tester','return cancel regression');
+ if (select count(*) from public.partner_ledger_entries where source_document_id=v_return)<>2
+   or (select sum(amount) from public.partner_ledger_entries where source_document_id=v_return)<>0
+   then raise exception 'return cancel reversal failed'; end if;
  perform public.cancel_business_document('00000000-0000-4000-8000-000000000001',v_document,gen_random_uuid(),'tester','cancel regression');
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  if b->>'status'<>'cancelled' or b->>'alreadyCreated'<>'true' or b->>'ledgerPosted'<>'true' then raise exception 'cancelled retry result failed'; end if;
  if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>2
    or (select sum(amount) from public.partner_ledger_entries where source_document_id=v_document)<>0
    then raise exception 'cancel reversal failed'; end if;
+ if (select count(*) from public.business_documents where source_type='order' and source_id='50000000-0000-4000-8000-000000000001')<>2
+   or (select sum(amount) from public.partner_ledger_entries where source_document_id in(v_document,v_return))<>0
+   then raise exception 'order sale and return trace did not converge'; end if;
 end $$;
 
 do $$ begin
@@ -119,6 +160,6 @@ end $$;
 \ir 20261106-store-order-to-sales-ledger.down.sql
 do $$ begin
  if to_regprocedure('public.create_sales_document_from_store_order(uuid,uuid,uuid,text)') is not null then raise exception 'down left function'; end if;
- if (select count(*) from public.business_documents where source_type='order')<>1 then raise exception 'down removed document'; end if;
- if (select count(*) from public.partner_ledger_entries)<>2 then raise exception 'down removed ledger'; end if;
+ if (select count(*) from public.business_documents where source_type='order')<>2 then raise exception 'down removed document'; end if;
+ if (select count(*) from public.partner_ledger_entries)<>4 then raise exception 'down removed ledger'; end if;
 end $$;
