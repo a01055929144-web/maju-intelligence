@@ -27,7 +27,7 @@ const actor = {
   vehicleKeys: ["1호차"]
 };
 
-function repository(options: { customerId?: string; noteType?: string; responseAttachmentId?: string; responseCompletedAt?: string; retryRelation?: boolean; route?: boolean; status?: string; vehicle?: string } = {}) {
+function repository(options: { conflict?: boolean; customerId?: string; noteType?: string; responseAttachmentId?: string; responseCompletedAt?: string; retryRelation?: boolean; route?: boolean; status?: string; vehicle?: string } = {}) {
   return vi.fn(async <T>(path: string, init?: RequestInit): Promise<T> => {
     let result: unknown;
     if (path.startsWith("route_plan_confirmations")) result = options.route === false ? [] : [{ driver_name: "기사 A", customer_ids: [customerId] }];
@@ -37,6 +37,7 @@ function repository(options: { customerId?: string; noteType?: string; responseA
     else if (path.startsWith("customer_attachments")) result = [{ id: attachmentId, attachment_type: "delivery_proof" }];
     else if (path.startsWith("store_order_delivery_completion_orders_09")) result = options.retryRelation ? [{ order_id: orderId, pre_revision: 3, completed_revision: 4 }] : [];
     if (path === "rpc/complete_store_order_delivery_09") {
+      if (options.conflict) throw new Error("store_order_completion_idempotency_conflict");
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         p_actor_key: "member-a",
@@ -90,5 +91,9 @@ describe("complete order delivery", () => {
 
   it("accepts the same completed instant with a different ISO offset representation", async () => {
     await expect(completeOrderDelivery(command, actor, repository({ responseCompletedAt: "2026-11-09T03:00:00+00:00" }))).resolves.toMatchObject({ completionEventId: eventId });
+  });
+
+  it("maps the known SQL idempotency conflict to a safe validation error", async () => {
+    await expect(completeOrderDelivery(command, actor, repository({ conflict: true }))).rejects.toThrow("기존 완료 정보와 다릅니다");
   });
 });

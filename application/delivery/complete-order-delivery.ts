@@ -68,24 +68,29 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   }
 
   const expectedRevisions = Object.fromEntries(input.orders.map((order) => [order.orderId, order.orderRevision]));
-  const result = await request<{
-    attachmentIds: string[]; companyId: string; completedAt: string; completionEventId: string; customerId: string; deliveryDate: string; noteId: string;
-    orderIds: string[]; orderRevisions: Record<string, number>;
-  }>("rpc/complete_store_order_delivery_09", {
-    method: "POST",
-    body: JSON.stringify({
-      p_actor_key: actor.actorKey,
-      p_company: actor.companyId,
-      p_completed_at: input.completedAt,
-      p_completion_event_id: input.completionEventId,
-      p_customer_id: input.customerId,
-      p_delivery_date: input.deliveryDate,
-      p_expected_revisions: expectedRevisions,
-      p_note_id: input.proof.noteId,
-      p_attachment_ids: attachmentIds,
-      p_order_ids: orderIds
-    })
-  });
+  let result: unknown;
+  try {
+    result = await request("rpc/complete_store_order_delivery_09", {
+      method: "POST",
+      body: JSON.stringify({
+        p_actor_key: actor.actorKey,
+        p_company: actor.companyId,
+        p_completed_at: input.completedAt,
+        p_completion_event_id: input.completionEventId,
+        p_customer_id: input.customerId,
+        p_delivery_date: input.deliveryDate,
+        p_expected_revisions: expectedRevisions,
+        p_note_id: input.proof.noteId,
+        p_attachment_ids: attachmentIds,
+        p_order_ids: orderIds
+      })
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("store_order_completion_idempotency_conflict")) {
+      throw new DeliveryCompletionError("배송 완료 요청이 기존 완료 정보와 다릅니다.");
+    }
+    throw error;
+  }
   return validateResult(result, input, actor);
 }
 

@@ -61,7 +61,7 @@ describe.runIf(process.env.STAGE_D_COMPLETION_INTEGRATION === "isolated")("Stage
       const first = await completeOrderDelivery(command, actor, rest);
       const retry = await completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [...attachmentIds].reverse() } }, actor, rest);
       expect(retry).toEqual(first);
-      await expect(completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [attachmentIds[0]] } }, actor, rest)).rejects.toThrow("store_order_completion_idempotency_conflict");
+      await expect(completeOrderDelivery({ ...command, proof: { noteId, attachmentIds: [attachmentIds[0]] } }, actor, rest)).rejects.toThrow("기존 완료 정보와 다릅니다");
       await expect(completeOrderDelivery({ ...command, companyId: otherCompanyId }, { ...actor, companyId: otherCompanyId }, rest)).rejects.toThrow();
       await expect(completeOrderDelivery({ ...command, customerId: otherCustomerId }, actor, rest)).rejects.toThrow();
 
