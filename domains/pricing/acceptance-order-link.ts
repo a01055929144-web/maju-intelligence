@@ -24,6 +24,7 @@ export type PricingAcceptanceResult = {
   leadId?: string;
   needsReview: boolean;
   orderEnabled: boolean;
+  orderSetupRequired?: boolean;
   storefrontLinkId?: string;
   storefrontToken?: string;
 };
