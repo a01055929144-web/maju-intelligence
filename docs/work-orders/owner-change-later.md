@@ -12,6 +12,7 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `FEATURE_PRICING_COMPANY_IDS` · `FEATURE_STORE_ORDERING_COMPANY_IDS` | Vercel Production | 2026-11-02 12:11 KST · Codex | 회사 ID를 쉼표로 추가 · 비우면 꺼짐 | 재배포 |
 | `PURCHASE_RECEIPT_CORRECTIONS_COMPANY_IDS` | Vercel Production | 미설정 · 기본 OFF | 정정 SQL 승인·적용·검증 뒤 허용할 회사 ID만 지정 | 재배포 후 정정 화면 확인 |
 | `FEATURE_PURCHASE_COST_BATCH_COMPANY_IDS` | Vercel Production | 2026-11-07 20:15 KST · 대표 회사만 지정 | Vercel Production에서 허용 회사 ID 목록 수정 후 재배포 | 저장·복구 RPC 운영 확인 완료, 파일 전체 흐름 확인 대기 |
+| `LEAD_DOCUMENT_LINK_SECRET` | Vercel Production (Sensitive) | 2026-11-08 12:00 KST · Codex | Vercel › Settings › Environment Variables에서 새 값으로 교체 | 재배포 → 기존 리드 문서 공유 링크 다시 발급 |
 | `FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS` | Vercel Production | 2026-11-08 01:54 KST | Vercel › Settings › Environment Variables에서 허용 회사 목록을 수정하고 Production 재배포 | 새 설정은 다음 Production 배포부터 적용 |
 
 | `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
