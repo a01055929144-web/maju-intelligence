@@ -193,7 +193,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
             promotionId: line.promotionId, quantity: cart[line.key] })) }) });
       const result = await response.json() as { message?: string };
       if (!response.ok) {
-        if (response.status === 403) setMemberAccessChanged(true);
+        if (response.status === 403 && /권한.*변경/.test(result.message || "")) setMemberAccessChanged(true);
         throw new Error(result.message || "주문을 저장하지 못했습니다.");
       }
       retryKey.current = null; setCart({}); setEditing(null); setMemo("");
