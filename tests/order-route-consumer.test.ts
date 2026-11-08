@@ -73,6 +73,13 @@ describe("order route consumer", () => {
     expect(() => build([baseOrder, { ...baseOrder, orderRevision: 2 }])).toThrow("같은 주문 ID");
   });
 
+  it("rejects the same order id assigned to different customers", () => {
+    expect(() => build([
+      baseOrder,
+      { ...baseOrder, customerId: "customer-b", destination: { ...baseOrder.destination, customerName: "나 매장" } }
+    ])).toThrow("여러 거래처");
+  });
+
   it("rejects candidates from another company", () => {
     expect(() => build([{ ...baseOrder, companyId: "company-b" }])).toThrow("다른 회사");
   });

@@ -41,12 +41,18 @@ export function buildOrderRouteConsumer(input: {
 
   const visibleCustomerIds = uniqueNonEmpty(input.existingCustomerIds);
   const grouped = new Map<string, OrderDeliveryCandidate[]>();
+  const customerByOrderId = new Map<string, string>();
 
   for (const candidate of input.candidates) {
     if (candidate.companyId !== input.companyId) throw new Error("다른 회사의 주문은 코스에 연결할 수 없습니다.");
     if (!candidate.orderId.trim() || !candidate.customerId.trim()) throw new Error("주문 ID와 거래처 ID가 필요합니다.");
     if (!Number.isInteger(candidate.orderRevision) || candidate.orderRevision < 1) throw new Error("주문 revision을 확인해 주세요.");
     if (candidate.deliveryDate !== input.deliveryDate) continue;
+    const ownerCustomerId = customerByOrderId.get(candidate.orderId);
+    if (ownerCustomerId && ownerCustomerId !== candidate.customerId) {
+      throw new Error("같은 주문 ID를 여러 거래처 코스에 연결할 수 없습니다.");
+    }
+    customerByOrderId.set(candidate.orderId, candidate.customerId);
     grouped.set(candidate.customerId, [...(grouped.get(candidate.customerId) || []), candidate]);
   }
 
