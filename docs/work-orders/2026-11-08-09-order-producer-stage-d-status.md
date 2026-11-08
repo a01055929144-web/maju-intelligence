@@ -37,3 +37,5 @@ B #400(main 44c4213), C #406(main a386667)의 fixture 구현 이후 별도 Draft
 02/03 검토 보완: 서로 다른 거래처 주문의 혼합 완료를 SQL에서 거부한다. 완료 이벤트↔주문 관계는 회사 복합 FK·주문당 UNIQUE·pre/completed revision으로 영속 저장하고, completed_at은 이벤트의 고정 칸에서 조회한다. completionEventId가 유일한 완료 멱등 키다. Stage E는 delivered와 동일 완료 관계를 검증하고 주문 ID source key로 전표 중복을 막는 후속 계약이다. 반품/완료 무효화는 이 SQL에 넣지 않는다. 기사·코스·차량·정류장·증빙의 서버 검증과 이력 projection 등 연결 전 미완료 조건은 승인표에 남겼다.
 
 이 Draft의 격리 PG17 통과와 운영 승인은 별개다. 운영 미적용·API 미연결·Stage D OFF이며, C의 수락/첫 주문 fixture 통과를 실제 주문·배송 완료로 보고하지 않는다.
+
+#414 증빙 검토 후 완료 RPC Draft에 필수 p_customer_id / p_note_id / p_attachment_ids를 추가했다. 회사·거래처·delivery 메모/delivery_proof 첨부를 SQL 안에서 잠금 재검증하고 이벤트·주문 상태·증빙 관계를 한 트랜잭션으로 저장한다. 02 전달용 상세 인자·결과·같은 이벤트 재시도 규칙은 위 승인표에 기록했다. #414 연결과 API→PG17 검증 전에는 호출 차단을 유지한다. 다른 채팅에 직접 전송한 것은 아니다.

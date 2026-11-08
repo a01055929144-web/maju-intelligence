@@ -12,6 +12,8 @@ const clients = [new pg.Client(), new pg.Client(), new pg.Client()];
 const [admin, first, second] = clients;
 const company = '00000000-0000-4000-8000-000000000001', otherCompany = '00000000-0000-4000-8000-000000000002';
 const customer = '20000000-0000-4000-8000-000000000001';
+const noteId = n => 'a1000000-0000-4000-8000-00000000000' + n;
+const attachmentId = n => 'a2000000-0000-4000-8000-00000000000' + n;
 const member = ['30000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001'];
 const staff = [member[0], '40000000-0000-4000-8000-000000000004', '50000000-0000-4000-8000-000000000002'];
 const foreignMember = ['30000000-0000-4000-8000-000000000003', '40000000-0000-4000-8000-000000000003', '50000000-0000-4000-8000-000000000003'];
@@ -23,13 +25,14 @@ const normalized = { ...snapshot, deliveryAddressDetailSnapshot: null, deliveryL
 const signatures = ['public.place_store_order(text,date,jsonb,uuid,uuid,integer,text)',
   'public.place_store_member_order(text,date,jsonb,uuid,uuid,integer,text,uuid,uuid,uuid)'];
 const newSignatures = ['public.place_store_order_with_delivery_snapshot_09(text,date,jsonb,uuid,jsonb,uuid,integer,text,uuid,uuid,uuid)',
-  'public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text)'];
+  'public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text,uuid,uuid,uuid[])'];
 const value = async (client, sql, args = []) => (await client.query(sql, args)).rows[0].result;
 const definitions = () => admin.query('select oid::text,proacl::text,prosecdef,md5(pg_get_functiondef(oid)) hash from pg_proc where oid=any($1::regprocedure[]) order by oid', [signatures]).then(r => r.rows);
 const counts = () => value(admin, `select jsonb_build_object('orders',(select count(*) from store_orders),
   'lines',(select count(*) from store_order_lines),'requests',(select count(*) from store_order_requests),
   'snapshots',(select count(*) from store_order_delivery_requests_09),'completions',(select count(*) from store_order_delivery_completions_09),
-  'completionOrders',(select count(*) from store_order_delivery_completion_orders_09)) result`);
+  'completionOrders',(select count(*) from store_order_delivery_completion_orders_09),
+  'completionProofs',(select count(*) from store_order_delivery_completion_attachments_09)) result`);
 const order = (client, key, options = {}) => value(client,
   'select public.place_store_order_with_delivery_snapshot_09($1,$2,$3::jsonb,$4,$5::jsonb,$6,$7,$8,$9,$10,$11) result',
   [hash, day, JSON.stringify(options.lines || lines), key, JSON.stringify(Object.hasOwn(options, 'snapshot') ? options.snapshot : snapshot),
@@ -38,8 +41,10 @@ const storedSnapshot = id => value(admin, `select jsonb_build_object('deliveryCu
   'deliveryAddressSnapshot',delivery_address_snapshot,'deliveryAddressDetailSnapshot',delivery_address_detail_snapshot,
   'deliveryRecipientPhoneSnapshot',delivery_recipient_phone_snapshot,'deliveryLoadingPositionSnapshot',delivery_loading_position_snapshot) result
   from store_orders where id=$1`, [id]);
-const completion = (client, input) => value(client, 'select public.complete_store_order_delivery_09($1,$2,$3,$4::uuid[],$5::jsonb,$6,$7) result',
-  [input.company || company, input.event, input.day || day, input.ids, JSON.stringify(input.revisions), input.at, input.actor || 'fixture-verified-driver']);
+const completion = (client, input) => value(client, 'select public.complete_store_order_delivery_09($1,$2,$3,$4::uuid[],$5::jsonb,$6,$7,$8,$9,$10::uuid[]) result',
+  [input.company || company, input.event, input.day || day, input.ids, JSON.stringify(input.revisions), input.at, input.actor || 'fixture-verified-driver',
+    input.customer || customer, Object.hasOwn(input, 'note') ? input.note : noteId(1),
+    Object.hasOwn(input, 'attachments') ? input.attachments : [attachmentId(1), attachmentId(2)]]);
 const states = ids => admin.query('select id,status,revision from store_orders where id=any($1::uuid[]) order by id', [ids]).then(r => r.rows);
 
 try {
@@ -56,7 +61,7 @@ try {
     }
     assert.equal(await value(admin, 'select prosecdef result from pg_proc where oid=$1::regprocedure', [signature]), false);
   }
-  for (const table of ['store_order_delivery_requests_09', 'store_order_delivery_completions_09', 'store_order_delivery_completion_orders_09']) {
+  for (const table of ['store_order_delivery_requests_09', 'store_order_delivery_completions_09', 'store_order_delivery_completion_orders_09', 'store_order_delivery_completion_attachments_09']) {
     assert.equal(await value(admin, 'select relrowsecurity result from pg_class where oid=$1::regclass', [table]), true);
     for (const role of ['anon', 'authenticated']) assert.equal(await value(admin, 'select has_table_privilege($1,$2,$3) result', [role, table, 'SELECT']), false);
     assert.equal(await value(admin, 'select has_table_privilege($1,$2,$3) result', ['service_role', table, 'UPDATE']), false);
@@ -133,15 +138,27 @@ try {
   const rejectCompletion = async (patch, message) => {
     await assert.rejects(completion(first, { ...input, event: randomUUID(), ...patch }), message);
     assert.equal(await completionCount(), 0); assert.equal((await counts()).completionOrders, 0);
+    assert.equal((await counts()).completionProofs, 0);
     assert.deepEqual(await states(ids), previousStates);
   };
   await rejectCompletion({ ids: [] }, /store_order_completion_invalid/);
   await rejectCompletion({ ids: [ids[0], ids[0]], revisions: { [ids[0]]: revisions[ids[0]] } }, /store_order_completion_invalid/);
   await rejectCompletion({ revisions: { ...revisions, [ids[0]]: 999 } }, /store_order_completion_revision_conflict/);
-  await rejectCompletion({ company: otherCompany }, /store_order_completion_unavailable/);
+  await rejectCompletion({ company: otherCompany }, /store_order_completion_proof_unavailable/);
   await rejectCompletion({ day: '2099-01-06' }, /store_order_completion_unavailable/);
   await rejectCompletion({ at: '2000-01-01T00:00:00Z' }, /store_order_completion_unavailable/);
   await rejectCompletion({ at: new Date(Date.now() + 600000).toISOString() }, /store_order_completion_invalid/);
+  await rejectCompletion({ note: null }, /store_order_completion_invalid/);
+  await rejectCompletion({ attachments: [] }, /store_order_completion_invalid/);
+  await rejectCompletion({ attachments: [attachmentId(1), attachmentId(1)] }, /store_order_completion_proof_invalid/);
+  for (const note of [noteId(3), noteId(4), noteId(5), randomUUID()]) {
+    await rejectCompletion({ note }, /store_order_completion_proof_unavailable/);
+  }
+  for (const attachment of [attachmentId(3), attachmentId(4), attachmentId(5), randomUUID()]) {
+    await rejectCompletion({ attachments: [attachment] }, /store_order_completion_proof_unavailable/);
+  }
+  await rejectCompletion({ customer: '20000000-0000-4000-8000-000000000002', note: noteId(3), attachments: [attachmentId(3)] },
+    /store_order_completion_customer_mismatch/);
   await rejectCompletion({ ids: [legacy.id], revisions: { [legacy.id]: 1 } }, /store_order_completion_snapshot_required/);
   await rejectCompletion({ ids: [ids[0], cancelled.id], revisions: { [ids[0]]: revisions[ids[0]], [cancelled.id]: 1 } }, /store_order_completion_unavailable/);
   const otherCustomerOrder = randomUUID();
@@ -154,6 +171,11 @@ try {
     /store_order_completion_customer_mismatch/);
   assert.deepEqual(await states([otherCustomerOrder]), [{ id: otherCustomerOrder, status: 'submitted', revision: 1 }]);
 
+  await admin.query(`create function public.delivery09_fail_proof() returns trigger language plpgsql as $$ begin
+    raise exception 'fixture_forced_proof_failure'; end $$;
+    create trigger delivery09_fail_proof before insert on public.store_order_delivery_completion_attachments_09 for each row execute function public.delivery09_fail_proof()`);
+  await rejectCompletion({}, /fixture_forced_proof_failure/);
+  await admin.query('drop trigger delivery09_fail_proof on store_order_delivery_completion_attachments_09; drop function public.delivery09_fail_proof()');
   await admin.query(`create function public.delivery09_fail_completion() returns trigger language plpgsql as $$ begin
     if new.status='delivered' then raise exception 'fixture_forced_completion_failure'; end if; return new; end $$;
     create trigger delivery09_fail_completion before update on public.store_orders for each row execute function public.delivery09_fail_completion()`);
@@ -163,14 +185,30 @@ try {
   const completed = await completion(first, input);
   assert.deepEqual(await states(ids), previousStates); assert.equal(await completionCount(), 0);
   assert.equal((await counts()).completionOrders, 0);
+  assert.equal((await counts()).completionProofs, 0);
   await first.query('commit');
   assert.deepEqual(completed.orderIds, [...ids].sort());
+  assert.equal(completed.customerId, customer); assert.equal(completed.noteId, noteId(1));
+  assert.deepEqual(completed.attachmentIds, [attachmentId(1), attachmentId(2)]);
   for (const row of await states(ids)) { assert.equal(row.status, 'delivered'); assert.equal(row.revision, revisions[row.id] + 1); }
-  assert.deepEqual(await completion(second, { ...input, ids: [...ids].reverse() }), completed);
+  assert.deepEqual(await completion(second, { ...input, ids: [...ids].reverse(), attachments: [attachmentId(2), attachmentId(1)] }), completed);
+  await assert.rejects(completion(second, { ...input, note: noteId(2) }), /store_order_completion_idempotency_conflict/);
+  await assert.rejects(completion(second, { ...input, attachments: [attachmentId(1)] }), /store_order_completion_idempotency_conflict/);
   await assert.rejects(completion(second, { ...input, actor: 'different-actor' }), /store_order_completion_idempotency_conflict/);
   await assert.rejects(completion(second, { ...input, ids: ids.slice(1), revisions: Object.fromEntries(ids.slice(1).map(id => [id, revisions[id]])) }), /store_order_completion_idempotency_conflict/);
   await assert.rejects(completion(second, { ...input, event: randomUUID(), revisions: completed.orderRevisions }), /store_order_completion_unavailable/);
   assert.equal(await completionCount(), 1);
+  assert.equal((await counts()).completionProofs, 2);
+  const proofRows = await admin.query(`select a.attachment_id,e.note_id,e.customer_id from store_order_delivery_completion_attachments_09 a
+    join store_order_delivery_completions_09 e using(company_id,completion_event_id,customer_id)
+    where a.company_id=$1 and a.completion_event_id=$2 order by a.attachment_id`, [company, input.event]);
+  assert.deepEqual(proofRows.rows, [1,2].map(n => ({ attachment_id: attachmentId(n), note_id: noteId(1), customer_id: customer })));
+  await assert.rejects(admin.query('delete from customer_notes where id=$1', [noteId(1)]), /foreign key constraint/);
+  await assert.rejects(admin.query('delete from customer_attachments where id=$1', [attachmentId(1)]), /foreign key constraint/);
+  await assert.rejects(admin.query('update customer_notes set customer_id=$1 where id=$2',
+    ['20000000-0000-4000-8000-000000000002', noteId(1)]), /foreign key constraint/);
+  await assert.rejects(admin.query('update customer_attachments set customer_id=$1 where id=$2',
+    ['20000000-0000-4000-8000-000000000002', attachmentId(1)]), /foreign key constraint/);
   const relations = await admin.query(`select r.order_id,r.pre_revision,r.completed_revision,e.completed_at
     from store_order_delivery_completion_orders_09 r join store_order_delivery_completions_09 e using(company_id,completion_event_id)
     where r.company_id=$1 and r.completion_event_id=$2 order by r.order_id`, [company, input.event]);
@@ -196,6 +234,7 @@ try {
   assert.deepEqual(await states(concurrentInput.ids), [{ id: concurrentOrder.id, status: 'delivered', revision: 2 }]);
   assert.equal(await completionCount(), 2);
   assert.equal((await counts()).completionOrders, ids.length + 1);
+  assert.equal((await counts()).completionProofs, 4);
   await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,$4,$5)',
     [company, concurrentInput.event, ids[0], revisions[ids[0]], revisions[ids[0]] + 1]), /unique constraint/);
   assert.equal(await value(admin, 'select count(*)::integer result from store_order_delivery_completion_orders_09 where company_id=$1 and completion_event_id=$2 and order_id=$3 and pre_revision=1 and completed_revision=2',
@@ -209,14 +248,17 @@ try {
   await admin.query('delete from companies where id=$1', [company]);
   // Force all deferred checks now, proving the transaction could commit; roll back to reuse this disposable fixture.
   await admin.query('set constraints all immediate');
-  assert.deepEqual(await counts(), { orders: 0, lines: 0, requests: 0, snapshots: 0, completions: 0, completionOrders: 0 });
+  assert.deepEqual(await counts(), { orders: 0, lines: 0, requests: 0, snapshots: 0, completions: 0, completionOrders: 0, completionProofs: 0 });
   assert.equal(await value(admin, 'select count(*)::integer result from companies where id=$1', [otherCompany]), 1);
   await admin.query('rollback');
   assert.deepEqual(await counts(), beforeCompanyDelete);
   // Fixture-only discard in the exact guarded database, never an operating rollback procedure.
-  await admin.query('truncate public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09');
+  await admin.query('truncate public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09,public.store_order_delivery_completion_attachments_09');
   await admin.query(down);
   assert.deepEqual(await definitions(), original);
+  assert.equal(await value(admin, "select to_regclass('public.customer_attachments_delivery_09_scope_uq')::text result"), null);
+  assert.equal(await value(admin, 'select count(*)::integer result from customer_notes'), 5);
+  assert.equal(await value(admin, 'select count(*)::integer result from customer_attachments'), 5);
   for (const signature of newSignatures) assert.equal(await value(admin, 'select to_regprocedure($1)::text result', [signature]), null);
   assert.equal(await value(admin, "select count(*)::integer result from pg_attribute where attrelid='store_orders'::regclass and attname='delivery_address_snapshot' and not attisdropped"), 1);
   const afterDown = await value(first, 'select public.place_store_order($1,$2,$3::jsonb,$4,null,null,$5) result', [hash, day, JSON.stringify(lines), randomUUID(), '']);

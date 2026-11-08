@@ -28,14 +28,21 @@ create table public.store_order_delivery_requests_09 (
   foreign key(company_id,link_id) references public.storefront_links(company_id,id) on delete cascade,
   foreign key(company_id,order_id) references public.store_orders(company_id,id) on delete cascade
 );
+-- Notes already have the existing N1 UNIQUE(company_id,customer_id,id).
+-- Attachment ownership needs the same referenced key; this adds no proof contents.
+create unique index customer_attachments_delivery_09_scope_uq on public.customer_attachments(company_id,customer_id,id);
 create table public.store_order_delivery_completions_09 (
   company_id uuid not null references public.companies(id) on delete cascade,
   completion_event_id uuid not null, actor_key text not null check(length(actor_key) between 1 and 200),
   completed_at timestamptz not null,
+  customer_id uuid not null, note_id uuid not null,
   request_fingerprint text not null check(request_fingerprint ~ '^[0-9a-f]{32}$'),
   result jsonb not null check(jsonb_typeof(result)='object'),
   created_at timestamptz not null default clock_timestamp(),
-  primary key(company_id,completion_event_id)
+  primary key(company_id,completion_event_id),
+  unique(company_id,completion_event_id,customer_id),
+  foreign key(company_id,customer_id) references public.normalized_customers(company_id,id) on delete no action deferrable initially deferred,
+  foreign key(company_id,customer_id,note_id) references public.customer_notes(company_id,customer_id,id) on delete no action deferrable initially deferred
 );
 create table public.store_order_delivery_completion_orders_09 (
   company_id uuid not null references public.companies(id) on delete cascade,
@@ -48,10 +55,18 @@ create table public.store_order_delivery_completion_orders_09 (
   foreign key(company_id,order_id) references public.store_orders(company_id,id) on delete no action deferrable initially deferred
 );
 alter table public.store_order_delivery_completion_orders_09 enable row level security;
+create table public.store_order_delivery_completion_attachments_09 (
+  company_id uuid not null references public.companies(id) on delete cascade,
+  completion_event_id uuid not null, customer_id uuid not null, attachment_id uuid not null,
+  primary key(company_id,completion_event_id,attachment_id),
+  foreign key(company_id,completion_event_id,customer_id) references public.store_order_delivery_completions_09(company_id,completion_event_id,customer_id) on delete no action deferrable initially deferred,
+  foreign key(company_id,customer_id,attachment_id) references public.customer_attachments(company_id,customer_id,id) on delete no action deferrable initially deferred
+);
+alter table public.store_order_delivery_completion_attachments_09 enable row level security;
 alter table public.store_order_delivery_requests_09 enable row level security;
 alter table public.store_order_delivery_completions_09 enable row level security;
-revoke all on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09 from public,anon,authenticated,service_role;
-grant select,insert on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09 to service_role;
+revoke all on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09,public.store_order_delivery_completion_attachments_09 from public,anon,authenticated,service_role;
+grant select,insert on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09,public.store_order_delivery_completion_attachments_09 to service_role;
 
 create function public.place_store_order_with_delivery_snapshot_09(
   p_token_hash text,p_delivery_date date,p_lines jsonb,p_idempotency_key uuid,p_snapshot jsonb,
@@ -158,14 +173,17 @@ end $$;
 
 create function public.complete_store_order_delivery_09(
   p_company uuid,p_completion_event_id uuid,p_delivery_date date,p_order_ids uuid[],
-  p_expected_revisions jsonb,p_completed_at timestamptz,p_actor_key text
+  p_expected_revisions jsonb,p_completed_at timestamptz,p_actor_key text,
+  p_customer_id uuid,p_note_id uuid,p_attachment_ids uuid[]
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp set timezone='UTC' as $$
 declare
-  v_ids uuid[]; v_id uuid; v_revision integer; v_count integer;
+  v_ids uuid[]; v_attachments uuid[]; v_id uuid; v_revision integer; v_count integer;
   v_expected jsonb:='{}'; v_after jsonb:='{}'; v_result jsonb; v_fingerprint text;
   v_existing public.store_order_delivery_completions_09%rowtype; v_order public.store_orders%rowtype;
 begin
   if p_company is null or p_completion_event_id is null or p_delivery_date is null
+    or p_customer_id is null or p_note_id is null or p_attachment_ids is null
+    or cardinality(p_attachment_ids) not between 1 and 100 or array_position(p_attachment_ids,null) is not null
     or p_order_ids is null or cardinality(p_order_ids) not between 1 and 100 or array_position(p_order_ids,null) is not null
     or p_completed_at is null or not isfinite(p_completed_at) or p_completed_at>clock_timestamp()+interval '5 minutes'
     or p_actor_key is null or length(btrim(p_actor_key)) not between 1 and 200
@@ -174,6 +192,8 @@ begin
   if v_count<>cardinality(p_order_ids) or (select count(*) from jsonb_object_keys(p_expected_revisions))<>v_count then
     raise exception 'store_order_completion_invalid';
   end if;
+  select array_agg(id order by id),count(distinct id) into v_attachments,v_count from unnest(p_attachment_ids) as supplied(id);
+  if v_count<>cardinality(p_attachment_ids) then raise exception 'store_order_completion_proof_invalid'; end if;
   foreach v_id in array v_ids loop
     if jsonb_typeof(p_expected_revisions->v_id::text) is distinct from 'number'
       or (p_expected_revisions->>v_id::text) !~ '^[1-9][0-9]*$' then raise exception 'store_order_completion_invalid'; end if;
@@ -183,22 +203,32 @@ begin
     v_after:=v_after||jsonb_build_object(v_id::text,v_revision+1);
   end loop;
   v_fingerprint:=md5(jsonb_build_object('orderIds',v_ids,'expectedRevisions',v_expected,'deliveryDate',p_delivery_date,
-    'completedAt',p_completed_at,'actorKey',btrim(p_actor_key))::text);
+    'completedAt',p_completed_at,'actorKey',btrim(p_actor_key),'customerId',p_customer_id,'noteId',p_note_id,'attachmentIds',v_attachments)::text);
   v_result:=jsonb_build_object('companyId',p_company,'deliveryDate',p_delivery_date,'completionEventId',p_completion_event_id,
-    'completedAt',p_completed_at,'orderIds',v_ids,'orderRevisions',v_after);
+    'completedAt',p_completed_at,'orderIds',v_ids,'orderRevisions',v_after,
+    'customerId',p_customer_id,'noteId',p_note_id,'attachmentIds',v_attachments);
   -- Unique event claim waits for a concurrent identical transaction; failed validation rolls it back.
-  insert into public.store_order_delivery_completions_09(company_id,completion_event_id,actor_key,completed_at,request_fingerprint,result)
-    values(p_company,p_completion_event_id,btrim(p_actor_key),p_completed_at,v_fingerprint,v_result) on conflict do nothing;
+  insert into public.store_order_delivery_completions_09(company_id,completion_event_id,actor_key,completed_at,customer_id,note_id,request_fingerprint,result)
+    values(p_company,p_completion_event_id,btrim(p_actor_key),p_completed_at,p_customer_id,p_note_id,v_fingerprint,v_result) on conflict do nothing;
   if not found then
     select * into v_existing from public.store_order_delivery_completions_09
       where company_id=p_company and completion_event_id=p_completion_event_id;
     if v_existing.request_fingerprint is distinct from v_fingerprint then raise exception 'store_order_completion_idempotency_conflict'; end if;
     return v_existing.result;
   end if;
+  perform 1 from public.customer_notes where company_id=p_company and customer_id=p_customer_id and id=p_note_id and note_type='delivery' for share;
+  if not found then raise exception 'store_order_completion_proof_unavailable'; end if;
+  perform 1 from public.customer_attachments where company_id=p_company and customer_id=p_customer_id
+    and id=any(v_attachments) and attachment_type='delivery_proof' order by id for share;
+  get diagnostics v_count=row_count;
+  if v_count<>cardinality(v_attachments) then raise exception 'store_order_completion_proof_unavailable'; end if;
   perform 1 from public.store_orders where company_id=p_company and id=any(v_ids) order by id for update;
   get diagnostics v_count=row_count;
   if v_count<>cardinality(v_ids) then raise exception 'store_order_completion_unavailable'; end if;
   if (select count(distinct customer_id) from public.store_orders where company_id=p_company and id=any(v_ids))<>1 then
+    raise exception 'store_order_completion_customer_mismatch';
+  end if;
+  if exists(select from public.store_orders where company_id=p_company and id=any(v_ids) and customer_id<>p_customer_id) then
     raise exception 'store_order_completion_customer_mismatch';
   end if;
   for v_order in select * from public.store_orders where company_id=p_company and id=any(v_ids) order by id loop
@@ -211,12 +241,14 @@ begin
   end loop;
   insert into public.store_order_delivery_completion_orders_09(company_id,completion_event_id,order_id,pre_revision,completed_revision)
     select p_company,p_completion_event_id,id,(v_expected->>id::text)::integer,(v_after->>id::text)::integer from unnest(v_ids) as completed(id);
+  insert into public.store_order_delivery_completion_attachments_09(company_id,completion_event_id,customer_id,attachment_id)
+    select p_company,p_completion_event_id,p_customer_id,id from unnest(v_attachments) as proof(id);
   update public.store_orders set status='delivered',revision=revision+1,updated_at=clock_timestamp()
     where company_id=p_company and id=any(v_ids);
   return v_result;
 end $$;
 revoke all on function public.place_store_order_with_delivery_snapshot_09(text,date,jsonb,uuid,jsonb,uuid,integer,text,uuid,uuid,uuid),
-  public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text) from public,anon,authenticated,service_role;
+  public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text,uuid,uuid,uuid[]) from public,anon,authenticated,service_role;
 grant execute on function public.place_store_order_with_delivery_snapshot_09(text,date,jsonb,uuid,jsonb,uuid,integer,text,uuid,uuid,uuid),
-  public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text) to service_role;
+  public.complete_store_order_delivery_09(uuid,uuid,date,uuid[],jsonb,timestamptz,text,uuid,uuid,uuid[]) to service_role;
 commit;
