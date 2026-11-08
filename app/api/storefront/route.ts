@@ -3,6 +3,7 @@ import { dateField, isId } from "@/domains/pricing/document";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { readStorefront } from "@/lib/pricing/storefront";
+import { getStoreOrderActor } from "@/lib/pricing/store-order-member";
 import { toPublicStorefront } from "@/lib/pricing/storefront-public";
 import { verifyStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { supabaseRequest } from "@/lib/store";
@@ -314,12 +315,18 @@ export async function PUT(request: NextRequest) {
     // Resolve tenant eligibility from the signed link, never from caller scope.
     const store = await readStorefront(String(body.token), body.deliveryDate);
     if (!store) return unavailable();
+    const member = await getStoreOrderActor({ companyId: store.companyId, customerId: store.customerId });
+    if (!member) return NextResponse.json({ message: "이 매장의 활성 구성원으로 로그인한 뒤 주문해 주세요." },
+      { status: 403, headers: { "Cache-Control": "no-store" } });
     const result = await supabaseRequest<Record<string, unknown>>(
       "rpc/place_store_order",
       {
         method: "POST",
         body: JSON.stringify({
           p_token_hash: verified.hash,
+          p_store_account_id: member.storeAccountId,
+          p_member_id: member.memberId,
+          p_auth_user_id: member.authUserId,
           p_delivery_date: body.deliveryDate,
           p_lines: (body.lines as Record<string, unknown>[]).map(line => ({
             productId: line.productId, promotionId: line.promotionId, quantity: line.quantity,

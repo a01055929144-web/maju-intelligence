@@ -328,6 +328,20 @@ jobs:
           createdb lead_share_policy_test
           psql --dbname=lead_share_policy_test --set=ON_ERROR_STOP=1 --file=.ci-lead-share-schema/tests/sql/pricing-lead-document-share.pg17.test.sql
 
+      - name: Verify member-bound ordering on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: store_member_order_test
+        run: |
+          createdb store_member_order_test
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-order.pg17.test.sql
+          # This job uses only psql plus Node; reuse the build job's installed dependency via npm below.
+          npm ci --ignore-scripts
+          node scripts/test-store-member-order-concurrency.mjs
+
   build:
     runs-on: ubuntu-latest
     steps:

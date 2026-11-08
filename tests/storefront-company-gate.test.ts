@@ -6,6 +6,7 @@ vi.mock("@/lib/pricing/store-link-token",()=>({verifyStoreLinkToken:()=>({id:"li
 vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
 vi.mock("@/lib/pricing/feature",()=>import("../lib/pricing/feature"));
 vi.mock("@/lib/pricing/store-order-feature",()=>import("../lib/pricing/store-order-feature"));
+vi.mock("@/lib/pricing/store-order-member",()=>({getStoreOrderActor:async()=>null}));
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {NextRequest} from "next/server";
 const {db}=vi.hoisted(()=>({db:vi.fn()}));

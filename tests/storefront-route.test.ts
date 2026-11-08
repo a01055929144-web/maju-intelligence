@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const mocks = vi.hoisted(() => ({ read: vi.fn(), db: vi.fn(), enabled: true }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), db: vi.fn(), enabled: true }));
+vi.mock("@/lib/pricing/store-order-member", () => ({ getStoreOrderActor: mocks.member }));
 vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.db }));
 vi.mock("@/lib/pricing/storefront", () => ({ readStorefront: mocks.read }));
 vi.mock("@/lib/pricing/feature", () => ({
@@ -39,6 +40,7 @@ function request(overrides = {}, origin = "https://store.example.test") {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.enabled = true;
+  mocks.member.mockResolvedValue(null);
 });
 it("keeps order submission dormant before any link or DB read", async () => {
   mocks.enabled = false;
@@ -55,7 +57,8 @@ it("rejects signed links whose company is no longer eligible before order RPC", 
   expect(mocks.db).not.toHaveBeenCalled();
 });
 it("takes order scope and prices only from the verified token RPC", async () => {
-  mocks.read.mockResolvedValue({ companyId: "verified-company" });
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
   mocks.db.mockResolvedValue({ id: "saved" });
   expect(
     (await PUT(request({ companyId: "forged-company", knownTotal: 1,
@@ -63,9 +66,20 @@ it("takes order scope and prices only from the verified token RPC", async () => 
   ).toBe(200);
   const payload = JSON.parse(mocks.db.mock.calls[0][1].body);
   expect(payload.p_token_hash).toBe("a".repeat(64));
+  expect(mocks.member).toHaveBeenCalledWith({ companyId: "verified-company", customerId: "verified-customer" });
+  expect(payload.p_store_account_id).toBe("verified-store");
+  expect(payload.p_member_id).toBe("verified-member");
+  expect(payload.p_auth_user_id).toBe("verified-user");
   expect(payload).not.toHaveProperty("companyId");
   expect(payload).not.toHaveProperty("knownTotal");
   expect(payload.p_lines).toEqual([{ productId, quantity: 1 }]);
+});
+it("rejects a public token alone and ignores caller-supplied member scope before writing", async () => {
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  const response = await PUT(request({ companyId: "forged", customerId: "forged", storeAccountId: "forged", memberId: "forged" }));
+  expect(response.status).toBe(403);
+  expect(mocks.member).toHaveBeenCalledWith({ companyId: "verified-company", customerId: "verified-customer" });
+  expect(mocks.db).not.toHaveBeenCalled();
 });
 it("rejects cross-origin writes before resolving a link", async () => {
   expect((await PUT(request({}, "https://other.example.test"))).status).toBe(

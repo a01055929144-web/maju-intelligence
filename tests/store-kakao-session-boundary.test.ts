@@ -43,6 +43,7 @@ describe("store Kakao session route boundary", () => {
     expect(logout).toContain("clearStoreSession");
     expect(storefront).not.toContain("getStoreSession");
     expect(storefront).not.toContain("getStoreMemberContext");
-    expect(storefront).not.toContain("authUserId");
+    expect(storefront).not.toContain("body.authUserId");
+    expect(storefront).toContain("getStoreOrderActor({ companyId: store.companyId, customerId: store.customerId })");
   });
 });
