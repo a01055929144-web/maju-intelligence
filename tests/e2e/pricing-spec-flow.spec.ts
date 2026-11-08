@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { expect, test } from "@playwright/test";
-import { documentDisplayPrice, lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
+import { documentDisplayPrice, lineFromCatalog, parseDocument, type DocumentContent } from "../../domains/pricing/document";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
@@ -167,7 +167,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
     // Reuse the selected old version for both read-only browser surfaces.
     // Responses are synthetic; no link issuance, acceptance, delivery record or order is performed.
-    const selected = version(1);
+    const oldVersion = version(1);
+    const selected = { ...oldVersion, content: parseDocument(oldVersion.content) };
     let forbiddenWrites = 0;
     await page.route("**/api/pricing-document-acceptance", route => { forbiddenWrites++; return route.abort(); });
     await page.route("**/api/pricing-store-links*", route => { forbiddenWrites++; return route.abort(); });
