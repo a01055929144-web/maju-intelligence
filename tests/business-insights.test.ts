@@ -12,6 +12,32 @@ describe("resolveInsightsDateRange", () => {
 });
 
 describe("buildBusinessInsights", () => {
+  it("does not count an isolated customer, link view, document acceptance, or first order as the legacy funnel", () => {
+    const range = resolveInsightsDateRange("month", new Date("2026-11-08T12:00:00+09:00"));
+    const fixtureStages = ["customer-created", "link-viewed", "document-accepted", "first-order"];
+
+    for (const stage of fixtureStages) {
+      const result = buildBusinessInsights({
+        churnRisks: [],
+        deliveries: [],
+        leads: [],
+        ledger: [],
+        quotes: []
+      }, range, new Date("2026-11-08T12:00:00+09:00"));
+
+      expect(result.current, stage).toEqual({
+        contracts: 0,
+        contacts: 0,
+        deliveries: 0,
+        leads: 0,
+        quotes: 0,
+        shareRate: 0
+      });
+      expect(result, stage).not.toHaveProperty("customers");
+      expect(result, stage).not.toHaveProperty("orders");
+    }
+  });
+
   it("keeps accepted quotes as the current operational contract metric, not a financial metric", () => {
     const range = resolveInsightsDateRange("month", new Date("2026-10-26T12:00:00+09:00"));
     const result = buildBusinessInsights({
