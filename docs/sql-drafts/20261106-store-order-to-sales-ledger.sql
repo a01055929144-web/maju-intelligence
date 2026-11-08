@@ -6,6 +6,9 @@ do $$ begin
     or to_regclass('public.store_order_delivery_completion_orders_09') is null then
     raise exception 'store_order_delivery_completion_contract_required';
   end if;
+  if to_regprocedure('public.inventory_resolve_document_lines(uuid,uuid)') is null then
+    raise exception 'inventory_document_resolution_contract_required';
+  end if;
 end $$;
 
 create or replace function public.create_sales_document_from_store_order(
@@ -141,6 +144,15 @@ begin
   if (v_document.taxable_supply_amount,v_document.exempt_supply_amount,v_document.tax_amount,v_document.total_amount)
      is distinct from (v_taxable,v_exempt,v_tax,v_total) then
     raise exception 'sales document totals do not preserve store order snapshots';
+  end if;
+  if (select count(*) from public.inventory_resolve_document_lines(p_company_id,v_document.id))
+       <> (select count(*) from public.business_document_lines
+           where company_id=p_company_id and document_id=v_document.id)
+    or exists (
+      select 1 from public.inventory_resolve_document_lines(p_company_id,v_document.id)
+      where resolve_status<>'ok'
+    ) then
+    raise exception 'all store order lines must resolve for inventory before sales confirmation';
   end if;
 
   return jsonb_build_object(

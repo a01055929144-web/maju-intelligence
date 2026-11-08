@@ -28,6 +28,7 @@ create extension if not exists pgcrypto;
 \ir ../../tests/sql/store-order-sales-ledger-fixture.pg17.sql
 \ir ../../supabase/migrations/20261016190000_erp_phase_1_documents_ledger.sql
 \ir ../../supabase/migrations/20261016200000_erp_phase_1b_v2.sql
+\ir ../../supabase/migrations/20261016202000_inventory_phase_1.sql
 \ir ../../supabase/migrations/20261102114602_pricing_p2_store_ordering.sql
 -- Minimal 09 completion producer interface. #410 owns the real Draft objects.
 create table public.store_order_delivery_completions_09(
@@ -81,7 +82,8 @@ insert into public.store_orders(
  ('50000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','delivered','60000000-0000-4000-8000-000000000002',1000,0,100,100,1200,false,2),
  ('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','cancelled','60000000-0000-4000-8000-000000000003',1000,0,100,0,1100,false,1),
  ('50000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','delivered','60000000-0000-4000-8000-000000000004',909,0,91,0,1000,false,2),
- ('50000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','submitted','60000000-0000-4000-8000-000000000005',1000,0,100,0,1100,false,1);
+ ('50000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','submitted','60000000-0000-4000-8000-000000000005',1000,0,100,0,1100,false,1),
+ ('50000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001','2099-01-01','delivered','60000000-0000-4000-8000-000000000006',2000,0,200,0,2200,false,2);
 insert into public.store_order_lines(
  id,company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,price_includes_tax,is_market_price
 ) values
@@ -89,16 +91,20 @@ insert into public.store_order_lines(
  ('70000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false),
  ('70000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false),
  ('70000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',true,false),
- ('70000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false);
+ ('70000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false),
+ ('70000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000006','20000000-0000-4000-8000-000000000001','item','BOX',1,1000,'taxable',false,false),
+ ('70000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000006','20000000-0000-4000-8000-000000000001','item','EA',1,1000,'taxable',false,false);
 
 insert into public.store_order_delivery_completions_09(company_id,completion_event_id,completed_at) values
  ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','2099-01-01 12:00+09'),
  ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002','2099-01-01 12:01+09'),
- ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000004','2099-01-01 12:02+09');
+ ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000004','2099-01-01 12:02+09'),
+ ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000006','2099-01-01 12:03+09');
 insert into public.store_order_delivery_completion_orders_09(company_id,completion_event_id,order_id,pre_revision,completed_revision) values
  ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',1,2),
  ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000002',1,2),
- ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000004','50000000-0000-4000-8000-000000000004',1,2);
+ ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000004','50000000-0000-4000-8000-000000000004',1,2),
+ ('00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000006','50000000-0000-4000-8000-000000000006',1,2);
 
 do $$ declare a jsonb; b jsonb; v_document uuid; v_return uuid:=gen_random_uuid(); begin
  a:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
@@ -119,6 +125,9 @@ do $$ declare a jsonb; b jsonb; v_document uuid; v_return uuid:=gen_random_uuid(
  b:=public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester');
  if b->>'status'<>'confirmed' or b->>'ledgerPosted'<>'true' then raise exception 'confirmed ledger result failed'; end if;
  if (select count(*) from public.partner_ledger_entries where source_document_id=v_document)<>1 then raise exception 'ledger count failed'; end if;
+ if (select count(*) from public.inventory_movements where source_document_id=v_document and movement_type='sale_out')<>1
+   or (select count(*) from public.inventory_document_positions where source_document_id=v_document)<>1
+   then raise exception 'sale inventory was not applied exactly once'; end if;
 
  insert into public.business_documents(
    id,company_id,document_type,document_number,document_date,status,customer_id,original_document_id,
@@ -168,12 +177,21 @@ do $$ declare a jsonb; b jsonb; v_document uuid; v_return uuid:=gen_random_uuid(
    then raise exception 'order sale and return trace did not converge'; end if;
 end $$;
 
-do $$ begin
+do $$ declare v_documents bigint; v_ledger bigint; v_inventory bigint; begin
+ select count(*) into v_documents from public.business_documents;
+ select count(*) into v_ledger from public.partner_ledger_entries;
+ select count(*) into v_inventory from public.inventory_movements;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001',gen_random_uuid(),'tester'); raise exception 'cross-company accepted'; exception when others then if sqlerrm='cross-company accepted' then raise; end if; end;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000002',gen_random_uuid(),'tester'); raise exception 'delivery fee accepted'; exception when others then if sqlerrm='delivery fee accepted' then raise; end if; end;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000003','90000000-0000-4000-8000-000000000003',gen_random_uuid(),'tester'); raise exception 'cancelled accepted'; exception when others then if sqlerrm='cancelled accepted' then raise; end if; end;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004','90000000-0000-4000-8000-000000000004',gen_random_uuid(),'tester'); raise exception 'tax-included accepted'; exception when others then if sqlerrm='tax-included accepted' then raise; end if; end;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000005','90000000-0000-4000-8000-000000000005',gen_random_uuid(),'tester'); raise exception 'editable submitted order accepted'; exception when others then if sqlerrm='editable submitted order accepted' then raise; end if; end;
+ begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000006','90000000-0000-4000-8000-000000000006',gen_random_uuid(),'tester'); raise exception 'partially resolvable inventory accepted'; exception when others then if sqlerrm='partially resolvable inventory accepted' then raise; end if; end;
+ if exists(select 1 from public.business_documents where company_id='00000000-0000-4000-8000-000000000001' and source_id='50000000-0000-4000-8000-000000000006')
+   or (select count(*) from public.business_documents)<>v_documents
+   or (select count(*) from public.partner_ledger_entries)<>v_ledger
+   or (select count(*) from public.inventory_movements)<>v_inventory
+   then raise exception 'inventory resolve failure left partial sales state'; end if;
  begin perform public.create_sales_document_from_store_order('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000099',gen_random_uuid(),'tester'); raise exception 'unrelated completion accepted'; exception when others then if sqlerrm='unrelated completion accepted' then raise; end if; end;
  update public.store_order_delivery_completion_orders_09 set pre_revision=2,completed_revision=3
    where company_id='00000000-0000-4000-8000-000000000001' and order_id='50000000-0000-4000-8000-000000000001';
