@@ -318,7 +318,14 @@ export function MobileDeliveryProofPanel({
     }
     const noteOk = Boolean(noteId);
     const attachmentOk = files.every((file) => Boolean(uploadedAttachments[fileKey(file)]));
-    saveProgressRef.current = { attachments: uploadedAttachments, attemptId: progress.attemptId, key: attemptKey, noteId };
+    saveProgressRef.current = {
+      attachments: uploadedAttachments,
+      attemptId: progress.attemptId,
+      completedAt: progress.completedAt,
+      completionEventId: progress.completionEventId,
+      key: attemptKey,
+      noteId
+    };
     if (!noteOk || !attachmentOk) {
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
