@@ -82,6 +82,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
   await expect.poll(() => profileRead).toBe(true);
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: new RegExp(`빈 ${kind === "sheet" ? "단가표" : "견적서"}로 시작`) }).click();
+  await page.getByRole("textbox", { name: "문서 제목", exact: true }).first().fill(`합성 B ${kind === "sheet" ? "단가표" : "견적서"} 통합 문서`);
   await page.getByRole("button", { name: /합성 공개 품목.*담기/ }).click();
   await page.getByRole("button", { name: "초안 저장", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
