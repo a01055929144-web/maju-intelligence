@@ -11,12 +11,17 @@ export default async function AdminUploadsPage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const uploads = await getUploadHistory();
-  const completed = uploads.filter((item) => item.status === "completed").length;
-  const needsAction = uploads.filter((item) => item.status === "failed" || item.qualityScore < 80 || item.duplicateCount > 0 || !item.reportId).length;
-  const processedRows = uploads.reduce((sum, item) => sum + item.rows, 0);
-  const avgQuality = uploads.length ? Math.round(uploads.reduce((sum, item) => sum + item.qualityScore, 0) / uploads.length) : 0;
-  const completeRate = uploads.length ? Math.round((completed / uploads.length) * 100) : 0;
+  const uploads = await getUploadHistory().catch(() => {
+    console.error("[admin/uploads] upload_history_read_failed");
+    return null;
+  });
+  const uploadItems = uploads ?? [];
+  const loadFailed = uploads === null;
+  const completed = uploadItems.filter((item) => item.status === "completed").length;
+  const needsAction = uploadItems.filter((item) => item.status === "failed" || item.qualityScore < 80 || item.duplicateCount > 0 || !item.reportId).length;
+  const processedRows = uploadItems.reduce((sum, item) => sum + item.rows, 0);
+  const avgQuality = uploadItems.length ? Math.round(uploadItems.reduce((sum, item) => sum + item.qualityScore, 0) / uploadItems.length) : 0;
+  const completeRate = uploadItems.length ? Math.round((completed / uploadItems.length) * 100) : 0;
 
   return (
     <main className="min-h-screen maju-app-bg">
@@ -24,11 +29,11 @@ export default async function AdminUploadsPage() {
 
       <section className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <Metric icon={FileSpreadsheet} label="최근 업로드" value={`${uploads.length.toLocaleString()}건`} />
-          <Metric icon={Rows3} label="처리 행 수" value={processedRows.toLocaleString()} />
-          <Metric icon={Gauge} label="평균 품질" value={`${avgQuality}%`} />
-          <Metric icon={AlertTriangle} label="보완 필요" value={`${needsAction.toLocaleString()}건`} />
-          <Metric icon={CheckCircle2} label="완료율" value={`${completeRate}%`} />
+          <Metric icon={FileSpreadsheet} label="최근 업로드" value={loadFailed ? "확인 불가" : `${uploadItems.length.toLocaleString()}건`} />
+          <Metric icon={Rows3} label="처리 행 수" value={loadFailed ? "확인 불가" : processedRows.toLocaleString()} />
+          <Metric icon={Gauge} label="평균 품질" value={loadFailed ? "확인 불가" : `${avgQuality}%`} />
+          <Metric icon={AlertTriangle} label="보완 필요" value={loadFailed ? "확인 불가" : `${needsAction.toLocaleString()}건`} />
+          <Metric icon={CheckCircle2} label="완료율" value={loadFailed ? "확인 불가" : `${completeRate}%`} />
         </div>
 
         <Card>
@@ -37,11 +42,17 @@ export default async function AdminUploadsPage() {
               <CardTitle>최근 데이터 적재 내역</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">최신순 12건 기준입니다. 회사별 전체 이력은 고객사 관리 화면에서도 확인할 수 있습니다.</p>
             </div>
-            <Badge className="w-fit bg-primary/10 text-primary">완료 {completed}건</Badge>
+            <Badge className="w-fit bg-primary/10 text-primary">{loadFailed ? "조회 실패" : `완료 ${completed}건`}</Badge>
           </CardHeader>
           <CardContent>
-            {uploads.length ? (
-              <AdminUploadsWorkspace uploads={uploads} />
+            {loadFailed ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center">
+                <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" />
+                <p className="font-bold text-destructive">업로드 이력을 불러오지 못했습니다.</p>
+                <p className="mt-2 text-sm text-muted-foreground">0건이 아니라 조회 실패 상태입니다. 잠시 후 새로고침하거나 시스템 점검을 확인해 주세요.</p>
+              </div>
+            ) : uploadItems.length ? (
+              <AdminUploadsWorkspace uploads={uploadItems} />
             ) : (
               <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
                 <FileSpreadsheet className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
