@@ -5,6 +5,9 @@ export type PurchaseDateBatch = { id: string; status: "completed" | "restored" |
 export function purchaseDateEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
+export function purchaseHistoryOnlyDefaultEnabled(companyId: string) {
+  return (process.env.FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
+}
 export async function getPurchaseDateBatch(companyId: string, batchId?: string): Promise<PurchaseDateBatch | null> {
   const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number }>>(
     `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);

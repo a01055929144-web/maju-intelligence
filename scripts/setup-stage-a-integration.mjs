@@ -31,7 +31,8 @@ try {
     'docs/sql-drafts/20261030-pricing-p1.sql',
     'docs/db-approval/20261104_purchase_receipt_lines.sql',
     'docs/sql-drafts/20261105-purchase-receipt-corrections.sql',
-    'docs/sql-drafts/20261107-purchase-cost-date-v2.sql'
+    'docs/sql-drafts/20261107-purchase-cost-date-v2.sql',
+    'docs/sql-drafts/20261108-purchase-history-only-no-recalc.sql'
   ]) await db.query(sql(path));
   await db.query(`alter table public.app_users add column if not exists password_hash text;
     create table if not exists public.auth_credentials(id text primary key,admin_email text,admin_password text,
