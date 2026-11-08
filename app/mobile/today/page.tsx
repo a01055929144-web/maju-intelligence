@@ -10,6 +10,7 @@ import { MobileThemeShell } from "@/components/mobile-theme-shell";
 import { MobileRouteList } from "@/components/mobile-route-list";
 import { MobileRouteActionPanel } from "@/components/mobile-route-action-panel";
 import { MobileVisitNoteForm } from "@/components/mobile-visit-note-form";
+import { loadTodayRouteOrderProjection } from "@/application/route/today-route-order-projection";
 import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
@@ -34,9 +35,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
     getCompanySettings(session.companyId, session.companyName),
     getDeliveryCompletionEvents(session.companyId, { deliveryVehicle: session.assignedVehicle, driverName, hours: 20 })
   ]);
-  const sourceReady = routePlan.source === "supabase";
+  const orderProjection = await loadTodayRouteOrderProjection(session.companyId, routePlan);
+  const projectedRoutePlan = orderProjection.routePlan;
+  const sourceReady = projectedRoutePlan.source === "supabase";
   const normalizedDriverName = driverName.trim();
-  const allStops = sourceReady ? routePlan.groups.flatMap((group) => group.stops) : [];
+  const allStops = sourceReady ? projectedRoutePlan.groups.flatMap((group) => group.stops) : [];
   // 2026-08-28 피드백 대응: 데스크톱에서 확정한 순서(order 필드, route_plan_confirmations 반영)를
   // 그대로 사용하도록 정렬을 명시적으로 추가합니다 — 정렬을 안 하면 원장에 저장된 순서(무작위에
   // 가까움)로 보일 수 있습니다.
@@ -120,6 +123,10 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </div>
           ) : null}
 
+          {sourceReady && orderProjection.status === "unavailable" ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" role="status">주문 연결 정보를 확인하지 못했습니다. 기존 수동 코스는 그대로 표시합니다.</p>
+          ) : null}
+
           <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
@@ -131,6 +138,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
               {selectedStopCompleted ? "배송완료 · 기록 확인 가능" : "다음 배송 · 처리 대기"}
             </p>
                     <h2 className="mt-1 truncate text-xl font-bold">{selectedStop.name}</h2>
+                    {selectedStop.orderIds?.length ? <p className="mt-1 text-xs font-semibold text-violet-300">주문 {selectedStop.orderIds.length}건 · revision {Math.max(...Object.values(selectedStop.orderRevisions || {}))}</p> : null}
                     <p className="mobile-muted mt-1 truncate text-xs font-bold">{selectedStop.address || selectedStop.region} · {selectedStop.distanceKm || 0}km</p>
                   </div>
                   <Badge className="shrink-0 bg-white text-teal-800 ring-1 ring-inset ring-teal-200">{selectedStop.industry || "업종"}</Badge>

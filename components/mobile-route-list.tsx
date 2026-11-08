@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
-export type MobileRouteStop = { address?: string; distanceKm?: number; durationMinutes?: number; id: string; name: string; phone?: string; region: string };
+export type MobileRouteStop = { address?: string; distanceKm?: number; durationMinutes?: number; id: string; name: string; orderIds?: string[]; orderRevisions?: Record<string, number>; phone?: string; region: string };
 type RouteStatusFilter = "all" | "pending" | "completed";
 
 export function MobileRouteList({ completedCustomerIds = [], driverName, initialStops, routeArea, selectedStopId }: { completedCustomerIds?: string[]; driverName: string; initialStops: MobileRouteStop[]; routeArea: string; selectedStopId?: string }) {
