@@ -99,7 +99,11 @@ insert into normalized_customers(id,company_id,import_id,customer_name,normalize
 values('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','second','second');
 do $$ declare a jsonb; begin
   a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000004',repeat('c',64),'staff','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}');
-  if a->>'needsReview'<>'true' or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000001')<>'10000000-0000-4000-8000-000000000001' then raise exception 'lead mismatch review boundary failed'; end if;
+  if a->>'needsReview'<>'true'
+    or (select review_reason from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000004')<>'lead_customer_mismatch'
+    or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000001')<>'10000000-0000-4000-8000-000000000001'
+    or not exists(select from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id='10000000-0000-4000-8000-000000000002' and document_version_id='50000000-0000-4000-8000-000000000001' and active)
+    then raise exception 'lead mismatch review boundary failed'; end if;
 end $$;
 
 -- 거래처 후보가 여러 개면 신규 거래처·가격 연결·주문 활성화를 만들지 않는다.
@@ -107,11 +111,18 @@ insert into normalized_customers(id,company_id,import_id,customer_name,address,p
 ('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','duplicate shop','same address','01077776666','dup-1'),
 ('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','duplicate shop','same address','01077776666','dup-2');
 insert into storefront_links(id,company_id,customer_id,document_version_id,can_order) values('80000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000001',false);
-do $$ declare a jsonb; before_count integer; begin
+do $$ declare a jsonb; before_count integer; before_links integer; before_agreements integer; begin
   select count(*) into before_count from normalized_customers;
+  select count(*) into before_links from customer_pricing_document_links;
+  select count(*) into before_agreements from customer_price_agreements;
   a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000005',repeat('b',64),'store',null,null,null,false,null,'80000000-0000-4000-8000-000000000001','{"businessName":"duplicate shop","phone":"010-7777-6666","address":"same address"}');
   if a->>'needsReview'<>'true' or a->>'customerId' is not null or a->>'orderEnabled'<>'false' then raise exception 'ambiguous customer was not held'; end if;
-  if (select count(*) from normalized_customers)<>before_count or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000001') then raise exception 'ambiguous customer created or activated order'; end if;
+  if (select review_reason from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000005')<>'ambiguous_customer_match'
+    or (select count(*) from normalized_customers)<>before_count
+    or (select count(*) from customer_pricing_document_links)<>before_links
+    or (select count(*) from customer_price_agreements)<>before_agreements
+    or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000001')
+    then raise exception 'ambiguous customer created price state or activated order'; end if;
 end $$;
 
 -- 만료 게시본은 수락할 수 없다.
