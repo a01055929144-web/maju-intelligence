@@ -1,11 +1,17 @@
 \set ON_ERROR_STOP on
 
+\getenv stage_e_pg_host PGHOST
+select :'stage_e_pg_host' in ('127.0.0.1', 'localhost', '::1', '[::1]') as stage_e_loopback \gset
+\if :stage_e_loopback
+\else
+  \echo 'Requires loopback PGHOST'
+  \quit 3
+\endif
+
 do $$
 begin
   if current_database() <> 'store_order_sales_ledger_test'
-    or current_setting('server_version_num')::integer not between 170000 and 179999
-    or inet_server_addr() is null
-    or not (inet_server_addr() <<= inet '127.0.0.0/8' or inet_server_addr() = inet '::1') then
+    or current_setting('server_version_num')::integer not between 170000 and 179999 then
     raise exception 'Requires loopback PostgreSQL 17 database store_order_sales_ledger_test';
   end if;
 end $$;
