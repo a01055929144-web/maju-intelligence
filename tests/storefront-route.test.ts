@@ -174,3 +174,45 @@ it("keeps public viewing readable and withholds the entry on a membership lookup
   expect(response.status).toBe(200);
   expect((await response.json()).memberManagement).toEqual({ message: expect.stringContaining("다시 확인") });
 });
+
+async function historyRead() {
+  mocks.read.mockResolvedValue({ ...viewScope, priceAvailable: true, lines: [], policy: { weekdays: [], holidays: [] } });
+  return POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" }, body: JSON.stringify({ token: "signed", companyId: "forged", storeAccountId: "forged", memberId: "forged" }) }));
+}
+it.each(["owner", "staff"])("shows stored authors only to a verified same-store %s", async role => {
+  mocks.orderContext.mockResolvedValue({ ...viewMember, role });
+  mocks.db.mockImplementation(async (path: string) => {
+    if (path.startsWith("store_orders?")) return [
+      { id: "order", store_account_id: viewMember.storeAccountId, ordered_by_member_id: viewMember.memberId },
+      { id: "legacy", store_account_id: null, ordered_by_member_id: null },
+      { id: "other", store_account_id: "other-store", ordered_by_member_id: viewMember.authUserId },
+      { id: "missing", store_account_id: viewMember.storeAccountId, ordered_by_member_id: viewScope.customerId },
+    ];
+    if (path.startsWith("store_account_members?")) return [{ id: viewMember.memberId, role: "owner", app_users: { name: "합성 원작성자" } }];
+    return [];
+  });
+  const response = await historyRead(); expect(response.status).toBe(200);
+  const result = await response.json();
+  expect(result.orders.map((order: { authorLabel: string }) => order.authorLabel)).toEqual(["합성 원작성자 · 점주", "기존 링크 주문", "작성자 확인 필요", "작성자 확인 필요"]);
+  expect(result.memberLogin).toBeUndefined();
+  const query = mocks.db.mock.calls.find(([path]) => path.startsWith("store_account_members?"))![0];
+  expect(query).toContain(`company_id=eq.${viewScope.companyId}`); expect(query).toContain(`store_account_id=eq.${viewMember.storeAccountId}`);
+  expect(query).not.toContain(viewMember.authUserId);
+  expect(JSON.stringify(result)).not.toMatch(/ordered_by_member_id|store_account_id|authUserId|memberId/);
+});
+it("offers only a server-resolved login scope to an anonymous bearer and never reads author names", async () => {
+  mocks.orderContext.mockResolvedValue(null);
+  mocks.db.mockImplementation(async (path: string) => path.startsWith("store_accounts?") ? [{ id: viewMember.storeAccountId }] : path.startsWith("store_orders?") ? [{ id: "order", ordered_by_member_id: viewMember.memberId }] : []);
+  const response = await historyRead(); const result = await response.json();
+  expect(result.memberLogin).toEqual({ enabled: true, companyId: viewScope.companyId, storeAccountId: viewMember.storeAccountId });
+  expect(result.orders[0]).not.toHaveProperty("authorLabel");
+  expect(mocks.db.mock.calls.some(([path]) => path.startsWith("store_account_members?"))).toBe(false);
+  expect(mocks.db.mock.calls.find(([path]) => path.startsWith("store_accounts?"))![0]).toContain(`customer_id=eq.${viewScope.customerId}`);
+});
+it.each(["memberEnabled", "memberCompany"] as const)("adds no member login or history name lookup with %s OFF", async flag => {
+  mocks[flag] = false; mocks.db.mockResolvedValue([]);
+  const result = await (await historyRead()).json(); expect(result.memberLogin).toBeUndefined();
+  expect(mocks.orderContext).not.toHaveBeenCalled();
+  expect(mocks.db.mock.calls.some(([path]) => /^(store_accounts|store_account_members)\?/.test(path))).toBe(false);
+  expect(mocks.db.mock.calls.find(([path]) => path.startsWith("store_orders?"))![0]).not.toContain("ordered_by_member_id");
+});

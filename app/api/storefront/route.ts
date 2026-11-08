@@ -86,16 +86,26 @@ export async function POST(request: NextRequest) {
     const store = await readStorefront(token, requestedDate);
     if (!store) return unavailable();
     let memberManagement: { href: string } | { message: string } | undefined;
+    let orderMember: Awaited<ReturnType<typeof getStoreOrderMemberContext>> = null;
+    let memberLogin: { enabled: boolean; companyId?: string; storeAccountId?: string; message?: string } | undefined;
     if (storeMemberSessionEnabled() && isStoreMemberCompanyAllowlisted(store.companyId)) {
       try {
         const member = await getStoreOrderMemberContext({ companyId: store.companyId, customerId: store.customerId });
-        memberManagement = member && member.status === "active" && member.companyId === store.companyId &&
+        if (member && member.status === "active" && member.companyId === store.companyId &&
           member.customerId === store.customerId && isId(member.storeAccountId) &&
-          (member.role === "owner" || member.role === "manager")
-          ? { href: `/store/members?${new URLSearchParams({ companyId: store.companyId, storeAccountId: member.storeAccountId })}` }
+          ["owner", "manager", "staff"].includes(member.role)) orderMember = member;
+        memberManagement = orderMember && (orderMember.role === "owner" || orderMember.role === "manager")
+          ? { href: `/store/members?${new URLSearchParams({ companyId: store.companyId, storeAccountId: orderMember.storeAccountId })}` }
           : { message: "구성원 관리는 이 매장의 점주·관리자로 로그인한 뒤 이용해 주세요." };
       } catch {
         memberManagement = { message: "구성원 권한을 확인하지 못했습니다. 잠시 후 다시 확인해 주세요." };
+      }
+      if (!orderMember) {
+        memberLogin = { enabled: false, message: "이 매장의 구성원 로그인 주소를 확인할 수 없습니다. 담당자에게 매장 계정 상태를 확인해 주세요." };
+        try {
+          const accounts = await supabaseRequest<Array<{ id: string }>>(`store_accounts?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${encodeURIComponent(store.customerId)}&status=eq.active&business_status=eq.active&select=id&limit=1`);
+          if (accounts[0] && isId(accounts[0].id)) memberLogin = { enabled: true, companyId: store.companyId, storeAccountId: accounts[0].id };
+        } catch { memberLogin = { enabled: false, message: "매장 로그인 정보를 불러오지 못했습니다. 로그인 상태를 다시 확인하거나 담당자에게 문의해 주세요." }; }
       }
     }
     const orders = store.priceAvailable
@@ -109,12 +119,19 @@ export async function POST(request: NextRequest) {
             submitted_at: string;
             revision: number;
             request_memo: string;
+            store_account_id?: string | null;
+            ordered_by_member_id?: string | null;
           }[]
         >(
-          `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision,request_memo&order=submitted_at.desc,id.desc&limit=11&offset=${(historyPage - 1) * 10}`,
+          `store_orders?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${store.customerId}&select=id,delivery_date,status,known_total,has_market_price,submitted_at,revision,request_memo${orderMember ? ",store_account_id,ordered_by_member_id" : ""}&order=submitted_at.desc,id.desc&limit=11&offset=${(historyPage - 1) * 10}`,
         )
       : [];
     const visibleOrders = orders.slice(0, 10);
+    const authorIds = orderMember ? Array.from(new Set(visibleOrders.filter(order => order.store_account_id === orderMember.storeAccountId && isId(order.ordered_by_member_id)).map(order => order.ordered_by_member_id!))) : [];
+    const authors = authorIds.length && orderMember ? await supabaseRequest<Array<{ id: string; role: string; app_users: { name: string | null } | null }>>(
+      `store_account_members?company_id=eq.${encodeURIComponent(store.companyId)}&store_account_id=eq.${orderMember.storeAccountId}&id=in.(${authorIds.join(",")})&select=id,role,app_users(name)&limit=10`,
+    ) : [];
+    const authorLabels = new Map(authors.map(author => [author.id, `${author.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${{ owner: "점주", manager: "관리자", staff: "직원" }[author.role] || "구성원"}`]));
     const orderIds = visibleOrders.map((order) => order.id);
     const lines = orderIds.length
       ? await supabaseRequest<
@@ -171,6 +188,7 @@ export async function POST(request: NextRequest) {
       {
         store: toPublicStorefront(store),
         ...(memberManagement ? { memberManagement } : {}),
+        ...(memberLogin ? { memberLogin } : {}),
         preferences: preferences.map((item) => ({
           productId: item.product_id,
           isFavorite: item.is_favorite,
@@ -188,6 +206,7 @@ export async function POST(request: NextRequest) {
           submittedAt: order.submitted_at,
           revision: order.revision,
           requestMemo: order.request_memo,
+          ...(orderMember ? { authorLabel: !order.ordered_by_member_id ? "기존 링크 주문" : order.store_account_id === orderMember.storeAccountId ? authorLabels.get(order.ordered_by_member_id) || "작성자 확인 필요" : "작성자 확인 필요" } : {}),
           lines: byOrder.get(order.id) ?? [],
         })),
       },
