@@ -161,6 +161,28 @@ do $$ begin if (select delivery_drop_location from normalized_customers where id
 
 insert into store_order_settings values('00000000-0000-4000-8000-000000000001');
 
+-- A single existing customer candidate is reused, linked to the lead, and receives one order link.
+insert into normalized_customers(id,company_id,import_id,customer_name,address,phone,normalized_key) values
+('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','single shop','single road','01055554444','single-shop');
+insert into business_permit_leads(id,company_id,business_name,address,phone) values
+('20000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','single lead','lead road','01011112222');
+do $$ declare a jsonb; before_count integer; begin
+  select count(*) into before_count from normalized_customers;
+  a:=accept_pricing_document_and_issue_storefront_link(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000018',repeat('8',64),'store',null,'20000000-0000-4000-8000-000000000004',null,false,null,
+    '{"businessName":"single shop","phone":"010-5555-4444","address":"single road"}',
+    '81000000-0000-4000-8000-000000000012',repeat('8',32),repeat('8',64),now()+interval '1 year');
+  if a->>'customerId'<>'10000000-0000-4000-8000-000000000005' or a->>'leadId'<>'20000000-0000-4000-8000-000000000004'
+    or a->>'needsReview'<>'false' or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId'<>'81000000-0000-4000-8000-000000000012'
+    then raise exception 'single customer candidate did not reach order link'; end if;
+  if (select count(*) from normalized_customers)<>before_count
+    or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000004')<>'10000000-0000-4000-8000-000000000005'
+    or not exists(select from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001'
+      and customer_id='10000000-0000-4000-8000-000000000005' and document_version_id='50000000-0000-4000-8000-000000000001' and active)
+    then raise exception 'single customer candidate duplicated or missed linkage'; end if;
+end $$;
+
 -- Quote acceptance is supported; an expired issued link cannot be replaced by retrying the same acceptance.
 do $$ declare a jsonb; b jsonb; begin
   a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000017',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000010',repeat('a',32),repeat('a',64),now()+interval '1 year');
