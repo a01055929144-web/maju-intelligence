@@ -296,6 +296,15 @@ jobs:
           cd docs/sql-drafts
           psql --dbname=store_owner_activation_test --set=ON_ERROR_STOP=1 --file=20261107-store-owner-activation.pg17.test.sql
 
+      - name: Verify delivery eligibility product boundary on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: maju_continuity_test
+        run: psql --set=ON_ERROR_STOP=1 --file=tests/sql/delivery-eligibility-product.pg17.test.sql
+
       - name: Verify selling price direction opt-in on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1

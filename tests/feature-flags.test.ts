@@ -54,4 +54,11 @@ describe("company pricing gates", () => {
     expect(isFeatureEnabled("STORE_COSTS", "company-a")).toBe(true);
     expect(isFeatureEnabled("STORE_COSTS", "company-b")).toBe(false);
   });
+
+  it("keeps delivery eligibility off until its schema-ready company is explicitly allowed", () => {
+    expect(isFeatureEnabled("DELIVERY_ELIGIBILITY", "company-a")).toBe(false);
+    process.env.FEATURE_DELIVERY_ELIGIBILITY_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("DELIVERY_ELIGIBILITY", "company-a")).toBe(true);
+    expect(isFeatureEnabled("DELIVERY_ELIGIBILITY", "company-b")).toBe(false);
+  });
 });

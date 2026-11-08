@@ -1,6 +1,7 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
+import { isFeatureEnabled } from "./feature-flags";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
@@ -198,6 +199,7 @@ export type CustomerMasterItem = {
   businessStatus?: string;
   businessStatusCheckedAt?: string;
   customerName: string;
+  deliveryEligibility?: "eligible" | "not_ready";
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -5017,7 +5019,7 @@ export async function getSystemDiagnostics(): Promise<SystemStatus> {
 
 export async function getCustomerMaster(
   companyId?: string,
-  options?: { assignmentKeys?: CustomerAssignmentScope; offset?: number }
+  options?: { assignmentKeys?: CustomerAssignmentScope; includeDeliveryEligibility?: boolean; offset?: number }
 ): Promise<{ customers: CustomerMasterItem[]; source: "empty" | "supabase"; truncated: boolean }> {
   const id = companyId || getDefaultCompanyId();
   const offset = Math.max(0, Math.floor(options?.offset || 0));
@@ -5042,6 +5044,7 @@ export async function getCustomerMaster(
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    delivery_eligibility?: "eligible" | "not_ready" | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -5085,7 +5088,7 @@ export async function getCustomerMaster(
   // 판별하는 이유: PostgREST는 select= 목록을 검증할 때 처음 걸리는 컬럼 하나만 에러 메시지에 담기
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
-  const CUSTOMER_MASTER_SELECT_TIERS = [
+  const customerMasterSelectTiers = [
     CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS,
     CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
     CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
@@ -5096,12 +5099,12 @@ export async function getCustomerMaster(
     CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS_AND_HOURS_MENU,
     CUSTOMER_MASTER_SELECT_WITH_PLACE_LINKS,
     CUSTOMER_MASTER_SELECT
-  ];
+  ].map((select) => options?.includeDeliveryEligibility ? `${select},delivery_eligibility` : select);
   let lastFetchError: unknown;
   let fetched: CustomerMasterRow[] | null = null;
   let fetchedAssignmentIds = false;
   let fetchedGradeOverride = false;
-  for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
+  for (const select of customerMasterSelectTiers) {
     try {
       fetched = await supabaseRequest<Array<CustomerMasterRow>>(
         `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
@@ -12677,12 +12680,17 @@ export async function saveRouteOrderConfirmation(companyId: string | undefined, 
 
 export async function getTodayRoutePlan(companyId?: string, options?: { assignmentKeys?: CustomerAssignmentScope }): Promise<RoutePlan> {
   const resolvedCompanyId = companyId || getDefaultCompanyId();
+  const deliveryEligibilityEnabled = isFeatureEnabled("DELIVERY_ELIGIBILITY", resolvedCompanyId);
   const [routeCache, customerMaster, routeOrderConfirmations] = await Promise.all([
     getRouteDistanceCacheMap(resolvedCompanyId),
-    getCustomerMaster(companyId, { assignmentKeys: options?.assignmentKeys }),
+    getCustomerMaster(companyId, {
+      assignmentKeys: options?.assignmentKeys,
+      includeDeliveryEligibility: deliveryEligibilityEnabled
+    }),
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
   const planned = customerMaster.customers
+    .filter((customer) => isCustomerEligibleForTodayRoute(customer, deliveryEligibilityEnabled))
     .map((customer, index) => {
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
       const cached = routeCache.get(address);
@@ -12773,6 +12781,13 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
     totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
     totalStops: planned.length
   };
+}
+
+export function isCustomerEligibleForTodayRoute(
+  customer: Pick<CustomerMasterItem, "deliveryEligibility">,
+  deliveryEligibilityEnabled: boolean
+) {
+  return !deliveryEligibilityEnabled || customer.deliveryEligibility === "eligible";
 }
 
 export async function getCompanyOriginAddress(companyId?: string) {
@@ -15291,6 +15306,7 @@ function toCustomerMasterItem(
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    delivery_eligibility?: "eligible" | "not_ready" | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -15346,6 +15362,7 @@ function toCustomerMasterItem(
     businessStatus: row.business_status || undefined,
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
+    deliveryEligibility: row.delivery_eligibility || undefined,
     deliveryKm: Number(row.delivery_km || 0),
     deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
