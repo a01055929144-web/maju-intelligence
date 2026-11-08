@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
-import type { DocumentContent } from "../../domains/pricing/document";
+import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
 for (const width of [1440, 390]) test(`explicit acceptance preserves retry and link boundaries at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   const content: DocumentContent = { kind: "quote", title: "합성 수락 견적", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
-    display: { columns: 1, promoLayout: "table", info: [], productWidth: 65, priceIncludesTax: true }, lines: [] };
+    display: { columns: 1, promoLayout: "table", info: [], productWidth: 65, priceIncludesTax: true },
+    lines: [lineFromCatalog({ id: "50000000-0000-4000-8000-000000000001", name: "합성 품목", displayName: "합성 품목", brand: "", spec: "1kg", unit: "봉", price: 1000, taxType: "taxable" })] };
   const document = publicDocumentOutput({ id: "version", documentId: "document", version: 1, revision: 1, publishedAt: "2026-11-08T00:00:00Z", content, unavailablePromotions: [] });
   const inputs: Record<string, unknown>[] = [];
   let mode = "retry";
