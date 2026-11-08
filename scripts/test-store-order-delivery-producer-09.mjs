@@ -28,7 +28,8 @@ const value = async (client, sql, args = []) => (await client.query(sql, args)).
 const definitions = () => admin.query('select oid::text,proacl::text,prosecdef,md5(pg_get_functiondef(oid)) hash from pg_proc where oid=any($1::regprocedure[]) order by oid', [signatures]).then(r => r.rows);
 const counts = () => value(admin, `select jsonb_build_object('orders',(select count(*) from store_orders),
   'lines',(select count(*) from store_order_lines),'requests',(select count(*) from store_order_requests),
-  'snapshots',(select count(*) from store_order_delivery_requests_09),'completions',(select count(*) from store_order_delivery_completions_09)) result`);
+  'snapshots',(select count(*) from store_order_delivery_requests_09),'completions',(select count(*) from store_order_delivery_completions_09),
+  'completionOrders',(select count(*) from store_order_delivery_completion_orders_09)) result`);
 const order = (client, key, options = {}) => value(client,
   'select public.place_store_order_with_delivery_snapshot_09($1,$2,$3::jsonb,$4,$5::jsonb,$6,$7,$8,$9,$10,$11) result',
   [hash, day, JSON.stringify(options.lines || lines), key, JSON.stringify(Object.hasOwn(options, 'snapshot') ? options.snapshot : snapshot),
@@ -55,10 +56,11 @@ try {
     }
     assert.equal(await value(admin, 'select prosecdef result from pg_proc where oid=$1::regprocedure', [signature]), false);
   }
-  for (const table of ['store_order_delivery_requests_09', 'store_order_delivery_completions_09']) {
+  for (const table of ['store_order_delivery_requests_09', 'store_order_delivery_completions_09', 'store_order_delivery_completion_orders_09']) {
     assert.equal(await value(admin, 'select relrowsecurity result from pg_class where oid=$1::regclass', [table]), true);
     for (const role of ['anon', 'authenticated']) assert.equal(await value(admin, 'select has_table_privilege($1,$2,$3) result', [role, table, 'SELECT']), false);
     assert.equal(await value(admin, 'select has_table_privilege($1,$2,$3) result', ['service_role', table, 'UPDATE']), false);
+    assert.equal(await value(admin, 'select has_table_privilege($1,$2,$3) result', ['service_role', table, 'DELETE']), false);
   }
   for (const bad of [null, {}, { ...snapshot, deliveryAddressSnapshot: ' ' }, { ...snapshot, deliveryRecipientPhoneSnapshot: 123 }, { ...snapshot, companyId: otherCompany }]) {
     await assert.rejects(order(first, randomUUID(), { snapshot: bad }), /delivery_snapshot_(required|invalid)/);
@@ -130,7 +132,8 @@ try {
   const completionCount = async () => (await counts()).completions;
   const rejectCompletion = async (patch, message) => {
     await assert.rejects(completion(first, { ...input, event: randomUUID(), ...patch }), message);
-    assert.equal(await completionCount(), 0); assert.deepEqual(await states(ids), previousStates);
+    assert.equal(await completionCount(), 0); assert.equal((await counts()).completionOrders, 0);
+    assert.deepEqual(await states(ids), previousStates);
   };
   await rejectCompletion({ ids: [] }, /store_order_completion_invalid/);
   await rejectCompletion({ ids: [ids[0], ids[0]], revisions: { [ids[0]]: revisions[ids[0]] } }, /store_order_completion_invalid/);
@@ -159,6 +162,7 @@ try {
   await first.query('begin');
   const completed = await completion(first, input);
   assert.deepEqual(await states(ids), previousStates); assert.equal(await completionCount(), 0);
+  assert.equal((await counts()).completionOrders, 0);
   await first.query('commit');
   assert.deepEqual(completed.orderIds, [...ids].sort());
   for (const row of await states(ids)) { assert.equal(row.status, 'delivered'); assert.equal(row.revision, revisions[row.id] + 1); }
@@ -167,6 +171,19 @@ try {
   await assert.rejects(completion(second, { ...input, ids: ids.slice(1), revisions: Object.fromEntries(ids.slice(1).map(id => [id, revisions[id]])) }), /store_order_completion_idempotency_conflict/);
   await assert.rejects(completion(second, { ...input, event: randomUUID(), revisions: completed.orderRevisions }), /store_order_completion_unavailable/);
   assert.equal(await completionCount(), 1);
+  const relations = await admin.query(`select r.order_id,r.pre_revision,r.completed_revision,e.completed_at
+    from store_order_delivery_completion_orders_09 r join store_order_delivery_completions_09 e using(company_id,completion_event_id)
+    where r.company_id=$1 and r.completion_event_id=$2 order by r.order_id`, [company, input.event]);
+  assert.deepEqual(relations.rows.map(row => ({ ...row, completed_at: row.completed_at.toISOString() })),
+    [...ids].sort().map(id => ({ order_id: id, pre_revision: revisions[id], completed_revision: revisions[id] + 1, completed_at: input.at })));
+  await assert.rejects(admin.query('delete from store_order_delivery_completions_09 where company_id=$1 and completion_event_id=$2', [company, input.event]), /foreign key constraint/);
+  await assert.rejects(admin.query('delete from store_orders where id=$1', [ids[0]]), /foreign key constraint/);
+  await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,1,2)', [otherCompany, input.event, ids[0]]), /foreign key constraint/);
+  await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,1,2)', [company, input.event, randomUUID()]), /foreign key constraint/);
+  await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,$4,$5)',
+    [company, input.event, ids[0], revisions[ids[0]], revisions[ids[0]] + 1]), /unique constraint/);
+  await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,1,3)',
+    [company, input.event, randomUUID()]), /check constraint/);
   assert.deepEqual(await order(first, key), created);
   assert.deepEqual(await storedSnapshot(created.id), normalized);
   assert.deepEqual(await definitions(), original);
@@ -178,12 +195,15 @@ try {
   assert.deepEqual(completionFirst, completionSecond);
   assert.deepEqual(await states(concurrentInput.ids), [{ id: concurrentOrder.id, status: 'delivered', revision: 2 }]);
   assert.equal(await completionCount(), 2);
+  assert.equal((await counts()).completionOrders, ids.length + 1);
+  assert.equal(await value(admin, 'select count(*)::integer result from store_order_delivery_completion_orders_09 where company_id=$1 and completion_event_id=$2 and order_id=$3 and pre_revision=1 and completed_revision=2',
+    [company, concurrentInput.event, concurrentOrder.id]), 1);
 
   await assert.rejects(admin.query(down), /store_order_delivery_09_down_refused_data_exists/);
   await admin.query('rollback');
   assert.equal(await completionCount(), 2);
   // Fixture-only discard in the exact guarded database, never an operating rollback procedure.
-  await admin.query('truncate public.store_order_delivery_requests_09,public.store_order_delivery_completions_09');
+  await admin.query('truncate public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09');
   await admin.query(down);
   assert.deepEqual(await definitions(), original);
   for (const signature of newSignatures) assert.equal(await value(admin, 'select to_regprocedure($1)::text result', [signature]), null);

@@ -31,15 +31,26 @@ create table public.store_order_delivery_requests_09 (
 create table public.store_order_delivery_completions_09 (
   company_id uuid not null references public.companies(id) on delete cascade,
   completion_event_id uuid not null, actor_key text not null check(length(actor_key) between 1 and 200),
+  completed_at timestamptz not null,
   request_fingerprint text not null check(request_fingerprint ~ '^[0-9a-f]{32}$'),
   result jsonb not null check(jsonb_typeof(result)='object'),
   created_at timestamptz not null default clock_timestamp(),
   primary key(company_id,completion_event_id)
 );
+create table public.store_order_delivery_completion_orders_09 (
+  company_id uuid not null, completion_event_id uuid not null, order_id uuid not null,
+  pre_revision integer not null check(pre_revision between 1 and 2147483646),
+  completed_revision integer not null check(completed_revision=pre_revision+1),
+  primary key(company_id,completion_event_id,order_id),
+  unique(company_id,order_id),
+  foreign key(company_id,completion_event_id) references public.store_order_delivery_completions_09(company_id,completion_event_id) on delete restrict,
+  foreign key(company_id,order_id) references public.store_orders(company_id,id) on delete restrict
+);
+alter table public.store_order_delivery_completion_orders_09 enable row level security;
 alter table public.store_order_delivery_requests_09 enable row level security;
 alter table public.store_order_delivery_completions_09 enable row level security;
-revoke all on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09 from public,anon,authenticated,service_role;
-grant select,insert on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09 to service_role;
+revoke all on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09 from public,anon,authenticated,service_role;
+grant select,insert on public.store_order_delivery_requests_09,public.store_order_delivery_completions_09,public.store_order_delivery_completion_orders_09 to service_role;
 
 create function public.place_store_order_with_delivery_snapshot_09(
   p_token_hash text,p_delivery_date date,p_lines jsonb,p_idempotency_key uuid,p_snapshot jsonb,
@@ -175,8 +186,8 @@ begin
   v_result:=jsonb_build_object('companyId',p_company,'deliveryDate',p_delivery_date,'completionEventId',p_completion_event_id,
     'completedAt',p_completed_at,'orderIds',v_ids,'orderRevisions',v_after);
   -- Unique event claim waits for a concurrent identical transaction; failed validation rolls it back.
-  insert into public.store_order_delivery_completions_09(company_id,completion_event_id,actor_key,request_fingerprint,result)
-    values(p_company,p_completion_event_id,btrim(p_actor_key),v_fingerprint,v_result) on conflict do nothing;
+  insert into public.store_order_delivery_completions_09(company_id,completion_event_id,actor_key,completed_at,request_fingerprint,result)
+    values(p_company,p_completion_event_id,btrim(p_actor_key),p_completed_at,v_fingerprint,v_result) on conflict do nothing;
   if not found then
     select * into v_existing from public.store_order_delivery_completions_09
       where company_id=p_company and completion_event_id=p_completion_event_id;
@@ -197,6 +208,8 @@ begin
       raise exception 'store_order_completion_snapshot_required';
     end if;
   end loop;
+  insert into public.store_order_delivery_completion_orders_09(company_id,completion_event_id,order_id,pre_revision,completed_revision)
+    select p_company,p_completion_event_id,id,(v_expected->>id::text)::integer,(v_after->>id::text)::integer from unnest(v_ids) as completed(id);
   update public.store_orders set status='delivered',revision=revision+1,updated_at=clock_timestamp()
     where company_id=p_company and id=any(v_ids);
   return v_result;

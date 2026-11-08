@@ -9,7 +9,7 @@ Ponytail: 사용함
 | 소유 범위 | 09 주문 생산자. 02 TMS/기사, 03 RPC, 07 인증, 04 구매 파일 변경 없음 |
 | 선행 조건 | 02 [배송지 승인표](store-order-delivery-snapshot-02.md)의 5개 text 칸·불변 trigger를 별도 승인·적용한 상태. 기존 7/10인자 함수 존재 필수 |
 | up/down | docs/sql-drafts/20261108-09-order-delivery-producer.sql 및 .down.sql. migration에 등록하지 않음 |
-| 추가 객체 | 새 wrapper·완료 함수 각 1개, 배송지 멱등 요청·완료 이벤트 테이블 각 1개 |
+| 추가 객체 | 새 wrapper·완료 함수 각 1개, 배송지 멱등 요청·완료 이벤트·완료 이벤트↔주문 관계 테이블 각 1개 |
 | 기존 보존 | 7인자 place_store_order와 10인자 place_store_member_order의 OID/본문/ACL 변경 없음. 새 wrapper에서 동일 트랜잭션으로 호출 |
 | 권한 | SECURITY INVOKER, RLS, service_role만 함수 실행·새 테이블 SELECT/INSERT. anon/authenticated 접근 금지. UPDATE/DELETE 권한 없음 |
 | 개인정보 | 이름·주소·상세주소·전화·하차 위치는 원본 주문 snapshot에만 저장. 새 멱등 기록에는 식별자·fingerprint·생성 시각만 저장하며 배송지 사본 없음. 보존·삭제 정책과 운영 접근자는 적용 전에 별도 확인 |
@@ -47,6 +47,12 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 결과는 `{companyId,deliveryDate,completionEventId,completedAt,orderIds,orderRevisions}`다. orderIds는 정렬되고 orderRevisions는 완료 뒤 revision이다. 같은 이벤트·같은 입력은 동일 결과, 같은 이벤트의 다른 입력은 store_order_completion_idempotency_conflict다. 이벤트 기록과 모든 주문의 delivered/revision+1 전환을 한 트랜잭션으로 확정한다.
 
+**completionEventId가 유일한 완료 멱등 키**다. 서버 생성/검증 UUID이며 별도 idempotencyKey는 이 SQL에서 받지 않는다. #405 adapter는 별도 키를 독립적으로 재사용하지 못하도록 이 계약에 맞춰야 한다.
+
+완료 관계는 JSON만 검색하지 않는다. `store_order_delivery_completion_orders_09`에 company_id/completion_event_id/order_id/pre_revision/completed_revision을 저장한다. 회사+이벤트와 회사+주문 복합 FK, 주문당 완료 1개 UNIQUE, completed_revision=pre_revision+1 CHECK를 둔다. 완료 시각은 부모 이벤트의 고정 completed_at 칸에 저장해 FK join으로 조회한다. 관계·이벤트·주문 상태는 같은 트랜잭션이며 실패하면 모두 롤백한다. 원 주문/이벤트 삭제는 FK RESTRICT로 거부한다.
+
+Stage E는 **delivered 단일 상태**만 소비한다. submitted/received/in_delivery는 완료 함수의 입력 후보일 뿐 전표 생성 조건이 아니다. 후속 E 호출은 회사+주문+완료 이벤트+completed_revision의 영속 관계와 현재 delivered/revision을 잠그고 검증해야 한다. 매출전표 중복은 주문 ID source key(`store_order:<order_id>`)로 막는다. 이번 PR에 전표 호출은 없다. 반품은 별도 return_event_id/idempotency_key·원 매출전표·주문·반품 줄/수량 계약이며, 완료 정정/무효화가 필요하면 별도 void event 계약을 승인해야 한다. 이 Draft에 반품/무효화 구현을 추가하지 않는다.
+
 **02/03 검토가 필요한 제안**: 기존 후보 계약에 맞춰 submitted/received/in_delivery를 완료 가능한 상태로 두었다. 실제 완료 호출자는 검증한 기사·코스·회사·배송일·정확한 주문 묶음과 revision을 먼저 확정해야 한다. SQL의 service_role 권한 자체는 기사/코스 인증을 대신하지 않는다. 배송 예정일은 주문과 일치해야 하지만 completedAt의 달력 날짜와 같도록 강제하지 않는다. 제출 전 시각·5분 초과 미래·취소/기완료·회사/날짜/revision 불일치·snapshot 누락은 거부한다. 이 상태 전이와 지연 완료 시각 정책이 합의되기 전에는 연결하지 않는다.
 
 같은 회사라도 서로 다른 customer_id 주문을 한 이벤트에 섞으면 store_order_completion_customer_mismatch로 전부 거부한다. 같은 거래처라는 사실만으로 동일 정류장임을 증명하지는 않는다.
@@ -57,7 +63,7 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 - 인증 기사·확정 코스·차량·정류장과 정확한 주문 묶음 검증. actor_key는 클라이언트 입력을 받지 않고 서버 세션에서 산출.
 - noteId·attachmentIds의 회사·거래처 검증 및 완료 이벤트와 같은 트랜잭션 연결. 메모/첨부가 따로 성공한 것을 완료 성공으로 취급하지 않음.
-- completionEventId와 별도 idempotencyKey의 관계 확정. 현재 SQL은 completionEventId 자체를 이벤트 멱등 키로 사용하며 별도 키를 받지 않음.
+- #405의 별도 idempotencyKey를 위 단일 완료 이벤트 키 계약으로 변환/검증하는 adapter와 UUID 형식 검사. 동일 재시도에서도 기사/코스 인증을 먼저 다시 검증.
 - #405 DTO의 pre/post revision 매핑. 현재 입력은 expectedRevisions, 결과는 완료 뒤 orderRevisions이며 DTO 연결은 미구현.
 - 명시적 완료 이력 projection과 재조회 계약. 현재 SQL의 이벤트 기록을 화면 이력/API로 연결하지 않음.
 
@@ -67,4 +73,4 @@ snapshot은 다음 5개 camelCase 칸만 허용한다.
 
 CI의 정확한 폐기 DB `store_member_order_test_delivery_09` 및 127.0.0.1만 허용한다. 실제 PG17에서 기존 회원 회귀, 원본 함수 OID/본문/ACL, snapshot 원자성·불변·회사 경계·제거 회원·동시 동일/충돌 재시도, 완료 실패 원자성·중복/동시 이벤트·revision·취소/회사/날짜 경계, up/down/up을 확인한다. 실행 결과는 PR의 CI 링크에 기록한다. 운영 DB로 이 fixture를 실행하면 안 된다.
 
-down은 호출자를 먼저 중지하고 새 두 테이블이 **비어 있을 때만** 새 객체를 제거한다. 데이터가 있으면 store_order_delivery_09_down_refused_data_exists로 거부한다. 기존 주문·02 snapshot 칸/trigger·기존 함수는 유지한다. 기록이 생긴 운영 환경은 데이터를 보존하고 별도 보존/정리 승인으로 처리하며 테스트의 TRUNCATE 절차를 따라 하면 안 된다.
+down은 호출자를 먼저 중지하고 새 세 테이블이 **비어 있을 때만** 새 객체를 제거한다. 데이터가 있으면 store_order_delivery_09_down_refused_data_exists로 거부한다. 기존 주문·02 snapshot 칸/trigger·기존 함수는 유지한다. 기록이 생긴 운영 환경은 데이터를 보존하고 별도 보존/정리 승인으로 처리하며 테스트의 TRUNCATE 절차를 따라 하면 안 된다.
