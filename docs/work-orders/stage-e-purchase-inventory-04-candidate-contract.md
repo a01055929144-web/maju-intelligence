@@ -1,7 +1,7 @@
 # 04 Stage E 입고 → 매입전표·재고·매입처원장 읽기 조사
 
 상태: **읽기 조사 완료 · 구현 증거 아님 · 03 생산자 계약 대기**
-기준: `main` 2ad89d0, 03 Draft PR #384와 09 Draft PR #410의 격리 SQL/승인 문서. 운영 DB 조회·쓰기와 SQL 실행은 하지 않았다.
+기준: `main` ebf61b1, 03 Draft PR #384와 09 Draft PR #410의 격리 SQL/승인 문서. 운영 DB 조회·쓰기와 SQL 실행은 하지 않았다.
 
 ## 결론
 
@@ -48,6 +48,32 @@
 2. **배송 완료 → 매출전표·`sale_out` 호출 주체와 원자 경계**: #410의 `complete_store_order_delivery_09`가 직접 #384의 매출전표 RPC를 같은 DB 트랜잭션에서 호출할지, 서버 조정자가 완료 결과를 받은 뒤 재시도 가능한 별도 호출을 할지 03/09가 결정해야 한다. 확정 매출전표의 기존 inventory trigger가 `sale_out`을 만드는 구조이므로 04가 별도 `sale_out` RPC나 직접 INSERT를 추가하지 않는다. 별도 호출을 택하면 배송 완료만 성공하고 전표·원장·재고가 빠진 상태를 탐지·재시도하는 계약이 함께 필요하다.
 
 이 두 결정 전에는 가상 fixture, 상태 추정, 운영 주문·입고 데이터로 Stage E 완료를 주장하지 않는다. #404는 계속 조사 문서이며 Stage E 구현 수는 **0/4**다.
+
+## 실제 입고 완료 ID·revision → 매입전표 확정 최소 경계
+
+입고 정본 생산자가 확정되면 04가 요구할 최소 입력은 `company_id`, 불변 `receipt_id`, `expected_receipt_revision`, 서버가 검증한 행위자다. 별도 임의 UUID로 중복을 숨기지 않고 `source_type='purchase_receipt'`, `source_key='purchase_receipt:' || receipt_id`처럼 입고 ID에서 결정되는 키를 사용해야 한다. 정확한 문자열은 03 승인 계약에서 확정한다.
+
+소유 RPC 하나가 같은 트랜잭션에서 다음 순서를 모두 수행해야 한다.
+
+1. `(company_id, receipt_id)` 입고 행과 입고 줄을 잠그고 완료 상태·revision·취소/반품 아님을 검증한다.
+2. 같은 source key의 기존 전표가 있으면 입력 revision과 전표 출처를 다시 검증한 뒤 같은 전표 결과를 반환한다. revision 불일치나 같은 키의 다른 입력은 충돌로 전체 거부한다.
+3. 입고 줄의 매입처·상품·단위·수량·단가·공급가·세액 스냅샷만 `purchase` 전표와 줄로 복사한다. 현재 상품 원가로 재가격화하지 않는다.
+4. 모든 줄이 확정 매입처 상품 매핑과 확정 환산(또는 허용된 동일 단위 1:1)을 통과하는지 먼저 확인한다. 한 줄이라도 `unmapped`, `no_conversion`, `no_product`이면 전표 확정 전에 전체 롤백한다.
+5. 기존 전표 저장·확정을 실행한다. 확정 trigger가 `purchase_in`, 현재고·평균원가를 만들고 `confirm_business_document`가 매입처원장을 만든 결과까지 같은 트랜잭션에서 확인한다.
+6. 응답에는 receipt ID·revision, 전표 ID·revision, 원장 항목 ID와 줄별 재고 반영 결과를 돌려 이후 재시도가 같은 결과인지 확인할 수 있게 한다.
+
+입고 완료 정본·상태 전환 주체가 아직 없으므로 위 항목은 구현 계약이 아니라 최소 착수 경계다.
+
+## #384의 기존 `sale_out` 재사용 조건
+
+#384가 새 재고 함수를 만들지 않고 기존 확정 전표 trigger를 재사용하려면 아래 조건을 매출전표 확정 **전**에 모두 검증해야 한다.
+
+- #410의 회사+주문+완료 이벤트 관계, `completed_revision`, 현재 `delivered` 상태가 모두 일치하고 잠겨 있어야 한다.
+- 주문 줄의 `product_id`가 같은 회사의 `product_catalog_id`로 전표 줄에 보존되고, 시가·빈 단가·0줄·합계 불일치가 없어야 한다.
+- 재고 추적 대상 줄마다 확정 단위 환산이 있거나, 환산표가 전혀 없고 주문 단위가 상품 판매 단위와 같은 1:1 조건이어야 한다.
+- `inventory_resolve_document_lines` 결과가 모든 추적 대상 줄에서 `ok`인지 확인해야 한다. 기존 `apply_inventory_for_document`는 해석 실패 줄을 자동 거부하지 않고 제외하므로 이 사전 검증 없이는 부분 `sale_out`이 생길 수 있다.
+- 매출전표 생성·행 저장·확정·거래처원장과 trigger의 `sale_out` 결과 확인이 한 트랜잭션이어야 한다. #410 완료와 별도 트랜잭션이면 완료 성공/전표 실패를 source key로 탐지·재시도하는 서버 계약이 필수다.
+- 같은 주문 재시도는 `store_order:<order_id>`의 기존 전표와 기존 inventory position을 반환해야 하며, 04가 별도 `sale_out` RPC나 재고 직접 INSERT를 호출하지 않는다.
 
 ## 정확한 차단점
 
