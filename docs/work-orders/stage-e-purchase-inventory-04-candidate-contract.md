@@ -1,42 +1,75 @@
-# 04 Stage E 입고 → 매입전표·재고·매입처원장 후보 계약
+# 04 Stage E 입고 → 매입전표·재고·매입처원장 읽기 조사
 
-상태: **03 원장 계약 확정 대기 · fixture 전용 · 런타임/SQL 없음**  
-소유: 04는 입고 스냅샷과 확정 상품·환산 근거만 제공한다. 매입전표·재고 이동·매입처원장의 생성과 원자성은 03 계약 확정 뒤 해당 소유자가 구현한다.
+상태: **읽기 조사 완료 · 구현 증거 아님 · 03 생산자 계약 대기**
+기준: `main` 2ad89d0, 03 Draft PR #384의 격리 SQL/승인 문서. 운영 DB 조회·쓰기와 SQL 실행은 하지 않았다.
 
-## 목적
+## 결론
 
-03 계약을 앞질러 구현하지 않으면서 04가 넘길 수 있는 최소 입력과, 나중에 04가 재조회할 최소 결과를 합성 fixture로 고정한다. 이 문서는 RPC 이름, 주문/입고 상태값, 기능 플래그, DB 함수 서명을 확정하지 않는다.
+재고·원장 엔진은 새로 만들 필요가 없다. 기존 ERP에서 확정 매입전표 하나가 이미 아래 결과를 만든다.
 
-## 후보 입력
+1. `business_documents(document_type='purchase')`와 `business_document_lines`
+2. `confirm_business_document`가 append-only `partner_ledger_entries(entry_type='purchase')` 생성
+3. 같은 전표 상태 변경 trigger가 `apply_inventory_for_document` 실행
+4. 확정 매입처 상품 매핑과 단위 환산을 통과한 행만 `inventory_movements(movement_type='purchase_in')` 및 `inventory_balances`에 반영
+5. 전표 취소·revision은 `inventory_document_positions`의 목표 수량과 차이만 기록해 재고를 되돌리거나 보정
 
-- 회사 ID, 입고 ID와 revision, 매입처 ID, 입고일, UUID 멱등 키
-- 행별 입고 원문 ID, 확정 상품 ID
-- 매입 단위·재고 단위, 정확한 문자열 수량
-- 부가세 별도 단가 문자열(소수 둘째 자리)
-- 확정 환산 근거 ID·revision·confirmed=true
+따라서 Stage E의 04 범위는 기존 엔진 앞에 **입고 정본을 확정 매입전표로 한 번만 변환하는 생산자 경계**를 제공하는 것이다. 판매관리의 매입가 업로드와 `purchase_receipt_lines`는 가격 관측 이력이며 입고·채무 정본이 아니므로 이 경계에 사용하지 않는다.
 
-후보 입력에는 현재 상품명·현재 원가 재조회 결과나 판매 문서·주문 필드를 넣지 않는다. 환산 미확정, 회사 불일치, 0 이하 수량, revision 불일치는 03 진입 전 또는 03 원자 관문에서 전체 거부할 대상이다.
+## 그대로 재사용할 운영 적용 구조
 
-## 후보 출력
+| 책임 | 기존 구조 | 04 연결 시 의미 |
+| --- | --- | --- |
+| 매입전표 헤더·행 | `business_documents`, `business_document_lines` | 입고 스냅샷을 `purchase` 전표 초안으로 복사 |
+| 전표 저장 | `save_business_document` | 전표 행 합계·과세·회사/매입처 관계 검증 |
+| 확정·매입처원장 | `confirm_business_document` | 확정과 `purchase` 원장 항목을 같은 함수에서 처리 |
+| 상품 해석 | `inventory_resolve_document_lines` | `supplier_product_matches.match_status='confirmed'`인 상품만 재고 상품으로 해석 |
+| 단위 환산 | `product_unit_conversions` | confirmed 환산 또는 환산표가 전혀 없을 때 판매 단위와 같은 단위의 1:1만 허용 |
+| 재고 반영 | `apply_inventory_for_document`, `inventory_post_movement` | `purchase_in` 이동·현재고·평균원가·재고금액 반영 |
+| 재시도 | `inventory_movements(company_id,idempotency_key)`와 `inventory_document_positions` | 같은 전표의 중복 이동 방지, revision은 차이만 반영 |
+| 취소·반품 | 기존 전표 취소와 `purchase_return` | append-only 원장과 재고 역방향 이동 재사용 |
 
-- 같은 회사 ID·입고 ID·멱등 키
-- committed 상태
-- 매입전표 ID/revision, 행별 재고 이동 ID, 매입처원장 항목 ID
+## #384에서 재사용할 패턴과 재사용하지 않을 것
 
-같은 멱등 키 재시도는 같은 결과를 반환해야 한다. 전표·재고·원장 중 일부 ID만 반환되는 부분 성공은 허용하지 않는다. 취소·반품·역분개 출력은 03 계약 확정 뒤 별도 계약으로 다룬다.
+03 PR #384의 `create_sales_document_from_store_order`는 매출 전용 후보라 입고에 직접 호출하거나 복사하지 않는다. 다만 다음 패턴은 입고 생산자 계약에도 필요하다.
 
-## 격리 fixture
+- `(company_id, source_id)` 기준 advisory lock과 원천 행 잠금
+- `business_documents(company_id,source_type,source_key)`로 같은 원천의 기존 전표 재조회
+- 원천 스냅샷 합계와 전표 합계 일치 확인
+- 전표 생성·행 저장·확정·원장 결과를 하나의 DB 트랜잭션으로 처리
+- `public/anon/authenticated` 차단, 승인 회사의 service-role 서버 경로만 호출
 
-[`tests/fixtures/stage-e-purchase-inventory.ts`](../../tests/fixtures/stage-e-purchase-inventory.ts)는 실제 회사·상품·매입처·입고 데이터를 사용하지 않는 고정 UUID 합성 자료다. 계약 테스트는 회사/입고/멱등 키 연속성, 행과 재고 이동 수 일치, 정확한 십진 문자열, 확정 환산 근거, 운영 접속 정보 부재만 확인한다.
+#384의 주문 상태 후보, 고객 스냅샷, 매출전표 `sale`, 주문 가격 규칙은 입고 계약에 사용하지 않는다.
 
-## 명시적 비범위
+## 정확한 차단점
 
-- 03 전표·원장·재고 파일 수정
-- 09 문서·주문 파일 수정
-- 런타임 API/RPC/기능 플래그 추가
-- 운영 DB 조회·쓰기, SQL 적용, 배포
-- 매입가 업로드만으로 재고·채무 생성
+| 차단점 | 현재 상태 | 계약 확정 전 금지 |
+| --- | --- | --- |
+| 입고 정본 | 04에 발주/입고 완료를 나타내는 단일 운영 상태·revision·취소 상태가 확정되지 않음 | 매입가 업로드를 입고로 간주 |
+| 원천 ID | 가격 이력 행 ID와 ERP 입고 ID의 의미가 다름 | `purchase_receipt_lines` ID를 전표 source ID로 자동 사용 |
+| 원자 진입점 | 앱의 전표 저장과 확정 호출은 분리되어 있음 | 두 호출을 이어 붙여 부분 초안·부분 원장 허용 |
+| 상품 연결 | 매입전표 재고 해석은 확정 `supplier_product_id` 매핑이 필요 | 품목명 추측이나 auto/후보 매핑으로 재고 이동 |
+| 환산 | 확정 환산이 없으면 일부 단위만 1:1 인정 | BOX→EA 같은 미확정 환산을 수량 1로 처리 |
+| 금액 원천 | 재고 금액은 전표 `supply_amount`, 매입처 채무는 전표 합계 사용 | 최신 상품 원가로 입고 스냅샷 재가격화 |
+| 멱등 | 입고 source key 형식과 revision 충돌 규칙 미확정 | 새 UUID로 재시도해 중복 전표 생성 |
+| 취소·반품 | 기존 ERP 엔진은 있으나 입고 상태와 전표 취소/반품 전환 주체 미확정 | 원장·재고 행 직접 삭제·수정 |
+| 기능 제어 | 입고 Stage E 회사별 플래그·서버 호출 위치 미확정 | 대표 승인 없이 운영 호출·기능 ON |
 
-## 다음 관문
+## 03에 필요한 확정 계약
 
-03이 입고 허용 상태, 소유 RPC, 전표·재고·원장 동일 트랜잭션, 취소·반품·재시도 계약을 확정한 뒤 이 후보와 대조한다. 불일치가 있으면 fixture를 먼저 갱신하고, 승인된 04 소유 파일에서 소비자 연결만 작은 PR로 구현한다.
+03이 다음을 확정하기 전에는 04 런타임·SQL·fixture 구현을 시작하지 않는다.
+
+1. 입고 완료/취소/반품의 단일 상태와 상태 전환 소유자
+2. 입고 원천 ID·revision과 `source_type/source_key` 형식
+3. 같은 입고 재시도와 수정 revision의 반환/409 규칙
+4. 매입전표 생성·저장·확정·매입처원장·재고 trigger를 한 트랜잭션으로 묶는 소유 RPC
+5. 미연결 상품·미확정 환산·0수량·합계 불일치가 하나라도 있을 때 전체 거부 규칙
+6. service-role 권한, 회사별 기능 플래그 기본 OFF, 취소·반품·실패 복구 절차
+
+계약이 병합되면 폐기 가능한 PostgreSQL 17에서 회사 격리, 동시 재시도, 중간 실패 롤백, 매입처원장·재고 합계, 취소·반품을 실제 기존 함수로 검증한다. 합성 객체 값만 확인하는 테스트는 구현 증거로 세지 않는다.
+
+## 운영 체크
+
+- Stage A 대표 파일 확정값은 변경하지 않았고 운영 실파일 저장을 실행하지 않았다.
+- 운영 DB·SQL·플래그·배포 변경 없음.
+- 03 전표/원장/재고 파일과 09 문서/주문 파일 수정 없음.
+- PR #404의 이전 가상 타입·fixture·테스트는 구현 증거가 아니므로 제거했다.
