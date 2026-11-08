@@ -1,4 +1,5 @@
--- REVIEW ONLY: explicit DB approval required. Adds member ordering beside the unchanged link ordering RPC.
+-- OPERATING APPLICATION COMPLETED: controller confirmation 2026-11-08. DO NOT RE-RUN against an operating database.
+-- Record only. Executable body matches approved compatibility source 084640cf; isolated disposable PG17 tests remain allowed.
 -- Prerequisites: actual P0/P1/P2/S2 migrations, manager-role migration, app_users(id,status).
 -- Existing orders are not backfilled. No new tables, policies, or SECURITY DEFINER.
 begin;
