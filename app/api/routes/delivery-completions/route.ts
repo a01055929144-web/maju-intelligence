@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { completeOrderDelivery } from "@/application/delivery/complete-order-delivery";
+import { completeOrderDelivery, DeliveryCompletionError } from "@/application/delivery/complete-order-delivery";
 import type { OrderDeliveryCompletionCommand } from "@/application/delivery/order-delivery-completion-command";
 import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getRequestAuthScope } from "@/lib/auth";
@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
       vehicleKeys
     }, supabaseRequest) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "배송 완료 요청을 처리하지 못했습니다.";
-    return NextResponse.json({ message }, { status: 409 });
+    if (error instanceof DeliveryCompletionError) return NextResponse.json({ message: error.message }, { status: 409 });
+    console.error("[delivery-completions] completion_failed", error);
+    return NextResponse.json({ message: "배송 완료 요청을 처리하지 못했습니다." }, { status: 500 });
   }
 }

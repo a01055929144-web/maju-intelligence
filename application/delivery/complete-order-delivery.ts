@@ -7,6 +7,8 @@ type Request = <T>(path: string, init?: RequestInit) => Promise<T>;
 type Actor = { actorKey: string; companyId: string; driverKeys: string[]; staffMemberId?: string; vehicleKeys: string[] };
 type OrderRow = { id: string; customer_id: string; delivery_date: string; revision: number; status: string; delivery_customer_name_snapshot: string | null; delivery_address_snapshot: string | null };
 
+export class DeliveryCompletionError extends Error {}
+
 export async function completeOrderDelivery(input: OrderDeliveryCompletionCommand, actor: Actor, request: Request) {
   validateCommand(input, actor.companyId);
   const orderIds = input.orders.map((order) => order.orderId).sort();
@@ -15,7 +17,7 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
   const encodedCustomer = encodeURIComponent(input.customerId);
   const encodedIds = orderIds.join(",");
 
-  const [confirmations, customers, orders, notes, attachments] = await Promise.all([
+  const [confirmations, customers, orders, notes, attachments, completions] = await Promise.all([
     request<Array<{ customer_ids: unknown; driver_name: string }>>(
       `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodedCompany}&route_date=eq.${encodeURIComponent(input.deliveryDate)}`
     ),
@@ -30,29 +32,36 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
     ) : Promise.resolve([]),
     request<Array<{ attachment_type: string; id: string }>>(
       `customer_attachments?select=id,attachment_type&company_id=eq.${encodedCompany}&customer_id=eq.${encodedCustomer}&id=in.(${attachmentIds.join(",")})&limit=100`
+    ),
+    request<Array<{ actor_key: string; result: unknown }>>(
+      `store_order_delivery_completions_09?select=actor_key,result&company_id=eq.${encodedCompany}&completion_event_id=eq.${encodeURIComponent(input.completionEventId)}&limit=1`
     )
   ]);
 
   const customer = customers[0];
-  if (!customer || !isAssignedCustomer(customer, actor)) throw new Error("배송 기사에게 배정된 거래처가 아닙니다.");
+  if (!customer || !isAssignedCustomer(customer, actor)) throw new DeliveryCompletionError("배송 기사에게 배정된 거래처가 아닙니다.");
   if (!customer.delivery_vehicle?.trim() || !actor.vehicleKeys.includes(customer.delivery_vehicle.trim())) {
-    throw new Error("배송 차량 배정을 확인해 주세요.");
+    throw new DeliveryCompletionError("배송 차량 배정을 확인해 주세요.");
   }
   if (!confirmations.some((row) => actor.driverKeys.includes(row.driver_name.trim()) && Array.isArray(row.customer_ids) && row.customer_ids.includes(input.customerId))) {
-    throw new Error("확정된 오늘 코스의 정류장이 아닙니다.");
+    throw new DeliveryCompletionError("확정된 오늘 코스의 정류장이 아닙니다.");
   }
-  if (orders.length !== input.orders.length) throw new Error("완료할 주문을 찾을 수 없습니다.");
+  if (!input.proof.noteId || notes[0]?.note_type !== "delivery") throw new DeliveryCompletionError("배송 완료 메모를 확인해 주세요.");
+  if (attachments.length !== attachmentIds.length || attachments.some((item) => item.attachment_type !== "delivery_proof")) {
+    throw new DeliveryCompletionError("배송 완료 사진을 확인해 주세요.");
+  }
+
+  const cached = completions[0];
+  if (cached) return validateResult(cached.result, input, actor, cached.actor_key);
+
+  if (orders.length !== input.orders.length) throw new DeliveryCompletionError("완료할 주문을 찾을 수 없습니다.");
   const revisionById = new Map(input.orders.map((order) => [order.orderId, order.orderRevision]));
   for (const order of orders) {
     if (order.customer_id !== input.customerId || order.delivery_date !== input.deliveryDate || !ACTIVE.has(order.status)) {
-      throw new Error("현재 정류장에서 완료할 수 없는 주문입니다.");
+      throw new DeliveryCompletionError("현재 정류장에서 완료할 수 없는 주문입니다.");
     }
-    if (order.revision !== revisionById.get(order.id)) throw new Error("주문 revision이 변경되었습니다.");
-    if (!order.delivery_customer_name_snapshot || !order.delivery_address_snapshot) throw new Error("배송지 snapshot을 확인해 주세요.");
-  }
-  if (!input.proof.noteId || notes[0]?.note_type !== "delivery") throw new Error("배송 완료 메모를 확인해 주세요.");
-  if (attachments.length !== attachmentIds.length || attachments.some((item) => item.attachment_type !== "delivery_proof")) {
-    throw new Error("배송 완료 사진을 확인해 주세요.");
+    if (order.revision !== revisionById.get(order.id)) throw new DeliveryCompletionError("주문 revision이 변경되었습니다.");
+    if (!order.delivery_customer_name_snapshot || !order.delivery_address_snapshot) throw new DeliveryCompletionError("배송지 snapshot을 확인해 주세요.");
   }
 
   const expectedRevisions = Object.fromEntries(input.orders.map((order) => [order.orderId, order.orderRevision]));
@@ -71,36 +80,46 @@ export async function completeOrderDelivery(input: OrderDeliveryCompletionComman
       p_order_ids: orderIds
     })
   });
-  if (result.companyId !== actor.companyId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate) {
-    throw new Error("배송 완료 결과 범위가 요청과 다릅니다.");
+  return validateResult(result, input, actor);
+}
+
+function validateResult(value: unknown, input: OrderDeliveryCompletionCommand, actor: Actor, storedActorKey?: string) {
+  const result = value as {
+    companyId?: string; completedAt?: string; completionEventId?: string; deliveryDate?: string;
+    orderIds?: string[]; orderRevisions?: Record<string, number>;
+  };
+  if (storedActorKey !== undefined && storedActorKey !== actor.actorKey) throw new DeliveryCompletionError("다른 기사의 배송 완료 이벤트입니다.");
+  if (result.companyId !== actor.companyId || result.completionEventId !== input.completionEventId || result.deliveryDate !== input.deliveryDate || result.completedAt !== input.completedAt) {
+    throw new DeliveryCompletionError("배송 완료 결과 범위가 요청과 다릅니다.");
   }
-  const returnedIds = [...result.orderIds].sort();
-  if (returnedIds.join("|") !== orderIds.join("|")) throw new Error("배송 완료 결과의 주문이 요청과 다릅니다.");
+  const requestedIds = input.orders.map((order) => order.orderId).sort();
+  const returnedIds = Array.isArray(result.orderIds) ? [...result.orderIds].sort() : [];
+  if (returnedIds.join("|") !== requestedIds.join("|")) throw new DeliveryCompletionError("배송 완료 결과의 주문이 요청과 다릅니다.");
   for (const order of input.orders) {
-    if (!Number.isInteger(result.orderRevisions[order.orderId]) || result.orderRevisions[order.orderId] !== order.orderRevision + 1) {
-      throw new Error("배송 완료 결과의 revision이 요청과 다릅니다.");
+    if (!Number.isInteger(result.orderRevisions?.[order.orderId]) || result.orderRevisions?.[order.orderId] !== order.orderRevision + 1) {
+      throw new DeliveryCompletionError("배송 완료 결과의 revision이 요청과 다릅니다.");
     }
   }
   return {
     completionEventId: result.completionEventId,
     completedAt: result.completedAt,
-    orders: returnedIds.map((orderId) => ({ orderId, orderRevision: result.orderRevisions[orderId] }))
+    orders: returnedIds.map((orderId) => ({ orderId, orderRevision: result.orderRevisions![orderId] }))
   };
 }
 
 function validateCommand(input: OrderDeliveryCompletionCommand, companyId: string) {
   if (input.companyId !== companyId || !UUID.test(input.customerId) || !UUID.test(input.completionEventId) || input.idempotencyKey !== input.completionEventId) {
-    throw new Error("배송 완료 요청 범위를 확인해 주세요.");
+    throw new DeliveryCompletionError("배송 완료 요청 범위를 확인해 주세요.");
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate) || Number.isNaN(Date.parse(input.completedAt))) throw new Error("배송 완료 날짜를 확인해 주세요.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate) || Number.isNaN(Date.parse(input.completedAt))) throw new DeliveryCompletionError("배송 완료 날짜를 확인해 주세요.");
   if (!input.orders.length || input.orders.length > 100 || new Set(input.orders.map((order) => order.orderId)).size !== input.orders.length) {
-    throw new Error("완료할 주문을 확인해 주세요.");
+    throw new DeliveryCompletionError("완료할 주문을 확인해 주세요.");
   }
   if (input.orders.some((order) => !UUID.test(order.orderId) || !Number.isInteger(order.orderRevision) || order.orderRevision < 1)) {
-    throw new Error("주문 ID와 revision을 확인해 주세요.");
+    throw new DeliveryCompletionError("주문 ID와 revision을 확인해 주세요.");
   }
   if (!input.proof.noteId || !UUID.test(input.proof.noteId) || !input.proof.attachmentIds.length || input.proof.attachmentIds.some((id) => !UUID.test(id))) {
-    throw new Error("배송 완료 증빙을 확인해 주세요.");
+    throw new DeliveryCompletionError("배송 완료 증빙을 확인해 주세요.");
   }
 }
 

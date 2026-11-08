@@ -27,7 +27,7 @@ const actor = {
   vehicleKeys: ["1호차"]
 };
 
-function repository(options: { customerId?: string; noteType?: string; route?: boolean; status?: string; vehicle?: string } = {}) {
+function repository(options: { cached?: boolean; customerId?: string; noteType?: string; route?: boolean; status?: string; vehicle?: string } = {}) {
   return vi.fn(async <T>(path: string, init?: RequestInit): Promise<T> => {
     let result: unknown;
     if (path.startsWith("route_plan_confirmations")) result = options.route === false ? [] : [{ driver_name: "기사 A", customer_ids: [customerId] }];
@@ -35,6 +35,7 @@ function repository(options: { customerId?: string; noteType?: string; route?: b
     else if (path.startsWith("store_orders")) result = [{ id: orderId, customer_id: options.customerId || customerId, delivery_date: "2026-11-09", revision: 3, status: options.status || "in_delivery", delivery_customer_name_snapshot: "매장 A", delivery_address_snapshot: "서울" }];
     else if (path.startsWith("customer_notes")) result = [{ id: noteId, note_type: options.noteType || "delivery" }];
     else if (path.startsWith("customer_attachments")) result = [{ id: attachmentId, attachment_type: "delivery_proof" }];
+    else if (path.startsWith("store_order_delivery_completions_09")) result = options.cached ? [{ actor_key: "member-a", result: { companyId, completionEventId: eventId, deliveryDate: "2026-11-09", completedAt: command.completedAt, orderIds: [orderId], orderRevisions: { [orderId]: 4 } } }] : [];
     if (path === "rpc/complete_store_order_delivery_09") {
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
@@ -70,5 +71,10 @@ describe("complete order delivery", () => {
 
   it("requires the event id to be the idempotency key while SQL has no separate key", async () => {
     await expect(completeOrderDelivery({ ...command, idempotencyKey: "different" }, actor, repository())).rejects.toThrow("요청 범위");
+  });
+
+  it("returns the same result for an authenticated retry after the order is delivered", async () => {
+    const result = await completeOrderDelivery(command, actor, repository({ cached: true, status: "delivered" }));
+    expect(result.orders).toEqual([{ orderId, orderRevision: 4 }]);
   });
 });
