@@ -1,5 +1,15 @@
 \set ON_ERROR_STOP on
 
+do $$
+begin
+  if current_database() <> 'store_order_sales_ledger_test'
+    or current_setting('server_version_num')::integer not between 170000 and 179999
+    or inet_server_addr() is null
+    or not (inet_server_addr() <<= inet '127.0.0.0/8' or inet_server_addr() = inet '::1') then
+    raise exception 'Requires loopback PostgreSQL 17 database store_order_sales_ledger_test';
+  end if;
+end $$;
+
 drop schema if exists public cascade;
 create schema public;
 grant usage on schema public to public;
