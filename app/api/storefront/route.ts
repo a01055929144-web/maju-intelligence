@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dateField, isId } from "@/domains/pricing/document";
+import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { readStorefront } from "@/lib/pricing/storefront";
+import { getStoreOrderActor } from "@/lib/pricing/store-order-member";
 import { toPublicStorefront } from "@/lib/pricing/storefront-public";
 import { verifyStoreLinkToken } from "@/lib/pricing/store-link-token";
+import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { supabaseRequest } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -314,12 +317,23 @@ export async function PUT(request: NextRequest) {
     // Resolve tenant eligibility from the signed link, never from caller scope.
     const store = await readStorefront(String(body.token), body.deliveryDate);
     if (!store) return unavailable();
+    const memberOrdering = storeMemberSessionEnabled() && isStoreMemberCompanyAllowlisted(store.companyId);
+    const member = memberOrdering
+      ? await getStoreOrderActor({ companyId: store.companyId, customerId: store.customerId })
+      : null;
+    if (memberOrdering && !member) return NextResponse.json({ message: "이 매장의 활성 구성원으로 로그인한 뒤 주문해 주세요." },
+      { status: 403, headers: { "Cache-Control": "no-store" } });
     const result = await supabaseRequest<Record<string, unknown>>(
-      "rpc/place_store_order",
+      memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
       {
         method: "POST",
         body: JSON.stringify({
           p_token_hash: verified.hash,
+          ...(member ? {
+            p_store_account_id: member.storeAccountId,
+            p_member_id: member.memberId,
+            p_auth_user_id: member.authUserId,
+          } : {}),
           p_delivery_date: body.deliveryDate,
           p_lines: (body.lines as Record<string, unknown>[]).map(line => ({
             productId: line.productId, promotionId: line.promotionId, quantity: line.quantity,
@@ -337,6 +351,8 @@ export async function PUT(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    if (/Store member unavailable/.test(message))
+      return NextResponse.json({ message: "매장 구성원 권한이 변경되었습니다. 다시 로그인해 주세요." }, { status: 403 });
     const friendly = /Delivery date unavailable/.test(message)
       ? "배송 가능일과 마감 시각을 다시 확인해 주세요."
       : /Minimum order not met/.test(message)

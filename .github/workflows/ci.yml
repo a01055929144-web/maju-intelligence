@@ -354,6 +354,25 @@ jobs:
           createdb pricing_lead_share_company_delete_test
           psql --dbname=pricing_lead_share_company_delete_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-company-delete.pg17.test.sql
 
+      - name: Setup Node for member-order concurrency checks
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify compatible member ordering on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: store_member_order_test
+        run: |
+          createdb store_member_order_test
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-order.pg17.test.sql
+          npm ci --ignore-scripts
+          node scripts/test-store-member-order-concurrency.mjs
+
   build:
     runs-on: ubuntu-latest
     steps:
