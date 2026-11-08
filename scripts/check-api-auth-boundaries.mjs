@@ -7,6 +7,7 @@ const apiRoot = path.join(process.cwd(), "app", "api");
 // a provider/webhook secret, or intentionally expose only non-sensitive readiness data.
 // Adding an entry here is an explicit security decision and should include a short reason.
 const publicRoutes = new Map([
+  ["pricing-document-acceptance/route.ts", "default-OFF purpose-signed delivered-document token, tenant allowlist, verified send/version/lead and S2 request guard; optional staff or 07 store-member session"],
   ["pricing-documents/public/route.ts", "default-OFF purpose-signed lead document link, same-origin bounded POST, tenant allowlist and S2 request guard; sales whitelist only"],
   ["admin/logout/route.ts", "clears the admin session cookie only"],
   ["auth/forgot-password/route.ts", "starts the rate-limited password reset flow"],
