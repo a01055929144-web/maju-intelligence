@@ -11,8 +11,8 @@ export default async function AdminUploadsPage() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const uploads = await getUploadHistory().catch((error: unknown) => {
-    console.error("[admin/uploads] getUploadHistory failed", error);
+  const uploads = await getUploadHistory().catch(() => {
+    console.error("[admin/uploads] upload_history_read_failed");
     return null;
   });
   const uploadItems = uploads ?? [];
@@ -48,7 +48,7 @@ export default async function AdminUploadsPage() {
             {loadFailed ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center">
                 <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" />
-                <p className="font-black text-destructive">업로드 이력을 불러오지 못했습니다.</p>
+                <p className="font-bold text-destructive">업로드 이력을 불러오지 못했습니다.</p>
                 <p className="mt-2 text-sm text-muted-foreground">0건이 아니라 조회 실패 상태입니다. 잠시 후 새로고침하거나 시스템 점검을 확인해 주세요.</p>
               </div>
             ) : uploadItems.length ? (
