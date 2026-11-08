@@ -56,6 +56,14 @@ insert into public.company_members values
  ('40000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000001','member','manager','active');
 \ir 20261105-store-kakao-membership.sql
 \ir 20261107-store-owner-activation.sql
+\ir 20261107-store-owner-activation.down.sql
+do $$ begin
+  if to_regclass('public.store_owner_activation_requests') is not null
+    or to_regprocedure('public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text)') is not null
+    or to_regprocedure('public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)') is not null
+  then raise exception 'empty_activation_rollback_failed'; end if;
+end $$;
+\ir 20261107-store-owner-activation.sql
 
 set role service_role;
 do $$ begin

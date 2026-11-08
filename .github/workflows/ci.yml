@@ -295,6 +295,18 @@ jobs:
           createdb store_owner_activation_test
           cd docs/sql-drafts
           psql --dbname=store_owner_activation_test --set=ON_ERROR_STOP=1 --file=20261107-store-owner-activation.pg17.test.sql
+          if psql --dbname=store_owner_activation_test --set=ON_ERROR_STOP=1 --file=20261107-store-owner-activation.down.sql; then
+            echo "owner activation rollback unexpectedly accepted existing history"
+            exit 1
+          fi
+          psql --dbname=store_owner_activation_test --set=ON_ERROR_STOP=1 <<'SQL'
+          do $$ begin
+            if to_regclass('public.store_owner_activation_requests') is null
+              or to_regprocedure('public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text)') is null
+              or to_regprocedure('public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text)') is null
+            then raise exception 'rejected_activation_rollback_changed_schema'; end if;
+          end $$;
+          SQL
 
       - name: Verify selling price direction opt-in on PostgreSQL 17
         env:
