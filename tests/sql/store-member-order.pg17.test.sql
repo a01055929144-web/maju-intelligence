@@ -28,6 +28,8 @@ end $$;
 \ir ../../supabase/migrations/20261102140834_store_account_manager_role_20261103.sql
 create table public.app_users(id uuid primary key,status text not null);
 grant select,update on public.app_users to service_role;
+-- Existing non-pricing tables are synthetic; reproduce their read grants for the invoker RPC.
+grant select on public.normalized_customers,public.customer_price_agreements to service_role;
 \ir ../../docs/sql-drafts/20261108-09-store-member-order.sql
 
 -- Empty down/up is reversible; no schema changes or backfill.
@@ -47,7 +49,8 @@ insert into store_accounts(id,company_id,customer_id,business_registration_numbe
 insert into store_account_members(id,company_id,store_account_id,auth_user_id,role,status) values
  ('40000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','owner','active'),
  ('40000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000002','owner','active'),
- ('40000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','owner','active');
+ ('40000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','owner','active'),
+ ('40000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','staff','active');
 insert into product_catalog(id,company_id,purchase_product_name,purchase_price,sales_unit,tax_type) values
  ('60000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','synthetic',800,'BOX','exempt');
 insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values
@@ -91,6 +94,23 @@ do $$ declare r jsonb; role_name text; begin
  if r is distinct from member_order_test_call(k=>'a0000000-0000-4000-8000-000000000001') then raise exception 'retry_result_changed'; end if;
  if (select count(*) from store_orders)<>4 or (select count(*) from store_order_lines)<>4 or (select count(*) from store_order_requests)<>4 then raise exception 'retry_duplicated_order'; end if;
  if exists(select from store_order_lines where product_name<>'snapshot product' or specification<>'snapshot spec' or sales_unit<>'BOX' or unit_price<>1200 or tax_type<>'exempt') then raise exception 'snapshot_changed'; end if;
+ begin
+  perform member_order_test_call(m=>'40000000-0000-4000-8000-000000000004',u=>'50000000-0000-4000-8000-000000000002',k=>'a0000000-0000-4000-8000-000000000001');
+  raise exception 'other_member_reused_key';
+ exception when raise_exception then if sqlerrm<>'Idempotency conflict' then raise; end if; end;
+ -- Another active member may edit this store's order; the original author is preserved.
+ perform place_store_order(repeat('a',64),'2099-01-05','[{"productId":"60000000-0000-4000-8000-000000000001","quantity":2}]',
+  gen_random_uuid(),(r->>'id')::uuid,1,'','30000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000004','50000000-0000-4000-8000-000000000002');
+ if not exists(select from store_orders where id=(r->>'id')::uuid and revision=2 and ordered_by_member_id='40000000-0000-4000-8000-000000000001') then raise exception 'edit_reassigned_author'; end if;
+ insert into store_orders(id,company_id,customer_id,link_id,document_version_id,delivery_date,idempotency_key)
+ values('b0000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001','2099-01-05',gen_random_uuid());
+ begin
+  perform place_store_order(repeat('a',64),'2099-01-05','[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',
+   gen_random_uuid(),'b0000000-0000-4000-8000-000000000001',1,'','30000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
+  raise exception 'legacy_order_silently_attributed';
+ exception when raise_exception then if sqlerrm<>'Order cannot be edited' then raise; end if; end;
+ delete from store_orders where id='b0000000-0000-4000-8000-000000000001' and ordered_by_member_id is null;
+
  update store_account_members set status='removed',removed_at=now() where id='40000000-0000-4000-8000-000000000001';
  begin perform member_order_test_call(k=>'a0000000-0000-4000-8000-000000000001'); raise exception 'removed_member_replay_allowed';
  exception when raise_exception then if sqlerrm<>'Store member unavailable' then raise; end if; end;
