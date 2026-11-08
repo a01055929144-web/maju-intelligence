@@ -59,9 +59,9 @@ try {
     insert into supplier_product_matches(company_id,supplier_product_id,product_catalog_id,match_status,match_score,conversion_confirmed) values
       ('${companyA}','50000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','confirmed',100,false);
 
-    insert into normalized_customers(id,company_id,import_id,customer_name) values
-      ('60000000-0000-4000-8000-000000000001','${companyA}','10000000-0000-4000-8000-000000000001','A 매장'),
-      ('60000000-0000-4000-8000-000000000002','${companyB}','20000000-0000-4000-8000-000000000001','B 매장');
+    insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key) values
+      ('60000000-0000-4000-8000-000000000001','${companyA}','10000000-0000-4000-8000-000000000001','A 매장','stage-f-a'),
+      ('60000000-0000-4000-8000-000000000002','${companyB}','20000000-0000-4000-8000-000000000001','B 매장','stage-f-b');
     insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values
       ('70000000-0000-4000-8000-000000000001','${companyA}',repeat('a',64),'sheet',1,'{}'),
       ('70000000-0000-4000-8000-000000000002','${companyB}',repeat('b',64),'sheet',1,'{}');
