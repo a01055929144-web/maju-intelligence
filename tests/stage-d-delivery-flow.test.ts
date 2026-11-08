@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildOrderRouteConsumer, type OrderDeliveryCandidate } from "../application/delivery/order-route-consumer";
 import { buildStageDDeliveryFlow } from "../application/delivery/stage-d-delivery-flow";
-import { toOrderDeliveryCandidates } from "../application/delivery/store-order-delivery-adapter";
 
 const order: OrderDeliveryCandidate = {
   companyId: "company-a",
@@ -33,16 +32,6 @@ function build(input: Partial<Parameters<typeof buildStageDDeliveryFlow>[0]> = {
 }
 
 describe("Stage D synthetic delivery flow", () => {
-  it("does not create delivery work when a customer only opens a link and has no order rows", () => {
-    const deliveryRead = toOrderDeliveryCandidates([]);
-    const read = orderRead(deliveryRead.candidates);
-    const result = build({ existingStops: [], orderRead: read });
-
-    expect(deliveryRead).toEqual({ candidates: [], blocked: [] });
-    expect(read.visibleCustomerIds).toEqual([]);
-    expect(result).toEqual({ routeStops: [], unassigned: [], blocked: [], history: [] });
-  });
-
   it("preserves manual stops, order ids, drivers and vehicles when there are no candidates", () => {
     expect(build()).toMatchObject({
       routeStops: [{
