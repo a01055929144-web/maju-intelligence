@@ -46,6 +46,8 @@ try {
       (select count(*)::int from product_catalog where company_id=$1) products_count,
       (select count(*)::int from product_catalog where company_id=$1 and purchase_price=0) unpriced,
       (select count(*)::int from purchase_receipt_lines where company_id=$1) receipts,
+      (select min(receipt_date)::text from purchase_receipt_lines where company_id=$1) receipt_min_date,
+      (select max(receipt_date)::text from purchase_receipt_lines where company_id=$1) receipt_max_date,
       (select count(*)::int from purchase_cost_date_batches_v2 where company_id=$1) batches,
       (select count(*)::int from price_recalc_runs where company_id=$1) price_runs,
       (select count(*)::int from purchase_receipt_correction_events where company_id=$1) corrections,

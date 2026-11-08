@@ -10,6 +10,7 @@ const priorDate = new Date(Date.parse(date+'T00:00:00Z')-172800000).toISOString(
 const units = ['EA','BOX','봉','병'];
 type Product = { catalog_code: string; code: string; id: string; cost: string; date: string | null; purchase_unit: string; sales_unit: string | null; price: string };
 type State = { products_count: number; unpriced: number; receipts: number; batches: number; price_runs: number; corrections: number; other_cost: string;
+  receipt_min_date: string | null; receipt_max_date: string | null;
   batch: null | { id: string; status: string; row_count: number; history_only_product_count: number; recalc_run_id: string | null }; items: Product[] };
 function db(action: string, value?: number, input?: unknown) {
   return execFileSync(process.execPath, ['scripts/stage-a-test-db.mjs', action, ...(value === undefined ? [] : [String(value)])], {
@@ -34,13 +35,13 @@ function syntheticFile(existing: number) {
   return { rows, buffer: XLSX.write(workbook,{type:'buffer',bookType:'xlsx',cellDates:true}) as Buffer };
 }
 function historyOnlyFile() {
-  const header = 'ERP 코드,품목,규격,단위,구매일,단가';
+  const header = 'ERP 코드,품목,규격,단위,단가';
   const rows = Array.from({length:3389},(_,index)=>{
     const i=index<741?index:index<929?index-741:(index-929)%741;
     const cost=i<188 && index>=741 && index<929?120:100;
-    return `${code(i)},${name(i,741)},1kg,${units[i%4]},${date},${cost}`;
+    return `${code(i)},${name(i,741)},1kg,${units[i%4]},${cost}`;
   });
-  for(let i=0;i<28;i++) rows.push(`MISS-${i%4+1},검증 미연결 ${i%4+1},1kg,EA,${date},100`);
+  for(let i=0;i<28;i++) rows.push(`MISS-${i%4+1},검증 미연결 ${i%4+1},1kg,EA,100`);
   return Buffer.from(`${header}\n${rows.join('\n')}`,'utf8');
 }
 
@@ -205,6 +206,7 @@ test('history-only default preserves matched receipts without recalculation or c
   db('seed',741);
   expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   await page.goto(`/revenue/pricing?companyId=${company}`);
+  await page.getByLabel('매입일',{exact:true}).fill('2026-11-01');
   await page.locator('input[type="file"]').setInputFiles({name:'stage-a-history-only.csv',mimeType:'text/csv',buffer:historyOnlyFile()});
   const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
   await expect(preview.getByRole('checkbox',{name:'현재 가격도 변경',exact:true})).not.toBeChecked();
@@ -213,11 +215,13 @@ test('history-only default preserves matched receipts without recalculation or c
   await page.getByRole('button',{name:/③ 저장/}).click();
   const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
   await expect(review).toContainText('매입 이력 3389행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 28행 제외');
+  await expect(review).toContainText('2026-11-01 · 3389행');
   await review.getByRole('checkbox',{name:'적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다.',exact:true}).check();
   await review.getByRole('button',{name:'확인한 날짜로 저장',exact:true}).click();
   await expect.poll(()=>state().batches).toBe(1);
   const saved=state();
   expect(saved.receipts).toBe(3389); expect(saved.price_runs).toBe(0);
+  expect([saved.receipt_min_date,saved.receipt_max_date]).toEqual(['2026-11-01','2026-11-01']);
   expect(saved.batch).toMatchObject({status:'completed',row_count:3389,history_only_product_count:741,recalc_run_id:null});
   expect(saved.items.every(item=>Number(item.cost)===100 && item.date===priorDate)).toBe(true);
 });
