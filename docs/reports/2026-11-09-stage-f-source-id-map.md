@@ -1,13 +1,13 @@
 # Stage F 퍼널·오류 큐 원천 ID 연결표
 
-작성일: 2026-11-09  
-소유: 06 지표  
-중앙 상태: **1/4 유지**  
+작성일: 2026-11-09
+소유: 06 지표
+중앙 상태: **1/4 유지**
 기능 플래그: **OFF**
 
 ## 결론
 
-현재 운영에서 재계산 가능한 구간은 문서 발송·열람·수락과 첫 주문·재주문까지다. 배송 완료 원천인 #410과 주문 매출 원천인 #384는 모두 Draft이며 운영 DB 미적용·호출 미연결 상태다. 따라서 배송 완료율과 주문 매출은 `0`으로 집계하지 않고 `unavailable`로 반환한다.
+문서 발송·열람·수락과 첫 주문·재주문까지는 원천 ID 연결 경로가 존재하지만, 운영 발송과 실제 첫 주문 행으로 재계산을 검증하지 않았다. 배송 완료 원천인 #410과 주문 매출 원천인 #384는 모두 Draft이며 운영 DB 미적용·호출 미연결 상태다. 따라서 현재 Stage F 운영 지표를 생성하지 않으며, 배송 완료율과 주문 매출은 `0`으로 집계하지 않고 `unavailable`로 반환한다.
 
 운영 행이 없는 상태에서 fixture, 주문 상태 추정, 메모, 결과 JSON으로 수치를 만들지 않는다. Stage D와 E가 아래 관계를 실제 운영에 기록하고 검증하기 전까지 퍼널 확장과 오류 큐 플래그를 켜지 않는다.
 
@@ -15,9 +15,9 @@
 
 | 구간 | 기준 원천 | 다음 원천과의 명시적 연결 | 현재 판정 |
 | --- | --- | --- | --- |
-| 문서 발송·열람 | `pricing_document_sends.id` (`send_id`) | 같은 회사의 `pricing_document_acceptance_requests.send_id` | 운영 재계산 가능 |
-| 문서 수락 | `pricing_document_acceptance_requests.id` (`acceptance_request_id`) | 같은 회사·고객·문서 버전의 `storefront_links.acceptance_request_id` | 운영 재계산 가능 |
-| 첫 주문·재주문 | `storefront_links.id` (`link_id`) → `store_orders.id` (`order_id`) | 같은 회사·고객·문서 버전의 명시적 `link_id` | 운영 재계산 가능 |
+| 문서 발송·열람 | `pricing_document_sends.id` (`send_id`) | 같은 회사의 `pricing_document_acceptance_requests.send_id` | 원천 ID 경로 존재, 실제 운영 재계산 미검증 |
+| 문서 수락 | `pricing_document_acceptance_requests.id` (`acceptance_request_id`) | 같은 회사·고객·문서 버전의 `storefront_links.acceptance_request_id` | 원천 ID 경로 존재, 실제 운영 재계산 미검증 |
+| 첫 주문·재주문 | `storefront_links.id` (`link_id`) → `store_orders.id` (`order_id`) | 같은 회사·고객·문서 버전의 명시적 `link_id` | 원천 ID 경로 존재, 실제 첫 주문 0건·운영 재계산 미검증 |
 | 배송 완료 (#410) | `store_order_delivery_completions_09.(company_id, completion_event_id)` | `store_order_delivery_completion_orders_09`의 `(company_id, completion_event_id, order_id)`, `pre_revision`, `completed_revision` | Draft, 운영 미적용. `unavailable` |
 | 매출 전표 (#384) | `business_documents.id` (`sales_document_id`) | `source_type='order'`, `source_id=order_id`, `source_key='store_order:' || order_id` | Draft, 운영 미적용. `unavailable` |
 | 매출 원장 (#384) | `partner_ledger_entries.source_document_id` | 같은 회사의 `business_documents.id`; 주문은 전표의 `source_id`로 역연결 | Draft, 운영 미적용. `unavailable` |
