@@ -2,7 +2,7 @@
 
 상태: **운영 SQL 적용 완료 / 대표 회사 기능 ON / 데이터 미작성 / 재실행 금지**
 
-대표가 운영 프로젝트 적용을 명시 승인했고, 컨트롤타워가 승인 원문을 `apply_migration`으로 1회 적용했습니다. 운영 migration history는 `20261107163553 purchase_cost_date_v2_20261108`, 저장소 기록은 `supabase/migrations/20261107163553_purchase_cost_date_v2_20261108.sql`입니다. 이 SQL은 운영에서 재실행하지 않습니다. 대표 회사의 기능 접근은 활성화됐지만 운영 데이터 쓰기는 별도 최종 승인 전까지 금지합니다.
+대표가 운영 프로젝트 적용과 실제 파일 쓰기 검증을 명시 승인했고, 컨트롤타워가 승인 원문을 `apply_migration`으로 1회 적용했습니다. 운영 migration history는 `20261107163553 purchase_cost_date_v2_20261108`, 저장소 기록은 `supabase/migrations/20261107163553_purchase_cost_date_v2_20261108.sql`입니다. 이 SQL은 운영에서 재실행하지 않습니다. 대표 회사의 기능 접근은 활성화됐으며, 기존 쓰기 검증 승인 범위 안에서 최종 화면 미리보기(적용일·4품목 제외·188품목 보류·553품목 선택)를 확인하기 전에는 실행하지 않습니다.
 
 `DB-APPROVED: fcmdvveqmcgtioelzqun 2026-11-08 01:35 KST`
 
