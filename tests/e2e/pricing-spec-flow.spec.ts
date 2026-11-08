@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { expect, test } from "@playwright/test";
-import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
+import { documentDisplayPrice, lineFromCatalog, parseDocument, type DocumentContent } from "../../domains/pricing/document";
+import { publicDocumentOutput } from "../../domains/pricing/document-share";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
@@ -79,7 +80,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 미림", displayName: "합성 미림", brand: "", spec: "18L", unit: "통", price: 1000, taxType: "exempt" as const };
     const products = Array.from({ length: 16 }, (_, i) => ({ ...product, id: `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` }));
     let revision = 1;
-    let content: DocumentContent = { kind, title: "규격 회귀 문서", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, lines: products.map((item, i) => ({ ...lineFromCatalog({ ...item, spec: " " }), displayName: `합성 품목 ${i + 1}` })) };
+    let content: DocumentContent = { kind, title: "규격 회귀 문서", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+      display: { columns: 2, promoLayout: kind === "sheet" ? "table" : "cards", info: [], productWidth: 65, priceIncludesTax: true },
+      lines: products.map((item, i) => ({ ...lineFromCatalog({ ...item, spec: " " }), displayName: `합성 품목 ${i + 1}`, taxType: i % 2 ? "taxable" as const : "exempt" as const,
+        ...(i >= 14 ? { promotionId: `60000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, badge: "행사" as const, startsOn: "2020-01-01", endsOn: "2099-12-31" } : {}) })) };
     const oldContent = structuredClone(content);
     content = { ...content, lines: content.lines.map((line, i) => ({ ...line, displayName: `수정 초안 ${i + 1}`, unit: "BOX", price: 2200, taxType: "taxable" })) };
     let failVersions = false, failAutoRefresh = false, armedPromotionReads = 0;
@@ -131,6 +135,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
     expect((await page.getByRole("dialog", { name: "미리보기", exact: true }).locator(".pricing-paper").allTextContents()).join("")).not.toContain("18L");
     const oldPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
+    const oldPaper = oldPreview.locator(".pricing-online");
+    await expect(oldPaper.locator("[data-document-tax]")).toHaveCount(16);
+    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "면세" })).toHaveCount(8);
+    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "과세" })).toHaveCount(8);
     const downloadEvent = page.waitForEvent("download");
     await oldPreview.getByRole("button", { name: "엑셀 내려받기", exact: true }).click();
     const download = await downloadEvent;
@@ -138,6 +146,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     const exported = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
     expect(exported).toHaveLength(16);
     expect(exported[0]).toMatchObject({ 품목명: "합성 품목 1", 규격: "", 단위: "통", 판매가: 1000, 과세: "면세" });
+    expect(exported[1]).toMatchObject({ 품목명: "합성 품목 2", 규격: "", 단위: "통", 판매가: 1100, 과세: "과세" });
     expect(JSON.stringify(exported)).not.toMatch(/수정 초안|18L|2200|원가|마진/);
     const print = oldPreview.getByRole("button", { name: "PDF·인쇄", exact: true });
     expect((await print.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -156,6 +165,46 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     await automatic.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-
+    // Reuse the selected old version for both read-only browser surfaces.
+    // Responses are synthetic; no link issuance, acceptance, delivery record or order is performed.
+    const oldVersion = version(1);
+    const selected = { ...oldVersion, content: parseDocument(oldVersion.content) };
+    let forbiddenWrites = 0;
+    await page.route("**/api/pricing-document-acceptance", route => { forbiddenWrites++; return route.abort(); });
+    await page.route("**/api/pricing-store-links*", route => { forbiddenWrites++; return route.abort(); });
+    await page.route("**/api/pricing-documents/public", route => {
+      expect(route.request().postDataJSON()).toEqual({ token: "synthetic-snapshot-document" });
+      return route.fulfill({ json: { document: publicDocumentOutput(selected), expiresAt: "2099-01-01T00:00:00Z", acceptanceAvailable: false } });
+    });
+    await page.goto("/pricing-document#synthetic-snapshot-document");
+    const shared = page.locator(".pricing-output-content");
+    await expect(shared.locator("[data-document-tax]")).toHaveCount(16);
+    await expect(shared).toContainText("버전 1");
+    await expect(shared).toContainText("1,100원");
+    await expect(shared).not.toContainText("수정 초안");
+    await expect(shared).not.toContainText("18L");
+    await expect(shared).not.toContainText("BOX");
+    await page.screenshot({ path: info.outputPath(`${kind}-snapshot-share-${width}.png`), fullPage: true });
+    await page.route("**/api/storefront", route => {
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().postDataJSON().token).toBe("synthetic-snapshot-store");
+      return route.fulfill({ json: { store: { title: selected.content.title, companyName: selected.content.companyName, customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: selected.content.validUntil, priceAvailable: true, canOrder: false, nextDeliveryDate: null, selectedDeliveryDate: "2099-01-01", notice: "", marketPriceNotice: "",
+        policy: { weekdays: [], holidays: [], cutoffDaysBefore: 1, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+        lines: selected.content.lines.map(line => ({ key: `${line.productId}:${line.promotionId ?? ""}`, productId: line.productId, promotionId: line.promotionId, name: line.displayName, category: "", brand: line.brand, spec: line.spec || "", unit: line.unit, badge: line.badge, taxType: line.taxType, unitPrice: documentDisplayPrice(line.price, line.taxType, true), priceIncludesTax: true, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null })) },
+        orders: [], preferences: [], historyPage: 1, historyHasMore: false } });
+    });
+    await page.goto("/store#synthetic-snapshot-store");
+    await page.getByRole("button", { name: "주문하기", exact: true }).click();
+    const exempt = page.locator("main ul > li").filter({ has: page.getByText("합성 품목 1", { exact: true }) });
+    const taxable = page.locator("main ul > li").filter({ has: page.getByText("합성 품목 2", { exact: true }) });
+    await expect(exempt).toContainText("통"); await expect(exempt).toContainText("1,000원"); await expect(exempt.getByText("면세", { exact: true })).toBeVisible();
+    await expect(taxable).toContainText("1,100원"); await expect(taxable.getByText("과세 · 부가세 포함", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
+    await expect(page.locator("main")).not.toContainText("수정 초안");
+    await expect(page.locator("main")).not.toContainText("18L");
+    await expect(page.locator("main")).not.toContainText("BOX");
+    expect(forbiddenWrites).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+    await page.screenshot({ path: info.outputPath(`${kind}-snapshot-store-${width}.png`), fullPage: true });
   });
 }

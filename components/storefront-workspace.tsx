@@ -283,7 +283,8 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
           {pricesVisible && (line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat") ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
           <div className="text-right text-sm">{!pricesVisible ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
-            line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
+            line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}
+            {pricesVisible && <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : `과세 · 부가세 ${line.priceIncludesTax ? "포함" : "별도"}`}</p>}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}
           {pricesVisible && line.recentDispatchPrice !== null && line.recentDispatchDate &&
             <> 최근 출고 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)} (참고)</>}
