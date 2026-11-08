@@ -16,7 +16,13 @@ export default async function AdminCompaniesPage({
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const [{ companyId }, payload] = await Promise.all([searchParams, getManagedCompanyAccounts()]);
+  const [{ companyId }, payload] = await Promise.all([
+    searchParams,
+    getManagedCompanyAccounts().catch(() => {
+      console.error("[admin/companies] managed_company_accounts_read_failed");
+      return null;
+    })
+  ]);
 
   return (
     <main className="min-h-screen maju-app-bg">
@@ -36,13 +42,25 @@ export default async function AdminCompaniesPage({
           </CardContent>
         </Card>
 
-        <AdminCompaniesWorkspace
-          defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
-          holdModuleCompanyIds={Array.from(getHoldModulesEnabledCompanyIds())}
-          initialCompanies={payload.companies}
-          initialSelectedCompanyId={companyId}
-          source={payload.source}
-        />
+        {payload ? (
+          <AdminCompaniesWorkspace
+            defaultCompanyId={process.env.CUSTOMER_COMPANY_ID || ""}
+            holdModuleCompanyIds={Array.from(getHoldModulesEnabledCompanyIds())}
+            initialCompanies={payload.companies}
+            initialSelectedCompanyId={companyId}
+            source={payload.source}
+          />
+        ) : (
+          <Card className="border-destructive/30 bg-destructive/5 shadow-none">
+            <CardContent className="flex gap-3 p-6 text-sm leading-6 text-destructive">
+              <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-bold">고객사 목록을 불러오지 못했습니다.</p>
+                <p className="mt-1 text-muted-foreground">고객사 0건이 아니라 조회 실패 상태입니다. 잠시 후 새로고침하거나 시스템 점검을 확인해 주세요.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </section>
     </main>
   );
