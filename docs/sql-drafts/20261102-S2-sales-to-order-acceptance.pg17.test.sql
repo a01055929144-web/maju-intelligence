@@ -224,20 +224,27 @@ insert into normalized_customers(id,company_id,import_id,customer_name,address,p
 ('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','single shop','single road','01055554444','single-shop');
 insert into business_permit_leads(id,company_id,business_name,address,phone) values
 ('20000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','single lead','lead road','01011112222');
-do $$ declare a jsonb; before_count integer; begin
+do $$ declare a jsonb; b jsonb; before_count integer; begin
   select count(*) into before_count from normalized_customers;
   a:=accept_pricing_document_and_issue_storefront_link(
     '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
     '70000000-0000-4000-8000-000000000018',repeat('8',64),'store',null,'20000000-0000-4000-8000-000000000004',null,false,null,
     '{"businessName":"single shop","phone":"010-5555-4444","address":"single road"}',
     '81000000-0000-4000-8000-000000000012',repeat('8',32),repeat('8',64),now()+interval '1 year');
+  b:=accept_pricing_document_and_issue_storefront_link(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000018',repeat('8',64),'store',null,'20000000-0000-4000-8000-000000000004',null,false,null,
+    '{"businessName":"single shop","phone":"010-5555-4444","address":"single road"}',
+    '81000000-0000-4000-8000-000000000013',repeat('3',32),repeat('3',64),now()+interval '1 year');
   if a->>'customerId'<>'10000000-0000-4000-8000-000000000005' or a->>'leadId'<>'20000000-0000-4000-8000-000000000004'
-    or a->>'needsReview'<>'false' or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId'<>'81000000-0000-4000-8000-000000000012'
+    or a<>b or a->>'needsReview'<>'false' or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId'<>'81000000-0000-4000-8000-000000000012'
     then raise exception 'single customer candidate did not reach order link'; end if;
   if (select count(*) from normalized_customers)<>before_count
     or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000004')<>'10000000-0000-4000-8000-000000000005'
+    or (select count(*) from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000018')<>1
     or not exists(select from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001'
       and customer_id='10000000-0000-4000-8000-000000000005' and document_version_id='50000000-0000-4000-8000-000000000001' and active)
+    or exists(select from storefront_links where id='81000000-0000-4000-8000-000000000013')
     then raise exception 'single customer candidate duplicated or missed linkage'; end if;
 end $$;
 
@@ -261,12 +268,19 @@ do $$ declare a jsonb; b jsonb; begin
 end $$;
 
 -- New customer receives a link; a distinct acceptance reuses it without overwriting the first audit link.
-do $$ declare a jsonb; b jsonb; first_request uuid; begin
+do $$ declare a jsonb; b jsonb; c jsonb; first_request uuid; begin
   a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000003',repeat('5',32),repeat('6',64),now()+interval '1 year');
-  if a->>'customerId' is null or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'new customer order link failed'; end if;
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000014',repeat('4',32),repeat('4',64),now()+interval '1 year');
+  if a<>b or a->>'customerId' is null or a->>'leadId' is null or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'new customer order link failed'; end if;
+  if (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001' and customer_name='brand new' and phone='01055556666' and address='new road')<>1
+    or (select count(*) from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001' and source='pricing_sheet_acceptance' and phone='01055556666')<>1
+    or (select count(*) from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id=(a->>'customerId')::uuid and document_version_id='50000000-0000-4000-8000-000000000001' and active)<>1
+    or (select count(*) from storefront_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id=(a->>'customerId')::uuid and document_version_id='50000000-0000-4000-8000-000000000001')<>1
+    or exists(select from storefront_links where id='81000000-0000-4000-8000-000000000014')
+    then raise exception 'new customer retry duplicated acceptance state'; end if;
   select acceptance_request_id into first_request from storefront_links where id=(a->>'storefrontLinkId')::uuid;
-  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000016',repeat('6',64),'staff',(a->>'customerId')::uuid,(a->>'leadId')::uuid,null,false,null,'{}','81000000-0000-4000-8000-000000000009',repeat('9',32),repeat('9',64),now()+interval '1 year');
-  if b->>'storefrontLinkId'<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not reuse active link'; end if;
+  c:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000016',repeat('6',64),'staff',(a->>'customerId')::uuid,(a->>'leadId')::uuid,null,false,null,'{}','81000000-0000-4000-8000-000000000009',repeat('9',32),repeat('9',64),now()+interval '1 year');
+  if c->>'storefrontLinkId'<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not reuse active link'; end if;
   if (select acceptance_request_id from storefront_links where id=(a->>'storefrontLinkId')::uuid)<>first_request then raise exception 'distinct acceptance overwrote first audit link'; end if;
   if (select result->>'storefrontLinkId' from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000016')<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not preserve per-request link result'; end if;
 end $$;
