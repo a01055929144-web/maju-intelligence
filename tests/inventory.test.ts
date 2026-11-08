@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { supabaseRequest } = vi.hoisted(() => ({ supabaseRequest: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest }));
 
-import { createAndPostStocktake, listInventory, listInventoryIssues, listUnitConversions, searchStocktakeProducts } from "../lib/inventory";
+import { createAndPostStocktake, listInventory, listInventoryIssues, listUnitConversions, reapplyDocumentInventory, searchStocktakeProducts } from "../lib/inventory";
 
 describe("inventory data access", () => {
   beforeEach(() => supabaseRequest.mockReset());
@@ -53,6 +53,26 @@ describe("inventory data access", () => {
     expect(path).toContain("limit=51");
     expect(path).toContain("offset=100");
     expect(path).toContain("document_date=gte.");
+  });
+
+  it("does not reapply inventory while a document has unresolved lines", async () => {
+    supabaseRequest.mockResolvedValueOnce([{ resolve_status: "no_conversion", line_count: 1 }]);
+
+    await expect(reapplyDocumentInventory("company-1", "document-1", "운영자")).rejects.toThrow("상품 연결과 단위 환산");
+
+    expect(supabaseRequest).toHaveBeenCalledTimes(1);
+    expect(supabaseRequest).toHaveBeenCalledWith("rpc/inventory_document_status", expect.objectContaining({
+      body: JSON.stringify({ p_company_id: "company-1", p_document_id: "document-1" }),
+    }));
+  });
+
+  it("reapplies inventory after every tracked line resolves", async () => {
+    const status = [{ resolve_status: "ok", line_count: 2 }, { resolve_status: "untracked", line_count: 1 }];
+    supabaseRequest.mockResolvedValueOnce(status).mockResolvedValueOnce(null).mockResolvedValueOnce(status);
+
+    await expect(reapplyDocumentInventory("company-1", "document-1", "운영자")).resolves.toEqual(status);
+
+    expect(supabaseRequest.mock.calls[1][0]).toBe("rpc/reapply_inventory_for_document");
   });
 
   it("deletes a draft stocktake header when line insertion fails", async () => {

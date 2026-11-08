@@ -120,6 +120,10 @@ export async function getDocumentInventoryStatus(companyId: string, documentId: 
   return rpc<Array<{ resolve_status: string; line_count: number }>>("inventory_document_status", { p_company_id: companyId, p_document_id: documentId });
 }
 export async function reapplyDocumentInventory(companyId: string, documentId: string, actorName: string) {
+  const status = await getDocumentInventoryStatus(companyId, documentId);
+  if (status.some((entry) => entry.resolve_status !== "ok" && entry.resolve_status !== "untracked")) {
+    throw new Error("상품 연결과 단위 환산을 먼저 확인해 주세요.");
+  }
   await rpc("reapply_inventory_for_document", { p_company_id: companyId, p_document_id: documentId, p_actor_name: actorName });
   return getDocumentInventoryStatus(companyId, documentId);
 }
