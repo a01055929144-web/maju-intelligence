@@ -196,6 +196,8 @@ try {
   assert.deepEqual(await states(concurrentInput.ids), [{ id: concurrentOrder.id, status: 'delivered', revision: 2 }]);
   assert.equal(await completionCount(), 2);
   assert.equal((await counts()).completionOrders, ids.length + 1);
+  await assert.rejects(admin.query('insert into store_order_delivery_completion_orders_09 values($1,$2,$3,$4,$5)',
+    [company, concurrentInput.event, ids[0], revisions[ids[0]], revisions[ids[0]] + 1]), /unique constraint/);
   assert.equal(await value(admin, 'select count(*)::integer result from store_order_delivery_completion_orders_09 where company_id=$1 and completion_event_id=$2 and order_id=$3 and pre_revision=1 and completed_revision=2',
     [company, concurrentInput.event, concurrentOrder.id]), 1);
 
