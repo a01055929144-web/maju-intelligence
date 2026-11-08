@@ -8,13 +8,18 @@
 
 두 RPC와 준비 테이블은 RLS를 켜고 service role만 접근한다. 원문 토큰은 DB에 저장하지 않는다. 운영 적용·플래그 활성화는 이 승인표 범위가 아니다.
 
-## 2026-11-08 운영 읽기 확인
+## 운영 읽기 확인 (2026-11-09 재확인)
 
-- `store_kakao_membership_20261107` migration 기록과 초대 생성·수락 RPC는 운영에 있다.
-- `remove_store_member_v1`은 운영에 있지만 대응 migration `20261108121034` 기록은 없다. 개통 전에 적용 경위와 migration 장부를 정리해야 한다.
-- 이 문서의 준비 테이블과 `prepare_store_owner_activation_v1`·`activate_store_owner_v1`은 운영에 없다.
-- 활성 매장 계정과 구성원은 0건이며, 운영 Vercel에 `STORE_MEMBER_SESSION_ENABLED`와 `FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS`가 없어 기능은 OFF다.
-- `tests/sql/store-member-full-journey.pg17.sql`은 폐기 PG17에서 개통→초대→수락→역할별 주문자 기록→내보내기 직후 차단과 과거 주문자 보존을 검증한다. 이는 운영 SQL 적용·계정 생성·기능 ON 승인이 아니다.
+| 경계 | 운영 객체 | migration 장부 | 판정 |
+|---|---|---|---|
+| 구성원 초대·수락 | 두 RPC 있음, service role만 실행 | `20261107075454` 있음 | 적용 확인 |
+| 구성원 내보내기 | `remove_store_member_v1` 있음, service role만 실행 | `20261108121034` 없음 | 적용 경위 확인 대기 |
+| 회원 주문 | `place_store_member_order` 있음, service role만 실행 | `20261108141800` 없음 | 적용 경위 확인 대기 |
+| 최초 점주 개통 | 준비 테이블과 준비·개통 RPC 모두 없음 | 적용 기록 없음 | 운영 미적용 |
+
+활성 매장 계정·활성 구성원·회원 주문은 모두 0건이다. 운영 Vercel에는 `STORE_MEMBER_SESSION_ENABLED`와 `FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS`가 없어 기능은 OFF다. 객체가 존재해도 migration 장부가 없으면 적용 완료로 판정하지 않으며, 0건은 실사용 완료 증거로 세지 않는다.
+
+`tests/sql/store-member-full-journey.pg17.sql`은 폐기 PG17에서 개통→초대→수락→역할별 주문자 기록→내보내기 직후 차단과 과거 주문자 보존을 검증한다. 이는 운영 SQL 적용·계정 생성·기능 ON 승인이 아니다. Stage C 구현 체크는 5/8을 유지한다.
 
 ## 운영 개통 승인 게이트
 
