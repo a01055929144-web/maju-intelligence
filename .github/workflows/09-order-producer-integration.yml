@@ -1,0 +1,60 @@
+name: 09 order producer PG17 integration
+on:
+  pull_request:
+    paths:
+      - app/api/storefront/route.ts
+      - lib/pricing/store-order-delivery-*.ts
+      - domains/order/store-order-delivery-snapshot.ts
+      - tests/integration/store-order-producer-postgrest.test.ts
+      - .github/workflows/09-order-producer-integration.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  producer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: store_member_order_test_delivery_09_api
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d store_member_order_test_delivery_09_api"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: store_member_order_test_delivery_09_api
+      PGUSER: postgres
+      PGRST_JWT_SECRET: order-producer-isolated-ci-only-secret-at-least-32-characters
+      ORDER_PRODUCER_INTEGRATION: isolated
+      ORDER_PRODUCER_POSTGREST_URL: http://127.0.0.1:3003
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: 220b9c1011368570873f61be467e651cf22a6cec
+          path: delivery09-contract
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Prepare pinned SQL in disposable PG17
+        run: |
+          psql --set=ON_ERROR_STOP=1 --file=delivery09-contract/tests/sql/store-order-delivery-api-09.pg17.fixture.sql
+          psql --set=ON_ERROR_STOP=1 --command="grant usage on schema public to service_role"
+      - name: Start isolated PostgREST
+        run: >-
+          docker run --detach --network host
+          --env PGRST_DB_URI=postgres://postgres@127.0.0.1:5432/store_member_order_test_delivery_09_api
+          --env PGRST_DB_SCHEMAS=public --env PGRST_DB_ANON_ROLE=anon
+          --env PGRST_JWT_SECRET --env PGRST_DB_MAX_ROWS=1000 --env PGRST_SERVER_PORT=3003
+          postgrest/postgrest:v12.2.8
+      - name: Verify existing PUT to producer to PostgREST to PG17
+        run: npx vitest run tests/integration/store-order-producer-postgrest.test.ts
