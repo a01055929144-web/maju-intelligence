@@ -236,7 +236,7 @@ truncate table
   store_accounts, storefront_links, store_orders, customer_price_agreements cascade;
 update normalized_customers set delivery_recipient_name=null,delivery_contact_phone=null,
   preferred_delivery_time=null,delivery_drop_location=null;
-ir 20261102-S2-sales-to-order-acceptance.down.sql
+\ir 20261102-S2-sales-to-order-acceptance.down.sql
 do $$ begin
   if to_regprocedure('public.accept_pricing_document_and_issue_storefront_link(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,jsonb,uuid,text,text,timestamptz,uuid,text)') is not null
     then raise exception 'acceptance order-link wrapper survived down'; end if;
