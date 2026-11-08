@@ -1,0 +1,46 @@
+name: 02 Stage D delivery snapshot PG17
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/02-stage-d-snapshot-pg17.yml"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.pg17.test.sql"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/02-stage-d-snapshot-pg17.yml"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql"
+      - "docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.pg17.test.sql"
+
+jobs:
+  stage-d-delivery-snapshot-pg17:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: stage_d_delivery_snapshot_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stage_d_delivery_snapshot_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify Stage D delivery snapshot draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: stage_d_delivery_snapshot_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql --set=ON_ERROR_STOP=1 --file=20261108-stage-d-delivery-snapshot-02.pg17.test.sql
