@@ -44,6 +44,13 @@
 - 01 지도·02 배송·03 ERP·04 업로드·05 전달·06 지표·07 회원·08 관리자·09 주문 작업방에 파일 소유권을 나눠 후속 지시했다. 02/09는 기사 인증·정류장·증빙과 주문별 완료 관계를 맞추고, 03은 delivered 원장 계약을 연결한다. 공유 파일과 이 표는 컨트롤타워만 갱신한다.
 - 중앙 완료 수치는 여전히 **최소 17/31(55%)**, 운영 **0/6**이다. #409 테스트와 #410 초안은 운영 완료로 세지 않는다.
 
+## 2026-11-09 운영 배포 확인
+
+- 00:53:55 KST에 main 05b912a 배포가 READY가 됐고 운영 도메인 별칭이 해당 배포를 가리킨다. 운영 DB·기능 플래그 변경은 없었다.
+- 배포 URL에서 /login, /admin/login, /dashboard, /leads, /map, /revenue/pricing, /revenue/pricing/documents, /revenue/pricing/links, /revenue/products, /store, /mobile/today, /mobile/sales, /admin/companies/new가 200으로 응답했다. 이는 인증 후 화면의 실사용 확인이 아니라 경로 응답 검사다.
+- /orders와 /products는 새 배포와 직전 배포 모두 404다. 실제 메뉴 경로는 각각 주문관리 미구현, /revenue/products이며 이번 배포 회귀가 아니다. /orders는 09방 후속으로 기록했다.
+- 로컬 DNS 조회가 실패해 직접 curl 검사는 수행하지 못했고 Vercel 배포 URL 조회로 상태를 확인했다. 응답 검증에서 새 회귀가 없어 롤백하지 않았다.
+
 ## A 단계 대표 파일 확정값
 
 | 항목 | 현재 확정 |
