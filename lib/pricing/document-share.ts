@@ -135,14 +135,15 @@ export async function recordSharedDocumentDelivery(scope: DocumentScope, input: 
     documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
 export async function readPublicDocument(token: string, requester: string) {
-  const { row, output } = await resolvePublicDocument(token, requester);
+  const { row, output, orderable } = await resolvePublicDocument(token, requester);
   if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
     `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
   });
   return { document: output, expiresAt: row.expires_at,
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
-    ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && !output.expired,
+    ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && orderable,
+      message: !orderable ? "이 문서에는 현재 주문할 품목이나 판매가가 없습니다. 발행 회사에 주문 가능한 새 문서를 요청해 주세요." : "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.",
       companyName: output.companyName, title: output.title, version: output.version } } : {}) };
 }
 
@@ -168,14 +169,14 @@ async function resolvePublicDocument(token: string, requester: string) {
     promotions.push(...current.map(p => ({ id: p.id, stock: p.stock, startsOn: p.starts_on, endsOn: p.ends_on })));
   }
   const output = publicDocumentOutput(withLivePromotions(version, promotions));
-  return { row, output };
+  return { row, output, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
 }
 
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
 export async function getPublicDocumentOrderContext(token: string, requester: string) {
   if (!publicDocumentOrderEntryEnabled()) missing();
-  const { row, output } = await resolvePublicDocument(token, requester);
-  if (row.lead_id !== null || output.expired) missing();
+  const { row, output, orderable } = await resolvePublicDocument(token, requester);
+  if (row.lead_id !== null || !orderable) missing();
   return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
     shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
 }

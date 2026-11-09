@@ -122,7 +122,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       orderEntry: { available: signupReady, companyName: content!.companyName, title: content!.title, version: 1 } } }));
   await publicViewer.route("**/api/pricing-documents/order-intent", route => {
     expect(route.request().postDataJSON()).toEqual({ token });
-    return intentReady ? route.fulfill({ json: { intent: "synthetic.intent", next: "store-profile" } })
+    return intentReady ? route.fulfill({ json: { intent: "synthetic.intent", next: "kakao" } })
       : route.fulfill({ status: 503, json: { message: "카카오 가입 연결 준비 중입니다. 현재 주문은 접수되지 않습니다." } });
   });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);

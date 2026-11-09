@@ -12,7 +12,7 @@ export function PublicPricingDocument() {
   const [expiresAt, setExpiresAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptance, setAcceptance] = useState<{ token: string; available: boolean } | null>(null);
-  const [orderEntry, setOrderEntry] = useState<{ available: boolean; companyName: string; title: string; version: number } | null>(null);
+  const [orderEntry, setOrderEntry] = useState<{ available: boolean; companyName: string; title: string; version: number; message?: string } | null>(null);
   const [orderMessage, setOrderMessage] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
   const sequence = useRef(0);
@@ -47,7 +47,7 @@ export function PublicPricingDocument() {
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
       const response = await fetch("/api/pricing-documents/public", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: { available: boolean; companyName: string; title: string; version: number } };
+      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: { available: boolean; companyName: string; title: string; version: number; message?: string } };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage(""); }
@@ -80,9 +80,9 @@ export function PublicPricingDocument() {
     {safeDocument && <PricingDocPaper output={safeDocument} />}
     {safeDocument && orderEntry && <section aria-label="공개 문서 주문 안내" className="space-y-2 rounded border p-3">
       <p>{orderEntry.companyName} · {orderEntry.title} · 게시 버전 {orderEntry.version}</p>
-      <p className="text-sm">문서는 로그인 없이 볼 수 있습니다. 주문은 카카오 점주 가입과 매장 정보 확인 후 발행 회사에 연결합니다.</p>
+      <p className="text-sm">문서는 로그인 없이 볼 수 있습니다. 카카오 인증 후 매장 정보·약관을 확인하고 발행 회사의 주문으로 연결합니다.</p>
       <Button disabled={!orderEntry.available || safeDocument.expired || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "가입 연결 확인 중" : !orderEntry.available && !safeDocument.expired ? "주문 연결 준비 중" : "주문·점주 가입 시작"}</Button>
-      {safeDocument.expired ? <p>유효기간을 확인한 뒤 발행 회사에 새 문서를 요청해 주세요.</p> : !orderEntry.available ? <p>카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.</p> : <p className="text-sm">발행 회사의 주문을 위해 점주 가입 화면으로 이동합니다. 아직 주문은 접수되지 않습니다.</p>}
+      {safeDocument.expired ? <p>유효기간을 확인한 뒤 발행 회사에 새 문서를 요청해 주세요.</p> : !orderEntry.available ? <p>{orderEntry.message || "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요."}</p> : <p className="text-sm">발행 회사의 주문을 위해 점주 가입 화면으로 이동합니다. 아직 주문은 접수되지 않습니다.</p>}
       {orderMessage ? <p role="status">{orderMessage}</p> : null}
     </section>}
     {safeDocument && !safeDocument.expired && acceptance?.available && <SharedPricingAcceptance key={`${acceptance.token}:${expiresAt}`} token={acceptance.token} kind={safeDocument.kind} />}

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const intent = createPublicStoreOwnerOnboardingIntent({ companyId: context.companyId, documentId: context.documentId,
       documentVersionId: context.documentVersionId, shareLinkId: context.shareLinkId, nonce: randomUUID(), returnTo: `/pricing-document#${token}` });
     if (!intent) return reply(503, "카카오 점주 가입 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.");
-    return NextResponse.json({ intent, next: "store-profile", expiresAt: new Date(Math.min(Date.now() + 300_000, Date.parse(context.expiresAt))).toISOString() }, { headers });
+    return NextResponse.json({ intent, next: "kakao", expiresAt: new Date(Math.min(Date.now() + 300_000, Date.parse(context.expiresAt))).toISOString() }, { headers });
   } catch (error) {
     if (error instanceof DocumentSendError) return reply(error.status, error.message);
     return reply(503, "문서를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");

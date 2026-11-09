@@ -340,7 +340,7 @@ it("signs only server-verified public issuer context for 07 and never accepts sc
   const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
   const t = token(result.publicUrl);
   const response = await orderIntentPost(request({ token: t }));
-  expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ intent: "synthetic.intent", next: "store-profile" });
+  expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ intent: "synthetic.intent", next: "kakao" });
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(mocks.onboarding).toHaveBeenCalledWith({ companyId: company, documentId: doc, documentVersionId: version,
     shareLinkId: result.shareLinkId, nonce: expect.stringMatching(/^[0-9a-f-]{36}$/), returnTo: result.publicUrl });
@@ -378,4 +378,13 @@ it("returns an authenticated 07 order connection without starting signup again",
   const response = await orderIntentPost(request({ token: token(result.publicUrl) }));
   expect(response.status).toBe(200); expect(await response.json()).toEqual({ next: "order", storeUrl: "/store#synthetic" });
   expect(mocks.onboarding).not.toHaveBeenCalled();
+});
+
+it("keeps items-only documents viewable but denies signup/order handoff without sales prices", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); content.showPrice = false;
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const body = await (await publicPost(request({ token: token(result.publicUrl) }))).json();
+  expect(body.document.lines).toHaveLength(1); expect(body.document.lines[0].price).toBeNull();
+  expect(body.orderEntry.available).toBe(false); expect(body.orderEntry.message).toContain("품목이나 판매가가 없습니다");
+  await expect(getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).rejects.toMatchObject({ status: 404 });
 });
