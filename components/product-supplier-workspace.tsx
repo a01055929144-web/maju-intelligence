@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, FileSpreadsheet, PackageSearch, Save, Search, Truck } from "lucide-react";
+import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/product-suppliers";
 
 const money = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
@@ -14,12 +15,17 @@ const businessNumber = (value?: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 };
 
-export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?: string; data: ProductSupplierDirectory }) {
+export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" }: { companyId?: string; data: ProductSupplierDirectory; loadError?: string }) {
   const [suppliers, setSuppliers] = useState(data.suppliers);
   const [selectedId, setSelectedId] = useState(data.suppliers[0]?.id || "");
-  const [query, setQuery] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [supplierQuery, setSupplierQuery] = useState("");
   const selected = suppliers.find((supplier) => supplier.id === selectedId);
-  const products = useMemo(() => data.products.filter((item) => item.supplierId === selectedId && item.rawName.toLocaleLowerCase("ko").includes(query.trim().toLocaleLowerCase("ko"))), [data.products, query, selectedId]);
+  const products = useMemo(() => data.products.filter((item) => item.supplierId === selectedId && item.rawName.toLocaleLowerCase("ko").includes(productQuery.trim().toLocaleLowerCase("ko"))), [data.products, productQuery, selectedId]);
+  const visibleSuppliers = useMemo(() => {
+    const normalized = supplierQuery.trim().toLocaleLowerCase("ko");
+    return normalized ? suppliers.filter((supplier) => supplier.name.toLocaleLowerCase("ko").includes(normalized)) : suppliers;
+  }, [supplierQuery, suppliers]);
   const history = data.costHistory.filter((item) => item.supplierId === selectedId).slice(0, 100);
   const imports = data.imports.filter((item) => item.supplierId === selectedId);
   const uploadHref = companyId ? `/revenue/pricing?companyId=${encodeURIComponent(companyId)}` : "/revenue/pricing"; // 매입처 가격 파일은 매입가 반영에서 올린다(2149)
@@ -32,24 +38,56 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
         <Metric label="원가 비교 가능" value={`${data.comparisons.length.toLocaleString()}개 품목`} />
       </div>
 
-      <div className="grid min-h-[620px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
         <aside className="maju-section-card overflow-hidden">
-          <div className="maju-card-header">
-            <div className="flex items-center justify-between gap-3">
-              <div><p className="text-xs font-bold text-teal-700">PURCHASING</p><h2 className="maju-section-title">매입처 목록</h2></div>
-              <Link className="maju-button-secondary h-9 px-3 text-xs" href={uploadHref}><FileSpreadsheet className="h-4 w-4" /> 단가표</Link>
+        <ErpPartnerDirectoryToolbar
+          action={<Link className="maju-button-secondary min-h-11 px-3 text-xs sm:min-h-9" href={uploadHref}><FileSpreadsheet className="h-4 w-4" /> 단가표 업로드</Link>}
+          countLabel={`${visibleSuppliers.length}/${suppliers.length}곳`}
+          description="매입처를 검색한 뒤 상품 수, 원가 확정률, 최근 업로드와 활성 상태를 비교하세요."
+          error={loadError || undefined}
+          onRetry={loadError ? () => window.location.reload() : undefined}
+          title="매입처 목록"
+        >
+          <label className="maju-search-field max-w-xl">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input
+              aria-label="매입처 검색"
+              className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
+              onChange={(event) => setSupplierQuery(event.target.value)}
+              placeholder="매입처명 검색"
+              value={supplierQuery}
+            />
+          </label>
+        </ErpPartnerDirectoryToolbar>
+        {visibleSuppliers.length ? (
+            <div className="max-h-[680px] divide-y divide-slate-100 overflow-y-auto">
+              {visibleSuppliers.map((supplier) => (
+                <button
+                  aria-pressed={selectedId === supplier.id}
+                  className={`min-h-24 w-full px-4 py-3 text-left transition ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "bg-white hover:bg-slate-50"}`}
+                  key={supplier.id}
+                  onClick={() => { setSelectedId(supplier.id); setProductQuery(""); }}
+                  type="button"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <b className="min-w-0 break-words text-sm text-slate-950">{supplier.name}</b>
+                    <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span>
+                  </span>
+                  <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
+                    <span>상품 {supplier.productCount.toLocaleString()}개</span>
+                    <span>원가 확정률 {supplier.confirmedCostRate}%</span>
+                    <span className="col-span-2 font-medium text-slate-500">최근 업로드 {date(supplier.latestImportAt)}</span>
+                  </span>
+                </button>
+              ))}
             </div>
+        ) : loadError ? null : (
+          <div className="maju-empty-state m-4">
+            <p className="text-sm font-black text-slate-700">{suppliers.length ? "검색 조건에 맞는 매입처가 없습니다." : "등록된 매입처가 없습니다."}</p>
+            <p className="mt-1 text-xs font-bold leading-5 text-slate-400">{suppliers.length ? "검색어를 바꿔보세요." : "매입 단가표를 업로드하면 매입처가 생성됩니다."}</p>
+            {suppliers.length ? <button className="maju-button-secondary mt-3 min-h-11" onClick={() => setSupplierQuery("")} type="button">검색 초기화</button> : <Link className="maju-button-primary mt-3 min-h-11" href={uploadHref}>단가표 업로드</Link>}
           </div>
-          <div className="max-h-[700px] divide-y overflow-y-auto">
-            {suppliers.map((supplier) => (
-              <button className={`w-full px-4 py-4 text-left transition ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "hover:bg-slate-50"}`} key={supplier.id} onClick={() => { setSelectedId(supplier.id); setQuery(""); }} type="button">
-                <div className="flex items-start justify-between gap-2"><b className="text-sm text-slate-950">{supplier.name}</b><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span></div>
-                <p className="mt-2 text-xs font-semibold text-slate-500">상품 {supplier.productCount.toLocaleString()}개 · 원가 확정 {supplier.confirmedCostRate}%</p>
-                <p className="mt-1 text-xs text-slate-400">최근 업로드 {date(supplier.latestImportAt)}</p>
-              </button>
-            ))}
-            {!suppliers.length ? <div className="p-10 text-center text-sm font-semibold text-slate-500">매입 단가표를 업로드하면 매입처가 생성됩니다.</div> : null}
-          </div>
+        )}
         </aside>
 
         <div className="min-w-0 space-y-4">
@@ -71,7 +109,7 @@ export function ProductSupplierWorkspace({ companyId = "", data }: { companyId?:
                   <Link className="maju-button-secondary" href={uploadHref}>새 단가표 업로드 <ArrowRight className="h-4 w-4" /></Link>
                 </div>
                 <div className="border-t border-slate-100 p-4">
-                  <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="maju-input w-full pl-9" onChange={(event) => setQuery(event.target.value)} placeholder="매입 상품명 검색" value={query} /></div>
+                  <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="매입 상품 검색" className="maju-input w-full pl-9 text-base sm:text-sm" onChange={(event) => setProductQuery(event.target.value)} placeholder="매입 상품명 검색" value={productQuery} /></div>
                   <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
                     <table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="p-3">매입 상품</th><th className="p-3">규격·단위</th><th className="p-3 text-right">최신 원가</th><th className="p-3">원가 상태</th><th className="p-3">연결 마스터 상품</th><th className="p-3">관측일</th></tr></thead><tbody className="divide-y">{products.map((product) => <tr key={product.id}><td className="p-3 font-semibold">{product.rawName}</td><td className="p-3 text-slate-600">{product.rawSpec || "-"} · {product.rawUnit || "-"}</td><td className="p-3 text-right font-bold">{product.latestCost == null ? "-" : money(product.latestCost)}</td><td className="p-3">{product.costConfirmed ? <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4" />확정</span> : <span className="font-bold text-amber-700">확인 필요</span>}</td><td className="p-3">{product.matchedCatalogName || <span className="text-slate-400">미연결</span>}</td><td className="p-3 text-slate-500">{date(product.lastSeenDate)}</td></tr>)}</tbody></table>
                     {!products.length ? <div className="p-10 text-center text-sm text-slate-500">조건에 맞는 매입 상품이 없습니다.</div> : null}

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ProductSupplierWorkspace } from "@/components/product-supplier-workspace";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
-import { listProductSupplierDirectory } from "@/lib/product-suppliers";
+import { listProductSupplierDirectory, type ProductSupplierDirectory } from "@/lib/product-suppliers";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +14,19 @@ export default async function ProductSuppliersPage({ searchParams }: { searchPar
   if (customerSession && !customerHasCapability(customerSession, "manage_sales")) redirect("/dashboard");
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || "";
-  const data = await listProductSupplierDirectory(companyId);
+  let data: ProductSupplierDirectory = { comparisons: [], costHistory: [], imports: [], products: [], suppliers: [] };
+  let loadError = "";
+  try {
+    data = await listProductSupplierDirectory(companyId);
+  } catch {
+    loadError = "매입처 목록을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.";
+  }
   const isAdminPreview = Boolean(adminSession && !customerSession);
 
   return (
     <CustomerAppShell active="suppliers" companyName={customerSession?.companyName || "선택 고객사"} mode={isAdminPreview ? "admin-preview" : "customer"} previewCompanyId={isAdminPreview ? companyId : undefined} subtitle="매입처별 상품, 확정 원가, 원가 이력과 업로드 이력을 한 흐름에서 확인합니다." title="매입처 관리" userName={customerSession?.name || "관리자"} workspaceRole={customerSession?.workspaceRole}>
       <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
-        <ProductSupplierWorkspace companyId={isAdminPreview ? companyId : ""} data={data} />
+        <ProductSupplierWorkspace companyId={isAdminPreview ? companyId : ""} data={data} loadError={loadError} />
       </section>
     </CustomerAppShell>
   );
