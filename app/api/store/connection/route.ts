@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { saveStoreConnection, storeConnectionEnabled } from "@/lib/store/07-store-connection";
-import { changeStoreConnection } from "@/application/organization/change-store-connection";
-import { canChangeStoreConnection } from "@/domains/organization/store-connection";
+import { changeStoreConnection } from "../../../../application/organization/change-store-connection";
+import { canChangeStoreConnection } from "../../../../domains/organization/store-connection";
 
 export const dynamic = "force-dynamic";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
