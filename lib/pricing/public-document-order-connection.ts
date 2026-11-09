@@ -14,7 +14,7 @@ export async function connectPublicDocumentOrder(context: Awaited<ReturnType<typ
   if (!member) return null;
   const customerId = member.customerId;
   if (member.companyId !== context.companyId || member.status !== "active" || !isId(customerId) || !isId(member.authUserId))
-    throw new DocumentSendError("매장 권한을 확인하지 못했습니다. 다시 로그인해 주세요.", 403);
+    throw new DocumentSendError("매장 권한을 확인하지 못했습니다. 다시 로그인해 주세요.", 404);
   const id = randomUUID(), issued = issueStoreLinkToken(id);
   const rows = await supabaseRequest<Array<{ issued_customer_id: string; issued_link_id: string; issued_token_nonce: string; issued_token_hash: string }>>(
     "rpc/issue_storefront_links", { method: "POST", body: JSON.stringify({ p_company: context.companyId,

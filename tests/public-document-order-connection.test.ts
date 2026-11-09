@@ -38,7 +38,7 @@ it("never queries or issues links without a 07-verified single active membership
 });
 it.each([{ companyId: user }, { status: "removed" }, { customerId: "untrusted" }])("rejects inconsistent membership before any link write: %j", async change => {
   mocks.member.mockResolvedValue({ authUserId: user, companyId: company, customerId: customer, status: "active", ...change });
-  await expect(connectPublicDocumentOrder(context)).rejects.toMatchObject({ status: 403 }); expect(mocks.db).not.toHaveBeenCalled();
+  await expect(connectPublicDocumentOrder(context)).rejects.toMatchObject({ status: 404 }); expect(mocks.db).not.toHaveBeenCalled();
 });
 it("fails closed on a rotated existing link signature instead of exposing a wrong link", async () => {
   const previous = mocks.db.getMockImplementation()!;
