@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { StoreCostUploadPanel } from "./store-cost-upload-panel";
 import { Button } from "./ui/button";
@@ -104,6 +105,7 @@ export function StoreCostPanel({ access }: { access: StoreCostAccess }) {
   return <Card>
     <CardHeader><CardTitle>매장 자체 원가관리</CardTitle><p className="text-sm text-slate-600">매장에서 등록한 원가 자료입니다. 원가 조회와 수정은 PC에서 이용해 주세요.</p></CardHeader>
     <CardContent>
+      {scope && <Link className="inline-flex min-h-[44px] items-center underline" href={`/store/connection?${new URLSearchParams({ companyId: scope.companyId, storeAccountId: scope.storeAccountId })}`}>매장 연결 관리</Link>}
       {"message" in access && <p role="status">{access.message} 권한을 확인한 뒤 새로고침해 주세요.</p>}
       {error && <p role="alert">{error}</p>}
       <p className="md:hidden">PC에서 같은 매장 주소를 열어 주세요. 주문과 판매가 변동은 기존 메뉴에서 확인할 수 있습니다.</p>
