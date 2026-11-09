@@ -54,6 +54,30 @@ for (const width of [1440, 390]) {
   });
 }
 
+for (const width of [1440, 390]) {
+  test(`public document owner onboarding collects store profile without customer scope at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const intent = `${"a".repeat(80)}.${"b".repeat(43)}`;
+    let posted: Record<string, unknown> | null = null;
+    await page.route("**/api/store/accounts/activate", route => {
+      posted = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({ json: { loginUrl, next: "kakao", returnTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
+    });
+    await page.route("**/api/auth/kakao/start?**", route => route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" }));
+    await page.goto(`/store/activate?fixture=store-owner-activation#${intent}`);
+    for (const [label, value] of [["매장명", "새 매장"], ["대표자명", "새 대표"], ["사업자등록번호", "1234567890"],
+      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"]] as const) await page.getByLabel(label).fill(value);
+    await page.getByRole("checkbox").check();
+    const start = page.getByRole("button", { name: "동의하고 카카오로 시작" });
+    expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await start.click();
+    expect(posted).toMatchObject({ onboardingIntent: intent, termsAccepted: true, store: { storeName: "새 매장",
+      representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구" } });
+    expect(JSON.stringify(posted)).not.toMatch(/customerId|storeAccountId|companyId/);
+  });
+}
+
 test("invalid, expired and unavailable activation links show recovery guidance", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   let status = 410, posts = 0;
