@@ -1,15 +1,64 @@
 import "server-only";
 
-import { createHash } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { supabaseRequest } from "../store";
 
 export const STORE_TERMS_VERSION = "2026-11-07";
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export type PublicStoreOwnerOnboardingContext = {
+  companyId: string; documentId: string; documentVersionId: string; shareLinkId: string; returnTo: string; nonce: string;
+};
+
+export function publicStoreOwnerOnboardingEnabled(companyId?: string) {
+  if (process.env.STORE_PUBLIC_OWNER_ONBOARDING_ENABLED !== "true") return false;
+  const allowed = (process.env.FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS || "").split(",").map(value => value.trim()).filter(Boolean);
+  return Boolean(companyId && allowed.includes(companyId));
+}
+
+export function createPublicStoreOwnerOnboardingIntent(context: PublicStoreOwnerOnboardingContext) {
+  const secret = process.env.STORE_OWNER_ONBOARDING_SECRET;
+  if (!secret || secret.length < 32 || !publicStoreOwnerOnboardingEnabled(context.companyId) ||
+    ![context.companyId, context.documentId, context.documentVersionId, context.shareLinkId, context.nonce].every(value => uuid.test(value)) ||
+    !context.returnTo.startsWith("/pricing-document#") || context.returnTo.startsWith("//")) return null;
+  const issuedAt = Date.now(), payload = Buffer.from(JSON.stringify({ ...context, expiresAt: issuedAt + 5 * 60_000, issuedAt, v: 1 })).toString("base64url");
+  return `${payload}.${createHmac("sha256", secret).update(`store-public-owner-onboarding.v1.${payload}`).digest("base64url")}`;
+}
+
+export function verifyPublicStoreOwnerOnboardingIntent(token: string): PublicStoreOwnerOnboardingContext | null {
+  const secret = process.env.STORE_OWNER_ONBOARDING_SECRET;
+  const [payload, signature, extra] = token.split(".");
+  if (!secret || secret.length < 32 || !payload || !signature || extra || token.length > 1500) return null;
+  const expected = createHmac("sha256", secret).update(`store-public-owner-onboarding.v1.${payload}`).digest();
+  const actual = Buffer.from(signature, "base64url");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+  try {
+    const value = JSON.parse(Buffer.from(payload, "base64url").toString()) as PublicStoreOwnerOnboardingContext & { expiresAt: number; issuedAt: number; v: number };
+    if (value.v !== 1 || value.issuedAt > Date.now() + 60_000 || value.expiresAt < Date.now() || value.expiresAt - value.issuedAt !== 5 * 60_000 ||
+      !publicStoreOwnerOnboardingEnabled(value.companyId) ||
+      ![value.companyId, value.documentId, value.documentVersionId, value.shareLinkId, value.nonce].every(item => uuid.test(item)) ||
+      !value.returnTo.startsWith("/pricing-document#") || value.returnTo.startsWith("//")) return null;
+    return { companyId: value.companyId, documentId: value.documentId, documentVersionId: value.documentVersionId,
+      shareLinkId: value.shareLinkId, returnTo: value.returnTo, nonce: value.nonce };
+  } catch { return null; }
+}
+
+export async function preparePublicStoreOwnerActivation(input: PublicStoreOwnerOnboardingContext & {
+  businessRegistrationNumber: string; idempotencyKey: string; phone: string; representativeName: string; storeName: string; address: string; token: string;
+}) {
+  return supabaseRequest<{ customerId: string; storeAccountId: string; expiresAt: string }>("rpc/prepare_public_store_owner_activation_v1", {
+    method: "POST", body: JSON.stringify({ p_address: input.address, p_business_registration_number: input.businessRegistrationNumber,
+      p_company_id: input.companyId, p_document_id: input.documentId, p_document_version_id: input.documentVersionId,
+      p_idempotency_key: input.idempotencyKey, p_invite_token_hash: hashToken(input.token), p_phone: input.phone,
+      p_representative_name: input.representativeName, p_share_link_id: input.shareLinkId, p_store_name: input.storeName })
+  });
+}
 
 export type PreparedStoreOwnerActivation = {
   companyId: string;
-  customerId: string;
+  customerId: string | null;
   storeAccountId: string;
   businessRegistrationNumber: string;
 };
@@ -25,15 +74,29 @@ export async function prepareStoreOwnerActivation(input: {
 }
 
 export async function getPreparedStoreOwnerActivation(token: string): Promise<PreparedStoreOwnerActivation | null> {
-  const requests = await supabaseRequest<Array<{ company_id: string; customer_id: string; store_account_id: string }>>(
-    `store_owner_activation_requests?select=company_id,customer_id,store_account_id&invite_token_hash=eq.${hashToken(token)}&consumed_at=is.null&cancelled_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
+  const requests = await supabaseRequest<Array<{ company_id: string; customer_id: string | null; store_account_id: string; business_registration_number?: string | null;
+    document_id?: string | null; document_version_id?: string | null; share_link_id?: string | null }>>(
+    `store_owner_activation_requests?select=company_id,customer_id,store_account_id,business_registration_number,document_id,document_version_id,share_link_id&invite_token_hash=eq.${hashToken(token)}&consumed_at=is.null&cancelled_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
   );
   const request = requests[0];
   if (!request) return null;
-  const customers = await supabaseRequest<Array<{ business_registration_number: string | null }>>(
+  if (!request.customer_id) {
+    if (!request.document_id || !request.document_version_id || !request.share_link_id) return null;
+    const now = new Date().toISOString();
+    const links = await supabaseRequest<Array<{ id: string }>>(`pricing_document_share_links?select=id&company_id=eq.${request.company_id}` +
+      `&id=eq.${request.share_link_id}&document_id=eq.${request.document_id}&document_version_id=eq.${request.document_version_id}` +
+      `&revoked_at=is.null&expires_at=gt.${encodeURIComponent(now)}&limit=1`);
+    const documents = links[0] ? await supabaseRequest<Array<{ id: string }>>(
+      `pricing_documents?select=id&company_id=eq.${request.company_id}&id=eq.${request.document_id}&archived_at=is.null&limit=1`) : [];
+    const versions = documents[0] ? await supabaseRequest<Array<{ content: { validUntil?: string } }>>(
+      `pricing_document_versions?select=content&company_id=eq.${request.company_id}&document_id=eq.${request.document_id}&id=eq.${request.document_version_id}&limit=1`) : [];
+    const validUntil = versions[0]?.content?.validUntil;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(validUntil || "") || Date.parse(`${validUntil}T23:59:59.999+09:00`) < Date.now()) return null;
+  }
+  const customers = request.customer_id ? await supabaseRequest<Array<{ business_registration_number: string | null }>>(
     `normalized_customers?select=business_registration_number&company_id=eq.${request.company_id}&id=eq.${request.customer_id}&limit=1`
-  );
-  const businessRegistrationNumber = (customers[0]?.business_registration_number || "").replace(/\D/g, "");
+  ) : [];
+  const businessRegistrationNumber = (request.business_registration_number || customers[0]?.business_registration_number || "").replace(/\D/g, "");
   return businessRegistrationNumber.length === 10 ? { companyId: request.company_id, customerId: request.customer_id,
     storeAccountId: request.store_account_id, businessRegistrationNumber } : null;
 }

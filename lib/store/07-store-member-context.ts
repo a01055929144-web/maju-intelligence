@@ -32,3 +32,22 @@ export async function getStoreOrderMemberContext(input: { companyId: string; cus
   const member = await getStoreMemberContext({ companyId: input.companyId, storeAccountId });
   return member ? { ...member, customerId: input.customerId } : null;
 }
+
+export async function getStoreOrderMemberContextForCompany(companyId: string) {
+  const session = await getStoreSession();
+  if (!session) return null;
+  const memberships = await supabaseRequest<Array<{ store_account_id: string }>>(
+    `store_account_members?select=store_account_id&company_id=eq.${encodeURIComponent(companyId)}` +
+    `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active&limit=2`
+  );
+  if (memberships.length !== 1) return null;
+  const storeAccountId = memberships[0].store_account_id;
+  const stores = await supabaseRequest<Array<{ customer_id: string }>>(
+    `store_accounts?select=customer_id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(storeAccountId)}` +
+    `&status=eq.active&business_status=eq.active&limit=1`
+  );
+  const customerId = stores[0]?.customer_id;
+  if (!customerId) return null;
+  const member = await getStoreMemberContext({ companyId, storeAccountId });
+  return member ? { ...member, customerId } : null;
+}

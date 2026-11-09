@@ -70,6 +70,7 @@ export type StoreSession = {
 
 type StoreOwnerActivationProof = {
   token: string;
+  returnTo?: string;
   termsAcceptedAt: string;
   expiresAt: number;
 };
@@ -170,11 +171,12 @@ export async function getStoreSession(): Promise<StoreSession | null> {
   return session;
 }
 
-export async function setStoreOwnerActivationProof(token: string) {
+export async function setStoreOwnerActivationProof(token: string, returnTo?: string) {
   if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  if (returnTo && (!returnTo.startsWith("/pricing-document#") || returnTo.startsWith("//") || returnTo.length > 1500)) return false;
   const now = Math.floor(Date.now() / 1000);
   const cookieStore = await cookies();
-  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, termsAcceptedAt: new Date().toISOString(), expiresAt: now + 900 }), {
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, termsAcceptedAt: new Date().toISOString(), expiresAt: now + 900 }), {
     httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
   });
   return true;

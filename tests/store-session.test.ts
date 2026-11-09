@@ -62,4 +62,12 @@ describe("store member session cookie", () => {
     await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token });
     expect(state.values.has("maju_store_owner_activation")).toBe(false);
   });
+
+  it("binds public onboarding return only to the pricing document route", async () => {
+    vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
+    const token = "a".repeat(43), returnTo = "/pricing-document#opaque-share-token";
+    await expect(setStoreOwnerActivationProof(token, "https://evil.example/")).resolves.toBe(false);
+    await expect(setStoreOwnerActivationProof(token, returnTo)).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token, returnTo });
+  });
 });

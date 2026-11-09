@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
       const activated = await activateStoreOwner({ authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
         termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+      if (proof.returnTo) return NextResponse.redirect(new URL(proof.returnTo, request.url));
       return redirectStoreScope(request.url, activated.companyId, activated.storeAccountId);
     }
 

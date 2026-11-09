@@ -4,9 +4,13 @@
 
 `prepare_store_owner_activation_v1`은 활성 회사 owner/manager가 기존 거래처에 일회용 준비 행만 만들게 한다. 점주 사용자 ID, 약관 수락 시각, 사업 상태는 회사 사용자가 입력하지 않는다.
 
-`activate_store_owner_v1`은 점주가 일회용 링크에서 약관에 동의하고 카카오 본인 인증을 마친 뒤 서버가 호출한다. 5분 이내 국세청 계속사업자 결과와 거래처 사업자번호 일치, 활성 `app_users`, 미사용 30분 토큰을 잠근 뒤 `store_accounts`를 만들고 기존 `provision_store_owner_v1`으로 첫 owner를 생성한다. 어느 단계든 실패하면 한 트랜잭션으로 롤백한다.
+`prepare_public_store_owner_activation_v1`은 09 서버가 공개 문서 토큰의 서명·만료·회수·발행 회사·게시 버전·가격 기간을 확인한 뒤 07의 5분 가입 의도를 발급한 경우에만 사용한다. RPC도 동일 공유 링크와 문서 버전의 유효성을 다시 읽고, 매장명·대표자·주소·연락처·10자리 사업자번호를 받는다. 브라우저가 보낸 회사·거래처·매장 ID는 받지 않으며, 서명 nonce를 재시도 키로 사용한다. 기존 거래처나 매장과 사업자번호가 겹치면 자동 연결하지 않고 중단한다.
+
+`activate_store_owner_v1`은 점주가 일회용 링크에서 약관에 동의하고 카카오 본인 인증을 마친 뒤 서버가 호출한다. 5분 이내 국세청 계속사업자 결과와 사업자번호 일치, 활성 `app_users`, 미사용 30분 토큰을 잠근다. 기존 거래처 경로는 기존 방식대로 매장을 만들고, 공개 문서 경로는 거래처·매장·첫 owner·감사 이벤트를 한 트랜잭션에서 만든다. 어느 단계든 실패하면 전부 롤백한다.
 
 두 RPC와 준비 테이블은 RLS를 켜고 service role만 접근한다. 원문 토큰은 DB에 저장하지 않는다. 운영 적용·플래그 활성화는 이 승인표 범위가 아니다.
+
+공개 문서 경로는 `STORE_PUBLIC_OWNER_ONBOARDING_ENABLED`와 `FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS`가 모두 일치해야 하며 기본값은 OFF다. 가입 의도 HMAC에는 별도 `STORE_OWNER_ONBOARDING_SECRET`을 사용한다. 이 초안은 운영 승인·적용 전이며, 기존 점주 개통 SQL 승인에 자동 포함되지 않는다.
 
 ## 2026-11-08 운영 읽기 확인
 
