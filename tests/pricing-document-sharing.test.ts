@@ -3,9 +3,12 @@ import { createHash } from "crypto";
 import { NextRequest } from "next/server";
 import { lineFromCatalog, type DocumentContent } from "../domains/pricing/document";
 import { pricingDocuments } from "../application/pricing/documents";
-const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn() }));
+const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn(), onboarding: vi.fn(), connection: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db, getSupabaseConfig: vi.fn() }));
 vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOperationalName: (session: { name?: string } | undefined) => session?.name }));
+vi.mock("../lib/store/07-store-owner-provisioning", () => ({ createPublicStoreOwnerOnboardingIntent: mocks.onboarding }));
+vi.mock("../lib/pricing/public-document-order-connection", () => ({ connectPublicDocumentOrder: mocks.connection }));
+import { POST as orderIntentPost } from "../app/api/pricing-documents/order-intent/route";
 import { pricingDocumentsRepository } from "../lib/pricing/documents-repository";
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
@@ -27,6 +30,11 @@ const seen: string[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
+  mocks.connection.mockResolvedValue(null);
+  vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
+  vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS", company);
+  vi.stubEnv("STORE_OWNER_ONBOARDING_SECRET", "synthetic-onboarding-secret-32-bytes-long");
+  vi.stubEnv("STORE_ORDERING_ENABLED", "true"); vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://fixture.test"); vi.stubEnv("FEATURE_STORE_ORDERING_COMPANY_IDS", company);
   vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "true"); vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", company);
   vi.stubEnv("PRICE_SHEETS_ENABLED", "true"); vi.stubEnv("FEATURE_PRICING_COMPANY_IDS", company);
   vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET", "synthetic-test-key-for-lead-document-only-32");
@@ -219,6 +227,11 @@ it("keeps every new-table access off for default OFF, excluded companies and ano
   vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "false");
   expect((await publicPost(request({ token: "x" }))).status).toBe(404);
   expect((await privatePost(request(prepare))).status).toBe(404); expect(mocks.db).not.toHaveBeenCalled();
+  mocks.connection.mockResolvedValue(null);
+  vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
+  vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS", company);
+  vi.stubEnv("STORE_OWNER_ONBOARDING_SECRET", "synthetic-onboarding-secret-32-bytes-long");
+  vi.stubEnv("STORE_ORDERING_ENABLED", "true"); vi.stubEnv("STORE_PUBLIC_BASE_URL", "https://fixture.test"); vi.stubEnv("FEATURE_STORE_ORDERING_COMPANY_IDS", company);
   vi.stubEnv("LEAD_DOCUMENT_SHARING_ENABLED", "true"); vi.stubEnv("LEAD_DOCUMENT_SHARING_COMPANY_IDS", "");
   expect((await privatePost(request(prepare))).status).toBe(404); expect(mocks.db).not.toHaveBeenCalled();
   mocks.auth.mockResolvedValueOnce({ ok: false }); expect((await privatePost(request(prepare))).status).toBe(401);
@@ -319,4 +332,50 @@ it("rejects revoked, expired, foreign-owned and targeted links for public signup
   await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
   owner = actor; links[0].lead_id = lead;
   await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
+});
+
+it("signs only server-verified public issuer context for 07 and never accepts scope or return overrides", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  mocks.onboarding.mockReturnValue("synthetic.intent");
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const t = token(result.publicUrl);
+  const response = await orderIntentPost(request({ token: t }));
+  expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ intent: "synthetic.intent", next: "store-profile" });
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(mocks.onboarding).toHaveBeenCalledWith({ companyId: company, documentId: doc, documentVersionId: version,
+    shareLinkId: result.shareLinkId, nonce: expect.stringMatching(/^[0-9a-f-]{36}$/), returnTo: result.publicUrl });
+  mocks.onboarding.mockClear();
+  for (const extra of [{ companyId: other }, { returnTo: "https://untrusted.test" }, { customerId: lead }])
+    expect((await orderIntentPost(request({ token: t, ...extra }))).status).toBe(404);
+  expect((await orderIntentPost(request({ token: t }, "https://untrusted.test"))).status).toBe(403);
+  links[0].revoked_at = new Date().toISOString();
+  expect((await orderIntentPost(request({ token: t }))).status).toBe(404);
+  expect(mocks.onboarding).not.toHaveBeenCalled(); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it("keeps signup intent OFF with no database read and gives a recoverable 07-unavailable response", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "false");
+  expect((await orderIntentPost(request({ token: "untrusted" }))).status).toBe(404);
+  expect(seen).toHaveLength(0); expect(mocks.onboarding).not.toHaveBeenCalled();
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  mocks.onboarding.mockReturnValue(null);
+  const response = await orderIntentPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(503); expect((await response.json()).message).toContain("가입 연결을 준비 중");
+});
+
+it("does not advertise order entry when 07 onboarding is OFF even if sharing is ready", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "false");
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const body = await (await publicPost(request({ token: token(result.publicUrl) }))).json();
+  expect(body.orderEntry.available).toBe(false);
+  expect((await orderIntentPost(request({ token: token(result.publicUrl) }))).status).toBe(503);
+  expect(mocks.connection).not.toHaveBeenCalled(); expect(mocks.onboarding).not.toHaveBeenCalled();
+});
+it("returns an authenticated 07 order connection without starting signup again", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  mocks.connection.mockResolvedValue({ next: "order", storeUrl: "/store#synthetic" });
+  const response = await orderIntentPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(200); expect(await response.json()).toEqual({ next: "order", storeUrl: "/store#synthetic" });
+  expect(mocks.onboarding).not.toHaveBeenCalled();
 });

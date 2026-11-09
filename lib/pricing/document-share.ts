@@ -6,7 +6,7 @@ import { publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentS
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
-import { publicDocumentOrderEntryEnabled } from "./public-document-order-feature";
+import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 
 type ShareRow = {
@@ -142,7 +142,7 @@ export async function readPublicDocument(token: string, requester: string) {
   });
   return { document: output, expiresAt: row.expires_at,
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
-    ...(row.lead_id === null ? { orderEntry: { available: publicDocumentOrderEntryEnabled(row.company_id) && !output.expired,
+    ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && !output.expired,
       companyName: output.companyName, title: output.title, version: output.version } } : {}) };
 }
 
@@ -177,5 +177,5 @@ export async function getPublicDocumentOrderContext(token: string, requester: st
   const { row, output } = await resolvePublicDocument(token, requester);
   if (row.lead_id !== null || output.expired) missing();
   return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
-    shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash };
+    shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
 }

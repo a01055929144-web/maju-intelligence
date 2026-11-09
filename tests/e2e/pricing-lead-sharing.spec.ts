@@ -114,20 +114,35 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
   await expect(preview.locator(".pricing-paper").first()).toContainText("QR로 문서를 열고 주문·가입을 시작하세요");
+  let signupReady = false, intentReady = false;
   const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
   await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
     ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } })
     : route.fulfill({ json: { document: publicDocumentOutput(version()), expiresAt: "2099-01-01T00:00:00Z", acceptanceAvailable: false,
-      orderEntry: { available: true, companyName: content!.companyName, title: content!.title, version: 1 } } }));
+      orderEntry: { available: signupReady, companyName: content!.companyName, title: content!.title, version: 1 } } }));
+  await publicViewer.route("**/api/pricing-documents/order-intent", route => {
+    expect(route.request().postDataJSON()).toEqual({ token });
+    return intentReady ? route.fulfill({ json: { intent: "synthetic.intent", next: "store-profile" } })
+      : route.fulfill({ status: 503, json: { message: "카카오 가입 연결 준비 중입니다. 현재 주문은 접수되지 않습니다." } });
+  });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
   await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
   const order = publicViewer.getByRole("region", { name: "공개 문서 주문 안내" });
-  await order.getByRole("button", { name: "주문하기", exact: true }).click();
+  await expect(order.getByRole("button", { name: "주문 연결 준비 중", exact: true })).toBeDisabled();
+  signupReady = true;
+  await publicViewer.getByRole("button", { name: "다시 확인", exact: true }).click();
+  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
   await expect(order.getByRole("status")).toContainText("현재 주문은 접수되지 않습니다");
   expect(await publicViewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-  expect((await order.getByRole("button", { name: "주문하기", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicViewer.screenshot({ path: info.outputPath(`public-order-entry-${kind}-${width}.png`), fullPage: true });
+  intentReady = true;
+  await publicViewer.route("**/store/activate", route => route.fulfill({ contentType: "text/html", body: "<h1>합성 07 점주 가입</h1>" }));
+  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await expect(publicViewer).toHaveURL(/\/store\/activate#synthetic\.intent$/);
+  await expect(publicViewer.getByRole("heading", { name: "합성 07 점주 가입" })).toBeVisible();
   await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();
+  await publicViewer.goto(new URL(publicUrl, page.url()).href);
   await publicViewer.reload(); await expect(publicViewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
   await publicViewer.close();
   await preview.getByRole("button", { name: "기존 거래처 전용 QR 선택", exact: true }).click();
