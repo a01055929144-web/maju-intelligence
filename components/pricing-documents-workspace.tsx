@@ -519,6 +519,8 @@ export function PricingDocumentsWorkspace({
   const editable = Boolean(
     draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
   );
+  const latestPublished = versions.reduce<DocumentVersion | null>((latest, version) =>
+    !latest || version.version > latest.version ? version : latest, null);
   const leadNotice = leadContext ? <aside className="pricing-no-print flex flex-wrap items-center gap-2 rounded border p-3 text-sm" aria-label="리드 문서 작성 문맥">
     <p className="mr-auto">{leadContext.name} · {sharingEnabled ? "작성·게시는 전달이 아닙니다. 게시 버전으로 링크를 준비한 뒤 실제 전달을 별도로 기록해 주세요." : "작성·게시 전용입니다. 공개 링크 준비 전이며 아직 전달되지 않았습니다."}</p>
     <a className="inline-flex min-h-[44px] items-center rounded border px-3" href={leadContext.backHref} onClick={event => { if (!discard()) event.preventDefault(); }}>리드 상세로 돌아가기</a>
@@ -570,6 +572,7 @@ export function PricingDocumentsWorkspace({
                   >
                     판매가 버전 확정
                   </button>
+                  {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px] bg-teal-700 text-white" disabled={busy || !latestPublished} onClick={() => latestPublished && void task(() => openPublishedPreview(latestPublished, true))} type="button">{latestPublished ? `공개 링크·QR · 버전 ${latestPublished.version}` : "버전 확정 후 링크 공유"}</Button> : null}
                   <button disabled={busy} className={box} onClick={() => openPreview(false)} type="button">미리보기</button>
                   <Button disabled={busy} className="bg-slate-900 text-white" onClick={() => openPreview(true)}>A4 인쇄</Button>
                   <span className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="보기 방식">
@@ -1109,7 +1112,7 @@ export function PricingDocumentsWorkspace({
                 </p>
                 </>
                 )}
-                {!leadContext && publicSharingAvailable ? <p className="text-sm">상단 미리보기는 작성 중인 내용입니다. 공개 링크·QR은 아래 발행 버전에서 만드세요.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
+                {!leadContext && publicSharingAvailable ? <p className="text-sm">공개 링크·QR은 상단 버튼에서 최신 발행 버전으로 만듭니다. 작성 중인 변경은 새 버전을 확정해야 반영됩니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
                 <div className="flex flex-wrap gap-2">
                   {versions.map((v) => (
                     <div className="flex flex-wrap items-center gap-2" key={v.id}>
