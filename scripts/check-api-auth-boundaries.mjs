@@ -7,7 +7,7 @@ const apiRoot = path.join(process.cwd(), "app", "api");
 // a provider/webhook secret, or intentionally expose only non-sensitive readiness data.
 // Adding an entry here is an explicit security decision and should include a short reason.
 const publicRoutes = new Map([
-  ["pricing-documents/order-intent/route.ts", "default-OFF bounded same-origin token-only POST; DB-verified issuer/document/version/revocation/expiry, tenant allowlist and S2 guard; 07 short-lived purpose-signed signup intent only"],
+  ["pricing-documents/order-intent/route.ts", "default-OFF bounded same-origin token-only POST; DB-verified issuer/document/version/revocation/expiry, tenant allowlist and S2 guard; 07 short-lived signed intent or 07-verified single-store same-version link; no browser customer/store IDs or order writes"],
   ["pricing-document-acceptance/route.ts", "default-OFF purpose-signed delivered-document token, tenant allowlist, verified send/version/lead and S2 request guard; optional staff or 07 store-member session"],
   ["pricing-documents/public/route.ts", "default-OFF purpose-signed lead document link, same-origin bounded POST, tenant allowlist and S2 request guard; sales whitelist only"],
   ["admin/logout/route.ts", "clears the admin session cookie only"],
