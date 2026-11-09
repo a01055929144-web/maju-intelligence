@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
-  testDir: './tests/integration', outputDir: 'test-results/stage-a',
+  testDir: './tests/integration', testMatch: '**/stage-a.spec.ts', outputDir: 'test-results/stage-a',
   timeout: 600_000, expect: { timeout: 20_000 }, workers: 1, retries: 0,
   reporter: [['line'], ['html', { open: 'never', outputFolder: 'stage-a-report' }]],
   use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:3101', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
