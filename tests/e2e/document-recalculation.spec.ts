@@ -88,9 +88,10 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   await expect(page.locator('section[aria-label="카테고리별 마진"] + section[aria-label="상품별 예외"]')).toHaveCount(1);
   const panel = page.getByRole("region", { name: "마진 그룹 만들기·수정", exact: true });
   await expect(panel.getByRole("button", { name: "합성 기존 그룹 · 12% · 10원 올림", exact: true })).toBeVisible();
-  await expect(panel.getByText("농산 › 채소류 › 조미채소", { exact: true })).toBeVisible();
   await expect(panel.getByRole("button", { name: "분류·상품 수 다시 조회", exact: true })).toBeEnabled();
-  await expect(panel.getByRole("checkbox", { name: `마진 분류 ${category}`, exact: true })).toBeVisible();
+  const categoryOption = panel.getByRole("checkbox", { name: `마진 분류 ${category}`, exact: true });
+  await expect(categoryOption).toBeVisible();
+  await expect(categoryOption.locator("xpath=..")).toContainText("농산 › 채소류 › 조미채소");
   expect(seenPages.has(4)).toBe(true);
   await panel.getByRole("textbox", { name: "마진 그룹 이름", exact: true }).fill("합성 새 그룹");
   await panel.getByRole("spinbutton", { name: "그룹 마진율", exact: true }).fill("0");
