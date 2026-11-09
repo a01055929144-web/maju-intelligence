@@ -81,7 +81,7 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
                 </button>
               ))}
             </div>
-        ) : (
+        ) : loadError ? null : (
           <div className="maju-empty-state m-4">
             <p className="text-sm font-black text-slate-700">{suppliers.length ? "검색 조건에 맞는 매입처가 없습니다." : "등록된 매입처가 없습니다."}</p>
             <p className="mt-1 text-xs font-bold leading-5 text-slate-400">{suppliers.length ? "검색어를 바꿔보세요." : "매입 단가표를 업로드하면 매입처가 생성됩니다."}</p>
