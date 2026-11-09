@@ -59,9 +59,11 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const intent = `${"a".repeat(80)}.${"b".repeat(43)}`;
     const posted: Array<Record<string, unknown>> = [];
+    const profileFailures = [422, 503, 409];
     const context = page.context();
     await context.route("**/api/store/accounts/activate", route => {
       posted.push(route.request().postDataJSON() as Record<string, unknown>);
+      if (posted.length > 1 && profileFailures.length) return route.fulfill({ status: profileFailures.shift(), json: { code: "profile_retry_mismatch" } });
       return route.fulfill({ json: posted.length === 1 ? { loginUrl, next: "kakao", termsVersion: "2026-11-07" } :
         { next: "document", redirectTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
     });
@@ -86,6 +88,14 @@ for (const width of [1440, 390]) {
     const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
     expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    for (const message of ["이 화면에서 다시 시도", "잠시 후 다시 시도", "처음 제출한 매장 정보와 다릅니다"]) {
+      await start.click();
+      await expect(profilePage.getByRole("main").getByRole("alert")).toContainText(message);
+      await expect(profilePage.getByLabel("매장명")).toHaveValue("새 매장");
+      await expect(start).toBeEnabled();
+      expect(new URL(profilePage.url()).pathname).toBe("/store/activate");
+      expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    }
     await start.click();
     expect(posted[1]).toMatchObject({ termsAccepted: true, store: { storeName: "새 매장",
       representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구" } });

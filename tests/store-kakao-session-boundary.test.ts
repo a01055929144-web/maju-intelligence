@@ -82,24 +82,75 @@ describe("Kakao-first profile retry", () => {
       if (options?.consume) routeMocks.consume();
       return proof;
     });
-    routeMocks.prepared.mockResolvedValue({ businessRegistrationNumber: "1234567890", companyId: "10000000-0000-4000-8000-000000000001",
-      customerId: null, profileRequired: false, publicOnboarding: true, storeAccountId: "20000000-0000-4000-8000-000000000001" });
+    routeMocks.prepared.mockResolvedValue({ businessRegistrationNumber: "", companyId: "10000000-0000-4000-8000-000000000001",
+      customerId: null, profileRequired: true, publicOnboarding: true, storeAccountId: "20000000-0000-4000-8000-000000000001" });
     routeMocks.complete.mockResolvedValue({}); routeMocks.activate.mockResolvedValue({}); routeMocks.session.mockResolvedValue(true);
   });
 
   it("keeps the profile proof after a temporary business check failure and consumes it only after retry success", async () => {
     routeMocks.business.mockResolvedValueOnce({ failedNumbers: new Set(["1234567890"]), results: new Map() })
-      .mockResolvedValueOnce({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
+      .mockResolvedValueOnce({ failedNumbers: new Set(), results: new Map([["6234567890", { label: "정상" }]]) });
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const body = { store: { address: "서울", businessRegistrationNumber: "1234567890", phone: "01012345678",
       representativeName: "대표", storeName: "매장" }, termsAccepted: true };
     const first = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) as never);
     expect(first.status).toBe(422); expect(routeMocks.consume).not.toHaveBeenCalled(); expect(routeMocks.session).not.toHaveBeenCalled();
+    expect(routeMocks.complete).not.toHaveBeenCalled(); expect(routeMocks.activate).not.toHaveBeenCalled();
+    body.store.businessRegistrationNumber = "6234567890";
     const retry = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) as never);
-    expect(retry.status).toBe(200); expect(routeMocks.complete).toHaveBeenCalledTimes(2);
+    expect(retry.status).toBe(200); expect(routeMocks.complete).toHaveBeenCalledOnce();
+    expect(routeMocks.business).toHaveBeenLastCalledWith(["6234567890"]);
+    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ businessRegistrationNumber: "6234567890" }));
+    expect(routeMocks.activate).toHaveBeenCalledWith(expect.objectContaining({ businessRegistrationNumber: "6234567890" }));
+    expect(routeMocks.business.mock.invocationCallOrder[1]).toBeLessThan(routeMocks.complete.mock.invocationCallOrder[0]);
     expect(routeMocks.activate).toHaveBeenCalledOnce(); expect(routeMocks.session).toHaveBeenCalledOnce();
     expect(routeMocks.consume).toHaveBeenCalledOnce();
+  });
+
+  it("reports immutable saved-profile conflicts without leaking the database error or consuming the proof", async () => {
+    routeMocks.business.mockResolvedValue({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
+    routeMocks.complete.mockRejectedValueOnce(new Error("Supabase request failed: 400 public_store_retry_mismatch PRIVATE-CANARY"));
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+        phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ code: "profile_retry_mismatch" });
+    expect(routeMocks.activate).not.toHaveBeenCalled(); expect(routeMocks.session).not.toHaveBeenCalled();
+    expect(routeMocks.consume).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unavailable request before business verification or profile persistence", async () => {
+    routeMocks.prepared.mockResolvedValueOnce(null);
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+        phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+    expect(response.status).toBe(410);
+    expect(routeMocks.business).not.toHaveBeenCalled(); expect(routeMocks.complete).not.toHaveBeenCalled();
+    expect(routeMocks.activate).not.toHaveBeenCalled(); expect(routeMocks.consume).not.toHaveBeenCalled();
+  });
+
+  it.each(["request", "profile_save"] as const)("retries a transient %s response failure without repeating Kakao or leaking diagnostics", async (stage) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      routeMocks.business.mockResolvedValue({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
+      const failure = new Error("PRIVATE-CANARY token=secret Thread killed by timeout manager");
+      if (stage === "request") routeMocks.prepared.mockRejectedValueOnce(failure);
+      else routeMocks.complete.mockRejectedValueOnce(failure);
+      const { POST } = await import("../app/api/store/accounts/activate/route");
+      const submit = () => POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+        body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+          phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+      const first = await submit();
+      expect(first.status).toBe(503); expect(await first.text()).not.toContain("PRIVATE-CANARY");
+      expect(log).toHaveBeenCalledWith("public_store_owner_activation_failed", { stage });
+      expect(routeMocks.consume).not.toHaveBeenCalled(); expect(routeMocks.session).not.toHaveBeenCalled();
+      expect((await submit()).status).toBe(200);
+      if (stage === "profile_save") expect(routeMocks.complete.mock.calls[0]).toEqual(routeMocks.complete.mock.calls[1]);
+      expect(routeMocks.activate).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
+    } finally { log.mockRestore(); }
   });
 });
