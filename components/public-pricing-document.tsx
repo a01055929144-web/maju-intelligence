@@ -26,7 +26,7 @@ export function PublicPricingDocument() {
       const result = await response.json() as { intent?: string; message?: string; next?: string; storeUrl?: string };
       if (!response.ok) throw new Error(result.message || "가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (result.next === "order") {
-        if (typeof result.storeUrl !== "string" || !/^\/store#[0-9a-f-]{36}\.[0-9a-f]{32}\.[0-9a-f]{64}$/.test(result.storeUrl))
+        if (typeof result.storeUrl !== "string" || !/^\/store\?products=all#[0-9a-f-]{36}\.[0-9a-f]{32}\.[0-9a-f]{64}$/.test(result.storeUrl))
           throw new Error("주문 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
         if (sequence.current === current && window.location.hash.slice(1) === token) window.location.assign(result.storeUrl);
         return;

@@ -23,5 +23,5 @@ export async function connectPublicDocumentOrder(context: Awaited<ReturnType<typ
   if (rows.length !== 1 || rows[0].issued_customer_id !== customerId) throw new Error("Order connection unconfirmed");
   const token = issueStoreLinkToken(rows[0].issued_link_id, rows[0].issued_token_nonce);
   if (!equalShareHash(token.hash, rows[0].issued_token_hash)) throw new Error("Order link signing configuration changed");
-  return { next: "order" as const, storeUrl: `/store#${token.token}` };
+  return { next: "order" as const, storeUrl: `/store?products=all#${token.token}` };
 }

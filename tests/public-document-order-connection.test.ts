@@ -28,7 +28,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 it("connects exactly the issuer version and 07-authenticated active store, with no order write", async () => {
   const result = await connectPublicDocumentOrder(context);
-  expect(result).toMatchObject({ next: "order", storeUrl: expect.stringMatching(/^\/store#/) });
+  expect(result).toMatchObject({ next: "order", storeUrl: expect.stringMatching(/^\/store\?products=all#/) });
   expect(mocks.member).toHaveBeenCalledWith(company);
   expect(mocks.db.mock.calls.some(([url]) => /store_orders|normalized_customers/.test(url))).toBe(false);
 });

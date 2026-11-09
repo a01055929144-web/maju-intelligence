@@ -72,6 +72,12 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
   const retryKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const loadSequence = useRef(0);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("products") === "all") {
+      setTab("order"); setProductView("complete"); setCategory("전체"); setPriceChangesOnly(false);
+      setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 다른 문서의 품목은 포함하지 않습니다.");
+    }
+  }, []);
   const endpoint = "/api/storefront";
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
