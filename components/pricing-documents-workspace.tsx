@@ -47,6 +47,7 @@ export function PricingDocumentsWorkspace({
   initialStartKind,
   leadContext,
   sharingEnabled = false,
+  publicSharingAvailable = false,
 }: {
   companyId: string;
   manager: boolean;
@@ -54,6 +55,7 @@ export function PricingDocumentsWorkspace({
   initialStartKind?: DocumentKind;
   leadContext?: LeadDocumentContext;
   sharingEnabled?: boolean;
+  publicSharingAvailable?: boolean;
 }) {
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
     [total, setTotal] = useState(0),
@@ -1236,6 +1238,7 @@ export function PricingDocumentsWorkspace({
           version={preview}
           companyId={companyId}
             canManageLinks={manager && storeLinksEnabled && !leadContext}
+            publicSharingAvailable={publicSharingAvailable && !leadContext}
           refresh={() => refreshPreview(preview)}
         />
           </div>

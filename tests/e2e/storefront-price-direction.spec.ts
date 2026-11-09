@@ -186,6 +186,14 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "홈", exact: true }).click();
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
+    await page.getByRole("button", { name: "주문 품목 전체 보기", exact: true }).click();
+    await expect(rows).toHaveCount(4);
+    await expect(page.getByRole("status")).toContainText("이 발행 문서의 주문 가능 품목 전체");
+    await expect(page.getByLabel("합성 생선 수량", { exact: true })).toHaveText("0");
+    await expect(page.getByLabel("합성 채소 수량", { exact: true })).toHaveText("1");
+    await page.goto("/store?products=all#synthetic-catalog-link");
+    await expect(rows).toHaveCount(4);
+    await expect(page.getByRole("status")).toContainText("다른 문서의 품목은 포함하지 않습니다");
     expired = true;
     await page.reload();
     await page.getByRole("button", { name: "내역", exact: true }).click();

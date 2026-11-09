@@ -14,6 +14,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { resolveDocumentEntry } from "@/application/pricing/document-entry";
 import { findDocumentEntryLead } from "@/lib/pricing/document-entry";
 import { documentSharingEnabled } from "@/lib/pricing/document-share-feature";
+import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-order-feature";
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
   searchParams,
@@ -52,6 +53,7 @@ export default async function DocumentsPage({
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}
+          publicSharingAvailable={publicDocumentOrderEntryEnabled(companyId)}
           storeLinksEnabled={storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId)}
           manager={manager}
         />

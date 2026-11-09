@@ -57,7 +57,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
   const [deliveryDate, setDeliveryDate] = useState("");
   const [memo, setMemo] = useState("");
   const [editing, setEditing] = useState<{ id: string; revision: number } | null>(null);
-  const [productView, setProductView] = useState<"all" | "favorites" | "hidden">("all");
+  const [productView, setProductView] = useState<"all" | "favorites" | "hidden" | "complete">("all");
   const [category, setCategory] = useState("전체");
   const [orderView, setOrderView] = useState<"grid" | "table">("grid");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
@@ -72,6 +72,12 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
   const retryKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const loadSequence = useRef(0);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("products") === "all") {
+      setTab("order"); setProductView("complete"); setCategory("전체"); setPriceChangesOnly(false);
+      setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 다른 문서의 품목은 포함하지 않습니다.");
+    }
+  }, []);
   const endpoint = "/api/storefront";
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
@@ -108,7 +114,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
     (line.salesPriceDirection === "up" || line.salesPriceDirection === "down")) ?? [] : [];
   const visibleProducts = (store?.lines.filter((line) => {
     const preference = preferences.get(line.productId);
-    const matchesView = productView === "hidden" ? preference?.isHidden === true :
+    const matchesView = productView === "complete" ? true : productView === "hidden" ? preference?.isHidden === true :
       productView === "favorites" ? preference?.isFavorite === true && !preference.isHidden :
         !preference?.isHidden || (cart[line.key] ?? 0) > 0;
     return matchesView && (category === "전체" || (line.category || "미분류") === category) &&
@@ -240,6 +246,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         <button className="mt-2 min-h-[44px] rounded border px-4 text-sm" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(true); setTab("order"); }}>변동 품목 주문하기</button>
       </div>}
       <div className="grid grid-cols-2 gap-2">
+        <Button className="min-h-[44px]" onClick={() => { setCategory("전체"); setProductView("complete"); setPriceChangesOnly(false); setTab("order"); setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 숨김·즐겨찾기·분류·가격 변동 필터를 해제했습니다."); }} type="button">주문 품목 전체 보기</Button>
         <button className="min-h-14 rounded bg-slate-900 px-4 text-white" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(false); setTab("order"); }}>주문하기</button>
         <button className="min-h-14 rounded border px-4" onClick={() => setTab("history")}>지난 주문 다시 담기</button>
       </div>

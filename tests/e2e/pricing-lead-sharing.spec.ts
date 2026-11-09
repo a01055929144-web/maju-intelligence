@@ -1,5 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
-import { publicDocumentOutput } from "../../domains/pricing/document-share";
+import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} prepare, explicit delivery and public read at ${width}px`, async ({ page, browser }, info) => {
@@ -17,12 +17,15 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   let failPrepare = true, failSend = true, prepared = false, sent = false, revoked = false, readError = false, expiredPrice = false;
   const prepareInputs: Record<string, unknown>[] = [], sendInputs: Record<string, unknown>[] = [];
   const deliveryRecords = new Map<string, string>(), contactRecords = new Map<string, string>();
+  let failPublic = true, publicRevoked = false;
+  const publicInputs: Record<string, unknown>[] = [];
   let printed = 0, orderLinks = 0, publishedContent: DocumentContent | undefined;
   await page.exposeFunction("fixturePrinted", () => { printed++; });
   await page.addInitScript(() => { window.print = () => { void (window as Window & { fixturePrinted: () => Promise<void> }).fixturePrinted(); }; });
   const token = "synthetic-purpose-signed-token", publicUrl = `/pricing-document#${token}`;
   const draft = () => ({ id: documentId, revision, content, updatedAt: "2026-11-06T00:00:00Z", recalculation: { publishedAt: published ? "2026-11-06T00:00:00Z" : null, needsRecalculation: false, changedProductCount: 0 } });
   const version = (): DocumentVersion => ({ id: versionId, documentId, version: 1, revision, content: publishedContent!, publishedAt: "2026-11-06T00:00:00Z", unavailablePromotions: [] });
+  const publicExpiry = () => publicDocumentLinkExpiry(version().content.validUntil);
   await page.route("**/api/pricing-store-links*", route => {
     if (route.request().method() === "POST") {
       expect(route.request().postDataJSON()).toEqual({ companyId, action: "create", customerId, documentVersionId: versionId });
@@ -48,6 +51,13 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     }
     if (action === "save") { content = b.content; documentId = b.id; revision++; result = draft(); }
     if (action === "publish") { published = true; publishedContent = structuredClone(content!); result = version(); }
+    if (action === "prepare-share" && b.leadId === null) {
+      publicInputs.push(b); expect(b).not.toHaveProperty("ttlDays");
+      expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
+      if (failPublic) { failPublic = false; return route.fulfill({ status: 503, json: { message: "합성 공개 링크 재시도" } }); }
+      return route.fulfill({ json: { result: { shareLinkId: otherDocument, sendId: null, documentId, documentVersionId: versionId, publicUrl, expiresAt: publicExpiry(), deliveryRecorded: false }, manager: true } });
+    }
+    if (action === "revoke-share" && b.shareLinkId === otherDocument) { publicRevoked = true; return route.fulfill({ json: { result: { revoked: true }, manager: true } }); }
     if (action === "prepare-share") {
       expect(b.documentId).toBe(documentId); expect(b.documentVersionId).toBe(versionId);
       prepareInputs.push(b); prepared = true;
@@ -96,6 +106,62 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
   const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
   await preview.getByRole("button", { name: "주문 링크 QR 만들기", exact: true }).click();
+  await expect(preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true })).toHaveCount(0);
+  await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
+  await expect(preview.getByRole("status")).toContainText("합성 공개 링크 재시도");
+  await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
+  await expect(preview.getByRole("status")).toContainText("거래처 선택 없이");
+  expect(publicInputs).toHaveLength(2); expect(publicInputs[0]).toEqual(publicInputs[1]);
+  expect(orderLinks).toBe(0); expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
+  await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
+  await expect(preview.locator(".pricing-paper").first()).toContainText("QR로 문서를 열고 주문·가입을 시작하세요");
+  await expect(preview.locator(".pricing-paper").first()).toContainText(`가격·주문: ${version().content.validUntil}까지`);
+  await expect(preview.locator(".pricing-paper").first()).toContainText(`QR 품목 열람: ${documentLinkLastDay(publicExpiry())}까지`);
+  let signupReady = false, intentReady = false;
+  const publicViewer = await browser.newPage({ viewport: { width, height: 900 } });
+  await publicViewer.route("**/api/pricing-documents/public", route => publicRevoked
+    ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } })
+    : route.fulfill({ json: { document: publicDocumentOutput(version()), expiresAt: publicExpiry(), acceptanceAvailable: false,
+      orderEntry: { available: signupReady, companyName: content!.companyName, title: content!.title, version: 1 } } }));
+  await publicViewer.route("**/api/pricing-documents/order-intent", route => {
+    expect(route.request().postDataJSON()).toEqual({ token });
+    return intentReady ? route.fulfill({ json: { intent: "synthetic.intent", next: "kakao" } })
+      : route.fulfill({ status: 503, json: { message: "카카오 가입 연결 준비 중입니다. 현재 주문은 접수되지 않습니다." } });
+  });
+  await publicViewer.goto(new URL(publicUrl, page.url()).href);
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
+  const order = publicViewer.getByRole("region", { name: "공개 문서 주문 안내" });
+  await expect(order.getByRole("button", { name: "주문 연결 준비 중", exact: true })).toBeDisabled();
+  signupReady = true;
+  await publicViewer.getByRole("button", { name: "다시 확인", exact: true }).click();
+  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await expect(order.getByRole("status")).toContainText("현재 주문은 접수되지 않습니다");
+  expect(await publicViewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  expect((await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await publicViewer.screenshot({ path: info.outputPath(`public-order-entry-${kind}-${width}.png`), fullPage: true });
+  intentReady = true;
+  await publicViewer.route(url => url.pathname === "/store/activate", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<!doctype html><meta charset=\"utf-8\"><h1>합성 07 점주 가입</h1>" }));
+  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await expect(publicViewer).toHaveURL(/\/store\/activate#synthetic\.intent$/);
+  await expect(publicViewer.getByRole("heading", { name: "합성 07 점주 가입" })).toBeVisible();
+  await publicViewer.clock.install({ time: new Date(`${version().content.validUntil}T14:59:59Z`) });
+  await publicViewer.goto(new URL(publicUrl, page.url()).href);
+  await expect(publicViewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await publicViewer.clock.fastForward(2_000);
+  await expect(publicViewer.getByRole("status")).toContainText("가격·주문 유효기간이 지났습니다");
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
+  await expect(publicViewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  await expect(publicViewer.getByRole("button", { name: "주문 기간 종료", exact: true })).toBeDisabled();
+  await publicViewer.clock.setSystemTime(new Date(Date.parse(publicExpiry()) + 1000));
+  expect(await publicViewer.evaluate(() => Date.now())).toBeGreaterThanOrEqual(Date.parse(publicExpiry()));
+  await publicViewer.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(publicViewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();
+  await publicViewer.goto(new URL(publicUrl, page.url()).href);
+  await publicViewer.reload(); await expect(publicViewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
+  await publicViewer.close();
+  await preview.getByRole("button", { name: "기존 거래처 전용 QR 선택", exact: true }).click();
   await preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true }).selectOption(customerId);
   await preview.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();
   await preview.getByRole("button", { name: "문서에 QR 넣기", exact: true }).click();
@@ -158,7 +224,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
   await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
   await viewer.clock.fastForward(61_000);
-  await expect(viewer.getByRole("status")).toContainText("유효기간을 다시 확인");
+  await expect(viewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
   await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
   await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
   linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();

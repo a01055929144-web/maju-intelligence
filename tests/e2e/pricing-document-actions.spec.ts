@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`${kind} wrapped specs, pinned QR and archive at ${width}px`, async ({ page }, info) => {
+  page.setDefaultTimeout(15_000);
   const company = "00000000-0000-4000-8000-000000000001", id = "10000000-0000-4000-8000-000000000001", versionId = "30000000-0000-4000-8000-000000000001", customerId = "40000000-0000-4000-8000-000000000001";
   const spec = "냉장·냉동 겸용 대용량 포장 1kg×12입 / 재포장 불가 (박스)";
   const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 긴 품목", displayName: "합성 긴 품목", brand: "", spec, unit: "박스", price: 123456, taxType: "exempt" as const };
@@ -51,6 +52,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const dialog = page.getByRole("dialog", { name: "미리보기", exact: true });
   await dialog.getByRole("button", { name: "130%", exact: true }).click();
   await dialog.getByRole("button", { name: "주문 링크 QR 만들기", exact: true }).click();
+  await dialog.getByRole("button", { name: "기존 거래처 전용 QR 선택", exact: true }).click();
   await dialog.getByRole("combobox", { name: "QR을 받을 거래처", exact: true }).selectOption(customerId);
   await dialog.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();
   await expect(dialog.getByRole("img", { name: "합성 매장 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
