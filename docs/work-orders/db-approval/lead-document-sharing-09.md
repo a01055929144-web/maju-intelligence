@@ -1,15 +1,25 @@
-# 09 리드용 게시 문서 공유·열람 경계 — 승인 초안
+# 09 리드용 게시 문서 공유·열람 경계 — 운영 적용 기록
 
-> 2026-11-06 · **Draft / 신규 승인 전 운영 SQL 실행·기능 ON 금지**. 소유 09 pricing.
-> 기준 main `1fee44b`(#282), 작성기 진입은 별도 PR #284. 이 문서는 설계와 SQL 초안이며 공개 URL 기능 구현 완료가 아니다.
-> 운영 프로젝트 `fcmdvveqmcgtioelzqun` 대상 새 명시 승인이 필요하다. 기존 S2/record-send 승인을 확장 해석하지 않는다.
+> 2026-11-09 · 공개 문서 진입 보완 SQL 운영 적용 완료, 원문 재실행 금지, 기능 OFF. 소유 09 pricing.
+> 기준 main `e1c6d6d`. 운영 프로젝트 `fcmdvveqmcgtioelzqun`에 `docs/sql-drafts/20261109-09-public-document-entry.sql`을 대표의 별도 승인으로 약 14:36 KST에 1회 적용했다.
+> 이 기록은 기능 ON·실사용 승인이 아니다. 실제 공개 가입·주문 E2E는 미완료다.
+
+## 2026-11-09 운영 적용·읽기 검증
+
+- 적용 전 공유 링크는 0행이었고 기존 만료 제약과 검증 트리거가 각각 1개임을 확인했다.
+- 적용 뒤 공유 링크는 계속 0행이며 `lead_id`·`ttl_days`는 nullable, audience TTL 제약·만료 제약·검증 트리거는 각각 1개다.
+- 관련 함수는 `security invoker`, 테이블은 RLS ON이다. anon/authenticated SELECT는 없고 service role에는 SELECT/INSERT/UPDATE만 있다.
+- 적용 원문은 재실행하지 않는다. 저장소 migration 파일이나 Supabase migration history 항목을 이번 문서 PR에서 새로 만들거나 검증하지 않았다.
+- 기능 플래그는 계속 OFF이고 실제 링크 발급·카카오 가입·매장 개통·첫 주문 운영 E2E는 미완료다.
+
+아래 1~7절과 PR #288 보완은 최초 설계·검토 이력이다. 그 안의 Draft·승인 전·미승인 표현은 당시 상태를 설명하며, 현재 운영 적용 사실은 위 기록을 기준으로 한다. 적용은 스키마 준비에 한정되고 런타임 활성화 승인으로 확장되지 않는다.
 
 ## 1. 재사용과 최소 추가
 
 - 기존 `pricing_documents`의 sheet/quote, 불변 `pricing_document_versions`, `pricing_document_sends`, `documentOutput`/`withLivePromotions`, `PricingDocPaper`와 인쇄 CSS를 재사용한다.
 - `/quote/[token]`은 legacy `sales_quotes`이고 `/store`·`storefront_links`는 기존 거래처 주문 경로다. 둘을 리드 링크로 전용하거나 customerId를 가짜로 채우지 않는다.
 - 링크 준비는 전달 전에 필요하지만 `pricing_document_sends`는 실제 전달 확인 후에만 생성한다. 따라서 **문서 본문을 복제하지 않는 링크 메타데이터 테이블 하나**만 제안한다. 별도 문서 서비스·전송 사업자·주문 기능은 추가하지 않는다.
-- SQL: [up](../../sql-drafts/20261106-09-lead-document-share.sql), [down](../../sql-drafts/20261106-09-lead-document-share.down.sql). migration 파일·중앙 승인표·03 수락 SQL·05 파일은 수정하지 않는다.
+- 최초 SQL: [up](../../sql-drafts/20261106-09-lead-document-share.sql), [down](../../sql-drafts/20261106-09-lead-document-share.down.sql). 2026-11-09 공개 문서 진입 보완 SQL은 별도 승인·적용 이력으로 관리하며 최초 원문이나 down을 재실행하지 않는다.
 
 ## 2. 05 소비 계약 — 준비와 실제 전달을 분리
 
