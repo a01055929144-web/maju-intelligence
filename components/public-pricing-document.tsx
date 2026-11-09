@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
 import { PricingDocPaper } from "./pricing-doc-paper";
@@ -62,11 +63,19 @@ export function PublicPricingDocument() {
   }, [load]);
   useEffect(() => {
     if (!document) return;
-    const cutoff = Math.min(Date.parse(expiresAt), document.expired ? Infinity : Date.parse(`${document.validUntil}T15:00:00Z`));
+    const hardCutoff = Date.parse(expiresAt), priceCutoff = document.expired ? Infinity : Date.parse(`${document.validUntil}T15:00:00Z`);
     let timer: number;
     const check = () => {
-      if (Date.now() >= cutoff) { setDocument(null); setMessage("유효기간을 다시 확인해 주세요. 담당자에게 새 링크를 요청할 수 있습니다."); }
-      else timer = window.setTimeout(check, Math.min(2147483647, cutoff - Date.now()));
+      if (Date.now() >= hardCutoff) {
+        ++sequence.current; setDocument(null); setAcceptance(null); setOrderEntry(null);
+        setMessage("링크 열람기간이 끝났습니다. 발행 회사에 새 링크를 요청해 주세요.");
+      } else if (Date.now() >= priceCutoff) {
+        ++sequence.current;
+        setDocument(previous => previous ? { ...previous, expired: true, lines: previous.lines.map(line => ({ ...line, price: null })) } : null);
+        setAcceptance(previous => previous ? { ...previous, available: false } : null);
+        setOrderEntry(previous => previous ? { ...previous, available: false } : null); setOrderMessage("");
+        setMessage("가격·주문 유효기간이 지났습니다. 같은 QR로 품목을 계속 볼 수 있으며, 주문하려면 발행 회사에 새 문서를 요청해 주세요.");
+      } else timer = window.setTimeout(check, Math.min(2147483647, Math.min(hardCutoff, priceCutoff) - Date.now()));
     };
     check();
     return () => window.clearTimeout(timer);
@@ -79,9 +88,10 @@ export function PublicPricingDocument() {
     <button disabled={busy} className="min-h-[44px] rounded border px-3" onClick={() => void load()}>{busy ? "확인 중" : "다시 확인"}</button>
     {safeDocument && <PricingDocPaper output={safeDocument} />}
     {safeDocument && orderEntry && <section aria-label="공개 문서 주문 안내" className="space-y-2 rounded border p-3">
+      <p className="text-sm">가격·주문: {safeDocument.validUntil}까지 · QR 품목 열람: {documentLinkLastDay(expiresAt)}까지</p>
       <p>{orderEntry.companyName} · {orderEntry.title} · 게시 버전 {orderEntry.version}</p>
       <p className="text-sm">문서는 로그인 없이 볼 수 있습니다. 카카오 인증 후 매장 정보·약관을 확인하고 발행 회사의 주문으로 연결합니다.</p>
-      <Button className="min-h-[44px]" disabled={!orderEntry.available || safeDocument.expired || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "가입 연결 확인 중" : !orderEntry.available && !safeDocument.expired ? "주문 연결 준비 중" : "주문·점주 가입 시작"}</Button>
+      <Button className="min-h-[44px]" disabled={!orderEntry.available || safeDocument.expired || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "가입 연결 확인 중" : safeDocument.expired ? "주문 기간 종료" : !orderEntry.available ? "주문 연결 준비 중" : "주문·점주 가입 시작"}</Button>
       {safeDocument.expired ? <p>유효기간을 확인한 뒤 발행 회사에 새 문서를 요청해 주세요.</p> : !orderEntry.available ? <p>{orderEntry.message || "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요."}</p> : <p className="text-sm">발행 회사의 주문을 위해 점주 가입 화면으로 이동합니다. 아직 주문은 접수되지 않습니다.</p>}
       {orderMessage ? <p role="status">{orderMessage}</p> : null}
     </section>}

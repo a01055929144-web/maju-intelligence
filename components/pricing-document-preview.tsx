@@ -10,6 +10,7 @@ import {
   type DocumentOutput,
 } from "@/domains/pricing/document";
 import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
+import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import { Button } from "./ui/button";
 
 type OutputLine = DocumentOutput["lines"][number];
@@ -157,7 +158,7 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />{qr.audience === "public" ? "QR로 문서를 열고 주문·가입을 시작하세요." : "QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요."}</p></div> : null}
+        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />{qr.audience === "public" ? "QR로 문서를 열고 주문·가입을 시작하세요." : "QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요."}{qr.audience === "public" && qr.expiresAt ? <><br />가격·주문: {data.validUntil}까지<br />QR 품목 열람: {documentLinkLastDay(qr.expiresAt)}까지</> : null}</p></div> : null}
         {footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}

@@ -1,12 +1,13 @@
 "use client";
 import { useRef, useState } from "react";
 import type { DocumentVersion } from "@/domains/pricing/document";
+import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { documentOrderQr } from "@/lib/pricing/document-order-qr";
 import { Button } from "./ui/button";
 
-export type DocumentOrderQr = { dataUrl: string; customerName: string; audience?: "public" };
+export type DocumentOrderQr = { dataUrl: string; customerName: string; audience?: "public"; expiresAt?: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
 export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSharingAvailable = false, allowCustomerLink = true }: {
   companyId: string; version: DocumentVersion; onInsert: (qr: DocumentOrderQr | null) => void;
@@ -23,13 +24,13 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
     try {
       retryKey.current ??= crypto.randomUUID();
       const { result } = await documentRequest<PreparedDocumentShare>(companyId, "prepare-share", {
-        documentId: version.documentId, documentVersionId: version.id, leadId: null, idempotencyKey: retryKey.current, ttlDays: 14,
+        documentId: version.documentId, documentVersionId: version.id, leadId: null, idempotencyKey: retryKey.current,
       }, true);
       const url = new URL(result.publicUrl, window.location.origin);
-      if (url.origin !== window.location.origin || url.pathname !== "/pricing-document" || url.search || !url.hash)
+      if (url.origin !== window.location.origin || url.pathname !== "/pricing-document" || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
         throw new Error("공개 링크를 확인하지 못했습니다. 다시 시도해 주세요.");
       setShared({ ...result, publicUrl: url.href });
-      setQr({ dataUrl: await documentOrderQr(url.href), customerName: "공개 문서", audience: "public" });
+      setQr({ dataUrl: await documentOrderQr(url.href), customerName: "공개 문서", audience: "public", expiresAt: result.expiresAt });
       setMessage("거래처 선택 없이 공개 링크를 만들었습니다. 열람은 가입·주문·전달 기록을 만들지 않습니다.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "공개 링크를 만들지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
@@ -79,9 +80,9 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
     <Button className="min-h-[44px]" disabled={busy} onClick={() => open ? setOpen(false) : publicSharingAvailable ? setOpen(true) : void load()} type="button">주문 링크 QR 만들기</Button>
     {open ? <div className="space-y-3">
       {publicSharingAvailable ? <div className="space-y-2">
-        <p className="text-sm">게시 버전 {version.version}을 누구나 열람할 수 있는 링크·QR입니다. 주문할 때 카카오 점주 가입과 매장 정보를 확인합니다. 링크는 14일간 유효하며 회수할 수 있습니다.</p>
+        <p className="text-sm">게시 버전 {version.version}을 누구나 열람할 수 있는 링크·QR입니다. 주문할 때 카카오 점주 가입과 매장 정보를 확인합니다. 가격·주문은 문서 유효기간까지이며, 같은 QR로 만료 후에도 품목을 365일간 볼 수 있습니다. 링크는 회수할 수 있습니다.</p>
         <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(false); void generatePublic(); }} type="button">공개 링크·QR 생성</Button>
-        {shared ? <div className="space-y-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><p className="text-sm">링크 만료: {new Date(shared.expiresAt).toLocaleString("ko-KR")}</p><div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy} onClick={() => { void navigator.clipboard.writeText(shared.publicUrl).then(() => setMessage("공개 링크를 복사했습니다."), () => setMessage("복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button><Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button></div></div> : null}
+        {shared ? <div className="space-y-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><p className="text-sm">가격·주문: {version.content.validUntil}까지 · QR 품목 열람: {documentLinkLastDay(shared.expiresAt)}까지</p><div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy} onClick={() => { void navigator.clipboard.writeText(shared.publicUrl).then(() => setMessage("공개 링크를 복사했습니다."), () => setMessage("복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button><Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button></div></div> : null}
         {allowCustomerLink ? <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(true); void load(); }} type="button">기존 거래처 전용 QR 선택</Button> : null}
       </div> : null}
       {customerMode && allowCustomerLink ? <div className="space-y-3">

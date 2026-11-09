@@ -1,7 +1,19 @@
 -- REVIEW ONLY. Recipient-free view metadata; no customer/member/order creation.
 -- Requires the separately approved existing 09 share metadata schema and P1/S2.
 begin;
-alter table public.pricing_document_share_links alter column lead_id drop not null;
+lock table public.pricing_document_share_links in access exclusive mode;
+do $$ begin
+  if exists(select from public.pricing_document_share_links where lead_id is null) then
+    raise exception 'public_document_entry_up_requires_no_existing_public_links';
+  end if;
+end $$;
+alter table public.pricing_document_share_links alter column lead_id drop not null,
+  alter column ttl_days drop not null;
+alter table public.pricing_document_share_links drop constraint pricing_share_expiry_check;
+alter table public.pricing_document_share_links
+  add constraint pricing_share_audience_ttl_check check ((lead_id is null) = (ttl_days is null)),
+  add constraint pricing_share_expiry_check check (expires_at > created_at and
+    (lead_id is null or expires_at <= created_at + interval '30 days'));
 create or replace function public.validate_pricing_document_share_link() returns trigger
 language plpgsql security invoker set search_path=public,pg_temp as $$
 declare d public.pricing_documents%rowtype; content jsonb; s public.pricing_document_sends%rowtype;
@@ -20,7 +32,13 @@ begin
     if new.lead_id is not null and not exists(select from public.business_permit_leads where company_id=new.company_id and id=new.lead_id and merged_into_lead_id is null)
       then raise exception 'share_lead_not_found'; end if;
     new.created_at:=clock_timestamp();
-    new.expires_at:=new.created_at + make_interval(days=>new.ttl_days);
+    if new.lead_id is null then
+      -- KST price/order period is unchanged; the printed QR retains items for 365 more days.
+      new.ttl_days:=null;
+      new.expires_at:=((content->>'validUntil')::date + 1 + 365)::timestamp at time zone 'Asia/Seoul';
+    else
+      new.expires_at:=new.created_at + make_interval(days=>new.ttl_days);
+    end if;
   else
     if row(new.id,new.company_id,new.document_id,new.document_version_id,new.lead_id,new.idempotency_key,
       new.created_by_key,new.token_nonce,new.token_hash,new.ttl_days,new.created_at,new.expires_at)

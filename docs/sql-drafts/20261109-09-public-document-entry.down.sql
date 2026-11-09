@@ -6,7 +6,12 @@ do $$ begin
     raise exception 'public_document_entry_down_refused_links_exist';
   end if;
 end $$;
-alter table public.pricing_document_share_links alter column lead_id set not null;
+alter table public.pricing_document_share_links drop constraint pricing_share_audience_ttl_check;
+alter table public.pricing_document_share_links alter column lead_id set not null,
+  alter column ttl_days set not null;
+alter table public.pricing_document_share_links drop constraint pricing_share_expiry_check;
+alter table public.pricing_document_share_links add constraint pricing_share_expiry_check
+  check (expires_at > created_at and expires_at <= created_at + interval '30 days');
 create or replace function public.validate_pricing_document_share_link() returns trigger
 language plpgsql security invoker set search_path=public,pg_temp as $$
 declare d public.pricing_documents%rowtype; content jsonb; s public.pricing_document_sends%rowtype;

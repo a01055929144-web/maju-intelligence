@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { createHash } from "crypto";
 import { NextRequest } from "next/server";
+import { publicDocumentLinkExpiry, documentLinkLastDay } from "../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../domains/pricing/document";
 import { pricingDocuments } from "../application/pricing/documents";
 const mocks = vi.hoisted(() => ({ db: vi.fn(), auth: vi.fn(), onboarding: vi.fn(), connection: vi.fn() }));
@@ -79,7 +80,7 @@ beforeEach(() => {
         expect(p.get("on_conflict")).toBe("company_id,idempotency_key");
         expect(init.headers).toEqual({ Prefer: "resolution=ignore-duplicates,return=minimal" });
         if (!rows.some(r => r.company_id === b.company_id && r.idempotency_key === b.idempotency_key)) rows.push({
-          id: "60000000-0000-4000-8000-000000000001", created_at: new Date().toISOString(), expires_at: "2099-01-01T00:00:00Z", revoked_at: null, send_id: null, ...b,
+          id: "60000000-0000-4000-8000-000000000001", created_at: new Date().toISOString(), expires_at: b.lead_id === null ? publicDocumentLinkExpiry(content.validUntil) : "2099-01-01T00:00:00Z", revoked_at: null, send_id: null, ...b,
         });
         if (failInsert) { failInsert = false; throw new Error("synthetic lost commit response"); }
         return;
@@ -387,4 +388,30 @@ it("keeps items-only documents viewable but denies signup/order handoff without 
   expect(body.document.lines).toHaveLength(1); expect(body.document.lines[0].price).toBeNull();
   expect(body.orderEntry.available).toBe(false); expect(body.orderEntry.message).toContain("품목이나 판매가가 없습니다");
   await expect(getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).rejects.toMatchObject({ status: 404 });
+});
+
+it("keeps printed QR alive beyond 14 days, hides prices at the KST cutoff, and closes only after 365 more days", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-01T00:00:00Z")); content.validUntil = "2026-12-31";
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  expect(result.expiresAt).toBe("2027-12-31T15:00:00.000Z"); expect(links[0].ttl_days).toBeNull();
+  expect(documentLinkLastDay(result.expiresAt)).toBe("2027-12-31");
+  vi.setSystemTime(new Date("2026-11-20T00:00:00Z"));
+  let response = await publicPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(200); let body = await response.json();
+  expect(body.document.lines[0].price).toBe(1100); expect(body.orderEntry.available).toBe(true);
+  vi.setSystemTime(new Date("2026-12-31T15:00:00Z"));
+  response = await publicPost(request({ token: token(result.publicUrl) })); body = await response.json();
+  expect(response.status).toBe(200); expect(body.document.lines).toHaveLength(1); expect(body.document.lines[0].price).toBeNull();
+  expect(body.orderEntry.available).toBe(false);
+  await expect(getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).rejects.toMatchObject({ status: 404 });
+  vi.setSystemTime(new Date(result.expiresAt));
+  response = await publicPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(404); expect((await response.json()).message).toContain("링크 열람기간이 끝났습니다");
+});
+it("does not accept a caller TTL that would shorten or extend public printed QR policy", () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  expect(() => service.execute(scope, { ...prepare, leadId: null, ttlDays: 14 })).toThrow();
+  expect(seen).toHaveLength(0);
+  expect(publicDocumentLinkExpiry("2028-02-29")).toBe("2029-02-28T15:00:00.000Z");
 });

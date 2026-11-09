@@ -4,7 +4,7 @@
 
 ## 변경 범위
 
-- 기존 09 공개 공유 테이블 `pricing_document_share_links.lead_id`만 nullable로 완화한다.
+- 기존 09 공개 공유 테이블의 `lead_id`와 `ttl_days`를 일반 공개 링크에만 NULL로 허용한다. 일반 공개 QR은 게시 버전 가격 유효기간의 KST 종료 시각부터 365일 후까지 품목을 열람한다. 가격·주문은 기존 문서 validUntil을 연장하지 않는다. 기존 리드 링크는 종전 1~30일 TTL을 그대로 유지한다.
 - 일반 공개 링크는 lead_id/send_id 모두 NULL. 기존 회사·문서·게시 버전 복합 FK, 소유자·만료·불변·회수 검증 및 service-only RLS/권한을 유지한다.
 - 링크 생성·열람은 거래처·점주 계정·주문·문서 전달·접촉 기록을 생성하지 않는다.
 - 기존 리드별 공유/실제 전달 API는 그대로 유지하고 일반 링크의 전달 기록 연결은 거부한다.
@@ -15,6 +15,7 @@
 - up: `docs/sql-drafts/20261109-09-public-document-entry.sql`
 - down: `docs/sql-drafts/20261109-09-public-document-entry.down.sql`
 - 격리 검증: `tests/sql/public-document-entry-09.pg17.test.sql`, PostgreSQL 17 및 정확한 테스트 DB명 강제. 실제 P0/P1/P2/S2와 기존 공유 초안으로 구성한다.
+- up은 이전 초안의 일반 링크가 이미 있으면 자동 변경 없이 거부한다. 기존 초안은 운영 미적용 상태이며 과거 링크 기간을 임의 갱신하지 않는다.
 - down은 일반 링크가 하나라도 남아 있으면 거부한다. 승인 없이 삭제·회수 또는 NOT NULL 강제 변환하지 않는다.
 - 적용 검토 시 테이블 크기, 장기 트랜잭션/대기 잠금, nullable 및 기존 함수/ACL/회수 상태를 전후 확인한다. ALTER TABLE 잠금이 있으므로 별도 승인된 작업 시간과 짧은 lock_timeout이 필요하다.
 

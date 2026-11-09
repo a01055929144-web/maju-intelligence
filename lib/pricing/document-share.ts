@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
-import { publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
+import { publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
@@ -12,7 +12,7 @@ import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocu
 type ShareRow = {
   id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
   idempotency_key: string; created_by_key: string; token_nonce: string; token_hash: string;
-  ttl_days: number; created_at: string; expires_at: string; revoked_at: string | null; send_id: string | null;
+  ttl_days: number | null; created_at: string; expires_at: string; revoked_at: string | null; send_id: string | null;
 };
 const shareFields = "id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash,ttl_days,created_at,expires_at,revoked_at,send_id";
 function missing(): never { throw new DocumentSendError("공유 문서를 사용할 수 없습니다.", 404); }
@@ -89,6 +89,8 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   if (Object.entries(expected).some(([key, value]) => saved[key as keyof ShareRow] !== value))
     throw new DocumentSendError("같은 재시도 키에 다른 공유 요청이 있습니다. 기존 요청을 확인해 주세요.", 409);
   if (saved.revoked_at || Date.parse(saved.expires_at) <= Date.now()) missing();
+  if (input.leadId === null && Date.parse(saved.expires_at) !== Date.parse(publicDocumentLinkExpiry(version.content.validUntil)))
+    throw new DocumentSendError("공개 QR의 열람기간 설정을 확인하지 못했습니다. 발행 회사에 문의해 주세요.", 503);
   return { shareLinkId: saved.id, sendId: null, documentId: saved.document_id, documentVersionId: saved.document_version_id,
     publicUrl: publicUrl(saved), expiresAt: saved.expires_at, deliveryRecorded: false };
 }
@@ -154,7 +156,12 @@ async function resolvePublicDocument(token: string, requester: string) {
   const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?id=eq.${decoded.id}&token_hash=eq.${decoded.hash}&select=${shareFields}&limit=1`);
   const row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) || row.revoked_at || !equalShareHash(row.token_hash, decoded.hash) ||
-    row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at)) || Date.parse(row.expires_at) <= Date.now()) missing();
+    row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at))) missing();
+  if (Date.parse(row.expires_at) <= Date.now()) {
+    if (row.lead_id === null && publicDocumentOrderEntryEnabled(row.company_id))
+      throw new DocumentSendError("링크 열람기간이 끝났습니다. 발행 회사에 새 링크를 요청해 주세요.", 404);
+    missing();
+  }
   await limitDocumentShare(row.company_id, requester, "read", row.id);
   if (row.lead_id === null) {
     if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
@@ -175,7 +182,7 @@ async function resolvePublicDocument(token: string, requester: string) {
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
 export async function getPublicDocumentOrderContext(token: string, requester: string) {
   if (!publicDocumentOrderEntryEnabled()) missing();
-  const { row, output, orderable } = await resolvePublicDocument(token, requester);
+  const { row, orderable } = await resolvePublicDocument(token, requester);
   if (row.lead_id !== null || !orderable) missing();
   return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
     shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
