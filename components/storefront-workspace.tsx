@@ -246,7 +246,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         <button className="mt-2 min-h-[44px] rounded border px-4 text-sm" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(true); setTab("order"); }}>변동 품목 주문하기</button>
       </div>}
       <div className="grid grid-cols-2 gap-2">
-        <Button onClick={() => { setCategory("전체"); setProductView("complete"); setPriceChangesOnly(false); setTab("order"); setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 숨김·즐겨찾기·분류·가격 변동 필터를 해제했습니다."); }} type="button">주문 품목 전체 보기</Button>
+        <Button className="min-h-[44px]" onClick={() => { setCategory("전체"); setProductView("complete"); setPriceChangesOnly(false); setTab("order"); setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 숨김·즐겨찾기·분류·가격 변동 필터를 해제했습니다."); }} type="button">주문 품목 전체 보기</Button>
         <button className="min-h-14 rounded bg-slate-900 px-4 text-white" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(false); setTab("order"); }}>주문하기</button>
         <button className="min-h-14 rounded border px-4" onClick={() => setTab("history")}>지난 주문 다시 담기</button>
       </div>
