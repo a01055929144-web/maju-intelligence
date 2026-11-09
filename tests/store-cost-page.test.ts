@@ -16,6 +16,7 @@ const dependencies: Record<string, unknown> = {
   "@/lib/store/07-store-member-context": { getStoreMemberContext: mocks.member },
   "@/lib/ci-layout-fixtures": { isCiLayoutFixturesEnabled: mocks.fixture },
   "@/components/storefront-workspace": { StorefrontWorkspace: () => null },
+  "@/components/public-store-test-banner": { PublicStoreTestBanner: () => null },
   "@/domains/organization/store-cost-access": accessRules,
 };
 const compiled = ts.transpileModule(readFileSync("app/store/page.tsx", "utf8"), {

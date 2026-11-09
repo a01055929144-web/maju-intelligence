@@ -7,10 +7,13 @@ import { activateStoreOwner, completePublicStoreOwnerProfile, getPreparedStoreOw
   publicStoreOwnerOnboardingEnabled, verifyPublicStoreOwnerOnboardingIntent } from "@/lib/store/07-store-owner-provisioning";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
+import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested, publicOwnerTestNumberForCompany } from "@/lib/store/public-owner-test-mode";
+import { preparePublicOwnerTestOrdering } from "@/lib/pricing/public-owner-test-ordering";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  if (!publicOwnerTestAccessAllowed()) return NextResponse.json({ message: "Not found" }, { status: 404 });
   if (!storeMemberSessionEnabled()) return NextResponse.json({ message: "Not found" }, { status: 404 });
   let body: { termsAccepted?: boolean; token?: string; onboardingIntent?: string;
     store?: { address?: string; businessRegistrationNumber?: string; phone?: string; representativeName?: string; storeName?: string } };
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
   if (body.termsAccepted === true && body.store && !body.onboardingIntent) {
     const profile = { address: body.store.address?.trim() || "", businessRegistrationNumber: body.store.businessRegistrationNumber?.replace(/\D/g, "") || "",
       phone: body.store.phone?.replace(/\D/g, "") || "", representativeName: body.store.representativeName?.trim() || "", storeName: body.store.storeName?.trim() || "" };
-    if (profile.businessRegistrationNumber.length !== 10 ||
+    if ((profile.businessRegistrationNumber.length !== 10 && !(publicOwnerTestModeRequested() && !profile.businessRegistrationNumber)) ||
       profile.phone.length < 9 || profile.phone.length > 11 || !profile.storeName || profile.storeName.length > 100 ||
       !profile.representativeName || profile.representativeName.length > 50 || !profile.address || profile.address.length > 300) {
       return NextResponse.json({ message: "Store profile required" }, { status: 400 });
@@ -40,16 +43,26 @@ export async function POST(request: NextRequest) {
       if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       const activation = await getPreparedStoreOwnerActivation(proof.token);
       if (!activation || !activation.publicOnboarding || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
-        !isStoreMemberCompanyAllowlisted(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
+        !isStoreMemberCompanyAllowlisted(activation.companyId) || !publicOwnerTestAccessAllowed(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       stage = "business_verification";
-      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([profile.businessRegistrationNumber]);
-      if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
-        return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      if (!profile.businessRegistrationNumber) profile.businessRegistrationNumber = publicOwnerTestNumberForCompany(activation.companyId) || "";
+      const testNumber = isPublicOwnerTestNumber(activation.companyId, profile.businessRegistrationNumber);
+      if (publicOwnerTestModeRequested()) {
+        if (!testNumber) return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      } else {
+        const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([profile.businessRegistrationNumber]);
+        if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
+          return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      }
       stage = "profile_save";
       await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       stage = "activation";
-      await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
-        termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
+      const activated = await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
+        termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: `${testNumber ? "test-only:" : ""}${randomUUID()}`, verifiedAt: new Date().toISOString() });
+      if (testNumber) {
+        stage = "test_ordering";
+        await preparePublicOwnerTestOrdering(activation.companyId, activated.storeAccountId);
+      }
       stage = "session";
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await getStoreOwnerActivationProof({ consume: true });

@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setupPublicOwnerTestEnv } from "./fixtures/public-owner-test-env";
+
+afterEach(() => vi.unstubAllEnvs());
 
 const routeMocks = vi.hoisted(() => ({ activate: vi.fn(), business: vi.fn(), complete: vi.fn(), consume: vi.fn(),
-  getProof: vi.fn(), prepared: vi.fn(), session: vi.fn() }));
+  getProof: vi.fn(), prepared: vi.fn(), session: vi.fn(), testOrdering: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getStoreOwnerActivationProof: routeMocks.getProof, setPublicStoreOwnerKakaoProof: vi.fn(),
   setStoreOwnerActivationProof: vi.fn(), setStoreSession: routeMocks.session, storeMemberSessionEnabled: () => true }));
 vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: routeMocks.activate,
@@ -12,6 +15,8 @@ vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: 
   verifyPublicStoreOwnerOnboardingIntent: vi.fn() }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: () => true }));
 vi.mock("@/lib/business-status", () => ({ checkBusinessRegistrationStatusesWithHealth: routeMocks.business }));
+vi.mock("@/lib/store/public-owner-test-mode", async () => import("../lib/store/public-owner-test-mode"));
+vi.mock("@/lib/pricing/public-owner-test-ordering", () => ({ preparePublicOwnerTestOrdering: routeMocks.testOrdering }));
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
@@ -75,6 +80,7 @@ describe("store Kakao session route boundary", () => {
 
 describe("Kakao-first profile retry", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
     const proof = { authUserId: "30000000-0000-4000-8000-000000000001", expiresAt: 9999999999,
       returnTo: "/pricing-document#opaque", stage: "profile", token: "a".repeat(43) };
@@ -85,6 +91,34 @@ describe("Kakao-first profile retry", () => {
     routeMocks.prepared.mockResolvedValue({ businessRegistrationNumber: "", companyId: "10000000-0000-4000-8000-000000000001",
       customerId: null, profileRequired: true, publicOnboarding: true, storeAccountId: "20000000-0000-4000-8000-000000000001" });
     routeMocks.complete.mockResolvedValue({}); routeMocks.activate.mockResolvedValue({}); routeMocks.session.mockResolvedValue(true);
+  });
+
+  it("uses the exact isolated-preview synthetic verification while retaining profile, terms and activation", async () => {
+    const { number, company } = setupPublicOwnerTestEnv();
+    routeMocks.activate.mockResolvedValueOnce({ storeAccountId: "synthetic-store" });
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", businessRegistrationNumber: "",
+        phone: "0".repeat(11), representativeName: "합성 대표", storeName: "시험 전용 매장" } }) }) as never);
+    expect(response.status).toBe(200); expect(routeMocks.business).not.toHaveBeenCalled();
+    expect(routeMocks.complete).toHaveBeenCalledOnce();
+    expect(routeMocks.activate).toHaveBeenCalledWith(expect.objectContaining({ businessRegistrationNumber: number,
+      verificationRequestId: expect.stringMatching(/^test-only:/), authUserId: expect.any(String) }));
+    expect(routeMocks.session).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
+    expect(routeMocks.testOrdering).toHaveBeenCalledWith(company, "synthetic-store");
+  });
+
+  it.each(["wrong_number", "other_company", "production"])("refuses test verification for %s without writes", async (scenario) => {
+    const { number } = setupPublicOwnerTestEnv();
+    if (scenario === "production") vi.stubEnv("VERCEL_ENV", "production");
+    if (scenario === "other_company") vi.stubEnv("STORE_PUBLIC_TEST_COMPANY_ID", "20000000-0000-4000-8000-000000000001");
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", businessRegistrationNumber: scenario === "wrong_number" ? "7".repeat(10) : number,
+        phone: "0".repeat(11), representativeName: "합성 대표", storeName: "시험 매장" } }) }) as never);
+    expect([404, 410, 422]).toContain(response.status);
+    expect(routeMocks.business).not.toHaveBeenCalled(); expect(routeMocks.complete).not.toHaveBeenCalled();
+    expect(routeMocks.activate).not.toHaveBeenCalled(); expect(routeMocks.session).not.toHaveBeenCalled();
   });
 
   it("keeps the profile proof after a temporary business check failure and consumes it only after retry success", async () => {

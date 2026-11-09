@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { supabaseRequest } from "../store";
+import { publicOwnerTestAccessAllowed } from "./public-owner-test-mode";
 
 export const STORE_TERMS_VERSION = "2026-11-07";
 
@@ -13,6 +14,7 @@ export type PublicStoreOwnerOnboardingContext = {
 };
 
 export function publicStoreOwnerOnboardingEnabled(companyId?: string) {
+  if (!publicOwnerTestAccessAllowed(companyId)) return false;
   if (process.env.STORE_PUBLIC_OWNER_ONBOARDING_ENABLED !== "true") return false;
   const allowed = (process.env.FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS || "").split(",").map(value => value.trim()).filter(Boolean);
   return Boolean(companyId && allowed.includes(companyId));

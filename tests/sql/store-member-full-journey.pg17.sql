@@ -111,4 +111,59 @@ begin
 end $$;
 reset role;
 
+-- Public owner -> first member order, in this exact disposable PG17 database only.
+-- Surrounding synthetic schema fills fields not needed by the earlier existing-customer journey.
+alter table normalized_customers alter column id set default gen_random_uuid();
+alter table normalized_customers add column representative_name text;
+alter table pricing_documents add column if not exists archived_at timestamptz;
+create table pricing_document_share_links(
+  id uuid primary key,company_id uuid not null,document_id uuid not null,document_version_id uuid not null,
+  expires_at timestamptz not null,revoked_at timestamptz,
+  foreign key(company_id,document_id) references pricing_documents(company_id,id),
+  foreign key(company_id,document_version_id) references pricing_document_versions(company_id,id)
+);
+insert into pricing_document_share_links values('d1000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001',
+  '80000000-0000-4000-8000-000000000001',now()+interval '365 days',null);
+insert into app_users values('d2000000-0000-4000-8000-000000000001','active');
+grant select,update on pricing_document_share_links to service_role;
+grant select,insert,update on normalized_customers,customer_imports to service_role;
+grant select on business_documents to service_role;
+set role service_role;
+do $$
+declare activated jsonb; ordered jsonb; retried jsonb; customer uuid; ledger_before bigint;
+begin
+  select count(*) into ledger_before from business_documents;
+  perform prepare_public_store_owner_activation_v1('00000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
+    'd1000000-0000-4000-8000-000000000001','d3000000-0000-4000-8000-000000000001',repeat('6',64));
+  perform complete_public_store_owner_profile_v1(repeat('6',64),'synthetic test store','synthetic representative',
+    'synthetic address',repeat('0',11),repeat('8',10));
+  activated:=activate_store_owner_v1(repeat('6',64),'d2000000-0000-4000-8000-000000000001',
+    '2026-11-07',clock_timestamp(),repeat('8',10),'active',clock_timestamp(),'test-only:synthetic-verification');
+  select customer_id into customer from store_accounts where id=(activated->>'storeAccountId')::uuid;
+  -- Mirrors the scoped test-only API preparation; all native order constraints remain in force.
+  insert into store_order_customer_rules(company_id,customer_id,delivery_weekdays)
+    values('00000000-0000-4000-8000-000000000001',customer,array[0,1,2,3,4,5,6]::smallint[])
+    on conflict(company_id,customer_id) do nothing;
+  perform issue_storefront_links('00000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
+    jsonb_build_array(jsonb_build_object('id','d4000000-0000-4000-8000-000000000001','customerId',customer,
+      'nonce',repeat('5',32),'hash',repeat('5',64))),now()+interval '14 days',
+    'd2000000-0000-4000-8000-000000000001',repeat('b',64));
+  ordered:=place_store_member_order(repeat('5',64),'2099-01-05',
+    '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',
+    'd5000000-0000-4000-8000-000000000001',null,null,'synthetic test order',
+    (activated->>'storeAccountId')::uuid,(activated->>'ownerMemberId')::uuid,'d2000000-0000-4000-8000-000000000001');
+  retried:=place_store_member_order(repeat('5',64),'2099-01-05',
+    '[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]',
+    'd5000000-0000-4000-8000-000000000001',null,null,'synthetic test order',
+    (activated->>'storeAccountId')::uuid,(activated->>'ownerMemberId')::uuid,'d2000000-0000-4000-8000-000000000001');
+  if ordered->>'id' is distinct from retried->>'id' or
+    (select count(*) from store_orders where customer_id=customer)<>1 or
+    not exists(select 1 from store_accounts where id=(activated->>'storeAccountId')::uuid
+      and verification_request_id='test-only:synthetic-verification') or
+    (select count(*) from business_documents)<>ledger_before then raise exception 'isolated_public_owner_order_failed'; end if;
+end $$;
+reset role;
+select 'isolated_public_owner_first_order_pg17_pass';
 select 'store_member_full_journey_pg17_pass';

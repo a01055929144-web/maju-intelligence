@@ -34,14 +34,16 @@ export function StoreKakaoLoginPanel({ access, newWindow = false }: { access: St
   </Card>;
 }
 
-export function StoreOwnerActivationPanel({ enabled, profileStep = false, initialStorePhone = "" }: { enabled: boolean; profileStep?: boolean; initialStorePhone?: string }) {
+export function StoreOwnerActivationPanel({ enabled, profileStep = false, initialStorePhone = "", testMode = false }: { enabled: boolean; profileStep?: boolean; initialStorePhone?: string; testMode?: boolean }) {
   const token = useRef("");
   const publicFlow = useRef(false);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(profileStep);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [profile, setProfile] = useState({ address: "", businessRegistrationNumber: "", phone: initialStorePhone, representativeName: "", storeName: "" });
+  const [profile, setProfile] = useState(testMode
+    ? { address: "시험 배송지", businessRegistrationNumber: "", phone: "0".repeat(11), representativeName: "시험 담당자", storeName: "시험 전용 매장" }
+    : { address: "", businessRegistrationNumber: "", phone: initialStorePhone, representativeName: "", storeName: "" });
   useEffect(() => {
     if (token.current) return;
     if (profileStep) { publicFlow.current = true; setReady(true); return; }
@@ -60,7 +62,7 @@ export function StoreOwnerActivationPanel({ enabled, profileStep = false, initia
   async function start() {
     if (!enabled || !ready || busy || (!profileStep && !publicFlow.current && (!accepted || !token.current))) return;
     if (profileStep && (!accepted || !profile.storeName.trim() || !profile.representativeName.trim() ||
-      profile.businessRegistrationNumber.replace(/\D/g, "").length !== 10 || !profile.address.trim() || profile.phone.replace(/\D/g, "").length < 9)) {
+      (!testMode && profile.businessRegistrationNumber.replace(/\D/g, "").length !== 10) || !profile.address.trim() || profile.phone.replace(/\D/g, "").length < 9)) {
       setError("매장명, 대표자명, 사업자등록번호, 연락처와 주소를 모두 확인해 주세요."); return;
     }
     setBusy(true); setError("");
@@ -111,9 +113,10 @@ export function StoreOwnerActivationPanel({ enabled, profileStep = false, initia
       {error && <p role="alert">{error}</p>}
       {profileStep && ready && <fieldset className="space-y-3" disabled={!enabled || busy}>
         <legend className="font-medium">매장 정보</legend>
+        {testMode ? <p className="text-sm">시험 매장 정보가 채워져 있습니다. 사업자번호는 서버에 지정된 시험번호를 사용합니다. 실제 개인정보를 입력하지 마세요.</p> : null}
         <p className="text-sm">카카오 계정 인증을 마쳤습니다. 이메일·닉네임은 다시 입력하지 않습니다. 사업자·배송에 필요한 매장 정보만 확인해 주세요. 카카오에서 받은 연락처는 미리 채우며 매장 연락처로 바꿀 수 있습니다.</p>
         {([["storeName", "매장명"], ["representativeName", "사업자 대표자명"], ["businessRegistrationNumber", "사업자등록번호"],
-          ["phone", "매장 연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => <label className="block text-sm" key={key}>{label}
+          ["phone", "매장 연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => testMode && key === "businessRegistrationNumber" ? null : <label className="block text-sm" key={key}>{label}
             <input className="mt-1 min-h-[44px] w-full rounded-md border px-3" value={profile[key]} autoComplete={key === "phone" ? "tel" : "organization"}
               inputMode={key === "phone" || key === "businessRegistrationNumber" ? "numeric" : "text"}
               onChange={event => setProfile(current => ({ ...current, [key]: event.target.value }))} /></label>)}</fieldset>}
