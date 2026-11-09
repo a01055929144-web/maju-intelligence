@@ -34,7 +34,7 @@ test("staff leaves only their own connection and failures remain retryable", asy
   await expect(page.getByRole("button", { name: "매장 삭제(이용 종료)" })).toHaveCount(0);
   page.on("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "내 연결 해제", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("현재 연결 상태");
+  await expect(page.getByRole("alert").filter({ hasText: "현재 연결 상태" })).toBeVisible();
   fail = false;
   await page.getByRole("button", { name: "연결 상태 다시 확인" }).click();
   await page.getByRole("button", { name: "내 연결 해제", exact: true }).click();
