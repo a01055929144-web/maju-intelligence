@@ -138,15 +138,21 @@ do $$ begin
 end $$;
 select public.prepare_public_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
   '60000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
-  '새 매장','새 대표','서울시','01012345678','6234567890',repeat('1',64));
+  repeat('1',64));
 -- Same signed nonce is an idempotent retry and rotates only the short-lived activation proof hash.
 select public.prepare_public_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
   '60000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
-  '새 매장','새 대표','서울시','01012345678','6234567890',repeat('2',64));
+  repeat('2',64));
 do $$ begin
-  begin perform public.prepare_public_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
-    '60000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
-    '변조 매장','새 대표','서울시','01012345678','6234567890',repeat('3',64)); raise exception 'retry_profile_changed';
+  begin perform public.activate_store_owner_v1(repeat('2',64),'30000000-0000-4000-8000-000000000003','2026-11-07',clock_timestamp(),
+    '6234567890','active',clock_timestamp(),gen_random_uuid()::text); raise exception 'owner_activated_before_profile';
+  exception when others then if sqlerrm<>'public_store_profile_required' then raise; end if; end;
+end $$;
+select public.complete_public_store_owner_profile_v1(repeat('2',64),'새 매장','새 대표','서울시','01012345678','6234567890');
+select public.complete_public_store_owner_profile_v1(repeat('2',64),'새 매장','새 대표','서울시','01012345678','6234567890');
+do $$ begin
+  begin perform public.complete_public_store_owner_profile_v1(repeat('2',64),'변조 매장','새 대표','서울시','01012345678','6234567890');
+    raise exception 'retry_profile_changed';
   exception when others then if sqlerrm<>'public_store_retry_mismatch' then raise; end if; end;
 end $$;
 select public.activate_store_owner_v1(repeat('2',64),'30000000-0000-4000-8000-000000000003','2026-11-07',clock_timestamp(),
@@ -154,7 +160,9 @@ select public.activate_store_owner_v1(repeat('2',64),'30000000-0000-4000-8000-00
 do $$ begin
   begin perform public.prepare_public_store_owner_activation_v1('10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
     '60000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000002',
-    '중복 매장','대표','서울시','01099998888','6234567890',repeat('3',64)); raise exception 'duplicate_business_number_prepared';
+    repeat('3',64));
+    perform public.complete_public_store_owner_profile_v1(repeat('3',64),'중복 매장','대표','서울시','01099998888','6234567890');
+    raise exception 'duplicate_business_number_prepared';
   exception when others then if sqlerrm<>'public_store_business_number_exists' then raise; end if; end;
 end $$;
 reset role;

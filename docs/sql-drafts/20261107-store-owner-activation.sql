@@ -34,7 +34,8 @@ create table public.store_owner_activation_requests (
   check(num_nonnulls(consumed_at,cancelled_at)<=1),
   check((customer_id is not null and prepared_by_company_member_id is not null and public_idempotency_key is null)
     or (prepared_by_company_member_id is null and public_idempotency_key is not null
-      and num_nonnulls(document_id,document_version_id,share_link_id,store_name,representative_name,address,phone,business_registration_number)=8))
+      and num_nonnulls(document_id,document_version_id,share_link_id)=3
+      and num_nonnulls(store_name,representative_name,address,phone,business_registration_number) in (0,5)))
 );
 create unique index store_owner_activation_one_open_customer
   on public.store_owner_activation_requests(company_id,customer_id)
@@ -65,15 +66,11 @@ begin
 end $$;
 
 create function public.prepare_public_store_owner_activation_v1(
-  p_company_id uuid,p_document_id uuid,p_document_version_id uuid,p_share_link_id uuid,p_idempotency_key uuid,
-  p_store_name text,p_representative_name text,p_address text,p_phone text,p_business_registration_number text,p_invite_token_hash text
+  p_company_id uuid,p_document_id uuid,p_document_version_id uuid,p_share_link_id uuid,p_idempotency_key uuid,p_invite_token_hash text
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
-declare v_request public.store_owner_activation_requests%rowtype; v_number text:=regexp_replace(coalesce(p_business_registration_number,''),'\D','','g');
+declare v_request public.store_owner_activation_requests%rowtype;
 begin
-  if p_invite_token_hash is null or p_invite_token_hash !~ '^[0-9a-f]{64}$' or length(v_number)<>10
-    or nullif(btrim(p_store_name),'') is null or length(p_store_name)>100 or nullif(btrim(p_representative_name),'') is null
-    or length(p_representative_name)>50 or nullif(btrim(p_address),'') is null or length(p_address)>300
-    or regexp_replace(coalesce(p_phone,''),'\D','','g') !~ '^\d{9,11}$' then raise exception 'public_store_profile_required'; end if;
+  if p_invite_token_hash is null or p_invite_token_hash !~ '^[0-9a-f]{64}$' then raise exception 'invalid_store_owner_activation'; end if;
   perform 1 from public.pricing_document_share_links l
     join public.pricing_documents d on d.company_id=l.company_id and d.id=l.document_id and d.archived_at is null
     join public.pricing_document_versions v on v.company_id=l.company_id and v.document_id=l.document_id and v.id=l.document_version_id
@@ -82,25 +79,41 @@ begin
       and coalesce(v.content->>'validUntil','')~'^\d{4}-\d{2}-\d{2}$'
       and (v.content->>'validUntil')::date >= (clock_timestamp() at time zone 'Asia/Seoul')::date for share of l;
   if not found then raise exception 'public_document_onboarding_not_available'; end if;
-  if exists(select 1 from public.normalized_customers where company_id=p_company_id and regexp_replace(coalesce(business_registration_number,''),'\D','','g')=v_number)
-    or exists(select 1 from public.store_accounts where company_id=p_company_id and business_registration_number=v_number) then
-    raise exception 'public_store_business_number_exists';
-  end if;
   select * into v_request from public.store_owner_activation_requests where company_id=p_company_id and public_idempotency_key=p_idempotency_key for update;
   if found then
     if v_request.document_id<>p_document_id or v_request.document_version_id<>p_document_version_id or v_request.share_link_id<>p_share_link_id
-      or v_request.business_registration_number<>v_number or v_request.store_name<>btrim(p_store_name)
-      or v_request.representative_name<>btrim(p_representative_name) or v_request.address<>btrim(p_address)
-      or v_request.phone<>regexp_replace(p_phone,'\D','','g') then raise exception 'public_store_retry_mismatch'; end if;
+      then raise exception 'public_store_retry_mismatch'; end if;
     if v_request.consumed_at is not null or v_request.cancelled_at is not null or v_request.expires_at<=clock_timestamp() then raise exception 'store_owner_activation_not_available'; end if;
     update public.store_owner_activation_requests set invite_token_hash=p_invite_token_hash where id=v_request.id returning * into v_request;
   else
-    insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id,
-      store_name,representative_name,address,phone,business_registration_number)
-    values(p_company_id,p_invite_token_hash,p_idempotency_key,p_document_id,p_document_version_id,p_share_link_id,btrim(p_store_name),
-      btrim(p_representative_name),btrim(p_address),regexp_replace(p_phone,'\D','','g'),v_number) returning * into v_request;
+    insert into public.store_owner_activation_requests(company_id,invite_token_hash,public_idempotency_key,document_id,document_version_id,share_link_id)
+    values(p_company_id,p_invite_token_hash,p_idempotency_key,p_document_id,p_document_version_id,p_share_link_id) returning * into v_request;
   end if;
   return jsonb_build_object('customerId',null,'storeAccountId',v_request.store_account_id,'expiresAt',v_request.expires_at);
+end $$;
+
+create function public.complete_public_store_owner_profile_v1(
+  p_invite_token_hash text,p_store_name text,p_representative_name text,p_address text,p_phone text,p_business_registration_number text
+) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
+declare v_request public.store_owner_activation_requests%rowtype; v_number text:=regexp_replace(coalesce(p_business_registration_number,''),'\D','','g');
+begin
+  if length(v_number)<>10 or nullif(btrim(p_store_name),'') is null or length(p_store_name)>100
+    or nullif(btrim(p_representative_name),'') is null or length(p_representative_name)>50
+    or nullif(btrim(p_address),'') is null or length(p_address)>300
+    or regexp_replace(coalesce(p_phone,''),'\D','','g') !~ '^\d{9,11}$' then raise exception 'public_store_profile_required'; end if;
+  select * into v_request from public.store_owner_activation_requests where invite_token_hash=p_invite_token_hash
+    and public_idempotency_key is not null and consumed_at is null and cancelled_at is null for update;
+  if not found or v_request.expires_at<=clock_timestamp() then raise exception 'store_owner_activation_not_available'; end if;
+  if exists(select 1 from public.normalized_customers where company_id=v_request.company_id and regexp_replace(coalesce(business_registration_number,''),'\D','','g')=v_number)
+    or exists(select 1 from public.store_accounts where company_id=v_request.company_id and business_registration_number=v_number) then
+    raise exception 'public_store_business_number_exists'; end if;
+  if v_request.store_name is not null and row(v_request.store_name,v_request.representative_name,v_request.address,v_request.phone,v_request.business_registration_number)
+    is distinct from row(btrim(p_store_name),btrim(p_representative_name),btrim(p_address),regexp_replace(p_phone,'\D','','g'),v_number)
+    then raise exception 'public_store_retry_mismatch'; end if;
+  update public.store_owner_activation_requests set store_name=btrim(p_store_name),representative_name=btrim(p_representative_name),
+    address=btrim(p_address),phone=regexp_replace(p_phone,'\D','','g'),business_registration_number=v_number
+    where id=v_request.id returning * into v_request;
+  return jsonb_build_object('companyId',v_request.company_id,'storeAccountId',v_request.store_account_id);
 end $$;
 
 create function public.activate_store_owner_v1(
@@ -112,6 +125,7 @@ begin
   select * into v_request from public.store_owner_activation_requests
     where invite_token_hash=p_invite_token_hash and consumed_at is null and cancelled_at is null for update;
   if not found or v_request.expires_at<=clock_timestamp() then raise exception 'store_owner_activation_not_available'; end if;
+  if v_request.public_idempotency_key is not null and v_request.store_name is null then raise exception 'public_store_profile_required'; end if;
   if p_terms_version is null or length(p_terms_version)>50 or p_terms_accepted_at<v_request.prepared_at
     or p_terms_accepted_at>clock_timestamp()+interval '1 minute' then raise exception 'store_terms_acceptance_required'; end if;
   if p_business_status<>'active' or p_verified_at<clock_timestamp()-interval '5 minutes'
@@ -158,10 +172,12 @@ alter table public.store_owner_activation_requests enable row level security;
 revoke all on public.store_owner_activation_requests from public,anon,authenticated,service_role;
 grant select,insert,update on public.store_owner_activation_requests to service_role;
 revoke all on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
-revoke all on function public.prepare_public_store_owner_activation_v1(uuid,uuid,uuid,uuid,uuid,text,text,text,text,text,text) from public,anon,authenticated,service_role;
+revoke all on function public.prepare_public_store_owner_activation_v1(uuid,uuid,uuid,uuid,uuid,text) from public,anon,authenticated,service_role;
+revoke all on function public.complete_public_store_owner_profile_v1(text,text,text,text,text,text) from public,anon,authenticated,service_role;
 revoke all on function public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text) from public,anon,authenticated,service_role;
 grant execute on function public.prepare_store_owner_activation_v1(uuid,uuid,uuid,text) to service_role;
-grant execute on function public.prepare_public_store_owner_activation_v1(uuid,uuid,uuid,uuid,uuid,text,text,text,text,text,text) to service_role;
+grant execute on function public.prepare_public_store_owner_activation_v1(uuid,uuid,uuid,uuid,uuid,text) to service_role;
+grant execute on function public.complete_public_store_owner_profile_v1(text,text,text,text,text,text) to service_role;
 grant execute on function public.activate_store_owner_v1(text,uuid,text,timestamptz,text,text,timestamptz,text) to service_role;
 
 commit;

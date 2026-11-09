@@ -37,6 +37,18 @@ describe("store Kakao session route boundary", () => {
     expect(activate).not.toContain("ownerAuthUserId");
   });
 
+  it("keeps Kakao-first public owners incomplete until profile, terms and business verification finish", () => {
+    const activate = source("app/api/store/accounts/activate/route.ts");
+    const callback = source("app/api/auth/kakao/callback/route.ts");
+    expect(callback).toContain("setPublicStoreOwnerProfileProof");
+    expect(callback).toContain('new URL("/store/activate?profile=1", request.url)');
+    expect(activate).toContain('proof.stage !== "profile"');
+    expect(activate).toContain("completePublicStoreOwnerProfile");
+    expect(activate.indexOf("checkBusinessRegistrationStatusesWithHealth")).toBeLessThan(activate.indexOf("activateStoreOwner({"));
+    expect(activate.indexOf("activateStoreOwner({")).toBeLessThan(activate.indexOf("setStoreSession(proof.authUserId)"));
+    expect(callback.indexOf("setPublicStoreOwnerProfileProof")).toBeLessThan(callback.indexOf("setStoreSession(authUserId)"));
+  });
+
   it("clears the store cookie through the existing logout and never elevates a public order token", () => {
     const logout = source("app/api/customer/logout/route.ts");
     const storefront = source("app/api/storefront/route.ts");
