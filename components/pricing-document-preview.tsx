@@ -181,6 +181,7 @@ export function PricingDocumentPreview({
   companyId,
   canManageLinks = false,
   publicSharingAvailable = false,
+  openPublicQr = false,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
@@ -191,6 +192,7 @@ export function PricingDocumentPreview({
   companyId?: string;
   canManageLinks?: boolean;
   publicSharingAvailable?: boolean;
+  openPublicQr?: boolean;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
@@ -264,7 +266,7 @@ export function PricingDocumentPreview({
           PNG는 A4 페이지별로 저장합니다.
         </span>
       </div>
-      {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} onInsert={setQr} /> : null}
+      {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} initiallyOpen={openPublicQr && publicSharingAvailable} onInsert={setQr} /> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
           {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.

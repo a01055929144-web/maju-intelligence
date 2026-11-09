@@ -9,11 +9,12 @@ import { Button } from "./ui/button";
 
 export type DocumentOrderQr = { dataUrl: string; customerName: string; audience?: "public"; expiresAt?: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
-export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSharingAvailable = false, allowCustomerLink = true }: {
+export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSharingAvailable = false, allowCustomerLink = true, initiallyOpen = false }: {
   companyId: string; version: DocumentVersion; onInsert: (qr: DocumentOrderQr | null) => void;
   publicSharingAvailable?: boolean; allowCustomerLink?: boolean;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
+  const [open, setOpen] = useState(initiallyOpen), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]), [cursor, setCursor] = useState<string | null>(null);
   const [selected, setSelected] = useState(""), [qr, setQr] = useState<DocumentOrderQr | null>(null);
   const [customerMode, setCustomerMode] = useState(!publicSharingAvailable);
@@ -21,18 +22,25 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
   const retryKey = useRef<string | null>(null);
   async function generatePublic() {
     setBusy(true); setMessage(""); setQr(null); onInsert(null);
+    let stage: "request" | "address" | "qr" = "request";
     try {
       retryKey.current ??= crypto.randomUUID();
       const { result } = await documentRequest<PreparedDocumentShare>(companyId, "prepare-share", {
         documentId: version.documentId, documentVersionId: version.id, leadId: null, idempotencyKey: retryKey.current,
       }, true);
+      stage = "address";
       const url = new URL(result.publicUrl, window.location.origin);
       if (url.origin !== window.location.origin || url.pathname !== "/pricing-document" || url.search || !url.hash || !Number.isFinite(Date.parse(result.expiresAt)))
         throw new Error("공개 링크를 확인하지 못했습니다. 다시 시도해 주세요.");
       setShared({ ...result, publicUrl: url.href });
+      stage = "qr";
       setQr({ dataUrl: await documentOrderQr(url.href), customerName: "공개 문서", audience: "public", expiresAt: result.expiresAt });
       setMessage("거래처 선택 없이 공개 링크를 만들었습니다. 열람은 가입·주문·전달 기록을 만들지 않습니다.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "공개 링크를 만들지 못했습니다. 다시 시도해 주세요."); }
+    } catch (error) {
+      setMessage(stage === "qr" ? "공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다. 공개 링크를 복사해 사용하거나 같은 버튼으로 다시 시도해 주세요." :
+        stage === "address" ? "발급된 공개 주소를 확인하지 못했습니다. 같은 버튼으로 다시 시도하거나 담당자에게 문의해 주세요." :
+          `${error instanceof Error ? error.message : "공개 링크를 만들지 못했습니다."} 같은 생성 버튼으로 다시 시도해 주세요.`);
+    }
     finally { setBusy(false); }
   }
   async function revokePublic() {

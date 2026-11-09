@@ -76,6 +76,7 @@ async function handle(request: NextRequest, write: boolean) {
   };
   let recordSend = false;
   let sharingAction = false;
+  let sharingOperation = "none";
   try {
     const page = Number(request.nextUrl.searchParams.get("page") || 1),
       // 11/4: 화면은 search 로 보내 왔는데 q 만 읽어 검색이 안 되던 문제 — 둘 다 받습니다.
@@ -94,6 +95,7 @@ async function handle(request: NextRequest, write: boolean) {
     recordSend = Boolean(input && typeof input === "object" && "action" in input && input.action === "record-send");
     sharingAction = Boolean(input && typeof input === "object" && "action" in input &&
       (input.action === "prepare-share" || input.action === "revoke-share" || (recordSend && "shareLinkId" in input)));
+    if (sharingAction) sharingOperation = recordSend ? "record-send" : (input as { action: string }).action === "prepare-share" ? "prepare-share" : "revoke-share";
     if (sharingAction && !scope.sharingEnabled) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
     if (sharingAction && !request.headers.get("origin")) return NextResponse.json({ message: "같은 화면에서 다시 시도해 주세요." }, { status: 403 });
     const result = write
@@ -123,6 +125,11 @@ async function handle(request: NextRequest, write: boolean) {
       { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } },
     );
   } catch (error) {
+    if (sharingAction) {
+      const databaseCode = error instanceof Error ? error.message.match(/"code"\s*:\s*"([A-Z0-9]{5,12})"/)?.[1] : undefined;
+      console.error("pricing_document_share_failed", { operation: sharingOperation,
+        status: error instanceof DocumentSendError ? error.status : 503, ...(databaseCode ? { databaseCode } : {}) });
+    }
     if (error instanceof DocumentSendError) return NextResponse.json({ message: error.message }, { status: error.status });
     if (sharingAction) return NextResponse.json({ message: "공유 요청을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
     if (recordSend) return NextResponse.json({ message: "전달 기록을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503 });

@@ -82,6 +82,9 @@ for (const width of [1440, 390]) {
     const profilePage = await context.newPage();
     await profilePage.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await profilePage.goto("/store/activate?fixture=store-owner-activation&profile=1");
+    await expect(profilePage.getByText(/카카오 계정 인증을 마쳤습니다/)).toBeVisible();
+    await expect(profilePage.getByRole("textbox", { name: "이메일", exact: true })).toHaveCount(0);
+    await expect(profilePage.getByRole("textbox", { name: "닉네임", exact: true })).toHaveCount(0);
     for (const [label, value] of [["매장명", "새 매장"], ["대표자명", "새 대표"], ["사업자등록번호", "1234567890"],
       ["연락처", "01012345678"], ["매장 주소", "서울시 중구"]] as const) await profilePage.getByLabel(label).fill(value);
     await profilePage.getByRole("checkbox").check();

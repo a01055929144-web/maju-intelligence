@@ -83,7 +83,8 @@ export async function GET(request: NextRequest) {
       });
       if (!authUserId) return redirectStore(request.url, "store_activation_required");
       if (proof.stage === "kakao" && proof.returnTo && activation.publicOnboarding && publicStoreOwnerOnboardingEnabled(activation.companyId)) {
-        if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token })))
+        if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token,
+          storePhone: kakaoUser.kakao_account?.phone_number })))
           return redirectStore(request.url, "store_activation_required");
         return NextResponse.redirect(new URL("/store/activate?profile=1", request.url));
       }
