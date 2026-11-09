@@ -40,3 +40,5 @@ describe("signed-link company feature gates",()=>{
  });
  it("global OFF rejects before link lookup",async()=>{vi.stubEnv("PRICE_SHEETS_ENABLED","false");expect((await POST(request("POST"))).status).toBe(404);expect(db).not.toHaveBeenCalled()});
 });
+vi.mock("@/lib/pricing/store-order-delivery-feature", () => import("../lib/pricing/store-order-delivery-feature"));
+vi.mock("@/lib/pricing/store-order-delivery-producer", () => import("../lib/pricing/store-order-delivery-producer"));

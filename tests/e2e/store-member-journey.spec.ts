@@ -14,7 +14,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
     display: { columns: 1, promoLayout: "table", info: [], productWidth: 65, priceIncludesTax: true },
     lines: [lineFromCatalog({ id: productId, name: "합성 품목", displayName: "합성 품목", brand: "", spec: "1kg", unit: "봉", price: 1000, taxType })] };
   const document = publicDocumentOutput({ id: "version", documentId: "document", version: 1, revision: 1, publishedAt: "2026-11-08T00:00:00Z", content, unavailablePromotions: [] });
-  let signedIn = false, accepted = 0, orderAttempts = 0, costRequests = 0, lostResponse = false;
+  let signedIn = false, revoked = false, accepted = 0, orderAttempts = 0, costRequests = 0, lostResponse = false;
   let deliveryConfigured = false, failDeliveryRefresh = true;
   const orderSnapshot = { id: "synthetic-order", deliveryDate, status: "submitted", knownTotal: unitPrice, requestMemo: "", marketPricePending: false,
     submittedAt: "2026-11-08T00:00:00Z", revision: 1, authorLabel: author,
@@ -47,6 +47,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
       expect(input.lines).toEqual([{ productId, promotionId: null, quantity: 1 }]);
       expect(input.deliveryDate).toBe(deliveryDate); expect(input.memo).toBe("");
       if (!signedIn) return route.fulfill({ status: 403, json: { message: "매장 구성원으로 로그인한 뒤 다시 주문해 주세요." } });
+      if (revoked) return route.fulfill({ status: 403, json: { message: "매장 구성원 권한이 변경되었습니다. 다시 로그인해 주세요." } });
       expect(typeof input.idempotencyKey).toBe("string");
       if (!saved.has(input.idempotencyKey)) saved.set(input.idempotencyKey, structuredClone(orderSnapshot));
       if (!lostResponse) {
@@ -64,7 +65,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
     return route.fulfill({ json: { store: { title: "합성 매장 주문", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: deliveryConfigured, nextDeliveryDate: deliveryConfigured ? deliveryDate : null, selectedDeliveryDate: deliveryDate, notice: "", marketPriceNotice: "",
       policy: { weekdays: deliveryConfigured ? [0,1,2,3,4,5,6] : [], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
       lines: [{ key: `${productId}:`, productId, promotionId: null, name: "합성 품목", category: "", brand: "", spec: "1kg", unit: "봉", badge: "", taxType, unitPrice, priceIncludesTax: true, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
-      ...(!signedIn ? { memberLogin: { enabled: true, companyId, storeAccountId: accountId } } : {}),
+      ...(!signedIn || revoked ? { memberLogin: { enabled: true, companyId, storeAccountId: accountId } } : {}),
       orders: Array.from(saved.values()), preferences: [], historyPage: 1, historyHasMore: false } });
   });
   await page.goto("/pricing-document#synthetic-document-token");
@@ -132,6 +133,16 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await expect(history).toContainText(`${unitPrice.toLocaleString("ko-KR")}원`);
   expect(document.lines[0].price).toBe(unitPrice);
   expect(Array.from(saved.values())[0]).toEqual(orderSnapshot);
+  await page.getByRole("button", { name: "다시 담기", exact: true }).click();
+  await expect(page.getByLabel("합성 품목 수량", { exact: true })).toHaveText("1");
+  revoked = true;
+  await page.getByRole("button", { name: "후결제로 주문 신청", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "구성원 권한이 변경" })).toBeVisible();
+  const recheckMember = page.getByRole("button", { name: "로그인 상태 다시 확인", exact: true });
+  expect((await recheckMember.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await recheckMember.click();
+  await expect(page.getByRole("button", { name: "카카오로 매장 로그인", exact: true })).toBeVisible();
+  expect(saved.size).toBe(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`member-journey-${kind}-${role}-${width}.png`), fullPage: true });
   await page.getByRole("button", { name: "데이터", exact: true }).click();

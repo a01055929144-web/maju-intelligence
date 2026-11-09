@@ -1,5 +1,7 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+vi.mock("@/lib/pricing/store-order-delivery-feature", () => import("../lib/pricing/store-order-delivery-feature"));
+vi.mock("@/lib/pricing/store-order-delivery-producer", () => import("../lib/pricing/store-order-delivery-producer"));
 const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreOrderMemberContext: mocks.orderContext }));
 vi.mock("@/lib/pricing/store-order-member", () => ({ getStoreOrderActor: mocks.member }));
@@ -25,6 +27,7 @@ vi.mock(
   () => import("../lib/pricing/storefront-public"),
 );
 import { POST, PUT } from "../app/api/storefront/route";
+afterEach(() => vi.unstubAllEnvs());
 const productId = "10000000-0000-4000-8000-000000000001";
 const body = {
   token: "signed-link",
@@ -132,6 +135,23 @@ it("rejects cross-origin writes before resolving a link", async () => {
   );
   expect(mocks.read).not.toHaveBeenCalled();
   expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it("returns the 02 delivery DTO from the existing PUT while retaining the result object", async () => {
+  vi.stubEnv("STORE_ORDER_DELIVERY_SNAPSHOT_ENABLED", "true");
+  vi.stubEnv("STORE_ORDER_DELIVERY_COMPANY_IDS", "verified-company");
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", linkId: "verified-link",
+    customerName: "합성 매장", deliveryAddress: "합성 주소" });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  const saved = { id: productId, revision: 1, knownTotal: 1200, marketPricePending: false };
+  mocks.db.mockResolvedValueOnce([]).mockResolvedValueOnce(saved);
+  const response = await PUT(request({ companyId: "forged", customerId: "forged" }));
+  expect(await response.json()).toEqual({ result: saved, delivery: {
+    companyId: "verified-company", customerId: "verified-customer", orderId: productId, orderRevision: 1,
+    deliveryDate: body.deliveryDate, destination: { customerName: "합성 매장", address: "합성 주소" },
+  } });
+  expect(mocks.db.mock.calls[1][0]).toBe("rpc/place_store_order_with_delivery_snapshot_09");
+  expect(JSON.parse(mocks.db.mock.calls[1][1].body).p_member_id).toBe("verified-member");
 });
 
 const viewScope = { companyId: "00000000-0000-4000-8000-000000000001", customerId: "20000000-0000-4000-8000-000000000001" };
