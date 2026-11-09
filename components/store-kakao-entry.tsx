@@ -34,14 +34,14 @@ export function StoreKakaoLoginPanel({ access, newWindow = false }: { access: St
   </Card>;
 }
 
-export function StoreOwnerActivationPanel({ enabled, profileStep = false }: { enabled: boolean; profileStep?: boolean }) {
+export function StoreOwnerActivationPanel({ enabled, profileStep = false, initialStorePhone = "" }: { enabled: boolean; profileStep?: boolean; initialStorePhone?: string }) {
   const token = useRef("");
   const publicFlow = useRef(false);
   const [ready, setReady] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [profile, setProfile] = useState({ address: "", businessRegistrationNumber: "", phone: "", representativeName: "", storeName: "" });
+  const [profile, setProfile] = useState({ address: "", businessRegistrationNumber: "", phone: initialStorePhone, representativeName: "", storeName: "" });
   useEffect(() => {
     if (token.current) return;
     if (profileStep) { publicFlow.current = true; setReady(true); return; }
@@ -111,8 +111,9 @@ export function StoreOwnerActivationPanel({ enabled, profileStep = false }: { en
       {error && <p role="alert">{error}</p>}
       {profileStep && ready && <fieldset className="space-y-3" disabled={!enabled || busy}>
         <legend className="font-medium">매장 정보</legend>
-        {([["storeName", "매장명"], ["representativeName", "대표자명"], ["businessRegistrationNumber", "사업자등록번호"],
-          ["phone", "연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => <label className="block text-sm" key={key}>{label}
+        <p className="text-sm">카카오 계정 인증을 마쳤습니다. 이메일·닉네임은 다시 입력하지 않습니다. 사업자·배송에 필요한 매장 정보만 확인해 주세요. 카카오에서 받은 연락처는 미리 채우며 매장 연락처로 바꿀 수 있습니다.</p>
+        {([["storeName", "매장명"], ["representativeName", "사업자 대표자명"], ["businessRegistrationNumber", "사업자등록번호"],
+          ["phone", "매장 연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => <label className="block text-sm" key={key}>{label}
             <input className="mt-1 min-h-[44px] w-full rounded-md border px-3" value={profile[key]} autoComplete={key === "phone" ? "tel" : "organization"}
               inputMode={key === "phone" || key === "businessRegistrationNumber" ? "numeric" : "text"}
               onChange={event => setProfile(current => ({ ...current, [key]: event.target.value }))} /></label>)}</fieldset>}

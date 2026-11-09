@@ -65,6 +65,7 @@ export function PricingDocumentsWorkspace({
     [dirty, setDirty] = useState(false),
     [versions, setVersions] = useState<DocumentVersion[]>([]),
     [preview, setPreview] = useState<DocumentVersion | null>(null),
+    [openPublicQr, setOpenPublicQr] = useState(false),
     [fontScale, setFontScale] = useState(1);
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]),
     [catalogQuery, setCatalogQuery] = useState(""),
@@ -484,15 +485,17 @@ export function PricingDocumentsWorkspace({
     if (result.added.length) rows([...draft.content.lines, ...result.added]);
     setMessage(`${result.added.length}개 품목을 담았습니다.${result.unmatched.length ? ` 연결되지 않은 ${result.unmatched.length}개: ${result.unmatched.slice(0, 5).join(", ")}` : ""}`);
   }
-  async function openPublishedPreview(version: DocumentVersion) {
+  async function openPublishedPreview(version: DocumentVersion, publicQr = false) {
     const current = await read<DocumentVersion[]>("versions", { id: version.documentId });
     const selected = current.find(item => item.id === version.id);
     if (!selected) throw new Error("버전을 찾을 수 없습니다. 문서를 다시 열어 주세요.");
     setAutoPrint(false);
+    setOpenPublicQr(publicQr);
     setPreview(selected);
   }
   const openPreview = (print: boolean) => {
     if (!draft) return;
+    setOpenPublicQr(false);
     void task(async () => {
                         const content = parseDocument(draft.content),
                           p = await read<Promotion[]>("promotions");
@@ -1117,7 +1120,7 @@ export function PricingDocumentsWorkspace({
                     >
                       버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
                     </button>
-                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
+                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v, true))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
                     </div>
                   ))}
                 </div>
@@ -1236,6 +1239,7 @@ export function PricingDocumentsWorkspace({
           companyId={companyId}
             canManageLinks={manager && storeLinksEnabled && !leadContext}
             publicSharingAvailable={publicSharingAvailable && !leadContext}
+            openPublicQr={openPublicQr}
           refresh={() => refreshPreview(preview)}
         />
           </div>

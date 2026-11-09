@@ -315,6 +315,24 @@ it("creates a recipient-free public document without lead lookup, delivery or cu
   expect(await service.execute(scope, input)).toEqual(result);
   expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
 });
+it("recovers a public link committed before a lost API response and logs only safe failure metadata", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const input = { ...prepare, leadId: null };
+    failInsert = true;
+    const failed = await privatePost(request(input));
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain("synthetic lost commit response");
+    expect(log).toHaveBeenCalledWith("pricing_document_share_failed", { operation: "prepare-share", status: 503 });
+    expect(links).toHaveLength(1);
+    const restored = await privatePost(request(input));
+    expect(restored.status).toBe(200);
+    expect((await restored.json()).result.shareLinkId).toBe(links[0].id);
+    expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+  } finally { log.mockRestore(); }
+});
+
 it("keeps recipient-free creation and context OFF before any database query", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "false");
   await expect(service.execute(scope, { ...prepare, leadId: null })).rejects.toThrow();
