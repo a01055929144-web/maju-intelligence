@@ -8,6 +8,6 @@ export default async function StoreActivatePage({ searchParams }: { searchParams
   const params = await searchParams ?? {};
   const enabled = storeMemberSessionEnabled() || (isCiLayoutFixturesEnabled() && params.fixture === "store-owner-activation");
   return <main className="mx-auto max-w-3xl p-5"><meta name="referrer" content="no-referrer" />
-    <h1 className="mb-4 text-lg font-semibold">매장 전용 개통</h1><StoreOwnerActivationPanel enabled={enabled} />
+    <h1 className="mb-4 text-lg font-semibold">매장 전용 개통</h1><StoreOwnerActivationPanel enabled={enabled} profileStep={params.profile === "1"} />
   </main>;
 }

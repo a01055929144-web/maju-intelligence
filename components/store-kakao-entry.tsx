@@ -34,7 +34,7 @@ export function StoreKakaoLoginPanel({ access, newWindow = false }: { access: St
   </Card>;
 }
 
-export function StoreOwnerActivationPanel({ enabled }: { enabled: boolean }) {
+export function StoreOwnerActivationPanel({ enabled, profileStep = false }: { enabled: boolean; profileStep?: boolean }) {
   const token = useRef("");
   const publicFlow = useRef(false);
   const [ready, setReady] = useState(false);
@@ -44,28 +44,30 @@ export function StoreOwnerActivationPanel({ enabled }: { enabled: boolean }) {
   const [profile, setProfile] = useState({ address: "", businessRegistrationNumber: "", phone: "", representativeName: "", storeName: "" });
   useEffect(() => {
     if (token.current) return;
+    if (profileStep) { publicFlow.current = true; setReady(true); return; }
     const value = window.location.hash.slice(1);
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
     if (/^[A-Za-z0-9_-]{43}$/.test(value) || /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
       token.current = value; publicFlow.current = value.includes("."); setReady(true);
     }
     else setError("개통 링크를 확인할 수 없습니다. 담당자에게 받은 전체 링크를 다시 열어 주세요.");
-  }, []);
+  }, [profileStep]);
   useEffect(() => {
     const reopen = () => { if (window.location.hash) window.location.reload(); };
     window.addEventListener("hashchange", reopen);
     return () => window.removeEventListener("hashchange", reopen);
   }, []);
   async function start() {
-    if (!enabled || !ready || !accepted || busy || !token.current) return;
-    if (publicFlow.current && (!profile.storeName.trim() || !profile.representativeName.trim() ||
+    if (!enabled || !ready || busy || (!profileStep && !publicFlow.current && (!accepted || !token.current))) return;
+    if (profileStep && (!accepted || !profile.storeName.trim() || !profile.representativeName.trim() ||
       profile.businessRegistrationNumber.replace(/\D/g, "").length !== 10 || !profile.address.trim() || profile.phone.replace(/\D/g, "").length < 9)) {
       setError("매장명, 대표자명, 사업자등록번호, 연락처와 주소를 모두 확인해 주세요."); return;
     }
     setBusy(true); setError("");
     try {
-      const body = publicFlow.current
-        ? { onboardingIntent: token.current, store: profile, termsAccepted: true }
+      const body = profileStep
+        ? { store: profile, termsAccepted: true }
+        : publicFlow.current ? { onboardingIntent: token.current }
         : { token: token.current, termsAccepted: true };
       const response = await fetch("/api/store/accounts/activate", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -73,9 +75,16 @@ export function StoreOwnerActivationPanel({ enabled }: { enabled: boolean }) {
         throw new Error(response.status === 410 ? "개통 링크가 만료되었거나 사용되었습니다. 담당자에게 새 링크를 요청해 주세요." :
           response.status === 404 ? "점주 개통은 아직 준비 중입니다. 담당자에게 확인해 주세요." :
             response.status === 400 ? "개통 링크와 약관 동의를 확인한 뒤 다시 시도해 주세요." :
+              response.status === 422 ? "사업자 상태를 확인하지 못했습니다. 정보를 확인한 뒤 가입을 다시 시작해 주세요." :
               response.status === 401 || response.status === 403 ? "개통 권한을 확인할 수 없습니다. 담당자에게 받은 링크를 확인해 주세요." : "개통 요청을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
       }
-      const result = await response.json() as { loginUrl: string };
+      const result = await response.json() as { loginUrl?: string; redirectTo?: string };
+      if (profileStep) {
+        if (!result.redirectTo?.startsWith("/pricing-document#") || result.redirectTo.startsWith("//"))
+          throw new Error("복귀 주소를 확인하지 못했습니다. 주문 문서를 다시 열어 주세요.");
+        window.location.assign(result.redirectTo); return;
+      }
+      if (!result.loginUrl) throw new Error("로그인 주소를 확인하지 못했습니다. 다시 시도해 주세요.");
       const url = new URL(result.loginUrl, window.location.origin);
       const allowed = ["store", "companyId", "storeAccountId", "activation"];
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -96,17 +105,18 @@ export function StoreOwnerActivationPanel({ enabled }: { enabled: boolean }) {
     <CardContent className="space-y-4">
       {!enabled && <p role="status">점주 개통은 아직 준비 중입니다. 담당자의 안내 후 원래 개통 링크를 다시 열어 주세요.</p>}
       {error && <p role="alert">{error}</p>}
-      {publicFlow.current && ready && <fieldset className="space-y-3" disabled={!enabled || busy}>
+      {profileStep && ready && <fieldset className="space-y-3" disabled={!enabled || busy}>
         <legend className="font-medium">매장 정보</legend>
         {([["storeName", "매장명"], ["representativeName", "대표자명"], ["businessRegistrationNumber", "사업자등록번호"],
           ["phone", "연락처"], ["address", "매장 주소"]] as const).map(([key, label]) => <label className="block text-sm" key={key}>{label}
             <input className="mt-1 min-h-[44px] w-full rounded-md border px-3" value={profile[key]} autoComplete={key === "phone" ? "tel" : "organization"}
               inputMode={key === "phone" || key === "businessRegistrationNumber" ? "numeric" : "text"}
               onChange={event => setProfile(current => ({ ...current, [key]: event.target.value }))} /></label>)}</fieldset>}
-      <p className="text-sm"><a className="underline" href="/legal/terms" target="_blank" rel="noreferrer noopener">이용약관</a>과 <a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer noopener">개인정보처리방침</a>을 확인해 주세요.</p>
-      <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={accepted} disabled={!enabled || !ready || busy}
-        onChange={event => setAccepted(event.target.checked)} />이용약관과 개인정보처리방침을 확인하고 동의합니다.</label>
-      <Button className="min-h-[44px]" disabled={!enabled || !ready || !accepted || busy} onClick={() => void start()}>{busy ? "개통 요청 확인 중" : "동의하고 카카오로 시작"}</Button>
+      {(!publicFlow.current || profileStep) && <><p className="text-sm"><a className="underline" href="/legal/terms" target="_blank" rel="noreferrer noopener">이용약관</a>과 <a className="underline" href="/legal/privacy" target="_blank" rel="noreferrer noopener">개인정보처리방침</a>을 확인해 주세요.</p>
+        <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={accepted} disabled={!enabled || !ready || busy}
+          onChange={event => setAccepted(event.target.checked)} />이용약관과 개인정보처리방침을 확인하고 동의합니다.</label></>}
+      <Button className="min-h-[44px]" disabled={!enabled || !ready || (profileStep && !accepted) || (!publicFlow.current && !accepted) || busy} onClick={() => void start()}>
+        {busy ? "개통 요청 확인 중" : profileStep ? "동의하고 매장 개통" : publicFlow.current ? "카카오로 점주 가입" : "동의하고 카카오로 시작"}</Button>
       <p className="text-sm">개통·접근 권한과 사업자 상태는 인증 후 다시 확인합니다. 원가 기능은 별도 이용 안내 후 열립니다.</p>
     </CardContent>
   </Card>;

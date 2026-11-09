@@ -46,13 +46,22 @@ export function verifyPublicStoreOwnerOnboardingIntent(token: string): PublicSto
 }
 
 export async function preparePublicStoreOwnerActivation(input: PublicStoreOwnerOnboardingContext & {
-  businessRegistrationNumber: string; idempotencyKey: string; phone: string; representativeName: string; storeName: string; address: string; token: string;
+  idempotencyKey: string; token: string;
 }) {
   return supabaseRequest<{ customerId: string; storeAccountId: string; expiresAt: string }>("rpc/prepare_public_store_owner_activation_v1", {
+    method: "POST", body: JSON.stringify({ p_company_id: input.companyId, p_document_id: input.documentId,
+      p_document_version_id: input.documentVersionId, p_idempotency_key: input.idempotencyKey,
+      p_invite_token_hash: hashToken(input.token), p_share_link_id: input.shareLinkId })
+  });
+}
+
+export async function completePublicStoreOwnerProfile(input: {
+  address: string; businessRegistrationNumber: string; phone: string; representativeName: string; storeName: string; token: string;
+}) {
+  return supabaseRequest<{ companyId: string; storeAccountId: string }>("rpc/complete_public_store_owner_profile_v1", {
     method: "POST", body: JSON.stringify({ p_address: input.address, p_business_registration_number: input.businessRegistrationNumber,
-      p_company_id: input.companyId, p_document_id: input.documentId, p_document_version_id: input.documentVersionId,
-      p_idempotency_key: input.idempotencyKey, p_invite_token_hash: hashToken(input.token), p_phone: input.phone,
-      p_representative_name: input.representativeName, p_share_link_id: input.shareLinkId, p_store_name: input.storeName })
+      p_invite_token_hash: hashToken(input.token), p_phone: input.phone, p_representative_name: input.representativeName,
+      p_store_name: input.storeName })
   });
 }
 
@@ -61,6 +70,8 @@ export type PreparedStoreOwnerActivation = {
   customerId: string | null;
   storeAccountId: string;
   businessRegistrationNumber: string;
+  profileRequired: boolean;
+  publicOnboarding: boolean;
 };
 
 export async function prepareStoreOwnerActivation(input: {
@@ -75,8 +86,8 @@ export async function prepareStoreOwnerActivation(input: {
 
 export async function getPreparedStoreOwnerActivation(token: string): Promise<PreparedStoreOwnerActivation | null> {
   const requests = await supabaseRequest<Array<{ company_id: string; customer_id: string | null; store_account_id: string; business_registration_number?: string | null;
-    document_id?: string | null; document_version_id?: string | null; share_link_id?: string | null }>>(
-    `store_owner_activation_requests?select=company_id,customer_id,store_account_id,business_registration_number,document_id,document_version_id,share_link_id&invite_token_hash=eq.${hashToken(token)}&consumed_at=is.null&cancelled_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
+    document_id?: string | null; document_version_id?: string | null; share_link_id?: string | null; store_name?: string | null }>>(
+    `store_owner_activation_requests?select=company_id,customer_id,store_account_id,business_registration_number,document_id,document_version_id,share_link_id,store_name&invite_token_hash=eq.${hashToken(token)}&consumed_at=is.null&cancelled_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
   );
   const request = requests[0];
   if (!request) return null;
@@ -97,8 +108,10 @@ export async function getPreparedStoreOwnerActivation(token: string): Promise<Pr
     `normalized_customers?select=business_registration_number&company_id=eq.${request.company_id}&id=eq.${request.customer_id}&limit=1`
   ) : [];
   const businessRegistrationNumber = (request.business_registration_number || customers[0]?.business_registration_number || "").replace(/\D/g, "");
-  return businessRegistrationNumber.length === 10 ? { companyId: request.company_id, customerId: request.customer_id,
-    storeAccountId: request.store_account_id, businessRegistrationNumber } : null;
+  const profileRequired = !request.customer_id && !request.store_name;
+  return profileRequired || businessRegistrationNumber.length === 10 ? { companyId: request.company_id, customerId: request.customer_id,
+    storeAccountId: request.store_account_id, businessRegistrationNumber, profileRequired,
+    publicOnboarding: !request.customer_id && Boolean(request.document_id) } : null;
 }
 
 export async function resolveOrCreateStoreKakaoUser(input: {

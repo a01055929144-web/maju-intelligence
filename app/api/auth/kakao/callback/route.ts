@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof,
+  setCustomerSession, setPublicStoreOwnerProfileProof, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
-import { activateStoreOwner, getPreparedStoreOwnerActivation, resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
+import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
+  resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
@@ -73,10 +75,6 @@ export async function GET(request: NextRequest) {
       const activation = proof ? await getPreparedStoreOwnerActivation(proof.token) : null;
       if (!proof || !activation || !storeOwnerMatch || activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2])
         return redirectStore(request.url, "store_activation_required");
-      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
-      const status = results.get(activation.businessRegistrationNumber);
-      if (failedNumbers.has(activation.businessRegistrationNumber) || status?.label !== "정상")
-        return redirectStore(request.url, "business_status_verification_required");
       const authUserId = await resolveOrCreateStoreKakaoUser({
         avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
         email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
@@ -84,6 +82,16 @@ export async function GET(request: NextRequest) {
         phoneNumber: kakaoUser.kakao_account?.phone_number
       });
       if (!authUserId) return redirectStore(request.url, "store_activation_required");
+      if (proof.stage === "kakao" && proof.returnTo && activation.publicOnboarding && publicStoreOwnerOnboardingEnabled(activation.companyId)) {
+        if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token })))
+          return redirectStore(request.url, "store_activation_required");
+        return NextResponse.redirect(new URL("/store/activate?profile=1", request.url));
+      }
+      if (!proof.termsAcceptedAt || activation.profileRequired) return redirectStore(request.url, "store_activation_required");
+      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
+      const status = results.get(activation.businessRegistrationNumber);
+      if (failedNumbers.has(activation.businessRegistrationNumber) || status?.label !== "정상")
+        return redirectStore(request.url, "business_status_verification_required");
       const activated = await activateStoreOwner({ authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
         termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");

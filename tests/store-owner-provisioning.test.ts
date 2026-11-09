@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
-import { activateStoreOwner, createPublicStoreOwnerOnboardingIntent, getPreparedStoreOwnerActivation, getStorePublicBaseUrl,
+import { activateStoreOwner, completePublicStoreOwnerProfile, createPublicStoreOwnerOnboardingIntent, getPreparedStoreOwnerActivation, getStorePublicBaseUrl,
   preparePublicStoreOwnerActivation, prepareStoreOwnerActivation, resolveOrCreateStoreKakaoUser,
   verifyPublicStoreOwnerOnboardingIntent } from "../lib/store/07-store-owner-provisioning";
 
@@ -25,12 +25,21 @@ describe("store owner activation repository", () => {
 
   it("prepares a public owner without trusting customer or store identifiers", async () => {
     mocks.db.mockResolvedValue({ customerId: null, storeAccountId: "generated", expiresAt: "x" });
-    await preparePublicStoreOwnerActivation({ address: "Seoul", businessRegistrationNumber: "1234567890",
-      companyId: "company", documentId: "document", documentVersionId: "version", shareLinkId: "share",
-      nonce: "nonce", returnTo: "/pricing-document#opaque", idempotencyKey: "retry", phone: "01012345678", representativeName: "Owner", storeName: "Store", token: "secret" });
+    await preparePublicStoreOwnerActivation({ companyId: "company", documentId: "document", documentVersionId: "version", shareLinkId: "share",
+      nonce: "nonce", returnTo: "/pricing-document#opaque", idempotencyKey: "retry", token: "secret" });
     const body = JSON.parse(mocks.db.mock.calls[0][1].body);
     expect(body).not.toHaveProperty("p_customer_id"); expect(body).not.toHaveProperty("p_store_account_id");
     expect(body.p_invite_token_hash).toMatch(/^[0-9a-f]{64}$/); expect(JSON.stringify(body)).not.toContain("secret");
+    expect(body).not.toHaveProperty("p_store_name");
+  });
+
+  it("stores the profile only after Kakao identity continuation", async () => {
+    mocks.db.mockResolvedValue({ companyId: "company", storeAccountId: "store" });
+    await completePublicStoreOwnerProfile({ address: "Seoul", businessRegistrationNumber: "1234567890", phone: "01012345678",
+      representativeName: "Owner", storeName: "Store", token: "secret" });
+    const body = JSON.parse(mocks.db.mock.calls[0][1].body);
+    expect(body).toMatchObject({ p_store_name: "Store", p_business_registration_number: "1234567890" });
+    expect(JSON.stringify(body)).not.toContain("secret");
   });
 
   it("does not overwrite an existing Kakao user when concurrent creation wins", async () => {
@@ -68,7 +77,8 @@ describe("store owner activation repository", () => {
     mocks.db.mockResolvedValueOnce([{ company_id: "company", customer_id: "customer", store_account_id: "store" }])
       .mockResolvedValueOnce([{ business_registration_number: "123-45-67890" }]);
     await expect(getPreparedStoreOwnerActivation("a".repeat(43))).resolves.toEqual({
-      companyId: "company", customerId: "customer", storeAccountId: "store", businessRegistrationNumber: "1234567890"
+      companyId: "company", customerId: "customer", storeAccountId: "store", businessRegistrationNumber: "1234567890",
+      profileRequired: false, publicOnboarding: false
     });
     expect(mocks.db.mock.calls[0][0]).toContain("consumed_at=is.null&cancelled_at=is.null&expires_at=gt.");
   });

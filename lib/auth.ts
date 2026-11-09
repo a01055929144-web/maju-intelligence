@@ -71,7 +71,9 @@ export type StoreSession = {
 type StoreOwnerActivationProof = {
   token: string;
   returnTo?: string;
-  termsAcceptedAt: string;
+  termsAcceptedAt?: string;
+  authUserId?: string;
+  stage?: "kakao" | "profile";
   expiresAt: number;
 };
 
@@ -182,14 +184,36 @@ export async function setStoreOwnerActivationProof(token: string, returnTo?: str
   return true;
 }
 
+export async function setPublicStoreOwnerKakaoProof(token: string, returnTo: string) {
+  if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token) ||
+    !returnTo.startsWith("/pricing-document#") || returnTo.startsWith("//") || returnTo.length > 1500) return false;
+  const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, stage: "kakao", expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function setPublicStoreOwnerProfileProof(input: { authUserId: string; returnTo: string; token: string }) {
+  if (!storeMemberSessionEnabled() || !UUID_PATTERN.test(input.authUserId) || !/^[A-Za-z0-9_-]{43}$/.test(input.token) ||
+    !input.returnTo.startsWith("/pricing-document#") || input.returnTo.startsWith("//") || input.returnTo.length > 1500) return false;
+  const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ ...input, stage: "profile", expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
 export async function getStoreOwnerActivationProof(options: { consume?: boolean } = {}): Promise<StoreOwnerActivationProof | null> {
   if (!storeMemberSessionEnabled()) return null;
   const cookieStore = await cookies();
   const proof = decodeSession<StoreOwnerActivationProof>(cookieStore.get(STORE_OWNER_ACTIVATION_COOKIE)?.value);
   if (options.consume) cookieStore.delete(STORE_OWNER_ACTIVATION_COOKIE);
   const now = Math.floor(Date.now() / 1000);
-  return proof && /^[A-Za-z0-9_-]{43}$/.test(proof.token) && proof.expiresAt > now &&
-    !Number.isNaN(Date.parse(proof.termsAcceptedAt)) ? proof : null;
+  if (!proof || !/^[A-Za-z0-9_-]{43}$/.test(proof.token) || proof.expiresAt <= now) return null;
+  if (proof.stage === "kakao") return proof.returnTo ? proof : null;
+  if (proof.stage === "profile") return proof.returnTo && proof.authUserId && UUID_PATTERN.test(proof.authUserId) ? proof : null;
+  return proof.termsAcceptedAt && !Number.isNaN(Date.parse(proof.termsAcceptedAt)) ? proof : null;
 }
 
 function decodeSession<TSession>(value?: string): TSession | null {
