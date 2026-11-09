@@ -21,3 +21,10 @@ it("reserves print space for QR and larger text without losing or changing lines
   expect(pages.length).toBeGreaterThanOrEqual(printPages(output).length);
   expect(pages.flatMap(page => page.lines)).toEqual(output.lines);
 });
+
+it("renders public document QR locally, including loopback previews, without weakening store URL guards", async () => {
+  for (const url of ["https://docs.example.test/pricing-document#synthetic-public-token", "http://127.0.0.1:3100/pricing-document#synthetic-public-token"])
+    expect(await documentOrderQr(url)).toMatch(/^data:image\/png;base64,iVBOR/);
+  for (const invalid of ["http://docs.example.test/pricing-document#token", "https://docs.example.test/pricing-document?token=secret#x", "https://user:pass@docs.test/pricing-document#x"])
+    await expect(documentOrderQr(invalid)).rejects.toThrow();
+});
