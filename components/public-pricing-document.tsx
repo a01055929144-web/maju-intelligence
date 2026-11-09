@@ -4,6 +4,7 @@ import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { SharedPricingAcceptance } from "./shared-pricing-acceptance";
+import { Button } from "./ui/button";
 
 export function PublicPricingDocument() {
   const [document, setDocument] = useState<PublicDocumentOutput | null>(null);
@@ -11,19 +12,21 @@ export function PublicPricingDocument() {
   const [expiresAt, setExpiresAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptance, setAcceptance] = useState<{ token: string; available: boolean } | null>(null);
+  const [orderEntry, setOrderEntry] = useState<{ available: boolean; companyName: string; title: string; version: number } | null>(null);
+  const [orderMessage, setOrderMessage] = useState("");
   const sequence = useRef(0);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setAcceptance(null); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
       const response = await fetch("/api/pricing-documents/public", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean };
+      const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: { available: boolean; companyName: string; title: string; version: number } };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
-      if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setMessage(""); }
+      if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage(""); }
     } catch (error) { if (sequence.current === current) setMessage(error instanceof Error ? error.message : "문서를 확인하지 못했습니다."); }
     finally { if (sequence.current === current) setBusy(false); }
   }, []);
@@ -51,6 +54,13 @@ export function PublicPricingDocument() {
     {message && <p role="status">{message}</p>}
     <button disabled={busy} className="min-h-[44px] rounded border px-3" onClick={() => void load()}>{busy ? "확인 중" : "다시 확인"}</button>
     {safeDocument && <PricingDocPaper output={safeDocument} />}
+    {safeDocument && orderEntry && <section aria-label="공개 문서 주문 안내" className="space-y-2 rounded border p-3">
+      <p>{orderEntry.companyName} · {orderEntry.title} · 게시 버전 {orderEntry.version}</p>
+      <p className="text-sm">문서는 로그인 없이 볼 수 있습니다. 주문은 카카오 점주 가입과 매장 정보 확인 후 발행 회사에 연결합니다.</p>
+      <Button disabled={!orderEntry.available || safeDocument.expired} type="button" onClick={() => setOrderMessage("카카오 점주 가입 연결을 준비 중입니다. 현재 주문은 접수되지 않습니다. 발행 회사 담당자에게 주문 방법을 문의해 주세요.")}>주문하기</Button>
+      {!orderEntry.available || safeDocument.expired ? <p>유효기간을 확인한 뒤 발행 회사에 새 문서를 요청해 주세요.</p> : <p className="text-sm">카카오 가입·주문 연결 준비 중</p>}
+      {orderMessage ? <p role="status">{orderMessage}</p> : null}
+    </section>}
     {safeDocument && !safeDocument.expired && acceptance?.available && <SharedPricingAcceptance key={`${acceptance.token}:${expiresAt}`} token={acceptance.token} kind={safeDocument.kind} />}
   </main>;
 }

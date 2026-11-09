@@ -1,14 +1,14 @@
 import { DocumentSendError } from "./document-send";
 import { documentOutput, isId, object, type DocumentVersion } from "./document";
 
-export type PrepareDocumentShare = { documentId: string; documentVersionId: string; leadId: string; idempotencyKey: string; ttlDays: number };
+export type PrepareDocumentShare = { documentId: string; documentVersionId: string; leadId: string | null; idempotencyKey: string; ttlDays: number };
 export type PreparedDocumentShare = { shareLinkId: string; sendId: null; documentId: string; documentVersionId: string; publicUrl: string; expiresAt: string; deliveryRecorded: false };
 export function parseDocumentShare(input: unknown): PrepareDocumentShare {
   const b = object(input), ttlDays = b.ttlDays ?? 14;
-  if (!isId(b.documentId) || !isId(b.documentVersionId) || !isId(b.leadId) || !isId(b.idempotencyKey) ||
+  if (!isId(b.documentId) || !isId(b.documentVersionId) || (b.leadId != null && !isId(b.leadId)) || !isId(b.idempotencyKey) ||
     !Number.isInteger(ttlDays) || Number(ttlDays) < 1 || Number(ttlDays) > 30)
-    throw new DocumentSendError("게시 버전·리드·재시도 키와 링크 기간(1~30일)을 확인해 주세요.", 400);
-  return { documentId: b.documentId.toLowerCase(), documentVersionId: b.documentVersionId.toLowerCase(), leadId: b.leadId.toLowerCase(), idempotencyKey: b.idempotencyKey.toLowerCase(), ttlDays: Number(ttlDays) };
+    throw new DocumentSendError("게시 버전·재시도 키와 링크 기간(1~30일)을 확인해 주세요.", 400);
+  return { documentId: b.documentId.toLowerCase(), documentVersionId: b.documentVersionId.toLowerCase(), leadId: typeof b.leadId === "string" ? b.leadId.toLowerCase() : null, idempotencyKey: b.idempotencyKey.toLowerCase(), ttlDays: Number(ttlDays) };
 }
 
 /** Public sales output only. Never serialize a published row, recipient or arbitrary info. */

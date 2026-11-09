@@ -6,10 +6,11 @@ import { publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentS
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
+import { publicDocumentOrderEntryEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 
 type ShareRow = {
-  id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string;
+  id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
   idempotency_key: string; created_by_key: string; token_nonce: string; token_hash: string;
   ttl_days: number; created_at: string; expires_at: string; revoked_at: string | null; send_id: string | null;
 };
@@ -64,6 +65,7 @@ export async function limitDocumentShare(company: string, identity: string, acti
 }
 export async function prepareDocumentShare(scope: DocumentScope, input: PrepareDocumentShare): Promise<PreparedDocumentShare> {
   enabled(scope);
+  if (input.leadId === null && !publicDocumentOrderEntryEnabled(scope.companyId)) missing();
   const id = randomUUID();
   await limitDocumentShare(scope.companyId, `actor:${scope.actor}`, "prepare", id);
   const keyPath = path("pricing_document_share_links", scope.companyId, `idempotency_key=eq.${input.idempotencyKey}&select=${shareFields}&limit=1`);
@@ -74,7 +76,7 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   const version = await published(scope.companyId, input.documentVersionId, scope.actor);
   if (version.documentId !== input.documentId) throw new DocumentSendError("선택한 문서와 게시 버전이 다릅니다. 다시 확인해 주세요.", 409);
   if (!existing && version.content.validUntil < koreaDay()) missing();
-  await assertLead(scope.companyId, input.leadId);
+  if (input.leadId !== null) await assertLead(scope.companyId, input.leadId);
   const issued = issueDocumentShareToken(id);
   const expected = { company_id: scope.companyId, document_id: version.documentId, document_version_id: version.id,
     lead_id: input.leadId, idempotency_key: input.idempotencyKey, created_by_key: scope.actor, ttl_days: input.ttlDays };
@@ -101,6 +103,7 @@ export async function revokeDocumentShare(scope: DocumentScope, id: string) {
 }
 export async function validateShareDelivery(scope: DocumentScope, input: DocumentSendInput) {
   const row = await link(scope, input.shareLinkId!);
+  if (row.lead_id === null) throw new DocumentSendError("일반 공개 링크는 리드 전달 기록으로 저장할 수 없습니다.", 409);
   if (!row.send_id && (row.revoked_at || Date.parse(row.expires_at) <= Date.now())) missing();
   if (row.document_version_id !== input.documentVersionId || row.lead_id !== input.leadId ||
     row.idempotency_key !== input.idempotencyKey || input.customerId !== null)
@@ -132,6 +135,18 @@ export async function recordSharedDocumentDelivery(scope: DocumentScope, input: 
     documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
 export async function readPublicDocument(token: string, requester: string) {
+  const { row, output } = await resolvePublicDocument(token, requester);
+  if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
+    `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
+    method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
+  });
+  return { document: output, expiresAt: row.expires_at,
+    acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
+    ...(row.lead_id === null ? { orderEntry: { available: publicDocumentOrderEntryEnabled(row.company_id) && !output.expired,
+      companyName: output.companyName, title: output.title, version: output.version } } : {}) };
+}
+
+async function resolvePublicDocument(token: string, requester: string) {
   if (!documentSharingEnabled()) missing();
   const decoded = verifyDocumentShareToken(token);
   if (!decoded) missing();
@@ -140,7 +155,9 @@ export async function readPublicDocument(token: string, requester: string) {
   if (!row || !documentSharingEnabled(row.company_id) || row.revoked_at || !equalShareHash(row.token_hash, decoded.hash) ||
     row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at)) || Date.parse(row.expires_at) <= Date.now()) missing();
   await limitDocumentShare(row.company_id, requester, "read", row.id);
-  await assertLead(row.company_id, row.lead_id);
+  if (row.lead_id === null) {
+    if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
+  } else await assertLead(row.company_id, row.lead_id);
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) missing();
   const ids = Array.from(new Set(version.content.lines.flatMap(l => l.promotionId ? [l.promotionId] : [])));
@@ -151,10 +168,14 @@ export async function readPublicDocument(token: string, requester: string) {
     promotions.push(...current.map(p => ({ id: p.id, stock: p.stock, startsOn: p.starts_on, endsOn: p.ends_on })));
   }
   const output = publicDocumentOutput(withLivePromotions(version, promotions));
-  if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
-    `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
-    method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
-  });
-  return { document: output, expiresAt: row.expires_at,
-    acceptanceAvailable: Boolean(row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)) };
+  return { row, output };
+}
+
+/** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
+export async function getPublicDocumentOrderContext(token: string, requester: string) {
+  if (!publicDocumentOrderEntryEnabled()) missing();
+  const { row, output } = await resolvePublicDocument(token, requester);
+  if (row.lead_id !== null || output.expired) missing();
+  return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
+    shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash };
 }

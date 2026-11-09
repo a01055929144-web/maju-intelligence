@@ -9,6 +9,7 @@ vi.mock("../lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOper
 import { pricingDocumentsRepository } from "../lib/pricing/documents-repository";
 import { POST as publicPost } from "../app/api/pricing-documents/public/route";
 import { POST as privatePost } from "../app/api/pricing-documents/route";
+import { getPublicDocumentOrderContext } from "../lib/pricing/document-share";
 import { issueDocumentShareToken, verifyDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 
@@ -281,4 +282,41 @@ it("exposes acceptance only for delivered, unexpired shares inside all company g
   vi.stubEnv("QUOTE_ACCEPTANCE", "false"); expect(await read()).toBe(false);
   vi.stubEnv("QUOTE_ACCEPTANCE", "true");
   content.validUntil = "2020-01-01"; expect(await read()).toBe(false);
+});
+
+
+it("creates a recipient-free public document without lead lookup, delivery or customer writes", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const input = { ...prepare, leadId: null };
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, input);
+  expect(links[0].lead_id).toBeNull(); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+  expect(seen.some(url => /business_permit_leads|normalized_customers|store_accounts|store_orders/.test(url))).toBe(false);
+  const response = await publicPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body.orderEntry).toMatchObject({ available: true, companyName: content.companyName, version: 2 });
+  expect(body.acceptanceAvailable).toBe(false);
+  expect(JSON.stringify(body)).not.toMatch(/CANARY|company_id|customerId|documentId|leadId|productId|cost|supplier/);
+  expect(await getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).toMatchObject({ companyId: company, documentId: doc, documentVersionId: version, shareLinkId: result.shareLinkId });
+  expect(await service.execute(scope, input)).toEqual(result);
+  expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it("keeps recipient-free creation and context OFF before any database query", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "false");
+  await expect(service.execute(scope, { ...prepare, leadId: null })).rejects.toThrow();
+  await expect(getPublicDocumentOrderContext("untrusted", "fixture")).rejects.toThrow();
+  expect(seen).toHaveLength(0);
+});
+it("rejects revoked, expired, foreign-owned and targeted links for public signup context", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const t = token(result.publicUrl);
+  links[0].revoked_at = new Date().toISOString();
+  await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
+  links[0].revoked_at = null; links[0].expires_at = "2000-01-01T00:00:00Z";
+  await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
+  links[0].expires_at = "2099-01-01T00:00:00Z"; owner = "foreign-owner";
+  await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
+  owner = actor; links[0].lead_id = lead;
+  await expect(getPublicDocumentOrderContext(t, "fixture")).rejects.toThrow();
 });

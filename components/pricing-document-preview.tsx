@@ -157,7 +157,7 @@ export function PageContent({
         <p className="py-8">표시 가능한 품목이 없습니다.</p>
       )}
       <footer className="mt-auto space-y-1.5 border-t pt-3 text-sm">
-        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />QR을 스캔해 주문하세요.<br />이 거래처에만 전달해 주세요.</p></div> : null}
+        {qr ? <div className="flex items-center gap-3"><img src={qr.dataUrl} width={128} height={128} alt={`${qr.customerName} 주문 링크 QR`} className="h-32 w-32 shrink-0" /><p className="text-xs"><strong>{qr.customerName}</strong><br />{qr.audience === "public" ? "QR로 문서를 열고 주문·가입을 시작하세요." : "QR을 스캔해 주문하세요. 이 거래처에만 전달해 주세요."}</p></div> : null}
         {footerInfo.length ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
@@ -179,6 +179,7 @@ export function PricingDocumentPreview({
   autoPrint = false,
   companyId,
   canManageLinks = false,
+  publicSharingAvailable = false,
 }: {
   version: DocumentVersion;
   refresh?: () => Promise<DocumentVersion>;
@@ -188,6 +189,7 @@ export function PricingDocumentPreview({
   autoPrint?: boolean;
   companyId?: string;
   canManageLinks?: boolean;
+  publicSharingAvailable?: boolean;
 }) {
   const [current, setCurrent] = useState(version),
     [error, setError] = useState(""),
@@ -261,7 +263,7 @@ export function PricingDocumentPreview({
           PNG는 A4 페이지별로 저장합니다.
         </span>
       </div>
-      {companyId && canManageLinks && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} onInsert={setQr} /> : null}
+      {companyId && (canManageLinks || publicSharingAvailable) && current.version > 0 ? <PricingDocumentOrderQr key={current.id} companyId={companyId} version={current} publicSharingAvailable={publicSharingAvailable} allowCustomerLink={canManageLinks} onInsert={setQr} /> : null}
       {error && (
         <p role="alert" className="pricing-no-print text-red-700">
           {error} 같은 버튼으로 다시 시도하거나 미리보기를 닫고 버전을 다시 선택해 주세요.
