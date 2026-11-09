@@ -152,7 +152,9 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
   await expect(publicViewer.getByText("1,000원", { exact: true })).toHaveCount(0);
   await expect(publicViewer.getByRole("button", { name: "주문 기간 종료", exact: true })).toBeDisabled();
-  await publicViewer.clock.fastForward(365 * 86400000);
+  await publicViewer.clock.setSystemTime(new Date(Date.parse(publicExpiry()) + 1000));
+  expect(await publicViewer.evaluate(() => Date.now())).toBeGreaterThanOrEqual(Date.parse(publicExpiry()));
+  await publicViewer.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(publicViewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
   await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
   await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();

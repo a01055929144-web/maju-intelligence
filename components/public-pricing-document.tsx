@@ -64,8 +64,9 @@ export function PublicPricingDocument() {
   useEffect(() => {
     if (!document) return;
     const hardCutoff = Date.parse(expiresAt), priceCutoff = document.expired ? Infinity : Date.parse(`${document.validUntil}T15:00:00Z`);
-    let timer: number;
+    let timer: number | undefined;
     const check = () => {
+      window.clearTimeout(timer);
       if (Date.now() >= hardCutoff) {
         ++sequence.current; setDocument(null); setAcceptance(null); setOrderEntry(null);
         setMessage("링크 열람기간이 끝났습니다. 발행 회사에 새 링크를 요청해 주세요.");
@@ -77,8 +78,13 @@ export function PublicPricingDocument() {
         setMessage("가격·주문 유효기간이 지났습니다. 같은 QR로 품목을 계속 볼 수 있으며, 주문하려면 발행 회사에 새 문서를 요청해 주세요.");
       } else timer = window.setTimeout(check, Math.min(2147483647, Math.min(hardCutoff, priceCutoff) - Date.now()));
     };
+    const visible = () => { if (window.document.visibilityState === "visible") check(); };
+    window.addEventListener("focus", check); window.document.addEventListener("visibilitychange", visible);
     check();
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer); window.removeEventListener("focus", check);
+      window.document.removeEventListener("visibilitychange", visible);
+    };
   }, [document, expiresAt]);
   const safeDocument = document && koreaDay() > document.validUntil ? { ...document, expired: true, lines: document.lines.map(l => ({ ...l, price: null })) } : document;
   return <main className="mx-auto max-w-[900px] space-y-4 p-4">
