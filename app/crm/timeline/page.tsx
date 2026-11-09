@@ -5,6 +5,7 @@ import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import { LinkifiedText } from "@/components/linkified-text";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
@@ -1327,26 +1328,23 @@ export default function CrmTimelinePage() {
               </button>
             ) : (
             <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="border-b border-slate-200/80 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-950">거래처 검색·필터</h2>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">검색 후 보완 대상을 선택하세요.</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
-                    <button
-                      aria-label="거래처 검색·목록 접기"
-                      className="maju-button-secondary h-8 w-8 px-0"
-                      onClick={() => setListCollapsed(true)}
-                      type="button"
-                    >
-                      <PanelLeftClose className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+              <ErpPartnerDirectoryToolbar
+                action={(
+                  <button
+                    aria-label="거래처 검색·목록 접기"
+                    className="maju-button-secondary min-h-11 w-11 px-0 sm:min-h-9 sm:w-9"
+                    onClick={() => setListCollapsed(true)}
+                    type="button"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                )}
+                countLabel={`${filteredCustomers.length}/${customers.length}곳`}
+                description="검색 후 등급과 보완 상태로 작업 대상을 좁히세요."
+                error={customerSource === "error" ? customerLoadError : undefined}
+                onRetry={customerSource === "error" ? loadCustomers : undefined}
+                title="거래처 목록"
+              >
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
@@ -1413,9 +1411,6 @@ export default function CrmTimelinePage() {
                 onClear={clearOperationFilter}
                 selectedPosition={selectedFilteredPosition}
               />
-              {customerSource === "error" ? (
-                <CustomerLoadErrorBanner message={customerLoadError} onRetry={loadCustomers} />
-              ) : null}
               <LedgerListStatusStrip
                 customerSource={customerSource}
                 gradeFilter={gradeFilter}
@@ -1425,7 +1420,7 @@ export default function CrmTimelinePage() {
                 visibleCount={filteredCustomers.length}
                 totalCount={customers.length}
               />
-            </div>
+              </ErpPartnerDirectoryToolbar>
             <datalist id="bulk-manager-options">
               {managerOptions.map((manager) => (
                 <option key={manager} value={manager} />
@@ -2650,28 +2645,6 @@ function LedgerListStatusStrip({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function CustomerLoadErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="mt-3 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-2">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-        <p className="text-xs font-bold leading-5 text-red-900">
-          거래처 원장을 불러오지 못했습니다. 실제로 거래처가 0곳이라는 뜻이 아닙니다 — 서버/네트워크 오류일 수 있으니 다시 시도해주세요.
-          {message ? <span className="mt-1 block text-[11px] font-semibold text-red-700">{message}</span> : null}
-        </p>
-      </div>
-      <button
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-black text-red-700 transition hover:bg-red-100"
-        onClick={onRetry}
-        type="button"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-        다시 시도
-      </button>
     </div>
   );
 }
