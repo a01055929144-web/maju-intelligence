@@ -59,26 +59,33 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const intent = `${"a".repeat(80)}.${"b".repeat(43)}`;
     const posted: Array<Record<string, unknown>> = [];
-    await page.route("**/api/store/accounts/activate", route => {
+    const context = page.context();
+    await context.route("**/api/store/accounts/activate", route => {
       posted.push(route.request().postDataJSON() as Record<string, unknown>);
       return route.fulfill({ json: posted.length === 1 ? { loginUrl, next: "kakao", termsVersion: "2026-11-07" } :
         { next: "document", redirectTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
     });
-    await page.route("**/api/auth/kakao/start?**", route => route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" }));
+    await context.route("**/api/auth/kakao/start?**", route => route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" }));
     await page.goto(`/store/activate?fixture=store-owner-activation#${intent}`);
     await expect(page.getByLabel("매장명")).toHaveCount(0);
     const kakao = page.getByRole("button", { name: "카카오로 점주 가입" });
     expect((await kakao.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await kakao.click();
+    const [authResponse] = await Promise.all([
+      page.waitForResponse(response => { const url = new URL(response.url()); return url.pathname === "/api/auth/kakao/start" && url.searchParams.get("activation") === "1"; }),
+      kakao.click()
+    ]);
+    expect(authResponse.status()).toBe(200);
     expect(posted[0]).toEqual({ onboardingIntent: intent });
     expect(JSON.stringify(posted[0])).not.toMatch(/customerId|storeAccountId|companyId|storeName/);
-    await page.goto("/store/activate?fixture=store-owner-activation&profile=1");
+    const profilePage = await context.newPage();
+    await profilePage.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await profilePage.goto("/store/activate?fixture=store-owner-activation&profile=1");
     for (const [label, value] of [["매장명", "새 매장"], ["대표자명", "새 대표"], ["사업자등록번호", "1234567890"],
-      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"]] as const) await page.getByLabel(label).fill(value);
-    await page.getByRole("checkbox").check();
-    const start = page.getByRole("button", { name: "동의하고 매장 개통" });
+      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"]] as const) await profilePage.getByLabel(label).fill(value);
+    await profilePage.getByRole("checkbox").check();
+    const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
     expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
     await start.click();
     expect(posted[1]).toMatchObject({ termsAccepted: true, store: { storeName: "새 매장",
       representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구" } });
