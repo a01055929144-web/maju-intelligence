@@ -15,6 +15,9 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `LEAD_DOCUMENT_LINK_SECRET` | Vercel Production (Sensitive) | 2026-11-08 12:00 KST · Codex | Vercel › Settings › Environment Variables에서 새 값으로 교체 | 재배포 → 기존 리드 문서 공유 링크 다시 발급 |
 | `LEAD_DOCUMENT_SHARING_ENABLED` · `LEAD_DOCUMENT_SHARING_COMPANY_IDS` | Vercel Production | 2026-11-08 12:04 KST · Codex, 전역 OFF·대표 회사만 지정 | Vercel › Settings › Environment Variables에서 전역 스위치·허용 회사 수정 | 재배포 후 비허용 회사 404 확인 |
 | `FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS` | Vercel Production | 2026-11-08 01:54 KST | Vercel › Settings › Environment Variables에서 허용 회사 목록을 수정하고 Production 재배포 | 새 설정은 다음 Production 배포부터 적용 |
+| `PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED` · `STORE_PUBLIC_OWNER_ONBOARDING_ENABLED` · `STORE_MEMBER_SESSION_ENABLED` | Vercel Production | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 각 전역 스위치 수정 | 재배포 후 OFF 404와 대상 경로 확인 |
+| `FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS` · `FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS` | Vercel Production | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 허용 회사 목록 수정·비우면 대상 기능 OFF | 재배포 후 허용·비허용 회사 경계 확인 |
+| `STORE_OWNER_ONBOARDING_SECRET` | Vercel Production (Sensitive) | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 새 무작위 값으로 교체 | 재배포 → 기존 가입 의도 폐기 후 원 문서에서 다시 시작 |
 
 | `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
 
