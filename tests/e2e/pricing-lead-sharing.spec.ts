@@ -138,9 +138,19 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
   await expect(preview.getByRole("status")).toContainText("발급된 공개 주소를 확인하지 못했습니다");
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveCount(0);
+  await page.evaluate(() => {
+    const original = HTMLCanvasElement.prototype.toDataURL;
+    window.addEventListener("restore-synthetic-qr", () => { HTMLCanvasElement.prototype.toDataURL = original; }, { once: true });
+    HTMLCanvasElement.prototype.toDataURL = () => { throw new Error("synthetic QR render failure"); };
+  });
+  await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
+  await expect(preview.getByRole("status")).toContainText("공개 링크는 발급됐지만 QR 이미지를 만들지 못했습니다");
+  await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
+  await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("restore-synthetic-qr")));
   await preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true }).click();
   await expect(preview.getByRole("status")).toContainText("거래처 선택 없이");
-  expect(publicInputs).toHaveLength(4); for (const input of publicInputs) expect(input).toEqual(publicInputs[0]);
+  expect(publicInputs).toHaveLength(5); for (const input of publicInputs) expect(input).toEqual(publicInputs[0]);
   await expect(preview.getByRole("link", { name: "공개 문서 열기", exact: true })).toHaveAttribute("href", new URL(publicUrl, page.url()).href);
   await expect(preview.getByRole("img", { name: "공개 문서 주문 QR 미리보기", exact: true })).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(preview.getByRole("button", { name: "공개 링크 복사", exact: true })).toBeVisible();
