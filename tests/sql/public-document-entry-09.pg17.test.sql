@@ -61,4 +61,47 @@ do $$ begin
     join pricing_document_sends s on s.id=r.send_id and to_jsonb(s)=r.send_snapshot) then raise exception 'existing_history_changed'; end if;
 end $$;
 \ir ../../docs/sql-drafts/20261109-09-public-document-entry.sql
+-- Real P1/P2 RPC regression: a D+14 price period must not use QR retention as the order-link deadline.
+do $$
+declare c uuid:='00000000-0000-4000-8000-000000000001'; a text:=repeat('a',64);
+  d uuid:='10000000-0000-4000-8000-000000000009'; customer uuid:='80000000-0000-4000-8000-000000000009';
+  price_day date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+14;
+  content jsonb; published jsonb; version_id uuid; order_end timestamptz; qr_end timestamptz; link_id uuid; token_hash text;
+  candidates jsonb;
+begin
+  select version_content into content from integration_refs limit 1;
+  content:=content || jsonb_build_object('title','synthetic 14-day order cutoff','validUntil',price_day::text);
+  perform pricing_p1(c,a,true,'save',jsonb_build_object('id',d,'expected',0,'content',content));
+  published:=pricing_p1(c,a,true,'publish',jsonb_build_object('id',d,'expected',1));
+  version_id:=(published->>'id')::uuid;
+  order_end:=(price_day+1)::timestamp at time zone 'Asia/Seoul';
+  qr_end:=order_end+interval '365 days';
+  insert into normalized_customers(id,company_id,customer_name) values(customer,c,'synthetic expiry test store');
+  insert into pricing_document_share_links(id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash)
+    values('60000000-0000-4000-8000-00000000000b',c,d,version_id,null,
+      '70000000-0000-4000-8000-00000000000b',a,repeat('b',32),repeat('8',64));
+  if not exists(select from pricing_document_share_links where document_version_id=version_id and expires_at=qr_end)
+    then raise exception 'QR_retention_changed'; end if;
+  candidates:=jsonb_build_array(jsonb_build_object('customerId',customer,'id','90000000-0000-4000-8000-000000000009',
+    'nonce',repeat('b',32),'hash',repeat('9',64)));
+  begin
+    perform * from issue_storefront_links(c,version_id,candidates,qr_end,null,a);
+    raise exception 'old_QR_deadline_unexpectedly_accepted';
+  exception when raise_exception then if sqlerrm<>'Invalid link issue request' then raise; end if; end;
+  select issued_link_id,issued_token_hash into link_id,token_hash from issue_storefront_links(c,version_id,candidates,order_end,null,a);
+  if not exists(select from storefront_links where id=link_id and expires_at=order_end and expires_at<qr_end)
+    then raise exception 'order_link_not_bound_to_price_cutoff'; end if;
+  -- Fixture-only clock-state simulation, preserving expires_at > issued_at. No trigger bypass or schema edits.
+  update storefront_links set issued_at=clock_timestamp()-interval '2 days',expires_at=clock_timestamp()-interval '1 day' where id=link_id;
+  begin
+    perform place_store_order(token_hash,price_day,jsonb_build_array(jsonb_build_object(
+      'productId','40000000-0000-4000-8000-000000000001','quantity',1)),
+      'a0000000-0000-4000-8000-000000000009');
+    raise exception 'expired_order_link_accepted';
+  exception when raise_exception then if sqlerrm<>'Link unavailable' then raise; end if; end;
+  if exists(select from store_orders where document_version_id=version_id) then raise exception 'expired_link_created_order'; end if;
+  if not exists(select from pricing_document_share_links where document_version_id=version_id and expires_at=qr_end)
+    then raise exception 'expired_order_link_changed_public_QR'; end if;
+end $$;
+select 'public_document_order_expiry_09_PG17_pass';
 select 'public_document_entry_09_PG17_pass';

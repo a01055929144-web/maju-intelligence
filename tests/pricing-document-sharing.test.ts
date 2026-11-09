@@ -346,7 +346,7 @@ it("signs only server-verified public issuer context for 07 and never accepts sc
   expect(mocks.onboarding).toHaveBeenCalledWith({ companyId: company, documentId: doc, documentVersionId: version,
     shareLinkId: result.shareLinkId, nonce: expect.stringMatching(/^[0-9a-f-]{36}$/), returnTo: result.publicUrl });
   mocks.onboarding.mockClear();
-  for (const extra of [{ companyId: other }, { returnTo: "https://untrusted.test" }, { customerId: lead }])
+  for (const extra of [{ companyId: other }, { returnTo: "https://untrusted.test" }, { customerId: lead }, { orderExpiresAt: "2099-01-01T00:00:00Z" }])
     expect((await orderIntentPost(request({ token: t, ...extra }))).status).toBe(404);
   expect((await orderIntentPost(request({ token: t }, "https://untrusted.test"))).status).toBe(403);
   links[0].revoked_at = new Date().toISOString();
@@ -414,4 +414,19 @@ it("does not accept a caller TTL that would shorten or extend public printed QR 
   expect(() => service.execute(scope, { ...prepare, leadId: null, ttlDays: 14 })).toThrow();
   expect(seen).toHaveLength(0);
   expect(publicDocumentLinkExpiry("2028-02-29")).toBe("2029-02-28T15:00:00.000Z");
+});
+
+it("derives the 14-day order deadline from the verified version separately from QR retention", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-09T15:00:00.000Z")); content.validUntil = "2026-11-23";
+  const result = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const context = await getPublicDocumentOrderContext(token(result.publicUrl), "fixture");
+  expect(context.orderExpiresAt).toBe("2026-11-23T15:00:00.000Z");
+  expect(Date.parse(context.orderExpiresAt) - Date.now()).toBe(14 * 86400000);
+  expect(context.expiresAt).toBe("2027-11-23T15:00:00.000Z");
+  vi.setSystemTime(new Date(context.orderExpiresAt));
+  await expect(getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).rejects.toMatchObject({ status: 404 });
+  const response = await publicPost(request({ token: token(result.publicUrl) }));
+  expect(response.status).toBe(200); const body = await response.json();
+  expect(body.document.lines).toHaveLength(1); expect(body.document.lines[0].price).toBeNull(); expect(body.orderEntry.available).toBe(false);
 });

@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { DocumentScope } from "../../application/pricing/documents";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
-import { publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
+import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
@@ -182,8 +182,8 @@ async function resolvePublicDocument(token: string, requester: string) {
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
 export async function getPublicDocumentOrderContext(token: string, requester: string) {
   if (!publicDocumentOrderEntryEnabled()) missing();
-  const { row, orderable } = await resolvePublicDocument(token, requester);
+  const { row, output, orderable } = await resolvePublicDocument(token, requester);
   if (row.lead_id !== null || !orderable) missing();
   return { companyId: row.company_id, documentId: row.document_id, documentVersionId: row.document_version_id,
-    shareLinkId: row.id, expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
+    shareLinkId: row.id, orderExpiresAt: documentOrderExpiry(output.validUntil), expiresAt: row.expires_at, tokenHash: row.token_hash, issuerActorKey: row.created_by_key };
 }

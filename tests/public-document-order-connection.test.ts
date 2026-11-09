@@ -8,8 +8,9 @@ import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 const company = "00000000-0000-4000-8000-000000000001", store = "10000000-0000-4000-8000-000000000001";
 const customer = "20000000-0000-4000-8000-000000000001", user = "30000000-0000-4000-8000-000000000001";
 const context = { companyId: company, documentId: store, documentVersionId: customer, shareLinkId: user,
-  tokenHash: "a".repeat(64), issuerActorKey: "b".repeat(64), expiresAt: "2099-01-01T00:00:00Z" };
+  tokenHash: "a".repeat(64), issuerActorKey: "b".repeat(64), orderExpiresAt: "2026-11-23T15:00:00.000Z", expiresAt: "2027-11-23T15:00:00.000Z" };
 beforeEach(() => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-09T15:00:00.000Z"));
   vi.resetAllMocks(); vi.stubEnv("STORE_LINK_SECRET", "synthetic-order-link-secret-longer-than-32");
   mocks.member.mockResolvedValue({ authUserId: user, companyId: company, storeAccountId: store, role: "owner", status: "active", customerId: customer });
   mocks.db.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -17,7 +18,10 @@ beforeEach(() => {
     if (url.startsWith("store_accounts?")) return [{ customer_id: customer }];
     if (url === "rpc/issue_storefront_links") {
       const b = JSON.parse(String(init?.body));
-      expect(b).toMatchObject({ p_company: company, p_document_version: context.documentVersionId, p_actor_key: context.issuerActorKey, p_actor_user_id: user, p_expires_at: context.expiresAt });
+      expect(b).toMatchObject({ p_company: company, p_document_version: context.documentVersionId, p_actor_key: context.issuerActorKey, p_actor_user_id: user, p_expires_at: context.orderExpiresAt });
+      expect(Date.parse(b.p_expires_at) - Date.now()).toBe(14 * 86400000);
+      expect(Date.parse(context.expiresAt) - Date.now()).toBeGreaterThan(370 * 86400000);
+      expect(b.p_expires_at).not.toBe(context.expiresAt);
       expect(b.p_links).toHaveLength(1); expect(b.p_links[0].customerId).toBe(customer);
       const row = b.p_links[0];
       return [{ issued_customer_id: customer, issued_link_id: row.id, issued_token_nonce: row.nonce, issued_token_hash: row.hash }];
@@ -25,7 +29,7 @@ beforeEach(() => {
     throw new Error("Unexpected request");
   });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 it("connects exactly the issuer version and 07-authenticated active store, with no order write", async () => {
   const result = await connectPublicDocumentOrder(context);
   expect(result).toMatchObject({ next: "order", storeUrl: expect.stringMatching(/^\/store\?products=all#/) });
@@ -48,4 +52,11 @@ it("fails closed on a rotated existing link signature instead of exposing a wron
     return [{ issued_customer_id: customer, issued_link_id: store, issued_token_nonce: issued.nonce, issued_token_hash: "0".repeat(64) }];
   });
   await expect(connectPublicDocumentOrder(context)).rejects.toThrow("signing configuration");
+});
+
+it("never issues a link after the verified price cutoff while public QR reading remains valid", async () => {
+  vi.setSystemTime(new Date(context.orderExpiresAt));
+  expect(Date.parse(context.expiresAt)).toBeGreaterThan(Date.now());
+  await expect(connectPublicDocumentOrder(context)).rejects.toMatchObject({ status: 404 });
+  expect(mocks.member).not.toHaveBeenCalled(); expect(mocks.db).not.toHaveBeenCalled();
 });
