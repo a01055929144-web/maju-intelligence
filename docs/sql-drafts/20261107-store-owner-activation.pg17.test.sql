@@ -155,6 +155,11 @@ do $$ begin
     raise exception 'retry_profile_changed';
   exception when others then if sqlerrm<>'public_store_retry_mismatch' then raise; end if; end;
 end $$;
+do $$ begin
+  begin perform public.activate_store_owner_v1(repeat('2',64),'30000000-0000-4000-8000-000000000003','2026-11-07',clock_timestamp(),
+    '6234567890','closed',clock_timestamp(),gen_random_uuid()::text); raise exception 'failed_verification_consumed_public_request';
+  exception when others then if sqlerrm<>'store_business_verification_required' then raise; end if; end;
+end $$;
 select public.activate_store_owner_v1(repeat('2',64),'30000000-0000-4000-8000-000000000003','2026-11-07',clock_timestamp(),
   '6234567890','active',clock_timestamp(),gen_random_uuid()::text);
 do $$ begin

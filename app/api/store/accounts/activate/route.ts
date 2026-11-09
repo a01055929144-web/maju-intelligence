@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Store profile required" }, { status: 400 });
     }
     try {
-      const proof = await getStoreOwnerActivationProof({ consume: true });
+      const proof = await getStoreOwnerActivationProof();
       if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       const activation = await getPreparedStoreOwnerActivation(proof.token);
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
         termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
+      await getStoreOwnerActivationProof({ consume: true });
       return NextResponse.json({ next: "document", redirectTo: proof.returnTo, termsVersion: STORE_TERMS_VERSION });
     } catch { return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 }); }
   }
