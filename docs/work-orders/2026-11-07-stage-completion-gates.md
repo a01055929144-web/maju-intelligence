@@ -1,8 +1,8 @@
 # MAJU 단계 완료 기준과 병렬 작업 경계
 
-> 2026-11-09 배포 전 현황. 아래 비율은 병합된 구현 체크이며, 단계 완료는 대표 회사의 실제 행동으로만 판정한다. 이 문서는 운영 DB 쓰기·플래그 활성화·배포 승인이 아니다.
+> 2026-11-09 배포·운영 검증 현황. 아래 비율은 병합된 구현 체크이며, 단계 완료는 대표 회사의 실제 행동으로만 판정한다. 이 문서는 운영 DB 쓰기·플래그 활성화·추가 배포 승인이 아니다.
 
-**현재 기준(2026-11-09):** 코드 `main`은 `e1c6d6d`, 마지막 확인 운영 READY는 `beefa501`(12:12 KST)이다. #431·#434·#433·#436·#432는 코드 병합됐다. 첫 점주 개통 SQL은 14:34 KST, 공개 문서 진입 SQL은 14:36 KST에 각각 별도 승인으로 운영 스키마 적용·읽기 검증을 마쳤으며 새 기능 플래그는 OFF다.
+**현재 기준(2026-11-09):** 코드와 운영 READY는 main `f7ca232`이며 Vercel 배포 `dpl_HU6MNFmk2TiXCBgUwc3t4rxH5sVV`에 운영 별칭 연결을 확인했다. 첫 점주 개통 SQL은 14:34 KST, 공개 문서 진입 SQL은 14:36 KST에 각각 별도 승인으로 운영 스키마 적용·읽기 검증을 마쳤으며 새 기능 플래그는 OFF다.
 
 ## 완료 순서
 
@@ -52,6 +52,13 @@
 - 배포 URL에서 /login, /admin/login, /dashboard, /leads, /map, /revenue/pricing, /revenue/pricing/documents, /revenue/pricing/links, /revenue/products, /store, /mobile/today, /mobile/sales, /admin/companies/new가 200으로 응답했다. 이는 인증 후 화면의 실사용 확인이 아니라 경로 응답 검사다.
 - /orders와 /products는 새 배포와 직전 배포 모두 404다. 실제 메뉴 경로는 각각 주문관리 미구현, /revenue/products이며 이번 배포 회귀가 아니다. /orders는 09방 후속으로 기록했다.
 - 로컬 DNS 조회가 실패해 직접 curl 검사는 수행하지 못했고 Vercel 배포 URL 조회로 상태를 확인했다. 응답 검증에서 새 회귀가 없어 롤백하지 않았다.
+
+## 2026-11-09 main f7ca232 운영 배포 확인
+
+- main `f7ca232`의 Vercel 배포 `dpl_HU6MNFmk2TiXCBgUwc3t4rxH5sVV`가 READY이고 운영 별칭이 이 배포를 가리키는 것을 확인했다.
+- `/login`, `/admin/login`, `/dashboard`, `/crm/timeline`, `/purchasing/suppliers`, `/revenue/pricing/margins`, `/revenue/pricing/documents`, `/revenue/pricing/links`, `/revenue/products`, `/store`, `/pricing-document`가 모두 200으로 응답했다. 보호 화면의 200에는 로그인 화면으로의 내부 리다이렉트가 포함되므로 로그인 뒤 실제 데이터 렌더링을 확인한 결과로 세지 않는다.
+- 배포 확인 시점부터 30분 동안 위 경로의 런타임 오류는 0건이었다.
+- 공개 문서 주문·점주 가입 플래그는 계속 OFF이며 실제 카카오 인증·매장 개통·주문 E2E는 수행하지 않았다. 이 배포로 운영 단계 완료를 올리지 않고 **0/6**을 유지한다.
 
 ## 2026-11-09 작업방 재점검
 
