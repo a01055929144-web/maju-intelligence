@@ -150,12 +150,14 @@ export function getStorePublicBaseUrl() {
 
 export async function activateStoreOwner(input: {
   authUserId: string; businessRegistrationNumber: string; token: string; termsAcceptedAt: string;
-  verificationRequestId: string; verifiedAt: string;
+  verificationRequestId: string; verifiedAt: string; deliveryTerritoryId?: string;
 }) {
-  return supabaseRequest<{ companyId: string; ownerMemberId: string; storeAccountId: string }>("rpc/activate_store_owner_v1", {
+  return supabaseRequest<{ companyId: string; ownerMemberId: string; storeAccountId: string }>(input.deliveryTerritoryId
+    ? "rpc/activate_public_store_owner_with_delivery_v1" : "rpc/activate_store_owner_v1", {
     method: "POST",
     body: JSON.stringify({ p_auth_user_id: input.authUserId, p_business_registration_number: input.businessRegistrationNumber,
       p_business_status: "active", p_invite_token_hash: hashToken(input.token), p_terms_accepted_at: input.termsAcceptedAt,
-      p_terms_version: STORE_TERMS_VERSION, p_verification_request_id: input.verificationRequestId, p_verified_at: input.verifiedAt })
+      p_terms_version: STORE_TERMS_VERSION, p_verification_request_id: input.verificationRequestId, p_verified_at: input.verifiedAt,
+      ...(input.deliveryTerritoryId ? { p_delivery_territory_id: input.deliveryTerritoryId } : {}) })
   });
 }
