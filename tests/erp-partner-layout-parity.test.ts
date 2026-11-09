@@ -14,11 +14,12 @@ describe("ERP partner directory layout parity", () => {
     expect(toolbar).toContain("min-h-11 w-full");
   });
 
-  it("keeps the supplier wireframe columns and mobile labels", () => {
+  it("keeps the supplier wireframe fields in a responsive master-detail layout", () => {
     for (const label of ["매입처명", "상품 수", "원가 확정률", "최근 업로드", "상태"]) {
       expect(supplierWorkspace).toContain(label);
     }
-    expect(supplierWorkspace).toContain("sm:grid-cols-[minmax(0,1fr)_100px_110px_130px_72px]");
+    expect(supplierWorkspace).toContain("xl:grid-cols-[360px_minmax(0,1fr)]");
+    expect(supplierWorkspace).toContain("<aside");
     expect(supplierWorkspace).toContain("검색 조건에 맞는 매입처가 없습니다.");
     expect(supplierWorkspace).toContain("등록된 매입처가 없습니다.");
   });

@@ -38,7 +38,8 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
         <Metric label="원가 비교 가능" value={`${data.comparisons.length.toLocaleString()}개 품목`} />
       </div>
 
-      <section className="maju-section-card overflow-hidden">
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
+        <aside className="maju-section-card overflow-hidden">
         <ErpPartnerDirectoryToolbar
           action={<Link className="maju-button-secondary min-h-11 px-3 text-xs sm:min-h-9" href={uploadHref}><FileSpreadsheet className="h-4 w-4" /> 단가표 업로드</Link>}
           countLabel={`${visibleSuppliers.length}/${suppliers.length}곳`}
@@ -59,28 +60,27 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
           </label>
         </ErpPartnerDirectoryToolbar>
         {visibleSuppliers.length ? (
-          <>
-            <div className="hidden grid-cols-[minmax(0,1fr)_100px_110px_130px_72px] gap-3 border-b border-slate-200/80 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 sm:grid">
-              <span>매입처명</span><span className="text-right">상품 수</span><span className="text-right">원가 확정률</span><span>최근 업로드</span><span className="text-center">상태</span>
-            </div>
-            <div className="divide-y divide-slate-100">
+            <div className="max-h-[680px] divide-y divide-slate-100 overflow-y-auto">
               {visibleSuppliers.map((supplier) => (
                 <button
                   aria-pressed={selectedId === supplier.id}
-                  className={`grid min-h-16 w-full gap-2 px-4 py-3 text-left transition sm:grid-cols-[minmax(0,1fr)_100px_110px_130px_72px] sm:items-center sm:gap-3 ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "bg-white hover:bg-slate-50"}`}
+                  className={`min-h-24 w-full px-4 py-3 text-left transition ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "bg-white hover:bg-slate-50"}`}
                   key={supplier.id}
                   onClick={() => { setSelectedId(supplier.id); setProductQuery(""); }}
                   type="button"
                 >
-                  <b className="min-w-0 break-words text-sm text-slate-950">{supplier.name}</b>
-                  <span className="text-xs font-semibold text-slate-600 sm:text-right"><span className="sm:hidden">상품 </span>{supplier.productCount.toLocaleString()}개</span>
-                  <span className="text-xs font-semibold tabular-nums text-slate-600 sm:text-right"><span className="sm:hidden">원가 확정 </span>{supplier.confirmedCostRate}%</span>
-                  <span className="text-xs font-medium text-slate-500"><span className="sm:hidden">최근 업로드 </span>{date(supplier.latestImportAt)}</span>
-                  <span className={`w-fit rounded-md px-2 py-1 text-[11px] font-bold sm:justify-self-center ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span>
+                  <span className="flex items-start justify-between gap-3">
+                    <b className="min-w-0 break-words text-sm text-slate-950">{supplier.name}</b>
+                    <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span>
+                  </span>
+                  <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
+                    <span>상품 {supplier.productCount.toLocaleString()}개</span>
+                    <span>원가 확정률 {supplier.confirmedCostRate}%</span>
+                    <span className="col-span-2 font-medium text-slate-500">최근 업로드 {date(supplier.latestImportAt)}</span>
+                  </span>
                 </button>
               ))}
             </div>
-          </>
         ) : (
           <div className="maju-empty-state m-4">
             <p className="text-sm font-black text-slate-700">{suppliers.length ? "검색 조건에 맞는 매입처가 없습니다." : "등록된 매입처가 없습니다."}</p>
@@ -88,9 +88,9 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
             {suppliers.length ? <button className="maju-button-secondary mt-3 min-h-11" onClick={() => setSupplierQuery("")} type="button">검색 초기화</button> : <Link className="maju-button-primary mt-3 min-h-11" href={uploadHref}>단가표 업로드</Link>}
           </div>
         )}
-      </section>
+        </aside>
 
-      <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-4">
           {selected ? (
             <>
               <SupplierProfileCard
@@ -129,6 +129,7 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
               </div>
             </>
           ) : null}
+        </div>
       </div>
 
       <section className="maju-section-card">
