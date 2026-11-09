@@ -9,6 +9,7 @@ import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-fea
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested, publicOwnerTestNumberForCompany } from "@/lib/store/public-owner-test-mode";
 import { preparePublicOwnerTestOrdering } from "@/lib/pricing/public-owner-test-ordering";
+import { PublicOwnerDeliveryUnavailable, resolvePublicOwnerDelivery } from "@/lib/pricing/public-owner-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +55,15 @@ export async function POST(request: NextRequest) {
         if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
           return NextResponse.json({ message: "Business verification required" }, { status: 422 });
       }
+      stage = "delivery_resolution";
+      const deliveryTerritoryId = testNumber ? undefined : await resolvePublicOwnerDelivery(activation.companyId, profile.address);
       stage = "profile_save";
       await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       stage = "activation";
       const activated = await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
-        termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: `${testNumber ? "test-only:" : ""}${randomUUID()}`, verifiedAt: new Date().toISOString() });
+        termsAcceptedAt: new Date().toISOString(), token: proof.token,
+        verificationRequestId: `${deliveryTerritoryId ? "public-delivery-v1:" : testNumber ? "test-only:" : ""}${randomUUID()}`,
+        verifiedAt: new Date().toISOString(), ...(deliveryTerritoryId ? { deliveryTerritoryId } : {}) });
       if (testNumber) {
         stage = "test_ordering";
         await preparePublicOwnerTestOrdering(activation.companyId, activated.storeAccountId);
@@ -68,6 +73,9 @@ export async function POST(request: NextRequest) {
       await getStoreOwnerActivationProof({ consume: true });
       return NextResponse.json({ next: "document", redirectTo: proof.returnTo, termsVersion: STORE_TERMS_VERSION });
     } catch (error) {
+      if (error instanceof PublicOwnerDeliveryUnavailable ||
+        (error instanceof Error && /public_delivery_(territory|rules)_unavailable/.test(error.message)))
+        return NextResponse.json({ code: "delivery_area_unavailable" }, { status: 422 });
       if (error instanceof Error && error.message.includes("public_store_retry_mismatch"))
         return NextResponse.json({ code: "profile_retry_mismatch" }, { status: 409 });
       console.error("public_store_owner_activation_failed", { stage });
