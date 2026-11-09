@@ -120,7 +120,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.screenshot({ path: info.outputPath(`public-qr-entry-${kind}-${width}.png`), fullPage: true });
   denyVersionRead = true;
   await publicEntry.click();
-  await expect(page.getByRole("alert")).toContainText("합성 문서 권한 없음");
+  await expect(page.getByRole("alert").filter({ hasText: "합성 문서 권한 없음" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true })).toHaveCount(0);
   expect(publicInputs).toHaveLength(0);
   denyVersionRead = false;
