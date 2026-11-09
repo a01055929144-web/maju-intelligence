@@ -13,4 +13,20 @@ describe("route order UI boundaries", () => {
     expect(mobileList).toContain("오늘 배송 없음");
     expect(mobileList).toContain("모두 완료");
   });
+
+  it("connects the driver completion button to the guarded order completion API", () => {
+    const mobilePage = readFileSync("app/mobile/today/page.tsx", "utf8");
+    const proofPanel = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
+
+    expect(mobilePage).toContain('orderCompletionEnabled={isFeatureEnabled("STAGE_D_ORDER_COMPLETION", session.companyId)}');
+    expect(mobilePage).toContain("orderIds={selectedStop.orderIds || []}");
+    expect(mobilePage).toContain("orderRevisions={selectedStop.orderRevisions || {}}");
+    expect(proofPanel).toContain('fetchWithTimeout("/api/routes/delivery-completions"');
+    expect(proofPanel).toContain('orderCompletionEnabled && deliveryStatus === "arrived"');
+    expect(proofPanel).toContain("completionEventId: progress.completionEventId");
+    expect(proofPanel).toContain("idempotencyKey: progress.completionEventId");
+    expect(proofPanel).toContain("completedAt: progress.completedAt");
+    expect(proofPanel).toContain("같은 버튼을 다시 누르면 저장된 사진과 메모는 재사용합니다");
+    expect(proofPanel).toContain("router.refresh()");
+  });
 });

@@ -31,7 +31,14 @@ type OperationNote = {
 };
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
-type DeliverySaveProgress = { attachments: Record<string, Attachment>; attemptId: string; key: string; noteId?: string };
+type DeliverySaveProgress = {
+  attachments: Record<string, Attachment>;
+  attemptId: string;
+  completedAt: string;
+  completionEventId: string;
+  key: string;
+  noteId?: string;
+};
 type RecentStructuredDelivery = {
   action_amount?: number | string;
   action_code?: DeliveryAction;
@@ -53,6 +60,8 @@ type MessageLog = {
 };
 
 const deliveryStatuses = DELIVERY_RECORD_TYPES;
+const EMPTY_ORDER_IDS: string[] = [];
+const EMPTY_ORDER_REVISIONS: Record<string, number> = {};
 
 const messageChannels: Array<{ label: string; value: MessageChannel }> = [
   { label: "카카오로 보내기", value: "kakao" },
@@ -60,12 +69,14 @@ const messageChannels: Array<{ label: string; value: MessageChannel }> = [
 ];
 
 export function MobileDeliveryProofPanel({
+  companyId,
   companyName,
   customerId,
   customerName,
   driverName,
   driverPhone,
   deliveryCompleteMessage,
+  deliveryDate,
   deliveryIssueMessage,
   deliveryPartialMessage,
   loadingPosition,
@@ -73,14 +84,19 @@ export function MobileDeliveryProofPanel({
   nextCustomerName,
   notificationPhone,
   notificationSenderName,
+  orderCompletionEnabled = false,
+  orderIds = EMPTY_ORDER_IDS,
+  orderRevisions = EMPTY_ORDER_REVISIONS,
   structuredRecordsEnabled = false
 }: {
+  companyId: string;
   companyName?: string;
   customerId: string;
   customerName: string;
   driverName: string;
   driverPhone?: string;
   deliveryCompleteMessage?: string;
+  deliveryDate: string;
   deliveryIssueMessage?: string;
   deliveryPartialMessage?: string;
   loadingPosition?: string;
@@ -88,6 +104,9 @@ export function MobileDeliveryProofPanel({
   nextCustomerName?: string;
   notificationPhone?: string;
   notificationSenderName?: string;
+  orderCompletionEnabled?: boolean;
+  orderIds?: string[];
+  orderRevisions?: Record<string, number>;
   structuredRecordsEnabled?: boolean;
 }) {
   const router = useRouter();
@@ -232,7 +251,13 @@ export function MobileDeliveryProofPanel({
     ]);
     const progress = saveProgressRef.current?.key === attemptKey
       ? saveProgressRef.current
-      : { attachments: {}, attemptId: `delivery:${crypto.randomUUID()}`, key: attemptKey };
+      : {
+          attachments: {},
+          attemptId: `delivery:${crypto.randomUUID()}`,
+          completedAt: new Date().toISOString(),
+          completionEventId: crypto.randomUUID(),
+          key: attemptKey
+        };
     const isNotificationRetry = Boolean(progress.noteId) && files.every((file) => Boolean(progress.attachments[fileKey(file)]));
 
     setSaving(true);
@@ -293,7 +318,14 @@ export function MobileDeliveryProofPanel({
     }
     const noteOk = Boolean(noteId);
     const attachmentOk = files.every((file) => Boolean(uploadedAttachments[fileKey(file)]));
-    saveProgressRef.current = { attachments: uploadedAttachments, attemptId: progress.attemptId, key: attemptKey, noteId };
+    saveProgressRef.current = {
+      attachments: uploadedAttachments,
+      attemptId: progress.attemptId,
+      completedAt: progress.completedAt,
+      completionEventId: progress.completionEventId,
+      key: attemptKey,
+      noteId
+    };
     if (!noteOk || !attachmentOk) {
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
@@ -316,6 +348,38 @@ export function MobileDeliveryProofPanel({
     setErrorDetail("");
     const savedAttachments = Object.values(uploadedAttachments);
     setAttachments((current) => [...savedAttachments.filter((item) => !current.some((existing) => existing.id === item.id)), ...current]);
+    if (orderCompletionEnabled && deliveryStatus === "arrived") {
+      if (!orderIds.length || orderIds.some((orderId) => !Number.isInteger(orderRevisions[orderId]))) {
+        setErrorDetail("주문 연결 정보를 다시 불러온 후 재시도해 주세요.");
+        setSaving(false);
+        setProgressLabel("");
+        setStatus("error");
+        return;
+      }
+      setProgressLabel("주문 배송완료 저장 중");
+      const completionResponse = await fetchWithTimeout("/api/routes/delivery-completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          customerId,
+          deliveryDate,
+          completionEventId: progress.completionEventId,
+          idempotencyKey: progress.completionEventId,
+          completedAt: progress.completedAt,
+          orders: orderIds.map((orderId) => ({ orderId, orderRevision: orderRevisions[orderId] })),
+          proof: { noteId, attachmentIds: savedAttachments.map((item) => item.id) }
+        })
+      }, 15000).catch(() => null);
+      const completionPayload = (await completionResponse?.json().catch(() => null)) as { message?: string } | null;
+      if (!completionResponse?.ok) {
+        setErrorDetail(completionPayload?.message || "주문 배송완료를 저장하지 못했습니다. 같은 버튼을 다시 누르면 저장된 사진과 메모는 재사용합니다.");
+        setSaving(false);
+        setProgressLabel("");
+        setStatus("error");
+        return;
+      }
+    }
     setProgressLabel("알림 처리 중");
     const messageResponse = await fetchWithTimeout("/api/customer-messages/send", {
       method: "POST",
