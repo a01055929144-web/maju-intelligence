@@ -72,10 +72,14 @@ export function StoreOwnerActivationPanel({ enabled, profileStep = false }: { en
       const response = await fetch("/api/store/accounts/activate", { method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!response.ok) {
+        if (profileStep && response.status === 409) {
+          const failure = await response.json().catch(() => null) as { code?: string } | null;
+          if (failure?.code === "profile_retry_mismatch") throw new Error("처음 제출한 매장 정보와 다릅니다. 처음 제출한 정보로 다시 시도하거나 원래 공개 문서에서 가입을 다시 시작해 주세요.");
+        }
         throw new Error(response.status === 410 ? "개통 링크가 만료되었거나 사용되었습니다. 담당자에게 새 링크를 요청해 주세요." :
           response.status === 404 ? "점주 개통은 아직 준비 중입니다. 담당자에게 확인해 주세요." :
             response.status === 400 ? "개통 링크와 약관 동의를 확인한 뒤 다시 시도해 주세요." :
-              response.status === 422 ? "사업자 상태를 확인하지 못했습니다. 정보를 확인한 뒤 가입을 다시 시작해 주세요." :
+              response.status === 422 ? "사업자 상태를 확인하지 못했습니다. 사업자번호와 연결 상태를 확인한 뒤 이 화면에서 다시 시도해 주세요." :
               response.status === 401 || response.status === 403 ? "개통 권한을 확인할 수 없습니다. 담당자에게 받은 링크를 확인해 주세요." : "개통 요청을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
       }
       const result = await response.json() as { loginUrl?: string; redirectTo?: string };

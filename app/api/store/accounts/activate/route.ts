@@ -34,22 +34,32 @@ export async function POST(request: NextRequest) {
       !profile.representativeName || profile.representativeName.length > 50 || !profile.address || profile.address.length > 300) {
       return NextResponse.json({ message: "Store profile required" }, { status: 400 });
     }
+    let stage = "request";
     try {
       const proof = await getStoreOwnerActivationProof();
       if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
-      await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       const activation = await getPreparedStoreOwnerActivation(proof.token);
-      if (!activation || activation.profileRequired || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
+      if (!activation || !activation.publicOnboarding || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
         !isStoreMemberCompanyAllowlisted(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
-      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
-      if (failedNumbers.has(activation.businessRegistrationNumber) || results.get(activation.businessRegistrationNumber)?.label !== "정상")
+      stage = "business_verification";
+      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([profile.businessRegistrationNumber]);
+      if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
         return NextResponse.json({ message: "Business verification required" }, { status: 422 });
-      await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
+      stage = "profile_save";
+      await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
+      stage = "activation";
+      await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
         termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
+      stage = "session";
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await getStoreOwnerActivationProof({ consume: true });
       return NextResponse.json({ next: "document", redirectTo: proof.returnTo, termsVersion: STORE_TERMS_VERSION });
-    } catch { return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 }); }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("public_store_retry_mismatch"))
+        return NextResponse.json({ code: "profile_retry_mismatch" }, { status: 409 });
+      console.error("public_store_owner_activation_failed", { stage });
+      return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 });
+    }
   }
   if (body.termsAccepted !== true || !body.token || !/^[A-Za-z0-9_-]{43}$/.test(body.token)) {
     return NextResponse.json({ message: "Terms acceptance required" }, { status: 400 });
