@@ -463,8 +463,19 @@ jobs:
         # Avoid apt in PR jobs: an apt mirror stall otherwise blocks every check.
         run: npx playwright install chromium
 
-      - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/storefront-price-direction.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-lead-sharing.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts
+      - name: Verify 09 public document entry and all published order products
+      run: npx playwright test tests/e2e/pricing-lead-sharing.spec.ts tests/e2e/storefront-price-direction.spec.ts --workers=2 --retries=0 --timeout=90000
+      env:
+        CI_LAYOUT_FIXTURES: enabled
+        HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+        PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED: "true"
+        LEAD_DOCUMENT_SHARING_ENABLED: "true"
+        LEAD_DOCUMENT_SHARING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+        PRICE_SHEETS_ENABLED: "true"
+        FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+
+    - name: Responsive layout and route smoke checks
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
