@@ -1,5 +1,6 @@
 import { supabaseRequest } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { publicOwnerTestAccessAllowed } from "../store/public-owner-test-mode";
 import { verifyStoreLinkToken } from "./store-link-token";
 import { readPublishedPriceDirections } from "./storefront-price-direction";
 import { publishedPriceKey } from "../../domains/pricing/storefront-price-direction";
@@ -102,6 +103,7 @@ export async function readStorefront(
   const link = links[0];
   if (
     !link ||
+    !publicOwnerTestAccessAllowed(link.company_id) ||
     !isFeatureEnabled("PRICING", link.company_id) ||
     !isFeatureEnabled("STORE_ORDERING", link.company_id) ||
     link.revoked_at ||

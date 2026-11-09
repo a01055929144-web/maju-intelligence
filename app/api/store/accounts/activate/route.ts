@@ -7,10 +7,12 @@ import { activateStoreOwner, completePublicStoreOwnerProfile, getPreparedStoreOw
   publicStoreOwnerOnboardingEnabled, verifyPublicStoreOwnerOnboardingIntent } from "@/lib/store/07-store-owner-provisioning";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
+import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested } from "@/lib/store/public-owner-test-mode";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  if (!publicOwnerTestAccessAllowed()) return NextResponse.json({ message: "Not found" }, { status: 404 });
   if (!storeMemberSessionEnabled()) return NextResponse.json({ message: "Not found" }, { status: 404 });
   let body: { termsAccepted?: boolean; token?: string; onboardingIntent?: string;
     store?: { address?: string; businessRegistrationNumber?: string; phone?: string; representativeName?: string; storeName?: string } };
@@ -40,16 +42,21 @@ export async function POST(request: NextRequest) {
       if (!proof?.authUserId || proof.stage !== "profile" || !proof.returnTo) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       const activation = await getPreparedStoreOwnerActivation(proof.token);
       if (!activation || !activation.publicOnboarding || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
-        !isStoreMemberCompanyAllowlisted(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
+        !isStoreMemberCompanyAllowlisted(activation.companyId) || !publicOwnerTestAccessAllowed(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       stage = "business_verification";
-      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([profile.businessRegistrationNumber]);
-      if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
-        return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      const testNumber = isPublicOwnerTestNumber(activation.companyId, profile.businessRegistrationNumber);
+      if (publicOwnerTestModeRequested()) {
+        if (!testNumber) return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      } else {
+        const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([profile.businessRegistrationNumber]);
+        if (failedNumbers.has(profile.businessRegistrationNumber) || results.get(profile.businessRegistrationNumber)?.label !== "정상")
+          return NextResponse.json({ message: "Business verification required" }, { status: 422 });
+      }
       stage = "profile_save";
       await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       stage = "activation";
       await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
-        termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
+        termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: `${testNumber ? "test-only:" : ""}${randomUUID()}`, verifiedAt: new Date().toISOString() });
       stage = "session";
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await getStoreOwnerActivationProof({ consume: true });
