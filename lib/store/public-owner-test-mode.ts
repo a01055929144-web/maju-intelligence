@@ -22,3 +22,8 @@ export function isPublicOwnerTestNumber(companyId: string, number: string) {
   return publicOwnerTestModeRequested() && publicOwnerTestAccessAllowed(companyId) &&
     number === process.env.STORE_PUBLIC_TEST_BUSINESS_NUMBER;
 }
+
+export function publicOwnerTestNumberForCompany(companyId: string) {
+  return publicOwnerTestModeRequested() && publicOwnerTestAccessAllowed(companyId)
+    ? process.env.STORE_PUBLIC_TEST_BUSINESS_NUMBER : undefined;
+}

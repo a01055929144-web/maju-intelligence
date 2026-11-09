@@ -7,7 +7,7 @@ import { activateStoreOwner, completePublicStoreOwnerProfile, getPreparedStoreOw
   publicStoreOwnerOnboardingEnabled, verifyPublicStoreOwnerOnboardingIntent } from "@/lib/store/07-store-owner-provisioning";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
-import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested } from "@/lib/store/public-owner-test-mode";
+import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested, publicOwnerTestNumberForCompany } from "@/lib/store/public-owner-test-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (body.termsAccepted === true && body.store && !body.onboardingIntent) {
     const profile = { address: body.store.address?.trim() || "", businessRegistrationNumber: body.store.businessRegistrationNumber?.replace(/\D/g, "") || "",
       phone: body.store.phone?.replace(/\D/g, "") || "", representativeName: body.store.representativeName?.trim() || "", storeName: body.store.storeName?.trim() || "" };
-    if (profile.businessRegistrationNumber.length !== 10 ||
+    if ((profile.businessRegistrationNumber.length !== 10 && !(publicOwnerTestModeRequested() && !profile.businessRegistrationNumber)) ||
       profile.phone.length < 9 || profile.phone.length > 11 || !profile.storeName || profile.storeName.length > 100 ||
       !profile.representativeName || profile.representativeName.length > 50 || !profile.address || profile.address.length > 300) {
       return NextResponse.json({ message: "Store profile required" }, { status: 400 });
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       if (!activation || !activation.publicOnboarding || !publicStoreOwnerOnboardingEnabled(activation.companyId) ||
         !isStoreMemberCompanyAllowlisted(activation.companyId) || !publicOwnerTestAccessAllowed(activation.companyId)) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       stage = "business_verification";
+      if (!profile.businessRegistrationNumber) profile.businessRegistrationNumber = publicOwnerTestNumberForCompany(activation.companyId) || "";
       const testNumber = isPublicOwnerTestNumber(activation.companyId, profile.businessRegistrationNumber);
       if (publicOwnerTestModeRequested()) {
         if (!testNumber) return NextResponse.json({ message: "Business verification required" }, { status: 422 });
