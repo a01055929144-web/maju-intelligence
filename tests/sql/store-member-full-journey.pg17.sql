@@ -142,6 +142,10 @@ begin
   activated:=activate_store_owner_v1(repeat('6',64),'d2000000-0000-4000-8000-000000000001',
     '2026-11-07',clock_timestamp(),repeat('8',10),'active',clock_timestamp(),'test-only:synthetic-verification');
   select customer_id into customer from store_accounts where id=(activated->>'storeAccountId')::uuid;
+  -- Mirrors the scoped test-only API preparation; all native order constraints remain in force.
+  insert into store_order_customer_rules(company_id,customer_id,delivery_weekdays)
+    values('00000000-0000-4000-8000-000000000001',customer,array[0,1,2,3,4,5,6]::smallint[])
+    on conflict(company_id,customer_id) do nothing;
   perform issue_storefront_links('00000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     jsonb_build_array(jsonb_build_object('id','d4000000-0000-4000-8000-000000000001','customerId',customer,
       'nonce',repeat('5',32),'hash',repeat('5',64))),now()+interval '14 days',

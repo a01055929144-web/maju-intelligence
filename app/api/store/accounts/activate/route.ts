@@ -8,6 +8,7 @@ import { activateStoreOwner, completePublicStoreOwnerProfile, getPreparedStoreOw
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested, publicOwnerTestNumberForCompany } from "@/lib/store/public-owner-test-mode";
+import { preparePublicOwnerTestOrdering } from "@/lib/pricing/public-owner-test-ordering";
 
 export const dynamic = "force-dynamic";
 
@@ -56,8 +57,12 @@ export async function POST(request: NextRequest) {
       stage = "profile_save";
       await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
       stage = "activation";
-      await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
+      const activated = await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
         termsAcceptedAt: new Date().toISOString(), token: proof.token, verificationRequestId: `${testNumber ? "test-only:" : ""}${randomUUID()}`, verifiedAt: new Date().toISOString() });
+      if (testNumber) {
+        stage = "test_ordering";
+        await preparePublicOwnerTestOrdering(activation.companyId, activated.storeAccountId);
+      }
       stage = "session";
       if (!(await setStoreSession(proof.authUserId))) return NextResponse.json({ message: "Activation unavailable" }, { status: 410 });
       await getStoreOwnerActivationProof({ consume: true });

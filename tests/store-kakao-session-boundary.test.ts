@@ -6,7 +6,7 @@ import { setupPublicOwnerTestEnv } from "./fixtures/public-owner-test-env";
 afterEach(() => vi.unstubAllEnvs());
 
 const routeMocks = vi.hoisted(() => ({ activate: vi.fn(), business: vi.fn(), complete: vi.fn(), consume: vi.fn(),
-  getProof: vi.fn(), prepared: vi.fn(), session: vi.fn() }));
+  getProof: vi.fn(), prepared: vi.fn(), session: vi.fn(), testOrdering: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getStoreOwnerActivationProof: routeMocks.getProof, setPublicStoreOwnerKakaoProof: vi.fn(),
   setStoreOwnerActivationProof: vi.fn(), setStoreSession: routeMocks.session, storeMemberSessionEnabled: () => true }));
 vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: routeMocks.activate,
@@ -15,6 +15,8 @@ vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: 
   verifyPublicStoreOwnerOnboardingIntent: vi.fn() }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: () => true }));
 vi.mock("@/lib/business-status", () => ({ checkBusinessRegistrationStatusesWithHealth: routeMocks.business }));
+vi.mock("@/lib/store/public-owner-test-mode", async () => import("../lib/store/public-owner-test-mode"));
+vi.mock("@/lib/pricing/public-owner-test-ordering", () => ({ preparePublicOwnerTestOrdering: routeMocks.testOrdering }));
 
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
@@ -92,7 +94,8 @@ describe("Kakao-first profile retry", () => {
   });
 
   it("uses the exact isolated-preview synthetic verification while retaining profile, terms and activation", async () => {
-    const { number } = setupPublicOwnerTestEnv();
+    const { number, company } = setupPublicOwnerTestEnv();
+    routeMocks.activate.mockResolvedValueOnce({ storeAccountId: "synthetic-store" });
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", businessRegistrationNumber: "",
@@ -102,6 +105,7 @@ describe("Kakao-first profile retry", () => {
     expect(routeMocks.activate).toHaveBeenCalledWith(expect.objectContaining({ businessRegistrationNumber: number,
       verificationRequestId: expect.stringMatching(/^test-only:/), authUserId: expect.any(String) }));
     expect(routeMocks.session).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
+    expect(routeMocks.testOrdering).toHaveBeenCalledWith(company, "synthetic-store");
   });
 
   it.each(["wrong_number", "other_company", "production"])("refuses test verification for %s without writes", async (scenario) => {

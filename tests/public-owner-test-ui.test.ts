@@ -1,8 +1,32 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
-import { StoreOwnerActivationPanel } from "../components/store-kakao-entry";
-import { PublicStoreTestBanner } from "../components/public-store-test-banner";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+import * as React from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { publicOwnerTestModeRequested } from "../lib/store/public-owner-test-mode";
+
+// Reuse the repository's TSX test adapter; Vitest preserves JSX in application files.
+const dependencies: Record<string, unknown> = {
+  react: React, "react/jsx-runtime": jsxRuntime,
+  "./ui/button": { Button: "button" },
+  "./ui/card": { Card: "div", CardContent: "div", CardHeader: "div", CardTitle: "h2" },
+  "@/lib/store/public-owner-test-mode": { publicOwnerTestModeRequested },
+};
+function loadComponent(file: string) {
+  const compiled = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022,
+  } }).outputText;
+  const exports: Record<string, React.ComponentType<Record<string, unknown>>> = {};
+  new Function("require", "exports", compiled)((name: string) => {
+    if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
+    return dependencies[name];
+  }, exports);
+  return exports;
+}
+const { StoreOwnerActivationPanel } = loadComponent("components/store-kakao-entry.tsx");
+const { PublicStoreTestBanner } = loadComponent("components/public-store-test-banner.tsx");
 
 afterEach(() => vi.unstubAllEnvs());
 
