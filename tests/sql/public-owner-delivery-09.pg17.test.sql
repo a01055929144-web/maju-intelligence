@@ -14,6 +14,13 @@ insert into delivery_territories(id,company_id) values
   ('e1000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001');
 insert into app_users values('e2000000-0000-4000-8000-000000000001','active');
 grant select,update on delivery_territories to service_role;
+-- Force a failure AFTER the existing activation has run, to test full statement rollback.
+create function public.public_owner_delivery_fail_fixture() returns trigger language plpgsql as $$ begin
+  if current_setting('test.force_delivery_failure',true)='on' then raise exception 'synthetic_delivery_assignment_failure'; end if;
+  return new;
+end $$;
+create trigger public_owner_delivery_fail_fixture before update of delivery_territory_id on normalized_customers
+  for each row execute function public.public_owner_delivery_fail_fixture();
 set role service_role;
 do $$ declare activated jsonb; customer uuid; ordered jsonb; before_accounts bigint;
 begin
@@ -38,6 +45,19 @@ begin
   if (select count(*) from store_accounts)<>before_accounts or
     exists(select 1 from store_owner_activation_requests where invite_token_hash=repeat('4',64) and consumed_at is not null)
     then raise exception 'failed_delivery_created_or_consumed_owner'; end if;
+  perform set_config('test.force_delivery_failure','on',true);
+  begin
+    perform activate_public_store_owner_with_delivery_v1(repeat('4',64),'e2000000-0000-4000-8000-000000000001',
+      '2026-11-07',clock_timestamp(),repeat('9',10),'active',clock_timestamp(),'public-delivery-v1:synthetic',
+      '10000000-0000-4000-8000-000000000001');
+    raise exception 'partial_activation_survived_delivery_failure';
+  exception when raise_exception then if sqlerrm<>'synthetic_delivery_assignment_failure' then raise; end if; end;
+  perform set_config('test.force_delivery_failure','off',true);
+  if (select count(*) from store_accounts)<>before_accounts or
+    exists(select 1 from store_account_members where auth_user_id='e2000000-0000-4000-8000-000000000001') or
+    exists(select 1 from store_owner_activation_requests where invite_token_hash=repeat('4',64)
+      and (consumed_at is not null or customer_id is not null))
+    then raise exception 'public_delivery_partial_rows_not_rolled_back'; end if;
   activated:=activate_public_store_owner_with_delivery_v1(repeat('4',64),'e2000000-0000-4000-8000-000000000001',
     '2026-11-07',clock_timestamp(),repeat('9',10),'active',clock_timestamp(),'public-delivery-v1:synthetic',
     '10000000-0000-4000-8000-000000000001');
@@ -59,6 +79,8 @@ begin
     then raise exception 'public_owner_native_first_order_failed'; end if;
 end $$;
 reset role;
+drop trigger public_owner_delivery_fail_fixture on normalized_customers;
+drop function public.public_owner_delivery_fail_fixture();
 -- A real history row must make the actual down refuse without dropping the function or data.
 \set ON_ERROR_STOP off
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.down.sql
