@@ -116,6 +116,9 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
+  await page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
+  await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
   const publicEntry = page.getByRole("button", { name: "버전 1 공개 링크·QR", exact: true });
   expect((await publicEntry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicEntry.scrollIntoViewIfNeeded();
