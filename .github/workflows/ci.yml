@@ -363,6 +363,8 @@ jobs:
           createdb pricing_lead_document_share_migrations_test
           psql --dbname=pricing_lead_document_share_migrations_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-document-share-migrations.pg17.test.sql
           psql --dbname=pricing_lead_document_share_migrations_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-atomic.pg17.test.sql
+          createdb pricing_public_document_entry_test
+          psql --dbname=pricing_public_document_entry_test --set=ON_ERROR_STOP=1 --file=tests/sql/public-document-entry-09.pg17.test.sql
           createdb pricing_lead_share_company_delete_test
           psql --dbname=pricing_lead_share_company_delete_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-company-delete.pg17.test.sql
 
