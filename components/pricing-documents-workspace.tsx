@@ -484,6 +484,13 @@ export function PricingDocumentsWorkspace({
     if (result.added.length) rows([...draft.content.lines, ...result.added]);
     setMessage(`${result.added.length}개 품목을 담았습니다.${result.unmatched.length ? ` 연결되지 않은 ${result.unmatched.length}개: ${result.unmatched.slice(0, 5).join(", ")}` : ""}`);
   }
+  async function openPublishedPreview(version: DocumentVersion) {
+    const current = await read<DocumentVersion[]>("versions", { id: version.documentId });
+    const selected = current.find(item => item.id === version.id);
+    if (!selected) throw new Error("버전을 찾을 수 없습니다. 문서를 다시 열어 주세요.");
+    setAutoPrint(false);
+    setPreview(selected);
+  }
   const openPreview = (print: boolean) => {
     if (!draft) return;
     void task(async () => {
@@ -1099,29 +1106,19 @@ export function PricingDocumentsWorkspace({
                 </p>
                 </>
                 )}
+                {!leadContext && publicSharingAvailable ? <p className="text-sm">상단 미리보기는 작성 중인 내용입니다. 공개 링크·QR은 아래 발행 버전에서 만드세요.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
                 <div className="flex flex-wrap gap-2">
                   {versions.map((v) => (
+                    <div className="flex flex-wrap items-center gap-2" key={v.id}>
                     <button
-                      key={v.id}
                       disabled={busy}
-                      onClick={() =>
-                        void task(async () => {
-                          const current = await read<DocumentVersion[]>(
-                            "versions",
-                            { id: v.documentId },
-                          );
-                          const selected = current.find(
-                            (item) => item.id === v.id,
-                          );
-                          if (!selected)
-                            throw new Error("버전을 찾을 수 없습니다.");
-                          setPreview(selected);
-                        })
-                      }
+                      onClick={() => void task(() => openPublishedPreview(v))}
                       className={box}
                     >
                       버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
                     </button>
+                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
+                    </div>
                   ))}
                 </div>
               </div>

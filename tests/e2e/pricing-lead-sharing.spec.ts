@@ -10,7 +10,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const shareLinkId = "50000000-0000-4000-8000-000000000001", sendId = "60000000-0000-4000-8000-000000000001";
   const otherDocument = "70000000-0000-4000-8000-000000000001";
   const companyId = "00000000-0000-4000-8000-000000000001", customerId = "80000000-0000-4000-8000-000000000001";
-  let releaseOtherVersions: (() => void) | undefined;
+  let releaseOtherVersions: (() => void) | undefined, denyVersionRead = false;
   const product = { id: "30000000-0000-4000-8000-000000000001", name: "합성 공개 품목", displayName: "합성 공개 품목", brand: "합성 브랜드", spec: "18L", unit: "통", price: 1000, taxType: "exempt" };
   let content: DocumentContent | undefined, documentId = "", revision = 0, published = false, profileRead = false;
   let linkExpiresAt = "2099-01-01T00:00:00Z";
@@ -45,6 +45,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     if (action === "profile") { profileRead = true; result = { revision: 0, content: { companyName: "합성 유통", contact: "PRIVATE-CONTACT-CANARY", footer: "PRIVATE-FOOTER-CANARY" } }; }
     if (action === "catalog") result = { items: [product], total: 1 };
     if (action === "versions") {
+      if (denyVersionRead) return route.fulfill({ status: 403, json: { message: "합성 문서 권한 없음. 담당자에게 확인해 주세요." } });
       if (url.searchParams.get("id") === otherDocument) await new Promise<void>(resolve => { releaseOtherVersions = resolve; });
       // Deliberately replay an old document's response for the new selection.
       result = published ? [version()] : [];
@@ -98,12 +99,32 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   await expect(page.getByRole("button", { name: /버전 1 미리보기/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "버전 1 공개 링크·QR", exact: true })).toHaveCount(0);
   const frozenVersion = JSON.stringify(version());
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
+  published = false;
+  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await expect(page.getByText(/먼저 초안을 저장하고 판매가 버전을 확정해 주세요/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /버전 1 공개 링크·QR/ })).toHaveCount(0);
+  published = true;
+  await page.goto("/revenue/pricing/documents");
   await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  await page.getByRole("button", { name: "미리보기", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
+  await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
+  const publicEntry = page.getByRole("button", { name: "버전 1 공개 링크·QR", exact: true });
+  expect((await publicEntry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await publicEntry.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath(`public-qr-entry-${kind}-${width}.png`), fullPage: true });
+  denyVersionRead = true;
+  await publicEntry.click();
+  await expect(page.getByRole("alert")).toContainText("합성 문서 권한 없음");
+  await expect(page.getByRole("dialog", { name: "미리보기", exact: true })).toHaveCount(0);
+  expect(publicInputs).toHaveLength(0);
+  denyVersionRead = false;
+  await publicEntry.click();
   const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
   await preview.getByRole("button", { name: "주문 링크 QR 만들기", exact: true }).click();
   await expect(preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true })).toHaveCount(0);
