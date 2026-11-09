@@ -14,8 +14,8 @@ const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
 /**
  * 11/4 마진 설정 단순화.
  * ① 기본 마진 하나만 정하면 모든 상품 판매가가 매입가 × (1+마진)으로 바로 계산됩니다.
- * ② 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
- * ③ 마진 그룹(카테고리 연결)은 '고급'으로 접어 둡니다.
+ * ② 카테고리별 마진은 기존 그룹과 분류 연결을 카드에서 고릅니다.
+ * ③ 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
  */
 export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const [state, setState] = useState<PriceState | null>(null);
@@ -30,7 +30,6 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMargin, setBulkMargin] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [groupsOpen, setGroupsOpen] = useState(false);
 
   const send = useCallback(async (command?: PricingCommand | PricingBulkCommand) => {
     const query = new URLSearchParams({ companyId, q: search, page: String(page) });
@@ -85,7 +84,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
 
     {/* ① 기본 마진 */}
-    <section className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
+    <section aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-black">① 기본 마진</h2>
@@ -106,10 +105,24 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
       {sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{sample.cost.toLocaleString()}원</strong> → 판매가 <strong className="text-teal-800">{sample.price.toLocaleString()}원</strong> (이익 {(sample.price - sample.cost).toLocaleString()}원)</p> : null}
     </section>
 
-    {/* ② 상품별 */}
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    {/* ② 카테고리별 */}
+    <section aria-label="카테고리별 마진" className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
       <div>
-        <h2 className="text-lg font-black">② 상품별로 다르게</h2>
+        <h2 className="text-lg font-black">② 카테고리별 마진</h2>
+        <p className="text-sm text-slate-600">상품관리와 같은 전체 분류 경로를 골라 마진을 연결하세요. 상위 분류를 골라도 하위 분류는 자동으로 연결되지 않습니다.</p>
+      </div>
+      <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} />
+      <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
+        <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
+        <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
+        <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
+      </div>
+    </section>
+
+    {/* ③ 상품별 */}
+    <section aria-label="상품별 예외" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <h2 className="text-lg font-black">③ 상품별 예외</h2>
         <p className="text-sm text-slate-600">기본 마진과 다르게 받을 상품만 고치세요. 체크해서 여러 개를 한 번에 바꿀 수 있습니다. 칸을 비우고 저장하면 기본 마진으로 돌아갑니다.</p>
       </div>
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setPage(1); }}>
@@ -180,18 +193,5 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
       </div>
     </section>
 
-    {/* ③ 고급 */}
-    <details onToggle={event => setGroupsOpen(event.currentTarget.open)} className="rounded-xl border border-slate-200 bg-white p-4">
-      <summary className="cursor-pointer text-sm font-black text-slate-700">③ 고급 — 마진 그룹 · 카테고리 연결 · 복구</summary>
-      <div className="mt-3 space-y-4 text-sm">
-        <p className="text-slate-600">카테고리별로 마진을 다르게 할 때 씁니다. 우선순위: 직접 단가 → 개별 마진 → 그룹 마진 → 기본 마진.</p>
-        {groupsOpen ? <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} /> : null}
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
-          <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
-          <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
-        </div>
-      </div>
-    </details>
   </div>;
 }

@@ -125,18 +125,29 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
     } finally { onBusy(false); }
   }
 
-  return <section aria-label="마진 그룹 만들기·수정" className="min-w-0 space-y-4">
-    <div className="flex flex-wrap gap-2"><Button disabled={busy || Boolean(uncertain)} onClick={() => selectGroup()} variant="outline" type="button">새 마진 그룹</Button>
-      {state.groups.map(group => <Button key={group.id} disabled={busy} onClick={() => selectGroup(group)} variant={id === group.id ? "default" : "outline"} className="h-auto min-h-11 max-w-full whitespace-normal break-words py-2 text-left" type="button">{group.name} · {group.margin}% · {group.rounding}원 올림</Button>)}</div>
-    {!state.groups.length ? <p>마진 그룹이 없습니다. 이름·마진율과 적용할 분류를 골라 새로 만드세요.</p> : null}
+  return <section aria-label="마진 그룹 만들기·수정" className="min-w-0 space-y-4 text-sm">
+    <div className="space-y-2"><div><h3 className="font-bold">마진 그룹 선택</h3><p className="text-slate-600">기존 그룹을 고쳐 쓰거나 새 그룹을 만드세요.</p></div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <Button className="h-auto min-h-24 flex-col items-start justify-center whitespace-normal px-3 py-3 text-left" disabled={busy || Boolean(uncertain)} onClick={() => selectGroup()} variant={!id ? "accent" : "outline"} type="button">
+          <span className="font-bold">새 마진 그룹</span><span className="text-xs font-normal">이름·마진·분류를 새로 설정</span>
+        </Button>
+        {state.groups.map(group => {
+          const categoryCount = state.categories.filter(link => link.groupId === group.id).length;
+          return <Button aria-label={`${group.name} · ${group.margin}% · ${group.rounding}원 올림`} key={group.id} disabled={busy} onClick={() => selectGroup(group)} variant={id === group.id ? "default" : "outline"} className="h-auto min-h-24 flex-col items-start justify-center whitespace-normal px-3 py-3 text-left" type="button">
+            <span className="max-w-full break-words font-bold">{group.name}</span><span className="text-xs font-normal">마진 {group.margin}% · {group.rounding}원 올림</span><span className="text-xs font-normal">연결 분류 {categoryCount}개</span>
+          </Button>;
+        })}
+      </div>
+    </div>
+    {!state.groups.length ? <p className="rounded-lg bg-slate-50 p-3 text-slate-600">저장된 마진 그룹이 없습니다. 새 그룹 카드에서 이름·마진율과 적용할 분류를 설정하세요.</p> : null}
     {uncertain ? <div className="space-y-2 rounded border p-3"><p>그룹 생성 응답을 확인하지 못했습니다. 중복 생성을 막기 위해 다시 만들지 않고 기존 그룹을 조회합니다.</p><Button disabled={busy} onClick={() => void recoverCreation()} type="button">생성 결과 다시 조회</Button></div> : null}
     <form onSubmit={event => { event.preventDefault(); void save(); }} className="space-y-4">
       <fieldset disabled={busy || Boolean(uncertain)} className="min-w-0 space-y-3">
-        <legend className="font-bold">{id ? "그룹 수정" : "그룹 만들기"}</legend>
+        <legend className="font-bold">{id ? "선택한 그룹 수정" : "새 그룹 만들기"}</legend>
         <div className="grid gap-3 sm:grid-cols-3"><label>그룹 이름<input aria-label="마진 그룹 이름" className={input} value={name} maxLength={80} required onChange={event => setName(event.target.value)} /></label>
           <label>마진율 (%)<input aria-label="그룹 마진율" className={input} type="number" min="0" max="1000" step="0.01" required value={margin} onChange={event => setMargin(event.target.value)} /></label>
           <label>끝자리 올림<select aria-label="그룹 끝자리 올림" className={input} value={rounding} onChange={event => setRounding(event.target.value)}>{[1, 10, 100].map(value => <option key={value} value={value}>{value}원</option>)}</select></label></div>
-        <p>분류 연결은 전체 경로가 같은 상품에만 적용합니다. 상위 분류를 골라도 하위 분류가 자동 연결되지는 않습니다. 상품 분류를 바꾸거나 상품을 이동하지 않습니다.</p>
+        <p className="text-slate-600">분류 연결은 전체 경로가 같은 상품에만 적용합니다. 상품 분류를 바꾸거나 상품을 이동하지 않습니다.</p>
         <label className="block">분류 검색<input aria-label="마진 적용 분류 검색" className={input} placeholder="대·중·소 분류 이름 검색" value={query} onChange={event => setQuery(event.target.value)} /></label>
         <div className="grid gap-2 sm:grid-cols-3">{["대분류", "중분류", "소분류"].map((label, index) => {
           const choices = Array.from(new Set(options.filter(option => levels.slice(0, index).every((value, level) => !value || option.parts[level] === value)).map(option => option.parts[index]).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko"));
@@ -147,7 +158,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
         <Button disabled={busy || loading} type="button" variant="outline" onClick={() => setReload(value => value + 1)}>분류·상품 수 다시 조회</Button>
         {items && !loading && !loadError ? <div className="max-h-72 overflow-y-auto rounded border" aria-label="실제 상품 분류 선택">{visible.length ? visible.map(option => <label key={option.path} className="flex min-h-11 items-center gap-2 border-b p-2 last:border-0">
           <input aria-label={`마진 분류 ${option.path}`} type="checkbox" disabled={!option.selectable} checked={selected.includes(option.path)} onChange={event => setSelected(previous => event.target.checked ? [...previous, option.path] : previous.filter(path => path !== option.path))} />
-          <span className="min-w-0 flex-1 break-words">{option.parts.join(" > ")}<span className="block text-xs text-slate-500">{state.categories.find(link => link.category === option.path) ? `현재 ${state.groups.find(group => group.id === state.categories.find(link => link.category === option.path)?.groupId)?.name || "기존 그룹"}` : "그룹 연결 없음"}{!option.selectable ? " · 상품관리에서 분류 표기를 확인해 주세요" : ""}</span></span><span className="shrink-0">{option.count}개</span>
+          <span className="min-w-0 flex-1 break-words">{option.parts.join(" › ")}<span className="block text-xs text-slate-500">{state.categories.find(link => link.category === option.path) ? `현재 ${state.groups.find(group => group.id === state.categories.find(link => link.category === option.path)?.groupId)?.name || "기존 그룹"}` : "그룹 연결 없음"}{!option.selectable ? " · 상품관리에서 분류 표기를 확인해 주세요" : ""}</span></span><span className="shrink-0">{option.count}개</span>
         </label>) : <p className="p-3">선택할 분류가 없습니다. 검색·필터를 바꾸거나 상품관리의 분류를 확인해 주세요.</p>}</div> : null}
         <div className="rounded border bg-slate-50 p-3" aria-label="선택 분류와 적용 상품 요약"><p>선택 분류 {selected.length}개 · 분류의 활성 상품 {items && !loading && !loadError ? `${summary.categoryProducts}개` : "확인 중"}</p>
           <p>실제 그룹 마진 대상 {items && !loading && !loadError ? `${summary.groupProducts}개` : "확인 중"} <span className="text-xs">(상품 지정 {summary.explicitProducts}개 포함, 현재 조회 기준)</span></p>
