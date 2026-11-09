@@ -137,7 +137,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect((await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicViewer.screenshot({ path: info.outputPath(`public-order-entry-${kind}-${width}.png`), fullPage: true });
   intentReady = true;
-  await publicViewer.route(url => url.pathname === "/store/activate", route => route.fulfill({ contentType: "text/html", body: "<h1>합성 07 점주 가입</h1>" }));
+  await publicViewer.route(url => url.pathname === "/store/activate", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<!doctype html><meta charset=\"utf-8\"><h1>합성 07 점주 가입</h1>" }));
   await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
   await expect(publicViewer).toHaveURL(/\/store\/activate#synthetic\.intent$/);
   await expect(publicViewer.getByRole("heading", { name: "합성 07 점주 가입" })).toBeVisible();

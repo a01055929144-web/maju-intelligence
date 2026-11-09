@@ -39,7 +39,9 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
     setBusy(true);
     try {
       await documentRequest(companyId, "revoke-share", { shareLinkId: shared.shareLinkId }, true);
-      setShared(null); setQr(null); onInsert(null); retryKey.current = null;
+      setShared(null);
+      if (qr?.audience === "public") { setQr(null); onInsert(null); }
+      retryKey.current = null;
       setMessage("공개 링크를 회수했습니다. 인쇄된 QR도 열리지 않습니다. 새 링크를 만들 수 있습니다.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "회수하지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
