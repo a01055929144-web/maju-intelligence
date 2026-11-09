@@ -11,11 +11,15 @@ export function parseDocumentShare(input: unknown): PrepareDocumentShare {
   return { documentId: b.documentId.toLowerCase(), documentVersionId: b.documentVersionId.toLowerCase(), leadId: typeof b.leadId === "string" ? b.leadId.toLowerCase() : null, idempotencyKey: b.idempotencyKey.toLowerCase(), ttlDays: general ? null : Number(ttlDays) };
 }
 
-/** Public printed QR remains readable for 365 days after the KST price/order cutoff. */
-export function publicDocumentLinkExpiry(validUntil: string) {
+/** The date's KST 24:00 is the same instant as 15:00 UTC. */
+export function documentOrderExpiry(validUntil: string) {
   const cutoff = Date.parse(`${validUntil}T15:00:00.000Z`);
   if (!Number.isFinite(cutoff)) throw new DocumentSendError("문서의 가격 유효기간을 확인해 주세요.", 400);
-  return new Date(cutoff + 365 * 86400000).toISOString();
+  return new Date(cutoff).toISOString();
+}
+/** Public printed QR remains readable for 365 days after the KST price/order cutoff. */
+export function publicDocumentLinkExpiry(validUntil: string) {
+  return new Date(Date.parse(documentOrderExpiry(validUntil)) + 365 * 86400000).toISOString();
 }
 export function documentLinkLastDay(expiresAt: string) {
   return koreaDay(new Date(Date.parse(expiresAt) - 1));
