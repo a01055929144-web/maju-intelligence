@@ -9,6 +9,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
+import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
@@ -21,7 +22,7 @@ type Store = { title: string; companyName: string; customerName: string;
   deliveryAddress: string | null; version: number; validUntil: string;
   priceAvailable: boolean; canOrder: boolean; nextDeliveryDate: string | null;
   selectedDeliveryDate: string;
-  pendingDelivery?: boolean;
+  deliveryEligibility?:{eligible:boolean;reason:string;territoryName?:string;weekdays:number[]};
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
 type Order = { id: string; deliveryDate: string | null; status: string; knownTotal: number;
   authorLabel?: string;
@@ -107,6 +108,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
   }, [endpoint, token]);
   useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
   const store = data?.store;
+  const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
@@ -135,7 +137,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       productId: line.productId, quantity: cart[line.key],
       unitPrice: line.unitPrice, taxType: line.taxType,
       priceIncludesTax: line.priceIncludesTax,
-    })), store.policy, store.pendingDelivery);
+    })), store.policy);
   } catch { /* The server returns a field-level order error on submission. */ }
   function changeQuantity(line: Product, delta: number) {
     const max = Math.min(100000, line.maximumQuantity ?? 100000, line.remaining ?? 100000);
@@ -177,7 +179,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
     setCart(Object.fromEntries(copied.map((line) => [
       `${line.product_id}:${line.promotion_id ?? ""}`, Number(line.quantity),
     ])));
-    const day = edit ? order.deliveryDate || undefined : store?.pendingDelivery ? undefined : store?.nextDeliveryDate || undefined;
+    const day = edit ? order.deliveryDate || undefined : store?.nextDeliveryDate || undefined;
     setDeliveryDate(day || store?.selectedDeliveryDate || "");
     void load(day).catch(() => setMessage("현재 주문 가격을 불러오지 못했습니다."));
     setMemo(edit ? order.requestMemo : "");
@@ -189,13 +191,13 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       missing ? ` 현재 문서에 없는 품목 ${missing}개는 담지 않았습니다.` : ""}`);
   }
   async function submit() {
-    if (submitting.current || !store || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    if (submitting.current || !store || !deliveryReady || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
     submitting.current = true;
     setBusy(true); setMessage("");
     if (!retryKey.current) retryKey.current = crypto.randomUUID();
     try {
       const response = await fetch(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, deliveryDate: store.pendingDelivery ? null : deliveryDate, memo, idempotencyKey: retryKey.current,
+        body: JSON.stringify({ token, deliveryDate, memo, idempotencyKey: retryKey.current,
           orderId: editing?.id ?? null, expectedRevision: editing?.revision ?? null,
           lines: selected.map((line) => ({ productId: line.productId,
             promotionId: line.promotionId, quantity: cart[line.key] })) }) });
@@ -208,7 +210,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
       setTab("history");
       try {
         await load(undefined, 1);
-        setMessage(store.pendingDelivery ? `주문을 받았습니다. ${DELIVERY_CONFIRMATION_NOTICE}. 주문 내역에서 확인해 주세요.` : "주문을 받았습니다. 주문 내역에서 확인해 주세요.");
+        setMessage("주문을 받았습니다. 주문 내역에서 확인해 주세요.");
       } catch {
         setMessage("주문은 저장됐습니다. 내역을 불러오지 못했으니 화면을 새로고침해 확인해 주세요.");
       }
@@ -240,7 +242,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
       </section>}
     {tab === "home" && <section className="space-y-4 p-4 md:max-w-3xl md:p-6">
-      <p>배송일: <strong>{store.pendingDelivery ? DELIVERY_CONFIRMATION_NOTICE : store.nextDeliveryDate || "권역 배송일 설정 필요"}</strong></p>
+      <p>다음 배송일: <strong>{deliveryReady ? store.nextDeliveryDate || "배송 가능일 확인 필요" : "매장 주소·배송 권역 확인 필요"}</strong></p>
       {changedPrices.length > 0 && <div className="rounded border p-3">
         <h2 className="font-semibold">판매가 변동</h2>
         <p className="text-sm">인상 {changedPrices.filter((line) => line.salesPriceDirection === "up").length}품목 · 인하 {changedPrices.filter((line) => line.salesPriceDirection === "down").length}품목</p>
@@ -260,18 +262,19 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
     {tab === "order" && <section className="space-y-4 p-4 md:p-6">
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
-      {store.policy.weekdays.length === 0 && !store.pendingDelivery && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
-        <p role="status">이 거래처의 배송 요일이 설정되지 않아 주문할 수 없습니다. 담당자에게 배송 요일 설정을 요청한 뒤 다시 확인해 주세요.</p>
+      {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
+        <p role="status">{deliveryEligibilityMessage(store.deliveryEligibility&&!store.deliveryEligibility.eligible?store.deliveryEligibility.reason:"weekdays_unconfigured")}</p>
         <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
       </section>}
       {!pricesReady ? retryLoad : null}
-      {store.pendingDelivery ? <p role="status">{DELIVERY_CONFIRMATION_NOTICE}. 배송일은 아직 확정되지 않았습니다. 가격은 접수 시점 기준입니다.</p> : <><label className="block text-sm">배송일
-        <input disabled={busy} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
+      {deliveryReady && <p role="status">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}
+      <label className="block text-sm">배송일
+        <input disabled={busy||!deliveryReady} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
           min={store.nextDeliveryDate || undefined}
           onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
             if (day) void load(day).catch(() => undefined);
             else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
-      <p className="text-sm text-slate-600">배송 요일·휴일·마감은 저장할 때 다시 확인합니다.</p></>}
+      <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
       <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
         {(["all", "favorites", "hidden"] as const).map((view) =>
           <button key={view} aria-pressed={productView === view} className="min-h-[44px] rounded border px-3"
@@ -333,7 +336,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <Button disabled={!pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full"
+      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full"
         onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>

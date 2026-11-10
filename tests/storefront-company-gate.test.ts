@@ -42,3 +42,24 @@ describe("signed-link company feature gates",()=>{
 });
 vi.mock("@/lib/pricing/store-order-delivery-feature", () => import("../lib/pricing/store-order-delivery-feature"));
 vi.mock("@/lib/pricing/store-order-delivery-producer", () => import("../lib/pricing/store-order-delivery-producer"));
+
+it("OFF preserves original queries; ON shares address eligibility with submission and blocks missing fields",async()=>{
+  await readStorefront("signed","2099-01-01");
+  expect(db.mock.calls.some(([path])=>path.includes("delivery_base_address"))).toBe(false);
+  vi.stubEnv("STORE_ORDER_ADDRESS_VERIFICATION_ENABLED","true");vi.stubEnv("FEATURE_STORE_ORDER_ADDRESS_VERIFICATION_COMPANY_IDS",company);
+  let storedBase:string|null="서울특별시 강남구 합성로 1";
+  db.mockImplementation(async(path:string)=>{
+    if(path.includes("offset=")&&!path.includes("offset=0"))return [];
+    if(path.startsWith("normalized_customers?")&&path.includes("delivery_base_address"))return [{delivery_base_address:storedBase,delivery_address_detail:"1층",delivery_territory_id:"territory"}];
+    if(path.startsWith("delivery_territories?"))return [{id:"territory",name:"합성 권역",is_active:true}];
+    if(path.startsWith("delivery_territory_areas?"))return [{territory_id:"territory",administrative_area:"서울특별시 강남구"}];
+    if(path.startsWith("store_order_settings?"))return [{company_id:company}];
+    return fixture(path);
+  });
+  const valid=await readStorefront("signed","2099-01-01");
+  expect(valid?.deliveryEligibility?.eligible).toBe(true);expect(valid?.canOrder).toBe(true);
+  storedBase=null;const missing=await readStorefront("signed","2099-01-01");
+  expect(missing?.deliveryEligibility?.reason).toBe("address_unknown");expect(missing?.canOrder).toBe(false);
+  expect((await PUT(request("PUT"))).status).toBe(422);
+  expect(db.mock.calls.some(([path])=>path.startsWith("rpc/place_store"))).toBe(false);
+});

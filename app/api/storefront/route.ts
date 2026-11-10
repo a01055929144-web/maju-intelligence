@@ -12,6 +12,8 @@ import { toPublicStorefront } from "@/lib/pricing/storefront-public";
 import { verifyStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { supabaseRequest } from "@/lib/store";
+import { getStoreDeliveryEligibility,storeAddressVerificationEnabled } from "../../../lib/pricing/store-delivery-eligibility";
+import { deliveryEligibilityMessage } from "../../../domains/order/delivery-eligibility";
 
 export const dynamic = "force-dynamic";
 
@@ -315,8 +317,8 @@ export async function PUT(request: NextRequest) {
     (body.orderId != null &&
       (!Number.isSafeInteger(body.expectedRevision) ||
         Number(body.expectedRevision) < 1)) ||
-    (body.deliveryDate !== null && (typeof body.deliveryDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(body.deliveryDate))) ||
+    typeof body.deliveryDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(body.deliveryDate) ||
     typeof body.memo !== "string" ||
     body.memo.length > 500 ||
     !Array.isArray(body.lines) ||
@@ -343,7 +345,7 @@ export async function PUT(request: NextRequest) {
       { status: 400 },
     );
   try {
-    if (body.deliveryDate !== null) dateField(body.deliveryDate);
+    dateField(body.deliveryDate);
   } catch {
     return NextResponse.json(
       { message: "배송일을 확인해 주세요." },
@@ -352,18 +354,18 @@ export async function PUT(request: NextRequest) {
   }
   try {
     // Resolve tenant eligibility from the signed link, never from caller scope.
-    const store = await readStorefront(String(body.token), typeof body.deliveryDate === "string" ? body.deliveryDate : undefined);
+    const store = await readStorefront(String(body.token), body.deliveryDate);
     if (!store) return unavailable();
-    if (Boolean(store.pendingDelivery) !== (body.deliveryDate === null))
-      return NextResponse.json({ message: "배송 설정이 변경되었습니다. 주문 화면을 새로고침해 주세요." }, { status: 409 });
     const memberOrdering = storeMemberSessionEnabled() && isStoreMemberCompanyAllowlisted(store.companyId);
     const member = memberOrdering
       ? await getStoreOrderActor({ companyId: store.companyId, customerId: store.customerId })
       : null;
     if (memberOrdering && !member) return NextResponse.json({ message: "이 매장의 활성 구성원으로 로그인한 뒤 주문해 주세요." },
       { status: 403, headers: { "Cache-Control": "no-store" } });
-    if (store.pendingDelivery && (!store.canOrder || !member || body.orderId != null || storeOrderDeliverySnapshotEnabled(store.companyId)))
-      return NextResponse.json({ message: "배송일 미정 주문은 매장 구성원으로 새 주문을 접수해 주세요. 담당자에게 배송일 확인을 요청할 수 있습니다." }, { status: 409 });
+    // Re-read the same server-address/company rule immediately before submission.
+    // Caller address, territory IDs and snapshots never grant eligibility.
+    const eligibility=storeAddressVerificationEnabled(store.companyId)?await getStoreDeliveryEligibility(store.companyId,store.customerId):null;
+    if(eligibility&&!eligibility.eligible)return NextResponse.json({message:deliveryEligibilityMessage(eligibility.reason)},{status:422,headers:{"Cache-Control":"no-store"}});
     const payload = {
           p_token_hash: verified.hash,
           ...(member ? {
@@ -371,7 +373,7 @@ export async function PUT(request: NextRequest) {
             p_member_id: member.memberId,
             p_auth_user_id: member.authUserId,
           } : {}),
-          p_delivery_date: body.deliveryDate === null ? null : String(body.deliveryDate),
+          p_delivery_date: String(body.deliveryDate),
           p_lines: (body.lines as Record<string, unknown>[]).map(line => ({
             productId: line.productId, promotionId: line.promotionId, quantity: line.quantity,
           })),
@@ -381,12 +383,13 @@ export async function PUT(request: NextRequest) {
           p_memo: body.memo,
     };
     if (storeOrderDeliverySnapshotEnabled(store.companyId)) {
-      if (payload.p_delivery_date === null) return NextResponse.json({ message: "배송일 확인 후 다시 주문해 주세요." }, { status: 409 });
-      const placed = await placeStoreOrderWithDelivery({ scope: store, payload: { ...payload, p_delivery_date: payload.p_delivery_date }, snapshot: body.deliverySnapshot });
+      const placed = await placeStoreOrderWithDelivery(eligibility
+        ? {scope:{...store,deliveryAddress:`${eligibility.baseAddress} ${eligibility.addressDetail}`},payload}
+        : {scope:store,payload,snapshot:body.deliverySnapshot});
       return NextResponse.json(placed, { headers: { "Cache-Control": "no-store" } });
     }
     const result = await supabaseRequest<Record<string, unknown>>(
-      store.pendingDelivery ? "rpc/place_store_pending_delivery_order" : memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
+      memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
       { method: "POST", body: JSON.stringify(payload) });
     return NextResponse.json(
       { result },

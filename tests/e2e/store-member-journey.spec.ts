@@ -62,7 +62,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
       failDeliveryRefresh = false;
       return route.fulfill({ status: 503, json: { message: "합성 배송 설정 확인 실패. 다시 확인해 주세요." } });
     }
-    return route.fulfill({ json: { store: { title: "합성 매장 주문", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: deliveryConfigured, nextDeliveryDate: deliveryConfigured ? deliveryDate : null, selectedDeliveryDate: deliveryDate, notice: "", marketPriceNotice: "",
+    return route.fulfill({ json: { store: { title: "합성 매장 주문", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 주소", version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: deliveryConfigured, deliveryEligibility: { eligible: true, reason: "eligible", weekdays: [0,1,2,3,4,5,6] }, nextDeliveryDate: deliveryConfigured ? deliveryDate : null, selectedDeliveryDate: deliveryDate, notice: "", marketPriceNotice: "",
       policy: { weekdays: deliveryConfigured ? [0,1,2,3,4,5,6] : [], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
       lines: [{ key: `${productId}:`, productId, promotionId: null, name: "합성 품목", category: "", brand: "", spec: "1kg", unit: "봉", badge: "", taxType, unitPrice, priceIncludesTax: true, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
       ...(!signedIn || revoked ? { memberLogin: { enabled: true, companyId, storeAccountId: accountId } } : {}),
@@ -82,7 +82,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
   await page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true }).click();
   const deliveryGuide = page.getByRole("region", { name: "배송 요일 설정 안내", exact: true });
-  await expect(deliveryGuide).toContainText("이 거래처의 배송 요일이 설정되지 않아 주문할 수 없습니다.");
+  await expect(deliveryGuide).toContainText("배송 권역의 가능 요일이 설정되지 않았습니다.");
   const refreshDelivery = page.getByRole("button", { name: "배송 설정 다시 확인", exact: true });
   expect((await refreshDelivery.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();

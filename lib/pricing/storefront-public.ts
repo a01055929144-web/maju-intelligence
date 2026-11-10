@@ -5,6 +5,7 @@ type Storefront = NonNullable<Awaited<ReturnType<typeof readStorefront>>>;
 
 /** Explicit public field list: new staff or supplier fields never flow to a store link. */
 export function toPublicStorefront(store: Storefront) {
+  const delivery=store.deliveryEligibility;
   return {
     version: store.version,
     title: store.title,
@@ -15,7 +16,7 @@ export function toPublicStorefront(store: Storefront) {
     validUntil: store.validUntil,
     priceAvailable: store.priceAvailable,
     canOrder: store.canOrder,
-    ...(store.pendingDelivery ? { pendingDelivery: true } : {}),
+    ...(delivery?{deliveryEligibility:{eligible:delivery.eligible,reason:delivery.reason,territoryName:delivery.territoryName,weekdays:delivery.weekdays}}:{}),
     nextDeliveryDate: store.nextDeliveryDate,
     selectedDeliveryDate: store.selectedDeliveryDate,
     notice: store.notice,

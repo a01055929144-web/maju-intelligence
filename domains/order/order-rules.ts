@@ -95,9 +95,8 @@ export function nextDeliveryDate(policy: DeliveryPolicy, now = new Date()) {
   return null;
 }
 
-export function summarizeOrder(lines: readonly OrderLineInput[], policy: DeliveryPolicy, pendingDelivery = false) {
-  if (pendingDelivery) validateOrderAmounts(policy);
-  else validateDeliveryPolicy(policy);
+export function summarizeOrder(lines: readonly OrderLineInput[], policy: DeliveryPolicy) {
+  validateDeliveryPolicy(policy);
   if (!lines.length || lines.length > 100) throw new Error("품목은 1~100개를 담아 주세요.");
   let taxableSupply = 0;
   let exemptSupply = 0;

@@ -1,4 +1,5 @@
--- DRAFT ONLY. New opt-in member intake RPC; never apply without operating DB approval.
+-- SUPERSEDED 2026-11-10: territory-free pending intake is cancelled. DO NOT APPLY.
+-- Historical isolated regression only; current runtime cannot call this RPC.
 -- Keeps place_store_order/place_store_member_order definitions and ACLs unchanged.
 begin;
 set local lock_timeout='3s';
