@@ -121,7 +121,7 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
   const comparison:unknown[]=[];
   for(const qr of [false,true]){
     if(qr){
-      await dialog.getByRole("button",{name:"주문 링크 QR 만들기",exact:true}).click();await dialog.getByRole("button",{name:"기존 거래처 전용 QR 선택",exact:true}).click();
+      await dialog.getByRole("button",{name:"주문 링크 QR 만들기",exact:true}).click();await dialog.getByText("관리 · 회수와 기존 거래처 전용 QR",{exact:true}).click();await dialog.getByRole("button",{name:"기존 거래처 전용 QR 선택",exact:true}).click();
       await dialog.getByRole("combobox",{name:"QR을 받을 거래처",exact:true}).selectOption(customerId);await dialog.getByRole("button",{name:"선택 거래처 QR 생성",exact:true}).click();await dialog.getByRole("button",{name:"문서에 QR 넣기",exact:true}).click();
     }
     for(const scale of [1,1.15,1.3]){
