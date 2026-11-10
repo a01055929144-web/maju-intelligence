@@ -21,22 +21,65 @@ const confirm = (body: Record<string, unknown> = {}) => POST(new NextRequest("ht
 describe("order inbox API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.supabase.mockReset();
     mocks.enabled.mockReturnValue(true);
     mocks.manage.mockReturnValue(true);
     mocks.auth.mockResolvedValue(customer);
   });
 
-  it("lists only this company's new orders with customer names", async () => {
-    mocks.supabase
-      .mockResolvedValueOnce([{ id: orderId, customer_id: "c1", delivery_date: "2026-11-12", status: "submitted", known_total: 12000,
-        has_market_price: false, request_memo: "", submitted_at: "2026-11-10T01:00:00Z", revision: 1, store_order_lines: [] }])
-      .mockResolvedValueOnce([{ id: "c1", customer_name: "송파 시험 매장" }]);
+  const orderRow = (member: string | null) => ({ id: orderId, customer_id: "c1", delivery_date: "2026-11-12", status: "submitted", known_total: 12000,
+    has_market_price: false, request_memo: "", submitted_at: "2026-11-10T01:00:00Z", revision: 1, ordered_by_member_id: member, store_order_lines: [] });
+  const routeFor = (path: string) => {
+    if (path.startsWith("store_orders?")) return [orderRow("m1")];
+    if (path.startsWith("normalized_customers?") && path.includes("ilike")) return [{ id: "c1" }];
+    if (path.startsWith("normalized_customers?")) return [{ id: "c1", customer_name: "송파 시험 매장", address: "옛 주소", delivery_base_address: "서울 송파구 합성로 1", delivery_address_detail: "101호" }];
+    if (path.startsWith("store_account_members?")) return [{ id: "m1", role: "owner", app_users: { name: "합성 점주" } }];
+    throw new Error(`unexpected ${path}`);
+  };
+
+  it("lists only this company's new orders with store, delivery address and orderer", async () => {
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
     const response = await GET(new NextRequest("http://localhost/api/orders"));
     expect(response.status).toBe(200);
     const result = await response.json();
-    expect(result.items[0]).toMatchObject({ customerName: "송파 시험 매장", status: "submitted" });
+    expect(result.items[0]).toMatchObject({ customerName: "송파 시험 매장", status: "submitted",
+      deliveryAddress: "서울 송파구 합성로 1 101호", orderedBy: "합성 점주 · 점주" });
     expect(mocks.supabase.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&status=eq.submitted`);
-    expect(mocks.supabase.mock.calls[1][0]).toContain(`company_id=eq.${companyId}`);
+    for (const [path] of mocks.supabase.mock.calls) expect(path).toContain(`company_id=eq.${companyId}`);
+  });
+
+  it("filters by any of the five statuses or all, and rejects unknown statuses", async () => {
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
+    await GET(new NextRequest("http://localhost/api/orders?status=delivered"));
+    expect(mocks.supabase.mock.calls[0][0]).toContain("&status=eq.delivered");
+    mocks.supabase.mockClear();
+    await GET(new NextRequest("http://localhost/api/orders?status=all"));
+    expect(mocks.supabase.mock.calls[0][0]).not.toContain("status=eq.");
+    mocks.supabase.mockClear();
+    expect((await GET(new NextRequest("http://localhost/api/orders?status=paid"))).status).toBe(400);
+    expect(mocks.supabase).not.toHaveBeenCalled();
+  });
+
+  it("searches by store name inside the company and skips the order query when nothing matches", async () => {
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
+    await GET(new NextRequest(`http://localhost/api/orders?q=${encodeURIComponent("송파")}`));
+    expect(mocks.supabase.mock.calls[0][0]).toContain(`normalized_customers?company_id=eq.${companyId}&customer_name=ilike.*`);
+    expect(mocks.supabase.mock.calls[1][0]).toContain("customer_id=in.(c1)");
+    mocks.supabase.mockReset().mockResolvedValueOnce([]);
+    const empty = await GET(new NextRequest(`http://localhost/api/orders?q=${encodeURIComponent("없는매장")}`));
+    expect((await empty.json()).items).toEqual([]);
+    expect(mocks.supabase).toHaveBeenCalledTimes(1);
+    expect((await GET(new NextRequest("http://localhost/api/orders?q=a*b"))).status).toBe(400);
+  });
+
+  it("lets sales staff view orders but not confirm them", async () => {
+    mocks.manage.mockReturnValue(false);
+    mocks.auth.mockResolvedValue({ ok: true, companyId, customerSession: { role: "member", workspaceRole: "sales" } });
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
+    expect((await GET(new NextRequest("http://localhost/api/orders"))).status).toBe(200);
+    mocks.supabase.mockClear();
+    expect((await confirm()).status).toBe(403);
+    expect(mocks.supabase).not.toHaveBeenCalled();
   });
 
   it("hides the feature when store ordering is off for the company", async () => {
