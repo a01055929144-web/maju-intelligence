@@ -161,13 +161,14 @@ it("returns the 02 delivery DTO from the existing PUT while retaining the result
   mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
   const saved = { id: productId, revision: 1, knownTotal: 1200, marketPricePending: false };
   mocks.db.mockResolvedValueOnce([]).mockResolvedValueOnce(saved);
-  const response = await PUT(request({ companyId: "forged", customerId: "forged" }));
+  const response = await PUT(request({ companyId: "forged", customerId: "forged", deliverySnapshot: {deliveryCustomerNameSnapshot:"forged",deliveryAddressSnapshot:"forged outside address"} }));
   expect(await response.json()).toEqual({ result: saved, delivery: {
     companyId: "verified-company", customerId: "verified-customer", orderId: productId, orderRevision: 1,
     deliveryDate: body.deliveryDate, destination: { customerName: "합성 매장", address: "합성 주소" },
   } });
   expect(mocks.db.mock.calls[1][0]).toBe("rpc/place_store_order_with_delivery_snapshot_09");
   expect(JSON.parse(mocks.db.mock.calls[1][1].body).p_member_id).toBe("verified-member");
+  expect(JSON.parse(mocks.db.mock.calls[1][1].body).p_snapshot.deliveryAddressSnapshot).toBe("합성 주소");
 });
 
 const viewScope = { companyId: "00000000-0000-4000-8000-000000000001", customerId: "20000000-0000-4000-8000-000000000001" };
