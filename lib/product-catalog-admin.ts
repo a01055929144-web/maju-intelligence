@@ -194,6 +194,9 @@ export async function listProductCatalogForAdmin(
 }
 function validate(i: SaveProductCatalogInput) {
   if (!i.name.trim()) throw new Error("품목명은 필수입니다.");
+  // 수정 창 한 건 저장도 일괄 분류 저장과 같은 규칙(대·중·소 3단계, 단계마다 30자)으로 받는다.
+  const category = cleanCategory(i.category ?? null);
+  if (category && typeof category === "object") throw new Error(category.error);
   if (!i.purchaseUnit.trim() || !i.salesUnit?.trim())
     throw new Error("매입·판매 단위는 필수입니다.");
   if (
@@ -220,7 +223,7 @@ function write(i: SaveProductCatalogInput) {
     purchase_unit: i.purchaseUnit.trim(),
     purchase_to_sales_ratio: i.purchaseToSalesRatio ?? null,
     tax_type: i.taxType || null,
-    category: i.category?.trim() || null,
+    category: cleanCategory(i.category ?? null) as string | null, // validate()가 오류 값을 먼저 막는다.
     photo_url: i.photoUrl?.trim() || null,
     is_active: i.isActive,
     default_sales_price: i.salesPrice ?? null,
