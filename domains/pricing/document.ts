@@ -336,7 +336,14 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
   const columns = Math.max(1, Math.min(3, output.display?.columns || 1));
   const scale = Math.max(1, fontScale);
   const mainHeight = Math.round(16 * scale);
-  const rows = (text: string, width: number) => text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil(line.length / width)), 0);
+  const rows = (text: string, width: number) => text.split("\n").reduce((n, line) => {
+    // Conservative system-font widths: narrow ASCII must not consume a whole CJK cell.
+    const units = line.split("").reduce((sum, char) => {
+      const glyph = /[0-9]/.test(char) ? 0.65 : /[\s.,·]/.test(char) ? 0.35 : /[A-Za-z]/.test(char) && !/[MWmw]/.test(char) ? 0.9 : 1;
+      return sum + glyph;
+    }, 0);
+    return n + Math.max(1, Math.ceil(units / width));
+  }, 0);
   const headerInfo = output.display.info.filter(item => item.place === "header");
   const footerInfo = output.display.info.filter(item => item.place === "footer");
   // A4 minus 10mm on each side. Keep in sync with pricing-document-preview print CSS.
