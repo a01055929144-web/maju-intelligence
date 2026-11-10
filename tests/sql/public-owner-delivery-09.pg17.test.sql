@@ -8,6 +8,14 @@ alter table delivery_territories add column if not exists is_active boolean not 
 grant select,update on delivery_territories,store_order_territory_rules to service_role;
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.sql
 \ir ../../docs/sql-drafts/20261110-public-owner-base-address.sql
+\ir ../../docs/sql-drafts/20261110-public-owner-base-address-acl.sql
+do $$ begin
+  if has_function_privilege('public','public.copy_public_owner_delivery_address_v1()','EXECUTE')
+    or has_function_privilege('anon','public.copy_public_owner_delivery_address_v1()','EXECUTE')
+    or has_function_privilege('authenticated','public.copy_public_owner_delivery_address_v1()','EXECUTE')
+    or not has_function_privilege('service_role','public.copy_public_owner_delivery_address_v1()','EXECUTE')
+    then raise exception 'public_owner_base_address_trigger_acl_changed'; end if;
+end $$;
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.down.sql
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.sql
 insert into delivery_territories(id,company_id) values
