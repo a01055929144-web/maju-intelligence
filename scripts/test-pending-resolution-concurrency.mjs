@@ -12,12 +12,12 @@ try {
   assert.ok(fixture);
   const {rows:[fresh]}=await observer.query(`insert into store_orders(company_id,customer_id,link_id,document_version_id,delivery_date,delivery_confirmation,idempotency_key,store_account_id,ordered_by_member_id,known_total)
     values($1,$2,$3,$4,null,'pending',gen_random_uuid(),$5,$6,$7) returning id,revision`,[fixture.company_id,fixture.customer_id,fixture.link_id,fixture.document_version_id,fixture.store_account_id,fixture.ordered_by_member_id,fixture.known_total]);
-  const {rows:[keys]}=await observer.query("select gen_random_uuid() first,gen_random_uuid() second,((clock_timestamp() at time zone 'Asia/Seoul')::date+1)::text day");
+  const {rows:[keys]}=await observer.query("select gen_random_uuid() request_one,gen_random_uuid() request_two,((clock_timestamp() at time zone 'Asia/Seoul')::date+1)::text delivery_day");
   const call="select resolve_pending_order_delivery_09($1,$2,$3,$4,$5,$6,$7,$8) result";
   const common=[fixture.company_id,fresh.id,fixture.actor,fixture.actor_user];
   await a.query("begin");await a.query("set local role service_role");await b.query("set role service_role");
-  const first=await a.query(call,[...common,keys.first,fresh.revision,keys.day,"confirm"]);
-  const competing=b.query(call,[...common,keys.second,fresh.revision,null,"cancel"]).then(()=>null,e=>e);
+  const first=await a.query(call,[...common,keys.request_one,fresh.revision,keys.delivery_day,"confirm"]);
+  const competing=b.query(call,[...common,keys.request_two,fresh.revision,null,"cancel"]).then(()=>null,e=>e);
   let blocked=false;
   for(let i=0;i<80;i++) {
     const {rows:[state]}=await observer.query("select wait_event_type from pg_stat_activity where pid=$1",[b.processID]);
@@ -27,7 +27,7 @@ try {
   assert.ok(blocked,"competing resolution must wait for the same order row");
   await a.query("commit");
   const error=await competing;assert.match(error?.message||"",/pending_confirmation_revision_conflict/);
-  const replay=await b.query(call,[...common,keys.first,fresh.revision,keys.day,"confirm"]);
+  const replay=await b.query(call,[...common,keys.request_one,fresh.revision,keys.delivery_day,"confirm"]);
   assert.deepEqual(first.rows[0].result,replay.rows[0].result);
   const {rows:[after]}=await observer.query("select status,revision,delivery_confirmation,known_total,(select count(*)::int from store_order_delivery_resolutions_09 where order_id=$1) audits from store_orders where id=$1",[fresh.id]);
   assert.equal(after.status,"submitted");assert.equal(after.revision,fresh.revision+1);assert.equal(after.delivery_confirmation,"scheduled");assert.equal(after.audits,1);
