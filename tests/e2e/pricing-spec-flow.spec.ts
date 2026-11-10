@@ -3,6 +3,19 @@ import * as XLSX from "xlsx";
 import { expect, test } from "@playwright/test";
 import { documentDisplayPrice, lineFromCatalog, parseDocument, type DocumentContent } from "../../domains/pricing/document";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
+// CC-14: 휴대폰(≤640px)에서는 초안 저장이 더보기 메뉴 안에 있다.
+async function saveDraft(page: import("@playwright/test").Page) {
+  if ((page.viewportSize()?.width ?? 1440) <= 640) {
+    await page.getByRole("button", { name: "더보기", exact: true }).click();
+    await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click();
+  } else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+}
+async function openPreviewPrint(page: import("@playwright/test").Page) {
+  if ((page.viewportSize()?.width ?? 1440) <= 640) {
+    await page.getByRole("button", { name: "더보기", exact: true }).click();
+    await page.getByRole("menuitem", { name: "미리보기·인쇄", exact: true }).click();
+  } else await page.getByRole("button", { name: "미리보기·인쇄", exact: true }).click();
+}
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
@@ -41,7 +54,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const context = page.getByRole("complementary", { name: "리드 문서 작성 문맥", exact: true });
   await expect(context).toContainText("테스트 매장 01");
   await page.getByRole("button", { name: /합성 진입 품목.*담기/ }).click();
-  await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await saveDraft(page);
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
   expect(content?.kind).toBe(kind); expect(content?.recipient).toBe("테스트 매장 01"); expect(content?.lines).toHaveLength(1);
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
@@ -86,7 +99,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
         ...(i >= 14 ? { promotionId: `60000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, badge: "행사" as const, startsOn: "2020-01-01", endsOn: "2099-12-31" } : {}) })) };
     const oldContent = structuredClone(content);
     content = { ...content, lines: content.lines.map((line, i) => ({ ...line, displayName: `수정 초안 ${i + 1}`, unit: "BOX", price: 2200, taxType: "taxable" })) };
-    let failVersions = false, failAutoRefresh = false, armedPromotionReads = 0;
+    let failVersions = false;
     await page.addInitScript(() => { window.print = () => { document.documentElement.dataset.printCount = String(Number(document.documentElement.dataset.printCount || 0) + 1); }; });
     const draft = () => ({ id, revision, content: { ...content, lines: content.lines.map(line => ({ ...line, spec: revision === 1 ? null : line.spec })) }, updatedAt: "2026-11-05T01:00:00Z", recalculation: { publishedAt: "2026-11-05T01:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
     const version = (number: number) => ({ id: `30000000-0000-4000-8000-00000000000${number}`, documentId: id, version: number, revision, publishedAt: "2026-11-05T01:00:00Z", content: number === 1 ? { ...oldContent, lines: oldContent.lines.map(line => ({ ...line, spec: null })) } : structuredClone(content), unavailablePromotions: [], promotionStock: {} });
@@ -104,7 +117,6 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       if (action === "profile") result = { revision: 0, content: { companyName: "합성", contact: "", footer: "" } };
       if (action === "catalog") result = { items: products, total: 16 };
       if (action === "versions" && failVersions) return route.fulfill({ status: 503, json: { message: "합성 게시 버전 확인 실패" } });
-      if (action === "promotions" && failAutoRefresh && ++armedPromotionReads > 1) return route.fulfill({ status: 503, json: { message: "합성 인쇄 상태 확인 실패" } });
       if (action === "versions") result = published ? [version(2), version(1)] : [version(1)];
       if (action === "save") { content = body.content; revision++; result = draft(); }
       if (action === "publish") { published = true; result = version(2); }
@@ -113,11 +125,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     await page.goto("/revenue/pricing/documents");
     await page.getByRole("button", { name: "규격 회귀 문서", exact: true }).click();
     await expect(page.getByText(/기존 발행본의 규격은 그대로 유지됩니다/)).toBeVisible();
-    const fill = page.getByRole("button", { name: "빈 규격 원장에서 채우기", exact: true });
+    await page.getByRole("button", { name: "더보기", exact: true }).click();
+    const fill = page.getByRole("menuitem", { name: "빈 규격 원장에서 채우기", exact: true });
     if (width === 390) expect((await fill.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await fill.click();
     await expect(page.getByRole("status").filter({ hasText: "원장 규격 16개" })).toBeVisible();
-    await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+    await saveDraft(page);
     await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다" })).toBeVisible();
     expect(content.lines.map(line => line.spec)).toEqual(Array(16).fill("18L"));
     expect(oldContent.lines.every(line => line.spec === " ")).toBe(true);
@@ -156,12 +169,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     failVersions = false; await print.click();
     await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
     await oldPreview.getByRole("button", { name: "닫기", exact: true }).click();
-    failAutoRefresh = true;
-    await page.getByRole("button", { name: "A4 인쇄", exact: true }).click();
+    // CC-14: 미리보기와 A4 인쇄를 한 버튼으로 합쳤다. 인쇄는 미리보기 창의 PDF·인쇄로만 한다.
+    await openPreviewPrint(page);
     const automatic = page.getByRole("dialog", { name: "미리보기", exact: true });
-    await expect(automatic.getByRole("alert")).toContainText("합성 인쇄 상태 확인 실패");
     expect(await page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
-    failAutoRefresh = false;
     await automatic.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
