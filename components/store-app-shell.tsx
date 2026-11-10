@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { storeNavigationGroups, storeViewFrom } from "@/lib/store-navigation";
 
 /** 매장 PC 화면 틀: 고객사 화면과 같은 사이드바·제목줄. 휴대폰(≤640px)은 틀 없이 본문(하단 탭)만. */
 export function StoreAppShell({ children, title = "MAJU 매장" }: { children: ReactNode; title?: string }) {
+  const pathname = usePathname();
   const params = useSearchParams();
   const active = storeViewFrom(params.get("view"));
   // 매장 주소 토큰은 #뒤에 있고, 구성원 확인은 companyId·storeAccountId 쿼리에 있다. 메뉴 이동에서 둘 다 지키지 않으면 인증이 풀린다.
@@ -24,6 +25,8 @@ export function StoreAppShell({ children, title = "MAJU 매장" }: { children: R
       return { ...item, href: `/store?${next.toString()}${hash}` };
     }),
   })), [params, hash]);
+  // activate·members 같은 하위 화면은 틀 없이 그대로.
+  if (pathname !== "/store") return <>{children}</>;
   return (
     <div className="maju-app-bg min-h-screen text-slate-950">
       <div className="flex min-h-screen flex-col lg:flex-row">

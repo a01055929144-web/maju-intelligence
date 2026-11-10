@@ -1,8 +1,6 @@
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import type { StoreKakaoLogin } from "@/components/store-kakao-entry";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { StoreAppShell } from "@/components/store-app-shell";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { StorefrontWorkspace } from "@/components/storefront-workspace";
@@ -74,8 +72,8 @@ export default async function StorePage({ searchParams }: {
       customerName:"합성 공개 가입 매장",hasCostAccess:false,canManageMembers:true,canManageAddress:true,
       documents:[{title:"합성 가입 단가표",kind:"sheet",href:"/pricing-document#synthetic-source",canOrder:false,validUntil:"2099-12-31"}]}];
   }
-  return <Suspense><StoreAppShell><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
     {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
     <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} error={portalError} loginEnabled={storeMemberSessionEnabled()} />} />
-    {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</StoreAppShell></Suspense>;
+    {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
