@@ -24,6 +24,8 @@ const definitions=()=>a.query(`select oid::text,proacl::text,prosecdef,pg_get_fu
 try{
  assert.equal((await a.query('select current_database() db')).rows[0].db,'store_member_order_test_cx08');
  assert.equal((await a.query('show server_version_num')).rows[0].server_version_num.slice(0,2),'17');
+ assert.equal((await a.query('show transaction_isolation')).rows[0].transaction_isolation,'read committed');
+ assert.equal((await b.query('show transaction_isolation')).rows[0].transaction_isolation,'read committed');
  const before=(await definitions()).rows;
  const duplicate=apply(up);assert.notEqual(duplicate.status,0);assert.match(duplicate.stderr,/cx08_definition_changed_or_already_applied/);
  assert.deepEqual((await definitions()).rows,before);

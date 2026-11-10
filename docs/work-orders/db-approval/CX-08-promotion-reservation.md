@@ -24,7 +24,7 @@ Ponytail: 사용함. 지시서: `docs/dispatch/2026-11-10-R1-codex.md` CX-08. �
 
 ## 운영 읽기 관측 (2026-11-10 KST, 개인정보/행 값 미조회)
 
-두 함수 모두 invoker, 이전 집계 구문 1회, 행사 행 잠금 존재. anon/authenticated 실행 false, service_role 실행 true. advanced 상태 행사 라인 집계 0건(관측 시점만 유효; 적용 전 재확인).
+운영 기본 격리 수준은 read committed로 읽기 확인했다. 동시성 검증도 이 기존 PostgREST 계약에서 실행한다. 두 함수 모두 invoker, 이전 집계 구문 1회, 행사 행 잠금 존재. anon/authenticated 실행 false, service_role 실행 true. advanced 상태 행사 라인 집계 0건(관측 시점만 유효; 적용 전 재확인).
 
 | 함수 | 적용 전 정의 SHA-256 | 동일 원문의 예상 적용 후 SHA-256 |
 |---|---|---|
