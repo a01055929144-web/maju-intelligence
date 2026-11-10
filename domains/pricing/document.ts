@@ -333,27 +333,53 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
 export type DocumentOutput = ReturnType<typeof documentOutput>;
 export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = false) {
   const pages: DocumentOutput[] = [];
-  let lines: DocumentOutput["lines"] = [],
-    weight = 0;
-  for (const line of output.lines) {
-    const next =
-      output.layout === "cards"
-        ? 1
-        : Math.max(
-            2,
-            Math.ceil(line.displayName.length / 18) +
-              Math.ceil(line.brand.length / 18),
-            Math.ceil((line.spec + line.unit).length / 10),
-          ) + 1;
-    const columns = output.display?.columns || 1;
-    const limit = Math.max(columns, Math.floor((output.layout === "cards" ? 4 * columns : 26 * columns) / Math.max(1, fontScale)) - (hasOrderQr ? columns * (output.layout === "cards" ? 1 : 5) : 0));
-    if (lines.length && (weight + next > limit || lines.length >= 18 * columns)) {
-      pages.push({ ...output, lines });
-      lines = [];
-      weight = 0;
+  const columns = Math.max(1, Math.min(3, output.display?.columns || 1));
+  const scale = Math.max(1, fontScale);
+  const mainHeight = Math.round(16 * scale);
+  const rows = (text: string, width: number) => text.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil(line.length / width)), 0);
+  const headerInfo = output.display.info.filter(item => item.place === "header");
+  const footerInfo = output.display.info.filter(item => item.place === "footer");
+  // A4 minus 10mm on each side. Keep in sync with pricing-document-preview print CSS.
+  const header = 100 + Math.max(0, rows(output.companyName, 28) - 1) * 30 + Math.max(0, rows(output.title, 40) - 1) * 24 +
+    (output.recipient ? rows(output.recipient, 60) * 18 : 0) + (output.contact ? rows(output.contact, 60) * 16 : 0) +
+    (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 60) * 16 : 0);
+  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, 60) * 16 : 0);
+  for (let i = 0; i < footerInfo.length; i += 2) {
+    footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 30))) * 16;
+  }
+  const available = Math.max(140, 277 * 96 / 25.4 - header - footer - 30);
+  const rowHeight = (line: DocumentOutput["lines"][number], count: number) => {
+    const width = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
+      (output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
+    const mainChars = Math.max(4, Math.floor(width / Math.round(12 * scale)));
+    const textHeight = rows(line.displayName, mainChars) * mainHeight + (line.brand ? rows(line.brand, mainChars) * mainHeight : 0) +
+      (line.spec || line.unit ? rows([line.spec, line.unit].filter(Boolean).join(" · "), mainChars) * mainHeight : 0) +
+      (count > 1 ? mainHeight : 0);
+    const priceWidth = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
+      (1 - output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
+    const priceChars = Math.max(1, Math.floor(priceWidth / Math.round(11 * scale)));
+    const priceHeight = rows(line.price === null ? "—" : `${line.price.toLocaleString()}원`, priceChars) * mainHeight;
+    return Math.max(textHeight, priceHeight) + 6;
+  };
+  // ponytail: at most 300 items; full-width glyph estimates keep custom-font measurement out of this fixed A4 flow.
+  const fits = (lines: DocumentOutput["lines"]) => {
+    if (output.layout === "cards") return lines.length <= Math.max(columns, Math.floor(4 * columns / scale) - (hasOrderQr ? columns : 0));
+    const promos = lines.filter(line => line.badge), regular = lines.filter(line => !line.badge);
+    let promoHeight = promos.length ? 44 : 0;
+    if (output.display.promoLayout === "cards") {
+      for (let i = 0; i < promos.length; i += 3) promoHeight += Math.max(...promos.slice(i, i + 3).map(line => rowHeight(line, 3) + 40));
+    } else promoHeight += promos.reduce((height, line) => height + rowHeight(line, 3), 0);
+    const perColumn = Math.ceil(regular.length / columns);
+    let tallest = 0;
+    for (let i = 0; perColumn && i < regular.length; i += perColumn) {
+      tallest = Math.max(tallest, regular.slice(i, i + perColumn).reduce((height, line) => height + rowHeight(line, columns), 0));
     }
+    return promoHeight + tallest + (regular.length ? 24 : 0) <= available;
+  };
+  let lines: DocumentOutput["lines"] = [];
+  for (const line of output.lines) {
+    if (lines.length && !fits([...lines, line])) { pages.push({ ...output, lines }); lines = []; }
     lines.push(line);
-    weight += next;
   }
   if (lines.length || !pages.length) pages.push({ ...output, lines });
   return pages;

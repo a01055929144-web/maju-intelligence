@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
+import { documentOutput, printPages, lineFromCatalog, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`${kind} wrapped specs, pinned QR and archive at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
@@ -86,3 +86,54 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(archived).toBe(false); expect(JSON.stringify(content)).toBe(original);
 });
 
+
+for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${columns} columns`,async({page},info)=>{
+  page.setDefaultTimeout(15_000);await page.setViewportSize({width:1600,height:1200});
+  const id="10000000-0000-4000-8000-000000000001",versionId="30000000-0000-4000-8000-000000000001",customerId="40000000-0000-4000-8000-000000000001";
+  const product={id:"20000000-0000-4000-8000-000000000001",name:"합성 품목",brand:"",spec:"1.8L × 12입",unit:"BOX",price:123456,taxType:"exempt" as const};
+  const content:DocumentContent={kind:"sheet",title:`A4 ${columns}열 비교`,companyName:"합성 유통",contact:"",recipient:"",footer:"합성 인쇄 검증 · 모든 규격과 단위 보존",validUntil:"2099-12-31",theme:"blue",layout:"table",showPrice:true,showBrand:true,showSpec:true,
+    display:{columns,promoLayout:"table",info:[],productWidth:65,priceIncludesTax:false},
+    lines:Array.from({length:96},(_,i)=>lineFromCatalog({...product,id:`20000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`,displayName:`합성 품목 ${String(i+1).padStart(3,"0")}`}))};
+  const version:DocumentVersion={id:versionId,documentId:id,version:1,revision:1,publishedAt:"2026-11-10T00:00:00Z",content,unavailablePromotions:[],promotionStock:{}};
+  const output=documentOutput(version,"2026-11-10");
+  expect((await page.request.post("/api/customer/login",{data:{email:"ci-owner@example.test",password:"ci-owner-layout-password-2026"}})).ok()).toBe(true);
+  await page.route("**/api/pricing-documents*",route=>{
+    const url=new URL(route.request().url()),body=route.request().method()==="POST"?route.request().postDataJSON():{};
+    const action=body.action||url.searchParams.get("action")||"list";
+    const draft={id,revision:1,content,updatedAt:version.publishedAt,recalculation:{publishedAt:version.publishedAt,needsRecalculation:false,changedProductCount:0}};
+    let result:unknown=[];
+    if(action==="list")result={items:[draft],total:1};if(action==="versions")result=[version];
+    if(action==="profile")result={revision:0,content:{companyName:"합성 유통",contact:"",footer:""}};
+    if(action==="catalog")result={items:[product],total:1};
+    return route.fulfill({json:{result,manager:true}});
+  });
+  await page.route("**/api/pricing-store-links*",route=>route.fulfill({json:route.request().method()==="POST"?{url:"https://store.example.test/store#synthetic-order-token"}:{items:[{id:customerId,customer_name:"합성 매장",address:"합성 주소"}],nextCursor:null}}));
+  await page.goto("/revenue/pricing/documents");await page.getByRole("button",{name:content.title,exact:true}).click();
+  await page.getByRole("button",{name:/버전 1 미리보기/}).click();const dialog=page.getByRole("dialog",{name:"미리보기",exact:true});
+  const comparison:Array<{columns:number;font:number;qr:boolean;before:number;after:number;pages:number}>=[];
+  for(const qr of [false,true]){
+    if(qr){
+      await dialog.getByRole("button",{name:"주문 링크 QR 만들기",exact:true}).click();await dialog.getByRole("button",{name:"기존 거래처 전용 QR 선택",exact:true}).click();
+      await dialog.getByRole("combobox",{name:"QR을 받을 거래처",exact:true}).selectOption(customerId);await dialog.getByRole("button",{name:"선택 거래처 QR 생성",exact:true}).click();await dialog.getByRole("button",{name:"문서에 QR 넣기",exact:true}).click();
+    }
+    for(const scale of [1,1.15,1.3]){
+      await dialog.getByRole("button",{name:`${Math.round(scale*100)}%`,exact:true}).click();
+      const pages=printPages(output,scale,qr),before=Math.min(18*columns,Math.floor((Math.floor(26*columns/scale)-(qr?5*columns:0))/3));
+      expect(pages.flatMap(p=>p.lines)).toEqual(output.lines);expect(pages[0].lines.length).toBeGreaterThan(before);
+      comparison.push({columns,font:Math.round(scale*100),qr,before,after:pages[0].lines.length,pages:pages.length});
+      await expect(dialog.locator(".pricing-paper")).toHaveCount(pages.length);
+      const metrics=await dialog.locator(".pricing-paper").evaluateAll(papers=>papers.map(paper=>{
+        const style=getComputedStyle(paper),content=paper.querySelector(".pricing-output-content")!,image=paper.querySelector("footer img");
+        return {padding:parseFloat(style.paddingTop),available:paper.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom),actual:content.getBoundingClientRect().height,
+          qrBottom:image?paper.getBoundingClientRect().bottom-image.getBoundingClientRect().bottom:null,
+          clipped:Array.from(paper.querySelectorAll("[data-document-spec]")).some(element=>element.scrollWidth>element.clientWidth+1)};
+      }));
+      for(const metric of metrics){expect(metric.padding).toBeCloseTo(10*96/25.4,0);expect(metric.actual).toBeLessThanOrEqual(metric.available+2);expect(metric.clipped).toBe(false);}
+      if(qr){const positions=metrics.map(m=>m.qrBottom!);expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(2);}
+      const download=page.waitForEvent("download");await dialog.getByRole("button",{name:"1쪽 PNG 저장",exact:true}).click();
+      await(await download).saveAs(info.outputPath(`CX-05-${columns}col-${Math.round(scale*100)}${qr?"-qr":""}.png`));
+    }
+  }
+  console.log("CX-05_CAPACITY",JSON.stringify(comparison));
+  await info.attach(`CX-05-${columns}col-capacity.json`,{body:JSON.stringify(comparison,null,2),contentType:"application/json"});
+});
