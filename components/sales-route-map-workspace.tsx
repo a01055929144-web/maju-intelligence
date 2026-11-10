@@ -123,6 +123,7 @@ import {
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { formatPhoneNumber } from "@/lib/phone";
 import {
   clamp,
   deliveryCostRatio,
@@ -3999,7 +4000,7 @@ function QuickRegisterDrawer({
 }) {
   const [customerName, setCustomerName] = useState(result.name);
   const [address, setAddress] = useState(result.roadAddress || result.address);
-  const [phone, setPhone] = useState(result.phone);
+  const [phone, setPhone] = useState(formatPhoneNumber(result.phone));
   const [industry, setIndustry] = useState(result.industry);
   const [deliveryManager, setDeliveryManager] = useState("");
   const [deliveryVehicle, setDeliveryVehicle] = useState("");
@@ -4044,7 +4045,7 @@ function QuickRegisterDrawer({
           deliveryVehicle: deliveryVehicle || undefined,
           industry: industry || "미분류",
           kakaoPlaceUrl: result.kakaoPlaceUrl,
-          phone,
+          phone: normalizePhoneNumber(phone),
           validateBusinessNumber: false
         })
       });
@@ -4127,7 +4128,7 @@ function QuickRegisterDrawer({
                 <span className="text-xs font-black text-slate-500">연락처</span>
                 <input
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setPhone(formatPhoneNumberInput(event.target.value))}
+                  onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
                   value={phone}
                 />
               </label>
@@ -5340,7 +5341,7 @@ export function StoreQuickCard({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draft, setDraft] = useState({
     name: store.name,
-    phone: store.phone || "",
+    phone: formatPhoneNumber(store.phone),
     deliveryDriver: store.deliveryDriver || "",
     deliveryVehicleName: store.deliveryVehicleName || "",
     memo: store.memo || "",
@@ -5385,7 +5386,7 @@ export function StoreQuickCard({
   useEffect(() => {
     setDraft({
       name: store.name,
-      phone: store.phone || "",
+      phone: formatPhoneNumber(store.phone),
       deliveryDriver: store.deliveryDriver || "",
       deliveryVehicleName: store.deliveryVehicleName || "",
       memo: store.memo || "",
@@ -5443,7 +5444,7 @@ export function StoreQuickCard({
     setIsSaving(true);
     setSaveError("");
     try {
-      await onSave(draft);
+      await onSave({ ...draft, phone: normalizePhoneNumber(draft.phone) });
       setIsEditing(false);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 정보 저장에 실패했습니다.");
@@ -5534,7 +5535,7 @@ export function StoreQuickCard({
             </p>
             <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
               <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate">{store.phone || "연락처 미등록"}</span>
+              <span className="min-w-0 flex-1 truncate">연락처 · {formatPhoneNumber(store.phone) || "미등록"}</span>
             </p>
           </div>
         ) : null}
@@ -5666,7 +5667,7 @@ export function StoreQuickCard({
           <div className="mt-2 space-y-1.5">
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumberInput(event.target.value) }))}
+              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))}
               placeholder="연락처"
               value={draft.phone}
             />
@@ -5719,7 +5720,7 @@ export function StoreQuickCard({
               <p className="mt-2.5 truncate text-[10.5px] font-bold text-slate-400">
                 {[
                   store.representativeName ? `대표 ${store.representativeName}` : null,
-                  store.businessRegistrationNumber ? `사업자 ${store.businessRegistrationNumber}` : null,
+                  store.businessRegistrationNumber ? `사업자번호 · ${formatBusinessRegistrationNumber(store.businessRegistrationNumber)}` : null,
                   store.openingDate ? `개업 ${store.openingDate}` : null
                 ]
                   .filter(Boolean)
@@ -9287,7 +9288,7 @@ function StoreDetail({
   const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
   const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
   const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
-  const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
+  const [draftBusinessNumber, setDraftBusinessNumber] = useState(formatBusinessRegistrationNumber(store.businessRegistrationNumber));
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
   const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
@@ -9309,7 +9310,7 @@ function StoreDetail({
   const [draftIndustry, setDraftIndustry] = useState(store.industry);
   const [draftName, setDraftName] = useState(store.name);
   const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
-  const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftPhone, setDraftPhone] = useState(formatPhoneNumber(store.phone));
   const [draftRelationshipStatus, setDraftRelationshipStatus] = useState(store.relationshipStatus || "거래중");
   const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
@@ -9344,7 +9345,7 @@ function StoreDetail({
       bankAccount: draftBankAccount,
       birthDate: draftBirthDate,
       businessCertificateStatus: draftBusinessCertificateStatus,
-      businessRegistrationNumber: draftBusinessNumber,
+      businessRegistrationNumber: normalizeBusinessRegistrationNumber(draftBusinessNumber),
       businessStatus: draftBusinessStatus,
       businessHours: draftBusinessHours,
       menuSummary: draftMenuSummary,
@@ -9366,7 +9367,7 @@ function StoreDetail({
       industry: draftIndustry,
       name: draftName,
       openingDate: draftOpeningDate,
-      phone: draftPhone,
+      phone: normalizePhoneNumber(draftPhone),
       representativeName: draftRepresentativeName
       });
       const persistedLabel = result?.persisted === false ? "저장 미확인" : "저장 완료";
@@ -9494,6 +9495,9 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                연락처 · {formatPhoneNumber(draftPhone) || "미등록"} · 사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}
+              </p>
               <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
                 {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
                 <span className="ml-1 text-[10px] font-bold text-amber-700">단계 저장 미연결</span>
@@ -9563,7 +9567,7 @@ function StoreDetail({
                   <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
                   <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
-                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumberInput(value))} value={draftPhone} />
+                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumber(value))} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
@@ -9800,7 +9804,7 @@ function StoreDetail({
                         representativeName: draftRepresentativeName
                       }}
                       onApply={() => {
-                        setDraftBusinessNumber(activeOcrSuggestion.businessRegistrationNumber);
+                        setDraftBusinessNumber(formatBusinessRegistrationNumber(activeOcrSuggestion.businessRegistrationNumber));
                         setDraftBusinessStatus(activeOcrSuggestion.businessStatus);
                         setDraftBusinessCertificateStatus("received");
                         setDraftName(activeOcrSuggestion.companyName);
@@ -10017,7 +10021,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         body: JSON.stringify({
           role: draftRole || "담당자",
           name: draftName.trim(),
-          phone: draftPhone.trim(),
+          phone: normalizePhoneNumber(draftPhone),
           birthDate: draftBirthDate,
           memo: draftMemo.trim()
         })
@@ -10045,7 +10049,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setEditingId(contact.id);
     setEditRole(contact.role);
     setEditName(contact.name);
-    setEditPhone(contact.phone || "");
+    setEditPhone(formatPhoneNumber(contact.phone));
     setEditBirthDate(contact.birthDate || "");
     setEditMemo(contact.memo || "");
   };
@@ -10060,7 +10064,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         body: JSON.stringify({
           role: editRole || "담당자",
           name: editName.trim(),
-          phone: editPhone.trim(),
+          phone: normalizePhoneNumber(editPhone),
           birthDate: editBirthDate,
           memo: editMemo.trim()
         })
@@ -10115,7 +10119,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
                 <div className="flex flex-wrap items-center gap-1.5">
                   <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setEditRole(event.target.value)} placeholder="직책" value={editRole} />
                   <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditName(event.target.value)} placeholder="이름" value={editName} />
-                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumberInput(event.target.value))} placeholder="연락처" value={editPhone} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumber(event.target.value))} placeholder="연락처" value={editPhone} />
                   <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditBirthDate(event.target.value)} type="date" value={editBirthDate} />
                   <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditMemo(event.target.value)} placeholder="메모" value={editMemo} />
                   <button className="maju-button-primary h-9 px-3 text-xs" disabled={rowBusyId === contact.id} onClick={() => saveEdit(contact.id)} type="button">
@@ -10132,7 +10136,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
                   {contact.phone ? (
                     <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
                       <Phone className="h-3.5 w-3.5" />
-                      {contact.phone}
+                      {formatPhoneNumber(contact.phone)}
                     </span>
                   ) : null}
                   {contact.birthDate ? (
@@ -10175,7 +10179,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         <div className="flex flex-wrap items-center gap-1.5">
           <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setDraftRole(event.target.value)} placeholder="직책" value={draftRole} />
           <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftName(event.target.value)} placeholder="담당자 이름" value={draftName} />
-          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumberInput(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumber(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
           <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold text-slate-500 outline-none focus:border-teal-300 focus:text-slate-950" onChange={(event) => setDraftBirthDate(event.target.value)} type="date" value={draftBirthDate} />
           <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftMemo(event.target.value)} placeholder="메모(선택)" value={draftMemo} />
           <button className="maju-button-primary inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm" disabled={isAdding} onClick={addContact} type="button">
@@ -11317,21 +11321,8 @@ function isValidBusinessRegistrationNumber(value: string) {
 }
 
 // 휴대폰(010 등, 3-4-4)과 서울(02)/지역 번호를 입력 자릿수에 맞춰 실시간으로 하이픈 처리합니다.
-function formatPhoneNumberInput(value: string) {
-  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
-  if (!digits) return "";
-
-  if (digits.startsWith("02")) {
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
-  }
-
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+function normalizePhoneNumber(value: string) {
+  return value.replace(/[^0-9]/g, "").slice(0, 11);
 }
 
 function getBusinessRegistrationCheckDigit(firstNineDigits: string) {
