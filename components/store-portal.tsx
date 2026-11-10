@@ -14,8 +14,9 @@ export function StorePortal({ accounts, error = false, loginEnabled }: { account
       const scope = new URLSearchParams({ companyId: account.companyId, storeAccountId: account.storeAccountId });
       return <Card key={`${account.companyId}:${account.storeAccountId}`}><CardHeader><CardTitle>{account.customerName}</CardTitle></CardHeader><CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
-          <Link className="maju-button-primary inline-flex min-h-[44px] items-center justify-center px-4" href={`/store?${scope}`}>원가관리·매장 정보</Link>
-          <Link className="inline-flex min-h-[44px] items-center rounded-lg border px-4" href={`/store/members?${scope}`}>구성원</Link>
+          {account.hasCostAccess && <Link className="maju-button-primary inline-flex min-h-[44px] items-center justify-center px-4" href={`/store?${scope}`}>원가관리</Link>}
+          {account.canManageAddress && <Link className="inline-flex min-h-[44px] items-center rounded-lg border px-4" href={`/store?${scope}`}>배송지 주소</Link>}
+          {account.canManageMembers && <Link className="inline-flex min-h-[44px] items-center rounded-lg border px-4" href={`/store/members?${scope}`}>구성원</Link>}
         </div>
         <div><h2 className="font-semibold">견적서·단가표와 주문</h2>
           {account.documents.length ? <ul className="mt-2 space-y-2">{account.documents.map(document => <li key={document.href}>

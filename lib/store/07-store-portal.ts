@@ -5,16 +5,20 @@ import { supabaseRequest } from "../store";
 import { isFeatureEnabled } from "../feature-flags";
 import { issueStoreLinkToken } from "../pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "./07-store-member-feature";
+import { isStoreAddressCompanyEnabled } from "./07-store-address-management";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 
-type Membership = { company_id: string; store_account_id: string; store_accounts: { customer_id: string } | null };
+type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
 type StoreLink = { id: string; token_nonce: string; token_hash: string; document_version_id: string; expires_at: string; can_order: boolean };
-type DocumentVersion = { id: string; content: { kind: "sheet" | "quote"; title: string; validUntil: string } };
+type DocumentVersion = { id: string; content: { kind: "sheet" | "quote"; title: string; validUntil: string; showPrice: boolean } };
 
 export type StorePortalAccount = {
   companyId: string;
   storeAccountId: string;
   customerName: string;
+  hasCostAccess: boolean;
+  canManageMembers: boolean;
+  canManageAddress: boolean;
   documents: Array<{ title: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string }>;
 };
 
@@ -33,7 +37,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
   if (!session) return null;
   if (!(await hasActiveStoreMembership(session.authUserId))) return [];
   const memberships = await supabaseRequest<Membership[]>(
-    `store_account_members?select=company_id,store_account_id,store_accounts!inner(customer_id)` +
+    `store_account_members?select=company_id,store_account_id,role,store_accounts!inner(customer_id)` +
     `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active` +
     `&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );
@@ -60,10 +64,13 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
       const token = issueStoreLinkToken(link.id, link.token_nonce);
       if (token.hash !== link.token_hash) return [];
       return [{ title: content.title, kind: content.kind, href: `/store#${token.token}`,
-        canOrder: link.can_order && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
+        canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
         validUntil: content.validUntil }];
     });
+    const canManage = row.role === "owner" || row.role === "manager";
     return { companyId: row.company_id, storeAccountId: row.store_account_id,
-      customerName: customers[0]?.customer_name || "이름 없는 매장", documents };
+      customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
+      hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,
+      canManageAddress: canManage && isStoreAddressCompanyEnabled(row.company_id) };
   }));
 }

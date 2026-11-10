@@ -14,6 +14,7 @@ vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
 vi.mock("../lib/store/08-store-cost-access", () => ({ hasActiveStoreMembership: mocks.active }));
 vi.mock("../lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
+vi.mock("../lib/store/07-store-address-management", () => ({ isStoreAddressCompanyEnabled: () => true }));
 vi.mock("../lib/feature-flags", () => ({ isFeatureEnabled: mocks.feature }));
 import { hasAllowedStorePortalMembership, listStorePortalAccounts } from "../lib/store/07-store-portal";
 import { GET as startKakao } from "../app/api/auth/kakao/start/route";
@@ -30,11 +31,11 @@ beforeEach(() => {
   mocks.session.mockResolvedValue({ authUserId: "verified-user" });
   mocks.active.mockResolvedValue(true); mocks.allowed.mockReturnValue(true); mocks.feature.mockReturnValue(true);
   mocks.db.mockImplementation(async (path: string) => {
-    if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, store_accounts: { customer_id: customerId } }];
+    if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, role: "owner", store_accounts: { customer_id: customerId } }];
     if (path.startsWith("normalized_customers?")) return [{ customer_name: "합성 매장" }];
     if (path.startsWith("storefront_links?")) return [{ id: linkId, token_nonce: nonce,
       token_hash: issueStoreLinkToken(linkId, nonce).hash, document_version_id: versionId, expires_at: "2099-01-01", can_order: true }];
-    if (path.startsWith("pricing_document_versions?")) return [{ id: versionId, content: { kind: "sheet", title: "합성 단가표", validUntil: "2099-01-01" } }];
+    if (path.startsWith("pricing_document_versions?")) return [{ id: versionId, content: { kind: "sheet", title: "합성 단가표", validUntil: "2099-01-01", showPrice: true } }];
     return [];
   });
 });
@@ -49,7 +50,8 @@ describe("store portal", () => {
 
   it("shows only the signed member's active company and a matching issued link", async () => {
     const accounts = await listStorePortalAccounts();
-    expect(accounts).toEqual([{ companyId, storeAccountId, customerName: "합성 매장", documents: [{
+    expect(accounts).toEqual([{ companyId, storeAccountId, customerName: "합성 매장", hasCostAccess: true,
+      canManageMembers: true, canManageAddress: true, documents: [{
       title: "합성 단가표", kind: "sheet", href: `/store#${issueStoreLinkToken(linkId, nonce).token}`,
       canOrder: true, validUntil: "2099-01-01" }] }]);
     expect(mocks.db.mock.calls[0][0]).toContain("auth_user_id=eq.verified-user");
@@ -62,13 +64,13 @@ describe("store portal", () => {
     expect(await listStorePortalAccounts()).toEqual([]);
     expect(mocks.db).toHaveBeenCalledTimes(1);
     mocks.allowed.mockReturnValue(true); mocks.db.mockImplementation(async (path: string) => {
-      if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, store_accounts: { customer_id: customerId } }];
+      if (path.startsWith("store_account_members?")) return [{ company_id: companyId, store_account_id: storeAccountId, role: "staff", store_accounts: { customer_id: customerId } }];
       if (path.startsWith("normalized_customers?")) return [{ customer_name: "합성 매장" }];
       if (path.startsWith("storefront_links?")) return [{ id: linkId, token_nonce: nonce, token_hash: "0".repeat(64), document_version_id: versionId, expires_at: "2099-01-01", can_order: true }];
       if (path.startsWith("pricing_document_versions?")) return [{ id: versionId, content: { kind: "sheet", title: "합성", validUntil: "2099-01-01" } }];
       return [];
     });
-    expect((await listStorePortalAccounts())?.[0].documents).toEqual([]);
+    expect((await listStorePortalAccounts())?.[0]).toMatchObject({ documents: [], canManageMembers: false, canManageAddress: false });
   });
 
   it("does not issue a generic store session to a member of a disabled company", async () => {
