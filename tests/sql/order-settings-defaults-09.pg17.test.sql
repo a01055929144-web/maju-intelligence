@@ -9,6 +9,9 @@ create temporary table defaults_original as
  select oid,proacl,md5(pg_get_functiondef(oid)) definition_hash from pg_proc
  where oid in ('public.place_store_order(text,date,jsonb,uuid,uuid,integer,text)'::regprocedure,
  'public.place_store_member_order(text,date,jsonb,uuid,uuid,integer,text,uuid,uuid,uuid)'::regprocedure);
+select oid::regprocedure as original_signature,
+ encode(sha256(convert_to(pg_get_functiondef(oid),'UTF8')),'hex') as isolated_original_definition_sha256
+from pg_proc where oid in (select oid from defaults_original);
 \ir ../../docs/sql-drafts/20261110-09-order-settings-defaults.sql
 begin;
 delete from store_order_settings where company_id='00000000-0000-4000-8000-000000000001';
