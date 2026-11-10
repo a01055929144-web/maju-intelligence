@@ -21,8 +21,8 @@ export function PendingOrderInbox({companyId}:{companyId:string}) {
   const [dates,setDates]=useState<Record<string,string>>({});
   const retry=useRef<Record<string,{date:string;key:string}>>({});
   const load=useCallback(async()=>{
-    const response=await fetch(`/api/pricing-pending-orders?${new URLSearchParams({companyId,page:String(page)})}`,{cache:"no-store"});
-    const body:Result=await response.json(); if(!response.ok)throw new Error(body.message||"대기 주문을 다시 조회해 주세요."); setResult(body);
+    const response=await fetch(`/api/pricing-pending-orders?${new URLSearchParams({companyId,page:String(page)})}`,{cache:"no-store"}).catch(()=>{throw new Error("대기 주문을 불러오지 못했습니다. 다시 조회해 주세요.");});
+    const body:Result|null=await response.json().catch(()=>null); if(!response.ok||!body)throw new Error(body?.message||"대기 주문을 다시 조회해 주세요."); setResult(body);
   },[companyId,page]);
   useEffect(()=>{setResult(null);void load().catch(c=>setMessage(c instanceof Error?c.message:"다시 조회해 주세요."));},[load]);
   async function confirm(item:Item,action:"confirm"|"cancel"="confirm") {
@@ -32,8 +32,8 @@ export function PendingOrderInbox({companyId}:{companyId:string}) {
     const previous=retry.current[item.id];
     const marker=action+":"+(date||"");const key=previous?.date===marker?previous.key:crypto.randomUUID();retry.current[item.id]={date:marker,key};
     try {
-      const response=await fetch("/api/pricing-pending-orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderId:item.id,expectedRevision:item.revision,deliveryDate:date,requestId:key,action})});
-      const body=await response.json();if(!response.ok)throw new Error(body.message||"결과를 확인하지 못했습니다.");
+      const response=await fetch("/api/pricing-pending-orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderId:item.id,expectedRevision:item.revision,deliveryDate:date,requestId:key,action})}).catch(()=>{throw new Error("처리 결과를 확인하지 못했습니다. 같은 요청으로 다시 시도하거나 목록을 조회해 주세요.");});
+      const body=await response.json().catch(()=>null);if(!response.ok||!body?.result)throw new Error(body?.message||"결과를 확인하지 못했습니다. 같은 요청으로 다시 시도하거나 목록을 조회해 주세요.");
       delete retry.current[item.id];const completed=action==="confirm"?`배송일을 ${date}로 확정했습니다.`:"주문을 취소했습니다. 행사 예약 대상에서 제외됐습니다.";setMessage(completed);
       try{await load();}catch{setMessage(`${completed} 목록을 다시 조회해 주세요.`);}
     }catch(c){setMessage(c instanceof Error?c.message:"결과를 확인하지 못했습니다.");}finally{setBusy(false);}
