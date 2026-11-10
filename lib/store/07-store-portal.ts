@@ -25,7 +25,7 @@ export type StorePortalAccount = {
 export async function hasAllowedStorePortalMembership(authUserId: string) {
   if (!(await hasActiveStoreMembership(authUserId))) return false;
   const rows = await supabaseRequest<Array<{ company_id: string }>>(
-    `store_account_members?select=company_id,store_accounts!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
+    `store_account_members?select=company_id,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
     `&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );
   return rows.some(row => isStoreMemberCompanyAllowlisted(row.company_id));
@@ -37,7 +37,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
   if (!session) return null;
   if (!(await hasActiveStoreMembership(session.authUserId))) return [];
   const memberships = await supabaseRequest<Membership[]>(
-    `store_account_members?select=company_id,store_account_id,role,store_accounts!inner(customer_id)` +
+    `store_account_members?select=company_id,store_account_id,role,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(customer_id)` +
     `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active` +
     `&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );

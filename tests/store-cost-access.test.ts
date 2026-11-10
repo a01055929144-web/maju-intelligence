@@ -25,7 +25,7 @@ describe("store cost membership boundary", () => {
       `app_users?select=id&id=eq.${authUserId}&status=eq.active&limit=1`
     );
     expect(mocks.db).toHaveBeenNthCalledWith(2,
-      `store_account_members?select=id,role,status,store_accounts!inner(id)&company_id=eq.${companyId}&store_account_id=eq.${storeAccountId}&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`
+      `store_account_members?select=id,role,status,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&company_id=eq.${companyId}&store_account_id=eq.${storeAccountId}&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`
     );
   });
 
@@ -90,7 +90,7 @@ describe("store Kakao identity resolution", () => {
     await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(true);
     await expect(hasActiveStoreMembership(authUserId)).resolves.toBe(false);
     expect(mocks.db).toHaveBeenNthCalledWith(2,
-      `store_account_members?select=id,store_accounts!inner(id)&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`);
+      `store_account_members?select=id,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&auth_user_id=eq.${authUserId}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`);
   });
 
   it("rejects login when every membership belongs to a suspended, closed or inactive account", async () => {
