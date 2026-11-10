@@ -267,7 +267,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
         <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
       </section>}
       {!pricesReady ? retryLoad : null}
-      {deliveryReady && <p role="status">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}
+      {deliveryReady && <p aria-live="polite">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}
       <label className="block text-sm">배송일
         <input disabled={busy||!deliveryReady} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
           min={store.nextDeliveryDate || undefined}
