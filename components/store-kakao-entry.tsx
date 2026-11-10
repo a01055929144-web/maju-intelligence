@@ -128,10 +128,10 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
   }
   return <Card>
     <CardHeader><CardTitle>점주 계정 시작</CardTitle><p className="text-sm">담당자에게 받은 개통 링크에서 점주 본인이 동의하고 카카오 인증을 진행합니다.</p></CardHeader>
-    <CardContent className="space-y-4">
+    <CardContent className="min-w-0 space-y-4">
       {!enabled && <p role="status">점주 개통은 아직 준비 중입니다. 담당자의 안내 후 원래 개통 링크를 다시 열어 주세요.</p>}
       {error && <p role="alert">{error}</p>}
-      {profileStep && ready && <fieldset className="space-y-3" disabled={!enabled || busy}>
+      {profileStep && ready && <fieldset className="min-w-0 space-y-3" disabled={!enabled || busy}>
         <legend className="font-medium">매장 정보</legend>
         {testMode ? <p className="text-sm">시험 매장 정보가 채워져 있습니다. 사업자번호는 서버에 지정된 시험번호를 사용합니다. 실제 개인정보를 입력하지 마세요.</p> : null}
         <p className="text-sm">카카오 계정 인증을 마쳤습니다. 이메일·닉네임은 다시 입력하지 않습니다. 사업자·배송에 필요한 매장 정보만 확인해 주세요. 카카오에서 받은 연락처는 미리 채우며 매장 연락처로 바꿀 수 있습니다.</p>
