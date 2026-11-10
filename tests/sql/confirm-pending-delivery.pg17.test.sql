@@ -17,7 +17,7 @@ create function synthetic_resolution_audit_failure() returns trigger language pl
 end $$;
 create trigger synthetic_resolution_audit_failure before insert on store_order_delivery_resolutions_09 for each row execute function synthetic_resolution_audit_failure();
 set role service_role;
-do $$ declare c record; r jsonb; retried jsonb; k uuid:=gen_random_uuid(); day date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1; cancelled uuid; reserved numeric; begin
+do $$ declare c record; r jsonb; retried jsonb; k uuid:=gen_random_uuid(); day date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1; cancelled uuid; reserved numeric; test_territory uuid; holiday uuid; begin
   select * into strict c from confirm_case;
   begin
     perform resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day-2,'confirm');
@@ -62,6 +62,28 @@ do $$ declare c record; r jsonb; retried jsonb; k uuid:=gen_random_uuid(); day d
     raise exception 'configured_schedule_ignored';
   exception when raise_exception then if sqlerrm<>'pending_confirmation_date_unavailable' then raise; end if; end;
   delete from store_order_settings where company_id=c.company_id;
+  begin
+    perform resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day,'confirm');
+    raise exception 'customer_only_schedule_ignored';
+  exception when raise_exception then if sqlerrm<>'pending_confirmation_date_unavailable' then raise; end if; end;
+  update store_order_customer_rules set delivery_weekdays=null where company_id=c.company_id and customer_id=(select customer_id from store_orders where id=c.id);
+  select id into strict test_territory from delivery_territories where company_id=c.company_id limit 1;
+  update normalized_customers set delivery_territory_id=test_territory where company_id=c.company_id and id=(select customer_id from store_orders where id=c.id);
+  insert into store_order_territory_rules(company_id,territory_id,delivery_weekdays)
+    values(c.company_id,test_territory,array[((extract(dow from day)::int+1)%7)::smallint])
+    on conflict(company_id,territory_id) do update set delivery_weekdays=excluded.delivery_weekdays;
+  begin
+    perform resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day,'confirm');
+    raise exception 'territory_only_schedule_ignored';
+  exception when raise_exception then if sqlerrm<>'pending_confirmation_date_unavailable' then raise; end if; end;
+  update store_order_territory_rules set delivery_weekdays=array[extract(dow from day)::smallint] where company_id=c.company_id and territory_id=test_territory;
+  insert into store_order_holidays(company_id,territory_id,kind,holiday_date) values(c.company_id,test_territory,'date',day) returning id into holiday;
+  begin
+    perform resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day,'confirm');
+    raise exception 'territory_only_holiday_ignored';
+  exception when raise_exception then if sqlerrm<>'pending_confirmation_date_unavailable' then raise; end if; end;
+  delete from store_order_holidays where id=holiday;
+  update normalized_customers set delivery_territory_id=null where company_id=c.company_id and id=(select customer_id from store_orders where id=c.id);
   r:=resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,k,c.revision,day,'confirm');
   retried:=resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,k,c.revision,day,'confirm');
   if r is distinct from retried or not exists(select 1 from store_orders where id=c.id and company_id=c.company_id and delivery_date=day and delivery_confirmation='scheduled' and revision=c.revision+1 and known_total=c.known_total and status='submitted')

@@ -19,7 +19,7 @@ create function public.resolve_pending_order_delivery_09(
   p_request_id uuid,p_expected_revision integer,p_delivery_date date,p_action text
 ) returns jsonb language plpgsql security invoker set search_path=public,pg_temp as $$
 declare o public.store_orders%rowtype; previous public.store_order_delivery_resolutions_09%rowtype;
-  weekdays smallint[]; days smallint; cutoff time; territory uuid; company_configured boolean;
+  weekdays smallint[]; days smallint; cutoff time; territory uuid;
 begin
   perform 1 from public.company_members m join public.app_users u on u.id=m.user_id
     where m.company_id=p_company_id and m.id=p_actor_member_id and m.user_id=p_actor_user_id and u.status='active'
@@ -42,17 +42,16 @@ begin
   if p_delivery_date<(clock_timestamp() at time zone 'Asia/Seoul')::date
     or p_delivery_date>(clock_timestamp() at time zone 'Asia/Seoul')::date+366 then raise exception 'pending_confirmation_date_invalid'; end if;
   select delivery_territory_id into territory from public.normalized_customers where company_id=p_company_id and id=o.customer_id;
-  select exists(select 1 from public.store_order_settings where company_id=p_company_id) into company_configured;
   select coalesce(c.delivery_weekdays,t.delivery_weekdays),coalesce(c.cutoff_days_before,t.cutoff_days_before,s.cutoff_days_before),
     coalesce(c.cutoff_time,t.cutoff_time,s.cutoff_time) into weekdays,days,cutoff
     from (select 1) seed left join public.store_order_customer_rules c on c.company_id=p_company_id and c.customer_id=o.customer_id
     left join public.store_order_territory_rules t on t.company_id=p_company_id and t.territory_id=territory
     left join public.store_order_settings s on s.company_id=p_company_id;
-  if company_configured and weekdays is not null and (not extract(dow from p_delivery_date)::smallint=any(weekdays)
-    or (clock_timestamp() at time zone 'Asia/Seoul')>=(p_delivery_date-days)::timestamp+cutoff
+  if (weekdays is not null and not extract(dow from p_delivery_date)::smallint=any(weekdays))
+    or (days is not null and cutoff is not null and (clock_timestamp() at time zone 'Asia/Seoul')>=(p_delivery_date-days)::timestamp+cutoff)
     or exists(select 1 from public.store_order_holidays h where h.company_id=p_company_id and (h.territory_id is null or h.territory_id=territory)
       and ((h.kind='weekly' and h.weekday=extract(dow from p_delivery_date)) or (h.kind='fixed' and h.month=extract(month from p_delivery_date) and h.day=extract(day from p_delivery_date))
-        or (h.kind='date' and h.holiday_date=p_delivery_date)))) then raise exception 'pending_confirmation_date_unavailable'; end if;
+        or (h.kind='date' and h.holiday_date=p_delivery_date))) then raise exception 'pending_confirmation_date_unavailable'; end if;
   update public.store_orders set delivery_date=p_delivery_date,delivery_confirmation='scheduled',revision=revision+1,updated_at=clock_timestamp()
     where company_id=p_company_id and id=o.id returning * into o;
   else
