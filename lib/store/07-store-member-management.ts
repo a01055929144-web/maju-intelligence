@@ -54,7 +54,7 @@ export async function getPreparedStoreMemberInvitation(token: string): Promise<P
   if (!INVITE_TOKEN.test(token)) return null;
   const invitedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const rows = await supabaseRequest<Array<{ company_id: string; id: string; role: string; store_account_id: string }>>(
-    `store_account_members?select=id,company_id,store_account_id,role,store_accounts!inner(id)&invite_token_hash=eq.${hashToken(token)}&status=eq.invited&invited_at=gt.${encodeURIComponent(invitedAfter)}&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
+    `store_account_members?select=id,company_id,store_account_id,role,store_accounts!inner(id)&invite_token_hash=eq.${hashToken(token)}&status=eq.invited&invited_at=gt.${encodeURIComponent(invitedAfter)}&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`
   );
   const row = rows[0];
   if (!row || (row.role !== "manager" && row.role !== "staff")) return null;

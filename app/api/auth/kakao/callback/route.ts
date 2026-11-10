@@ -9,6 +9,7 @@ import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08
 import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
   resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
+import { findSingleActiveStoreAccount } from "@/lib/store/07-store-member-context";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,10 @@ export async function GET(request: NextRequest) {
       });
       if (!authUserId) return redirectStore(request.url, "store_activation_required");
       if (proof.stage === "kakao" && proof.returnTo && activation.publicOnboarding && publicStoreOwnerOnboardingEnabled(activation.companyId)) {
+        if (await findSingleActiveStoreAccount(activation.companyId, authUserId)) {
+          if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+          return NextResponse.redirect(new URL(proof.returnTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#"), request.url));
+        }
         if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token,
           storePhone: kakaoUser.kakao_account?.phone_number })))
           return redirectStore(request.url, "store_activation_required");

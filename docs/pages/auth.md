@@ -76,3 +76,12 @@ PASS (`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test -- --run`)
 
 ## KNOWN ISSUES
 없음.
+
+## 2026-11-10 매장 점주 재진입
+
+- Owner Domain: organization. Related Domain: pricing (공개 문서 복귀 경로).
+- 이번 오류 수정의 허용 파일: `app/api/auth/kakao/callback/route.ts`, `app/api/address-search/route.ts`, `app/api/store/accounts/activate/route.ts`, `components/store-kakao-entry.tsx`, `components/public-pricing-document.tsx`, `lib/store/07-store-member-context.ts`, `tests/store-member-context.test.ts`, `tests/store-kakao-session-boundary.test.ts`, `tests/store-address-search.test.ts`, `tests/e2e/store-kakao-entry.spec.ts`.
+- 운영 읽기 확인: 해당 매장 점주 개통과 활성 구성원은 생성됐지만 주문은 0건이었다. 세션이 없는 재방문에서 공개 문서는 다시 개통 요청을 만들었다.
+- 카카오 인증 후 같은 회사의 활성 매장 구성원이 정확히 한 곳이면 기존 세션을 발급하고 문서로 복귀한다. 여러 매장 또는 비활성 구성원은 자동 선택하지 않는다. 운영 데이터 변경은 없다.
+- 개통 화면은 카카오 주소 검색 결과를 선택하게 하고 상세주소를 별도로 필수 입력한다. 배송 권역은 선택한 카카오 주소로 판정하고, 현재 DB의 단일 주소 칸에는 상세주소를 이어 저장한다. 개통 뒤에는 공유 문서의 주문 연결을 자동으로 다시 시도한다.
+- 사업자번호 없는 개업 준비 매장 지원은 현행 `store_accounts` 제약·개통 RPC·회원 주문 RPC가 모두 사업자 정상 상태를 요구하므로 별도 SQL·코드 작업이 필요하다. 임시 사업자번호를 생성하지 않는다. `docs/work-orders/db-approval/20261110-preopening-store.md` 참조.

@@ -67,6 +67,21 @@ export async function completePublicStoreOwnerProfile(input: {
   });
 }
 
+export function publicPreopeningStoreEnabled(companyId: string) {
+  return process.env.STORE_PREOPENING_ENABLED === "true" &&
+    (process.env.FEATURE_PREOPENING_COMPANY_IDS || "").split(",").map(value => value.trim()).includes(companyId);
+}
+
+export async function activatePreopeningStoreOwner(input: {
+  authUserId: string; deliveryTerritoryId?: string; termsAcceptedAt: string; token: string;
+}) {
+  return supabaseRequest<{ companyId: string; storeAccountId: string }>("rpc/activate_preopening_store_owner_v1", {
+    method: "POST", body: JSON.stringify({ p_auth_user_id: input.authUserId,
+      p_delivery_territory_id: input.deliveryTerritoryId || null, p_invite_token_hash: hashToken(input.token),
+      p_terms_accepted_at: input.termsAcceptedAt, p_terms_version: STORE_TERMS_VERSION })
+  });
+}
+
 export type PreparedStoreOwnerActivation = {
   companyId: string;
   customerId: string | null;
@@ -111,7 +126,7 @@ export async function getPreparedStoreOwnerActivation(token: string): Promise<Pr
   ) : [];
   const businessRegistrationNumber = (request.business_registration_number || customers[0]?.business_registration_number || "").replace(/\D/g, "");
   const profileRequired = !request.customer_id && !request.store_name;
-  return profileRequired || businessRegistrationNumber.length === 10 ? { companyId: request.company_id, customerId: request.customer_id,
+  return profileRequired || businessRegistrationNumber.length === 10 || (!request.customer_id && publicPreopeningStoreEnabled(request.company_id)) ? { companyId: request.company_id, customerId: request.customer_id,
     storeAccountId: request.store_account_id, businessRegistrationNumber, profileRequired,
     publicOnboarding: !request.customer_id && Boolean(request.document_id) } : null;
 }

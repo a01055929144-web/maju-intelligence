@@ -17,7 +17,8 @@ export function PublicPricingDocument() {
   const [orderMessage, setOrderMessage] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
   const sequence = useRef(0);
-  async function startOrder() {
+  const continuedOrder = useRef(false);
+  const startOrder = useCallback(async () => {
     if (!acceptance || !orderEntry?.available || orderBusy) return;
     const current = sequence.current, token = acceptance.token;
     setOrderBusy(true); setOrderMessage("");
@@ -39,7 +40,7 @@ export function PublicPricingDocument() {
     } catch (error) {
       if (sequence.current === current) setOrderMessage(error instanceof Error ? error.message : "가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
     } finally { setOrderBusy(false); }
-  }
+  }, [acceptance, orderEntry, orderBusy]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
     setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setBusy(true); setMessage("문서를 확인하고 있습니다.");
@@ -61,6 +62,12 @@ export function PublicPricingDocument() {
     window.addEventListener("hashchange", load); window.addEventListener("pageshow", restore);
     return () => { ++sequence.current; window.removeEventListener("hashchange", load); window.removeEventListener("pageshow", restore); };
   }, [load]);
+  useEffect(() => {
+    if (!acceptance || !orderEntry?.available || continuedOrder.current || new URLSearchParams(window.location.search).get("continueOrder") !== "1") return;
+    continuedOrder.current = true;
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    void startOrder();
+  }, [acceptance, orderEntry, startOrder]);
   useEffect(() => {
     if (!document) return;
     const hardCutoff = Date.parse(expiresAt), priceCutoff = document.expired ? Infinity : Date.parse(`${document.validUntil}T15:00:00Z`);

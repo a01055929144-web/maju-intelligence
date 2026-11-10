@@ -6,13 +6,14 @@ vi.mock("server-only", () => ({}));
 
 afterEach(() => vi.unstubAllEnvs());
 
-const routeMocks = vi.hoisted(() => ({ activate: vi.fn(), business: vi.fn(), complete: vi.fn(), consume: vi.fn(),
+const routeMocks = vi.hoisted(() => ({ activate: vi.fn(), preopening: vi.fn(), business: vi.fn(), complete: vi.fn(), consume: vi.fn(),
   getProof: vi.fn(), prepared: vi.fn(), session: vi.fn(), testOrdering: vi.fn(), delivery: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getStoreOwnerActivationProof: routeMocks.getProof, setPublicStoreOwnerKakaoProof: vi.fn(),
   setStoreOwnerActivationProof: vi.fn(), setStoreSession: routeMocks.session, storeMemberSessionEnabled: () => true }));
-vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: routeMocks.activate,
+vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ activateStoreOwner: routeMocks.activate, activatePreopeningStoreOwner: routeMocks.preopening,
   completePublicStoreOwnerProfile: routeMocks.complete, getPreparedStoreOwnerActivation: routeMocks.prepared,
-  preparePublicStoreOwnerActivation: vi.fn(), publicStoreOwnerOnboardingEnabled: () => true, STORE_TERMS_VERSION: "2026-11-07",
+  preparePublicStoreOwnerActivation: vi.fn(), publicStoreOwnerOnboardingEnabled: () => true,
+  publicPreopeningStoreEnabled: () => process.env.STORE_PREOPENING_ENABLED === "true", STORE_TERMS_VERSION: "2026-11-07",
   verifyPublicStoreOwnerOnboardingIntent: vi.fn() }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: () => true }));
 vi.mock("@/lib/business-status", () => ({ checkBusinessRegistrationStatusesWithHealth: routeMocks.business }));
@@ -62,6 +63,7 @@ describe("store Kakao session route boundary", () => {
     const activate = source("app/api/store/accounts/activate/route.ts");
     const callback = source("app/api/auth/kakao/callback/route.ts");
     expect(callback).toContain("setPublicStoreOwnerProfileProof");
+    expect(callback).toContain("findSingleActiveStoreAccount(activation.companyId, authUserId)");
     expect(callback).toContain('new URL("/store/activate?profile=1", request.url)');
     expect(activate).toContain('proof.stage !== "profile"');
     expect(activate).toContain("completePublicStoreOwnerProfile");
@@ -69,7 +71,7 @@ describe("store Kakao session route boundary", () => {
     expect(activate.indexOf("activateStoreOwner({")).toBeLessThan(activate.indexOf("setStoreSession(proof.authUserId)"));
     expect(activate.indexOf("const proof = await getStoreOwnerActivationProof();")).toBeLessThan(activate.indexOf("await completePublicStoreOwnerProfile"));
     expect(activate.indexOf("setStoreSession(proof.authUserId)")).toBeLessThan(activate.indexOf("getStoreOwnerActivationProof({ consume: true })"));
-    expect(callback.indexOf("setPublicStoreOwnerProfileProof")).toBeLessThan(callback.indexOf("setStoreSession(authUserId)"));
+    expect(callback.indexOf("if (await findSingleActiveStoreAccount(activation.companyId, authUserId))")).toBeLessThan(callback.indexOf("if (!(await setPublicStoreOwnerProfileProof"));
   });
 
   it("clears the store cookie through the existing logout and never elevates a public order token", () => {
@@ -96,7 +98,7 @@ describe("Kakao-first profile retry", () => {
     });
     routeMocks.prepared.mockResolvedValue({ businessRegistrationNumber: "", companyId: "10000000-0000-4000-8000-000000000001",
       customerId: null, profileRequired: true, publicOnboarding: true, storeAccountId: "20000000-0000-4000-8000-000000000001" });
-    routeMocks.complete.mockResolvedValue({}); routeMocks.activate.mockResolvedValue({}); routeMocks.session.mockResolvedValue(true);
+    routeMocks.complete.mockResolvedValue({}); routeMocks.activate.mockResolvedValue({}); routeMocks.preopening.mockResolvedValue({ storeAccountId: "preopening-store" }); routeMocks.session.mockResolvedValue(true);
   });
 
   it("uses the exact isolated-preview synthetic verification while retaining profile, terms and activation", async () => {
@@ -104,7 +106,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.activate.mockResolvedValueOnce({ storeAccountId: "synthetic-store" });
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", businessRegistrationNumber: "",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", addressDetail: "1층", businessRegistrationNumber: "",
         phone: "0".repeat(11), representativeName: "합성 대표", storeName: "시험 전용 매장" } }) }) as never);
     expect(response.status).toBe(200); expect(routeMocks.business).not.toHaveBeenCalled();
     expect(routeMocks.complete).toHaveBeenCalledOnce();
@@ -112,6 +114,38 @@ describe("Kakao-first profile retry", () => {
       verificationRequestId: expect.stringMatching(/^test-only:/), authUserId: expect.any(String) }));
     expect(routeMocks.session).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
     expect(routeMocks.testOrdering).toHaveBeenCalledWith(company, "synthetic-store");
+  }, 15_000);
+
+  it("requires a separate delivery detail before any profile or business lookup", async () => {
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울시 강남구 테헤란로 1",
+        businessRegistrationNumber: "1234567890", phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+    expect(response.status).toBe(400);
+    expect(routeMocks.business).not.toHaveBeenCalled();
+    expect(routeMocks.complete).not.toHaveBeenCalled();
+  });
+
+  it("keeps numberless onboarding OFF until the company flag and SQL are ready", async () => {
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울시 강남구 테헤란로 1", addressDetail: "1층",
+        businessRegistrationNumber: "", phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ code: "preopening_unavailable" });
+    expect(routeMocks.complete).not.toHaveBeenCalled(); expect(routeMocks.preopening).not.toHaveBeenCalled();
+  });
+
+  it("routes a company-enabled numberless owner through pending registration without a tax-status lookup", async () => {
+    vi.stubEnv("STORE_PREOPENING_ENABLED", "true");
+    const { POST } = await import("../app/api/store/accounts/activate/route");
+    const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울시 강남구 테헤란로 1", addressDetail: "1층",
+        businessRegistrationNumber: "", phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+    expect(response.status).toBe(200);
+    expect(routeMocks.business).not.toHaveBeenCalled(); expect(routeMocks.activate).not.toHaveBeenCalled();
+    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ address: "서울시 강남구 테헤란로 1 1층", businessRegistrationNumber: "" }));
+    expect(routeMocks.preopening).toHaveBeenCalledWith(expect.objectContaining({ authUserId: expect.any(String) }));
   });
 
   it("passes only the server-resolved territory to atomic activation, ignoring client scope claims", async () => {
@@ -120,7 +154,7 @@ describe("Kakao-first profile retry", () => {
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       body: JSON.stringify({ termsAccepted: true, deliveryTerritoryId: "client-territory", companyId: "client-company",
-        store: { address: "synthetic address", businessRegistrationNumber: "1234567890", phone: "0".repeat(11),
+        store: { address: "synthetic address", addressDetail: "suite 1", businessRegistrationNumber: "1234567890", phone: "0".repeat(11),
           representativeName: "synthetic", storeName: "synthetic" } }) }) as never);
     expect(response.status).toBe(200);
     expect(routeMocks.delivery).toHaveBeenCalledWith("10000000-0000-4000-8000-000000000001", "synthetic address");
@@ -134,7 +168,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.delivery.mockRejectedValueOnce(new PublicOwnerDeliveryUnavailable());
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-      body: JSON.stringify({ termsAccepted: true, store: { address: "unmatched address", businessRegistrationNumber: "1234567890",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "unmatched address", addressDetail: "suite 1", businessRegistrationNumber: "1234567890",
         phone: "0".repeat(11), representativeName: "synthetic", storeName: "synthetic" } }) }) as never);
     expect(response.status).toBe(422); expect(await response.json()).toEqual({ code: "delivery_area_unavailable" });
     expect(routeMocks.complete).not.toHaveBeenCalled(); expect(routeMocks.activate).not.toHaveBeenCalled();
@@ -147,7 +181,7 @@ describe("Kakao-first profile retry", () => {
     if (scenario === "other_company") vi.stubEnv("STORE_PUBLIC_TEST_COMPANY_ID", "20000000-0000-4000-8000-000000000001");
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", businessRegistrationNumber: scenario === "wrong_number" ? "7".repeat(10) : number,
+      body: JSON.stringify({ termsAccepted: true, store: { address: "합성 주소", addressDetail: "1층", businessRegistrationNumber: scenario === "wrong_number" ? "7".repeat(10) : number,
         phone: "0".repeat(11), representativeName: "합성 대표", storeName: "시험 매장" } }) }) as never);
     expect([404, 410, 422]).toContain(response.status);
     expect(routeMocks.business).not.toHaveBeenCalled(); expect(routeMocks.complete).not.toHaveBeenCalled();
@@ -158,7 +192,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.business.mockResolvedValueOnce({ failedNumbers: new Set(["1234567890"]), results: new Map() })
       .mockResolvedValueOnce({ failedNumbers: new Set(), results: new Map([["6234567890", { label: "정상" }]]) });
     const { POST } = await import("../app/api/store/accounts/activate/route");
-    const body = { store: { address: "서울", businessRegistrationNumber: "1234567890", phone: "01012345678",
+    const body = { store: { address: "서울", addressDetail: "1층", businessRegistrationNumber: "1234567890", phone: "01012345678",
       representativeName: "대표", storeName: "매장" }, termsAccepted: true };
     const first = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify(body) }) as never);
@@ -181,7 +215,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.complete.mockRejectedValueOnce(new Error("Supabase request failed: 400 public_store_retry_mismatch PRIVATE-CANARY"));
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", addressDetail: "1층", businessRegistrationNumber: "1234567890",
         phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ code: "profile_retry_mismatch" });
@@ -193,7 +227,7 @@ describe("Kakao-first profile retry", () => {
     routeMocks.prepared.mockResolvedValueOnce(null);
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+      body: JSON.stringify({ termsAccepted: true, store: { address: "서울", addressDetail: "1층", businessRegistrationNumber: "1234567890",
         phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
     expect(response.status).toBe(410);
     expect(routeMocks.business).not.toHaveBeenCalled(); expect(routeMocks.complete).not.toHaveBeenCalled();
@@ -209,7 +243,7 @@ describe("Kakao-first profile retry", () => {
       else routeMocks.complete.mockRejectedValueOnce(failure);
       const { POST } = await import("../app/api/store/accounts/activate/route");
       const submit = () => POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
-        body: JSON.stringify({ termsAccepted: true, store: { address: "서울", businessRegistrationNumber: "1234567890",
+        body: JSON.stringify({ termsAccepted: true, store: { address: "서울", addressDetail: "1층", businessRegistrationNumber: "1234567890",
           phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
       const first = await submit();
       expect(first.status).toBe(503); expect(await first.text()).not.toContain("PRIVATE-CANARY");

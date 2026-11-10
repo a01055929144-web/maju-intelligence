@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       if (!orderMember) {
         memberLogin = { enabled: false, message: "이 매장의 구성원 로그인 주소를 확인할 수 없습니다. 담당자에게 매장 계정 상태를 확인해 주세요." };
         try {
-          const accounts = await supabaseRequest<Array<{ id: string }>>(`store_accounts?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${encodeURIComponent(store.customerId)}&status=eq.active&business_status=eq.active&select=id&limit=1`);
+          const accounts = await supabaseRequest<Array<{ id: string }>>(`store_accounts?company_id=eq.${encodeURIComponent(store.companyId)}&customer_id=eq.${encodeURIComponent(store.customerId)}&status=eq.active&business_status=in.(active,registration_pending)&select=id&limit=1`);
           if (accounts[0] && isId(accounts[0].id)) memberLogin = { enabled: true, companyId: store.companyId, storeAccountId: accounts[0].id };
         } catch { memberLogin = { enabled: false, message: "매장 로그인 정보를 불러오지 못했습니다. 로그인 상태를 다시 확인하거나 담당자에게 문의해 주세요." }; }
       }
