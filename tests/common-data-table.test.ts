@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMMON_TABLE_PAGE_SIZES, normalizeColumnState } from "../lib/common-data-table";
+import { COMMON_TABLE_PAGE_SIZES, normalizeColumnState, setColumnWidth } from "../lib/common-data-table";
 
 const columns = [
   { key: "code", label: "코드", value: (row: { code: string }) => row.code },
@@ -12,6 +12,19 @@ describe("common data table contract", () => {
       { key: "name", hidden: false, pinned: true },
       { key: "code", hidden: false, pinned: false },
     ]);
+  });
+
+  it("saves a column width within limits and drops broken saved widths", () => {
+    const base = normalizeColumnState(columns);
+    expect(setColumnWidth(base, "code", 5000)[0].width).toBe(640);
+    expect(setColumnWidth(base, "code", 10)[0].width).toBe(80);
+    expect(setColumnWidth(base, "code", 200.4)[1].width).toBeUndefined();
+    const saved = [{ key: "code", hidden: false, pinned: false, width: Number.NaN }, { key: "name", hidden: false, pinned: false, width: 222 }];
+    expect(normalizeColumnState(columns, saved).map((item) => item.width)).toEqual([undefined, 222]);
+  });
+
+  it("reset to defaults carries no widths", () => {
+    expect(normalizeColumnState(columns).every((item) => item.width === undefined)).toBe(true);
   });
 
   it("uses the WO-01 list and order page sizes", () => {

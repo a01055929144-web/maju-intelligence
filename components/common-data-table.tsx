@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
-import { COMMON_TABLE_PAGE_SIZES, normalizeColumnState, type CommonColumnState } from "@/lib/common-data-table";
+import { COMMON_TABLE_PAGE_SIZES, normalizeColumnState, setColumnWidth, type CommonColumnState } from "@/lib/common-data-table";
 
 export type CommonTableColumn<Row> = {
   key: string;
@@ -54,9 +54,30 @@ export function CommonDataTable<Row>({
     }
   }, [columns, defaults, storageKey]);
 
+  function persist(next: CommonColumnState[]) {
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* private browsing */ }
+  }
+
   function save(next: CommonColumnState[]) {
     setColumnState(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* private browsing */ }
+    persist(next);
+  }
+
+  /** 머리글 오른쪽 끝을 끌어 너비를 바꾼다. 끄는 동안은 화면만, 놓을 때 저장. */
+  function startResize(event: React.PointerEvent<HTMLElement>, key: string) {
+    event.preventDefault(); event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 160;
+    let latest = columnState;
+    const onMove = (move: PointerEvent) => { latest = setColumnWidth(columnState, key, startWidth + move.clientX - startX); setColumnState(latest); };
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); persist(latest); };
+    window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
+  }
+
+  function resizeByKey(event: React.KeyboardEvent<HTMLElement>, key: string, current: number) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault(); event.stopPropagation();
+    save(setColumnWidth(columnState, key, current + (event.key === "ArrowRight" ? 16 : -16)));
   }
 
   const orderedColumns = columnState.map((state) => ({ ...state, column: columns.find((column) => column.key === state.key)! })).filter((item) => item.column && !item.hidden);
@@ -107,17 +128,17 @@ export function CommonDataTable<Row>({
     </div>
     {editorOpen ? <div className="common-data-table-tools absolute right-3 top-14 z-30 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
       <div className="mb-2 flex items-center justify-between"><b className="text-sm">열 편집</b><button className="text-xs font-bold text-teal-700" onClick={() => save(defaults)} type="button"><RotateCcw className="mr-1 inline h-3 w-3" />기본으로</button></div>
-      <p className="mb-2 text-xs text-slate-500">끌어서 순서를 바꾸세요.</p>
+      <p className="mb-2 text-xs text-slate-500">끌어서 순서를 바꾸세요. 열 너비는 머리글 오른쪽 끝을 끌거나 ←→ 키로 바꿉니다.</p>
       {columnState.map((state) => { const column = columns.find((item) => item.key === state.key)!; return <div className="flex items-center gap-2 border-t border-slate-100 py-2 text-sm" draggable key={state.key} onDragStart={(event) => event.dataTransfer.setData("text/plain", state.key)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => move(event.dataTransfer.getData("text/plain"), state.key)}>
         <span className="cursor-grab text-slate-400">⋮⋮</span><input checked={!state.hidden} onChange={() => save(columnState.map((item) => item.key === state.key ? { ...item, hidden: !item.hidden } : item))} type="checkbox" /><span className="flex-1">{column.label}</span><button aria-label={`${column.label} 고정`} className={state.pinned ? "text-teal-700" : "text-slate-300"} onClick={() => save(columnState.map((item) => item.key === state.key ? { ...item, pinned: !item.pinned } : item))} type="button"><Pin className="h-4 w-4" /></button>
       </div>; })}
     </div> : null}
     <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
       <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
-        <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : ""}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.column.width || 160), 0), minWidth: item.column.width || 160 } : { minWidth: item.column.width }}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button></th>)}</tr></thead>
+        <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : "relative"}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : { minWidth: item.width ?? item.column.width, width: item.width }}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button><span aria-label={`${item.column.label} 열 너비 조절`} aria-orientation="vertical" className="common-data-table-tools absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-teal-300 focus:bg-teal-400 focus:outline-none" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => resizeByKey(event, item.key, item.width ?? item.column.width ?? 160)} onPointerDown={(event) => startResize(event, item.key)} role="separator" tabIndex={0} /></th>)}</tr></thead>
         <tbody>{pageRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
-          return [groupRow, <tr className="odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 py-2.5 ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.column.width || 160), 0), minWidth: item.column.width || 160 } : undefined}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</td>)}</tr>];
+          return [groupRow, <tr className="odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 py-2.5 ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : undefined}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</td>)}</tr>];
         })}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length}>{emptyMessage}</td></tr> : null}</tbody>
         {totals.some((value) => value !== null) ? <tfoot><tr className="font-black"><td className="border-t-4 border-double border-slate-900 px-3 py-3">합계</td>{displayColumns.slice(1).map((item, index) => <td className="border-t-4 border-double border-slate-900 px-3 py-3 text-right" key={item.key}>{totals[index + 1]?.toLocaleString("ko-KR") ?? ""}</td>)}</tr></tfoot> : null}
       </table>
