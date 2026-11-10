@@ -87,6 +87,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [catalogReady, setCatalogReady] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [categoryReviewLink, setCategoryReviewLink] = useState(false);
   const [undo, setUndo] = useState<{ changes: Array<{ productId: string; supplierProductId?: string; expectedCost: number; cost: number }>; batchId?: string } | null>(null);
   const [recalcPending, setRecalcPending] = useState(false);
   const [batchEnabled, setBatchEnabled] = useState(false);
@@ -668,14 +669,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가를 채워 주세요."); openFilter("unit", unmatched); return; }
     if (dateSaveBlocked) { setError("구매일 기준 저장은 아직 준비 중입니다. 날짜 보호와 원본 이력 저장을 지원하는 저장 경로가 준비된 뒤 다시 시도해 주세요."); return; }
     setSaveReview(false); setConfirmedReview("");
-    setBusy(true); setError(""); setMessage("");
+    setBusy(true); setError(""); setMessage(""); setCategoryReviewLink(false);
     const notes: string[] = [];
     const newRows = unmatched;
     try {
       if (unmatched.length) {
         setMessage(`저장 중… 새 상품 ${unmatched.length}개 상품관리 등록`);
         const created = await createNewProducts(unmatched);
-        notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개는 상품관리에서 확인 후 저장` : ""}`);
+        notes.push(`새 상품 ${created.createdCount}개 상품관리에 등록${created.categorySuggestedCount ? ` · 분류 추천 ${created.categorySuggestedCount}개는 상품관리 미분류에서 확인 후 저장` : ""}`);
+        if (created.categorySuggestedCount) setCategoryReviewLink(true);
         setUnmatched([]);
       }
       if (changes.length && !batchEnabled) {
@@ -840,7 +842,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {error ? <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error} <Button className="min-h-[44px]" variant="outline" onClick={() => void reloadCatalog()}>목록 새로고침</Button></p> : null}
     {batchEnabled ? <p className="text-xs text-slate-600">선택한 매입가 최대 100건과 판매가 계산을 함께 저장합니다. 새 상품·원문 연결·매입 기록은 별도로 저장됩니다.</p> : null}
     {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
-    {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}</p> : null}
+    {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}{categoryReviewLink && !busy && message.includes("상품관리 미분류에서 확인") ? <> <Link className="font-bold text-teal-700 underline" href={`/revenue/products?category=unsorted&companyId=${encodeURIComponent(companyId)}`}>미분류 상품 보기</Link></> : null}</p> : null}
     {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3 [&_select]:min-h-[44px]"><PurchaseSheetMapper mapping={mapping} onMapping={next => { setMapping(next); setConflictChoices({}); }} onVatMode={next => { setVatMode(next); setConflictChoices({}); }} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {importPreview ? <section aria-label="업로드 적용일과 단가 확인" className="maju-section-card min-w-0 space-y-3 p-4">
       <h3 className="font-semibold">적용 날짜·중복 단가 확인</h3>

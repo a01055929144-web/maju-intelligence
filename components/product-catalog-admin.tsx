@@ -56,6 +56,10 @@ export function ProductCatalogAdmin({
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null),
     [reviewingCategories, setReviewingCategories] = useState(false);
+  // 매입가 업로드 완료 안내의 "미분류 상품 보기" 링크(?category=unsorted)로 들어오면 미분류만 보여 준다.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("category") === "unsorted") { setSideTab("category"); setSideFilter("미분류"); }
+  }, []);
   async function load() {
     setLoading(true);
     setError("");
