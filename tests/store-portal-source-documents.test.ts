@@ -3,10 +3,10 @@ const db=vi.hoisted(()=>vi.fn());vi.mock("server-only",()=>({}));vi.mock("../lib
 import {issueDocumentShareToken} from "../lib/pricing/document-share-token";
 import {readStorePortalSourceDocuments as read} from "../lib/pricing/store-portal-source-documents";
 const company="company",account="account",customer="customer",document="document",version="version",share="10000000-0000-4000-8000-000000000001",nonce="a".repeat(32);
-let expired:boolean,revoked:boolean,archived:boolean,issued:boolean,duplicate:boolean,invalidHash:boolean,wrongVersion:boolean;
+let expiredVersion:boolean,expired:boolean,revoked:boolean,archived:boolean,issued:boolean,duplicate:boolean,invalidHash:boolean,wrongVersion:boolean;
 beforeEach(()=>{
  vi.clearAllMocks();vi.stubEnv("STORE_PORTAL_SOURCE_DOCUMENTS_ENABLED","true");vi.stubEnv("FEATURE_STORE_PORTAL_SOURCE_DOCUMENTS_COMPANY_IDS",company);vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET","synthetic-document-secret-more-than-32-characters");
- expired=revoked=archived=issued=duplicate=invalidHash=wrongVersion=false;
+ expiredVersion=expired=revoked=archived=issued=duplicate=invalidHash=wrongVersion=false;
  db.mockImplementation(async(path:string,init:unknown)=>{
   expect(init).toBeUndefined();expect(path).toContain(`company_id=eq.${company}`);
   if(path.startsWith("store_owner_activation_requests?")){
@@ -20,7 +20,7 @@ beforeEach(()=>{
    expect(path).toContain(`id=eq.${share}&document_id=eq.${document}&document_version_id=eq.${version}`);expect(path).toContain("revoked_at=is.null&expires_at=gt.");
    return [{id:share,document_id:document,document_version_id:wrongVersion?"other":version,token_nonce:nonce,token_hash:invalidHash?"bad":issueDocumentShareToken(share,nonce).hash,expires_at:expired?"2000-01-01":"2099-01-01",revoked_at:revoked?"2026-01-01":null}];
   }
-  if(path.startsWith("pricing_document_versions?"))return [{id:version,document_id:document,content:{kind:"sheet",title:"합성 가입 문서",validUntil:"2099-01-01"}}];
+  if(path.startsWith("pricing_document_versions?"))return [{id:version,document_id:document,content:{kind:"sheet",title:"합성 가입 문서",validUntil:expiredVersion?"2000-01-01":"2099-01-01"}}];
   if(path.startsWith("pricing_documents?")){expect(path).toContain("archived_at=is.null");return archived?[]:[{id:document}];}
   throw new Error("unexpected query");
  });
@@ -36,8 +36,8 @@ it("deduplicates repeated source records and never resurrects any previously iss
  issued=true;expect(await read(company,account,customer)).toEqual([]);
  expect(db.mock.calls.filter(([path])=>path.startsWith("storefront_links?")).length).toBe(2);
 });
-it.each(["expired","revoked","archived","hash","version"])("hides unavailable source %s",async reason=>{
- expired=reason==="expired";revoked=reason==="revoked";archived=reason==="archived";invalidHash=reason==="hash";wrongVersion=reason==="version";
+it.each(["expired","document_expired","revoked","archived","hash","version"])("hides unavailable source %s",async reason=>{
+ expiredVersion=reason==="document_expired";expired=reason==="expired";revoked=reason==="revoked";archived=reason==="archived";invalidHash=reason==="hash";wrongVersion=reason==="version";
  expect(await read(company,account,customer)).toEqual([]);
 });
 it("keeps OFF and excluded companies on the original query path",async()=>{
