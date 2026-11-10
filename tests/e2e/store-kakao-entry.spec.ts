@@ -169,6 +169,15 @@ test("390px can read callback errors without receiving an unscoped login action"
   await page.screenshot({ path: info.outputPath("store-kakao-error-390.png"), fullPage: true });
 });
 
+test("standalone store home fits 390px and explains how first-time owners enter", async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/store");
+  await expect(page.getByRole("heading", { name: "MAJU 매장" })).toBeVisible();
+  await expect(page.getByText("첫 가입은 받은 견적서·단가표 링크에서 진행합니다.", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: info.outputPath("store-portal-390.png"), fullPage: true });
+});
+
 
 // Synthetic UI contract journey only: no real OAuth, session verification, business lookup or DB writes.
 for (const width of [1440, 390]) {

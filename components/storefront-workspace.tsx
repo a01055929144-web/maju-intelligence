@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
@@ -41,7 +41,7 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));
 
-export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null }) {
+export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     const read = () => { const value = window.location.hash.slice(1); setToken(value.length <= 200 ? value : "invalid-link"); };
@@ -50,10 +50,10 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
   }, []);
   if (token === null) return <p role="status">매장 주소를 확인 중입니다.</p>;
   // A bearer link does not prove that its customer matches the signed-in store account.
-  return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} />;
+  return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} portal={token ? null : portal} />;
 }
 
-function StorefrontSession({ token, costAccess, storeLogin }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null }) {
+function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode }) {
   const [data, setData] = useState<Response | null>(null);
   const [tab, setTab] = useState<"home" | "order" | "history" | "data" | "info">("home");
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -221,7 +221,7 @@ function StorefrontSession({ token, costAccess, storeLogin }: { token: string; c
     <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
     {loadError && token ? <button disabled={loading || busy} className="min-h-[44px] rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
   </div>;
-  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess || storeLogin ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : "주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요."}</p>}</main>;
+  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{portal}{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <div id="store-costs"><h2 className="text-lg font-semibold">매장 원가관리</h2><StoreCostPanel access={costAccess} /></div>}{token ? retryLoad : !portal ? <p role="status">주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.</p> : null}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
