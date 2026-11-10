@@ -17,6 +17,8 @@ const dependencies: Record<string, unknown> = {
   "@/lib/ci-layout-fixtures": { isCiLayoutFixturesEnabled: mocks.fixture },
   "@/components/storefront-workspace": { StorefrontWorkspace: () => null },
   "@/components/public-store-test-banner": { PublicStoreTestBanner: () => null },
+  "@/components/store-address-management-panel": { StoreAddressManagementPanel: () => null },
+  "@/lib/store/07-store-address-management": { isStoreAddressCompanyEnabled: () => false },
   "@/domains/organization/store-cost-access": accessRules,
 };
 const compiled = ts.transpileModule(readFileSync("app/store/page.tsx", "utf8"), {

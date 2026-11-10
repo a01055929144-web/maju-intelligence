@@ -10,6 +10,8 @@ import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { canAccessStoreCosts } from "@/domains/organization/store-cost-access";
 import { isCiLayoutFixturesEnabled } from "@/lib/ci-layout-fixtures";
 import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
+import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
+import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 
 export const dynamic = "force-dynamic";
 
@@ -53,5 +55,14 @@ export default async function StorePage({ searchParams }: {
   if (isCiLayoutFixturesEnabled() && params.fixture === "store-kakao-login") {
     storeLogin = { enabled: true, companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-000000000001", errorCode };
   }
-  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} /></>;
+  let addressAccess = false;
+  if (scoped && isStoreAddressCompanyEnabled(companyId)) {
+    try { const member = await getStoreMemberContext({ companyId, storeAccountId });
+      addressAccess = member?.role === "owner" || member?.role === "manager"; } catch { addressAccess = false; }
+  }
+  if (scoped && isCiLayoutFixturesEnabled() && params.fixture === "store-address-management") addressAccess = true;
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
+    {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
+    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
+    {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
