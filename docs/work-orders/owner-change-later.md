@@ -18,8 +18,8 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED` · `STORE_PUBLIC_OWNER_ONBOARDING_ENABLED` · `STORE_MEMBER_SESSION_ENABLED` | Vercel Production | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 각 전역 스위치 수정 | 재배포 후 OFF 404와 대상 경로 확인 |
 | `FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS` · `FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS` | Vercel Production | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 허용 회사 목록 수정·비우면 대상 기능 OFF | 재배포 후 허용·비허용 회사 경계 확인 |
 | `STORE_OWNER_ONBOARDING_SECRET` | Vercel Production (Sensitive) | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 새 무작위 값으로 교체 | 재배포 → 기존 가입 의도 폐기 후 원 문서에서 다시 시작 |
-| `STORE_PREOPENING_ENABLED` · `FEATURE_PREOPENING_COMPANY_IDS` | Vercel Production | 2026-11-10 14:34 KST 설정 · 대표 회사만 허용 | Vercel Production 환경 변수에서 전역 스위치와 대상 회사 목록 변경 | 재배포 → 번호 없는 가입·첫 주문 확인 |
-| `STORE_PUBLIC_OWNER_DELIVERY_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS` | Vercel Production | 2026-11-10 14:48 KST 설정 · 대표 회사만 허용 | Vercel Production 환경 변수에서 전역 스위치와 대상 회사 목록 변경 | 재배포 → 기존 사업자번호 보유 점주 가입·첫 주문 확인 |
+| `STORE_PREOPENING_ENABLED` · `FEATURE_PREOPENING_COMPANY_IDS` | Vercel Production | 2026-11-10 15:18 KST 전역 스위치 OFF · 대표 회사 목록 유지 | 주문 권역·요일 설정과 기존 매장 주소 보완 뒤 Vercel에서 전역 스위치 변경 | 재배포 → 번호 없는 가입·첫 주문 확인 |
+| `STORE_PUBLIC_OWNER_DELIVERY_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS` | Vercel Production | 2026-11-10 15:18 KST 전역 스위치 OFF · 대표 회사 목록 유지 | 주문 권역·요일 설정 뒤 Vercel에서 전역 스위치 변경 | 재배포 → 기존 사업자번호 보유 점주 가입·첫 주문 확인 |
 
 | `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
 
