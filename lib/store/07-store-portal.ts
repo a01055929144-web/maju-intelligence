@@ -6,6 +6,7 @@ import { isFeatureEnabled } from "../feature-flags";
 import { issueStoreLinkToken } from "../pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "./07-store-member-feature";
 import { isStoreAddressCompanyEnabled } from "./07-store-address-management";
+import { readStorePortalSourceDocuments } from "../pricing/store-portal-source-documents";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
@@ -25,7 +26,7 @@ export type StorePortalAccount = {
 export async function hasAllowedStorePortalMembership(authUserId: string) {
   if (!(await hasActiveStoreMembership(authUserId))) return false;
   const rows = await supabaseRequest<Array<{ company_id: string }>>(
-    `store_account_members?select=company_id,store_accounts!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
+    `store_account_members?select=company_id,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
     `&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );
   return rows.some(row => isStoreMemberCompanyAllowlisted(row.company_id));
@@ -37,7 +38,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
   if (!session) return null;
   if (!(await hasActiveStoreMembership(session.authUserId))) return [];
   const memberships = await supabaseRequest<Membership[]>(
-    `store_account_members?select=company_id,store_account_id,role,store_accounts!inner(customer_id)` +
+    `store_account_members?select=company_id,store_account_id,role,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(customer_id)` +
     `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active` +
     `&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );
@@ -67,6 +68,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
         canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
         validUntil: content.validUntil }];
     });
+    documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
     const canManage = row.role === "owner" || row.role === "manager";
     return { companyId: row.company_id, storeAccountId: row.store_account_id,
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,

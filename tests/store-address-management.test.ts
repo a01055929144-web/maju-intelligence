@@ -15,7 +15,12 @@ describe("store member address boundary", () => {
     const proof = createStoreAddressSelection({ ...scope, address: "서울시 중구 합성로 1" })!;
     expect(verifyStoreAddressSelection(proof, scope)).toBe("서울시 중구 합성로 1");
     expect(verifyStoreAddressSelection(proof, { ...scope, storeAccountId: "20000000-0000-4000-8000-000000000002" })).toBeNull();
-    expect(verifyStoreAddressSelection(`${proof.slice(0, -1)}x`, scope)).toBeNull();
+    // 서명(base64url 43자)의 마지막 글자는 하위 4비트가 버려지는 채움 비트라, 바꿔도 같은 서명으로 읽힐 수 있다.
+    // 6비트가 모두 쓰이는 서명 첫 글자를 원래와 다른 글자로 바꿔 항상 위조가 되게 한다.
+    const at = proof.indexOf(".") + 1;
+    const tampered = `${proof.slice(0, at)}${proof[at] === "A" ? "B" : "A"}${proof.slice(at + 1)}`;
+    expect(tampered).not.toBe(proof);
+    expect(verifyStoreAddressSelection(tampered, scope)).toBeNull();
   });
 
   it("updates exactly one company customer and connects only an exact territory match", async () => {

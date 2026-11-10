@@ -23,8 +23,8 @@ Core Principle: **Find → Understand → Explain → Design → Handoff.** 코�
 
 이 저장소를 **Claude Code(로컬 CLI 또는 클라우드 세션)** 에서 직접 개발한다. 예전 Cowork 세션의 "git 쓰기 금지 · 미러 폴더 동기화 · push-latest.bat · ebcheck 검증"은 더 이상 적용하지 않는다.
 
-- **시작할 때 먼저 읽기**: `docs/handoff/2026-11-10-claude-code-migration.md`(현재 상태·열린 PR·남은 일), `AGENTS.md`(공통 규칙·승인 경계), `docs/work-orders/2026-11-08-stage-checklist.md`(단계 체크리스트).
-- **브랜치 · PR**: `main`에 직접 커밋하지 않는다. `claude/<작업>` 브랜치 → PR → CI 전체 초록 → 병합. 한 PR = 한 고객 행동. PR 본문 첫 줄은 `Ponytail: 해당 없음(Claude Code) — 최소 변경·재사용 확인`(아래 8-2).
+- **시작할 때 먼저 읽기**: `docs/dispatch/README.md`와 최신 차수의 `*-claude-code.md`·`*-board.md`, `docs/handoff/2026-11-10-claude-code-migration.md`(현재 상태·열린 PR·남은 일), `AGENTS.md`(공통 규칙·승인 경계), `docs/work-orders/2026-11-08-stage-checklist.md`(단계 체크리스트).
+- **브랜치 · PR**: `main`에 직접 커밋하지 않는다. `claude/<작업>` 브랜치 → PR → CI 전체 초록 → 병합. 한 PR = 한 고객 행동. 작업은 `docs/dispatch/`의 차수별 지시서(`CC-*`)만 한다. PR 전에 Claude Code의 ponytail-review로 직접 점검하고 본문 첫 줄 `Ponytail: 사용함 (Claude Code ponytail-review)`가 있어야 병합(아래 8-2).
 - **검증(로컬에서 직접 실행)**: `npm ci` → `npx tsc --noEmit` → `npm run lint` → `npm test` → `npm run build` → `npm run check:auth-boundaries`. 화면을 바꾸면 `npm run test:e2e:layout`(PC 1440 · 모바일 390). Vitest의 `domains/*` 안에서는 `@/` 대신 상대 경로 import. CI는 Node 24 · PostgreSQL 17.
 - **배포**: Vercel Git 자동 배포는 꺼져 있다(`vercel.json`). 병합 후 Production 배포는 대표 지시가 있을 때만, 하루 1회 원칙. 배포 후 `/login` `/dashboard` `/leads` `/revenue/pricing/*` `/revenue/products` `/store` 스모크, 회귀 시 직전 READY로 되돌린다. 빌드는 `next build`뿐이고 `npm run ops:migrate`는 배포에서 실행되지 않는다.
 - **운영 DB(`fcmdvveqmcgtioelzqun`)**: 읽기 조회만 자유. 스키마·데이터 변경은 `docs/sql-drafts/` 초안 + down + PG17 테스트 → 대표의 명시 승인 문구 → 적용 → 읽기 검증 → `docs/work-orders/db-approval/`에 기록.
@@ -95,9 +95,9 @@ God Component(한 컴포넌트에 책임 과다) · Cross-Domain Coupling(도메
 
 작은 UI 수정, 명확한 버그, 단순 기능 추가는 Claude 분석 없이 `docs/pages/<page>.md`만으로 바로 Codex에 보내도 된다. Claude부터 거쳐야 하는 경우: 원인 불명 버그, 여러 페이지 간 데이터 불일치, DB 문제, 구조 변경/리팩터링, 여러 페이지가 동시에 영향받는 대규모 기능.
 
-### 8-2. Ponytail 대체 (Claude Code)
+### 8-2. Ponytail 점검 (Claude Code PR도 필수 · 2026-11-10 대표 결정)
 
-Ponytail은 Codex 플러그인이라 Claude Code에는 없다. Claude Code PR은 같은 목적의 확인을 직접 하고 본문에 적는다: ① 기존 공통 컴포넌트·도메인 함수 재사용 ② 요청 범위 밖 파일 수정 없음 ③ 중복 로직·죽은 코드 추가 없음 ④ 검증·보안·접근성은 줄이지 않음. 대표가 Codex Ponytail 재검토를 원하면 PR 번호를 Codex에 넘긴다.
+Ponytail은 Claude Code에도 설치돼 있다(2026-11-11). Claude Code PR은 **Claude Code가 ponytail-review로 직접 점검·보완**한 뒤 병합한다(Codex 검토방 CX-00은 추가 검토가 필요할 때만). 흐름과 상태 표기는 `docs/dispatch/README.md`. Claude Code는 PR을 올리기 전에 스스로도 ① 공통 컴포넌트·도메인 함수 재사용 ② 지시서 Files 밖 수정 없음 ③ 중복·죽은 코드 없음 ④ 검증·보안·접근성 유지를 확인한다.
 
 ## 9. QA Report 형식
 

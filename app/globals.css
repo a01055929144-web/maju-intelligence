@@ -308,6 +308,11 @@ select {
     @apply rounded-[10px] border border-slate-200/90 bg-slate-50/60 p-2 shadow-none;
   }
 
+  /* 16개 화면이 쓰지만 정의가 없어 테두리 없는 글자처럼 보였다(CC-05). 높이·폭은 각 화면 클래스가 정한다. */
+  .maju-input {
+    @apply rounded-md border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-600;
+  }
+
   .maju-search-field {
     @apply flex h-10 items-center gap-2 rounded-lg border border-slate-300/80 bg-white px-3 shadow-none transition focus-within:border-teal-600 focus-within:ring-2 focus-within:ring-teal-600/10;
   }

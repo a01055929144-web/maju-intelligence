@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
+import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
 import { matchCostImportRow } from "../domains/pricing/purchase-cost";
 import { buildPurchaseReceiptRows } from "../domains/pricing/purchase-receipt";
 
@@ -205,6 +205,15 @@ describe("purchase history", () => {
 });
 
 describe("aliases and duplicate suspects", () => {
+  it("extracts synthetic capacity and grade tokens without collapsing variants", () => {
+    expect(purchaseSpecification("합성 미림 1.8L")).toEqual({ baseName: "합성미림", key: "1800ml" });
+    expect(purchaseSpecification("합성 미림", "18L")).toEqual({ baseName: "합성미림", key: "18000ml" });
+    expect(purchaseSpecification("합성 미림 500ml")).toEqual({ baseName: "합성미림", key: "500ml" });
+    expect(purchaseSpecification("합성 사과 정상", "10kg")).toEqual({ baseName: "합성사과", key: "10000g|정상" });
+    expect(purchaseSpecification("합성 사과 B급", "10kg")).toEqual({ baseName: "합성사과", key: "10000g|b급" });
+    expect(["특", "상", "정품"].map((grade) => purchaseSpecification(`합성 사과 ${grade}`).key)).toEqual(["특", "상", "정품"]);
+  });
+
   it("matches by remembered raw text even after the product was renamed", async () => {
     const { aliasKey, matchByAlias } = await import("../domains/pricing/purchase-cost");
     const key = aliasKey("냉동오징어 [EA]", "", "EA");

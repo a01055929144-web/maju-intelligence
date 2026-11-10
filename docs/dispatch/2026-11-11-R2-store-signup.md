@@ -1,0 +1,48 @@
+# R2 작업지시 — 매장 직접 가입·유통사 연결 (2026-11-11)
+
+설계: [매장 직접 가입과 유통사 연결](../design/2026-11-11-store-direct-signup.md). 운영 방식: [README](README.md). 현황판: [R1 현황판](2026-11-10-R1-board.md) 아래 "R2" 줄에 기록한다.
+R1의 P0(CX-08 → CC-02 주문함, CX-07)이 끝나는 대로 이어서 시작한다. 모든 신규 기능 기본 OFF, 운영 DB는 승인 후.
+
+## Codex (총괄방이 작업방에 배분)
+
+### CX-10 (07) S1 매장 프로필 데이터 구조 — SQL 초안
+- `store_profiles`, `store_profile_members`, `company_store_invite_codes` 신규 + `store_accounts.store_profile_id`(nullable) 추가. RLS·service_role 전용 함수, `(company_id, id)` 회사 경계, 초대코드는 해시만 저장.
+- 기존 링크 가입 매장 1:1 백필 계획(대상 건수 읽기 조회, 롤백).
+- **Done**: SQL+down+PG17(직접 가입·코드 연결·두 유통사 연결 시 서로 비노출) CI 초록, 승인표. 운영 적용 금지.
+
+### CX-11 (07) S2 직접 가입 API·화면 + 링크 가입이 프로필도 만들기
+- `/store` "카카오로 시작" → 처음이면 매장 정보(이름·카카오 주소 검색·사업자번호 또는 개업 예정) → 프로필 생성 → 홈. 링크·QR 가입 경로는 프로필 생성 + 해당 유통사 연결 후 문서로 복귀(기존 #452 흐름 유지).
+- 플래그 `STORE_DIRECT_SIGNUP_ENABLED`(전역 OFF). CX-10 SQL 적용 전에는 PR Draft.
+- **Done**: PC/390 e2e(처음 가입·재로그인·링크 가입), 회사 격리 테스트, Ponytail.
+
+### CX-12 (09) S3 매장 홈 문서 목록 + 초대코드 입력
+- 유통사별로 **공개 링크가 살아 있는 게시 단가표** + **그 매장 앞 견적서**를 보여 준다(설계 4절). CX-07 결과를 확장.
+- "거래 유통사 연결" 카드: 초대코드 입력, 사업자번호가 정확히 한 유통사 기존 거래처와 일치할 때만 제안(설계 2절). 유통사 목록·검색 화면은 만들지 않는다.
+- **Done**: 두 유통사 연결 매장에서 서로의 존재 비노출 테스트, 회수된 공개 링크 문서 사라짐, PC/390, Ponytail.
+
+### CX-13 (03) S4 첫 거래 매장 거래처 확인
+- 코드·제안·직접 연결 매장의 첫 주문 → 거래처 `needs_review` 생성(또는 기존 거래처 후보 제시), 확인·병합 화면은 기존 거래처 화면 재사용. #460 보류 경계와 일치.
+- **Done**: PG17·단위 테스트, 승인표(필요 시).
+
+## Claude Code
+
+### CC-07 회사 설정 › 매장 초대코드 발급·회수
+- 설정 › 회사 정보 › 주문 탭에 "매장 초대코드": 발급(만료일 선택)·복사·회수·사용 매장 수. 코드는 발급 순간 한 번만 전체 표시.
+- Files: `components/company-profile-form.tsx`(주문 탭 부분), 신규 `app/api/store-invite-codes/route.ts`, `domains/store/invite-code.ts`(형식·검증 순수 함수). CX-10 SQL 적용 전에는 Draft.
+- **Done**: owner·manager만, 회사 격리, PC/390, Ponytail 검토 요청.
+
+### CC-08 주문함 "첫 거래 — 거래처 확인 필요" 표시
+- CC-02 주문함에서 첫 거래 매장 주문에 배지 + 거래처 확인으로 가는 버튼. 확인 전에는 [확인] 버튼 대신 "거래처 확인 후 주문 확인" 안내.
+- Files: CC-02 파일들만. CX-13 계약(필드 이름) 확정 후 시작.
+- **Done**: 단위·e2e, Ponytail 검토 요청.
+
+## Claude Code 단독 진행 (2026-11-11 대표 지시 — Codex 사용량 소진 기간)
+
+- CX-10~CX-13도 Claude Code가 지시서 ID 그대로 진행한다(브랜치 `claude/CX-10-…`, PR 제목 `[CX-10]`). Codex가 돌아오면 남은 것만 다시 나눈다.
+- Claude Code가 **SQL 초안**도 쓴다: `docs/sql-drafts/` 초안 + down + PG17 테스트 + `docs/work-orders/db-approval/` 승인표까지. **운영 적용은 하지 않는다**(대표 승인 문구 → 컨트롤타워 적용).
+- 한 번에 한 작업 PR. 진행 순서: CX-10(SQL 초안) → [대표 승인·적용] → CC-07 → CX-11 → CX-12 → CX-13 → CC-08. SQL 승인을 기다리는 동안은 R1 남은 일(CC-10·CC-09) 먼저.
+- Ponytail은 ponytail-review로 직접.
+
+## 순서
+
+CX-10 → (대표 SQL 승인·적용) → CX-11 · CX-12 · CC-07 병렬 → CX-13 → CC-08 → 대표 회사 ON → 시험 매장 직접 가입·코드 연결·첫 주문.

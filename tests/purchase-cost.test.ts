@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchCostImportRow, parseCostImportRows, type CostProduct } from "../domains/pricing/purchase-cost";
+import { findDuplicateSuspects, matchCostImportRow, parseCostImportRows, type CostProduct } from "../domains/pricing/purchase-cost";
 import { updatePurchaseCosts } from "../application/pricing/update-purchase-cost";
 
 const products: CostProduct[] = [
@@ -13,6 +13,25 @@ describe("purchase cost import", () => {
     expect(matchCostImportRow({ code: "", name: "양파", spec: "5kg", unit: "", supplier: "유통사 A", cost: 4000 }, products)?.id).toBe("b");
     expect(matchCostImportRow({ code: "", name: "양파", spec: "20kg", unit: "", supplier: "유통사 A", cost: 4000 }, products)).toBeNull();
     expect(matchCostImportRow({ code: "", name: "양파", spec: "10kg", unit: "", supplier: "", cost: 9000 }, [...products, { ...products[0], supplierName: "유통사 B", supplierProductId: "supplier-b" }])?.supplierProductId).toBeUndefined();
+  });
+
+  it("keeps capacity and grade variants separate and pending review", () => {
+    const variants: CostProduct[] = [
+      { id: "1.8l", code: "", name: "미림", spec: "1.8L", unit: "병", cost: 3000 },
+      { id: "18l", code: "", name: "미림 18L", spec: "", unit: "통", cost: 20000 },
+      { id: "500ml", code: "", name: "미림", spec: "500ml", unit: "병", cost: 1200 },
+      { id: "normal", code: "", name: "사과 정상", spec: "10kg", unit: "박스", cost: 30000 },
+      { id: "b", code: "", name: "사과 B급", spec: "10kg", unit: "박스", cost: 18000 }
+    ];
+    const row = (name: string, spec = "", unit = "") => ({ code: "", name, spec, unit, supplier: "", cost: 1 });
+
+    expect(matchCostImportRow(row("미림 1.8L", "", "병"), variants)?.id).toBe("1.8l");
+    expect(matchCostImportRow(row("미림 18L", "", "병"), variants)?.id).toBe("18l");
+    expect(matchCostImportRow(row("미림 500ml", "", "병"), variants)?.id).toBe("500ml");
+    expect(matchCostImportRow(row("미림 5L", "", "병"), variants)).toBeNull();
+    expect(matchCostImportRow(row("사과 정상", "10kg", "박스"), variants)?.id).toBe("normal");
+    expect(matchCostImportRow(row("사과 B급", "10kg", "박스"), variants)?.id).toBe("b");
+    expect(findDuplicateSuspects(row("미림 5L", "", "병"), variants)[0]?.reason).toContain("규격이 다른 상품");
   });
 
   it("rejects an empty cost rather than treating it as zero", () => {
