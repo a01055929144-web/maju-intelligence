@@ -25,7 +25,7 @@ export async function getStoreMemberContext(input: { companyId: string; storeAcc
 
 export async function getStoreOrderMemberContext(input: { companyId: string; customerId: string }) {
   const rows = await supabaseRequest<Array<{ id: string }>>(
-    `store_accounts?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&status=eq.active&business_status=eq.active&limit=1`
+    `store_accounts?select=id&company_id=eq.${encodeURIComponent(input.companyId)}&customer_id=eq.${encodeURIComponent(input.customerId)}&status=eq.active&business_status=in.(active,registration_pending)&limit=1`
   );
   const storeAccountId = rows[0]?.id;
   if (!storeAccountId) return null;
@@ -36,18 +36,26 @@ export async function getStoreOrderMemberContext(input: { companyId: string; cus
 export async function getStoreOrderMemberContextForCompany(companyId: string) {
   const session = await getStoreSession();
   if (!session) return null;
-  const memberships = await supabaseRequest<Array<{ store_account_id: string }>>(
-    `store_account_members?select=store_account_id&company_id=eq.${encodeURIComponent(companyId)}` +
-    `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active&limit=2`
-  );
-  if (memberships.length !== 1) return null;
-  const storeAccountId = memberships[0].store_account_id;
+  const storeAccountId = await findSingleActiveStoreAccount(companyId, session.authUserId);
+  if (!storeAccountId) return null;
   const stores = await supabaseRequest<Array<{ customer_id: string }>>(
     `store_accounts?select=customer_id&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(storeAccountId)}` +
-    `&status=eq.active&business_status=eq.active&limit=1`
+    `&status=eq.active&business_status=in.(active,registration_pending)&limit=1`
   );
   const customerId = stores[0]?.customer_id;
   if (!customerId) return null;
   const member = await getStoreMemberContext({ companyId, storeAccountId });
   return member ? { ...member, customerId } : null;
+}
+
+/** A verified Kakao user can resume an existing store without repeating onboarding. */
+export async function findSingleActiveStoreAccount(companyId: string, authUserId: string): Promise<string | null> {
+  const memberships = await supabaseRequest<Array<{ store_account_id: string }>>(
+    `store_account_members?select=store_account_id&company_id=eq.${encodeURIComponent(companyId)}` +
+    `&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&limit=2`
+  );
+  if (memberships.length !== 1) return null;
+  const storeAccountId = memberships[0].store_account_id;
+  const member = await getStoreCostMemberAccess({ companyId, storeAccountId, authUserId });
+  return member ? storeAccountId : null;
 }

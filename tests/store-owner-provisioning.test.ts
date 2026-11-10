@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
-import { activateStoreOwner, completePublicStoreOwnerProfile, createPublicStoreOwnerOnboardingIntent, getPreparedStoreOwnerActivation, getStorePublicBaseUrl,
+import { activatePreopeningStoreOwner, activateStoreOwner, completePublicStoreOwnerProfile, createPublicStoreOwnerOnboardingIntent, getPreparedStoreOwnerActivation, getStorePublicBaseUrl,
+  publicPreopeningStoreEnabled,
   preparePublicStoreOwnerActivation, prepareStoreOwnerActivation, resolveOrCreateStoreKakaoUser,
   verifyPublicStoreOwnerOnboardingIntent } from "../lib/store/07-store-owner-provisioning";
 
@@ -40,6 +41,20 @@ describe("store owner activation repository", () => {
     const body = JSON.parse(mocks.db.mock.calls[0][1].body);
     expect(body).toMatchObject({ p_store_name: "Store", p_business_registration_number: "1234567890" });
     expect(JSON.stringify(body)).not.toContain("secret");
+  });
+
+  it("keeps no-number signup scoped to a configured company and sends no invented registration number", async () => {
+    expect(publicPreopeningStoreEnabled("company")).toBe(false);
+    vi.stubEnv("STORE_PREOPENING_ENABLED", "true");
+    vi.stubEnv("FEATURE_PREOPENING_COMPANY_IDS", "other,company");
+    expect(publicPreopeningStoreEnabled("company")).toBe(true);
+    expect(publicPreopeningStoreEnabled("unknown")).toBe(false);
+    mocks.db.mockResolvedValue({ companyId: "company", storeAccountId: "store" });
+    await activatePreopeningStoreOwner({ authUserId: "user", token: "a".repeat(43), termsAcceptedAt: "2026-11-10T00:00:00.000Z" });
+    const body = JSON.parse(mocks.db.mock.calls[0][1].body);
+    expect(body).not.toHaveProperty("p_business_registration_number");
+    expect(body.p_delivery_territory_id).toBeNull();
+    expect(body.p_invite_token_hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("does not overwrite an existing Kakao user when concurrent creation wins", async () => {

@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("../lib/auth", () => ({ getStoreSession: mocks.session }));
 vi.mock("../lib/store/08-store-cost-access", () => ({ getStoreCostMemberAccess: mocks.access }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
-import { getStoreMemberContext, getStoreOrderMemberContextForCompany } from "../lib/store/07-store-member-context";
+import { findSingleActiveStoreAccount, getStoreMemberContext, getStoreOrderMemberContextForCompany } from "../lib/store/07-store-member-context";
 
 const authUserId = "00000000-0000-4000-8000-000000000003";
 const companyId = "00000000-0000-4000-8000-000000000001";
@@ -49,5 +49,22 @@ describe("store member context", () => {
     mocks.db.mockResolvedValueOnce([{ store_account_id: storeAccountId }, { store_account_id: "another" }]);
     await expect(getStoreOrderMemberContextForCompany(companyId)).resolves.toBeNull();
     expect(mocks.access).not.toHaveBeenCalled();
+  });
+
+  it("lets a verified returning owner resume one active store without an old browser session", async () => {
+    mocks.db.mockResolvedValue([{ store_account_id: storeAccountId }]);
+    mocks.access.mockResolvedValue({ id: "member-1", role: "owner", status: "active" });
+    await expect(findSingleActiveStoreAccount(companyId, authUserId)).resolves.toBe(storeAccountId);
+    expect(mocks.session).not.toHaveBeenCalled();
+    expect(mocks.access).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId, authUserId });
+  });
+
+  it("does not resume a removed or ambiguous company membership", async () => {
+    mocks.db.mockResolvedValueOnce([{ store_account_id: storeAccountId }]);
+    mocks.access.mockResolvedValue(null);
+    await expect(findSingleActiveStoreAccount(companyId, authUserId)).resolves.toBeNull();
+    mocks.db.mockResolvedValueOnce([{ store_account_id: storeAccountId }, { store_account_id: "another" }]);
+    await expect(findSingleActiveStoreAccount(companyId, authUserId)).resolves.toBeNull();
+    expect(mocks.access).toHaveBeenCalledTimes(1);
   });
 });

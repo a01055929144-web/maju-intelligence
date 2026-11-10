@@ -31,7 +31,7 @@ describe("store member management", () => {
     mocks.db.mockResolvedValue([{ company_id: "company", id: "member", role: "manager", store_account_id: "store" }]);
     expect(await getPreparedStoreMemberInvitation("b".repeat(43))).toEqual({ companyId: "company", memberId: "member", role: "manager", storeAccountId: "store" });
     expect(mocks.db.mock.calls[0][0]).toContain("status=eq.invited");
-    expect(mocks.db.mock.calls[0][0]).toContain("store_accounts.business_status=eq.active");
+    expect(mocks.db.mock.calls[0][0]).toContain("store_accounts.business_status=in.(active,registration_pending)");
   });
 
   it("maps only display-safe roster fields", async () => {

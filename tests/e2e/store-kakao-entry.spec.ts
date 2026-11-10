@@ -71,6 +71,7 @@ for (const width of [1440, 390]) {
         { next: "document", redirectTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
     });
     await context.route("**/api/auth/kakao/start?**", route => route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" }));
+    await context.route("**/api/address-search?**", route => route.fulfill({ json: { results: [{ address: "서울시 중구", postalCode: "04500" }] } }));
     await page.goto(`/store/activate?fixture=store-owner-activation#${intent}`);
     await expect(page.getByLabel("매장명")).toHaveCount(0);
     const kakao = page.getByRole("button", { name: "카카오로 점주 가입" });
@@ -89,7 +90,9 @@ for (const width of [1440, 390]) {
     await expect(profilePage.getByRole("textbox", { name: "이메일", exact: true })).toHaveCount(0);
     await expect(profilePage.getByRole("textbox", { name: "닉네임", exact: true })).toHaveCount(0);
     for (const [label, value] of [["매장명", "새 매장"], ["대표자명", "새 대표"], ["사업자등록번호", "1234567890"],
-      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"]] as const) await profilePage.getByLabel(label).fill(value);
+      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"], ["상세주소", "1층"]] as const) await profilePage.getByLabel(label).fill(value);
+    await profilePage.getByRole("button", { name: "주소 검색" }).click();
+    await profilePage.getByRole("button", { name: "서울시 중구 (04500)" }).click();
     await profilePage.getByRole("checkbox").check();
     const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
     expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -104,7 +107,7 @@ for (const width of [1440, 390]) {
     }
     await start.click();
     expect(posted[1]).toMatchObject({ termsAccepted: true, store: { storeName: "새 매장",
-      representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구" } });
+      representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구", addressDetail: "1층" } });
     expect(JSON.stringify(posted[1])).not.toMatch(/customerId|storeAccountId|companyId|onboardingIntent/);
   });
 }
