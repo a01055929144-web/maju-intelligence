@@ -24,6 +24,28 @@ export type VatMode = "auto" | "included" | "excluded";
 
 const norm = (value: unknown) => String(value ?? "").normalize("NFKC").toLowerCase().replace(/[\s_\-./()[\]]/g, "");
 
+const CAPACITY_TOKEN = /\d+(?:[.,]\d+)?\s*(?:ml|kg|l|g)\b/gi;
+const GRADE_TOKEN = /b\s*급|정상|정품|특급|상급/gi;
+
+/** 상품명·규격에 섞인 용량과 등급을 같은 비교 형식으로 만듭니다. */
+export function purchaseSpecification(name: string, spec = "", unit = "") {
+  const source = `${name} ${spec} ${unit}`.normalize("NFKC");
+  const tokens = (source.match(CAPACITY_TOKEN) || []).map((raw) => {
+    const match = raw.replace(",", ".").match(/([\d.]+)\s*(ml|kg|l|g)/i)!;
+    const amount = Number(match[1]);
+    const measure = match[2].toLowerCase();
+    return measure === "l" ? `${amount * 1000}ml` : measure === "kg" ? `${amount * 1000}g` : `${amount}${measure}`;
+  });
+  for (const raw of source.match(GRADE_TOKEN) || []) tokens.push(raw.replace(/\s/g, "").toLowerCase());
+  const withoutKnown = name.normalize("NFKC").replace(CAPACITY_TOKEN, " ").replace(GRADE_TOKEN, " ");
+  const singleGrade = withoutKnown.match(/(?:^|[\s()[\]{}_/.-])([특상])(?:$|[\s()[\]{}_/.-])|([특상])$/);
+  if (singleGrade) tokens.push(singleGrade[1] || singleGrade[2]);
+  return {
+    baseName: norm(singleGrade ? withoutKnown.replace(singleGrade[0], " ") : withoutKnown),
+    key: Array.from(new Set(tokens)).sort().join("|")
+  };
+}
+
 export function columnLetter(index: number) {
   let n = index + 1;
   let out = "";

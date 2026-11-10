@@ -1,3 +1,5 @@
+import { purchaseSpecification } from "./purchase-import";
+
 export type CostProduct = {
   id: string;
   code: string;
@@ -69,6 +71,17 @@ export function matchCostImportRow(row: CostImportRow, products: readonly CostPr
     return { ...byName[0], supplierProductId: undefined, supplierCode: undefined, supplierName: undefined };
   }
   if (byName.length) return null;
+  const identity = purchaseSpecification(row.name, row.spec, row.unit);
+  if (identity.baseName) {
+    const bySpecification = choices.filter((product) => {
+      const candidate = purchaseSpecification(product.name, product.spec, product.unit);
+      return candidate.baseName === identity.baseName && candidate.key === identity.key;
+    });
+    if (bySpecification.length === 1) return bySpecification[0];
+    if (bySpecification.length > 1 && new Set(bySpecification.map((product) => product.id)).size === 1) {
+      return { ...bySpecification[0], supplierProductId: undefined, supplierCode: undefined, supplierName: undefined };
+    }
+  }
   // 11/4: 매일 올려도 같은 품목이 새로 생기지 않도록 이름+규격을 괄호·띄어쓰기 없이 한 번 더 비교합니다.
   const key = looseKey(`${row.name}${row.spec}`);
   if (!key) return null;
@@ -134,17 +147,22 @@ export function findDuplicateSuspects(row: { name: string; spec: string; unit: s
   const seen = new Set<string>();
   const out: DuplicateSuspect[] = [];
   const rowName = looseKey(row.name);
+  const rowSpecification = purchaseSpecification(row.name, row.spec, row.unit);
   for (const product of products) {
     if (seen.has(product.id)) continue;
     seen.add(product.id);
     const sameName = looseKey(product.name) === rowName;
-    const score = sameName ? 1 : nameSimilarity(row.name, product.name);
+    const productSpecification = purchaseSpecification(product.name, product.spec, product.unit);
+    const sameBaseName = Boolean(rowSpecification.baseName) && productSpecification.baseName === rowSpecification.baseName;
+    const differentSpecification = sameBaseName && rowSpecification.key !== productSpecification.key && Boolean(rowSpecification.key || productSpecification.key);
+    const score = sameName || sameBaseName ? 1 : nameSimilarity(row.name, product.name);
     if (score < 0.6) continue;
     const diffs = [
       looseKey(product.spec) !== looseKey(row.spec) ? `규격 ${product.spec || "없음"} → ${row.spec || "없음"}` : "",
       looseKey(product.unit) !== looseKey(row.unit) ? `단위 ${product.unit || "없음"} → ${row.unit || "없음"}` : ""
     ].filter(Boolean);
-    const reason = sameName ? (diffs.length ? `이름 같음 · ${diffs.join(" · ")}` : "같은 상품") : `이름 비슷 ${Math.round(score * 100)}%${diffs.length ? ` · ${diffs.join(" · ")}` : ""}`;
+    const reason = differentSpecification ? `규격이 다른 상품 · ${diffs.join(" · ") || `${productSpecification.key || "규격 없음"} → ${rowSpecification.key || "규격 없음"}`}`
+      : sameName ? (diffs.length ? `이름 같음 · ${diffs.join(" · ")}` : "같은 상품") : `이름 비슷 ${Math.round(score * 100)}%${diffs.length ? ` · ${diffs.join(" · ")}` : ""}`;
     out.push({ name: product.name, productId: product.id, reason, score, spec: product.spec, unit: product.unit });
   }
   return out.sort((a, b) => b.score - a.score).slice(0, limit);
