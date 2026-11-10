@@ -57,8 +57,10 @@ export default async function StorePage({ searchParams }: {
   }
   let addressAccess = false;
   if (scoped && isStoreAddressCompanyEnabled(companyId)) {
-    try { addressAccess = Boolean(await getStoreMemberContext({ companyId, storeAccountId })); } catch { addressAccess = false; }
+    try { const member = await getStoreMemberContext({ companyId, storeAccountId });
+      addressAccess = member?.role === "owner" || member?.role === "manager"; } catch { addressAccess = false; }
   }
+  if (scoped && isCiLayoutFixturesEnabled() && params.fixture === "store-address-management") addressAccess = true;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
     {addressAccess && <main className="mx-auto max-w-6xl p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
