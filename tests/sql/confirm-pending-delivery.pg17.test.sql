@@ -20,6 +20,10 @@ set role service_role;
 do $$ declare c record; r jsonb; retried jsonb; k uuid:=gen_random_uuid(); day date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1; cancelled uuid; reserved numeric; begin
   select * into strict c from confirm_case;
   begin
+    perform resolve_pending_order_delivery_09(c.company_id,c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day-2,'confirm');
+    raise exception 'past_date_confirmed';
+  exception when raise_exception then if sqlerrm<>'pending_confirmation_date_invalid' then raise; end if; end;
+  begin
     perform resolve_pending_order_delivery_09(gen_random_uuid(),c.id,c.member,c.user_id,gen_random_uuid(),c.revision,day,'confirm');
     raise exception 'other_company_confirmation';
   exception when raise_exception then if sqlerrm<>'pending_confirmation_manager_required' then raise; end if; end;

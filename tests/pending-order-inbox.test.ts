@@ -36,11 +36,10 @@ it("uses only the session actor for cancellation",async()=>{
 it("rejects a foreign origin and invalid dates without writing",async()=>{
   expect((await POST(request(input,"https://other"))).status).toBe(403);
   expect((await POST(request({...input,deliveryDate:"invalid"}))).status).toBe(400);
-  expect((await POST(request({...input,deliveryDate:"2000-01-01"}))).status).toBe(400);expect(m.confirm).not.toHaveBeenCalled();
+  expect((await POST(request({...input,deliveryDate:""}))).status).toBe(400);expect(m.confirm).not.toHaveBeenCalled();
 });
 it("validates explicit dates and leaves cancellation date null",()=>{
-  const now=new Date("2026-11-10T00:00:00Z");
-  expect(parseDeliveryConfirmation({...input,deliveryDate:"2026-11-11"},now).deliveryDate).toBe("2026-11-11");
-  expect(()=>parseDeliveryConfirmation(input,now)).toThrow("1년");
-  expect(parseDeliveryConfirmation({...input,action:"cancel",deliveryDate:null},now).deliveryDate).toBeNull();
+  expect(parseDeliveryConfirmation({...input,deliveryDate:"2026-11-11"}).deliveryDate).toBe("2026-11-11");
+  expect(parseDeliveryConfirmation({...input,deliveryDate:"2000-01-01"}).deliveryDate).toBe("2000-01-01");
+  expect(parseDeliveryConfirmation({...input,action:"cancel",deliveryDate:null}).deliveryDate).toBeNull();
 });
