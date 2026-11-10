@@ -109,23 +109,28 @@ function EditablePricingDocPaper({
         </section>
       ) : null}
 
-      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))" }}>
+      {/* 선택한 열 수까지 나눈다. 예전 auto-fit(260px)은 3단 편집 화면의 좁은 종이(약 490px)에서 늘 1열이었다.
+          열이 150px보다 좁아지면(단가·품목명을 못 읽음) 그만큼만 줄인다. 휴대폰은 아래 media 규칙으로 1열. */}
+      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(max(150px, calc((100% - ${columns - 1}rem) / ${columns})), 1fr))` }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
-            <colgroup><col style={{ width: `${content.showPrice ? display.productWidth * (editable ? 0.95 : 1) : editable ? 95 : 100}%` }} />{content.showPrice ? <col style={{ width: `${(100 - display.productWidth) * (editable ? 0.95 : 1)}%` }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
             <thead>
               <tr className="text-left text-xs text-slate-500">
                 <th className="border-b py-1.5">품목{content.showSpec ? "·규격·단위" : ""}</th>
-                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right">단가</th> : null}
-                {editable ? <th className="w-7 border-b" /> : null}
+                {/* 단가 칸은 좁은 열에서도 7자리 가격이 들어가게 최소 6rem, 나머지는 품목명. */}
+                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right" style={{ width: `max(${100 - display.productWidth}%, 6rem)` }}>단가</th> : null}
               </tr>
             </thead>
             <tbody>
               {chunk.map(({ index, line }) => (
                 <tr className={`border-b border-slate-100 ${line.visible ? "" : "opacity-40"} ${line.price < (baselines[line.productId] ?? 0) ? "bg-orange-50" : ""}`} key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
                   <td className="py-0.5">
-                    {editable ? <span aria-hidden="true" className="cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
+                    {/* 끌기 손잡이·이름·빼기를 한 줄에 둔다. 따로 둔 5% 휴지통 칸은 3열처럼 좁은 열에서 아이콘(14px)보다 좁아 칸 밖으로 넘쳤다(CC-10). */}
+                    <div className="flex min-w-0 items-center">
+                    {editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
                     <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
+                    {editable ? <button aria-label={`${line.displayName} 빼기`} className="shrink-0 px-1 text-slate-300 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
+                    </div>
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
                     {content.showSpec && (line.spec || line.unit) ? <span className="block px-1 text-xs text-slate-600 [overflow-wrap:anywhere]" data-document-spec>{[line.spec, line.unit].filter(Boolean).join(" · ")}</span> : null}
                   </td>
@@ -134,7 +139,6 @@ function EditablePricingDocPaper({
                       <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value }); }} value={visiblePrice(line).toLocaleString()} />
                     </td>
                   ) : null}
-                  {editable ? <td className="py-0.5 text-right"><button aria-label={`${line.displayName} 빼기`} className="text-slate-300 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button></td> : null}
                 </tr>
               ))}
             </tbody>
