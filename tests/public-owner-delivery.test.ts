@@ -23,14 +23,20 @@ it("reuses the existing server address recommendation and scopes the native week
   expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${company}&territory_id=eq.synthetic-territory`);
 });
 
-it("refuses an unmatched address or missing weekdays without creating any data", async () => {
+it("leaves delivery pending for an unmatched address or missing weekdays without creating any data", async () => {
   vi.stubEnv("STORE_PUBLIC_OWNER_DELIVERY_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS", company);
   mocks.assign.mockResolvedValueOnce({ status: "unassigned" });
-  await expect(resolvePublicOwnerDelivery(company, "unmatched address")).rejects.toThrow("delivery unavailable");
+  await expect(resolvePublicOwnerDelivery(company, "unmatched address")).resolves.toBeUndefined();
   expect(mocks.db).not.toHaveBeenCalled();
   mocks.assign.mockResolvedValue({ status: "matched", territoryId: "synthetic-territory" });
   for (const rows of [[], [{ delivery_weekdays: null }], [{ delivery_weekdays: [] }], [{ delivery_weekdays: [9] }]]) {
     mocks.db.mockResolvedValueOnce(rows);
-    await expect(resolvePublicOwnerDelivery(company, "synthetic address")).rejects.toThrow("delivery unavailable");
+    await expect(resolvePublicOwnerDelivery(company, "synthetic address")).resolves.toBeUndefined();
   }
+});
+
+it("does not hide a delivery lookup outage as an unconfigured area", async () => {
+  vi.stubEnv("STORE_PUBLIC_OWNER_DELIVERY_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS", company);
+  mocks.assign.mockRejectedValueOnce(new Error("lookup unavailable"));
+  await expect(resolvePublicOwnerDelivery(company, "synthetic address")).rejects.toThrow("lookup unavailable");
 });

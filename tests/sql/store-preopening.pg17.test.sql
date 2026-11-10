@@ -7,10 +7,14 @@ end $$;
 alter table delivery_territories add column if not exists is_active boolean not null default true;
 grant select on delivery_territories,store_order_territory_rules to service_role;
 \ir ../../docs/sql-drafts/20261110-store-preopening.sql
+\ir ../../docs/sql-drafts/20261110-preopening-customer-match.sql
 insert into app_users values('f2000000-0000-4000-8000-000000000001','active');
 set role service_role;
 do $$ declare activated jsonb; ordered jsonb; customer uuid;
 begin
+  insert into normalized_customers(id,company_id,customer_name,address,normalized_key)
+    values('f6000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',
+      'synthetic preopening store','synthetic road 1, suite 2','existing-preopening-candidate');
   perform prepare_public_store_owner_activation_v1('00000000-0000-4000-8000-000000000001',
     '70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     'd1000000-0000-4000-8000-000000000001','f3000000-0000-4000-8000-000000000001',repeat('7',64));
@@ -31,6 +35,10 @@ begin
   if customer is null or not exists(select 1 from normalized_customers where id=customer
     and business_registration_number is null and delivery_territory_id='10000000-0000-4000-8000-000000000001')
     then raise exception 'preopening_profile_or_territory_missing'; end if;
+  if customer<>'f6000000-0000-4000-8000-000000000001' or
+    (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001'
+      and lower(customer_name)='synthetic preopening store' and lower(address)='synthetic road 1, suite 2')<>1
+    then raise exception 'preopening_existing_customer_not_reused'; end if;
   perform issue_storefront_links('00000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     jsonb_build_array(jsonb_build_object('id','f4000000-0000-4000-8000-000000000001','customerId',customer,
       'nonce',repeat('7',32),'hash',repeat('7',64))),now()+interval '14 days',

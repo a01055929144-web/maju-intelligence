@@ -9,7 +9,7 @@ import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-fea
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { isPublicOwnerTestNumber, publicOwnerTestAccessAllowed, publicOwnerTestModeRequested, publicOwnerTestNumberForCompany } from "@/lib/store/public-owner-test-mode";
 import { preparePublicOwnerTestOrdering } from "@/lib/pricing/public-owner-test-ordering";
-import { PublicOwnerDeliveryUnavailable, resolvePublicOwnerDelivery } from "@/lib/pricing/public-owner-delivery";
+import { resolvePublicOwnerDelivery } from "@/lib/pricing/public-owner-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -79,11 +79,10 @@ export async function POST(request: NextRequest) {
       await getStoreOwnerActivationProof({ consume: true });
       return NextResponse.json({ next: "document", redirectTo: proof.returnTo, termsVersion: STORE_TERMS_VERSION });
     } catch (error) {
-      if (error instanceof PublicOwnerDeliveryUnavailable ||
-        (error instanceof Error && /public_delivery_(territory|rules)_unavailable/.test(error.message)))
-        return NextResponse.json({ code: "delivery_area_unavailable" }, { status: 422 });
       if (error instanceof Error && error.message.includes("public_store_retry_mismatch"))
         return NextResponse.json({ code: "profile_retry_mismatch" }, { status: 409 });
+      if (error instanceof Error && /public_store_customer_(match_needs_review|already_linked)/.test(error.message))
+        return NextResponse.json({ code: "customer_match_needs_review" }, { status: 409 });
       console.error("public_store_owner_activation_failed", { stage });
       return NextResponse.json({ message: "Store activation unavailable" }, { status: 503 });
     }
