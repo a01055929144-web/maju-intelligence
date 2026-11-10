@@ -6,6 +6,7 @@ import { isFeatureEnabled } from "../feature-flags";
 import { issueStoreLinkToken } from "../pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "./07-store-member-feature";
 import { isStoreAddressCompanyEnabled } from "./07-store-address-management";
+import { readStorePortalSourceDocuments } from "../pricing/store-portal-source-documents";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
@@ -67,6 +68,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
         canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
         validUntil: content.validUntil }];
     });
+    documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
     const canManage = row.role === "owner" || row.role === "manager";
     return { companyId: row.company_id, storeAccountId: row.store_account_id,
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
