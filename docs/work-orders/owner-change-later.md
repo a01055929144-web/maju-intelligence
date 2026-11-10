@@ -22,6 +22,7 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `STORE_PUBLIC_OWNER_DELIVERY_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:30 KST · 대표 회사만 ON, 다음 배포부터 반영 | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 기존 사업자번호 보유 점주 가입·첫 주문 확인 |
 | `STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:04 KST · 대표 회사만 ON | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 카카오 기본주소·상세주소 분리 저장 확인 |
 | `STORE_ORDER_ADDRESS_VERIFICATION_ENABLED` · `FEATURE_STORE_ORDER_ADDRESS_VERIFICATION_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:04 KST · 대표 회사만 ON | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 권역·요일 없는 주문 차단, 설정 뒤 권역 안 주문 확인 |
+| `STORE_MEMBER_ADDRESS_ENABLED` · `FEATURE_STORE_MEMBER_ADDRESS_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:40 KST · 대표 회사만 ON, #467 배포부터 반영 | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 기존 카카오 점주·관리자의 주소 수정·권역 연결 확인 |
 
 | `DATA_GO_KR_SERVICE_KEY` · `NAVER_SEARCHAD_API_KEY` · `NAVER_SEARCHAD_SECRET` · `NAVER_SEARCHAD_CUSTOMER_ID` | Vercel Production (Sensitive) | 2026-11-02 22:46 · 대표 직접 | 공공데이터포털 마이페이지 · 네이버 검색광고 › 도구 › API 사용 관리에서 재발급 → Vercel 값 수정 | 재배포 |
 
