@@ -19,7 +19,9 @@ export type CommonTableColumn<Row> = {
 export function CommonDataTable<Row>({
   columns,
   emptyMessage = "표시할 항목이 없습니다.",
+  error,
   filename = "목록.csv",
+  loading = false,
   groupBy,
   pageSizeMode = "list",
   rowKey,
@@ -28,7 +30,10 @@ export function CommonDataTable<Row>({
 }: {
   columns: CommonTableColumn<Row>[];
   emptyMessage?: string;
+  /** 불러오기 실패 문구. 있으면 빈 상태 대신 보인다. */
+  error?: string | null;
   filename?: string;
+  loading?: boolean;
   groupBy?: (row: Row) => { key: string; label: string } | null;
   pageSizeMode?: keyof typeof COMMON_TABLE_PAGE_SIZES;
   rowKey: (row: Row) => string;
@@ -44,6 +49,14 @@ export function CommonDataTable<Row>({
   const [pageSize, setPageSize] = useState<number>(pageSizes[0]);
   const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const storageKey = `maju:table:${settingsKey}`;
+  // 휴대폰(≤640px)은 표 대신 카드. 한쪽만 그려서 같은 글자가 화면에 두 번 생기지 않게 한다.
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const sync = () => setMobile(query.matches);
+    sync(); query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     try {
@@ -114,6 +127,7 @@ export function CommonDataTable<Row>({
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
   }
 
+  const stateMessage = error ?? (loading ? "불러오는 중…" : emptyMessage);
   let lastGroup = "";
   const totals = displayColumns.map((item) => item.column.total ? sortedRows.reduce((sum, row) => sum + Number(item.column.value(row) || 0), 0) : null);
 
@@ -133,16 +147,23 @@ export function CommonDataTable<Row>({
         <span className="cursor-grab text-slate-400">⋮⋮</span><input checked={!state.hidden} onChange={() => save(columnState.map((item) => item.key === state.key ? { ...item, hidden: !item.hidden } : item))} type="checkbox" /><span className="flex-1">{column.label}</span><button aria-label={`${column.label} 고정`} className={state.pinned ? "text-teal-700" : "text-slate-300"} onClick={() => save(columnState.map((item) => item.key === state.key ? { ...item, pinned: !item.pinned } : item))} type="button"><Pin className="h-4 w-4" /></button>
       </div>; })}
     </div> : null}
-    <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
+    {mobile ? null : <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
       <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
         <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : "relative"}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : { minWidth: item.width ?? item.column.width, width: item.width }}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button><span aria-label={`${item.column.label} 열 너비 조절`} aria-orientation="vertical" className="common-data-table-tools absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-teal-300 focus:bg-teal-400 focus:outline-none" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => resizeByKey(event, item.key, item.width ?? item.column.width ?? 160)} onPointerDown={(event) => startResize(event, item.key)} role="separator" tabIndex={0} /></th>)}</tr></thead>
         <tbody>{pageRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
           return [groupRow, <tr className="odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 py-2.5 ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : undefined}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</td>)}</tr>];
-        })}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length}>{emptyMessage}</td></tr> : null}</tbody>
+        })}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length} role={error ? "alert" : undefined}>{stateMessage}</td></tr> : null}</tbody>
         {totals.some((value) => value !== null) ? <tfoot><tr className="font-black"><td className="border-t-4 border-double border-slate-900 px-3 py-3">합계</td>{displayColumns.slice(1).map((item, index) => <td className="border-t-4 border-double border-slate-900 px-3 py-3 text-right" key={item.key}>{totals[index + 1]?.toLocaleString("ko-KR") ?? ""}</td>)}</tr></tfoot> : null}
       </table>
-    </div>
+    </div>}
+    {/* 휴대폰(≤640px): 줄마다 카드. 같은 열 설정(보이기·순서)을 따른다. */}
+    {mobile ? <ul className="divide-y divide-slate-200">
+      {pageRows.map((row, rowIndex) => <li className="space-y-1 px-3 py-3 text-sm" key={rowKey(row)}>
+        {displayColumns.map((item) => <div className="flex justify-between gap-3" key={item.key}><span className="shrink-0 text-xs font-bold text-slate-500">{item.column.label}</span><span className={`min-w-0 text-right ${item.column.align === "right" ? "tabular-nums" : ""}`}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</span></div>)}
+      </li>)}
+      {!pageRows.length ? <li className="px-4 py-10 text-center text-sm font-bold text-slate-500" role={error ? "alert" : undefined}>{stateMessage}</li> : null}
+    </ul> : null}
     <div className="common-data-table-tools flex items-center justify-between border-t border-slate-200 p-3 text-xs font-bold text-slate-500"><span>{sortedRows.length ? `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedRows.length)} / ${sortedRows.length}` : "0건"}</span><div className="flex items-center gap-2"><button disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)} type="button">이전</button><span>{currentPage} / {totalPages}</span><button disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">다음</button></div></div>
     <div className="common-data-table-print-legend hidden">■ 묶음 · ★ 요청 · ※ 주의·계근 · ▲ 시세 · ☐ 체크</div>
     <style>{`@media print{.common-data-table-tools{display:none!important}.common-data-table{color:#000}.common-data-table table{font-size:11px}.common-data-table th,.common-data-table td{border-color:#777!important}.common-data-table-group td{border-color:#000!important;border-width:2.5px 0!important}.common-data-table-print-legend{display:block!important;border-top:1px solid #777;margin-top:8px;padding-top:6px;font-size:10px}.common-data-table td{background:#fff!important}.common-data-table td:nth-last-child(1){font-weight:700}.common-data-table tfoot td{border-top:3px double #000!important}}`}</style>
