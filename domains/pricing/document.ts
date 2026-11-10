@@ -341,11 +341,11 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
   const footerInfo = output.display.info.filter(item => item.place === "footer");
   // A4 minus 10mm on each side. Keep in sync with pricing-document-preview print CSS.
   const header = 100 + Math.max(0, rows(output.companyName, 28) - 1) * 30 + Math.max(0, rows(output.title, 40) - 1) * 24 +
-    (output.recipient ? rows(output.recipient, 60) * 18 : 0) + (output.contact ? rows(output.contact, 60) * 16 : 0) +
-    (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 60) * 16 : 0);
+    (output.recipient ? rows(output.recipient, 45) * 18 : 0) + (output.contact ? rows(output.contact, 45) * 16 : 0) +
+    (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 45) * 16 : 0);
   let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, 60) * 16 : 0);
   for (let i = 0; i < footerInfo.length; i += 2) {
-    footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 30))) * 16;
+    footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 26))) * 16;
   }
   const available = Math.max(140, 277 * 96 / 25.4 - header - footer - 30);
   const rowHeight = (line: DocumentOutput["lines"][number], count: number) => {
