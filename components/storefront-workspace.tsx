@@ -44,7 +44,7 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
 export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
-    const read = () => { const value = window.location.hash.slice(1); setToken(value.length <= 200 ? value : "invalid-link"); };
+    const read = () => { const value = window.location.hash.slice(1); setToken(value === "store-address-management" ? "" : value.length <= 200 ? value : "invalid-link"); };
     read(); window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);

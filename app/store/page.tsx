@@ -66,6 +66,12 @@ export default async function StorePage({ searchParams }: {
   let accounts: Awaited<ReturnType<typeof listStorePortalAccounts>> = null;
   let portalError = false;
   try { accounts = await listStorePortalAccounts(); } catch { portalError = true; }
+  if (isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document") {
+    portalError = false; addressAccess = Boolean(scoped);
+    accounts = [{companyId:"00000000-0000-4000-8000-000000000001",storeAccountId:"20000000-0000-4000-8000-000000000001",
+      customerName:"합성 공개 가입 매장",hasCostAccess:false,canManageMembers:true,canManageAddress:true,
+      documents:[{title:"합성 가입 단가표",kind:"sheet",href:"/pricing-document#synthetic-source",canOrder:false,validUntil:"2099-12-31"}]}];
+  }
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
     {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
     <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} error={portalError} loginEnabled={storeMemberSessionEnabled()} />} />
