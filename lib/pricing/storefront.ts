@@ -313,7 +313,7 @@ export async function readStorefront(
     validUntil: version.content.validUntil,
     priceAvailable,
     canOrder: canOrder && deliveryAllowed,
-    pendingDelivery,
+    ...(pendingDelivery ? { pendingDelivery: true } : {}),
     nextDeliveryDate: deliveryDate,
     selectedDeliveryDate: priceDate,
     notice: settings.notice,

@@ -381,7 +381,8 @@ export async function PUT(request: NextRequest) {
           p_memo: body.memo,
     };
     if (storeOrderDeliverySnapshotEnabled(store.companyId)) {
-      const placed = await placeStoreOrderWithDelivery({ scope: store, payload, snapshot: body.deliverySnapshot });
+      if (payload.p_delivery_date === null) return NextResponse.json({ message: "배송일 확인 후 다시 주문해 주세요." }, { status: 409 });
+      const placed = await placeStoreOrderWithDelivery({ scope: store, payload: { ...payload, p_delivery_date: payload.p_delivery_date }, snapshot: body.deliverySnapshot });
       return NextResponse.json(placed, { headers: { "Cache-Control": "no-store" } });
     }
     const result = await supabaseRequest<Record<string, unknown>>(
