@@ -35,5 +35,12 @@ export async function POST(request:NextRequest) {
     command=parseDeliveryConfirmation(body as Record<string,unknown>);
   } catch(cause) {return reply({message:cause instanceof Error?cause.message:"배송일을 확인해 주세요."},400);}
   try {return reply({result:await confirmPendingOrder({...command,companyId:auth.companyId,memberId:session.companyMemberId,userId:session.userId})});}
-  catch {return reply({message:"확정 결과를 확인하지 못했습니다. 같은 날짜로 다시 시도하거나 목록을 다시 조회해 주세요."},409);}
+  catch(cause) {
+    const reason=cause instanceof Error?cause.message:"";
+    if(/pending_confirmation_manager_required/.test(reason))return reply({message:"처리 권한이 변경되었습니다. 회사 대표·관리자로 다시 로그인해 주세요."},403);
+    if(/pending_confirmation_date_invalid/.test(reason))return reply({message:"오늘부터 366일 이내의 배송일을 선택해 주세요."},400);
+    if(/pending_confirmation_date_unavailable/.test(reason))return reply({message:"기존 배송 요일·휴일·마감에 맞는 날짜를 선택해 주세요."},400);
+    if(/pending_confirmation_revision_conflict|pending_confirmation_order_unavailable/.test(reason))return reply({message:"다른 담당자가 먼저 처리했거나 주문이 변경됐습니다. 목록을 다시 조회해 주세요."},409);
+    return reply({message:"처리 결과를 확인하지 못했습니다. 같은 요청으로 다시 시도하거나 목록을 다시 조회해 주세요."},409);
+  }
 }
