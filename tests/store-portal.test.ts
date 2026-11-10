@@ -15,7 +15,7 @@ vi.mock("../lib/store/08-store-cost-access", () => ({ hasActiveStoreMembership: 
 vi.mock("../lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("../lib/feature-flags", () => ({ isFeatureEnabled: mocks.feature }));
-import { listStorePortalAccounts } from "../lib/store/07-store-portal";
+import { hasAllowedStorePortalMembership, listStorePortalAccounts } from "../lib/store/07-store-portal";
 import { GET as startKakao } from "../app/api/auth/kakao/start/route";
 
 const companyId = "00000000-0000-4000-8000-000000000001";
@@ -69,6 +69,14 @@ describe("store portal", () => {
       return [];
     });
     expect((await listStorePortalAccounts())?.[0].documents).toEqual([]);
+  });
+
+  it("does not issue a generic store session to a member of a disabled company", async () => {
+    mocks.allowed.mockReturnValue(false);
+    mocks.db.mockResolvedValue([{ company_id: companyId }]);
+    expect(await hasAllowedStorePortalMembership("verified-user")).toBe(false);
+    mocks.allowed.mockReturnValue(true);
+    expect(await hasAllowedStorePortalMembership("verified-user")).toBe(true);
   });
 
   it("starts a standalone store Kakao login only when enabled and keeps scoped login separate", async () => {

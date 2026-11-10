@@ -18,6 +18,15 @@ export type StorePortalAccount = {
   documents: Array<{ title: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string }>;
 };
 
+export async function hasAllowedStorePortalMembership(authUserId: string) {
+  if (!(await hasActiveStoreMembership(authUserId))) return false;
+  const rows = await supabaseRequest<Array<{ company_id: string }>>(
+    `store_account_members?select=company_id,store_accounts!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
+    `&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
+  );
+  return rows.some(row => isStoreMemberCompanyAllowlisted(row.company_id));
+}
+
 /** A Kakao session, never a link token or URL parameter, chooses the visible stores. */
 export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | null> {
   const session = await getStoreSession();

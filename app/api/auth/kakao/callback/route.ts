@@ -5,7 +5,8 @@ import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStor
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
-import { getStoreCostMemberAccess, hasActiveStoreMembership, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
+import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
+import { hasAllowedStorePortalMembership } from "@/lib/store/07-store-portal";
 import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
   resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     if (storePortalMode) {
       const authUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
-      if (!authUserId || !(await hasActiveStoreMembership(authUserId)) || !(await setStoreSession(authUserId)))
+      if (!authUserId || !(await hasAllowedStorePortalMembership(authUserId)) || !(await setStoreSession(authUserId)))
         return redirectStore(request.url, "store_membership_required");
       return NextResponse.redirect(new URL("/store", request.url));
     }
