@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
   }
   if (body.termsAccepted === true && body.store && !body.onboardingIntent) {
     const baseAddress = body.store.address?.trim() || "", addressDetail = body.store.addressDetail?.trim() || "";
-    const profile = { address: `${baseAddress} ${addressDetail}`.trim(), businessRegistrationNumber: body.store.businessRegistrationNumber?.replace(/\D/g, "") || "",
+    const profile = { address: `${baseAddress} ${addressDetail}`.trim(), baseAddress, addressDetail,
+      businessRegistrationNumber: body.store.businessRegistrationNumber?.replace(/\D/g, "") || "",
       phone: body.store.phone?.replace(/\D/g, "") || "", representativeName: body.store.representativeName?.trim() || "", storeName: body.store.storeName?.trim() || "" };
     if ((profile.businessRegistrationNumber.length !== 10 && profile.businessRegistrationNumber.length !== 0) ||
       profile.phone.length < 9 || profile.phone.length > 11 || !profile.storeName || profile.storeName.length > 100 ||
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       stage = "delivery_resolution";
       const deliveryTerritoryId = testNumber ? undefined : await resolvePublicOwnerDelivery(activation.companyId, baseAddress);
       stage = "profile_save";
-      await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
+      await completePublicStoreOwnerProfile({ ...profile, companyId: activation.companyId, token: proof.token });
       stage = "activation";
       const activated = profile.businessRegistrationNumber
         ? await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,

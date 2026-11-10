@@ -170,7 +170,8 @@ describe("Kakao-first profile retry", () => {
       body: JSON.stringify({ termsAccepted: true, store: { address: "unmatched address", addressDetail: "suite 1", businessRegistrationNumber: "1234567890",
         phone: "0".repeat(11), representativeName: "synthetic", storeName: "synthetic" } }) }) as never);
     expect(response.status).toBe(200);
-    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ address: "unmatched address suite 1" }));
+    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ address: "unmatched address suite 1",
+      baseAddress: "unmatched address", addressDetail: "suite 1" }));
     expect(routeMocks.activate).toHaveBeenCalledWith(expect.not.objectContaining({ deliveryTerritoryId: expect.anything() }));
     expect(routeMocks.session).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
   });

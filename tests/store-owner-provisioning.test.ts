@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
 import { activatePreopeningStoreOwner, activateStoreOwner, completePublicStoreOwnerProfile, createPublicStoreOwnerOnboardingIntent, getPreparedStoreOwnerActivation, getStorePublicBaseUrl,
-  publicPreopeningStoreEnabled,
+  publicOwnerBaseAddressEnabled, publicPreopeningStoreEnabled,
   preparePublicStoreOwnerActivation, prepareStoreOwnerActivation, resolveOrCreateStoreKakaoUser,
   verifyPublicStoreOwnerOnboardingIntent } from "../lib/store/07-store-owner-provisioning";
 
@@ -34,13 +34,30 @@ describe("store owner activation repository", () => {
     expect(body).not.toHaveProperty("p_store_name");
   });
 
-  it("stores the profile only after Kakao identity continuation", async () => {
+  it("keeps the existing profile RPC while separated address storage is OFF", async () => {
     mocks.db.mockResolvedValue({ companyId: "company", storeAccountId: "store" });
-    await completePublicStoreOwnerProfile({ address: "Seoul", businessRegistrationNumber: "1234567890", phone: "01012345678",
+    await completePublicStoreOwnerProfile({ address: "Seoul suite 1", baseAddress: "Seoul", addressDetail: "suite 1",
+      businessRegistrationNumber: "1234567890", companyId: "company", phone: "01012345678",
       representativeName: "Owner", storeName: "Store", token: "secret" });
     const body = JSON.parse(mocks.db.mock.calls[0][1].body);
+    expect(mocks.db.mock.calls[0][0]).toBe("rpc/complete_public_store_owner_profile_v1");
     expect(body).toMatchObject({ p_store_name: "Store", p_business_registration_number: "1234567890" });
+    expect(body).not.toHaveProperty("p_base_address"); expect(body).not.toHaveProperty("p_address_detail");
+  });
+
+  it("uses v2 only for an explicitly approved company", async () => {
+    vi.stubEnv("STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED", "true");
+    vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS", "other,company");
+    mocks.db.mockResolvedValue({ companyId: "company", storeAccountId: "store" });
+    await completePublicStoreOwnerProfile({ address: "Seoul suite 1", baseAddress: "Seoul", addressDetail: "suite 1",
+      businessRegistrationNumber: "1234567890", companyId: "company", phone: "01012345678",
+      representativeName: "Owner", storeName: "Store", token: "secret" });
+    const body = JSON.parse(mocks.db.mock.calls[0][1].body);
+    expect(mocks.db.mock.calls[0][0]).toBe("rpc/complete_public_store_owner_profile_v2");
+    expect(body).toMatchObject({ p_base_address: "Seoul", p_address_detail: "suite 1" });
     expect(JSON.stringify(body)).not.toContain("secret");
+    expect(publicOwnerBaseAddressEnabled("company")).toBe(true);
+    expect(publicOwnerBaseAddressEnabled("unknown")).toBe(false);
   });
 
   it("keeps no-number signup scoped to a configured company and sends no invented registration number", async () => {

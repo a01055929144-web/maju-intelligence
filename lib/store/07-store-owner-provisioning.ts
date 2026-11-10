@@ -58,11 +58,14 @@ export async function preparePublicStoreOwnerActivation(input: PublicStoreOwnerO
 }
 
 export async function completePublicStoreOwnerProfile(input: {
-  address: string; businessRegistrationNumber: string; phone: string; representativeName: string; storeName: string; token: string;
+  address: string; addressDetail: string; baseAddress: string; businessRegistrationNumber: string; companyId: string; phone: string; representativeName: string; storeName: string; token: string;
 }) {
-  return supabaseRequest<{ companyId: string; storeAccountId: string }>("rpc/complete_public_store_owner_profile_v1", {
+  const separated = publicOwnerBaseAddressEnabled(input.companyId);
+  return supabaseRequest<{ companyId: string; storeAccountId: string }>(separated
+    ? "rpc/complete_public_store_owner_profile_v2" : "rpc/complete_public_store_owner_profile_v1", {
     method: "POST", body: JSON.stringify({ p_address: input.address, p_business_registration_number: input.businessRegistrationNumber,
-      p_invite_token_hash: hashToken(input.token), p_phone: input.phone, p_representative_name: input.representativeName,
+      ...(separated ? { p_address_detail: input.addressDetail, p_base_address: input.baseAddress } : {}), p_invite_token_hash: hashToken(input.token),
+      p_phone: input.phone, p_representative_name: input.representativeName,
       p_store_name: input.storeName })
   });
 }
@@ -70,6 +73,11 @@ export async function completePublicStoreOwnerProfile(input: {
 export function publicPreopeningStoreEnabled(companyId: string) {
   return process.env.STORE_PREOPENING_ENABLED === "true" &&
     (process.env.FEATURE_PREOPENING_COMPANY_IDS || "").split(",").map(value => value.trim()).includes(companyId);
+}
+
+export function publicOwnerBaseAddressEnabled(companyId: string) {
+  return process.env.STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED === "true" &&
+    (process.env.FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
 
 export async function activatePreopeningStoreOwner(input: {
