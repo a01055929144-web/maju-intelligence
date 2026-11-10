@@ -10,6 +10,12 @@ async function saveDraft(page: import("@playwright/test").Page) {
     await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click();
   } else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
 }
+async function openPreviewPrint(page: import("@playwright/test").Page) {
+  if ((page.viewportSize()?.width ?? 1440) <= 640) {
+    await page.getByRole("button", { name: "더보기", exact: true }).click();
+    await page.getByRole("menuitem", { name: "미리보기·인쇄", exact: true }).click();
+  } else await page.getByRole("button", { name: "미리보기·인쇄", exact: true }).click();
+}
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} entry completes drafting and publication without sending at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
@@ -164,7 +170,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     await expect.poll(() => page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
     await oldPreview.getByRole("button", { name: "닫기", exact: true }).click();
     // CC-14: 미리보기와 A4 인쇄를 한 버튼으로 합쳤다. 인쇄는 미리보기 창의 PDF·인쇄로만 한다.
-    await page.getByRole("button", { name: "미리보기·인쇄", exact: true }).click();
+    await openPreviewPrint(page);
     const automatic = page.getByRole("dialog", { name: "미리보기", exact: true });
     expect(await page.evaluate(() => Number(document.documentElement.dataset.printCount || 0))).toBe(1);
     await automatic.getByRole("button", { name: "PDF·인쇄", exact: true }).click();
