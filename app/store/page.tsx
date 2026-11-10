@@ -61,6 +61,8 @@ export default async function StorePage({ searchParams }: {
       addressAccess = member?.role === "owner" || member?.role === "manager"; } catch { addressAccess = false; }
   }
   if (scoped && isCiLayoutFixturesEnabled() && params.fixture === "store-address-management") addressAccess = true;
-  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
-    {addressAccess && <main className="mx-auto max-w-6xl p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
+    {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
+    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
+    {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
