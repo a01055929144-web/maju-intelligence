@@ -15,6 +15,7 @@ export function toPublicStorefront(store: Storefront) {
     validUntil: store.validUntil,
     priceAvailable: store.priceAvailable,
     canOrder: store.canOrder,
+    ...(store.pendingDelivery ? { pendingDelivery: true } : {}),
     nextDeliveryDate: store.nextDeliveryDate,
     selectedDeliveryDate: store.selectedDeliveryDate,
     notice: store.notice,

@@ -51,6 +51,27 @@ beforeEach(() => {
   mocks.member.mockResolvedValue(null);
   mocks.orderContext.mockResolvedValue(null);
 });
+it("accepts a verified member's pending delivery without inventing a date", async () => {
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", pendingDelivery: true, canOrder: true });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  mocks.db.mockResolvedValue({ id: "pending", deliveryConfirmation: "pending" });
+  expect((await PUT(request({ deliveryDate: null }))).status).toBe(200);
+  expect(mocks.db.mock.calls[0][0]).toBe("rpc/place_store_pending_delivery_order");
+  expect(JSON.parse(mocks.db.mock.calls[0][1].body).p_delivery_date).toBeNull();
+});
+it("rejects pending mode spoofing and stale schedule changes", async () => {
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer" });
+  expect((await PUT(request({ deliveryDate: null, pendingDelivery: true }))).status).toBe(409);
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", pendingDelivery: true });
+  expect((await PUT(request())).status).toBe(409);
+  expect(mocks.db).not.toHaveBeenCalled();
+});
+it("keeps needs_review or other disabled order links blocked for pending intake", async () => {
+  mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", pendingDelivery: true, canOrder: false });
+  mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
+  expect((await PUT(request({ deliveryDate: null }))).status).toBe(409);
+  expect(mocks.db).not.toHaveBeenCalled();
+});
 it("keeps order submission dormant before any link or DB read", async () => {
   mocks.enabled = false;
   expect((await PUT(request())).status).toBe(404);
