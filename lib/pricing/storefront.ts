@@ -5,8 +5,7 @@ import { verifyStoreLinkToken } from "./store-link-token";
 import { readPublishedPriceDirections } from "./storefront-price-direction";
 import { publishedPriceKey } from "../../domains/pricing/storefront-price-direction";
 import { splitCategory } from "../../domains/pricing/product-category";
-import { needsDeliveryConfirmation } from "../../domains/order/delivery-confirmation";
-import { pendingDeliveryEnabled } from "./pending-delivery-feature";
+import { getStoreDeliveryEligibility,storeAddressVerificationEnabled } from "./store-delivery-eligibility";
 import {
   canOrderForDelivery,
   kstDateTime,
@@ -135,6 +134,9 @@ export async function readStorefront(
   const version = versions[0];
   const customer = customers[0];
   if (!version || !customer) return null;
+  const verificationEnabled=storeAddressVerificationEnabled(company);
+  const deliveryEligibility=verificationEnabled?await getStoreDeliveryEligibility(company,customer.id):undefined;
+  const deliveryTerritoryId=verificationEnabled?deliveryEligibility?.territoryId:customer.delivery_territory_id;
   const settings: Settings = settingsRows[0] ?? {
     cutoff_days_before: 1,
     cutoff_time: "22:00:00",
@@ -198,12 +200,12 @@ export async function readStorefront(
           }),
         })
       : Promise.resolve([]),
-    customer.delivery_territory_id
+    deliveryTerritoryId
       ? supabaseRequest<Override[]>(
           path(
             "store_order_territory_rules",
             company,
-            `&territory_id=eq.${customer.delivery_territory_id}&select=*&limit=1`,
+            `&territory_id=eq.${deliveryTerritoryId}&select=*&limit=1`,
           ),
         )
       : Promise.resolve([]),
@@ -218,7 +220,7 @@ export async function readStorefront(
       path(
         "store_order_holidays",
         company,
-        `&or=(territory_id.is.null,territory_id.eq.${customer.delivery_territory_id ?? "00000000-0000-0000-0000-000000000000"})&select=kind,weekday,month,day,holiday_date&limit=200`,
+        `&or=(territory_id.is.null,territory_id.eq.${deliveryTerritoryId ?? "00000000-0000-0000-0000-000000000000"})&select=kind,weekday,month,day,holiday_date&limit=200`,
       ),
     ),
   ]);
@@ -247,7 +249,7 @@ export async function readStorefront(
   const territory = territoryRules[0] ?? {};
   const store = customerRules[0] ?? {};
   const policy: DeliveryPolicy = {
-    weekdays: store.delivery_weekdays ?? territory.delivery_weekdays ?? [],
+    weekdays: deliveryEligibility ? deliveryEligibility.eligible ? deliveryEligibility.weekdays : [] : store.delivery_weekdays ?? territory.delivery_weekdays ?? [],
     cutoffDaysBefore:
       store.cutoff_days_before ??
       territory.cutoff_days_before ??
@@ -276,11 +278,10 @@ export async function readStorefront(
             : { kind: "date", date: item.holiday_date! },
     ),
   };
-  const pendingDelivery = pendingDeliveryEnabled(company) && needsDeliveryConfirmation(settingsRows.length > 0, policy.weekdays);
-  const deliveryDate = !pendingDelivery && policy.weekdays.length ? nextDeliveryDate(policy) : null;
-  const priceDate = pendingDelivery ? today : requestedDeliveryDate ?? deliveryDate ?? today;
+  const deliveryDate = policy.weekdays.length ? nextDeliveryDate(policy) : null;
+  const priceDate = requestedDeliveryDate ?? deliveryDate ?? today;
   const deliveryAllowed =
-    pendingDelivery || (policy.weekdays.length > 0 && canOrderForDelivery(priceDate, policy));
+    (!verificationEnabled||deliveryEligibility?.eligible===true) && policy.weekdays.length > 0 && canOrderForDelivery(priceDate, policy);
   const agreements = productIds.length
     ? await supabaseRequest<Agreement[]>(
         path(
@@ -309,11 +310,11 @@ export async function readStorefront(
     companyName: version.content.companyName,
     footer: version.content.footer,
     customerName: customer.customer_name,
-    deliveryAddress: customer.address,
+    deliveryAddress: deliveryEligibility?.eligible ? `${deliveryEligibility.baseAddress} ${deliveryEligibility.addressDetail}` : customer.address,
     validUntil: version.content.validUntil,
     priceAvailable,
     canOrder: canOrder && deliveryAllowed,
-    ...(pendingDelivery ? { pendingDelivery: true } : {}),
+    ...(deliveryEligibility?{deliveryEligibility}:{}),
     nextDeliveryDate: deliveryDate,
     selectedDeliveryDate: priceDate,
     notice: settings.notice,

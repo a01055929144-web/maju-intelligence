@@ -156,7 +156,7 @@ for (const width of [1440, 390]) {
     await page.route("**/api/storefront", route => route.fulfill({ json: {
       store: { title: "합성 주문 링크", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: null,
         version: 1, validUntil: "2099-12-31", priceAvailable: true, canOrder: true,
-        nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "", lines: [],
+        deliveryEligibility: { eligible: true, reason: "eligible", weekdays: [0,1,2,3,4,5,6] }, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "", lines: [],
         policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
       orders: [], preferences: [], historyPage: 1, historyHasMore: false,
     } }));

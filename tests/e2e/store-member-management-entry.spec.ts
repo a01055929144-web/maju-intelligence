@@ -24,7 +24,7 @@ for (const width of [1440, 390]) test(`verified store member entry keeps role an
       : token === "retry" && retryFailed ? { message: "구성원 권한을 확인하지 못했습니다. 잠시 후 다시 확인해 주세요." } : { href };
     return route.fulfill({ json: {
       store: { title: "합성 매장 링크", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: null, version: 1, validUntil: "2099-12-31",
-        priceAvailable: true, canOrder: true, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "", lines: [],
+        priceAvailable: true, canOrder: true, deliveryEligibility: { eligible: true, reason: "eligible", weekdays: [0,1,2,3,4,5,6] }, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05", notice: "", marketPriceNotice: "", lines: [],
         policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
       memberManagement, orders: [], preferences: [], historyPage: 1, historyHasMore: false,
     } });
