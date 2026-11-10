@@ -1,6 +1,14 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
+// CC-14: 휴대폰(≤640px)에서는 보조 버튼이 더보기 메뉴 안에 있다. PC는 툴바 버튼.
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) <= 640;
+async function toolbarAction(page: Page, name: string) {
+  if (!isPhone(page)) return page.getByRole("button", { name, exact: true });
+  const menu = page.getByRole("button", { name: "더보기", exact: true });
+  if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  return page.getByRole("menuitem", { name, exact: true });
+}
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} prepare, explicit delivery and public read at ${width}px`, async ({ page, browser }, info) => {
   page.setDefaultTimeout(15_000);
@@ -97,7 +105,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: new RegExp(`빈 ${kind === "sheet" ? "단가표" : "견적서"}로 시작`) }).click();
   await page.getByRole("textbox", { name: "문서 제목", exact: true }).first().fill(`합성 B ${kind === "sheet" ? "단가표" : "견적서"} 통합 문서`);
   await page.getByRole("button", { name: /합성 공개 품목.*담기/ }).click();
-  await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await (await toolbarAction(page, "초안 저장")).click();
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   await expect(page.getByRole("button", { name: /버전 1 미리보기/ })).toBeVisible();
@@ -106,20 +114,20 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
   published = false;
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByText(/먼저 초안을 저장하고 판매가 버전을 확정해 주세요/)).toBeVisible();
   await expect(page.getByRole("button", { name: /공개 링크·QR · 버전 1/ })).toHaveCount(0);
   published = true;
   await page.goto("/revenue/pricing/documents");
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "미리보기", exact: true }).click();
+  await (await toolbarAction(page, "미리보기·인쇄")).click();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  await page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true }).click();
+  await (await toolbarAction(page, "공개 링크·QR · 버전 1")).click();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  const publicEntry = page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true });
+  const publicEntry = await toolbarAction(page, "공개 링크·QR · 버전 1");
   expect((await publicEntry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicEntry.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath(`public-qr-entry-${kind}-${width}.png`), fullPage: true });
@@ -129,7 +137,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true })).toHaveCount(0);
   expect(publicInputs).toHaveLength(0);
   denyVersionRead = false;
-  await publicEntry.click();
+  await (await toolbarAction(page, "공개 링크·QR · 버전 1")).click();
   const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
   await expect(preview.getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
   await expect(preview.getByRole("combobox", { name: "QR을 받을 거래처", exact: true })).toHaveCount(0);
@@ -223,7 +231,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "닫기", exact: true }).click();
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   const share = page.getByRole("region", { name: "리드 문서 공유", exact: true });
   await expect(share).toBeVisible(); expect(sent).toBe(false);
   await share.getByRole("button", { name: "링크 준비", exact: true }).click();
@@ -288,7 +296,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect.poll(() => Boolean(releaseOtherVersions)).toBe(true);
   await expect(page.getByRole("button", { name: "링크 준비", exact: true })).toHaveCount(0);
   releaseOtherVersions!();
-  await expect(page.getByRole("button", { name: "초안 저장", exact: true })).toBeVisible();
+  await expect(isPhone(page) ? page.getByRole("button", { name: "더보기", exact: true }) : page.getByRole("button", { name: "초안 저장", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
   expect(prepareInputs).toHaveLength(prepareCount);
   await page.route(`**/api/leads/permits/${leadId}/actions*`, route => route.fulfill({ json: { actions: Array.from(contactRecords.values()).map(id => ({
