@@ -10,6 +10,8 @@ import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { canAccessStoreCosts } from "@/domains/organization/store-cost-access";
 import { isCiLayoutFixturesEnabled } from "@/lib/ci-layout-fixtures";
 import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
+import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
+import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 
 export const dynamic = "force-dynamic";
 
@@ -53,5 +55,10 @@ export default async function StorePage({ searchParams }: {
   if (isCiLayoutFixturesEnabled() && params.fixture === "store-kakao-login") {
     storeLogin = { enabled: true, companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-000000000001", errorCode };
   }
-  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} /></>;
+  let addressAccess = false;
+  if (scoped && isStoreAddressCompanyEnabled(companyId)) {
+    try { addressAccess = Boolean(await getStoreMemberContext({ companyId, storeAccountId })); } catch { addressAccess = false; }
+  }
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
+    {addressAccess && <main className="mx-auto max-w-6xl p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
