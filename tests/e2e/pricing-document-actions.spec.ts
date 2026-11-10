@@ -99,6 +99,7 @@ for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${colu
   expect((await page.request.post("/api/customer/login",{data:{email:"ci-owner@example.test",password:"ci-owner-layout-password-2026"}})).ok()).toBe(true);
   await page.route("**/api/pricing-documents*",route=>{
     const url=new URL(route.request().url()),body=route.request().method()==="POST"?route.request().postDataJSON():{};
+    if(url.pathname.endsWith("/catalog-index"))return route.fulfill({json:{items:[product]}});
     const action=body.action||url.searchParams.get("action")||"list";
     const draft={id,revision:1,content,updatedAt:version.publishedAt,recalculation:{publishedAt:version.publishedAt,needsRecalculation:false,changedProductCount:0}};
     let result:unknown=[];

@@ -359,7 +359,7 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
       (1 - output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
     const priceChars = Math.max(1, Math.floor(priceWidth / Math.round(11 * scale)));
     const priceHeight = rows(line.price === null ? "—" : `${line.price.toLocaleString()}원`, priceChars) * mainHeight;
-    return Math.max(textHeight, priceHeight) + 6;
+    return Math.max(textHeight, priceHeight) + 7;
   };
   // ponytail: at most 300 items; full-width glyph estimates keep custom-font measurement out of this fixed A4 flow.
   const fits = (lines: DocumentOutput["lines"]) => {
@@ -374,7 +374,7 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
     for (let i = 0; perColumn && i < regular.length; i += perColumn) {
       tallest = Math.max(tallest, regular.slice(i, i + perColumn).reduce((height, line) => height + rowHeight(line, columns), 0));
     }
-    return promoHeight + tallest + (regular.length ? 24 : 0) <= available;
+    return promoHeight + tallest + (regular.length ? mainHeight + 8 : 0) <= available;
   };
   let lines: DocumentOutput["lines"] = [];
   for (const line of output.lines) {
