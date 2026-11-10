@@ -8,7 +8,8 @@ await Promise.all([a.connect(),b.connect(),observer.connect()]);
 try {
   const {rows:[fixture]}=await observer.query(`select o.*,m.id actor,m.user_id actor_user from store_orders o
     join company_members m on m.company_id=o.company_id and m.status='active' and coalesce(m.permission_role,m.role) in ('owner','manager')
-    join app_users u on u.id=m.user_id and u.status='active' where o.delivery_confirmation='scheduled' limit 1`);
+    join app_users u on u.id=m.user_id and u.status='active' where o.delivery_confirmation='scheduled'
+    and exists(select 1 from store_order_delivery_resolutions_09 r where r.company_id=o.company_id and r.order_id=o.id and r.action='confirm') limit 1`);
   assert.ok(fixture);
   const {rows:[fresh]}=await observer.query(`insert into store_orders(company_id,customer_id,link_id,document_version_id,delivery_date,delivery_confirmation,idempotency_key,store_account_id,ordered_by_member_id,known_total)
     values($1,$2,$3,$4,null,'pending',gen_random_uuid(),$5,$6,$7) returning id,revision`,[fixture.company_id,fixture.customer_id,fixture.link_id,fixture.document_version_id,fixture.store_account_id,fixture.ordered_by_member_id,fixture.known_total]);

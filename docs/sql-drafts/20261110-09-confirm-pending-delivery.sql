@@ -2,6 +2,8 @@
 begin;
 set local lock_timeout='3s';
 set local statement_timeout='10s';
+create index store_orders_pending_inbox_09_idx on public.store_orders(company_id,submitted_at,id)
+  where delivery_confirmation='pending' and status in ('submitted','received');
 create table public.store_order_delivery_resolutions_09(
   id uuid primary key default gen_random_uuid(),company_id uuid not null,order_id uuid not null,
   request_id uuid not null,actor_member_id uuid not null,actor_user_id uuid not null,delivery_date date,action text not null check(action in ('confirm','cancel')),

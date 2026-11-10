@@ -19,6 +19,7 @@ API 회사는 서버 세션에서 결정한다. body의 회사/회원/사용자�
 - up: `docs/sql-drafts/20261110-09-confirm-pending-delivery.sql`
 - down: 동일 이름 `.down.sql`
 - 신규 `store_order_delivery_resolutions_09`: 회사/주문/담당자 FK와 요청키, confirm/cancel, 선택 날짜, 전후 revision, 처리 시각만 보관한다. 이름/사업자번호/전화·토큰 원문을 저장하지 않는다. RLS ON, PUBLIC/anon/authenticated 차단, service_role SELECT/INSERT만 허용한다.
+- 대기 목록 조회용 부분 인덱스 `store_orders_pending_inbox_09_idx(company_id,submitted_at,id)`를 pending/submitted·received 행에만 추가한다. 운영 적용 전 기존 행 수·인덱스 생성 잠금 시간을 확인한다.
 - 신규 `resolve_pending_order_delivery_09(uuid,uuid,uuid,uuid,uuid,integer,date,text)`: SECURITY INVOKER, service_role EXECUTE만. 회원/사용자 공유 잠금→주문 행 잠금→revision 확인→변경·감사 한 트랜잭션. 새 함수 하나 외에 기존 RPC를 덮어쓰지 않는다. 새 표 외의 권한 추가 없음. lock_timeout 3초, statement_timeout 10초.
 - confirm은 delivery_date 설정 + delivery_confirmation=scheduled + revision 증가, 취소는 status=cancelled + revision 증가. pending 상태의 in_delivery/delivered 금지 제약을 제거하거나 완화하지 않는다.
 - down은 처리 이력이 한 건이라도 있으면 중단한다. 날짜나 취소를 자동 되돌리거나 주문/감사 기록을 지우지 않는다.
