@@ -94,7 +94,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     const products = Array.from({ length: 16 }, (_, i) => ({ ...product, id: `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` }));
     let revision = 1;
     let content: DocumentContent = { kind, title: "규격 회귀 문서", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
-      display: { columns: 2, promoLayout: kind === "sheet" ? "table" : "cards", info: [], productWidth: 65, priceIncludesTax: true },
+      display: { columns: 2, promoLayout: kind === "sheet" ? "table" : "cards", info: [], productWidth: 65, priceIncludesTax: true, showTaxType: kind === "sheet" },
       lines: products.map((item, i) => ({ ...lineFromCatalog({ ...item, spec: " " }), displayName: `합성 품목 ${i + 1}`, taxType: i % 2 ? "taxable" as const : "exempt" as const,
         ...(i >= 14 ? { promotionId: `60000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, badge: "행사" as const, startsOn: "2020-01-01", endsOn: "2099-12-31" } : {}) })) };
     const oldContent = structuredClone(content);
@@ -149,9 +149,9 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     expect((await page.getByRole("dialog", { name: "미리보기", exact: true }).locator(".pricing-paper").allTextContents()).join("")).not.toContain("18L");
     const oldPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
     const oldPaper = oldPreview.locator(".pricing-online");
-    await expect(oldPaper.locator("[data-document-tax]")).toHaveCount(16);
-    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "면세" })).toHaveCount(8);
-    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "과세" })).toHaveCount(8);
+    // CC-15: 과세·면세 글자는 옵션을 켠 문서(단가표)에만 16개, 기본(견적서)은 0개.
+    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "면세" })).toHaveCount(taxShown ? 8 : 0);
+    await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "과세" })).toHaveCount(taxShown ? 8 : 0);
     const downloadEvent = page.waitForEvent("download");
     await oldPreview.getByRole("button", { name: "엑셀 내려받기", exact: true }).click();
     const download = await downloadEvent;
@@ -189,7 +189,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     });
     await page.goto("/pricing-document#synthetic-snapshot-document");
     const shared = page.locator(".pricing-output-content");
-    await expect(shared.locator("[data-document-tax]")).toHaveCount(16);
+    await expect(shared.locator("[data-document-tax]")).toHaveCount(kind === "sheet" ? 16 : 0);
     await expect(shared).toContainText("버전 1");
     await expect(shared).toContainText("1,100원");
     await expect(shared).not.toContainText("수정 초안");
