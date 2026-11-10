@@ -22,12 +22,14 @@ export function PageContent({
   pages,
   start = 0,
   qr,
+  online = false,
 }: {
   data: DocumentOutput;
   page: number;
   pages: number;
   start?: number;
   qr?: DocumentOrderQr | null;
+  online?: boolean;
 }) {
   const accent =
     data.theme === "blue"
@@ -40,7 +42,8 @@ export function PageContent({
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const promos = data.lines.filter((l) => l.badge);
   const regular = data.lines.filter((l) => !l.badge);
-  const columns = Math.max(1, Math.min(3, display.columns || 1));
+  const columns = online ? 1 : Math.max(1, Math.min(3, display.columns || 1));
+  const indexed = columns === 1 && !online;
   const perColumn = Math.ceil(regular.length / columns) || 0;
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
   const price = (l: OutputLine) => (l.price !== null ? `${l.price.toLocaleString()}원` : "—");
@@ -86,19 +89,19 @@ export function PageContent({
                 {promos.map((l, i) => (
                   <tr key={i}>
                     <td className="border-b border-amber-200 p-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1">{l.badge}</span>{l.displayName}<span data-document-spec className="block text-xs text-slate-600">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span></td>
-                    <td className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}<span data-document-tax className="block text-xs font-normal">{l.taxType === "exempt" ? "면세" : "과세"}</span></td>
+                    <td data-document-price className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}<span data-document-tax className="block text-xs font-normal">{l.taxType === "exempt" ? "면세" : "과세"}</span></td>
                     <td className="border-b border-amber-200 p-1 text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="pricing-promo-cards grid grid-cols-3 gap-2">
               {promos.map((l, i) => (
                 <article key={i} className="rounded bg-white p-2">
                   <p className="font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
-                  <p className="text-xs">{l.spec} {l.unit}</p>
-                  <p className="font-bold">{price(l)}</p>
+                  <p data-document-spec className="text-xs">{l.spec} {l.unit}</p>
+                  <p data-document-price className="font-bold">{price(l)}</p>
                   <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p>
                   <p className="text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</p>
                 </article>
@@ -108,15 +111,15 @@ export function PageContent({
         </section>
       ) : null}
       {data.layout === "cards" ? (
-        <div className="my-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${columns + 1}, minmax(0, 1fr))` }}>
+        <div className="my-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${online ? 1 : columns + 1}, minmax(0, 1fr))` }}>
           {regular.map((l, i) => (
             <article key={i} className="space-y-1 rounded border p-2">
               <h3 className="font-bold">{l.displayName}</h3>
               {l.brand && <p className="text-xs">{l.brand}</p>}
-              <p className="text-xs">
+              <p data-document-spec className="text-xs">
                 {l.spec} {l.unit}
               </p>
-              {l.price !== null && <p className="font-bold">{price(l)}</p>}
+              {l.price !== null && <p data-document-price className="font-bold">{price(l)}</p>}
               <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p>
             </article>
           ))}
@@ -125,10 +128,10 @@ export function PageContent({
         <div className="pricing-output-grid my-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${chunks.length || 1}, minmax(0, 1fr))` }}>
           {chunks.map((chunk, c) => (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left" key={c}>
-              <colgroup>{(columns === 1 ? [6, display.productWidth * 0.83, (100 - display.productWidth) * 0.83, 11] : [display.productWidth, 100 - display.productWidth]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
+              <colgroup>{(indexed ? [6, display.productWidth * 0.83, (100 - display.productWidth) * 0.83, 11] : [display.productWidth, 100 - display.productWidth]).map((width, i) => <col key={i} style={{ width: `${width}%` }} />)}</colgroup>
               <thead>
                 <tr>
-                  {(columns === 1 ? ["No", "품목·규격·단위", "단가", "비고"] : ["품목·규격·단위", "단가"]).map((t) => (
+                  {(indexed ? ["No", "품목·규격·단위", "단가", "비고"] : ["품목·규격·단위", "단가"]).map((t) => (
                     <th key={t} className="border-b-2 p-1.5">
                       {t}
                     </th>
@@ -138,15 +141,15 @@ export function PageContent({
               <tbody>
                 {chunk.map((l, i) => (
                   <tr key={i}>
-                    {columns === 1 ? <td className="border-b p-1.5">{start + c * perColumn + i + 1}</td> : null}
+                    {indexed ? <td className="border-b p-1.5">{start + c * perColumn + i + 1}</td> : null}
                     <td className="min-w-0 border-b p-1.5 font-semibold [overflow-wrap:anywhere]">
                       <span className="block">{l.displayName}</span>
                       {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
                       {l.spec || l.unit ? <span data-document-spec className="block font-normal text-xs text-slate-600 [overflow-wrap:anywhere]">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span> : null}
-                      {columns !== 1 ? <span data-document-tax className="block font-normal text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}
+                      {!indexed ? <span data-document-tax className="block font-normal text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
                     <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
-                    {columns === 1 ? <td data-document-tax className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
+                    {indexed ? <td data-document-tax className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -258,7 +261,7 @@ export function PricingDocumentPreview({
     }
   }
   return (
-    <section className="space-y-4" aria-label="온라인·오프라인 미리보기">
+    <section className="pricing-document-preview space-y-4" aria-label="온라인·오프라인 미리보기">
       <div className="pricing-no-print flex flex-wrap items-center gap-3">
         <h2 className="font-bold">온라인·오프라인 미리보기</h2>
         <Button className="min-h-[44px]" variant="outline" disabled={busy} onClick={() => void printDocument()}>PDF·인쇄</Button>
@@ -276,7 +279,7 @@ export function PricingDocumentPreview({
         <div className="pricing-no-print">
           <h3 className="mb-2 font-semibold">온라인 · 휴대폰</h3>
           <div className="pricing-online max-w-[390px] rounded-2xl border bg-white p-3 shadow">
-            <PageContent data={output} page={1} pages={1} qr={qr} />
+            <PageContent data={output} page={1} pages={1} qr={qr} online />
           </div>
         </div>
         <div className="min-w-0">
@@ -314,7 +317,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{position:sticky;top:0;background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid{grid-template-columns:minmax(0,1fr)!important}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
+      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }

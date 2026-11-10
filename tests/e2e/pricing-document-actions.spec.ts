@@ -89,13 +89,13 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
 
 test.describe("CX-05 A4 comparison previews",()=>{
   test.use({deviceScaleFactor:2});
-for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${columns} columns`,async({page},info)=>{
+for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${columns} columns ${count} items`,async({page},info)=>{
   page.setDefaultTimeout(15_000);await page.setViewportSize({width:1600,height:2000});
   const id="10000000-0000-4000-8000-000000000001",versionId="30000000-0000-4000-8000-000000000001",customerId="40000000-0000-4000-8000-000000000001";
   const product={id:"20000000-0000-4000-8000-000000000001",name:"합성 품목",brand:"",spec:"1.8L × 12입",unit:"BOX",price:123456,taxType:"exempt" as const};
   const content:DocumentContent={kind:"sheet",title:`A4 ${columns}열 비교`,companyName:"합성 유통",contact:"",recipient:"",footer:"합성 인쇄 검증 · 모든 규격과 단위 보존",validUntil:"2099-12-31",theme:"blue",layout:"table",showPrice:true,showBrand:true,showSpec:true,
     display:{columns,promoLayout:"table",info:[],productWidth:65,priceIncludesTax:false},
-    lines:Array.from({length:96},(_,i)=>lineFromCatalog({...product,id:`20000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`,displayName:`합성 품목 ${String(i+1).padStart(3,"0")}`}))};
+    lines:Array.from({length:count},(_,i)=>lineFromCatalog({...product,id:`20000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`,displayName:`합성 품목 ${String(i+1).padStart(3,"0")}`}))};
   const version:DocumentVersion={id:versionId,documentId:id,version:1,revision:1,publishedAt:"2026-11-10T00:00:00Z",content,unavailablePromotions:[],promotionStock:{}};
   const output=documentOutput(version,"2026-11-10");
   expect((await page.request.post("/api/customer/login",{data:{email:"ci-owner@example.test",password:"ci-owner-layout-password-2026"}})).ok()).toBe(true);
@@ -113,7 +113,7 @@ for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${colu
   await page.route("**/api/pricing-store-links*",route=>route.fulfill({json:route.request().method()==="POST"?{url:"https://store.example.test/store#synthetic-order-token"}:{items:[{id:customerId,customer_name:"합성 매장",address:"합성 주소"}],nextCursor:null}}));
   await page.goto("/revenue/pricing/documents");await page.getByRole("button",{name:content.title,exact:true}).click();
   await page.getByRole("button",{name:/버전 1 미리보기/}).click();const dialog=page.getByRole("dialog",{name:"미리보기",exact:true});
-  const comparison:Array<{columns:number;font:number;qr:boolean;before:number;after:number;pages:number}>=[];
+  const comparison:unknown[]=[];
   for(const qr of [false,true]){
     if(qr){
       await dialog.getByRole("button",{name:"주문 링크 QR 만들기",exact:true}).click();await dialog.getByRole("button",{name:"기존 거래처 전용 QR 선택",exact:true}).click();
@@ -123,8 +123,9 @@ for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${colu
       await dialog.getByRole("button",{name:`${Math.round(scale*100)}%`,exact:true}).click();
       await page.evaluate(()=>document.fonts.ready);
       const pages=printPages(output,scale,qr),before=Math.min(18*columns,Math.floor((Math.floor(26*columns/scale)-(qr?5*columns:0))/3));
-      expect(pages.flatMap(p=>p.lines)).toEqual(output.lines);expect(pages[0].lines.length).toBeGreaterThan(before);
-      comparison.push({columns,font:Math.round(scale*100),qr,before,after:pages[0].lines.length,pages:pages.length});
+      expect(pages.flatMap(p=>p.lines)).toEqual(output.lines);expect(pages[0].lines.length).toBeGreaterThanOrEqual(Math.min(count,before));
+      if(count===18 && columns===2 && scale===1 && !qr) expect(pages).toHaveLength(1);
+
       await expect(dialog.locator(".pricing-paper")).toHaveCount(pages.length);
       const metrics=await dialog.locator(".pricing-paper").evaluateAll(papers=>papers.map(paper=>{
         const style=getComputedStyle(paper),content=paper.querySelector(".pricing-output-content")!,image=paper.querySelector("footer img");
@@ -134,11 +135,59 @@ for(const columns of [1,2,3] as const)test(`CX-05 A4 density and fixed QR ${colu
       }));
       for(const metric of metrics){expect(metric.padding).toBeCloseTo(10*96/25.4,0);expect(metric.actual).toBeLessThanOrEqual(metric.available+2);expect(metric.clipped).toBe(false);}
       if(qr){const positions=metrics.map(m=>m.qrBottom!);expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(2);}
-      await dialog.locator(".pricing-paper").first().screenshot({path:info.outputPath(`CX-05-${columns}col-${Math.round(scale*100)}${qr?"-qr":""}.png`),animations:"disabled"});
+      // Intrinsic occupied height excludes the footer's auto margin and the 277mm flex minimum.
+      // Reconstruct the former first page from these same rendered rows and its former CSS.
+      const fill=await dialog.locator(".pricing-paper").first().evaluate((paper,{before,columns,scale})=>{
+        const occupied=(content:Element)=>{
+          const style=getComputedStyle(content);
+          return Array.from(content.children).reduce((sum,child)=>{
+            const s=getComputedStyle(child);
+            return sum+child.getBoundingClientRect().height+(child.classList.contains("mt-auto")?0:parseFloat(s.marginTop)||0)+(parseFloat(s.marginBottom)||0);
+          },parseFloat(style.borderTopWidth)||0);
+        };
+        const content=paper.querySelector(".pricing-output-content")!;
+        const after=occupied(content)/(277*96/25.4);
+        const clone=paper.cloneNode(true) as HTMLElement;
+        clone.style.cssText="position:fixed;left:-10000px;top:0;padding:14mm;width:210mm;height:297mm";
+        const style=document.createElement("style");
+        style.textContent=`.cx05-before table{font-size:${Math.round(11*scale)}px;line-height:${Math.round(16*scale)}px}.cx05-before table .text-xs{font-size:12px;line-height:16px}.cx05-before .pricing-output-table td,.cx05-before .pricing-output-table th{padding:6px}.cx05-before .pricing-output-grid{gap:12px;margin-top:12px;margin-bottom:12px}`;
+        clone.classList.add("cx05-before");clone.append(style);document.body.append(clone);
+        const tables=Array.from(clone.querySelectorAll(".pricing-output-grid table"));
+        const rows=tables.flatMap(t=>Array.from(t.querySelectorAll("tbody tr")));
+        for(const t of tables)t.querySelector("tbody")!.replaceChildren();
+        const n=Math.ceil(Math.min(rows.length,before)/columns);
+        rows.slice(0,before).forEach((row,i)=>tables[Math.floor(i/n)].querySelector("tbody")!.append(row));
+        const old=occupied(clone.querySelector(".pricing-output-content")!)/(269*96/25.4);
+        clone.remove();return {beforeFillPercent:Math.round(old*1000)/10,afterFillPercent:Math.round(after*1000)/10};
+      },{before,columns,scale});
+      comparison.push({count,columns,font:Math.round(scale*100),qr,before:Math.min(count,before),after:pages[0].lines.length,pages:pages.length,...fill});
+
+      await dialog.locator(".pricing-paper").first().screenshot({path:info.outputPath(`CX-05-${count}items-${columns}col-${Math.round(scale*100)}${qr?"-qr":""}.png`),animations:"disabled"});
     }
   }
+  if(count===18){
+    await page.setViewportSize({width:390,height:1000});
+    const online=dialog.locator(".pricing-online");
+    await expect(online.locator(".pricing-output-grid table")).toHaveCount(1);
+    expect(await online.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    expect(await online.locator("[data-document-price]").evaluateAll(els=>els.every(el=>getComputedStyle(el).whiteSpace==="nowrap"&&getComputedStyle(el).textAlign==="right"))).toBe(true);
+    // The modal owns its scrolling/sticky header; document table headings must not float over it.
+    await dialog.evaluate(el=>{el.scrollTop=600;});
+    const header=dialog.locator(":scope > div").first();
+    expect(Math.abs((await header.boundingBox())!.y)).toBeLessThan(2);
+    expect(await header.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+10,r.top+10));})).toBe(true);
+    await dialog.evaluate(el=>{el.scrollTop=0;});
+    await online.screenshot({path:info.outputPath(`CX-05-phone-${columns}col-source.png`)});
+    await dialog.getByRole("button",{name:"닫기",exact:true}).click();
+    content.layout="cards";
+    await page.getByRole("button",{name:/버전 1 미리보기/}).click();
+    const cards=page.getByRole("dialog",{name:"미리보기",exact:true}).locator(".pricing-online");
+    expect(await cards.locator("article").evaluateAll(els=>els.length===18&&els.every(el=>Math.abs(el.getBoundingClientRect().left-els[0].getBoundingClientRect().left)<1))).toBe(true);
+    expect(await cards.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    await cards.screenshot({path:info.outputPath(`CX-05-phone-cards-${columns}col-source.png`)});
+  }
   console.log("CX-05_CAPACITY",JSON.stringify(comparison));
-  await info.attach(`CX-05-${columns}col-capacity.json`,{body:JSON.stringify(comparison,null,2),contentType:"application/json"});
+  await info.attach(`CX-05-${count}items-${columns}col-capacity.json`,{body:JSON.stringify(comparison,null,2),contentType:"application/json"});
 });
 
 });
