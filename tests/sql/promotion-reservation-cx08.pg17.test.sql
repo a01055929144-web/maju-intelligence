@@ -23,7 +23,7 @@ insert into pricing_promotions(id,company_id,product_id,name,display_name,starts
  values('c0080000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000001',
  'CX08 synthetic','CX08 synthetic',current_date-1,'2099-12-31',800,0,1200,2,null,'exempt',true,'행사',1);
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content)
- select 'c0080000-0000-4000-8000-000000000002',company_id,document_id,2,1,
+ select 'c0080000-0000-4000-8000-000000000002',company_id,document_id,2,2,
  jsonb_set(content,'{lines,0,promotionId}','"c0080000-0000-4000-8000-000000000001"') from pricing_document_versions where id='80000000-0000-4000-8000-000000000001';
 update storefront_links set document_version_id='c0080000-0000-4000-8000-000000000002' where token_hash=repeat('a',64);
 update normalized_customers set delivery_territory_id='10000000-0000-4000-8000-000000000001' where id='20000000-0000-4000-8000-000000000002';
