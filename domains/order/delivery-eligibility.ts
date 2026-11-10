@@ -17,7 +17,13 @@ export function matchOrderDeliveryArea(base:string,territories:Territory[],known
     const parts=a.trim().split(/\s+/);parts[0]=aliases[parts[0]]||parts[0];
     return key===parts.join(" ")?key:null;
   })}));
-  if(configured.some(t=>t.areas.some(a=>a===null)))return {eligible:false as const,reason:"verification_unavailable"};
+  // An invalid area in a different locality cannot disable every store in the company.
+  // An invalid key sharing this city may hide an overlap, so keep that locality closed.
+  const parent=area.split(" ").slice(0,2).join(" ");
+  if(territories.some(t=>t.areas.some(a=>{
+    const parts=a.trim().split(/\s+/);parts[0]=aliases[parts[0]]||parts[0];
+    return parts.slice(0,2).join(" ")===parent && orderAddressArea(a,knownAreas,generalGu)!==parts.join(" ");
+  })))return {eligible:false as const,reason:"verification_unavailable"};
   // City-wide and district-specific territories both count; no arbitrary priority.
   const matches=configured.filter(t=>t.areas.some(a=>a!==null&&(a===area||area.startsWith(`${a} `))));
   if(matches.length!==1)return {eligible:false as const,reason:matches.length?"ambiguous_area":territories.some(t=>t.areas.length)?"outside_area":"territory_unconfigured"};
@@ -32,7 +38,6 @@ export function deliveryEligibilityMessage(reason:string) {
     case "ambiguous_area":return "주소가 여러 배송 권역과 겹칩니다. 담당자에게 권역 설정 확인을 요청해 주세요.";
     case "weekdays_unconfigured":return "배송 권역의 가능 요일이 설정되지 않았습니다. 담당자에게 요일 설정을 요청해 주세요.";
     case "territory_link_required":return "주소에 맞는 배송 권역은 있지만 매장의 권역 연결이 완료되지 않았습니다. 담당자에게 매장 권역 연결을 요청해 주세요.";
-    case "order_settings_unconfigured":return "회사의 주문 설정이 준비되지 않았습니다. 담당자에게 주문 설정 확인을 요청해 주세요.";
     default:return "배송 가능 여부를 확인하지 못했습니다. 다시 확인하거나 담당자에게 문의해 주세요.";
   }
 }

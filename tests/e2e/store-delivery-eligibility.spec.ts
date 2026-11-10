@@ -11,7 +11,7 @@ for(const width of [1440,390])test(`server delivery eligibility blocks and recov
     const eligible=reason==="eligible";
     return route.fulfill({json:{store:{title:"합성 단가표",companyName:"합성 유통",customerName:"사업자번호 없는 합성 개업준비 매장",deliveryAddress:"서울특별시 강남구 합성로 1 1층",version:1,validUntil:"2099-12-31",priceAvailable:true,canOrder:eligible,
       deliveryEligibility:{eligible,reason,weekdays:eligible?[1,3]:[]},nextDeliveryDate:eligible?"2099-01-05":null,selectedDeliveryDate:"2099-01-05",notice:"",marketPriceNotice:"",
-      policy:{weekdays:eligible?[1,3]:[],holidays:[],cutoffDaysBefore:0,cutoffTime:"22:00",minimumAmount:0,minimumPolicy:"notice",deliveryFee:0},
+      policy:{weekdays:eligible?[1,3]:[],holidays:[],cutoffDaysBefore:1,cutoffTime:"22:00",minimumAmount:0,minimumPolicy:"notice",deliveryFee:0},
       lines:[{key:`${productId}:`,productId,promotionId:null,name:"합성 품목",category:"",brand:"",spec:"1kg",unit:"봉",badge:"",taxType:"exempt",unitPrice:1000,priceIncludesTax:false,isMarketPrice:false,remaining:null,maximumQuantity:null,recentDispatchPrice:null,recentDispatchDate:null}]},orders:[],preferences:[],historyPage:1,historyHasMore:false}});
   });
   await page.goto("/store#synthetic-token");await page.getByRole("button",{name:"주문하기",exact:true}).click();

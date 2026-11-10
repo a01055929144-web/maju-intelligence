@@ -23,12 +23,11 @@ export async function getStoreDeliveryEligibility(companyId:string,customerId:st
   if(!storeAddressVerificationEnabled(companyId))return blocked("verification_unavailable");
   const company=encodeURIComponent(companyId),customer=encodeURIComponent(customerId);
   try {
-    const [customers,territories,areas,customerRules,settings]=await Promise.all([
+    const [customers,territories,areas,customerRules]=await Promise.all([
       supabaseRequest<Array<{delivery_base_address:string|null;delivery_address_detail:string|null;delivery_territory_id:string|null}>>(`normalized_customers?company_id=eq.${company}&id=eq.${customer}&select=delivery_base_address,delivery_address_detail,delivery_territory_id&limit=1`),
       allRows<{id:string;name:string;is_active:boolean}>(`delivery_territories?company_id=eq.${company}&is_active=eq.true&select=id,name,is_active&order=id.asc`,1000),
       allRows<{territory_id:string;administrative_area:string}>(`delivery_territory_areas?company_id=eq.${company}&select=territory_id,administrative_area&order=territory_id.asc,administrative_area.asc`,10000),
-      supabaseRequest<Array<{delivery_weekdays:number[]|null}>>(`store_order_customer_rules?company_id=eq.${company}&customer_id=eq.${customer}&select=delivery_weekdays&limit=1`),
-      supabaseRequest<Array<{company_id:string}>>(`store_order_settings?company_id=eq.${company}&select=company_id&limit=1`)
+      supabaseRequest<Array<{delivery_weekdays:number[]|null}>>(`store_order_customer_rules?company_id=eq.${company}&customer_id=eq.${customer}&select=delivery_weekdays&limit=1`)
     ]);
     const saved=customers[0],base=saved?.delivery_base_address?.trim(),detail=saved?.delivery_address_detail?.trim();
     if(!base||!detail)return blocked("address_unknown");
@@ -38,7 +37,6 @@ export async function getStoreDeliveryEligibility(companyId:string,customerId:st
     const rules=await supabaseRequest<Array<{delivery_weekdays:number[]|null}>>(`store_order_territory_rules?company_id=eq.${company}&territory_id=eq.${encodeURIComponent(match.territory.id)}&select=delivery_weekdays&limit=1`);
     const days=customerRules[0]?.delivery_weekdays??rules[0]?.delivery_weekdays;
     if(!days?.length||days.length>7||days.some(d=>!Number.isInteger(d)||d<0||d>6))return blocked("weekdays_unconfigured");
-    if(!settings.length)return blocked("order_settings_unconfigured");
     return {eligible:true,reason:"eligible",territoryId:match.territory.id,territoryName:match.territory.name,weekdays:days,baseAddress:base,addressDetail:detail};
   }catch{return blocked("verification_unavailable");}
 }

@@ -53,11 +53,13 @@ it("OFF preserves original queries; ON shares address eligibility with submissio
     if(path.startsWith("normalized_customers?")&&path.includes("delivery_base_address"))return [{delivery_base_address:storedBase,delivery_address_detail:"1층",delivery_territory_id:"territory"}];
     if(path.startsWith("delivery_territories?"))return [{id:"territory",name:"합성 권역",is_active:true}];
     if(path.startsWith("delivery_territory_areas?"))return [{territory_id:"territory",administrative_area:"서울특별시 강남구"}];
-    if(path.startsWith("store_order_settings?"))return [{company_id:company,cutoff_days_before:0,cutoff_time:"23:59:00",minimum_amount:0,minimum_policy:"notice",delivery_fee:0}];
+    if(path.startsWith("store_order_settings?"))return [];
+    if(path.startsWith("store_order_territory_rules?"))return [{delivery_weekdays:[0,1,2,3,4,5,6]}];
     return fixture(path);
   });
   const valid=await readStorefront("signed","2099-01-01");
   expect(valid?.deliveryEligibility?.eligible).toBe(true);expect(valid?.canOrder).toBe(true);
+  expect(valid?.policy).toMatchObject({cutoffDaysBefore:1,cutoffTime:"22:00",minimumAmount:0,minimumPolicy:"notice",deliveryFee:0});
   storedBase=null;const missing=await readStorefront("signed","2099-01-01");
   expect(missing?.deliveryEligibility?.reason).toBe("address_unknown");expect(missing?.canOrder).toBe(false);
   expect((await PUT(request("PUT"))).status).toBe(422);

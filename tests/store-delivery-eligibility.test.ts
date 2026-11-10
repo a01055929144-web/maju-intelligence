@@ -49,8 +49,8 @@ it("blocks no active territory, overlapping territories, unknown addresses and m
 it.each([null,"different"])("requires customer territory connection %s without updating customer master",async value=>{
   linked=value;expect((await getStoreDeliveryEligibility(company,customer)).reason).toBe("territory_link_required");
 });
-it("requires company settings and fails closed on missing address SQL",async()=>{
-  settings=false;expect((await getStoreDeliveryEligibility(company,customer)).reason).toBe("order_settings_unconfigured");
+it("does not require a company settings row and fails closed on missing address SQL",async()=>{
+  settings=false;expect((await getStoreDeliveryEligibility(company,customer)).eligible).toBe(true);
   db.mockRejectedValue(new Error("column missing/private DB details"));expect(await getStoreDeliveryEligibility(company,customer)).toEqual({eligible:false,reason:"verification_unavailable",weekdays:[]});
 });
 it("reads past a server row cap so the second matching territory cannot disappear",async()=>{
@@ -78,4 +78,9 @@ it("matches the actual general-gu unit; city+gu overlap blocks rather than selec
   expect(match("경기도 성남시 분당구 도로 1",["경기도 성남시","경기도 성남시 분당구"]).reason).toBe("ambiguous_area");
   expect(match("경기도 성남시 도로 1",["경기도 성남시 분당구"]).eligible).toBe(false);
   expect(match("경기도 성남시 분당구 도로 1",["경기도 성남시 엉뚱구"]).eligible).toBe(false);
+});
+
+it("does not let an invalid unrelated locality disable a verified store",()=>{
+  const result=matchOrderDeliveryArea("서울특별시 강남구 도로 1",[{id:"good",name:"good",areas:["서울특별시 강남구"]},{id:"bad",name:"bad",areas:["경기도 성남시 엉뚱구"]}],known,gu);
+  expect(result.eligible).toBe(true);
 });
