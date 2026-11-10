@@ -24,8 +24,8 @@ PR 생성 — 제목 앞에 [CC-01] / [CX-01], 본문에 지시서 링크
    ↓
 Ponytail 점검 (필수)
    · Codex 작업: 작성한 Codex가 Ponytail 사용 → 본문 `Ponytail: 사용함`
-   · Claude Code 작업: PR을 Draft로 올리고 본문 `Ponytail: 검토 요청` → Codex Ponytail 검토방이 점검·보완 커밋
-     → 본문을 `Ponytail: 사용함 (Codex 검토 #PR)`로 바꿈
+   · Claude Code 작업: Claude Code가 설치된 Ponytail(ponytail-review)로 직접 점검·보완 → 본문 `Ponytail: 사용함 (Claude Code ponytail-review)`
+     (2026-11-11부터. Codex Ponytail 검토방 CX-00은 추가 검토가 필요할 때만)
    ↓
 CI 전체 초록 → Ready for review → 병합 (병합은 작성자가 함)
    ↓
