@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { storeViewFrom, type StoreView } from "@/lib/store-navigation";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
@@ -56,7 +58,15 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null, port
 
 function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode }) {
   const [data, setData] = useState<Response | null>(null);
-  const [tab, setTab] = useState<"home" | "order" | "history" | "data" | "info">("home");
+  const [tab, setTabState] = useState<StoreView>("home");
+  // PC 사이드바(?view=)와 화면 탭을 맞춘다. 주소의 #토큰·다른 쿼리는 그대로 둔다.
+  const viewParam = useSearchParams().get("view");
+  useEffect(() => { setTabState(storeViewFrom(viewParam)); }, [viewParam]);
+  const setTab = (next: StoreView) => {
+    setTabState(next);
+    const url = new URL(window.location.href); url.searchParams.set("view", next);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  };
   const [cart, setCart] = useState<Record<string, number>>({});
   const [deliveryDate, setDeliveryDate] = useState("");
   const [memo, setMemo] = useState("");
@@ -230,7 +240,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
       {store.notice && <p className="mt-2 rounded bg-blue-50 p-2 text-sm">{store.notice}</p>}
       {!store.priceAvailable && <p className="mt-2 rounded bg-amber-50 p-2 text-sm">문서 유효기간이 지났습니다. 품목은 볼 수 있지만 가격과 주문은 잠시 숨겼습니다.</p>}
     </header>
-    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-5 border-t bg-white text-sm md:static md:max-w-none md:translate-x-0 md:border-b md:border-t-0">
+    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-5 border-t bg-white text-sm sm:hidden">
       {(["home", "order", "history", "data", "info"] as const).map((item, index) =>
         <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
           onClick={() => setTab(item)}>{["홈", "주문", "내역", "데이터", "내 정보"][index]}</button>)}</nav>
