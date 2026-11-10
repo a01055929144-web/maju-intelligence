@@ -52,6 +52,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   const dialog = page.getByRole("dialog", { name: "미리보기", exact: true });
   await dialog.getByRole("button", { name: "130%", exact: true }).click();
   await dialog.getByRole("button", { name: "주문 링크 QR 만들기", exact: true }).click();
+  await dialog.getByText("관리 · 회수와 기존 거래처 전용 QR", { exact: true }).click();
   await dialog.getByRole("button", { name: "기존 거래처 전용 QR 선택", exact: true }).click();
   await dialog.getByRole("combobox", { name: "QR을 받을 거래처", exact: true }).selectOption(customerId);
   await dialog.getByRole("button", { name: "선택 거래처 QR 생성", exact: true }).click();

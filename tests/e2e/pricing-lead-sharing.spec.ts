@@ -101,14 +101,14 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(page.getByRole("status")).toContainText("초안을 저장했습니다");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   await expect(page.getByRole("button", { name: /버전 1 미리보기/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "버전 1 공개 링크·QR", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true })).toHaveCount(0);
   const frozenVersion = JSON.stringify(version());
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
   published = false;
   await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByText(/먼저 초안을 저장하고 판매가 버전을 확정해 주세요/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /버전 1 공개 링크·QR/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /공개 링크·QR · 버전 1/ })).toHaveCount(0);
   published = true;
   await page.goto("/revenue/pricing/documents");
   await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
@@ -119,7 +119,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "공개 링크·QR 생성", exact: true })).toBeVisible();
   await page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  const publicEntry = page.getByRole("button", { name: "버전 1 공개 링크·QR", exact: true });
+  const publicEntry = page.getByRole("button", { name: "공개 링크·QR · 버전 1", exact: true });
   expect((await publicEntry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicEntry.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath(`public-qr-entry-${kind}-${width}.png`), fullPage: true });
@@ -202,6 +202,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await publicViewer.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(publicViewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
   await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await preview.getByText("관리 · 회수와 기존 거래처 전용 QR", { exact: true }).click();
   await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
   await publicViewer.reload(); await expect(publicViewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
