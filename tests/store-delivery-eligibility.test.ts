@@ -84,3 +84,12 @@ it("does not let an invalid unrelated locality disable a verified store",()=>{
   const result=matchOrderDeliveryArea("서울특별시 강남구 도로 1",[{id:"good",name:"good",areas:["서울특별시 강남구"]},{id:"bad",name:"bad",areas:["경기도 성남시 엉뚱구"]}],known,gu);
   expect(result.eligible).toBe(true);
 });
+
+it("blocks an address changed after a successful read until customer territory is explicitly reconnected",async()=>{
+  expect((await getStoreDeliveryEligibility(company,customer)).eligible).toBe(true);
+  territories.push({id:"new-area",name:"new area",is_active:true});
+  areas.push({territory_id:"new-area",administrative_area:"서울특별시 서초구"});
+  base="서울특별시 서초구 합성로 2";
+  expect((await getStoreDeliveryEligibility(company,customer)).reason).toBe("territory_link_required");
+  expect(linked).toBe(territory);
+});
