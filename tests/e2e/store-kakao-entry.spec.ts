@@ -369,3 +369,37 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+// CX-07 synthetic session/profile boundary: no real OAuth, signup or operating DB.
+for(const width of [1440,390])test(`public signup source returns in store home and address anchor at ${width}px`,async({page},info)=>{
+  page.setDefaultTimeout(15_000);
+  await page.setViewportSize({width,height:900});let orderReads=0;
+  await page.route("**/api/storefront",route=>{orderReads++;return route.fulfill({status:404,json:{message:"unexpected bearer request"}});});
+  await page.route(/\/store(?:\?|$)/,async route=>{
+    const url=new URL(route.request().url());if(url.pathname!=="/store")return route.fallback();
+    url.searchParams.set("fixture","store-portal-source-document");
+    const response=await route.fetch({url:url.toString(),maxRedirects:0});return route.fulfill({response});
+  });
+  await page.route("**/api/store/address?**",route=>route.fulfill({json:{address:"서울특별시 송파구 합성로 1 1층",baseAddress:"서울특별시 송파구 합성로 1",addressDetail:"1층"}}));
+  await page.route("**/api/address-search?**",route=>route.fulfill({json:{results:[{address:"서울특별시 송파구 합성로 1",postalCode:"00000"}]}}));
+  await page.route("**/api/store/accounts/activate",route=>route.fulfill({json:{redirectTo:"/pricing-document#synthetic-source"}}));
+  // Return document fixture is outside this task; the real portal component is rendered below.
+  await page.route(/\/pricing-document(?:\?|$)/,route=>route.fulfill({contentType:"text/html; charset=utf-8",body:'<main><h1>합성 가입 단가표</h1><a href="/store">매장 홈</a></main>'}));
+  await page.goto("/store/activate?fixture=store-owner-activation&profile=1");
+  for(const [label,value] of [["매장명","합성 공개 가입 매장"],["사업자 대표자명","합성 대표"],["사업자등록번호","1234567890"],["매장 연락처","01012345678"],["매장 주소","합성로 1"],["상세주소","1층"]] as const)await page.getByLabel(label,{exact:true}).fill(value);
+  await page.getByRole("button",{name:"주소 검색",exact:true}).click();await page.getByRole("button",{name:"서울특별시 송파구 합성로 1 (00000)",exact:true}).click();
+  await page.getByRole("checkbox").check();await page.getByRole("button",{name:"동의하고 매장 개통",exact:true}).click();
+  await expect(page).toHaveURL(/pricing-document\?continueOrder=1#synthetic-source$/);
+  await page.getByRole("link",{name:"매장 홈",exact:true}).click();
+  const source=page.getByRole("link",{name:"단가표 · 합성 가입 단가표 문서 확인",exact:true});
+  await expect(source).toHaveCount(1);await expect(source).toHaveAttribute("href","/pricing-document#synthetic-source");
+  await page.reload();await expect(source).toHaveCount(1);expect(orderReads).toBe(0);
+  await page.screenshot({path:info.outputPath(`CX-07-source-home-${width}.png`),fullPage:true});
+  const address=page.getByRole("link",{name:"배송지 주소",exact:true});
+  await expect(address).toHaveAttribute("href",`/store?companyId=${companyId}&storeAccountId=${storeAccountId}#store-address-management`);
+  expect((await address.boundingBox())!.height).toBeGreaterThanOrEqual(44);await address.click();
+  await expect(page).toHaveURL(/#store-address-management$/);
+  await expect(page.getByRole("heading",{name:"배송지 주소",exact:true})).toBeInViewport();expect(orderReads).toBe(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
+  await page.screenshot({path:info.outputPath(`CX-07-address-anchor-${width}.png`),fullPage:true});
+});

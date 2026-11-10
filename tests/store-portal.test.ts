@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { issueDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 import { NextRequest } from "next/server";
 
@@ -92,4 +93,26 @@ describe("store portal", () => {
     expect(new URL(response.headers.get("location")!).searchParams.get("state")).toBe("store-portal");
     expect((await startKakao(new NextRequest(`${url}&store=1`))).status).toBe(400);
   });
+});
+
+it("joins the authenticated store home to its consumed public signup source without issuing a store link",async()=>{
+  vi.stubEnv("STORE_PORTAL_SOURCE_DOCUMENTS_ENABLED","true");vi.stubEnv("FEATURE_STORE_PORTAL_SOURCE_DOCUMENTS_COMPANY_IDS",companyId);
+  vi.stubEnv("LEAD_DOCUMENT_LINK_SECRET","synthetic-document-secret-over-32-characters");
+  const original=mocks.db.getMockImplementation()!;
+  const documentId="00000000-0000-4000-8000-000000000006",shareId="00000000-0000-4000-8000-000000000007";
+  mocks.db.mockImplementation(async(path:string)=>{
+    if(path.startsWith("storefront_links?"))return [];
+    if(path.startsWith("store_owner_activation_requests?")){
+      expect(path).toContain(`company_id=eq.${companyId}&store_account_id=eq.${storeAccountId}&customer_id=eq.${customerId}`);
+      return [{document_id:documentId,document_version_id:versionId,share_link_id:shareId}];
+    }
+    if(path.startsWith("pricing_document_share_links?"))return [{id:shareId,document_id:documentId,document_version_id:versionId,token_nonce:nonce,token_hash:issueDocumentShareToken(shareId,nonce).hash,expires_at:"2099-01-01",revoked_at:null}];
+    if(path.startsWith("pricing_document_versions?"))return [{id:versionId,document_id:documentId,content:{kind:"sheet",title:"가입 문서",validUntil:"2099-01-01"}}];
+    if(path.startsWith("pricing_documents?"))return [{id:documentId}];
+    return original(path);
+  });
+  const account=(await listStorePortalAccounts())?.[0];
+  expect(account?.documents).toEqual([{title:"가입 문서",kind:"sheet",href:`/pricing-document#${issueDocumentShareToken(shareId,nonce).token}`,canOrder:false,validUntil:"2099-01-01"}]);
+  expect(mocks.db.mock.calls.every(([,init])=>init===undefined)).toBe(true);
+  mocks.db.mockClear();mocks.active.mockResolvedValue(false);expect(await listStorePortalAccounts()).toEqual([]);expect(mocks.db).not.toHaveBeenCalled();
 });
