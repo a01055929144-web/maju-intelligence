@@ -84,28 +84,42 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
     } catch (error) { setMessage(error instanceof Error ? error.message : "QR을 만들지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
+  const step = "space-y-2 rounded-lg border border-slate-200 bg-white p-3";
+  const customerPicker = <div className="space-y-3">
+    <p className="text-sm">게시 버전 {version.version}의 거래처별 주문 링크를 만듭니다. 기존 활성 링크는 재사용합니다. QR은 이번 인쇄·PNG에만 넣으며 게시 원문은 바꾸지 않습니다.</p>
+    <label className="block text-sm">QR을 받을 거래처<select disabled={busy} aria-label="QR을 받을 거래처" className="mt-1 min-h-11 w-full rounded border p-2" value={selected} onChange={event => { setSelected(event.target.value); setQr(null); onInsert(null); }}>
+      <option value="">거래처 선택</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.customer_name}{customer.address ? ` · ${customer.address}` : ""}</option>)}
+    </select></label>
+    {!customers.length ? <p className="text-sm">거래처가 없습니다. 거래처 등록 상태를 확인하거나 다시 불러와 주세요.</p> : null}
+    <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy || !selected} onClick={() => void generate()} type="button">선택 거래처 QR 생성</Button><Button className="min-h-[44px]" disabled={busy} onClick={() => void load()} type="button">거래처 다시 불러오기</Button>{cursor ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void load(cursor)} type="button">거래처 더 보기</Button> : null}</div>
+  </div>;
   return <section className="pricing-no-print space-y-3 rounded border p-3" aria-label="주문 링크 QR">
     <Button className="min-h-[44px]" disabled={busy} onClick={() => open ? setOpen(false) : publicSharingAvailable ? setOpen(true) : void load()} type="button">주문 링크 QR 만들기</Button>
     {open ? <div className="space-y-3">
-      {publicSharingAvailable ? <div className="space-y-2">
-        <p className="text-sm">게시 버전 {version.version}을 누구나 열람할 수 있는 링크·QR입니다. 주문할 때 카카오 점주 가입과 매장 정보를 확인합니다. 가격·주문은 문서 유효기간까지이며, 같은 QR로 만료 후에도 품목을 365일간 볼 수 있습니다. 링크는 회수할 수 있습니다.</p>
+      {publicSharingAvailable ? <div className={step}>
+        <h3 className="font-bold">1 링크 만들기</h3>
+        <p className="text-sm">게시 버전 {version.version}을 누구나 열 수 있는 링크·QR로 만듭니다. 주문할 때 카카오 점주 가입과 매장 정보를 확인합니다.</p>
         <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(false); void generatePublic(); }} type="button">공개 링크·QR 생성</Button>
-        {shared ? <div className="space-y-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><p className="text-sm">가격·주문: {version.content.validUntil}까지 · QR 품목 열람: {documentLinkLastDay(shared.expiresAt)}까지</p><div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy} onClick={() => { void navigator.clipboard.writeText(shared.publicUrl).then(() => setMessage("공개 링크를 복사했습니다."), () => setMessage("복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button><Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button></div></div> : null}
-        {allowCustomerLink ? <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(true); void load(); }} type="button">기존 거래처 전용 QR 선택</Button> : null}
       </div> : null}
-      {customerMode && allowCustomerLink ? <div className="space-y-3">
-      <p className="text-sm">게시 버전 {version.version}의 거래처별 주문 링크를 만듭니다. 기존 활성 링크는 재사용합니다. QR은 이번 인쇄·PNG에만 넣으며 게시 원문은 바꾸지 않습니다.</p>
-      <label className="block text-sm">QR을 받을 거래처<select disabled={busy} aria-label="QR을 받을 거래처" className="mt-1 min-h-11 w-full rounded border p-2" value={selected} onChange={event => { setSelected(event.target.value); setQr(null); onInsert(null); }}>
-        <option value="">거래처 선택</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.customer_name}{customer.address ? ` · ${customer.address}` : ""}</option>)}
-      </select></label>
-      {!customers.length ? <p className="text-sm">거래처가 없습니다. 거래처 등록 상태를 확인하거나 다시 불러와 주세요.</p> : null}
-      <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={busy || !selected} onClick={() => void generate()} type="button">선택 거래처 QR 생성</Button><Button className="min-h-[44px]" disabled={busy} onClick={() => void load()} type="button">거래처 다시 불러오기</Button>{cursor ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void load(cursor)} type="button">거래처 더 보기</Button> : null}</div>
+      {shared || qr ? <div className={step}>
+        <h3 className="font-bold">2 QR·링크 받기</h3>
+        <p className="text-sm">링크를 복사해 보내거나 QR을 저장·인쇄에 넣습니다.{shared ? ` 가격·주문: ${version.content.validUntil}까지 · QR 품목 열람: ${documentLinkLastDay(shared.expiresAt)}까지` : ""}</p>
+        {shared ? <div className="flex flex-wrap items-center gap-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><Button className="min-h-[44px]" disabled={busy} onClick={() => { void navigator.clipboard.writeText(shared.publicUrl).then(() => setMessage("공개 링크를 복사했습니다."), () => setMessage("복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button></div> : null}
+        {qr ? <div className="flex flex-wrap items-center gap-2"><img src={qr.dataUrl} width={160} height={160} alt={`${qr.customerName} 주문 QR 미리보기`} />
+          <Button className="min-h-[44px]" onClick={() => { const a = document.createElement("a"); a.href = qr.dataUrl; a.download = `order-qr-v${version.version}.png`; a.click(); }} type="button">QR PNG 저장</Button>
+          <Button className="min-h-[44px]" onClick={() => { onInsert(qr); setMessage("인쇄·PNG에 QR을 넣었습니다. 공개 범위와 게시 버전을 확인해 주세요."); }} type="button">문서에 QR 넣기</Button>
+          <Button className="min-h-[44px]" onClick={() => { onInsert(null); setMessage("문서에서 QR을 뺐습니다. 발급된 주문 링크는 유지됩니다."); }} type="button">문서에서 QR 빼기</Button>
+        </div> : null}
       </div> : null}
-      {qr ? <div className="space-y-2"><img src={qr.dataUrl} width={160} height={160} alt={`${qr.customerName} 주문 QR 미리보기`} /><div className="flex flex-wrap gap-2">
-        <Button className="min-h-[44px]" onClick={() => { onInsert(qr); setMessage("인쇄·PNG에 QR을 넣었습니다. 공개 범위와 게시 버전을 확인해 주세요."); }} type="button">문서에 QR 넣기</Button>
-        <Button className="min-h-[44px]" onClick={() => { const a = document.createElement("a"); a.href = qr.dataUrl; a.download = `order-qr-v${version.version}.png`; a.click(); }} type="button">QR PNG 저장</Button>
-        <Button className="min-h-[44px]" onClick={() => { onInsert(null); setMessage("문서에서 QR을 뺐습니다. 발급된 주문 링크는 유지됩니다."); }} type="button">문서에서 QR 빼기</Button>
-      </div></div> : null}
+      {publicSharingAvailable && (shared || allowCustomerLink) ? <div className={step}>
+        <h3 className="font-bold">관리 · 회수와 기존 거래처 전용 QR</h3>
+        <p className="text-sm">링크는 언제든 회수할 수 있습니다. 특정 거래처에만 보낼 QR이 필요할 때만 거래처 전용 QR을 씁니다.</p>
+        <div className="flex flex-wrap gap-2">
+          {shared ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void revokePublic()} type="button">공개 링크 회수</Button> : null}
+          {allowCustomerLink ? <Button className="min-h-[44px]" disabled={busy} onClick={() => { setCustomerMode(true); void load(); }} type="button">기존 거래처 전용 QR 선택</Button> : null}
+        </div>
+        {customerMode && allowCustomerLink ? customerPicker : null}
+      </div> : customerMode && allowCustomerLink ? customerPicker : null}
     </div> : null}
     {message ? <p role="status" className="text-sm">{message}</p> : null}
   </section>;

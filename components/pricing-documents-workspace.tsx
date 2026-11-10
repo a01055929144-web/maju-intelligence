@@ -541,7 +541,8 @@ export function PricingDocumentsWorkspace({
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
       {leadNotice}
-      <header className="pricing-no-print sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-1 py-2 backdrop-blur">
+      {/* 화면 고정 줄은 앱 상단 줄 하나만 둔다. 이 줄까지 top-0에 고정하면 스크롤 때 페이지 제목을 덮는다(대표 11/10). */}
+      <header className="pricing-no-print -mx-1 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-1 py-2">
         <button className={box} onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button">← 문서 목록</button>
         {draft && tab === "documents" ? (
           <>
@@ -593,6 +594,22 @@ export function PricingDocumentsWorkspace({
                     event.target.value = "";
                   }} />
                 </div>
+                {!leadContext && publicSharingAvailable ? <p className="w-full text-sm">공개 링크·QR은 최신 발행 버전으로 만듭니다. 작성 중인 변경은 새 버전을 확정해야 반영됩니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
+                {versions.length ? <div aria-label="발행 버전" className="flex w-full flex-wrap items-center gap-2" role="group">
+                  <span className="text-sm font-semibold text-slate-600">발행 버전</span>
+                  {versions.map((v) => (
+                    <div className="flex flex-wrap items-center gap-2" key={v.id}>
+                    <button
+                      disabled={busy}
+                      onClick={() => void task(() => openPublishedPreview(v))}
+                      className={box}
+                    >
+                      버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
+                    </button>
+                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v, true))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
+                    </div>
+                  ))}
+                </div> : null}
           </>
         ) : <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>}
       </header>
@@ -1112,21 +1129,6 @@ export function PricingDocumentsWorkspace({
                 </p>
                 </>
                 )}
-                {!leadContext && publicSharingAvailable ? <p className="text-sm">공개 링크·QR은 상단 버튼에서 최신 발행 버전으로 만듭니다. 작성 중인 변경은 새 버전을 확정해야 반영됩니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
-                <div className="flex flex-wrap gap-2">
-                  {versions.map((v) => (
-                    <div className="flex flex-wrap items-center gap-2" key={v.id}>
-                    <button
-                      disabled={busy}
-                      onClick={() => void task(() => openPublishedPreview(v))}
-                      className={box}
-                    >
-                      버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
-                    </button>
-                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v, true))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
-                    </div>
-                  ))}
-                </div>
               </div>
               {docView === "doc" ? <PricingInfoPanel companyId={companyId} content={draft.content} editable={editable} onContent={change} /> : (
               <aside className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
