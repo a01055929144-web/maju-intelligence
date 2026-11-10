@@ -25,8 +25,10 @@ for (const width of [1920, 1440, 390]) test(`edit paper shows the selected 1/2/3
   for (const n of [1, 2, 3]) {
     await page.getByRole("button", { name: `${n}열`, exact: true }).click();
     await expect(page.getByRole("button", { name: `${n}열`, exact: true })).toHaveAttribute("aria-pressed", "true");
-    const used = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
-    expect(used).toBe(width <= 640 ? 1 : n);
+    const { used, gridWidth } = await grid.evaluate((el) => ({ used: getComputedStyle(el).gridTemplateColumns.split(" ").length, gridWidth: el.getBoundingClientRect().width }));
+    // 선택한 열 수까지. 한 열이 150px(+간격 16px)보다 좁아질 만큼 종이가 좁으면 들어가는 만큼만.
+    expect(used).toBe(width <= 640 ? 1 : Math.min(n, Math.max(1, Math.floor((gridWidth + 16) / 166))));
+    if (width === 1920 && n === 2) expect(used).toBe(2);
     // 좁은 열에서도 표가 칸 밖으로 넘치지 않고 단가 칸이 보인다.
     expect(await grid.evaluate((el) => { const edge = el.getBoundingClientRect().right + 1; return Array.from(el.querySelectorAll("input, button, [data-document-spec]")).filter((child) => child.getBoundingClientRect().right > edge).map((child) => `${child.tagName} ${child.getAttribute("aria-label") || ""} +${Math.round(child.getBoundingClientRect().right - edge)}px`); })).toEqual([]);
     await expect(page.getByRole("textbox", { name: "품목 1 단가", exact: true })).toBeVisible();

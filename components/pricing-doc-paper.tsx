@@ -109,15 +109,16 @@ function EditablePricingDocPaper({
         </section>
       ) : null}
 
-      {/* 선택한 열 수를 그대로 쓴다. auto-fit(260px)은 3단 편집 화면의 좁은 종이(약 490px)에서 늘 1열이 됐다. 휴대폰은 아래 media 규칙으로 1열. */}
-      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {/* 선택한 열 수까지 나눈다. 예전 auto-fit(260px)은 3단 편집 화면의 좁은 종이(약 490px)에서 늘 1열이었다.
+          열이 150px보다 좁아지면(단가·품목명을 못 읽음) 그만큼만 줄인다. 휴대폰은 아래 media 규칙으로 1열. */}
+      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(max(150px, calc((100% - ${columns - 1}rem) / ${columns})), 1fr))` }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
-            <colgroup><col style={{ width: `${content.showPrice ? display.productWidth : 100}%` }} />{content.showPrice ? <col style={{ width: `${100 - display.productWidth}%` }} /> : null}</colgroup>
             <thead>
               <tr className="text-left text-xs text-slate-500">
                 <th className="border-b py-1.5">품목{content.showSpec ? "·규격·단위" : ""}</th>
-                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right">단가</th> : null}
+                {/* 단가 칸은 좁은 열에서도 7자리 가격이 들어가게 최소 6rem, 나머지는 품목명. */}
+                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right" style={{ width: `max(${100 - display.productWidth}%, 6rem)` }}>단가</th> : null}
               </tr>
             </thead>
             <tbody>
