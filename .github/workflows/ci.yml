@@ -368,6 +368,16 @@ jobs:
           createdb pricing_lead_share_company_delete_test
           psql --dbname=pricing_lead_share_company_delete_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-lead-share-company-delete.pg17.test.sql
 
+      - name: Verify Songpa delivery seed draft on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb songpa_delivery_seed_test
+          psql --dbname=songpa_delivery_seed_test --set=ON_ERROR_STOP=1 --file=tests/sql/songpa-delivery-seed.pg17.test.sql
+
       - name: Setup Node for member-order concurrency checks
         uses: actions/setup-node@v5
         with:
