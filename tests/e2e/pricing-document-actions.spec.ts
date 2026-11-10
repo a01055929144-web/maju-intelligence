@@ -182,7 +182,11 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
     expect(await header.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+10,r.top+10));})).toBe(true);
     await page.screenshot({path:info.outputPath(`CX-05-phone-header-${columns}col-source.png`)});
     await dialog.evaluate(el=>{el.scrollTop=0;});
-    await online.screenshot({path:info.outputPath(`CX-05-phone-${columns}col-source.png`)});
+    await online.evaluate(el=>{
+      const modal=el.closest("[role=dialog]")!;
+      modal.scrollTop+=el.getBoundingClientRect().top-modal.firstElementChild!.getBoundingClientRect().bottom-8;
+    });
+    await page.screenshot({path:info.outputPath(`CX-05-phone-${columns}col-source.png`)});
     await dialog.getByRole("button",{name:"닫기",exact:true}).click();
     content.layout="cards";
     await page.reload();
@@ -191,7 +195,11 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
     const cards=page.getByRole("dialog",{name:"미리보기",exact:true}).locator(".pricing-online");
     expect(await cards.locator("article").evaluateAll(els=>els.length===18&&els.every(el=>Math.abs(el.getBoundingClientRect().left-els[0].getBoundingClientRect().left)<1))).toBe(true);
     expect(await cards.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
-    await cards.screenshot({path:info.outputPath(`CX-05-phone-cards-${columns}col-source.png`)});
+    await cards.evaluate(el=>{
+      const modal=el.closest("[role=dialog]")!;
+      modal.scrollTop+=el.getBoundingClientRect().top-modal.firstElementChild!.getBoundingClientRect().bottom-8;
+    });
+    await page.screenshot({path:info.outputPath(`CX-05-phone-cards-${columns}col-source.png`)});
   }
   console.log("CX-05_CAPACITY",JSON.stringify(comparison));
   await info.attach(`CX-05-${count}items-${columns}col-capacity.json`,{body:JSON.stringify(comparison,null,2),contentType:"application/json"});
