@@ -117,6 +117,7 @@ const orderNavigationGroup: CustomerNavigationGroup = {
   label: "주문",
   items: [
     // 11/3: 주문 설정은 설정 > 회사 정보 '주문' 탭으로 옮겼습니다(정보를 한 곳에서 입력).
+    { active: "revenue", description: "매장 새 주문 확인", href: "/orders", icon: Store, label: "주문 확인", workspaceRoles: ["owner", "manager", "sales"] },
     { active: "revenue", description: "매장 주문 링크 관리", href: "/revenue/pricing/links", icon: Store, label: "링크 관리", workspaceRoles: ["owner", "manager"] }
   ]
 };

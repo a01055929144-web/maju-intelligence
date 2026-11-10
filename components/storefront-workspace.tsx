@@ -10,6 +10,7 @@ import { Button } from "./ui/button";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
 import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
+import { storeOrderStatusLabel } from "../domains/order/store-order-status";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
@@ -347,7 +348,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
         <th scope="col" className="p-3 text-left">품목</th><th scope="col" className="p-3 text-left">합계</th><th scope="col" className="p-3 text-left">동작</th>
       </tr></thead><tbody>{data?.orders.map((order) => <tr key={order.id} className="block border-b py-2 md:table-row">
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : order.status}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : storeOrderStatusLabel(order.status)}</span></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
         <td className="p-2 md:p-3"><div className="flex gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
