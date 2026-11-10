@@ -345,3 +345,36 @@
 - 대표 승인: 대기
 - `DB-APPROVED:` **없음**
 
+### `lead_customer_mismatch` 주문 보류 보완 — 별도 적용 범위
+
+| 항목 | 내용 |
+|---|---|
+| 상태 | **승인 대기 · 운영 미적용 · 기능 OFF** |
+| SQL 초안 | `docs/sql-drafts/20261110-03-lead-customer-mismatch-order-hold.sql` |
+| 적용 대상 | 운영 `record_pricing_document_acceptance(...)`의 `lead_customer_mismatch` 분기만 교체 |
+| 보존 계약 | 리드의 기존 `matched_customer_id`를 덮어쓰지 않음 |
+| 보류 계약 | `needs_review=true`, `review_reason=lead_customer_mismatch`, `orderEnabled=false`를 저장하고 가격·주문 링크 생성 전 반환 |
+| 제외 | 07 개통, 09 주문, 배송 권역·배송일 계약, 기존 데이터 백필 |
+| 검증 | 합성 PostgreSQL 17에서 기존 연결 보존, 가격 상태 무변경, 주문 링크 비활성 유지 |
+| 운영 적용 | 프로젝트별 `DB-APPROVED:` 명시 승인 후 별도 migration PR에서만 진행 |
+
+이 초안 PR에는 `supabase/migrations/` 파일을 포함하지 않는다. 승인 전에는 `QUOTE_ACCEPTANCE`와 관련 공개 수락·주문 기능을 OFF로 유지하며 운영 DB에 SQL을 실행하지 않는다.
+
+운영 적용 승인 전에는 아래 읽기 전용 조회로 과거 영향 건수를 회사별로 확인한다. 결과에는 회사 ID와 건수만 남기고 거래처·리드·링크 식별자는 승인 문서에 복사하지 않는다.
+
+```sql
+select r.company_id, count(*) as orderable_mismatch_links
+from public.pricing_document_acceptance_requests r
+join public.storefront_links l
+  on l.company_id=r.company_id
+ and l.acceptance_request_id=r.id
+where r.review_reason='lead_customer_mismatch'
+  and r.needs_review
+  and l.can_order
+  and l.revoked_at is null
+group by r.company_id
+order by r.company_id;
+```
+
+이 보완은 새 수락부터 주문 활성화를 막는다. 조회 결과가 1건 이상이면 기존 링크의 비활성화·고객 안내·감사 기록 범위를 별도로 승인하며, 이 초안이나 후속 migration에서 기존 행을 자동 수정하지 않는다.
+
