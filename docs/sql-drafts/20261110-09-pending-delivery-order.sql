@@ -6,7 +6,7 @@ set local statement_timeout='10s';
 alter table public.store_orders add column delivery_confirmation text not null default 'scheduled'
   check(delivery_confirmation in ('scheduled','pending'));
 alter table public.store_orders alter column delivery_date drop not null;
-alter table public.store_orders add constraint store_orders_delivery_confirmation_check
+alter table public.store_orders add constraint store_orders_delivery_schedule_shape_check
   check((delivery_date is null)=(delivery_confirmation='pending')
     and (delivery_confirmation='scheduled' or status in ('submitted','received','cancelled')));
 -- ponytail: reuses the reviewed member-order algorithm as a separate opt-in RPC;
