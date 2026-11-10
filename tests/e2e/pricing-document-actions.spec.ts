@@ -51,6 +51,10 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
   const dialog = page.getByRole("dialog", { name: "미리보기", exact: true });
   await dialog.getByRole("button", { name: "130%", exact: true }).click();
+  await expect(dialog.locator(".pricing-online .pricing-output-grid table")).toHaveCount(1);
+  expect(await dialog.locator(".pricing-online [data-document-spec]").evaluateAll(els=>els.every(el=>el.scrollWidth<=el.clientWidth+1))).toBe(true);
+  expect(await dialog.locator(".pricing-online [data-document-price]").evaluateAll(els=>els.every(el=>getComputedStyle(el).whiteSpace==="nowrap"))).toBe(true);
+
   await dialog.getByRole("button", { name: "주문 링크 QR 만들기", exact: true }).click();
   await dialog.getByRole("button", { name: "기존 거래처 전용 QR 선택", exact: true }).click();
   await dialog.getByRole("combobox", { name: "QR을 받을 거래처", exact: true }).selectOption(customerId);
