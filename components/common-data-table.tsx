@@ -24,6 +24,7 @@ export function CommonDataTable<Row>({
   loading = false,
   groupBy,
   pageSizeMode = "list",
+  phoneCards = false,
   rowKey,
   rows,
   settingsKey,
@@ -36,6 +37,8 @@ export function CommonDataTable<Row>({
   loading?: boolean;
   groupBy?: (row: Row) => { key: string; label: string } | null;
   pageSizeMode?: keyof typeof COMMON_TABLE_PAGE_SIZES;
+  /** 휴대폰(≤640px)에서 표 대신 카드로 보여준다. 기본 꺼짐(기존 화면 유지), 화면별로 켠다. */
+  phoneCards?: boolean;
   rowKey: (row: Row) => string;
   rows: Row[];
   /** 화면 id와 사용자 id를 합친 값. 예: products:user-123 */
@@ -52,11 +55,12 @@ export function CommonDataTable<Row>({
   // 휴대폰(≤640px)은 표 대신 카드. 한쪽만 그려서 같은 글자가 화면에 두 번 생기지 않게 한다.
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
+    if (!phoneCards) return;
     const query = window.matchMedia("(max-width: 639px)");
     const sync = () => setMobile(query.matches);
     sync(); query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
-  }, []);
+  }, [phoneCards]);
 
   useEffect(() => {
     try {
