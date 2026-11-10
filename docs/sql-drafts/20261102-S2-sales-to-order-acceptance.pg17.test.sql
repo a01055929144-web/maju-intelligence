@@ -320,6 +320,15 @@ do $$ declare a jsonb; b jsonb; begin
   if exists(select from storefront_links where id in('81000000-0000-4000-8000-000000000007','81000000-0000-4000-8000-000000000008')) then raise exception 'order setup retry issued storefront link'; end if;
 end $$;
 
+-- The scoped rollback restores only the reviewed mismatch branch.
+\ir 20261110-03-lead-customer-mismatch-order-hold.down.sql
+do $$ declare definition text; needle constant text:='if not found then v_needs_review:=true; v_review_reason:=''lead_customer_mismatch''; end if;'; begin
+  definition:=pg_get_functiondef('public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)'::regprocedure);
+  if (length(definition)-length(replace(definition,needle,'')))/length(needle)<>1 then
+    raise exception 'lead mismatch rollback did not restore original guard';
+  end if;
+end $$;
+
 select 'S2 sales-to-order acceptance PG17 checks passed' as result;
 
 -- send/audit 등 어떤 신규 이력이라도 있으면 down은 전체 롤백되어야 한다.
