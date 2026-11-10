@@ -59,13 +59,18 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const intent = `${"a".repeat(80)}.${"b".repeat(43)}`;
     const posted: Array<Record<string, unknown>> = [];
-    const profileFailures = [422, 503, 409, 422];
+    const profileFailures = [
+      { status: 422, code: "synthetic_failure" },
+      { status: 503, code: "synthetic_failure" },
+      { status: 409, code: "profile_retry_mismatch" },
+      { status: 409, code: "customer_match_needs_review" },
+    ];
     const context = page.context();
     await context.route("**/api/store/accounts/activate", route => {
       posted.push(route.request().postDataJSON() as Record<string, unknown>);
       if (posted.length > 1 && profileFailures.length) {
-        const status = profileFailures.shift();
-        return route.fulfill({ status, json: { code: status === 409 ? "profile_retry_mismatch" : profileFailures.length === 0 ? "delivery_area_unavailable" : "synthetic_failure" } });
+        const failure = profileFailures.shift()!;
+        return route.fulfill({ status: failure.status, json: { code: failure.code } });
       }
       return route.fulfill({ json: posted.length === 1 ? { loginUrl, next: "kakao", termsVersion: "2026-11-07" } :
         { next: "document", redirectTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
@@ -97,7 +102,7 @@ for (const width of [1440, 390]) {
     const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
     expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
-    for (const message of ["이 화면에서 다시 시도", "잠시 후 다시 시도", "처음 제출한 매장 정보와 다릅니다", "배송 권역·요일"]) {
+    for (const message of ["이 화면에서 다시 시도", "잠시 후 다시 시도", "처음 제출한 매장 정보와 다릅니다", "문서를 보낸 회사에 매장 연결 확인을 요청"]) {
       await start.click();
       await expect(profilePage.getByRole("main").getByRole("alert")).toContainText(message);
       await expect(profilePage.getByLabel("매장명")).toHaveValue("새 매장");
