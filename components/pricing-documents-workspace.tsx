@@ -597,17 +597,16 @@ export function PricingDocumentsWorkspace({
                 {!leadContext && publicSharingAvailable ? <p className="w-full text-sm">공개 링크·QR은 최신 발행 버전으로 만듭니다. 작성 중인 변경은 새 버전을 확정해야 반영됩니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
                 {versions.length ? <div aria-label="발행 버전" className="flex w-full flex-wrap items-center gap-2" role="group">
                   <span className="text-sm font-semibold text-slate-600">발행 버전</span>
+                  {/* 공개 링크·QR은 위 버튼(최신 발행 버전) 하나로만 만든다. */}
                   {versions.map((v) => (
-                    <div className="flex flex-wrap items-center gap-2" key={v.id}>
                     <button
                       disabled={busy}
+                      key={v.id}
                       onClick={() => void task(() => openPublishedPreview(v))}
                       className={box}
                     >
                       버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
                     </button>
-                    {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px]" disabled={busy} onClick={() => void task(() => openPublishedPreview(v, true))} type="button" aria-label={`버전 ${v.version} 공개 링크·QR`}>공개 링크·QR</Button> : null}
-                    </div>
                   ))}
                 </div> : null}
           </>
