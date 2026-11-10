@@ -36,6 +36,13 @@ R1의 P0(CX-08 → CC-02 주문함, CX-07)이 끝나는 대로 이어서 시작�
 - Files: CC-02 파일들만. CX-13 계약(필드 이름) 확정 후 시작.
 - **Done**: 단위·e2e, Ponytail 검토 요청.
 
+## Claude Code 단독 진행 (2026-11-11 대표 지시 — Codex 사용량 소진 기간)
+
+- CX-10~CX-13도 Claude Code가 지시서 ID 그대로 진행한다(브랜치 `claude/CX-10-…`, PR 제목 `[CX-10]`). Codex가 돌아오면 남은 것만 다시 나눈다.
+- Claude Code가 **SQL 초안**도 쓴다: `docs/sql-drafts/` 초안 + down + PG17 테스트 + `docs/work-orders/db-approval/` 승인표까지. **운영 적용은 하지 않는다**(대표 승인 문구 → 컨트롤타워 적용).
+- 한 번에 한 작업 PR. 진행 순서: CX-10(SQL 초안) → [대표 승인·적용] → CC-07 → CX-11 → CX-12 → CX-13 → CC-08. SQL 승인을 기다리는 동안은 R1 남은 일(CC-10·CC-09) 먼저.
+- Ponytail은 ponytail-review로 직접.
+
 ## 순서
 
 CX-10 → (대표 SQL 승인·적용) → CX-11 · CX-12 · CC-07 병렬 → CX-13 → CC-08 → 대표 회사 ON → 시험 매장 직접 가입·코드 연결·첫 주문.
