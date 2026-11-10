@@ -18,7 +18,7 @@ begin
     'synthetic road 1, suite 2',repeat('0',11),'');
   begin
     perform activate_preopening_store_owner_v1(repeat('7',64),'f2000000-0000-4000-8000-000000000001',
-      '2026-11-07',clock_timestamp(),'e1000000-0000-4000-8000-000000000002');
+      '2026-11-07',clock_timestamp(),'e1000000-0000-4000-8000-000000000001');
     raise exception 'cross_company_territory_accepted';
   exception when raise_exception then if sqlerrm<>'public_delivery_territory_unavailable' then raise; end if; end;
   if exists(select 1 from store_accounts where business_status='registration_pending')
