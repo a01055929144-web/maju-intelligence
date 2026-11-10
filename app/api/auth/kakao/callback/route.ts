@@ -5,7 +5,7 @@ import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStor
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
-import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
+import { getStoreCostMemberAccess, hasActiveStoreMembership, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
 import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
   resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
   const storeInviteMode = Boolean(storeInviteMatch);
   const storeMatch = stateOk ? statePayload.match(/^store:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeMode = Boolean(storeMatch);
-  const storeFlow = storeMode || storeOwnerMode || storeInviteMode;
+  const storePortalMode = stateOk && statePayload === "store-portal";
+  const storeFlow = storeMode || storeOwnerMode || storeInviteMode || storePortalMode;
   const storeCompanyId = storeOwnerMatch?.[1] || storeInviteMatch?.[1] || storeMatch?.[1] || "";
   const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeFlow ? statePayload : "";
 
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
   }
   if (storeFlow && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
-  if (storeFlow && !isStoreMemberCompanyAllowlisted(storeCompanyId)) return redirectStore(request.url, "store_login_unavailable");
+  if (storeFlow && !storePortalMode && !isStoreMemberCompanyAllowlisted(storeCompanyId)) return redirectStore(request.url, "store_login_unavailable");
   if (!code) {
     return storeFlow ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
@@ -121,6 +122,13 @@ export async function GET(request: NextRequest) {
         storeAccountId: invitation.storeAccountId, token: proof.token });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
       return redirectStoreScope(request.url, invitation.companyId, invitation.storeAccountId);
+    }
+
+    if (storePortalMode) {
+      const authUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
+      if (!authUserId || !(await hasActiveStoreMembership(authUserId)) || !(await setStoreSession(authUserId)))
+        return redirectStore(request.url, "store_membership_required");
+      return NextResponse.redirect(new URL("/store", request.url));
     }
 
     if (storeMode && storeMatch) {

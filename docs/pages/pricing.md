@@ -1,5 +1,11 @@
 # 가격표 ①-2 — P0
 
+## 매장 전용 사이트 진입 (2026-11-10)
+
+Owner Domain: organization(매장 회원). Related: pricing(발행 문서), order(기존 링크 주문). 매장 사이트의 공식 경로는 기존 `/store` 하나로 유지한다. 카카오로 로그인한 점주·직원이 자신의 활성 매장을 찾아 견적서·단가표, 주문, 원가관리·구성원 화면으로 들어간다. 처음 가입은 받은 공개 문서 링크에서만 시작한다. 새 주문 UI·가격 계산·DB 스키마를 만들지 않고 기존 링크 주문과 원가관리 부품을 재사용한다.
+
+이번 범위의 Allowed Files: `lib/store/07-store-portal.ts`, `app/api/auth/kakao/{start,callback}/route.ts`, `app/store/page.tsx`, `components/{store-portal,storefront-workspace}.tsx`, `tests/{store-portal,store-cost-page,store-kakao-session-boundary}.test.ts`, `tests/e2e/store-kakao-entry.spec.ts`, 이 문서와 중앙 체크리스트. Preserve: 공개 `#token` 주문, 회사별 기능 제한, 매장 회원 권한, 원가관리의 별도 접근 제어, 390px 입력·안내.
+
 ## 2026-11-02 12:48 실사용 화면 구성
 
 `/revenue/pricing`은 매입가 반영, `/revenue/pricing/margins`는 기존 P0 마진 그룹 화면이다. 매입가 반영은 기존 상품 업로드 파서·열 맞추기·마스터 상품 일괄 생성과 P0 재계산·복구를 재사용한다. 새 운영 스키마는 추가하지 않는다. 이번 화면 범위에서 허용 파일: `domains/pricing/purchase-cost.ts`, `application/pricing/update-purchase-cost.ts`, `lib/pricing/purchase-cost-repository.ts`, `app/api/price-sheets/costs/route.ts`, `app/revenue/pricing/{page.tsx,margins/page.tsx}`, `components/purchase-cost-workspace.tsx`, `components/app-sidebar.tsx`, `lib/customer-navigation.ts`, `lib/product-catalog-import.ts`, `tests/purchase-cost.test.ts`.

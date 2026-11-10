@@ -12,6 +12,8 @@ import { isCiLayoutFixturesEnabled } from "@/lib/ci-layout-fixtures";
 import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
 import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
+import { listStorePortalAccounts } from "@/lib/store/07-store-portal";
+import { StorePortal } from "@/components/store-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +63,11 @@ export default async function StorePage({ searchParams }: {
       addressAccess = member?.role === "owner" || member?.role === "manager"; } catch { addressAccess = false; }
   }
   if (scoped && isCiLayoutFixturesEnabled() && params.fixture === "store-address-management") addressAccess = true;
+  let accounts: Awaited<ReturnType<typeof listStorePortalAccounts>> = null;
+  let portalError = false;
+  try { accounts = await listStorePortalAccounts(); } catch { portalError = true; }
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
     {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
-    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} />
+    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} error={portalError} loginEnabled={storeMemberSessionEnabled()} />} />
     {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
