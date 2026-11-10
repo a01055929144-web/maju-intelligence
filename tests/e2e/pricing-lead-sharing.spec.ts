@@ -1,6 +1,9 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
 import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
+// CC-11: 문서 목록은 휴대폰(≤640px)에서 표 대신 카드(listitem)로 보인다.
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) <= 640;
+
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`lead ${kind} prepare, explicit delivery and public read at ${width}px`, async ({ page, browser }, info) => {
   page.setDefaultTimeout(15_000);
@@ -106,12 +109,12 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   // Keep the production guard: lead context cannot issue customer order QR links.
   await page.goto("/revenue/pricing/documents");
   published = false;
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByText(/먼저 초안을 저장하고 판매가 버전을 확정해 주세요/)).toBeVisible();
   await expect(page.getByRole("button", { name: /공개 링크·QR · 버전 1/ })).toHaveCount(0);
   published = true;
   await page.goto("/revenue/pricing/documents");
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   await expect(page.getByRole("region", { name: "리드 문서 공유", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "미리보기", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "미리보기", exact: true }).getByRole("button", { name: "주문 링크 QR 만들기", exact: true })).toHaveCount(0);
@@ -223,7 +226,7 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await preview.getByRole("button", { name: "닫기", exact: true }).click();
   await page.goto(`/revenue/pricing/documents?start=${kind}&leadId=${leadId}`);
   await page.getByRole("dialog", { name: "새 문서 시작", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
-  await page.getByRole("row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
+  await page.getByRole(isPhone(page) ? "listitem" : "row").filter({ has: page.getByRole("checkbox", { name: `${content!.title} 선택`, exact: true }) }).getByRole("button", { name: content!.title, exact: true }).click();
   const share = page.getByRole("region", { name: "리드 문서 공유", exact: true });
   await expect(share).toBeVisible(); expect(sent).toBe(false);
   await share.getByRole("button", { name: "링크 준비", exact: true }).click();

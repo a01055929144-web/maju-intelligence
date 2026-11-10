@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Tabs } from "@/components/ui/tabs";
 import { useSearchParams } from "next/navigation";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
@@ -626,20 +627,7 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      {tab !== "documents" ? <div className="pricing-no-print flex flex-wrap gap-2">
-        {[
-          ["library", "행사·묶음·템플릿"],
-          ["profile", "인쇄 기본값"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            className={`${box} ${tab === id ? "bg-slate-900 text-white" : ""}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div> : null}
+      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "행사·묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
