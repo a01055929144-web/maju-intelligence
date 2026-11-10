@@ -19,7 +19,7 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 | `FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS` · `FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS` | Vercel Production | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 허용 회사 목록 수정·비우면 대상 기능 OFF | 재배포 후 허용·비허용 회사 경계 확인 |
 | `STORE_OWNER_ONBOARDING_SECRET` | Vercel Production (Sensitive) | 2026-11-09 15:35 KST · 대표 회사 시험용 이름 등록 | Vercel › Settings › Environment Variables에서 새 무작위 값으로 교체 | 재배포 → 기존 가입 의도 폐기 후 원 문서에서 다시 시작 |
 | `STORE_PREOPENING_ENABLED` · `FEATURE_PREOPENING_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:04 KST · 대표 회사 가입만 ON | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 사업자번호 없는 가입 확인. 주문은 별도 주소·권역 검증 통과 뒤에만 가능 |
-| `STORE_PUBLIC_OWNER_DELIVERY_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS` | Vercel Production | 2026-11-10 15:18 KST 전역 스위치 OFF · 대표 회사 목록 유지 | 주문 권역·요일 설정 뒤 Vercel에서 전역 스위치 변경 | 재배포 → 기존 사업자번호 보유 점주 가입·첫 주문 확인 |
+| `STORE_PUBLIC_OWNER_DELIVERY_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_DELIVERY_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:30 KST · 대표 회사만 ON, 다음 배포부터 반영 | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 기존 사업자번호 보유 점주 가입·첫 주문 확인 |
 | `STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED` · `FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:04 KST · 대표 회사만 ON | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 카카오 기본주소·상세주소 분리 저장 확인 |
 | `STORE_ORDER_ADDRESS_VERIFICATION_ENABLED` · `FEATURE_STORE_ORDER_ADDRESS_VERIFICATION_COMPANY_IDS` | Vercel Production (Sensitive) | 2026-11-10 18:04 KST · 대표 회사만 ON | Vercel에서 전역 스위치 또는 허용 회사 목록 수정 | 재배포 → 권역·요일 없는 주문 차단, 설정 뒤 권역 안 주문 확인 |
 
