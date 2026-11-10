@@ -69,3 +69,12 @@ where sl.promotion_id is not null group by so.status;
 - 최신 head의 CI 결과·PR 번호는 PR 본문에 기록한다. 결과 전에는 완료/운영 적용으로 판정하지 않는다.
 
 Superpowers/Security Audit 전용 도구 미설치. 직접 권한/회사 경계 검토 및 격리 PG17 검증. 화면/가격/기존 폼·공통 부품 변경 없음.
+
+## 운영 적용 기록 (2026-11-11 01:59 KST · Claude Code)
+
+- 승인 문구(대표): `fcmdvveqmcgtioelzqun CX-08 행사 수량 SQL 승인`
+- 1 정지: 운영 주문 링크 0 · 주문 0 · 주문 줄 0 · 실행 중 주문 RPC 0(`pg_stat_activity`) — 처리 중인 주문 없음 확인. 격리 수준 read committed.
+- 2 사전 읽기: 두 함수 정의 SHA-256이 이 표의 적용 전 값과 정확히 일치(`f599bd19…`, `fdea5cd6…`). OID 39056·40040, invoker, ACL `{postgres=X/postgres,service_role=X/postgres}`. 행사 주문 줄 0.
+- 3 적용: main `docs/sql-drafts/20261110-CX-08-promotion-reservation.sql`(LF SHA-256 `09f01b99…` 일치) 원문 그대로 1회 실행. 오류 없음.
+- 4 사후 읽기: 정의 SHA-256 `3335776d…`(7인자)·`2afb5d70…`(10인자) — 이 표의 예상 적용 후 값과 정확히 일치. 새 조건 있음·옛 조건 없음, OID·ACL·invoker 동일, anon/authenticated 실행 false·service_role true, 주문·주문 줄·링크 0건 불변.
+- 5 다음: #480(CC-02) 병합·활성화 검토 가능. 운영 검증용 주문은 만들지 않았다.
