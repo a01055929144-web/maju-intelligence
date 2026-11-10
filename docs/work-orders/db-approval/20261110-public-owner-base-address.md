@@ -3,7 +3,7 @@
 ## 상태
 
 - up 원문은 운영에 1회 적용하고 권한·RLS·기존 데이터 불변을 내부 읽기 기록으로 확인했다. **up 원문을 재실행하지 않는다.** 운영 프로젝트 식별자와 조회 수치는 공개 문서에 기록하지 않는다.
-- trigger function의 기본 EXECUTE가 PUBLIC·anon·authenticated에 남은 후속 ACL 보완은 별도 승인 대기다. 최소 초안: `docs/sql-drafts/20261110-public-owner-base-address-acl.sql`. 이 PR 작업에서는 운영에 적용하지 않는다.
+- trigger function ACL 보완은 별도 승인 후 운영에 1회 적용하고 비공개 역할 차단·`service_role` 허용을 내부 읽기로 확인했다. 원문 `docs/sql-drafts/20261110-public-owner-base-address-acl.sql`을 재실행하지 않는다. 운영 식별자와 조회 수치는 공개 문서에 기록하지 않는다.
 - `STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED`, `FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS`를 포함한 가입 관련 스위치와 회사 목록은 OFF를 유지한다. OFF 또는 회사 목록 밖에서는 기존 v1 RPC만 호출한다.
 - up 초안: `docs/sql-drafts/20261110-public-owner-base-address.sql`
 - 조건부 down 초안: `docs/sql-drafts/20261110-public-owner-base-address.down.sql`
