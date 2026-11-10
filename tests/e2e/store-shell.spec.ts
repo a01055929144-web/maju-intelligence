@@ -22,8 +22,8 @@ for (const width of [1440, 1920, 390]) test(`store shell navigation keeps token 
     await expect(sidebar).toBeVisible();
     await sidebar.click();
   }
-  // 어느 쪽으로 눌러도 주소에는 view·기존 쿼리·#토큰이 모두 남는다(토큰이 사라지면 매장 인증이 풀린다).
-  await expect(page).toHaveURL(/\/store\?(?=.*keep=1)(?=.*view=order).*#synthetic-shell-token$/);
+  // 사이드바 이동은 ?view=를 붙이고, 하단 탭은 주소를 건드리지 않는다. 어느 쪽이든 기존 쿼리와 #토큰은 남는다(토큰이 사라지면 매장 인증이 풀린다).
+  await expect(page).toHaveURL(phone ? /\/store\?keep=1#synthetic-shell-token$/ : /\/store\?(?=.*keep=1)(?=.*view=order).*#synthetic-shell-token$/);
   await expect(page.getByText("18L · 통", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });

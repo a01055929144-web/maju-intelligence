@@ -59,13 +59,13 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null, port
 function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode }) {
   const [data, setData] = useState<Response | null>(null);
   const [tab, setTabState] = useState<StoreView>("home");
-  // PC 사이드바(?view=)와 화면 탭을 맞춘다. 주소의 #토큰·다른 쿼리는 그대로 둔다.
+  // PC 사이드바(?view=)와 화면 탭을 맞춘다.
   const viewParam = useSearchParams().get("view");
   useEffect(() => { setTabState(storeViewFrom(viewParam)); }, [viewParam]);
   const setTab = (next: StoreView) => {
     setTabState(next);
-    const url = new URL(window.location.href); url.searchParams.set("view", next);
-    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    // 주소는 그대로 두고(#토큰·기존 쿼리 보호) 사이드바 강조만 알린다. 주소의 ?view=는 사이드바로 이동할 때만 바뀐다.
+    window.dispatchEvent(new CustomEvent("store:tab", { detail: next }));
   };
   const [cart, setCart] = useState<Record<string, number>>({});
   const [deliveryDate, setDeliveryDate] = useState("");
