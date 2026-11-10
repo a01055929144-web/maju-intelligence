@@ -9550,7 +9550,7 @@ function StoreDetail({
 
         <nav aria-label="매장 정보 탭" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
           {([
-            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문 (준비 중)"], ["ledger", "매출 원장 (준비 중)"]
+            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문·링크"], ["ledger", "매출 원장 (준비 중)"]
           ] as const).map(([value, label]) => (
             <button className={`h-11 shrink-0 border-b-[3px] px-3 text-sm font-black ${detailTab === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500"}`} key={value} onClick={() => setDetailTab(value)} type="button">{label}</button>
           ))}
@@ -9947,8 +9947,15 @@ function StoreDetail({
             </div>
           ) : null}
 
-          {detailTab === "order" || detailTab === "ledger" ? (
-            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-black text-slate-950">{detailTab === "order" ? "주문" : "매출 원장"} 연결 준비 중</h4><p className="mt-2 text-sm font-bold text-slate-500">같은 매장 ID에 연결할 SQL 원장이 아직 적용되지 않아 읽기·쓰기를 모두 OFF로 유지합니다.</p></div>
+          {detailTab === "order" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center">
+              <h4 className="text-base font-semibold text-slate-950">문서에서 주문 링크 만들기</h4>
+              <p className="mt-2 text-sm text-slate-600">발행한 견적서·단가표의 공개 링크·QR을 만들면 매장이 카카오로 가입하고 주문할 수 있습니다. 주문 가능 여부는 매장 주소와 배송 권역·요일로 확인합니다.</p>
+              <Link className="maju-button-primary mt-4 inline-flex min-h-[44px] items-center px-4" href="/revenue/pricing/documents">견적서·단가표에서 링크 만들기</Link>
+              <p className="mt-3 text-xs text-slate-500">이 거래처 상세에서 주문 내역을 직접 보는 기능은 준비 중입니다.</p>
+            </div>
+          ) : detailTab === "ledger" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-semibold text-slate-950">매출 원장 연결 준비 중</h4><p className="mt-2 text-sm text-slate-600">이 거래처 상세에서 매출 원장을 조회하는 기능은 준비 중입니다.</p></div>
           ) : null}
         </div>
     </MapStoreDetailDrawer>
