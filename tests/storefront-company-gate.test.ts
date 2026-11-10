@@ -53,7 +53,7 @@ it("OFF preserves original queries; ON shares address eligibility with submissio
     if(path.startsWith("normalized_customers?")&&path.includes("delivery_base_address"))return [{delivery_base_address:storedBase,delivery_address_detail:"1층",delivery_territory_id:"territory"}];
     if(path.startsWith("delivery_territories?"))return [{id:"territory",name:"합성 권역",is_active:true}];
     if(path.startsWith("delivery_territory_areas?"))return [{territory_id:"territory",administrative_area:"서울특별시 강남구"}];
-    if(path.startsWith("store_order_settings?"))return [{company_id:company}];
+    if(path.startsWith("store_order_settings?"))return [{company_id:company,cutoff_days_before:0,cutoff_time:"23:59:00",minimum_amount:0,minimum_policy:"notice",delivery_fee:0}];
     return fixture(path);
   });
   const valid=await readStorefront("signed","2099-01-01");
