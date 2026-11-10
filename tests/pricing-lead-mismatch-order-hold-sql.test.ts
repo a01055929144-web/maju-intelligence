@@ -5,18 +5,15 @@ const draft = readFileSync(
   "docs/sql-drafts/20261110-03-lead-customer-mismatch-order-hold.sql",
   "utf8",
 );
-const migration = readFileSync(
-  "supabase/migrations/20261110170000_lead_customer_mismatch_order_hold.sql",
-  "utf8",
-);
 const pg17 = readFileSync(
   "docs/sql-drafts/20261102-S2-sales-to-order-acceptance.pg17.test.sql",
   "utf8",
 );
 
 describe("lead customer mismatch order hold SQL", () => {
-  it("keeps the reviewed draft and migration identical apart from the warning", () => {
-    expect(draft.replace(/^-- DRAFT ONLY[^\n]*\n/, "")).toBe(migration);
+  it("keeps the corrective SQL as an approval-gated draft", () => {
+    expect(draft).toMatch(/^-- DRAFT ONLY/);
+    expect(draft).toContain("Do not apply to an operating database");
   });
 
   it("returns a review result before pricing or storefront activation", () => {
