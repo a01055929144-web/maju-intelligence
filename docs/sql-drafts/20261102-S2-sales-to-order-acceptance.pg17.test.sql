@@ -44,6 +44,7 @@ begin
 end $$;
 
 \ir 20261108-S2-acceptance-order-link.sql
+\ir 20261110-03-lead-customer-mismatch-order-hold.sql
 
 insert into companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
 insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
@@ -94,15 +95,21 @@ do $$ declare a jsonb; begin
   if a->>'needsReview'<>'true' or a->>'leadId' is not null then raise exception 'ambiguous lead did not continue for review'; end if;
 end $$;
 
--- 기존 리드가 다른 거래처에 연결돼도 예외 대신 검토 표시로 수락을 계속한다.
+-- 기존 리드가 다른 거래처에 연결돼 있으면 연결을 보존하고 주문 활성화를 보류한다.
 insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key)
 values('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','second','second');
-do $$ declare a jsonb; begin
-  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000004',repeat('c',64),'staff','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}');
-  if a->>'needsReview'<>'true'
+insert into storefront_links(id,company_id,customer_id,document_version_id,can_order)
+values('80000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000001',false);
+do $$ declare a jsonb; before_links integer; before_agreements integer; begin
+  select count(*) into before_links from customer_pricing_document_links;
+  select count(*) into before_agreements from customer_price_agreements;
+  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000004',repeat('c',64),'staff','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',null,false,null,'80000000-0000-4000-8000-000000000004','{}');
+  if a->>'needsReview'<>'true' or a->>'orderEnabled'<>'false'
     or (select review_reason from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000004')<>'lead_customer_mismatch'
     or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000001')<>'10000000-0000-4000-8000-000000000001'
-    or not exists(select from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id='10000000-0000-4000-8000-000000000002' and document_version_id='50000000-0000-4000-8000-000000000001' and active)
+    or (select count(*) from customer_pricing_document_links)<>before_links
+    or (select count(*) from customer_price_agreements)<>before_agreements
+    or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000004')
     then raise exception 'lead mismatch review boundary failed'; end if;
 end $$;
 
