@@ -70,9 +70,14 @@ for (const width of [1440, 390]) {
     try {
       const page = await context.newPage();
       const product = { id: "30000000-0000-4000-8000-000000000001", code: "P-000001", name: "양파", spec: "10kg", unit: "박스", cost: 10000, supplierName: "한빛유통", supplierCode: "ERP-1", supplierProductId: "40000000-0000-4000-8000-000000000001" };
+      const variants = [
+        { id: "30000000-0000-4000-8000-000000000002", code: "P-000002", name: "미림", spec: "1.8L", unit: "병", cost: 3000 },
+        { id: "30000000-0000-4000-8000-000000000003", code: "P-000003", name: "미림", spec: "18L", unit: "통", cost: 20000 },
+        { id: "30000000-0000-4000-8000-000000000004", code: "P-000004", name: "미림", spec: "500ml", unit: "병", cost: 1200 }
+      ];
       let currentCost = product.cost;
       await page.route("**/api/price-sheets/costs?*", async (route) => {
-        await route.fulfill({ json: { products: [{ ...product, cost: currentCost }], suppliers: ["한빛유통"] } });
+        await route.fulfill({ json: { products: [{ ...product, cost: currentCost }, ...variants], suppliers: ["한빛유통"] } });
       });
       await page.route("**/api/price-sheets/costs", async (route) => {
         const body = route.request().postDataJSON() as { changes: Array<Record<string, unknown>> };
@@ -107,6 +112,11 @@ for (const width of [1440, 390]) {
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);
       expect(saved[0].cost).toBe(12000);
+      await page.getByRole("button", { name: "엑셀 올리기" }).click();
+      await page.locator('input[type="file"]').setInputFiles({ name: "규격확인.csv", mimeType: "text/csv", buffer: Buffer.from("품목,단위,매입가\n미림 5L,병,5000\n") });
+      await page.getByRole("button", { name: "② 열 정렬" }).click();
+      await expect(page.getByText("규격이 다른 상품", { exact: false }).first()).toBeVisible();
+      await expect(page.getByText(/중복 의심 1개/).first()).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`purchase-cost-${width}.png`), fullPage: false });
       expect((await collectLayoutProblems(page)).filter((problem) => problem.startsWith("horizontal-overflow"))).toEqual([]);
     } finally { await context.close(); }
