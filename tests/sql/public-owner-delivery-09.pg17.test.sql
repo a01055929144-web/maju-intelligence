@@ -7,6 +7,7 @@ end $$;
 alter table delivery_territories add column if not exists is_active boolean not null default true;
 grant select,update on delivery_territories,store_order_territory_rules to service_role;
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.sql
+\ir ../../docs/sql-drafts/20261110-public-owner-base-address.sql
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.down.sql
 \ir ../../docs/sql-drafts/20261109-09-public-owner-delivery.sql
 insert into delivery_territories(id,company_id) values
@@ -27,8 +28,8 @@ begin
   perform prepare_public_store_owner_activation_v1('00000000-0000-4000-8000-000000000001',
     '70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     'd1000000-0000-4000-8000-000000000001','e3000000-0000-4000-8000-000000000001',repeat('4',64));
-  perform complete_public_store_owner_profile_v1(repeat('4',64),'synthetic public store','synthetic representative',
-    'synthetic matched area',repeat('0',11),repeat('9',10));
+  perform complete_public_store_owner_profile_v2(repeat('4',64),'synthetic public store','synthetic representative',
+    'synthetic matched area suite 1','synthetic matched area','suite 1',repeat('0',11),repeat('9',10));
   select count(*) into before_accounts from store_accounts;
   begin
     perform activate_public_store_owner_with_delivery_v1(repeat('4',64),'e2000000-0000-4000-8000-000000000001',
@@ -64,7 +65,8 @@ begin
   select customer_id into customer from store_accounts where id=(activated->>'storeAccountId')::uuid;
   if not exists(select 1 from normalized_customers where id=customer
       and company_id='00000000-0000-4000-8000-000000000001'
-      and delivery_territory_id='10000000-0000-4000-8000-000000000001') or
+      and delivery_territory_id='10000000-0000-4000-8000-000000000001'
+      and delivery_base_address='synthetic matched area' and delivery_address_detail='suite 1') or
     exists(select 1 from store_order_customer_rules where customer_id=customer)
     then raise exception 'public_delivery_was_not_native_territory_rule'; end if;
   perform issue_storefront_links('00000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',

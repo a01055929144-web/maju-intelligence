@@ -15,12 +15,12 @@ do $$ declare activated jsonb; ordered jsonb; customer uuid;
 begin
   insert into normalized_customers(id,company_id,customer_name,address,normalized_key)
     values('f6000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',
-      'synthetic preopening store','synthetic road 1, suite 2','existing-preopening-candidate');
+      'synthetic preopening store','synthetic road 1 suite 2','existing-preopening-candidate');
   perform prepare_public_store_owner_activation_v1('00000000-0000-4000-8000-000000000001',
     '70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     'd1000000-0000-4000-8000-000000000001','f3000000-0000-4000-8000-000000000001',repeat('7',64));
   perform complete_public_store_owner_profile_v2(repeat('7',64),'synthetic preopening store','synthetic owner',
-    'synthetic road 1, suite 2','synthetic road 1','suite 2',repeat('0',11),'');
+    'synthetic road 1 suite 2','synthetic road 1','suite 2',repeat('0',11),'');
   begin
     perform activate_preopening_store_owner_v1(repeat('7',64),'f2000000-0000-4000-8000-000000000001',
       '2026-11-07',clock_timestamp(),'e1000000-0000-4000-8000-000000000001');
@@ -39,7 +39,7 @@ begin
     then raise exception 'preopening_profile_or_territory_missing'; end if;
   if customer<>'f6000000-0000-4000-8000-000000000001' or
     (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001'
-      and lower(customer_name)='synthetic preopening store' and lower(address)='synthetic road 1, suite 2')<>1
+      and lower(customer_name)='synthetic preopening store' and lower(address)='synthetic road 1 suite 2')<>1
     then raise exception 'preopening_existing_customer_not_reused'; end if;
   perform issue_storefront_links('00000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     jsonb_build_array(jsonb_build_object('id','f4000000-0000-4000-8000-000000000001','customerId',customer,
