@@ -5,6 +5,8 @@ import { verifyStoreLinkToken } from "./store-link-token";
 import { readPublishedPriceDirections } from "./storefront-price-direction";
 import { publishedPriceKey } from "../../domains/pricing/storefront-price-direction";
 import { splitCategory } from "../../domains/pricing/product-category";
+import { needsDeliveryConfirmation } from "../../domains/order/delivery-confirmation";
+import { pendingDeliveryEnabled } from "./pending-delivery-feature";
 import {
   canOrderForDelivery,
   kstDateTime,
@@ -274,10 +276,11 @@ export async function readStorefront(
             : { kind: "date", date: item.holiday_date! },
     ),
   };
-  const deliveryDate = policy.weekdays.length ? nextDeliveryDate(policy) : null;
-  const priceDate = requestedDeliveryDate ?? deliveryDate ?? today;
+  const pendingDelivery = pendingDeliveryEnabled(company) && needsDeliveryConfirmation(settingsRows.length > 0, policy.weekdays);
+  const deliveryDate = !pendingDelivery && policy.weekdays.length ? nextDeliveryDate(policy) : null;
+  const priceDate = pendingDelivery ? today : requestedDeliveryDate ?? deliveryDate ?? today;
   const deliveryAllowed =
-    policy.weekdays.length > 0 && canOrderForDelivery(priceDate, policy);
+    pendingDelivery || (policy.weekdays.length > 0 && canOrderForDelivery(priceDate, policy));
   const agreements = productIds.length
     ? await supabaseRequest<Agreement[]>(
         path(
@@ -310,6 +313,7 @@ export async function readStorefront(
     validUntil: version.content.validUntil,
     priceAvailable,
     canOrder: canOrder && deliveryAllowed,
+    pendingDelivery,
     nextDeliveryDate: deliveryDate,
     selectedDeliveryDate: priceDate,
     notice: settings.notice,

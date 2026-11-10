@@ -388,6 +388,11 @@ jobs:
           node scripts/test-store-member-order-concurrency.mjs
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-full-journey.pg17.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-preopening.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/pending-delivery-order.pg17.test.sql
+          if psql --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261110-09-pending-delivery-order.down.sql; then
+            echo "pending delivery rollback unexpectedly accepted existing orders"
+            exit 1
+          fi
 
       - name: Verify disposable storefront fixture on PostgreSQL 17
         env:
@@ -476,7 +481,7 @@ jobs:
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/pending-delivery-order.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001

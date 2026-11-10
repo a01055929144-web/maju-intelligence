@@ -58,6 +58,10 @@ export function validateDeliveryPolicy(policy: DeliveryPolicy) {
     throw new Error("마감 시각을 확인해 주세요.");
   if (![0, 1, 2].includes(policy.cutoffDaysBefore))
     throw new Error("마감일을 확인해 주세요.");
+  validateOrderAmounts(policy);
+}
+
+function validateOrderAmounts(policy: DeliveryPolicy) {
   if (![policy.minimumAmount, policy.deliveryFee].every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 1e12))
     throw new Error("최소 주문금액과 배송비를 확인해 주세요.");
   if (!["block", "fee", "notice"].includes(policy.minimumPolicy))
@@ -91,8 +95,9 @@ export function nextDeliveryDate(policy: DeliveryPolicy, now = new Date()) {
   return null;
 }
 
-export function summarizeOrder(lines: readonly OrderLineInput[], policy: DeliveryPolicy) {
-  validateDeliveryPolicy(policy);
+export function summarizeOrder(lines: readonly OrderLineInput[], policy: DeliveryPolicy, pendingDelivery = false) {
+  if (pendingDelivery) validateOrderAmounts(policy);
+  else validateDeliveryPolicy(policy);
   if (!lines.length || lines.length > 100) throw new Error("품목은 1~100개를 담아 주세요.");
   let taxableSupply = 0;
   let exemptSupply = 0;
