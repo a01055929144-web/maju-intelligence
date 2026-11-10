@@ -95,7 +95,7 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
         if (profileStep && (response.status === 409 || response.status === 422)) {
           const failure = await response.json().catch(() => null) as { code?: string } | null;
           if (response.status === 409 && failure?.code === "profile_retry_mismatch") throw new Error("처음 제출한 매장 정보와 다릅니다. 처음 제출한 정보로 다시 시도하거나 원래 공개 문서에서 가입을 다시 시작해 주세요.");
-          if (response.status === 422 && failure?.code === "delivery_area_unavailable") throw new Error("이 매장 주소의 배송 권역·요일을 확인하지 못했습니다. 주소를 확인하거나 문서를 보낸 회사에 배송 가능 여부를 문의해 주세요.");
+          if (response.status === 409 && failure?.code === "customer_match_needs_review") throw new Error("기존 매장 연결을 확인해야 개통할 수 있습니다. 문서를 보낸 회사에 매장 연결 확인을 요청해 주세요.");
           if (response.status === 422 && failure?.code === "preopening_unavailable") throw new Error("사업자번호 없는 개업 준비 매장 가입은 아직 준비 중입니다. 담당자에게 문의해 주세요.");
         }
         throw new Error(response.status === 410 ? "개통 링크가 만료되었거나 사용되었습니다. 담당자에게 새 링크를 요청해 주세요." :

@@ -162,17 +162,17 @@ describe("Kakao-first profile retry", () => {
       verificationRequestId: expect.stringMatching(/^public-delivery-v1:/) }));
   });
 
-  it("shows delivery guidance before profile persistence or activation when the address cannot be served", async () => {
-    const { PublicOwnerDeliveryUnavailable } = await import("../lib/pricing/public-owner-delivery");
+  it("activates safely without a territory and leaves delivery-date confirmation to ordering", async () => {
     routeMocks.business.mockResolvedValue({ failedNumbers: new Set(), results: new Map([["1234567890", { label: "정상" }]]) });
-    routeMocks.delivery.mockRejectedValueOnce(new PublicOwnerDeliveryUnavailable());
+    routeMocks.delivery.mockResolvedValueOnce(undefined);
     const { POST } = await import("../app/api/store/accounts/activate/route");
     const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
       body: JSON.stringify({ termsAccepted: true, store: { address: "unmatched address", addressDetail: "suite 1", businessRegistrationNumber: "1234567890",
         phone: "0".repeat(11), representativeName: "synthetic", storeName: "synthetic" } }) }) as never);
-    expect(response.status).toBe(422); expect(await response.json()).toEqual({ code: "delivery_area_unavailable" });
-    expect(routeMocks.complete).not.toHaveBeenCalled(); expect(routeMocks.activate).not.toHaveBeenCalled();
-    expect(routeMocks.session).not.toHaveBeenCalled(); expect(routeMocks.consume).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(routeMocks.complete).toHaveBeenCalledWith(expect.objectContaining({ address: "unmatched address suite 1" }));
+    expect(routeMocks.activate).toHaveBeenCalledWith(expect.not.objectContaining({ deliveryTerritoryId: expect.anything() }));
+    expect(routeMocks.session).toHaveBeenCalledOnce(); expect(routeMocks.consume).toHaveBeenCalledOnce();
   });
 
   it.each(["wrong_number", "other_company", "production"])("refuses test verification for %s without writes", async (scenario) => {
@@ -221,6 +221,26 @@ describe("Kakao-first profile retry", () => {
     expect(await response.json()).toEqual({ code: "profile_retry_mismatch" });
     expect(routeMocks.activate).not.toHaveBeenCalled(); expect(routeMocks.session).not.toHaveBeenCalled();
     expect(routeMocks.consume).not.toHaveBeenCalled();
+  });
+
+  it.each(["public_store_customer_match_needs_review", "public_store_customer_already_linked"])(
+    "keeps ambiguous preopening customer matching pending for %s", async (reason) => {
+      vi.stubEnv("STORE_PREOPENING_ENABLED", "true");
+      routeMocks.preopening.mockRejectedValueOnce(new Error(`Supabase request failed: 400 ${reason}`));
+      const { POST } = await import("../app/api/store/accounts/activate/route");
+      const response = await POST(new Request("http://localhost/api/store/accounts/activate", { method: "POST",
+        body: JSON.stringify({ termsAccepted: true, store: { address: "서울", addressDetail: "1층", businessRegistrationNumber: "",
+          phone: "01012345678", representativeName: "대표", storeName: "매장" } }) }) as never);
+      expect(response.status).toBe(409); expect(await response.json()).toEqual({ code: "customer_match_needs_review" });
+      expect(routeMocks.session).not.toHaveBeenCalled(); expect(routeMocks.consume).not.toHaveBeenCalled();
+    });
+
+  it("keeps the preopening replacement company-scoped and blocks ambiguous or already-linked candidates", () => {
+    const sql = source("docs/sql-drafts/20261110-preopening-customer-match.sql");
+    expect(sql).toContain("where company_id=r.company_id");
+    expect(sql).toContain("public_store_customer_match_needs_review");
+    expect(sql).toContain("public_store_customer_already_linked");
+    expect(sql).toContain("pg_advisory_xact_lock");
   });
 
   it("rejects an unavailable request before business verification or profile persistence", async () => {
