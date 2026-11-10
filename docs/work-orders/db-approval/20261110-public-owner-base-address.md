@@ -2,7 +2,7 @@
 
 ## 상태
 
-- 운영 미적용. `STORE_PUBLIC_OWNER_ONBOARDING_ENABLED`, `STORE_PREOPENING_ENABLED` 및 관련 회사 목록은 OFF를 유지한다.
+- 운영 미적용. `STORE_PUBLIC_OWNER_BASE_ADDRESS_ENABLED`, `FEATURE_STORE_PUBLIC_OWNER_BASE_ADDRESS_COMPANY_IDS`를 포함한 가입 관련 스위치와 회사 목록은 OFF를 유지한다. OFF 또는 회사 목록 밖에서는 기존 v1 RPC만 호출한다.
 - up 초안: `docs/sql-drafts/20261110-public-owner-base-address.sql`
 - 조건부 down 초안: `docs/sql-drafts/20261110-public-owner-base-address.down.sql`
 - 기존 `address`를 분해하거나 기존 행을 백필하지 않는다. 적용 직후 기존 데이터 변경은 0건이어야 한다.
@@ -21,7 +21,7 @@
 3. v2 RPC는 `service_role`만 실행 가능하고 `public`, `anon`, `authenticated`는 실행 불가인지 확인한다.
 4. 복사 trigger가 activation request의 `customer_id`가 null에서 값으로 바뀔 때만 실행되는지 정의를 읽는다. update는 `new.company_id`와 `new.customer_id`를 함께 사용하므로 다른 회사 행을 변경하지 않는다.
 5. RLS를 우회하는 새 정책이나 grant가 추가되지 않았고 기존 두 테이블의 RLS 상태가 유지되는지 확인한다.
-6. 기존 행에서 두 신규 칸이 모두 null이고 변경된 행이 0건인지 확인한 뒤에만 앱을 배포한다. 기능 ON과 실제 가입은 다시 별도 승인한다.
+6. 기존 행에서 두 신규 칸이 모두 null이고 변경된 행이 0건인지 확인한 뒤 앱을 배포한다. 앱은 기본 OFF에서 v1을 유지한다. v2 함수·권한 읽기 확인 후에만 전역 스위치와 대상 회사 목록 ON을 별도 승인한다.
 
 ## 사후 읽기 검증
 

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       stage = "delivery_resolution";
       const deliveryTerritoryId = testNumber ? undefined : await resolvePublicOwnerDelivery(activation.companyId, baseAddress);
       stage = "profile_save";
-      await completePublicStoreOwnerProfile({ ...profile, token: proof.token });
+      await completePublicStoreOwnerProfile({ ...profile, companyId: activation.companyId, token: proof.token });
       stage = "activation";
       const activated = profile.businessRegistrationNumber
         ? await activateStoreOwner({ authUserId: proof.authUserId, businessRegistrationNumber: profile.businessRegistrationNumber,
