@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
+import { PendingOrderEntry } from "./pending-order-inbox";
 
 type Rule = {
   delivery_weekdays?: number[] | null;
@@ -148,6 +149,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
     finally { setBusy(false); }
   }
   return <div className="space-y-4">
+    <PendingOrderEntry companyId={companyId}/>
     <p className="text-xs font-semibold text-slate-500">회사 기본값보다 권역, 권역보다 매장별 예외가 우선합니다. 지금은 후결제 주문만 받습니다.</p>
     {message && <p role="status" className="rounded-md bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{message}</p>}
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">회사 기본값</h2>

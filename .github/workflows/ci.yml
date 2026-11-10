@@ -393,6 +393,11 @@ jobs:
             echo "pending delivery rollback unexpectedly accepted existing orders"
             exit 1
           fi
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/confirm-pending-delivery.pg17.test.sql
+          if psql --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261110-09-confirm-pending-delivery.down.sql; then
+            echo "pending resolution rollback unexpectedly accepted audit history"
+            exit 1
+          fi
 
       - name: Verify disposable storefront fixture on PostgreSQL 17
         env:
