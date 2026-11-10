@@ -36,10 +36,13 @@ describe("store owner activation repository", () => {
 
   it("stores the profile only after Kakao identity continuation", async () => {
     mocks.db.mockResolvedValue({ companyId: "company", storeAccountId: "store" });
-    await completePublicStoreOwnerProfile({ address: "Seoul", businessRegistrationNumber: "1234567890", phone: "01012345678",
+    await completePublicStoreOwnerProfile({ address: "Seoul suite 1", baseAddress: "Seoul", addressDetail: "suite 1",
+      businessRegistrationNumber: "1234567890", phone: "01012345678",
       representativeName: "Owner", storeName: "Store", token: "secret" });
     const body = JSON.parse(mocks.db.mock.calls[0][1].body);
-    expect(body).toMatchObject({ p_store_name: "Store", p_business_registration_number: "1234567890" });
+    expect(mocks.db.mock.calls[0][0]).toBe("rpc/complete_public_store_owner_profile_v2");
+    expect(body).toMatchObject({ p_store_name: "Store", p_base_address: "Seoul", p_address_detail: "suite 1",
+      p_business_registration_number: "1234567890" });
     expect(JSON.stringify(body)).not.toContain("secret");
   });
 

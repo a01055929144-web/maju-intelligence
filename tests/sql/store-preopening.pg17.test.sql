@@ -8,6 +8,7 @@ alter table delivery_territories add column if not exists is_active boolean not 
 grant select on delivery_territories,store_order_territory_rules to service_role;
 \ir ../../docs/sql-drafts/20261110-store-preopening.sql
 \ir ../../docs/sql-drafts/20261110-preopening-customer-match.sql
+\ir ../../docs/sql-drafts/20261110-public-owner-base-address.sql
 insert into app_users values('f2000000-0000-4000-8000-000000000001','active');
 set role service_role;
 do $$ declare activated jsonb; ordered jsonb; customer uuid;
@@ -18,8 +19,8 @@ begin
   perform prepare_public_store_owner_activation_v1('00000000-0000-4000-8000-000000000001',
     '70000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000001',
     'd1000000-0000-4000-8000-000000000001','f3000000-0000-4000-8000-000000000001',repeat('7',64));
-  perform complete_public_store_owner_profile_v1(repeat('7',64),'synthetic preopening store','synthetic owner',
-    'synthetic road 1, suite 2',repeat('0',11),'');
+  perform complete_public_store_owner_profile_v2(repeat('7',64),'synthetic preopening store','synthetic owner',
+    'synthetic road 1, suite 2','synthetic road 1','suite 2',repeat('0',11),'');
   begin
     perform activate_preopening_store_owner_v1(repeat('7',64),'f2000000-0000-4000-8000-000000000001',
       '2026-11-07',clock_timestamp(),'e1000000-0000-4000-8000-000000000001');
@@ -33,7 +34,8 @@ begin
     and company_id='00000000-0000-4000-8000-000000000001' and business_status='registration_pending'
     and business_registration_number is null and business_status_verified_at is null and verification_request_id is null;
   if customer is null or not exists(select 1 from normalized_customers where id=customer
-    and business_registration_number is null and delivery_territory_id='10000000-0000-4000-8000-000000000001')
+    and business_registration_number is null and delivery_territory_id='10000000-0000-4000-8000-000000000001'
+    and delivery_base_address='synthetic road 1' and delivery_address_detail='suite 2')
     then raise exception 'preopening_profile_or_territory_missing'; end if;
   if customer<>'f6000000-0000-4000-8000-000000000001' or
     (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001'
