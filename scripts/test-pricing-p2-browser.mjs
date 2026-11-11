@@ -7,6 +7,11 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { chromium, expect } from "@playwright/test";
+// CX-11: 매장 화면 메뉴. 휴대폰(≤640px)은 하단 탭 버튼, PC는 사이드바 링크(이름이 조금 다르다).
+const STORE_SIDEBAR_LABEL = { "홈": "홈", "주문": "주문", "내역": "주문 내역", "데이터": "데이터", "내 정보": "매장 정보" };
+const storeTab = (page, name) => (page.viewportSize()?.width ?? 1440) <= 640
+  ? page.getByRole("button", { name, exact: true })
+  : page.getByRole("link", { name: STORE_SIDEBAR_LABEL[name], exact: true });
 const readonlySmoke = process.env.P2_READONLY_PG17_SMOKE === "true";
 const db = process.env.PRICING_P2_LOCAL_DATABASE_URL;
 if (!db) throw new Error("Initialized disposable PG16 DB required");
@@ -454,12 +459,12 @@ try {
     for (const privateValue of ["INTERNAL","18910","purchaseCost","supplier","margin","objectKey","accessPassword"]) expect(JSON.stringify(data)).not.toContain(privateValue);
     for (const width of [1440,390]) {
       await page.setViewportSize({width,height:900});
-      await page.getByRole("button",{name:"주문",exact:true}).click();
+      await storeTab(page, "주문").click();
       await expect(page.getByText("합성 PG17 품목18",{exact:true})).toBeVisible();
       await expect(page.getByRole("button",{name:"후결제로 주문 신청",exact:true})).toBeDisabled();
       expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
       await page.screenshot({path:resolve(artifacts,`readonly-pg17-${width}.png`),fullPage:true});
-      await page.getByRole("button",{name:"데이터",exact:true}).click();
+      await storeTab(page, "데이터").click();
       await expect(page.getByText("현재 주문 링크에서는 원가 자료를 제공하지 않습니다.",{exact:false})).toBeVisible();
       await expect(page.getByRole("button",{name:"엑셀 원가 업로드",exact:true})).toHaveCount(0);
     }
@@ -582,7 +587,7 @@ try {
   await expect(
     page.getByRole("button", { name: "후결제로 주문 신청", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "내 정보", exact: true }).click();
+  await storeTab(page, "내 정보").click();
   await expect(
     page.locator('input[type="file"],input[type="password"]'),
   ).toHaveCount(0);

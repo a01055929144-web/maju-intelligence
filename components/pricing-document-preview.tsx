@@ -73,7 +73,7 @@ export function PageContent({
         </div>
         {data.recipient && <p>받는 곳: {data.recipient}</p>}
         {data.contact && <p className="text-xs">{data.contact}</p>}
-        <p className="text-xs">{display.priceIncludesTax ? "과세 품목 부가세 포함" : "부가세 별도"} · 면세 품목 별도 표시</p>
+        <p className="text-xs">{display.priceIncludesTax ? "과세 품목 부가세 포함" : "부가세 별도"}{display.showTaxType ? " · 면세 품목 별도 표시" : ""}</p>
         {data.expired && (
           <p className="font-semibold text-red-700">
             유효기간이 지나 가격을 표시하지 않습니다.
@@ -89,7 +89,7 @@ export function PageContent({
                 {promos.map((l, i) => (
                   <tr key={i}>
                     <td className="border-b border-amber-200 p-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1">{l.badge}</span>{l.displayName}<span data-document-spec className="block text-xs text-slate-600">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span></td>
-                    <td data-document-price className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}<span data-document-tax className="block text-xs font-normal">{l.taxType === "exempt" ? "면세" : "과세"}</span></td>
+                    <td data-document-price className="border-b border-amber-200 p-1 text-right font-bold">{price(l)}{display.showTaxType ? <span data-document-tax className="block text-xs font-normal">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
                     <td className="border-b border-amber-200 p-1 text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</td>
                   </tr>
                 ))}
@@ -102,7 +102,7 @@ export function PageContent({
                   <p className="font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{l.badge}</span>{l.displayName}</p>
                   <p data-document-spec className="text-xs">{l.spec} {l.unit}</p>
                   <p data-document-price className="font-bold">{price(l)}</p>
-                  <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p>
+                  {display.showTaxType ? <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   <p className="text-xs">{l.endsOn ? `${l.endsOn}까지` : ""}{l.remaining !== null ? ` · 남은 ${l.remaining}` : ""}</p>
                 </article>
               ))}
@@ -120,7 +120,7 @@ export function PageContent({
                 {l.spec} {l.unit}
               </p>
               {l.price !== null && <p data-document-price className="font-bold">{price(l)}</p>}
-              <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p>
+              {display.showTaxType ? <p data-document-tax className="text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</p> : null}
             </article>
           ))}
         </div>
@@ -146,10 +146,10 @@ export function PageContent({
                       <span className="block">{l.displayName}</span>
                       {l.brand ? <span className="block font-normal text-xs">{l.brand}</span> : null}
                       {l.spec || l.unit ? <span data-document-spec className="block font-normal text-xs text-slate-600 [overflow-wrap:anywhere]">{[l.spec, l.unit].filter(Boolean).join(" · ")}</span> : null}
-                      {!indexed ? <span data-document-tax className="block font-normal text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}
+                      {!indexed && display.showTaxType ? <span data-document-tax className="block font-normal text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
                     <td data-document-price className="border-b border-l px-1.5 py-1.5 text-right tabular-nums [overflow-wrap:anywhere]"><span data-document-price-value>{price(l)}</span></td>
-                    {indexed ? <td data-document-tax className="border-b p-1.5 text-xs">{l.taxType === "exempt" ? "면세" : "과세"}</td> : null}
+                    {indexed ? <td className="border-b p-1.5 text-xs">{display.showTaxType ? <span data-document-tax>{l.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td> : null}
                   </tr>
                 ))}
               </tbody>

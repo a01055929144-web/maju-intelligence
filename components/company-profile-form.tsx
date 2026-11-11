@@ -4,6 +4,7 @@ import { RegionPicker } from "@/components/region-picker";
 import { formatPhoneNumber } from "@/lib/phone";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MapPin, Plus, Trash2 } from "lucide-react";
+import { INVITE_CODE_EXPIRY_DAYS, formatInviteCode, inviteCodeStatus } from "@/domains/store/invite-code";
 import {
   type CompanyProfileField,
   type CompanyProfileSection,
@@ -245,7 +246,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
             <CompanyBasicsFields basics={basics} onChange={setBasics} readOnly={!editable} />
           ) : null}
           {current.id === "order" ? (
-            <div className="md:col-span-2">{orderContent || <p className="rounded-md bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">주문 링크를 켜면 주문 마감·배송일·최소 주문 금액을 여기서 정합니다.</p>}</div>
+            <div className="md:col-span-2">{orderContent ? <StoreInviteCodes companyId={companyId} /> : null}{orderContent ||<p className="rounded-md bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-600">주문 링크를 켜면 주문 마감·배송일·최소 주문 금액을 여기서 정합니다.</p>}</div>
           ) : null}
           {current.fields.map((field) => {
             const readOnly = !editable || (Boolean(field.locked) && !data.canEditLocked);
@@ -530,5 +531,70 @@ function FieldInput({
       {control}
       {hint}
     </div>
+  );
+}
+
+type InviteCode = { id: string; createdAt: string; expiresAt: string; revokedAt: string | null; storeCount: number };
+const INVITE_STATUS_LABEL = { active: "사용 중", expired: "만료", revoked: "회수됨" } as const;
+
+/** 설정 › 회사 정보 › 주문: 매장 초대코드 발급·복사·회수(CC-07). 기능이 꺼져 있으면(404) 아무것도 그리지 않는다. */
+function StoreInviteCodes({ companyId }: { companyId?: string }) {
+  const [codes, setCodes] = useState<InviteCode[] | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const [days, setDays] = useState<number>(30);
+  const [issued, setIssued] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const load = useCallback(async () => {
+    const response = await fetch(`/api/store-invite-codes${query}`, { cache: "no-store" });
+    if (response.status === 404) { setHidden(true); return; }
+    const result = await response.json().catch(() => ({})) as { items?: InviteCode[]; message?: string };
+    if (!response.ok) { setCodes([]); setMessage(result.message || "초대코드를 불러오지 못했습니다."); return; }
+    setCodes(result.items ?? []);
+  }, [query]);
+  useEffect(() => { void load(); }, [load]);
+  async function send(body: Record<string, unknown>) {
+    setBusy(true); setMessage("");
+    const response = await fetch("/api/store-invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...body }) });
+    const result = await response.json().catch(() => ({})) as { code?: string; expiresAt?: string; message?: string };
+    setBusy(false);
+    if (!response.ok) { setMessage(result.message || "처리하지 못했습니다."); return; }
+    if (result.code && result.expiresAt) setIssued({ code: result.code, expiresAt: result.expiresAt });
+    await load();
+  }
+  if (hidden) return null;
+  return (
+    <section aria-label="매장 초대코드" className="mb-4 space-y-2 rounded-md border border-slate-200 p-3">
+      <p className="text-xs font-black text-slate-800">매장 초대코드</p>
+      <p className="text-xs font-semibold text-slate-500">매장이 MAJU에 가입한 뒤 이 코드를 입력하면 우리 회사와 연결됩니다. 첫 주문은 주문 확인에서 거래처를 확인합니다.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-[11px] font-black text-slate-600">만료
+          <select aria-label="초대코드 만료" className="mt-1 block h-9 rounded-md border border-slate-200 px-2 text-xs font-semibold" onChange={(event) => setDays(Number(event.target.value))} value={days}>
+            {INVITE_CODE_EXPIRY_DAYS.map((d) => <option key={d} value={d}>{d === 365 ? "1년" : `${d}일`}</option>)}
+          </select>
+        </label>
+        <button className="maju-button-primary h-9 px-4 text-xs" disabled={busy} onClick={() => void send({ action: "issue", expiresInDays: days })} type="button">초대코드 발급</button>
+      </div>
+      {issued ? <div className="rounded-md bg-teal-50 p-3" role="status">
+        <p className="text-xs font-semibold text-teal-800">새 코드는 지금 한 번만 보입니다. 복사해서 매장에 전달하세요.</p>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <code className="text-lg font-black tracking-widest text-teal-900">{formatInviteCode(issued.code)}</code>
+          <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => void navigator.clipboard.writeText(formatInviteCode(issued.code)).then(() => setMessage("초대코드를 복사했습니다."), () => setMessage("복사하지 못했습니다. 코드를 직접 적어 주세요."))} type="button">복사</button>
+          <span className="text-xs text-slate-600">{issued.expiresAt.slice(0, 10)}까지</span>
+        </div>
+      </div> : null}
+      {message ? <p className="text-xs font-semibold text-slate-700" role="status">{message}</p> : null}
+      {codes === null ? <p className="text-xs text-slate-500">불러오는 중…</p> : codes.length ? (
+        <ul className="divide-y divide-slate-100 text-xs">
+          {codes.map((code) => { const status = inviteCodeStatus(code); return (
+            <li className="flex flex-wrap items-center gap-2 py-2" key={code.id}>
+              <span className="font-semibold text-slate-800">{code.createdAt.slice(0, 10)} 발급 · {code.expiresAt.slice(0, 10)}까지</span>
+              <span className="text-slate-600">{INVITE_STATUS_LABEL[status]} · 연결 매장 {code.storeCount}곳</span>
+              {status === "active" ? <button className="ml-auto text-xs font-bold text-rose-700 underline" disabled={busy} onClick={() => void send({ action: "revoke", id: code.id })} type="button">회수</button> : null}
+            </li>); })}
+        </ul>
+      ) : <p className="text-xs text-slate-500">아직 발급한 초대코드가 없습니다.</p>}
+    </section>
   );
 }

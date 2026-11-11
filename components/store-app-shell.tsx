@@ -43,7 +43,7 @@ export function StoreAppShell({ children, title = "MAJU 매장" }: { children: R
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur max-sm:hidden">
-            <div className="flex items-center px-4 py-3 xl:h-[72px] xl:py-0"><span className="text-xl font-bold">{title}</span></div>
+            <div className="flex items-center px-4 py-3 xl:h-[72px] xl:py-0"><h1 className="text-xl font-bold">{title}</h1></div>
           </header>
           <div className="w-full sm:px-4 sm:py-4 lg:px-6 lg:py-5">{children}</div>
         </div>

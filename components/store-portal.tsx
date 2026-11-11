@@ -7,7 +7,7 @@ import { StoreDirectSignup } from "./store-direct-signup";
 export function StorePortal({ accounts, error = false, loginEnabled }: { accounts: StorePortalAccount[] | null; error?: boolean; loginEnabled: boolean }) {
   const directSignup = storeDirectSignupEnabled();
   return <section className="space-y-4" aria-label="매장 홈">
-    <div><h1 className="text-xl font-semibold">MAJU 매장</h1><p className="text-sm text-slate-600">받은 견적서·단가표를 확인하고 주문과 원가관리를 이어가세요.</p></div>
+    <div><h1 className="text-xl font-semibold sm:hidden">MAJU 매장</h1><p className="text-sm text-slate-600">받은 견적서·단가표를 확인하고 주문과 원가관리를 이어가세요.</p></div>
     {error ? <Card><CardContent className="space-y-2 pt-4"><p role="alert">매장 정보를 불러오지 못했습니다.</p><Link className="inline-flex min-h-[44px] items-center underline" href="/store">다시 시도</Link></CardContent></Card> : accounts === null ? <Card><CardHeader><CardTitle>카카오로 시작</CardTitle></CardHeader><CardContent className="space-y-3">
       <p className="text-sm text-slate-600">{directSignup ? "카카오로 시작하세요. 처음이면 매장 정보를 입력하고 바로 시작할 수 있어요." : "이미 가입한 점주·직원은 카카오로 로그인하세요. 첫 가입은 받은 견적서·단가표 링크에서 진행합니다."}</p>
       {loginEnabled ? <Link className="maju-button-primary inline-flex min-h-[44px] items-center justify-center px-4" href="/api/auth/kakao/start?storePortal=1">{directSignup ? "카카오로 시작" : "카카오로 로그인"}</Link> : <p role="status" className="text-sm">매장 로그인이 준비 중입니다. 받은 문서 링크를 이용해 주세요.</p>}

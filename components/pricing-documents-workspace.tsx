@@ -1,5 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Tabs } from "@/components/ui/tabs";
+import { Toolbar } from "@/components/ui/toolbar";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "next/navigation";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
@@ -542,75 +546,55 @@ export function PricingDocumentsWorkspace({
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
       {leadNotice}
       {/* 화면 고정 줄은 앱 상단 줄 하나만 둔다. 이 줄까지 top-0에 고정하면 스크롤 때 페이지 제목을 덮는다(대표 11/10). */}
-      <header className="pricing-no-print -mx-1 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-1 py-2">
-        <button className={box} onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button">← 문서 목록</button>
+      <header className="pricing-no-print -mx-1 border-b border-slate-200 bg-white px-1 py-2">
         {draft && tab === "documents" ? (
           <>
-            <input aria-label="문서 제목" className="h-9 min-w-[160px] flex-1 rounded-md border border-transparent px-2 text-lg font-bold hover:border-slate-200 focus:border-teal-400" disabled={!editable} maxLength={100} onChange={(e) => change({ ...draft.content, title: e.target.value })} value={draft.content.title} />
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">
-                    {draft.content.kind === "sheet"
-                      ? "단가표"
-                      : "작성자 전용 견적서"}{" "}
-                    ·{" "}
-                    {dirty ? "저장 안 된 변경 있음" : `저장 ${draft.revision}`}
-                  </span>
-                  <button
-                    disabled={
-                      busy ||
-                      !editable ||
-                      draft.content.lines.some((l) => l.taxType === "unknown")
-                    }
-                    onClick={() => void task(save)}
-                    className={box}
-                  >
-                    초안 저장
-                  </button>
-                  <button
-                    disabled={busy || dirty || !draft.revision || !editable}
-                    onClick={() => void task(publish)}
-                    className={`${box} bg-blue-700 text-white`}
-                  >
-                    판매가 버전 확정
-                  </button>
-                  {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="min-h-[44px] bg-teal-700 text-white" disabled={busy || !latestPublished} onClick={() => latestPublished && void task(() => openPublishedPreview(latestPublished, true))} type="button">{latestPublished ? `공개 링크·QR · 버전 ${latestPublished.version}` : "버전 확정 후 링크 공유"}</Button> : null}
-                  <button disabled={busy} className={box} onClick={() => openPreview(false)} type="button">미리보기</button>
-                  <Button disabled={busy} className="bg-slate-900 text-white" onClick={() => openPreview(true)}>A4 인쇄</Button>
-                  <span className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="보기 방식">
-                    {([["doc", "문서 보기"], ["table", "표 보기"]] as const).map(([value, label]) => <button aria-pressed={docView === value} className={`h-9 px-3 text-sm font-bold ${docView === value ? "bg-teal-700 text-white" : "bg-white text-slate-700"}`} key={value} onClick={() => setDocView(value)} type="button">{label}</button>)}
-                  </span>
-                  <button
-                    disabled={busy}
-                    onClick={() => create("quote", draft.content)}
-                    className={box}
-                  >
-                    견적서로 복사
-                  </button>
-                  <button disabled={busy} onClick={() => void task(exportLines)} className={box} type="button">품목 엑셀 내보내기</button>
-                  <button disabled={busy || !editable} onClick={() => excelInput.current?.click()} className={box} type="button">품목 엑셀로 담기</button>
-                  <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void task(() => importLines(file));
-                    event.target.value = "";
-                  }} />
-                </div>
-                {!leadContext && publicSharingAvailable ? <p className="w-full text-sm">공개 링크·QR은 최신 발행 버전으로 만듭니다. 작성 중인 변경은 새 버전을 확정해야 반영됩니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : ""}</p> : null}
-                {versions.length ? <div aria-label="발행 버전" className="flex w-full flex-wrap items-center gap-2" role="group">
-                  <span className="text-sm font-semibold text-slate-600">발행 버전</span>
-                  {/* 공개 링크·QR은 위 버튼(최신 발행 버전) 하나로만 만든다. */}
-                  {versions.map((v) => (
-                    <button
-                      disabled={busy}
-                      key={v.id}
-                      onClick={() => void task(() => openPublishedPreview(v))}
-                      className={box}
-                    >
-                      버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
-                    </button>
-                  ))}
-                </div> : null}
+            <Toolbar
+              left={<>
+                <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
+                <input aria-label="문서 제목" className="h-9 min-w-[120px] flex-1 rounded-md border border-transparent px-2 text-base font-bold hover:border-slate-200 focus:border-teal-400 sm:text-lg" disabled={!editable} maxLength={100} onChange={(e) => change({ ...draft.content, title: e.target.value })} value={draft.content.title} />
+                <Badge className="max-sm:hidden">{draft.content.kind === "sheet" ? "단가표" : "작성자 전용 견적서"} · {dirty ? "저장 안 된 변경 있음" : `저장 ${draft.revision}`}</Badge>
+              </>}
+              center={<Tabs ariaLabel="보기 방식" items={[{ id: "doc", label: "문서" }, { id: "table", label: "표" }]} onChange={(id) => setDocView(id as "doc" | "table")} value={docView} variant="chip" />}
+              right={<>
+                <Button className="max-sm:hidden" disabled={busy} onClick={() => openPreview(false)} type="button" variant="outline">미리보기·인쇄</Button>
+                <Button className="max-sm:hidden" disabled={busy || !editable || draft.content.lines.some((l) => l.taxType === "unknown")} onClick={() => void task(save)} type="button" variant="outline">초안 저장</Button>
+                <Button disabled={busy || dirty || !draft.revision || !editable} onClick={() => void task(publish)} type="button">판매가 버전 확정</Button>
+                {publicSharingAvailable && !leadContext && !draft.archivedAt ? <Button className="max-sm:hidden" disabled={busy || !latestPublished} onClick={() => latestPublished && void task(() => openPublishedPreview(latestPublished, true))} title={latestPublished ? undefined : "판매가 버전을 확정하면 쓸 수 있습니다"} type="button" variant="outline">{latestPublished ? `공개 링크·QR · 버전 ${latestPublished.version}` : "버전 확정 후 링크 공유"}</Button> : null}
+                <DropdownMenu items={[
+                  { label: "미리보기·인쇄", mobileOnly: true, disabled: busy, onSelect: () => openPreview(false) },
+                  { label: "초안 저장", mobileOnly: true, disabled: busy || !editable || draft.content.lines.some((l) => l.taxType === "unknown"), onSelect: () => void task(save) },
+                  ...(publicSharingAvailable && !leadContext && !draft.archivedAt ? [{ label: latestPublished ? `공개 링크·QR · 버전 ${latestPublished.version}` : "공개 링크·QR (버전 확정 후)", mobileOnly: true, disabled: busy || !latestPublished, onSelect: () => latestPublished && void task(() => openPublishedPreview(latestPublished, true)) }] : []),
+                  { label: docView === "doc" ? "표로 보기" : "문서로 보기", mobileOnly: true, onSelect: () => setDocView(docView === "doc" ? "table" : "doc") },
+                  { label: "견적서로 복사", disabled: busy, onSelect: () => create("quote", draft.content) },
+                  { label: "품목 엑셀 내보내기", disabled: busy, onSelect: () => void task(exportLines) },
+                  { label: "품목 엑셀로 담기", disabled: busy || !editable, onSelect: () => excelInput.current?.click() },
+                  ...(editable && draft.content.lines.some((line) => !(line.spec || "").trim()) ? [{ label: "빈 규격 원장에서 채우기", disabled: busy, onSelect: () => void task(fillMissingSpecs) }] : []),
+                ]} />
+                <input accept=".xlsx,.xls,.csv" className="sr-only" ref={excelInput} type="file" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void task(() => importLines(file));
+                  event.target.value = "";
+                }} />
+              </>}
+            />
+            {!leadContext && publicSharingAvailable ? <p className="mt-1 text-xs text-slate-500">공개 링크·QR은 최신 발행 버전 기준입니다.{!versions.length ? " 먼저 초안을 저장하고 판매가 버전을 확정해 주세요." : " 작성 중인 변경은 새 버전 확정 후 반영됩니다."}</p> : null}
+            {versions.length ? <div aria-label="발행 버전" className="mt-1 flex w-full flex-wrap items-center gap-2" role="group">
+              <span className="text-sm font-semibold text-slate-600">발행 버전</span>
+              {/* 공개 링크·QR은 위 버튼(최신 발행 버전) 하나로만 만든다. */}
+              {versions.map((v) => (
+                <Button disabled={busy} key={v.id} onClick={() => void task(() => openPublishedPreview(v))} type="button" variant="outline">
+                  버전 {v.version} 미리보기 · {v.publishedAt.slice(0, 10)}
+                </Button>
+              ))}
+            </div> : null}
           </>
-        ) : <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>}
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
+            <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
+          </div>
+        )}
       </header>
       {draft?.archivedAt ? <p role="status" className="rounded border p-3 text-sm">보관된 문서입니다. 내용을 바꾸거나 새 버전을 발행하려면 문서 보관함에서 먼저 복원해 주세요. 기존 발행본과 주문 링크는 유지됩니다.</p> : null}
       {error && (
@@ -626,20 +610,7 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      {tab !== "documents" ? <div className="pricing-no-print flex flex-wrap gap-2">
-        {[
-          ["library", "행사·묶음·템플릿"],
-          ["profile", "인쇄 기본값"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            className={`${box} ${tab === id ? "bg-slate-900 text-white" : ""}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div> : null}
+      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "행사·묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
@@ -722,7 +693,6 @@ export function PricingDocumentsWorkspace({
             /* 11/4: 문서 목록(왼쪽)은 목록 화면에만 두고, 편집은 가운데 품목 · 오른쪽 문서 설정 두 칸으로 단순화 */
             <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
               <div className="min-w-0 space-y-4">
-                {editable && draft.content.lines.some((line) => !(line.spec || "").trim()) ? <button className="maju-button-secondary min-h-11" disabled={busy} onClick={() => void task(fillMissingSpecs)} type="button">빈 규격 원장에서 채우기</button> : null}
                 {versions.some((version) => version.content.lines.some((line) => !(line.spec || "").trim())) ? <p className="text-sm text-slate-600" role="status">기존 발행본의 규격은 그대로 유지됩니다. 초안에서 규격을 확인하고 저장한 뒤 새 버전을 확정해 공유 링크를 다시 발급해 주세요.</p> : null}
                 {docView === "doc" ? (
                   <>
