@@ -1,3 +1,4 @@
+import { AdminFeatureCompanyTable } from "@/components/admin-readonly-tables";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Database, FileClock, KeyRound, LayoutDashboard, ServerCog, ShieldAlert, UploadCloud, Users } from "lucide-react";
@@ -233,17 +234,7 @@ export default async function AdminSystemPage({
             ) : featureCompanyResult?.error ? (
               <p>{featureCompanyResult.error} <Link href="/admin/system?featureFlags=1#feature-flags">다시 시도</Link></p>
             ) : featureCompanyResult?.companies.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead><tr><th className="py-2">회사</th><th className="py-2">켜진 기능</th></tr></thead>
-                  <tbody>{featureCompanyResult.companies.map((company) => (
-                    <tr key={company.id} className="border-t">
-                      <td className="py-2">{company.name}</td>
-                      <td className="py-2">{companyFeatures.filter((feature) => isFeatureEnabled(feature, company.id)).join(", ") || "없음"}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
+              <AdminFeatureCompanyTable rows={featureCompanyResult.companies.map((company) => ({ id: company.id, name: company.name, features: companyFeatures.filter((feature) => isFeatureEnabled(feature, company.id)).join(", ") || "없음" }))} />
             ) : <p>표시할 회사가 없습니다. 고객사 등록 상태를 확인해 주세요.</p>}
           </CardContent>
         </Card>
