@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
   const includeExistingCustomers = params.get("includeExistingCustomers") === "true";
   const includeTemporaryOperations = params.get("includeTemporaryOperations") === "true";
   const leadId = params.get("leadId") || undefined;
+  // CC-21: 유통사 리드는 DISTRIBUTOR_SALES가 켜진 회사(비브)만 본다. 꺼진 회사는 요청값과 관계없이 매장(restaurant)만.
+  const distributorSales = isFeatureEnabled("DISTRIBUTOR_SALES", scope.companyId);
+  const targetType = !distributorSales ? "restaurant" as const : leadId ? undefined : params.get("targetType") === "distributor" ? "distributor" as const : "restaurant" as const;
   const requestedStoreAreaRange = params.get("storeArea");
   const storeAreaRange = process.env.LEAD_STORE_AREA_ENABLED === "true" && isStoreAreaRange(requestedStoreAreaRange)
     ? requestedStoreAreaRange
@@ -44,7 +47,8 @@ export async function GET(request: NextRequest) {
       includeExistingCustomers: Boolean(leadId) || includeExistingCustomers,
       includeTemporaryOperations: Boolean(leadId) || includeTemporaryOperations,
       leadId,
-      storeAreaRange
+      storeAreaRange,
+      targetType
     }),
     getPermitLeadQueues(scope.companyId!),
     getCompanySalesAdministrativeAreas(scope.companyId!)
@@ -55,7 +59,7 @@ export async function GET(request: NextRequest) {
     pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", scope.companyId),
     workspaceRole: scope.customerSession?.workspaceRole,
   });
-  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry });
+  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry, distributorSales, targetType });
 }
 
 // POST: 사업자 인허가 데이터 업로드(엑셀/CSV를 클라이언트에서 미리 파싱한 행 배열)를 일괄 적재합니다.
