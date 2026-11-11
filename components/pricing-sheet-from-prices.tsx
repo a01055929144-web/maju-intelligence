@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { compareCategoryPath, toFolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
 import { MAX_DOCUMENT_LINES } from "@/domains/pricing/document";
 import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
@@ -17,6 +18,10 @@ export function PricingSheetFromPrices({ companyId, folder, busy }: { companyId:
       const all = await fetchAllPriceItems(companyId);
       const picked = all.filter((item) => item.active && item.price > 0 && inFolder(item.category, folder));
       if (!picked.length) throw new Error("담을 수 있는 상품이 없습니다. 매입가가 있는 활성 상품이 필요합니다.");
+      // CC-26: 문서에도 폴더 순서대로(같은 폴더 안은 기존 순서 유지 — sort는 안정). 순서를 못 읽으면 기존 순서 그대로.
+      const order = await fetch(`/api/price-sheets/folder-order?${new URLSearchParams({ companyId })}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { folders: [] })).catch(() => ({ folders: [] }));
+      const folderOrder = toFolderOrder(order.folders ?? []);
+      if (folderOrder.size) picked.sort((a, b) => (a.category.trim() ? 0 : 1) - (b.category.trim() ? 0 : 1) || compareCategoryPath(a.category, b.category, folderOrder)); // 분류 없는 상품은 맨 뒤
       const ids = picked.slice(0, MAX_DOCUMENT_LINES).map((item) => item.id);
       if (picked.length > ids.length && !window.confirm(`상품이 ${picked.length.toLocaleString()}개라 문서 한도(${MAX_DOCUMENT_LINES}개)까지만 담습니다. 폴더를 좁혀 다시 만들 수도 있습니다. 계속할까요?`)) return;
       sessionStorage.setItem(SHEET_HANDOFF_KEY, JSON.stringify({ ids, label: folder ? folder.split(">").pop()?.trim() || "" : "" }));
