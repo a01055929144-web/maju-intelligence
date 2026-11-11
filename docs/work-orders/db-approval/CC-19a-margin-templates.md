@@ -32,3 +32,10 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 - 경로 하위 비교를 `LIKE`에서 `left(경로, 길이+3) = '경로 > '`로 변경 — 폴더 이름의 `_`·`%`가 와일드카드로 동작하지 않음(PG17 테스트 추가: `x_y` 이동 시 `xzy`·`x%y` 불변).
 - 화면(CC-17, 승인 후 구현): 폴더 이동 성공 직후 `recalculate`를 바로 실행해 판매가를 갱신.
 - 화면 합치기 확인창 문구: "같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다."
+
+## 운영 적용 기록 (2026-11-11 17:0x KST · 컨트롤타워)
+- 승인 문구(대표 16:18): `fcmdvveqmcgtioelzqun CC-19a 마진 템플릿·폴더 이동 SQL 승인 (위 3가지 보완 후 적용)`
+- 보완 1(SQL, `_`·`%` 와일드카드): 컨트롤타워 `2bddc04`(#550, PG17 통과 — `cc17_in_subtree()` left() 비교)로 적용. 같은 시각 Claude Code `77f64da`도 같은 보완을 인라인으로 넣었다 → **운영과 같은 `2bddc04` 형태로 초안을 맞춤**(이 PR). down에 `cc17_in_subtree` 삭제 추가.
+- 보완 2·3(판매가 재계산·합치기 문구): CC-17 화면 PR 조건.
+- 16:2x 첫 시도는 MCP 확인 대기 시간 초과로 미적용(한 트랜잭션이라 변경 없음 확인) → 17:0x 재적용.
+- 읽기 검증: `margin_templates`·`margin_template_categories`·`margin_template_items`·`product_category_moves` 생성, RLS 켬, anon select·authenticated execute 없음, 함수 3개(`move_product_category`·`cc17_in_subtree`·`cc17_category_norm`), `normalized_customers.margin_template_id` 추가, 감사 로그 1건. 거래처 1건 영향 없음(열 null).

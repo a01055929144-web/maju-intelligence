@@ -1,6 +1,7 @@
 -- DRAFT ONLY (CC-19a + CC-17). Never run against production without the CEO's explicit approval phrase.
 -- Dependencies: companies, product_catalog(company_id,id unique, category), margin_group_categories (pricing-p0), normalized_customers(company_id,id unique).
 -- Service-only API: company authorization is enforced at the server boundary; RLS on, no anon/authenticated grants.
+-- 11/11 컨트롤타워 보완: 하위 경로 판정을 LIKE 대신 left() 비교(cc17_in_subtree) — 분류 이름의 _·% 가 와일드카드로 쓰이지 않게.
 -- Markup basis follows pricing-p0: margin_bp 0..100000 = 0..1000% of purchase cost.
 begin;
 set local lock_timeout = '3s';
@@ -55,32 +56,36 @@ create function public.cc17_category_norm(c text) returns text language sql immu
 
 -- Atomic: products and default/template category margins move together, or nothing does.
 -- Published document versions are snapshots and are not touched.
--- Path prefix is compared with left() (not LIKE) so folder names containing _ or % match literally.
 -- Moving onto an existing folder merges: the target's margin links win, the moving folder's duplicate links are dropped.
+create function public.cc17_in_subtree(c text, root text) returns boolean language sql immutable set search_path = public,pg_temp as
+ $f$ select c = root or left(c, length(root) + 3) = root || ' > ' $f$;
+
 create function public.move_product_category(p_company uuid, p_from text, p_to text, p_actor uuid default null) returns jsonb
 language plpgsql security invoker set search_path = public,pg_temp as $$
 declare f text := public.cc17_category_norm(p_from); t text := public.cc17_category_norm(p_to); n integer; moved jsonb;
 begin
  if f = '' or t = '' or length(t) > 100 then raise exception 'cc17_invalid_path'; end if;
- if t = f or left(t, length(f)+3) = f || ' > ' then raise exception 'cc17_cannot_move_into_itself'; end if;
+ if public.cc17_in_subtree(t, f) then raise exception 'cc17_cannot_move_into_itself'; end if;
  select coalesce(jsonb_agg(jsonb_build_object('id',id,'category',category)),'[]') into moved from public.product_catalog
-  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
+  where company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(category), f);
  update public.product_catalog set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
+  where company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(category), f);
  get diagnostics n = row_count;
- delete from public.margin_group_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or left(public.cc17_category_norm(s.category), length(f)+3) = f || ' > ')
+ delete from public.margin_group_categories s where s.company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(s.category), f)
   and exists(select 1 from public.margin_group_categories d where d.company_id = p_company and d.category = t || substr(public.cc17_category_norm(s.category), length(f)+1));
  update public.margin_group_categories set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
- delete from public.margin_template_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or left(public.cc17_category_norm(s.category), length(f)+3) = f || ' > ')
+  where company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(category), f);
+ delete from public.margin_template_categories s where s.company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(s.category), f)
   and exists(select 1 from public.margin_template_categories d where d.template_id = s.template_id and d.category = t || substr(public.cc17_category_norm(s.category), length(f)+1));
  update public.margin_template_categories set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
+  where company_id = p_company and public.cc17_in_subtree(public.cc17_category_norm(category), f);
  insert into public.product_category_moves(company_id,from_path,to_path,product_count,moved_products,created_by) values (p_company,f,t,n,moved,p_actor);
  return jsonb_build_object('productCount', n, 'from', f, 'to', t);
 end $$;
 revoke all on function public.move_product_category(uuid,text,text,uuid) from public,anon,authenticated;
 revoke all on function public.cc17_category_norm(text) from public,anon,authenticated;
+revoke all on function public.cc17_in_subtree(text,text) from public,anon,authenticated;
 grant execute on function public.move_product_category(uuid,text,text,uuid) to service_role;
 grant execute on function public.cc17_category_norm(text) to service_role;
+grant execute on function public.cc17_in_subtree(text,text) to service_role;
 commit;

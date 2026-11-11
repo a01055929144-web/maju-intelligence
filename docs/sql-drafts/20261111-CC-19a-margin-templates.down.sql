@@ -8,6 +8,7 @@ do $$ begin
   if exists(select 1 from public.product_category_moves) then raise exception 'cc19a_down_refused_move_history_exists'; end if;
 end $$;
 drop function public.move_product_category(uuid,text,text,uuid);
+drop function if exists public.cc17_in_subtree(text,text);
 drop function public.cc17_category_norm(text);
 drop table public.product_category_moves;
 drop index public.normalized_customers_margin_template_idx;
