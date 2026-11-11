@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/document";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { discountPercent, regularPrice } from "@/domains/pricing/promotion-display";
 import { Tabs } from "./ui/tabs";
 
 // CC-20: 행사·임박 독립 화면. 데이터·명령은 기존 pricing_promotions API(documentRequest) 그대로, DB 변경 없음.
@@ -48,8 +49,9 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey }: { co
 
   const columns: CommonTableColumn<Promotion>[] = [
     { key: "name", label: "상품", value: (x) => x.displayName || x.name, sortable: true },
-    { key: "regular", label: "정상가", value: (x) => (x.regularCost && x.margin != null ? Math.ceil((x.regularCost * (100 + x.margin)) / 1000) * 10 : null), align: "right" },
+    { key: "regular", label: "정상가", value: (x) => regularPrice(x), align: "right", render: (x) => { const r = regularPrice(x); return r === null ? "-" : `${r.toLocaleString()}원`; } },
     { key: "price", label: kind === "임박" ? "처분가" : "행사가", value: (x) => x.price, align: "right", sortable: true, render: (x) => `${x.price.toLocaleString()}원` },
+    { key: "discount", label: "할인율", value: (x) => discountPercent(x), align: "right", sortable: true, render: (x) => { const d = discountPercent(x); return d === null ? "-" : `${d}%`; } },
     { key: "period", label: dateLabel, value: (x) => (kind === "임박" ? x.endsOn : `${x.startsOn} ~ ${x.endsOn}`), sortable: true },
     { key: "stock", label: "남은 수량", value: (x) => x.stock ?? "제한 없음", align: "right" },
     { key: "status", label: "상태", value: (x) => ({ active: "진행 중", upcoming: "예정", ended: "끝남" })[statusOf(x, today)] },
