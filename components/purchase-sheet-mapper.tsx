@@ -74,7 +74,7 @@ export function PurchaseSheetMapper({
                       <option value="">사용 안 함</option>
                       {PURCHASE_IMPORT_FIELDS.map((item) => <option key={item.key} value={item.key}>{item.label}{"required" in item && item.required ? " (필수)" : ""}</option>)}
                     </select>
-                    {field && "required" in field && field.required ? <span className="mt-1 inline-block rounded bg-teal-700 px-1.5 py-0.5 text-[10px] font-black text-white">필수</span> : null}
+                    {field && "required" in field && field.required ? <span className="mt-1 inline-block rounded bg-teal-700 px-1.5 py-0.5 text-xs font-black text-white">필수</span> : null}
                   </th>
                 );
               })}
