@@ -41,6 +41,6 @@ export function OAuthLoginButtons({ inviteCode }: OAuthLoginButtonsProps) {
 
 function KakaoMark() {
   return (
-    <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#191919] text-[9px] font-black leading-none text-[#FEE500]">K</span>
+    <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#191919] text-xs font-black leading-none text-[#FEE500]">K</span>
   );
 }

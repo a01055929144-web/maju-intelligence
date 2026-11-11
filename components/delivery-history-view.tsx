@@ -332,26 +332,26 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-teal-50 px-3 py-2">
-              <p className="text-[10px] font-black text-teal-600">조회 기간 운행일</p>
+              <p className="text-xs font-black text-teal-600">조회 기간 운행일</p>
               <p className="mt-0.5 text-base font-black text-teal-950">{rangeActiveDayCount}일</p>
             </div>
             <div className="rounded-lg bg-slate-50 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-500">조회 기간 완료</p>
+              <p className="text-xs font-black text-slate-500">조회 기간 완료</p>
               <p className="mt-0.5 text-base font-black text-slate-950">{rangeCompletionCount.toLocaleString()}건</p>
             </div>
           </div>
           <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-            <p className="text-[10px] font-black text-slate-500">날짜 범위</p>
+            <p className="text-xs font-black text-slate-500">날짜 범위</p>
             <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-              <input aria-label="조회 시작일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-700" max={dateRange.to} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} type="date" value={dateRange.from} />
-              <span className="text-[10px] font-bold text-slate-400">~</span>
-              <input aria-label="조회 종료일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-700" max={todayKey()} min={dateRange.from} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} type="date" value={dateRange.to} />
+              <input aria-label="조회 시작일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-black text-slate-700" max={dateRange.to} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} type="date" value={dateRange.from} />
+              <span className="text-xs font-bold text-slate-400">~</span>
+              <input aria-label="조회 종료일" className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-2 text-xs font-black text-slate-700" max={todayKey()} min={dateRange.from} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} type="date" value={dateRange.to} />
             </div>
-            <p className="mt-1.5 text-[9px] font-bold leading-4 text-slate-400">달력 배지와 기간 합계에 적용됩니다. 날짜를 선택하면 해당 일자의 기록을 엽니다.</p>
+            <p className="mt-1.5 text-xs font-bold leading-4 text-slate-400">달력 배지와 기간 합계에 적용됩니다. 날짜를 선택하면 해당 일자의 기록을 엽니다.</p>
           </div>
           <div className="mt-2 grid grid-cols-7 gap-1 px-1">
             {WEEKDAY_LABELS.map((label) => (
-              <div className="py-1 text-center text-[10px] font-black text-slate-400" key={label}>
+              <div className="py-1 text-center text-xs font-black text-slate-400" key={label}>
                 {label}
               </div>
             ))}
@@ -375,7 +375,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                   <span>{cell.day}</span>
                   {cell.count > 0 ? (
                     <span
-                      className={`rounded-full px-1.5 text-[9px] font-black ${
+                      className={`rounded-full px-1.5 text-xs font-black ${
                         selected ? "bg-white/25 text-white" : "bg-teal-100 text-teal-800"
                       }`}
                     >
@@ -439,10 +439,10 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
           {!detailLoading && !detailError && history ? (
             <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-3">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">완료</p><p className="mt-0.5 text-sm font-black text-emerald-700">{history.totalCompletions}건</p></div>
-                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">미완료</p><p className="mt-0.5 text-sm font-black text-rose-700">{selectedDayIncompleteCount}건</p></div>
-                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">재배송 후속</p><p className="mt-0.5 text-sm font-black text-amber-700">{selectedDayRedeliveryCount}건</p></div>
-                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-[10px] font-black text-slate-500">담당자</p><p className="mt-0.5 text-sm font-black text-slate-950">{history.drivers.length}명</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-xs font-black text-slate-500">완료</p><p className="mt-0.5 text-sm font-black text-emerald-700">{history.totalCompletions}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-xs font-black text-slate-500">미완료</p><p className="mt-0.5 text-sm font-black text-rose-700">{selectedDayIncompleteCount}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-xs font-black text-slate-500">재배송 후속</p><p className="mt-0.5 text-sm font-black text-amber-700">{selectedDayRedeliveryCount}건</p></div>
+                <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-slate-200"><p className="text-xs font-black text-slate-500">담당자</p><p className="mt-0.5 text-sm font-black text-slate-950">{history.drivers.length}명</p></div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5" aria-label="운행 기록 상태 필터">
                 {HISTORY_RECORD_FILTERS.map((filter) => (
@@ -511,7 +511,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                       </Badge>
                     </div>
                     {!activeDriver.planMatchedThatDay ? (
-                      <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] font-bold leading-4 text-amber-800">
+                      <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs font-bold leading-4 text-amber-800">
                         이 날짜에는 코스 확정 기록이 없습니다. 아래 담당자 구분과 계획 순서는 현재 거래처 배정을 기준으로 한 참고값이며,
                         당시 실제 배정과 다를 수 있습니다.
                       </p>
@@ -522,7 +522,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                       <RouteMetric label="완료 매장" value={`${activeDriver.completions.length.toLocaleString()}곳`} />
                       <RouteMetric label={todayIsSelected ? "배송 대기" : "미완료"} value={`${pendingPlannedStores.length.toLocaleString()}곳`} />
                     </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] font-bold">
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs font-bold">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600"><Route className="mb-1 h-3.5 w-3.5 text-teal-700" />거리: {hasRouteDistance ? "유효 GPS 구간 합계" : "좌표 2건 이상 필요"}</div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600"><Clock3 className="mb-1 h-3.5 w-3.5 text-teal-700" />시간: {hasRouteDuration ? "첫·마지막 GPS 기준" : "시작·종료 기록 필요"}</div>
                       <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800"><CircleDollarSign className="mb-1 h-3.5 w-3.5" />비용: 단가·인건비 데이터 필요</div>
@@ -551,7 +551,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                                     const Icon = action.icon;
                                     return (
                                       <button
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black ring-1 ring-inset ${selected ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`}
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ring-1 ring-inset ${selected ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`}
                                         key={action.status}
                                         disabled={Boolean(followUpSavingId)}
                                         onClick={() => void setPendingFollowUp(store.id, action.status)}
@@ -566,13 +566,13 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                               ) : null}
                               {!todayIsSelected && history.followUps?.find((item) => item.customerId === store.id) ? (() => {
                                 const followUp = history.followUps.find((item) => item.customerId === store.id)!;
-                                return <p className="mt-1.5 text-[9px] font-bold text-slate-400">{followUp.processedByName} · {new Date(followUp.processedAt).toLocaleString("ko-KR")}</p>;
+                                return <p className="mt-1.5 text-xs font-bold text-slate-400">{followUp.processedByName} · {new Date(followUp.processedAt).toLocaleString("ko-KR")}</p>;
                               })() : null}
                             </div>
                           ))}
                         </div>
-                        {followUpError ? <p className="mt-2 text-[10px] font-black text-rose-700">{followUpError}</p> : null}
-                        {!todayIsSelected ? <p className="mt-2 text-[10px] font-bold leading-4 text-rose-700/80">재배송 지정 건은 다음 배송 후보에 다시 표시됩니다.</p> : null}
+                        {followUpError ? <p className="mt-2 text-xs font-black text-rose-700">{followUpError}</p> : null}
+                        {!todayIsSelected ? <p className="mt-2 text-xs font-bold leading-4 text-rose-700/80">재배송 지정 건은 다음 배송 후보에 다시 표시됩니다.</p> : null}
                       </div>
                     ) : showIncomplete && recordFilter !== "redelivery" && activeDriver.planMatchedThatDay ? (
                       <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">확정 코스의 모든 배송이 완료됐습니다.</p>
@@ -593,18 +593,18 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                                   <p className="min-w-0 truncate text-[11px] font-black text-slate-900">
                                     {completion.actualOrder}. {completion.customerName}
                                   </p>
-                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
+                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
                                     {getCompletionOrderLabel(completion)}
                                   </span>
                                 </div>
-                                <p className="mt-1 truncate text-[10px] font-bold text-slate-500">
+                                <p className="mt-1 truncate text-xs font-bold text-slate-500">
                                   {new Date(completion.completedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                                   {completion.statusLabel ? ` · ${completion.statusLabel}` : ""}
                                 </p>
                                 <div className="mt-1 flex items-center justify-between gap-2">
-                                  <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
+                                  <p className="min-w-0 truncate text-xs font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
                                   <button
-                                    className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                                    className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                                     onClick={() => onOpenStore(completion.customerId)}
                                     type="button"
                                   >
@@ -633,7 +633,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
                         <div className="flex items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5" key={completion.id}>
                           <p className="min-w-0 truncate text-[11px] font-bold text-slate-700">{completion.customerName}</p>
                           <button
-                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                             onClick={() => onOpenStore(completion.customerId)}
                             type="button"
                           >
