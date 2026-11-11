@@ -543,9 +543,13 @@ export type ManagedLoginAccountInput = {
   role: AppUserLoginCredential["role"];
   workspaceRole?: StaffInvitation["role"] | "owner" | "member";
 };
+/** CC-22: 회사 구분. customer=영업할 고객사, pilot=파일럿, internal=본사(지표·결제·알림에서 제외). */
+export type CompanyKind = "customer" | "pilot" | "internal";
+export const normalizeCompanyKind = (value: unknown): CompanyKind => (value === "pilot" || value === "internal" ? value : "customer");
 export type ManagedCompanyAccount = {
   id: string;
   name: string;
+  companyKind: CompanyKind;
   businessRegistrationNumber: string;
   businessType: string;
   ownerName: string;
@@ -2272,8 +2276,9 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           origin_address: string | null;
           status: string;
           updated_at: string;
+          company_kind?: string | null;
         }>
-      >("companies?select=id,name,business_registration_number,business_type,owner_name,origin_address,status,updated_at&order=created_at.desc"),
+      >("companies?select=id,name,business_registration_number,business_type,owner_name,origin_address,status,updated_at,company_kind&order=created_at.desc"),
       supabaseRequest<
         Array<{
           customer_company_id: string | null;
@@ -2448,6 +2453,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         return {
           id: company.id,
           name: company.name,
+          companyKind: normalizeCompanyKind(company.company_kind),
           businessRegistrationNumber: company.business_registration_number || "",
           businessType: company.business_type || "",
           ownerName: company.owner_name || "",
@@ -2503,6 +2509,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         ownerName: input.ownerName || "",
         originAddress: input.originAddress || "",
         status: input.status || "active",
+        companyKind: "customer" as const,
         customerEmail,
         hasPassword: Boolean(input.customerPassword),
         customerCount: 0,
@@ -2562,6 +2569,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       origin_address: string | null;
       status: string;
       updated_at: string;
+      company_kind?: string | null;
     }>
   >("companies?on_conflict=id", {
     method: "POST",
@@ -2690,6 +2698,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
     company: {
       id: company.id,
       name: company.name,
+      companyKind: normalizeCompanyKind(company.company_kind),
       businessRegistrationNumber: company.business_registration_number || "",
       businessType: company.business_type || "",
       ownerName: company.owner_name || "",
@@ -14721,6 +14730,18 @@ export async function closeCompanyAccount(
  * supabase/migrations/*) 거래처/매출/업로드/직원 초대/구독 등 관련 데이터가 전부 함께 영구
  * 삭제되며 되돌릴 수 없습니다. 호출부(관리자 화면)에서 회사명 재입력 확인을 반드시 거치게 해야 합니다.
  */
+/** CC-22b: 회사 구분 변경(MAJU 관리자 API만 호출). 바꾸기 전 값을 읽어 감사 로그에 남긴다. */
+export async function setCompanyKind(companyId: string, kind: CompanyKind, actorName: string): Promise<{ from: CompanyKind; to: CompanyKind }> {
+  const [row] = await supabaseRequest<Array<{ company_kind: string | null }>>(`companies?select=company_kind&id=eq.${encodeURIComponent(companyId)}`);
+  if (!row) throw new Error("company_not_found");
+  const from = normalizeCompanyKind(row.company_kind);
+  if (from !== kind) {
+    await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ company_kind: kind }) });
+    await writeAdminAuditLog({ action: "company_kind_changed", companyId, metadata: { from, to: kind, actorName }, targetId: companyId, targetType: "company" });
+  }
+  return { from, to: kind };
+}
+
 export async function deleteCompanyPermanently(
   input: { companyId: string; confirmCompanyName: string },
   auditContext: AuditActorContext = {}

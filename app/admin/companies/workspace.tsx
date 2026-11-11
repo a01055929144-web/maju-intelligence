@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SortableTh } from "@/components/sortable-th";
 import { formatPhoneNumber } from "@/lib/phone";
-import type { DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
+import { CompanyKindPanel } from "./company-kind-panel";
+import type { CompanyKind, DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -60,6 +61,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
   const [selectedId, setSelectedId] = useState(initialCompany?.id || "new");
   const [query, setQuery] = useState("");
   const [companyFilter, setCompanyFilter] = useState<"all" | "active" | "needs-setup" | "paused">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | CompanyKind>("all");
   const [companyPage, setCompanyPage] = useState(1);
   const [companyPageSize, setCompanyPageSize] = useState<ListPageSize>(30);
   const [form, setForm] = useState<ManagedCompanyAccountInput>(initialForm);
@@ -100,9 +102,9 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         (companyFilter === "paused" && company.status !== "active") ||
         (companyFilter === "needs-setup" && readiness.score < 80);
 
-      return matchesKeyword && matchesFilter;
-    });
-  }, [companies, companyFilter, query]);
+      return matchesKeyword && matchesFilter && (kindFilter === "all" || company.companyKind === kindFilter);
+    }).sort((a, b) => Number(b.companyKind === "internal") - Number(a.companyKind === "internal")); // 본사(내부)를 맨 위에
+  }, [companies, companyFilter, kindFilter, query]);
   const companyTotalPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPageSize));
   const currentCompanyPage = Math.min(companyPage, companyTotalPages);
   const pagedCompanies = useMemo(() => {
@@ -591,6 +593,9 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
               신규
             </Button>
           </div>
+          <div aria-label="회사 구분" className="mt-3 flex flex-wrap gap-1.5" role="group">
+            {([["all", "모든 구분"], ["customer", "고객사"], ["pilot", "파일럿"], ["internal", "본사"]] as const).map(([id, label]) => <button aria-pressed={kindFilter === id} className={`min-h-[36px] rounded-full border px-3 text-xs font-black ${kindFilter === id ? "border-primary bg-primary text-white" : "border-slate-200 bg-white text-slate-600"}`} key={id} onClick={() => { setKindFilter(id); setCompanyPage(1); }} type="button">{label} {id === "all" ? companies.length : companies.filter((c) => c.companyKind === id).length}</button>)}
+          </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <CompanyFilterButton active={companyFilter === "all"} count={companies.length} label="전체" onClick={() => { setCompanyFilter("all"); setCompanyPage(1); }} />
             <CompanyFilterButton active={companyFilter === "active"} count={activeCompanies} label="운영중" onClick={() => { setCompanyFilter("active"); setCompanyPage(1); }} />
@@ -641,9 +646,11 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         </div>
 
         <div className="max-h-[680px] space-y-2 overflow-y-auto p-3">
-          {pagedCompanies.map((company) => (
+          {pagedCompanies.map((company, index) => (
+            <div key={company.id}>
+            {company.companyKind === "internal" && index === 0 ? <p className="mb-1 text-xs font-black text-slate-500">본사</p> : null}
+            {company.companyKind !== "internal" && pagedCompanies[index - 1]?.companyKind === "internal" ? <p className="mb-1 mt-3 text-xs font-black text-slate-500">고객사·파일럿</p> : null}
             <button
-              key={company.id}
               className={`w-full rounded-lg border p-4 text-left transition ${
                 selectedId === company.id ? "border-primary bg-primary/5" : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
@@ -652,7 +659,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">기본 로그인</span> : null}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.companyKind !== "customer" ? <span className={`rounded-full px-2 py-0.5 text-xs font-black ${company.companyKind === "pilot" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-700"}`}>{company.companyKind === "pilot" ? "파일럿" : "본사"}</span> : null}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">기본 로그인</span> : null}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {company.ownerName || "대표자 미등록"} · {company.originAddress.split(" ").slice(0, 2).join(" ") || "지역 미등록"} · {company.businessRegistrationNumber ? `사업자번호 끝 ${company.businessRegistrationNumber.slice(-4)}` : "사업자번호 필요"}
                   </p>
@@ -696,6 +703,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
                 <ReadinessMeter readiness={getCompanyReadiness(company)} compact />
               </div>
             </button>
+            </div>
           ))}
           {!filteredCompanies.length ? (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
@@ -1016,6 +1024,8 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
               <RecentCompanyUploadsTable uploads={selectedCompany.recentUploads} />
             </div>
           ) : null}
+
+          {selectedCompany ? <CompanyKindPanel companyId={selectedCompany.id} companyName={selectedCompany.name} kind={selectedCompany.companyKind} onChanged={(kind) => setCompanies((list) => list.map((c) => (c.id === selectedCompany.id ? { ...c, companyKind: kind } : c)))} /> : null}
 
           <div className="grid gap-4 md:grid-cols-2" id="company-editor">
             <Field label="고객사명" required value={form.name} onChange={(value) => update("name", value)} />
