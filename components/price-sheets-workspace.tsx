@@ -8,6 +8,7 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 import { marginSource } from "./pricing-margin-group-options";
 import { PricingMarginGroups } from "./pricing-margin-groups";
 import { Tabs } from "./ui/tabs";
+import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { buildMarginTree, inFolder } from "@/domains/pricing/margin-tree";
 export { marginSource } from "./pricing-margin-group-options";
 
@@ -77,6 +78,14 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const items = state.items.filter((i) => inFolder(i.category, folder));
   const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
   const zeroMargin = state.defaultMargin === 0;
+  const allColumns: CommonTableColumn<PriceItem>[] = [
+    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true },
+    { key: "name", label: "상품", value: (i) => i.name, sortable: true },
+    { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, render: (i) => `${i.cost.toLocaleString()}원` },
+    { key: "source", label: "적용 마진", value: (i) => { const s = marginSource(i, state); return s.margin === null ? s.label : `${s.margin}% · ${s.label}`; }, sortable: true },
+    { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, render: (i) => `${i.price.toLocaleString()}원` },
+    { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
+  ];
   const preview = (item: PriceItem) => {
     const raw = edits[item.id];
     if (raw === undefined || raw === "") return null;
@@ -89,7 +98,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
 
-    <Tabs ariaLabel="마진 설정" items={[{ id: "default", label: "기본 마진" }, { id: "category", label: "분류별 마진" }, { id: "items", label: "상품별 예외" }]} onChange={setTab} value={tab} />
+    <Tabs ariaLabel="마진 설정" items={[{ id: "default", label: "기본 마진" }, { id: "category", label: "분류별 마진" }, { id: "items", label: "상품별 예외" }, { id: "all", label: "전체 판매가 보기" }]} onChange={setTab} value={tab} />
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
       <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
@@ -204,5 +213,13 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
       </div>
     </section>
 
+    {/* ④ 전체 판매가 보기 */}
+    <section hidden={tab !== "all"} aria-label="전체 판매가 보기" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <h2 className="text-lg font-black">④ 전체 판매가 보기</h2>
+        <p className="text-sm text-slate-600">지금 마진 규칙으로 계산된 기본 판매가표입니다. 열 편집·CSV 내보내기는 표 위 버튼을 쓰세요. 지금은 불러온 페이지({state.items.length}개) 기준입니다.</p>
+      </div>
+      <CommonDataTable columns={allColumns} filename="기본-판매가표.csv" rowKey={(i) => i.id} rows={state.items} settingsKey="margin-all-prices" />
+    </section>
   </div>;
 }
