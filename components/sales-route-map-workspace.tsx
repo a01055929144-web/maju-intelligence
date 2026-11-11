@@ -675,6 +675,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapFilterPopTop, setMapFilterPopTop] = useState(48);
   const mapFilterPopRef = useRef<HTMLDivElement>(null);
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
+  // CC-21: 유통사 영업을 켠 회사만 "매장|유통사" 전환이 보인다(서버가 distributorSales로 알려 줌).
+  const [mapDistributorSales, setMapDistributorSales] = useState(false);
+  const [mapTargetType, setMapTargetType] = useState<"restaurant" | "distributor">("restaurant");
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
@@ -910,6 +913,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
       const params = new URLSearchParams({ excludeExcluded: "false" });
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      if (mapTargetType === "distributor") params.set("targetType", "distributor");
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
       const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
@@ -917,6 +921,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         setAllLeadsLoadState("error");
         return;
       }
+      setMapDistributorSales(payload.distributorSales === true);
       setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
       setMapSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
       setAllLeadsLoadState("ready");
@@ -1022,7 +1027,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange, mapTargetType]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -3028,7 +3033,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
                     숨김 리드 보기
                   </label>
-                  {mapSalesRegionsConfigured === true ? (
+                  {mapDistributorSales ? (
+                    <div aria-label="영업 대상" className="flex gap-1.5" role="group">
+                      {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={mapTargetType === id} className={`min-h-[36px] rounded-full border px-3 text-xs font-bold ${mapTargetType === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={id} onClick={() => setMapTargetType(id)} type="button">{label}</button>)}
+                    </div>
+                  ) : null}
+                  {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
                     <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                       <input checked={showOutsideSalesAreaOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
                       영업 지역 밖도 보기
