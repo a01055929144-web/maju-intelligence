@@ -454,12 +454,14 @@ try {
     for (const privateValue of ["INTERNAL","18910","purchaseCost","supplier","margin","objectKey","accessPassword"]) expect(JSON.stringify(data)).not.toContain(privateValue);
     for (const width of [1440,390]) {
       await page.setViewportSize({width,height:900});
-      await page.getByRole("button",{name:"주문",exact:true}).click();
+      // CX-11: PC(1440)는 사이드바 링크, 휴대폰(390)은 하단 탭 버튼.
+      const storeTab=(name)=>width<=640?page.getByRole("button",{name,exact:true}):page.getByRole("link",{name,exact:true});
+      await storeTab("주문").click();
       await expect(page.getByText("합성 PG17 품목18",{exact:true})).toBeVisible();
       await expect(page.getByRole("button",{name:"후결제로 주문 신청",exact:true})).toBeDisabled();
       expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
       await page.screenshot({path:resolve(artifacts,`readonly-pg17-${width}.png`),fullPage:true});
-      await page.getByRole("button",{name:"데이터",exact:true}).click();
+      await storeTab("데이터").click();
       await expect(page.getByText("현재 주문 링크에서는 원가 자료를 제공하지 않습니다.",{exact:false})).toBeVisible();
       await expect(page.getByRole("button",{name:"엑셀 원가 업로드",exact:true})).toHaveCount(0);
     }
