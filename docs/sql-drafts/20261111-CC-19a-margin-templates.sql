@@ -55,26 +55,27 @@ create function public.cc17_category_norm(c text) returns text language sql immu
 
 -- Atomic: products and default/template category margins move together, or nothing does.
 -- Published document versions are snapshots and are not touched.
+-- Path prefix is compared with left() (not LIKE) so folder names containing _ or % match literally.
 -- Moving onto an existing folder merges: the target's margin links win, the moving folder's duplicate links are dropped.
 create function public.move_product_category(p_company uuid, p_from text, p_to text, p_actor uuid default null) returns jsonb
 language plpgsql security invoker set search_path = public,pg_temp as $$
 declare f text := public.cc17_category_norm(p_from); t text := public.cc17_category_norm(p_to); n integer; moved jsonb;
 begin
  if f = '' or t = '' or length(t) > 100 then raise exception 'cc17_invalid_path'; end if;
- if t = f or t like f || ' > %' then raise exception 'cc17_cannot_move_into_itself'; end if;
+ if t = f or left(t, length(f)+3) = f || ' > ' then raise exception 'cc17_cannot_move_into_itself'; end if;
  select coalesce(jsonb_agg(jsonb_build_object('id',id,'category',category)),'[]') into moved from public.product_catalog
-  where company_id = p_company and (public.cc17_category_norm(category) = f or public.cc17_category_norm(category) like f || ' > %');
+  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
  update public.product_catalog set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or public.cc17_category_norm(category) like f || ' > %');
+  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
  get diagnostics n = row_count;
- delete from public.margin_group_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or public.cc17_category_norm(s.category) like f || ' > %')
+ delete from public.margin_group_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or left(public.cc17_category_norm(s.category), length(f)+3) = f || ' > ')
   and exists(select 1 from public.margin_group_categories d where d.company_id = p_company and d.category = t || substr(public.cc17_category_norm(s.category), length(f)+1));
  update public.margin_group_categories set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or public.cc17_category_norm(category) like f || ' > %');
- delete from public.margin_template_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or public.cc17_category_norm(s.category) like f || ' > %')
+  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
+ delete from public.margin_template_categories s where s.company_id = p_company and (public.cc17_category_norm(s.category) = f or left(public.cc17_category_norm(s.category), length(f)+3) = f || ' > ')
   and exists(select 1 from public.margin_template_categories d where d.template_id = s.template_id and d.category = t || substr(public.cc17_category_norm(s.category), length(f)+1));
  update public.margin_template_categories set category = t || substr(public.cc17_category_norm(category), length(f)+1)
-  where company_id = p_company and (public.cc17_category_norm(category) = f or public.cc17_category_norm(category) like f || ' > %');
+  where company_id = p_company and (public.cc17_category_norm(category) = f or left(public.cc17_category_norm(category), length(f)+3) = f || ' > ');
  insert into public.product_category_moves(company_id,from_path,to_path,product_count,moved_products,created_by) values (p_company,f,t,n,moved,p_actor);
  return jsonb_build_object('productCount', n, 'from', f, 'to', t);
 end $$;
