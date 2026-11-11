@@ -151,6 +151,7 @@ export function ProductCatalogAdmin({
     { key: "storage", label: "보관", defaultHidden: true, width: 80, value: () => "미설정" },
     { key: "brand", label: "브랜드", defaultHidden: true, width: 120, value: (i) => i.brand || "-" },
     { key: "edit", label: "수정", defaultHidden: true, sortable: false, width: 60, value: () => "", render: (i) => <button aria-label={`${i.name} 편집`} className="maju-button-secondary" onClick={() => setEditing(i)} type="button"><Edit3 className="h-4 w-4" /></button> },
+    { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
   ], []);
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">

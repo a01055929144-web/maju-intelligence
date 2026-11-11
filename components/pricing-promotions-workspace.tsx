@@ -120,7 +120,7 @@ function PromotionDrawer({ companyId, kind, onClose, onSaved, preset, promo }: {
       <label className="block text-sm font-bold">상품
         <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => setProductId(e.target.value)} required value={productId}>
           <option value="">상품 선택</option>
-          {promo && !choices.some((c) => c.id === promo.productId) ? <option value={promo.productId}>{promo.name}</option> : null}
+          {productId && !choices.some((c) => c.id === productId) ? <option value={productId}>{promo?.name || "선택한 상품"}</option> : null}
           {choices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </label>
