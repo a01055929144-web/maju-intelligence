@@ -113,16 +113,15 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
 
     {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
     <Tabs ariaLabel="마진 설정" items={[{ id: "default", label: "기본 마진" }, { id: "category", label: "분류별 마진" }, { id: "items", label: "상품별 예외" }, { id: "all", label: "전체 판매가 보기" }]} onChange={setTab} value={tab} />
-    <div className="flex flex-wrap items-center gap-2 text-sm">
+    {state.pendingCount > 0 || (state.lastBatch && !state.restored) ? <div className="flex flex-wrap items-center gap-2 text-sm">
       <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
       <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
       <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
-    </div>
+    </div> : null}
     {/* ① 기본 마진 */}
     <section hidden={tab !== "default"} aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-black">① 기본 마진</h2>
           <p className="text-sm text-slate-600">모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다.</p>
           {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
         </div>
@@ -143,7 +142,6 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     {/* ② 카테고리별 */}
     <section hidden={tab !== "category"} aria-label="카테고리별 마진" className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
       <div>
-        <h2 className="text-lg font-black">② 카테고리별 마진</h2>
         <p className="text-sm text-slate-600">상품관리와 같은 전체 분류 경로를 골라 마진을 연결하세요. 상위 분류를 골라도 하위 분류는 자동으로 연결되지 않습니다.</p>
       </div>
       <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} />
@@ -152,7 +150,6 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     {/* ③ 상품별 */}
     <section hidden={tab !== "items"} aria-label="상품별 예외" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div>
-        <h2 className="text-lg font-black">③ 상품별 예외</h2>
         <p className="text-sm text-slate-600">기본 마진과 다르게 받을 상품만 고치세요. 체크해서 여러 개를 한 번에 바꿀 수 있습니다. 칸을 비우고 저장하면 기본 마진으로 돌아갑니다.</p>
       </div>
       <nav aria-label="분류 폴더" className="flex flex-wrap gap-1.5">
@@ -232,7 +229,6 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     {/* ④ 전체 판매가 보기 */}
     <section hidden={tab !== "all"} aria-label="전체 판매가 보기" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div>
-        <h2 className="text-lg font-black">④ 전체 판매가 보기</h2>
         <p className="text-sm text-slate-600">지금 마진 규칙으로 계산된 기본 판매가표입니다. 열 편집·CSV 내보내기는 표 위 버튼을 쓰세요. 지금은 불러온 페이지({state.items.length}개) 기준입니다.</p>
       </div>
       <PricingSheetFromPrices busy={busy} companyId={companyId} folder={folder} />

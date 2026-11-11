@@ -81,11 +81,11 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   });
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/revenue/pricing/margins");
-  await expect(page.getByRole("heading", { name: "① 기본 마진", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "회사 기본 마진", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "② 카테고리별 마진", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "카테고리별 마진", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "상품별 예외", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "③ 상품별 예외", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "상품별 예외", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
   const panel = page.getByRole("region", { name: "마진 그룹 만들기·수정", exact: true });
   await expect(panel.getByRole("button", { name: "합성 기존 그룹 · 12% · 10원 올림", exact: true })).toBeVisible();
