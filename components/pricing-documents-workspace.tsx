@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "next/navigation";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
+  isId,
   koreaDay,
   lineFromCatalog,
   MAX_DOCUMENT_LINES,
@@ -116,6 +117,9 @@ export function PricingDocumentsWorkspace({
     setDocs(r.items);
     setTotal(r.total);
   }, [read, page, search]);
+  const [libraryReady, setLibraryReady] = useState(false);
+  const startSheet = useSearchParams()?.get("startSheet") === "products";
+  const sheetStarted = useRef(false);
   const loadLibrary = useCallback(async () => {
     const [s, p, h] = await Promise.all([
       read<ProductSet[]>("sets"),
@@ -125,6 +129,7 @@ export function PricingDocumentsWorkspace({
     setSets(s);
     setPromotions(p);
     setProfile(h);
+    setLibraryReady(true);
   }, [read]);
   async function task(action: () => Promise<void>) {
     setBusy(true);
@@ -201,6 +206,31 @@ export function PricingDocumentsWorkspace({
   function discard() {
     return !dirty || window.confirm("저장하지 않은 변경을 버리고 이동할까요?");
   }
+  // CC-18: 마진 설정의 "이 판매가로 단가표 만들기"에서 넘어온 상품으로 새 단가표를 시작한다(가격은 현재 회사 가격 규칙으로 다시 불러옴).
+  useEffect(() => {
+    if (!startSheet || !libraryReady || sheetStarted.current) return;
+    sheetStarted.current = true;
+    void (async () => {
+      try {
+        const raw = sessionStorage.getItem("maju:new-sheet-product-ids");
+        sessionStorage.removeItem("maju:new-sheet-product-ids");
+        const handoff = JSON.parse(raw || "null") as { ids?: unknown; label?: unknown } | null;
+        const ids = Array.isArray(handoff?.ids) ? handoff.ids.filter((id): id is string => typeof id === "string" && isId(id)).slice(0, MAX_DOCUMENT_LINES) : [];
+        if (!ids.length) throw new Error("담을 품목을 찾지 못했습니다. 마진 설정에서 다시 시작해 주세요.");
+        const byId = new Map<string, CatalogChoice>();
+        for (let start = 0; start < ids.length; start += 100) {
+          const r = await read<{ items: CatalogChoice[] }>("catalog", { productIds: ids.slice(start, start + 100) });
+          for (const item of r.items) byId.set(item.id, item);
+        }
+        const lines = ids.flatMap((id) => (byId.has(id) ? [lineFromCatalog(byId.get(id)!)] : []));
+        if (!lines.length) throw new Error("활성 상품·노출 상품명 설정을 확인해 주세요.");
+        const label = typeof handoff?.label === "string" ? handoff.label.trim().slice(0, 60) : "";
+        create("sheet", { ...blankContent("sheet"), title: label ? `${label} 단가표` : "단가표", lines });
+        const skipped = ids.length - lines.length;
+        setMessage(`${lines.length}개 품목을 담았습니다.${skipped ? ` 노출 설정이 없는 ${skipped}개는 제외했습니다.` : ""}`);
+      } catch (e) { setError(e instanceof Error ? e.message : "단가표를 시작하지 못했습니다."); }
+    })();
+  }, [startSheet, libraryReady]); // eslint-disable-line react-hooks/exhaustive-deps
   function blankContent(kind: DocumentKind): DocumentContent {
     return {
       kind,
