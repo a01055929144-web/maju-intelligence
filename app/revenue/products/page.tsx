@@ -18,7 +18,8 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
   const isAdminPreview = Boolean(adminSession && !customerSession);
   const canManageCategories = isAdminPreview || canManagePriceSheets(customerSession);
   // 매입처 상품 · 표준 품목 연결 탭은 없앴다(2149). 예전 주소(?tab=supplier|mapping)는 전체 상품으로 연다.
-  const initialTab = params?.tab === "imports" ? "imports" : "catalog";
+  // CC-24: 탭은 전체 상품 · 분류·마진 · 전체 상품 업로드. 옛 주소(?tab=imports 등)는 전체 상품으로 연다.
+  const initialTab = params?.tab === "categories" && canManageCategories ? "categories" : "catalog";
 
   return (
     <CustomerAppShell

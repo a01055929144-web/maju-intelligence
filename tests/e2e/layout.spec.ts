@@ -25,7 +25,7 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/revenue/products", slug: "products" },
   { auth: "customer", path: "/crm/timeline", slug: "customers" },
   { auth: "customer", path: "/purchasing/suppliers", slug: "suppliers" },
-  { auth: "customer", path: "/revenue/products?tab=imports", slug: "product-imports" },
+  { auth: "customer", path: "/revenue/products?tab=categories", slug: "product-categories" },
   { auth: "customer", path: "/settings/billing", slug: "settings-billing" },
   { auth: "customer", path: "/dashboard/settings/company", slug: "settings-company" },
   { auth: "customer", path: "/dashboard/settings/staff", slug: "settings-staff" },
