@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { storeTab } from "./store-tab";
 import { documentDisplayPrice, lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 
@@ -73,7 +74,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await page.getByRole("checkbox").check(); await page.getByRole("button", { name: "문서 수락 요청", exact: true }).click();
   await page.getByRole("link", { name: "주문 화면 열기", exact: true }).click();
   await expect(page).toHaveURL(/\/store#synthetic-order-token$/); expect(orderAttempts).toBe(0);
-  await page.getByRole("button", { name: "내역", exact: true }).click();
+  await storeTab(page, "내역").click();
   await expect(page.getByText("아직 주문이 없습니다.", { exact: true })).toBeVisible();
   expect(saved.size).toBe(0);
   // Even server-rendered cost privileges must stay isolated from a bearer order link.
@@ -145,7 +146,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   expect(saved.size).toBe(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`member-journey-${kind}-${role}-${width}.png`), fullPage: true });
-  await page.getByRole("button", { name: "데이터", exact: true }).click();
+  await storeTab(page, "데이터").click();
   await expect(page.getByText("현재 주문 링크에서는 원가 자료를 제공하지 않습니다.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { storeTab } from "./store-tab";
 const company = "00000000-0000-4000-8000-000000000001";
 
 for (const width of [1440, 390]) test(`store links verify settings before issuance at ${width}px`, async ({ page }, info) => {
@@ -106,7 +107,7 @@ for (const width of [1440, 390]) {
     const categories = page.getByRole("group", { name: "품목 대분류", exact: true });
     const views = page.getByRole("group", { name: "품목 보기", exact: true });
     await expect(rows).toHaveCount(2);
-    await page.getByRole("button", { name: "홈", exact: true }).click();
+    await storeTab(page, "홈").click();
     await page.getByRole("button", { name: "주문하기", exact: true }).click();
     await expect(rows).toHaveCount(4);
     await categories.getByRole("button", { name: "농산", exact: true }).click();
@@ -132,7 +133,7 @@ for (const width of [1440, 390]) {
     await rows.getByRole("button", { name: "즐겨찾기", exact: true }).click();
     await views.getByRole("button", { name: "즐겨찾기", exact: true }).click();
     await expect(rows).toHaveCount(1);
-    await page.getByRole("button", { name: "내역", exact: true }).click();
+    await storeTab(page, "내역").click();
     await expect(page.getByRole("table").getByRole("listitem")).toHaveText(["합성 생선 1개 · 12,000원", "합성 채소 1개 · 4,000원"]);
     await expect(page.getByRole("table")).toContainText("16,000원");
     await page.getByRole("button", { name: "다시 담기", exact: true }).click();
@@ -148,23 +149,25 @@ for (const width of [1440, 390]) {
     await expect(submit).toBeDisabled(); await expect(page.getByLabel("정렬", { exact: true })).toBeDisabled();
     await expect(page.getByText("확정된 품목 합계", { exact: false })).toHaveCount(0);
     await expect(rows.getByText("12,000원", { exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "내역", exact: true }).click();
+    await storeTab(page, "내역").click();
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText("16,000원", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 담기", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "데이터", exact: true }).click();
+    await storeTab(page, "데이터").click();
+    // PC 사이드바는 서버 페이지 전환이라 클릭 직후엔 이전 탭이 잠깐 남는다. 탭 화면이 뜬 뒤에 확인한다.
+    await expect(page.getByRole("heading", { name: "매장 데이터", exact: true })).toBeVisible();
     await expect(page.getByText("배송일 가격 확인 필요", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "홈", exact: true }).click();
+    await storeTab(page, "홈").click();
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
-    await page.getByRole("button", { name: "주문", exact: true }).click();
+    await storeTab(page, "주문").click();
     releaseDate!();
     await expect(page.getByText("합성 배송일 조회 실패", { exact: true })).toBeVisible();
     await expect(submit).toBeDisabled();
-    await page.getByRole("button", { name: "내역", exact: true }).click();
+    await storeTab(page, "내역").click();
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText("16,000원", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 담기", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "주문", exact: true }).click();
+    await storeTab(page, "주문").click();
     await page.screenshot({ path: info.outputPath(`store-controls-price-error-${width}.png`), fullPage: true });
     await page.getByRole("button", { name: "다시 불러오기", exact: true }).click();
     await expect(submit).toBeEnabled();
@@ -173,18 +176,18 @@ for (const width of [1440, 390]) {
     for (const target of [page.getByLabel("정렬", { exact: true }), rows.first().getByRole("button", { name: /수량 늘리기/ })]) expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
     await page.screenshot({ path: info.outputPath(`store-controls-ready-${width}.png`), fullPage: true });
-    await page.getByRole("button", { name: "데이터", exact: true }).click();
+    await storeTab(page, "데이터").click();
     await expect(page.getByRole("heading", { name: "매장 데이터" })).toBeVisible();
     await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "주문", exact: true }).click();
+    await storeTab(page, "주문").click();
     for (const name of ["합성 생선", "합성 고기"]) {
       await rows.filter({ has: page.getByText(name, { exact: true }) }).getByRole("button", { name: "품목 숨기기", exact: true }).click();
     }
-    await page.getByRole("button", { name: "데이터", exact: true }).click();
+    await storeTab(page, "데이터").click();
     await expect(page.getByRole("heading", { name: "판매가 변동", exact: true }).locator("..").getByText("0품목", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "변동 품목 보기", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "홈", exact: true }).click();
+    await storeTab(page, "홈").click();
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
     await page.getByRole("button", { name: "주문 품목 전체 보기", exact: true }).click();
     await expect(rows).toHaveCount(4);
@@ -196,13 +199,13 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("status")).toContainText("다른 문서의 품목은 포함하지 않습니다");
     expired = true;
     await page.reload();
-    await page.getByRole("button", { name: "내역", exact: true }).click();
+    await storeTab(page, "내역").click();
     await expect(page.getByText("문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다.", { exact: false })).toBeVisible();
-    await page.getByRole("button", { name: "주문", exact: true }).click();
+    await storeTab(page, "주문").click();
     await expect(page.getByText("확정된 품목 합계", { exact: false })).toHaveCount(0);
     await expect(page.getByText("12,000원", { exact: true })).toHaveCount(0);
     await expect(submit).toBeDisabled();
-    await page.getByRole("button", { name: "내역", exact: true }).click();
+    await storeTab(page, "내역").click();
     await expect(page.getByRole("table")).toHaveCount(0);
     await expect(page.getByText("16,000원", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 담기", exact: true })).toHaveCount(0);
@@ -334,15 +337,15 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByText(/주문 당시 품목.*주문 당시 규격.*면세.*2,000원/)).toBeVisible();
   await page.evaluate(() => { window.location.hash = "synthetic-second-store"; });
   await expect(page.getByText("다른 합성 유통 · 두 번째 매장", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "데이터", exact: true }).click();
+  await storeTab(page, "데이터").click();
   await expect(page.getByRole("status")).toContainText("로그인한 매장의 전용 주소");
   await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "매장 카카오 로그인", exact: false })).toHaveCount(0);
   expect(costRequests).toBe(0);
-  await page.getByRole("button", { name: "내역", exact: true }).click();
+  await storeTab(page, "내역").click();
   await expect(page.getByText("아직 주문이 없습니다.", { exact: true })).toBeVisible();
   await expect(page.getByText("주문 당시 품목", { exact: false })).toHaveCount(0);
-  await page.getByRole("button", { name: "주문", exact: true }).click();
+  await storeTab(page, "주문").click();
   await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "합성 주문 품목 수량 늘리기" }).click();
   await page.evaluate(() => { window.location.hash = "synthetic-revoked-link"; });

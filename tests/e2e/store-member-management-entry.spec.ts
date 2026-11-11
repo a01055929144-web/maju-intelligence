@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { storeTab } from "./store-tab";
 
 const companyId = "00000000-0000-4000-8000-000000000001";
 const storeAccountId = "30000000-0000-4000-8000-000000000001";
@@ -35,7 +36,7 @@ for (const width of [1440, 390]) test(`verified store member entry keeps role an
   await expect(page.getByRole("link", { name: "구성원 관리", exact: true })).toHaveCount(0);
   for (const token of ["owner", "manager", "staff", "anonymous", "off", "retry"]) {
     await page.goto(`/store#${token}`);
-    await page.getByRole("button", { name: "내 정보", exact: true }).click();
+    await storeTab(page, "내 정보").click();
     const entry = page.getByRole("link", { name: "구성원 관리", exact: true });
     if (token === "owner" || token === "manager") {
       await expect(entry).toHaveAttribute("href", href);
