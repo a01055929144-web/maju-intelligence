@@ -440,6 +440,7 @@ jobs:
             exit 1
           fi
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profiles-cx10.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-connect-cx12.pg17.test.sql
 
       - name: Verify CX-08 promotion reservations on PostgreSQL 17
         env:
