@@ -134,12 +134,12 @@ export function PricingProductPicker({
                       <td className="p-1.5"><input aria-label={`${label} 선택`} checked={inDoc || picked.has(item.id)} disabled={inDoc} onChange={(e) => toggle(item.id, e.target.checked)} type="checkbox" /></td>
                       <td className="p-1.5">
                         <span className="block truncate font-semibold" title={label}>{label}</span>
-                        {item.code ? <span className="text-[10px] text-slate-400">{item.code}</span> : null}
-                        {price?.taxType === "unknown" ? <span className="ml-1 text-[10px] font-bold text-amber-700">과세 확인 필요</span> : null}
+                        {item.code ? <span className="text-xs text-slate-400">{item.code}</span> : null}
+                        {price?.taxType === "unknown" ? <span className="ml-1 text-xs font-bold text-amber-700">과세 확인 필요</span> : null}
                       </td>
                       <td className="truncate p-1.5" title={`${item.spec} ${item.unit}`}>{item.spec} {item.unit}</td>
                       <td className="p-1.5 text-right font-bold">{price ? price.price.toLocaleString() : "…"}</td>
-                      <td className="p-1.5 text-right">{inDoc ? <span className="text-[10px] font-bold">담김</span> : <button aria-label={`${label} 담기`} className="rounded bg-teal-700 px-1.5 py-0.5 font-bold text-white disabled:bg-slate-300" disabled={busy || !price} onClick={() => price && onAdd([price])} type="button">+</button>}</td>
+                      <td className="p-1.5 text-right">{inDoc ? <span className="text-xs font-bold">담김</span> : <button aria-label={`${label} 담기`} className="rounded bg-teal-700 px-1.5 py-0.5 font-bold text-white disabled:bg-slate-300" disabled={busy || !price} onClick={() => price && onAdd([price])} type="button">+</button>}</td>
                     </tr>
                   );
                 })}
