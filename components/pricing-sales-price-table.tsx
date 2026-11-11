@@ -1,0 +1,74 @@
+"use client";
+import { useMemo } from "react";
+import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
+import type { MarginTreeNode } from "@/domains/pricing/margin-tree";
+import { inFolder } from "@/domains/pricing/margin-tree";
+import type { PricingCommand } from "@/application/pricing/manage-price-sheets";
+import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { marginSource } from "./pricing-margin-group-options";
+
+// CC-30a: 판매가 탭의 표 하나. 마진 칸·판매가 칸을 눌러 바로 고친다(저장 = 즉시 판매가 반영은 부모의 run이 한다).
+// 출처 배지는 4종 중 이 화면에서 나오는 둘: `마진`(기본·분류·상품 — 작은 글씨로 어느 것인지) · `고정`. (`매장`·`행사`는 해당 탭에서.)
+const source = (item: PriceItem, state: PriceState) => {
+  const s = marginSource(item, state);
+  if (s.kind === "direct") return { badge: "고정", detail: "마진 없이 정한 가격", tone: "bg-slate-900 text-white" };
+  const detail = s.kind === "default" ? "기본" : s.kind === "item" ? "상품" : `분류 ${s.margin}%`;
+  return { badge: "마진", detail, tone: "bg-emerald-100 text-emerald-800", title: `${detail}${s.margin !== null ? ` ${s.margin}%` : ""} → ${item.price.toLocaleString()}원` };
+};
+
+export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, busy, run, folderTools }: {
+  items: PriceItem[]; state: PriceState; tree: MarginTreeNode[]; folder: string | null; onFolder: (path: string | null) => void;
+  busy: boolean; run: (commands: PricingCommand[], done: string, apply?: boolean) => Promise<void>; folderTools: React.ReactNode;
+}) {
+  const rows = useMemo(() => items.filter((item) => inFolder(item.category, folder)), [items, folder]);
+  const columns: CommonTableColumn<PriceItem>[] = [
+    { key: "name", label: "상품", value: (i) => i.name, sortable: true, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
+    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true },
+    { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, render: (i) => `${i.cost.toLocaleString()}원` },
+    { key: "margin", label: "마진", value: (i) => marginSource(i, state).margin, align: "right", sortable: true, render: (i) => {
+      const s = marginSource(i, state);
+      return <input aria-label={`${i.name} 마진율`} className="h-8 w-16 rounded border border-slate-300 px-1.5 text-right text-sm disabled:bg-slate-100" defaultValue={i.itemMargin ?? ""} disabled={busy || s.kind === "direct"} inputMode="decimal" key={`m-${i.id}-${i.itemMargin}-${i.directPrice}`}
+        onBlur={(e) => {
+          const raw = e.currentTarget.value.trim();
+          if (raw === String(i.itemMargin ?? "")) return;
+          const margin = raw === "" ? null : Number(raw);
+          if (margin !== null && (!Number.isFinite(margin) || margin < 0 || margin > 1000)) { e.currentTarget.value = String(i.itemMargin ?? ""); return; }
+          void run([{ action: "item-margin", productId: i.id, margin }], `${i.name} 마진을 ${margin === null ? "상속(분류·기본)으로 되돌렸습니다" : `${margin}%로 바꿨습니다`}.`);
+        }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(i.itemMargin ?? ""); e.currentTarget.blur(); } }}
+        placeholder={s.margin !== null ? String(s.margin) : "-"} /> ;
+    } },
+    { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, render: (i) => (
+      <input aria-label={`${i.name} 판매가`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" defaultValue={i.price} disabled={busy} inputMode="numeric" key={`p-${i.id}-${i.price}-${i.directPrice}`}
+        onBlur={(e) => {
+          const raw = e.currentTarget.value.trim();
+          if (raw === String(i.price)) return;
+          const price = Number(raw);
+          if (raw === "" || !Number.isFinite(price) || price < 0) { e.currentTarget.value = String(i.price); return; }
+          // 판매가를 직접 넣으면 마진이 아니라 고정 가격이 된다 — 매입가가 바뀌어도 안 따라가니 한 번 확인.
+          if (!window.confirm(`${i.name}: 이 상품은 매입가가 바뀌어도 ${price.toLocaleString()}원으로 고정됩니다.\n마진으로 계산하려면 취소하고 마진 칸에 넣으세요.`)) { e.currentTarget.value = String(i.price); return; }
+          void run([{ action: "direct", productId: i.id, price }], `${i.name} 판매가를 ${price.toLocaleString()}원으로 고정했습니다.`);
+        }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(i.price); e.currentTarget.blur(); } }} />
+    ) },
+    { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
+    { key: "source", label: "출처", value: (i) => { const s = source(i, state); return `${s.badge} ${s.detail}`; }, render: (i) => {
+      const s = source(i, state);
+      return <span className="inline-flex items-center gap-1" title={s.title}><span className={`rounded px-1.5 py-0.5 text-xs font-bold ${s.tone}`}>{s.badge}</span><span className="text-xs text-slate-500">{s.detail}</span>
+        {i.directPrice !== null ? <button className="text-xs text-teal-700 underline" disabled={busy} onClick={() => void run([{ action: "direct", productId: i.id, price: null }], `${i.name} 고정 가격을 풀고 마진으로 계산합니다.`)} type="button">마진으로 계산</button> : null}</span>;
+    } },
+  ];
+  const loss = rows.filter((i) => i.price - i.cost <= 0).length;
+  return <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
+    <aside aria-label="분류" className="space-y-2 rounded-xl border border-slate-200 bg-white p-2">
+      <button aria-pressed={folder === null} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold ${folder === null ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} onClick={() => onFolder(null)} type="button"><span>전체</span><span className="text-xs text-slate-500">{items.length}</span></button>
+      {tree.map((node) => <button aria-pressed={folder === node.path} className={`flex w-full items-center justify-between gap-2 rounded-lg py-2 pr-3 text-left text-sm ${folder === node.path ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={node.path} onClick={() => onFolder(node.path)} style={{ paddingLeft: 12 + node.depth * 14 }} type="button">
+        <span className={`truncate ${node.depth === 0 ? "font-bold" : ""}`}>{node.name}</span><span className="shrink-0 text-xs text-slate-500">{node.badge} · {node.count}</span></button>)}
+      {folder ? <div className="border-t pt-2">{folderTools}</div> : null}
+    </aside>
+    <div className="min-w-0 space-y-2">
+      {loss ? <p className="text-sm font-bold text-rose-700">손해 {loss}개 — 이익이 0원 이하인 상품입니다.</p> : null}
+      <CommonDataTable columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price" />
+    </div>
+  </div>;
+}
