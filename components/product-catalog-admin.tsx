@@ -28,7 +28,7 @@ const blank: ProductCatalogAdminItem = {
 const money = (v?: number) =>
   v == null ? "-" : `${Math.round(v).toLocaleString("ko-KR")}원`;
 const margin = productCatalogMargin;
-type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo";
+type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo" | "promo" | "soon" | "no-promo";
 type SideTab = "category" | "supplier" | "maju-category";
 const units = ["박스", "kg", "g", "개", "단", "봉", "판", "통"];
 const origins = ["국내산", "중국산", "미국산", "호주산", "수입산"];
@@ -143,7 +143,10 @@ export function ProductCatalogAdmin({
           (view === "no-price" && i.salesPrice == null) ||
           (view === "no-code" && !i.productCode) ||
           (view === "duplicate-code" && Boolean(i.productCode && (codeCounts.get(i.productCode) || 0) > 1)) ||
-          (view === "no-photo" && !i.photoUrl);
+          (view === "no-photo" && !i.photoUrl) ||
+          (view === "promo" && i.promotion?.badge === "행사") ||
+          (view === "soon" && i.promotion?.badge === "임박") ||
+          (view === "no-promo" && !i.promotion);
         // 11/5: 왼쪽 분류·매입처를 누르면 그 상품만
         const matchesSide = !sideFilter || (sideTab === "category"
           ? (sideFilter === "미분류" ? !i.category : Boolean(i.category) && isUnder(i.category!, sideFilter))
@@ -195,6 +198,8 @@ export function ProductCatalogAdmin({
     { key: "storage", label: "보관", defaultHidden: true, width: 80, value: () => "미설정" },
     { key: "brand", label: "브랜드", defaultHidden: true, width: 120, value: (i) => i.brand || "-" },
     { key: "edit", label: "수정", defaultHidden: true, sortable: false, width: 60, value: () => "", render: (i) => <button aria-label={`${i.name} 편집`} className="maju-button-secondary" onClick={() => setEditing(i)} type="button"><Edit3 className="h-4 w-4" /></button> },
+    { key: "promoNow", label: "행사 상태", width: 120, value: (i) => (i.promotion ? `${i.promotion.badge} ~${i.promotion.endsOn}` : ""), render: (i) => (i.promotion ? <a className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i.promotion.badge === "임박" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`} href={`/revenue/pricing/promotions?productId=${i.id}`} title={`${i.promotion.badge}가 ${money(i.promotion.price)} · ${i.promotion.startsOn} ~ ${i.promotion.endsOn}`}>{i.promotion.badge} ~{i.promotion.endsOn.slice(5).replace("-", "/")}</a> : <span className="text-slate-400">-</span>) },
+    { key: "promoPrice", label: "행사가", align: "right", defaultHidden: true, width: 90, value: (i) => i.promotion?.price, render: (i) => (i.promotion ? money(i.promotion.price) : "-") },
     { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
   ], []);
   return (
@@ -251,7 +256,7 @@ export function ProductCatalogAdmin({
           {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <input aria-label={`${label} 검색`} className="maju-input w-full" key={key} onChange={(e) => setSearch((value) => ({ ...value, [key]: e.target.value }))} placeholder={`${label} 검색`} value={search[key]} />)}
         </div>
         <div className="flex flex-wrap gap-2 border-b p-4">
-          {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
+          {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음'],['promo','행사 중'],['soon','임박'],['no-promo','행사 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
           <Filter
             value={tax}
             onChange={(v) => setTax(v as typeof tax)}
