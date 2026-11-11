@@ -99,9 +99,9 @@ export function InstagramCandidateFinder({
           {candidates.map((candidate) => (
             <li className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5" key={candidate.handle}>
               <span className="text-xs font-black text-slate-900">@{candidate.handle}</span>
-              {candidate.nameMatched ? <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-black text-teal-700">상호 일치</span> : null}
-              {candidate.regionMatched ? <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">지역 일치</span> : null}
-              <span className="text-[10px] font-semibold text-slate-500">언급 {candidate.mentions}건</span>
+              {candidate.nameMatched ? <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-xs font-black text-teal-700">상호 일치</span> : null}
+              {candidate.regionMatched ? <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-xs font-black text-blue-700">지역 일치</span> : null}
+              <span className="text-xs font-semibold text-slate-500">언급 {candidate.mentions}건</span>
               <span className="ml-auto flex gap-1">
                 <a className="maju-button-secondary h-7 px-2 text-[11px]" href={`https://www.instagram.com/${encodeURIComponent(candidate.handle)}/`} rel="noreferrer" target="_blank">
                   <ExternalLink className="h-3 w-3" />

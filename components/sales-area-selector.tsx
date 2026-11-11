@@ -280,7 +280,7 @@ export function SalesAreaSelector({
           <span>옅음 → 진함: {mapMetric === "recentLeads" ? "신규 리드 수" : "거래처 수"} · 선택 지역은 청록색 테두리</span>
           <span>{mapStatsLoading ? "집계 불러오는 중" : mapLoadTiming == null ? "경계 불러오는 중" : `경계 표시 ${Math.round(mapLoadTiming)}ms`}</span>
         </div>
-        <p className="border-t border-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-400">행정경계: 국가데이터처 SGIS (2025.07.01 기준)</p>
+        <p className="border-t border-slate-100 px-3 py-2 text-xs font-semibold text-slate-400">행정경계: 국가데이터처 SGIS (2025.07.01 기준)</p>
       </div>
       {snapshot.expansionCandidateEnabled ? <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
         <p className="text-xs font-black text-violet-950">영업 필요 지역</p>
@@ -398,7 +398,7 @@ function SalesAreaCheckbox({
     <label className={`flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 ${disabled ? "opacity-60" : "cursor-pointer hover:bg-teal-50"}`}>
       <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
       <span className="min-w-0 flex-1 text-xs font-black text-slate-800">{label}</span>
-      <span className="text-right text-[10px] font-semibold tabular-nums text-slate-500 sm:shrink-0">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
+      <span className="text-right text-xs font-semibold tabular-nums text-slate-500 sm:shrink-0">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
     </label>
   );
 }

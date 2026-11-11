@@ -2073,10 +2073,10 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-950">{leadPageCopy.resultLabel}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${isSalesLeadPage ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"}`}>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-black ${isSalesLeadPage ? "bg-emerald-50 text-emerald-700" : "bg-violet-50 text-violet-700"}`}>
                 {filteredLeads.length.toLocaleString()}곳
               </span>
-              {activeFilterCount ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">필터 {activeFilterCount}개 적용</span> : null}
+              {activeFilterCount ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-500">필터 {activeFilterCount}개 적용</span> : null}
             </div>
             <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
               {isSalesLeadPage ? "우선순위를 검토하고 바로 연락하거나 후속 일정을 관리하세요." : "개업 시점과 업종을 좁혀 먼저 확인할 매장을 선별하세요."}
@@ -2511,7 +2511,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                             <p className="truncate font-bold text-slate-950">{lead.businessName}</p>
                             {lead.kakaoMatchMethod ? (
                               <span
-                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-black ${
                                   lead.kakaoMatchMethod === "name_only" && !lead.kakaoMatchConfirmed
                                     ? "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200"
                                     : "bg-teal-50 text-teal-700 ring-1 ring-inset ring-teal-100"
@@ -2540,14 +2540,14 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                           <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
                             {leadPriorityBadge(lead).label}
                           </span>
-                          {showMoreLeadColumns ? <p className="mt-1 truncate text-[10px] font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
+                          {showMoreLeadColumns ? <p className="mt-1 truncate text-xs font-semibold text-slate-500" title={confidence.reasons.join(" · ") || "우선순위 근거 확인 필요"}>
                             {confidence.reasons[0] || "근거 확인 필요"}
                           </p> : null}
                         </td>
                         <td className="max-w-[110px] truncate border-r border-slate-100 px-3 py-2 font-bold text-slate-700">{lead.industryPrimary}</td>
                         <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
                           {getPermitLeadOpenDate(lead) ? (
-                            <><span>{getPermitLeadOpenDate(lead)}</span><span className="ml-1 text-[10px] text-slate-400">{formatLeadOpenDateAge(getPermitLeadOpenDate(lead))}</span></>
+                            <><span>{getPermitLeadOpenDate(lead)}</span><span className="ml-1 text-xs text-slate-400">{formatLeadOpenDateAge(getPermitLeadOpenDate(lead))}</span></>
                           ) : <span className="text-slate-300">미확인</span>}
                         </td>
                         {showMoreLeadColumns ? <td className="whitespace-nowrap border-r border-slate-100 px-3 py-2">
@@ -3431,9 +3431,9 @@ function PermitLeadDetailPanel({
               <h3 className="min-w-0 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
               {/* 11/4: 지도 오른쪽 목록처럼 상호명 옆에 지도 바로가기(카카오·네이버·구글). */}
               <span className="flex shrink-0 items-center gap-1">
-                <a aria-label="카카오맵에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#FEE500] text-[10px] font-black text-[#3c1e1e]" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
-                <a aria-label="네이버 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#03C75A] text-[10px] font-black text-white" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
-                <a aria-label="구글 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-[10px] font-black text-[#4285F4]" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
+                <a aria-label="카카오맵에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#FEE500] text-xs font-black text-[#3c1e1e]" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
+                <a aria-label="네이버 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#03C75A] text-xs font-black text-white" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
+                <a aria-label="구글 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-xs font-black text-[#4285F4]" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
               </span>
             </div>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
@@ -3544,9 +3544,9 @@ function PermitLeadDetailPanel({
                 <CustomerAttachmentUploadPanel customerId={convertedCustomerId} customerName={lead.businessName} />
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">배송지</p><p className="mt-1 text-xs font-bold text-slate-800">{lead.address || "주소 확인 필요"}</p></div>
-                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">권역</p><p className="mt-1 text-xs font-bold text-slate-800">주소 기준 추천 후 사용자 확인</p></div>
-                <div className="rounded-lg bg-white px-3 py-2"><p className="text-[10px] font-black text-slate-400">오늘 코스</p><p className="mt-1 text-xs font-bold text-slate-800">미반영 · 지도에서 배정</p></div>
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-xs font-black text-slate-400">배송지</p><p className="mt-1 text-xs font-bold text-slate-800">{lead.address || "주소 확인 필요"}</p></div>
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-xs font-black text-slate-400">권역</p><p className="mt-1 text-xs font-bold text-slate-800">주소 기준 추천 후 사용자 확인</p></div>
+                <div className="rounded-lg bg-white px-3 py-2"><p className="text-xs font-black text-slate-400">오늘 코스</p><p className="mt-1 text-xs font-bold text-slate-800">미반영 · 지도에서 배정</p></div>
               </div>
               <a className="maju-button-secondary mt-2 h-9 w-full justify-center text-xs" href={withPermitLeadCompanyQuery(`/map?view=customers&customerId=${encodeURIComponent(convertedCustomerId)}`)}>
                 배송지·권역·코스 바로 확인
@@ -3857,7 +3857,7 @@ function PermitLeadDetailPanel({
                     <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2" key={action.id}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-xs font-black text-slate-950">{action.result || permitLeadActionLabel(action.actionType)}</span>
-                        <span className="shrink-0 text-[10px] font-bold text-slate-400">{action.createdAt}</span>
+                        <span className="shrink-0 text-xs font-bold text-slate-400">{action.createdAt}</span>
                       </div>
                       <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-slate-600">
                         <UserCheck className="h-3 w-3 text-teal-600" />
@@ -4164,7 +4164,7 @@ function PermitLeadQueueCard({
             <span className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5" key={lead.id}>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-black text-slate-800">{lead.businessName}</span>
-                <span className="mt-0.5 block text-[10px] font-semibold leading-4 text-slate-500">
+                <span className="mt-0.5 block text-xs font-semibold leading-4 text-slate-500">
                   {confidence.reasons.length ? `우선순위 근거 · ${confidence.reasons.slice(0, 2).join(" · ")}` : "우선순위 근거 확인 필요"}
                 </span>
               </span>

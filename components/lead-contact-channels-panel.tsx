@@ -410,7 +410,7 @@ export function LeadContactChannelsPanel({
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-slate-500">{icon}</span>
       <span className="text-xs font-black text-slate-900">{LEAD_CONTACT_CHANNEL_LABELS[channel]}</span>
-      {primary === channel ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-[10px] font-black text-white">먼저</span> : null}
+      {primary === channel ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-xs font-black text-white">먼저</span> : null}
       <span className={`min-w-0 truncate text-xs font-semibold ${value ? "text-slate-700" : "text-slate-400"}`}>{value || "없음"}</span>
     </div>
   );
