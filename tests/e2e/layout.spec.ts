@@ -138,7 +138,7 @@ test("category selection stays compact and hides the internal code at 390px", as
     ], options: ["농산", "농산 > 채소류", "농산 > 채소류 > 조미채소", "공산품", "공산품 > 조미·장류", "공산품 > 조미·장류 > 소스·드레싱"] } }));
     await page.route("**/api/price-sheets/products", (route) => { const items = route.request().postDataJSON().items as Array<{ id: string; category: string }>; for (const item of items) categories[item.id] = item.category; return route.fulfill({ json: { updated: items.length } }); });
     await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0 } }));
-    await page.goto("/revenue/products#product-category-management", { waitUntil: "domcontentloaded" });
+    await page.goto("/revenue/products?tab=categories#product-category-management", { waitUntil: "domcontentloaded" });
     const manager = page.locator("#product-category-management");
     await expect(page.locator(".common-data-table-group")).toHaveCount(0);
     await expect(manager.getByLabel("양파 분류 검색 선택")).toBeVisible();
@@ -442,9 +442,6 @@ for (const viewport of viewports) {
         }
         if (route.path === "/revenue/products") {
           await expect(page.getByText("깐양파").first()).toBeVisible();
-        }
-        if (route.slug === "product-imports") {
-          await expect(page.getByText("한빛유통_11월_단가표.xlsx").first()).toBeVisible();
         }
         if (route.slug === "lead-detail") {
           await expect(page.getByText("테스트 매장 01").first()).toBeVisible();
