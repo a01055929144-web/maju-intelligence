@@ -10627,6 +10627,8 @@ export type PermitLeadFilters = {
   hasPhone?: boolean;
   industry?: string;
   limit?: number;
+  /** 전체 건수(count=exact) 조회를 건너뛴다. 건수를 안 쓰는 호출(액션 큐)용. */
+  skipTotal?: boolean;
   period?: PermitLeadPeriod | "all";
   status?: string;
   includeOutsideSalesArea?: boolean;
@@ -10648,11 +10650,14 @@ type LeadBusinessHourRow = {
 export async function listLeadBusinessHours(companyId: string, leadIds: string[]) {
   if (!isProductionStoreConfigured() || !leadIds.length) return new Map<string, LeadBusinessHourInterval[]>();
   const result = new Map<string, LeadBusinessHourInterval[]>();
-  for (let offset = 0; offset < leadIds.length; offset += 200) {
-    const ids = leadIds.slice(offset, offset + 200).map(encodeURIComponent).join(",");
-    const rows = await supabaseRequest<LeadBusinessHourRow[]>(
+  // 11/12: 리드 3,000건이면 15번을 차례로 기다리다 /api/leads/permits가 10초를 넘겼다. 묶음별 조회를 동시에 보내고(한 리드는 한 묶음에만 있어 순서 유지), 합칠 때만 차례대로.
+  const batches = Array.from({ length: Math.ceil(leadIds.length / 200) }, (_, index) => leadIds.slice(index * 200, index * 200 + 200).map(encodeURIComponent).join(","));
+  const batchRows = await Promise.all(batches.map((ids) =>
+    supabaseRequest<LeadBusinessHourRow[]>(
       `lead_business_hour_intervals?select=lead_id,weekday,interval_index,opens_at,closes_at,is_closed&company_id=eq.${encodeURIComponent(companyId)}&source=eq.manual&lead_id=in.(${ids})&order=weekday,interval_index`
-    ).catch(() => []);
+    ).catch(() => [] as LeadBusinessHourRow[])
+  ));
+  for (const rows of batchRows) {
     for (const row of rows) {
       const current = result.get(row.lead_id) || [];
       current.push({ weekday: row.weekday, intervalIndex: row.interval_index, opensAt: row.opens_at?.slice(0, 5), closesAt: row.closes_at?.slice(0, 5), isClosed: row.is_closed });
@@ -10735,7 +10740,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   // (예: DB에 500건이어도 300건만 받아와 "총 300건"으로 잘못 표시). hasPhone처럼 조회 이후
   // 자바스크립트로만 걸러지는 필터가 없을 때는, 같은 조건으로 count=exact를 별도 조회해 진짜
   // 전체 건수를 돌려줍니다.
-  const total = await supabasePermitLeadCount(params).catch(() => leads.length);
+  const total = filters.skipTotal ? leads.length : await supabasePermitLeadCount(params).catch(() => leads.length);
 
   return { leads, total };
 }
@@ -10794,7 +10799,7 @@ export type PermitLeadQueues = {
  * 묶일 때만 방문을 권장합니다. 큐당 기본 20곳까지만 노출해 하루 작업량을 넘기지 않습니다.
  */
 export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20): Promise<PermitLeadQueues> {
-  const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500 });
+  const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500, skipTotal: true });
   const active = leads.filter((lead) => lead.status !== "제외" && lead.isActive);
 
   const regionCounts = new Map<string, number>();
