@@ -118,6 +118,9 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
   }, [companyId, form.customerId, isSale]);
   useEffect(() => { if (!form.id || form.status !== "confirmed") return; void api<{ status: Array<{ resolve_status: string; line_count: number }> }>(`/api/inventory/documents/${form.id}${companyId ? `?companyId=${companyId}` : ""}`).then((x) => setInventoryStatus(x.status)).catch(() => setInventoryStatus([])); }, [companyId, form.id, form.status]);
   const save = async () => {
+    // CC-30 E1: 매출 전표에 단가 0원 줄이 있으면 저장 전에 한 번 물어본다(가격이 안 들어온 줄을 놓치지 않게).
+    const zeroLines = isSale ? form.lines.filter((line) => line.productName.trim() && !(Number(line.unitPrice) > 0)).length : 0;
+    if (zeroLines && !window.confirm(`단가가 0원인 줄이 ${zeroLines}개 있습니다. 그대로 저장할까요?\n가격 관리에서 판매가를 먼저 확인해 보세요.`)) return;
     setSaving(true); setError("");
     try {
       let reason = form.reason || "";
