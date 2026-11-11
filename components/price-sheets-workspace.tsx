@@ -6,6 +6,7 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 
 
 import { marginSource } from "./pricing-margin-group-options";
+import { PricingMarginTemplates } from "./pricing-margin-templates";
 import { PricingFolderMove } from "./pricing-folder-move";
 import { PricingMarginGroups } from "./pricing-margin-groups";
 import { Tabs } from "./ui/tabs";
@@ -21,7 +22,7 @@ const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
  * ② 카테고리별 마진은 기존 그룹과 분류 연결을 카드에서 고릅니다.
  * ③ 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
  */
-export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
+export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { companyId: string; marginTemplates?: boolean }) {
   const [state, setState] = useState<PriceState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -99,6 +100,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
 
+    {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
     <Tabs ariaLabel="마진 설정" items={[{ id: "default", label: "기본 마진" }, { id: "category", label: "분류별 마진" }, { id: "items", label: "상품별 예외" }, { id: "all", label: "전체 판매가 보기" }]} onChange={setTab} value={tab} />
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>

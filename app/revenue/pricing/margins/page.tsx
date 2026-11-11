@@ -17,6 +17,6 @@ export default async function MarginGroupsPage({ searchParams }: { searchParams?
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && (!canManagePriceSheets(customer) || !customerHasCapability(customer, "manage_sales")))) notFound();
   const preview = Boolean(admin && !customer);
   return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="마진 설정" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <section className="mx-auto max-w-6xl space-y-4 p-4"><PriceSheetsWorkspace companyId={companyId} /></section>
+    <section className="mx-auto max-w-6xl space-y-4 p-4"><PriceSheetsWorkspace companyId={companyId} marginTemplates={isFeatureEnabled("MARGIN_TEMPLATES", companyId)} /></section>
   </CustomerAppShell>;
 }

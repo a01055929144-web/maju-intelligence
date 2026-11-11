@@ -86,6 +86,7 @@ export const ciLayoutCompany: ManagedCompanyAccount = {
   businessType: "식자재 유통",
   ownerName: "테스트 대표",
   originAddress: "서울특별시 강남구 테헤란로 1",
+  companyKind: "customer" as const,
   status: "active",
   customerEmail: "ci-owner@example.test",
   hasPassword: true,
