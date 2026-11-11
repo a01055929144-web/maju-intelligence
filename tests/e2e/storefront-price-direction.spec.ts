@@ -154,6 +154,8 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("16,000원", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 담기", exact: true })).toHaveCount(0);
     await storeTab(page, "데이터").click();
+    // PC 사이드바는 서버 페이지 전환이라 클릭 직후엔 이전 탭이 잠깐 남는다. 탭 화면이 뜬 뒤에 확인한다.
+    await expect(page.getByRole("heading", { name: "매장 데이터", exact: true })).toBeVisible();
     await expect(page.getByText("배송일 가격 확인 필요", { exact: true })).toBeVisible();
     await storeTab(page, "홈").click();
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toHaveCount(0);
