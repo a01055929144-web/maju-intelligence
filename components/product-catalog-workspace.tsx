@@ -17,6 +17,7 @@ import {
   type RawCatalogRow,
 } from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
+import { CategoryHealthCard } from "@/components/category-health-card";
 import { ProductCategoryWorkspace } from "@/components/product-category-manager";
 import { ImportRowEditor } from "@/components/import-row-editor";
 import { CustomerItemsImportDrawer } from "./customer-items-import-drawer";
@@ -281,7 +282,10 @@ export function ProductCatalogWorkspace({
           settingsKey={tableSettingsKey}
         />
       ) : tab === "categories" ? (
-        <ProductCategoryWorkspace companyId={companyId} />
+        <div className="space-y-4">
+          <CategoryHealthCard companyId={companyId} />
+          <ProductCategoryWorkspace companyId={companyId} />
+        </div>
       ) : (
         <section className="maju-section-card">
           <div className="maju-card-header flex items-center justify-between">
