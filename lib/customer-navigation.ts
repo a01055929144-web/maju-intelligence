@@ -108,7 +108,7 @@ const pricingNavigationGroup: CustomerNavigationGroup = {
     { active: "revenue", description: "엑셀과 직접 입력으로 매입가 변경", href: "/revenue/pricing", icon: BarChart3, label: "매입가 업로드", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "마진 규칙과 가격 재계산", href: "/revenue/pricing/margins", icon: BarChart3, label: "마진 설정", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "견적서와 단가표 문서", href: "/revenue/pricing/documents", icon: FileSpreadsheet, label: "견적서·단가표", workspaceRoles: ["owner", "manager", "sales"] },
-    { active: "revenue", description: "행사·임박 상품, 묶음, 템플릿", href: "/revenue/pricing/documents?tab=library", icon: FileSpreadsheet, label: "행사·템플릿", workspaceRoles: ["owner", "manager"] },
+    { active: "revenue", description: "행사·임박 상품", href: "/revenue/pricing/promotions", icon: FileSpreadsheet, label: "행사·임박", workspaceRoles: ["owner", "manager"] },
     { active: "revenue", description: "로고·회사명·연락처·하단 문구", href: "/revenue/pricing/documents?tab=profile", icon: Settings, label: "인쇄 기본값", workspaceRoles: ["owner", "manager"] }
   ]
 };
