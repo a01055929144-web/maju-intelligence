@@ -272,6 +272,19 @@ jobs:
           psql --dbname=delete_products_cc24_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p1.sql
           psql --dbname=delete_products_cc24_test --file=tests/sql/delete-products-cc24.pg17.test.sql
 
+      - name: Verify promotion audience (CC-29a) on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb promotion_audience_cc29a_test
+          psql --dbname=promotion_audience_cc29a_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p0-fixture.sql
+          psql --dbname=promotion_audience_cc29a_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p0.sql
+          psql --dbname=promotion_audience_cc29a_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p1.sql
+          psql --dbname=promotion_audience_cc29a_test --file=tests/sql/promotion-audience-cc29a.pg17.test.sql
+
 
       - name: Verify purchase-cost batch save and restore draft on PostgreSQL 17
         env:
