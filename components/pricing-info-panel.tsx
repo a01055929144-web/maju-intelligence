@@ -327,7 +327,10 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
           </select>
         </label> : null}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-          <span className="w-16">행사 블록</span>
+          <span className="w-16">행사·임박</span>
+          <span className="text-xs text-slate-500">자동 포함</span>
+          {([[false, "끄기"], [true, "켜기"]] as const).map(([on, label]) => <button aria-pressed={Boolean(display.autoPromos) === on} className={chip(Boolean(display.autoPromos) === on)} disabled={!editable} key={label} onClick={() => setDisplay({ autoPromos: on })} type="button">{label}</button>)}
+          <span className="ml-2 w-12">모양</span>
           {([["cards", "카드"], ["table", "표"]] as const).map(([value, label]) => <button aria-pressed={display.promoLayout === value} className={chip(display.promoLayout === value)} disabled={!editable} key={value} onClick={() => setDisplay({ promoLayout: value })} type="button">{label}</button>)}
         </div>
       </fieldset>

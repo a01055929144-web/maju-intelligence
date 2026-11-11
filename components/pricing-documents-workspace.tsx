@@ -180,6 +180,24 @@ export function PricingDocumentsWorkspace({
   function rows(lines: PrintLine[]) {
     if (draft) change({ ...draft.content, lines });
   }
+  // CC-20: "행사·임박 자동 포함"을 켠 문서는 진행 중인 행사·임박을 빠짐없이 넣는다(이미 넣은 줄·찾지 못한 상품은 건너뜀).
+  const autoPromos = draft?.content.display?.autoPromos === true;
+  const autoTried = useRef(new Set<string>());
+  useEffect(() => {
+    if (!draft || draft.archivedAt || !autoPromos) return;
+    const day = koreaDay();
+    const missing = promotions.filter((p) => day >= p.startsOn && day <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet)
+      && !draft.content.lines.some((l) => l.promotionId === p.id) && !autoTried.current.has(`${draft.id}:${p.id}`));
+    if (!missing.length) return;
+    missing.forEach((p) => autoTried.current.add(`${draft.id}:${p.id}`));
+    void read<{ items: CatalogChoice[] }>("catalog", { productIds: missing.map((p) => p.productId) }).then((r) => {
+      const byId = new Map(r.items.map((item) => [item.id, item]));
+      const added = missing.flatMap((p) => { const item = byId.get(p.productId); return item ? [{ p, item }] : []; });
+      if (!added.length) return;
+      setBaselines((previous) => ({ ...previous, ...Object.fromEntries(added.map(({ p, item }) => [p.productId, item.price])) }));
+      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType }))] });
+    }).catch((e) => setError(e instanceof Error ? e.message : "행사·임박을 자동으로 넣지 못했습니다."));
+  }, [draft, autoPromos, promotions]); // eslint-disable-line react-hooks/exhaustive-deps
   function discard() {
     return !dirty || window.confirm("저장하지 않은 변경을 버리고 이동할까요?");
   }

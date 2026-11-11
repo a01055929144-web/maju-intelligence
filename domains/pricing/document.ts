@@ -18,7 +18,8 @@ export type PrintLine = {
 /** 11/4: 회사 정보에서 골라 넣는 줄(위쪽/아래쪽). 확정 시점 값으로 고정됩니다. */
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
 /** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
-export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean };
+/** autoPromos: 켜면 진행 중인 행사·임박을 문서에 자동으로 넣는다(CC-20). 꺼져 있으면 키 자체가 없다. */
+export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean };
 export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
 export function parseDisplay(value: unknown): DocumentDisplay {
@@ -37,7 +38,7 @@ export function parseDisplay(value: unknown): DocumentDisplay {
       })
     : [];
   const productWidth = typeof d.productWidth === "number" && Number.isFinite(d.productWidth) ? Math.max(45, Math.min(80, Math.round(d.productWidth))) : DEFAULT_DISPLAY.productWidth;
-  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true };
+  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}) };
 }
 export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean) {
   return includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
