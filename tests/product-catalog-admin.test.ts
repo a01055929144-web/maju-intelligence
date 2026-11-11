@@ -51,8 +51,10 @@ describe("product catalog admin presentation", () => {
   });
 
   it("keeps category cleanup in product management with searchable choices", () => {
-    expect(adminSource).toContain("ProductCategoryWorkspace");
-    expect(adminSource).toContain('href="#product-category-management"');
+    // CC-24: 분류 정리·분류별 마진은 전체 상품 아래 카드가 아니라 "분류·마진" 탭으로 옮겼다.
+    expect(workspaceSource).toContain("ProductCategoryWorkspace");
+    expect(workspaceSource).toContain('tab === "categories"');
+    expect(adminSource).not.toContain("ProductCategoryWorkspace");
     expect(adminSource).toContain("product-large-category-options");
     expect(adminSource).toContain("${label} 검색 선택");
     expect(categorySource).toContain("옮길 분류 검색 선택");
@@ -75,7 +77,6 @@ describe("product catalog admin presentation", () => {
     expect(pageSource).toContain("canManagePriceSheets(customerSession)");
     expect(pageSource).toContain("canManageCategories={canManageCategories}");
     expect(workspaceSource).toContain("canManageCategories={canManageCategories}");
-    expect(adminSource).toContain("canManageCategories ? <ProductCategoryWorkspace");
-    expect(adminSource).toContain('sideTab === "category" && canManageCategories');
+    expect(workspaceSource).toContain('canManageCategories ? ([["categories", "분류·마진"]] as const) : []');
   });
 });
