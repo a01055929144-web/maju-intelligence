@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -7,6 +7,7 @@ import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { supabaseRequest } from "@/lib/store";
 import { INVITE_CODE_EXPIRY_DAYS, inviteCodeFromBytes } from "../../../domains/store/invite-code";
+import { hashInviteCode } from "../../../lib/store/11-invite-code-hash";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,6 @@ type CodeRow = { id: string; created_at: string; expires_at: string; revoked_at:
 // 직접 가입(R2)이 켜진 회사에서만. CX-10 SQL 적용 전에는 전역 OFF라 404.
 const enabled = () => process.env.STORE_DIRECT_SIGNUP_ENABLED === "true" && priceSheetsEnabled() && storeOrderingEnabled();
 const unavailable = () => NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
-
-/** 8자 코드는 짧아 평문 SHA-256이면 해시 유출 시 대입으로 찾을 수 있다. 서버 비밀값으로 HMAC. */
-function hashInviteCode(code: string) {
-  const secret = process.env.STORE_LINK_SECRET;
-  if (!secret || secret.length < 32) throw new Error("Store link secret is not configured.");
-  return createHmac("sha256", secret).update(`store-invite-code.v1:${code}`).digest("hex");
-}
 
 function sameOrigin(request: NextRequest) {
   const raw = request.headers.get("origin");

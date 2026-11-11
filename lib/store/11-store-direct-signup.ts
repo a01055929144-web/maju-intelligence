@@ -37,3 +37,23 @@ export async function listStoreProfiles(authUserId: string): Promise<StoreProfil
   return rows.flatMap((row) => row.store_profiles ? [{ id: row.store_profiles.id, storeName: row.store_profiles.store_name, role: row.role,
     businessStatus: row.store_profiles.business_status, baseAddress: row.store_profiles.base_address }] : []);
 }
+
+export type ConnectResult =
+  | { ok: true; companyId: string; storeAccountId: string; alreadyLinked: boolean }
+  | { ok: false; reason: "invalid_code" | "not_owner" };
+
+/** 초대코드로 유통사에 연결(DB 함수 connect_store_profile_by_invite_code_v1). 없는/만료/회수 코드는 모두 invalid_code 하나로 합쳐 구분하지 않는다. */
+export async function connectStoreProfile(authUserId: string, storeProfileId: string, codeHash: string): Promise<ConnectResult> {
+  if (!UUID.test(authUserId) || !UUID.test(storeProfileId)) throw new Error("store_profile_ids_invalid");
+  try {
+    const result = await supabaseRequest<{ companyId: string; storeAccountId: string; alreadyLinked: boolean }>("rpc/connect_store_profile_by_invite_code_v1", {
+      method: "POST", body: JSON.stringify({ p_auth_user_id: authUserId, p_store_profile_id: storeProfileId, p_code_hash: codeHash }),
+    });
+    return { ok: true, ...result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("store_invite_code_invalid")) return { ok: false, reason: "invalid_code" };
+    if (message.includes("store_profile_owner_required")) return { ok: false, reason: "not_owner" };
+    throw error;
+  }
+}
