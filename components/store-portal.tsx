@@ -31,5 +31,6 @@ export function StorePortal({ accounts, error = false, fixture, loginEnabled }: 
         </div>
       </CardContent></Card>;
     })}
+    {directSignup && accounts && accounts.length > 0 ? <StoreDirectSignup connected fixture={fixture} /> : null}
   </section>;
 }
