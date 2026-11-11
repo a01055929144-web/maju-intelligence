@@ -269,6 +269,7 @@ jobs:
           createdb delete_products_cc24_test
           psql --dbname=delete_products_cc24_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p0-fixture.sql
           psql --dbname=delete_products_cc24_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p0.sql
+          psql --dbname=delete_products_cc24_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p1.sql
           psql --dbname=delete_products_cc24_test --file=tests/sql/delete-products-cc24.pg17.test.sql
 
 
