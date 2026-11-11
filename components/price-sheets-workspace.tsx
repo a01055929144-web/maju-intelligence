@@ -6,6 +6,7 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 
 
 import { marginSource } from "./pricing-margin-group-options";
+import { PricingFolderMove } from "./pricing-folder-move";
 import { PricingMarginGroups } from "./pricing-margin-groups";
 import { Tabs } from "./ui/tabs";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
@@ -145,6 +146,7 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
         <button aria-pressed={folder === null} className={`rounded-full border px-3 py-1 text-sm font-bold ${folder === null ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white"}`} onClick={() => setFolder(null)} type="button">전체 {state.items.length}</button>
         {tree.map((node) => <button aria-pressed={folder === node.path} className={`rounded-full border px-3 py-1 text-sm ${folder === node.path ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white"}`} key={node.path} onClick={() => setFolder(node.path)} style={{ marginLeft: node.depth * 12 }} type="button">{node.name} {node.count} · {node.badge}</button>)}
       </nav>
+      {folder ? <PricingFolderMove busy={busy} companyId={companyId} folder={folder} onError={setError} onMoved={(to, count) => { setFolder(to); setPage(1); void run([{ action: "recalculate" }], `폴더를 "${to}"(으)로 옮기고(상품 ${count}개) 판매가를 다시 계산했습니다.`, false); }} /> : null}
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setPage(1); }}>
         <input aria-label="상품 검색" className={`${box} min-w-[220px] flex-1`} maxLength={100} onChange={(e) => setSearchInput(e.target.value)} placeholder="상품명·카테고리 검색" value={searchInput} />
         <button className={box} disabled={busy} type="submit">검색</button>
