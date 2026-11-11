@@ -2538,7 +2538,7 @@ function DataRegistrationFlowCard({
                     {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-black ${
                       step.done
                         ? "bg-emerald-100 text-emerald-800"
                         : index === currentIndex
