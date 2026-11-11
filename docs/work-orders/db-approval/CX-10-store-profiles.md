@@ -1,7 +1,7 @@
-# CX-10 매장 프로필·초대코드 — 운영 적용 완료(2026-11-11), 백필은 승인 대기
+# CX-10 매장 프로필·초대코드 — 운영 적용 완료(2026-11-11), 백필 적용 완료
 
 Ponytail: 사용함 (Claude Code ponytail-review). 지시서: `docs/dispatch/2026-11-11-R2-store-signup.md` CX-10, 설계 `docs/design/2026-11-11-store-direct-signup.md` 3절.
-**up 운영 적용 완료.** 백필은 별도 승인 전까지 미실행. 플래그·배포·기존 데이터 변경 없음.
+**up·백필 운영 적용 완료.** 플래그·배포 변경 없음(백필은 `store_accounts.store_profile_id`·`updated_at`만 갱신).
 
 ## 무엇이 생기나 (`docs/sql-drafts/20261111-CX-10-store-profiles.sql`)
 
@@ -59,3 +59,22 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서: `docs/dispatch/202
 | 신규 테이블 데이터 | 프로필 0·구성원 0·코드 0 |
 
 - 다음: CC-07 #512(초대코드 발급 화면) 병합 → CX-11(직접 가입). 백필(기존 매장 1건 → 프로필)은 대표가 `fcmdvveqmcgtioelzqun CX-10 백필 승인`처럼 별도 문구를 줄 때만.
+
+## 백필 적용 기록 (2026-11-11)
+
+- 승인 문구(대표): `fcmdvveqmcgtioelzqun CX-10 백필 승인` (up 적용 확인 후 실행).
+- 적용 파일: `docs/sql-drafts/20261111-CX-10-store-profiles-backfill.sql` (SHA-256 앞 8자리 `6280B36D`, 42줄). 적용자: Claude Code (Supabase MCP `execute_sql`, 트랜잭션 1회).
+- 사전 읽기: `store_accounts` 1건(`store_profile_id` 비어 있음 1), 프로필 0, 활성 매장 구성원 1명, 거래처 연결 가능 1건, up 적용됨.
+- 적용: 오류 없이 완료(`cx10_backfill_incomplete` 아님).
+- 사후 읽기(건수만, 매장명·주소 등 개인정보는 조회하지 않음):
+
+| 항목 | 결과 |
+|---|---|
+| 프로필 수 = 매장 계정 수 | 1 = 1 |
+| `store_profile_id` 빈 계정 | 0 |
+| 백필 프로필(origin=backfill, 원래 계정 ID 기록) | 1, 계정과 1:1 연결 1 |
+| 프로필 구성원(활성 점주) | 1 (원래 활성 구성원 1명과 일치), 원래 구성원 행 수 불변 |
+| 초대코드·초대코드 연결 계정 | 0 · 0 |
+
+- 되돌리기: `…-backfill.down.sql`(백필 프로필이 원래 계정 외에 쓰이면 거부).
+- 사업자번호가 같아도 합치지 않음(원 계획 그대로).
