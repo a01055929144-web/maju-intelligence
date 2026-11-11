@@ -63,6 +63,13 @@ begin
  perform move_product_category(c,'수산 > 생선','수산 > 활어');
  if exists(select 1 from margin_group_categories where company_id=c and category='수산 > 생선') then raise exception 'merge left source link'; end if;
 
+ -- 11/11 보완: 분류 이름의 _ 는 와일드카드가 아니다("가_나"를 옮겨도 "가X나"는 그대로).
+ insert into product_catalog(id,company_id,category,purchase_product_name,purchase_price) values
+  ('10000000-0000-4000-8000-000000000091',c,'가_나','언더바',1000),('10000000-0000-4000-8000-000000000092',c,'가X나 > 하위','비슷한 이름',1000);
+ r := move_product_category(c,'가_나','다');
+ if (r->>'productCount')::int <> 1 then raise exception 'underscore treated as wildcard: %', r; end if;
+ if (select category from product_catalog where id='10000000-0000-4000-8000-000000000092') <> '가X나 > 하위' then raise exception 'wildcard sibling moved'; end if;
+
  begin perform move_product_category(c,'식품','식품 > 채소 > 안으로'); raise exception 'move into itself accepted';
  exception when others then if sqlerrm <> 'cc17_cannot_move_into_itself' then raise; end if; end;
  begin perform move_product_category(c,'식품',''); raise exception 'empty path accepted';
