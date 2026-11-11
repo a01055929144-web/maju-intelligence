@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { DistributorImportSave } from "./distributor-import-save";
 import { FileSpreadsheet, ListFilter, Smartphone, Store, TableProperties } from "lucide-react";
 
 type FieldType = "text" | "number" | "date" | "select" | "multi_select" | "checkbox";
@@ -18,7 +19,7 @@ export function LeadWorkspaceSettings({ companyId, initialTab = "fields" }: { co
       <Tab active={tab === "import"} icon={<FileSpreadsheet className="h-4 w-4" />} label="엑셀 가져오기" onClick={() => setTab("import")} />
       <Tab active={tab === "distributors"} icon={<Store className="h-4 w-4" />} label="유통사" onClick={() => setTab("distributors")} />
     </div>
-    <div className="p-4 sm:p-5">{tab === "fields" ? <LeadFieldsPanel companyId={companyId} /> : tab === "import" ? <LeadImportPanel /> : <DistributorPanel />}</div>
+    <div className="p-4 sm:p-5">{tab === "fields" ? <LeadFieldsPanel companyId={companyId} /> : tab === "import" ? <LeadImportPanel companyId={companyId} /> : <DistributorPanel />}</div>
   </section>;
 }
 
@@ -72,17 +73,17 @@ function LeadFieldsPanel({ companyId }: { companyId?: string }) {
 
 function Preview({ icon, text, title }: { icon: React.ReactNode; text: string; title: string }) { return <div className="rounded-xl border border-slate-200 p-4"><p className="flex items-center gap-2 text-xs font-black text-teal-700">{icon}{title}</p><p className="mt-3 text-sm font-semibold text-slate-700">{text}</p></div>; }
 
-function LeadImportPanel() {
-  const [sheets, setSheets] = useState<ParsedSheet[]>([]); const [sheetIndex, setSheetIndex] = useState(0); const [error, setError] = useState("");
+function LeadImportPanel({ companyId }: { companyId?: string }) {
+  const [fileName, setFileName] = useState(""); const [sheets, setSheets] = useState<ParsedSheet[]>([]); const [sheetIndex, setSheetIndex] = useState(0); const [error, setError] = useState("");
   const sheet = sheets[sheetIndex];
   const headerIndex = useMemo(() => detectHeaderRow(sheet?.rows || []), [sheet]);
   const headers = (sheet?.rows[headerIndex] || []).map(String);
   async function readFile(file?: File) {
-    if (!file) return; setError("");
+    if (!file) return; setError(""); setFileName(file.name);
     try { const XLSX = await import("xlsx"); const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" }); setSheets(workbook.SheetNames.map((name) => ({ name, rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: "" }) as unknown[][] }))); setSheetIndex(0); }
     catch { setError("파일을 읽지 못했습니다. .xls, .xlsx 또는 .csv 파일인지 확인해 주세요."); }
   }
-  return <div className="space-y-4"><div><h2 className="text-lg font-black">리드 엑셀 가져오기</h2><p className="mt-1 text-sm text-slate-600">시트와 칸 이름 줄을 확인한 뒤 500행 단위로 저장합니다. 현재는 SQL 승인 전 미리보기 단계입니다.</p></div><label className="flex min-h-24 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-bold text-slate-700"><input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} type="file" />.xls · .xlsx · .csv 선택</label>{error ? <p className="text-sm font-bold text-rose-600">{error}</p> : null}{sheets.length ? <><select className="maju-input" onChange={(event) => setSheetIndex(Number(event.target.value))} value={sheetIndex}>{sheets.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}</select><p className="text-xs font-bold text-slate-500">감지된 칸 이름 줄: {headerIndex + 1}행 · 데이터 {(sheet.rows.length - headerIndex - 1).toLocaleString()}행</p><div className="overflow-x-auto"><table className="min-w-[720px] text-sm"><thead><tr>{headers.map((header, index) => <th className="border bg-slate-50 p-2 text-left" key={`${header}-${index}`}>{header || `빈 칸 ${index + 1}`}<span className="mt-1 block text-[11px] text-teal-700">{COMMON_HEADERS[header.replace(/\s/g, "")] || "우리 회사 칸 만들기"}</span></th>)}</tr></thead><tbody>{sheet.rows.slice(headerIndex + 1, headerIndex + 4).map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, columnIndex) => <td className="border p-2" key={columnIndex}>{String(row[columnIndex] ?? "")}</td>)}</tr>)}</tbody></table></div></> : null}</div>;
+  return <div className="space-y-4"><div><h2 className="text-lg font-black">리드 엑셀 가져오기</h2><p className="mt-1 text-sm text-slate-600">시트와 칸 이름 줄을 확인한 뒤 500행 단위로 저장합니다. 유통사 영업을 켠 회사는 미리보기 아래에서 저장할 수 있습니다.</p></div><label className="flex min-h-24 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-bold text-slate-700"><input accept=".xls,.xlsx,.csv" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} type="file" />.xls · .xlsx · .csv 선택</label>{error ? <p className="text-sm font-bold text-rose-600">{error}</p> : null}{sheets.length ? <><select className="maju-input" onChange={(event) => setSheetIndex(Number(event.target.value))} value={sheetIndex}>{sheets.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}</select><p className="text-xs font-bold text-slate-500">감지된 칸 이름 줄: {headerIndex + 1}행 · 데이터 {(sheet.rows.length - headerIndex - 1).toLocaleString()}행</p><div className="overflow-x-auto"><table className="min-w-[720px] text-sm"><thead><tr>{headers.map((header, index) => <th className="border bg-slate-50 p-2 text-left" key={`${header}-${index}`}>{header || `빈 칸 ${index + 1}`}<span className="mt-1 block text-[11px] text-teal-700">{COMMON_HEADERS[header.replace(/\s/g, "")] || "우리 회사 칸 만들기"}</span></th>)}</tr></thead><tbody>{sheet.rows.slice(headerIndex + 1, headerIndex + 4).map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, columnIndex) => <td className="border p-2" key={columnIndex}>{String(row[columnIndex] ?? "")}</td>)}</tr>)}</tbody></table></div><DistributorImportSave companyId={companyId} fileName={fileName} headerRow={headerIndex} key={`${fileName}-${sheetIndex}`} sheetName={sheet.name} table={sheet.rows} /></> : null}</div>;
 }
 
 function detectHeaderRow(rows: unknown[][]) { let best = 0; let score = -1; rows.slice(0, 20).forEach((row, index) => { const next = row.filter((value) => String(value ?? "").trim()).length; if (next > score) { best = index; score = next; } }); return best; }

@@ -675,6 +675,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapFilterPopTop, setMapFilterPopTop] = useState(48);
   const mapFilterPopRef = useRef<HTMLDivElement>(null);
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
+  // CC-21: 유통사 영업을 켠 회사만 "매장|유통사" 전환이 보인다(서버가 distributorSales로 알려 줌).
+  const [mapDistributorSales, setMapDistributorSales] = useState(false);
+  const [mapTargetType, setMapTargetType] = useState<"restaurant" | "distributor">("restaurant");
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
@@ -910,6 +913,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
       const params = new URLSearchParams({ excludeExcluded: "false" });
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      if (mapTargetType === "distributor") params.set("targetType", "distributor");
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
       const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
@@ -917,6 +921,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         setAllLeadsLoadState("error");
         return;
       }
+      setMapDistributorSales(payload.distributorSales === true);
       setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
       setMapSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
       setAllLeadsLoadState("ready");
@@ -1022,7 +1027,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange, mapTargetType]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -3028,7 +3033,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
                     숨김 리드 보기
                   </label>
-                  {mapSalesRegionsConfigured === true ? (
+                  {mapDistributorSales ? (
+                    <div aria-label="영업 대상" className="flex gap-1.5" role="group">
+                      {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={mapTargetType === id} className={`min-h-[36px] rounded-full border px-3 text-xs font-bold ${mapTargetType === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={id} onClick={() => setMapTargetType(id)} type="button">{label}</button>)}
+                    </div>
+                  ) : null}
+                  {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
                     <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                       <input checked={showOutsideSalesAreaOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
                       영업 지역 밖도 보기
@@ -3523,7 +3533,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                           </p>
                         </div>
                         <button
-                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 hover:bg-slate-200"
+                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-600 hover:bg-slate-200"
                           onClick={() => {
                             setMainMapRouteVehicleId("");
                             setMainMapRouteEvents([]);
@@ -4258,7 +4268,7 @@ function MapExplorerTabs({
       {tabs.map((tab) => (
         <button
           aria-current={active === tab.value ? "page" : undefined}
-          className={`min-w-0 rounded-md px-1.5 py-1.5 text-[10px] font-bold transition ${
+          className={`min-w-0 rounded-md px-1.5 py-1.5 text-xs font-bold transition ${
             active === tab.value ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:bg-white hover:text-slate-900"
           }`}
           key={tab.value}
@@ -4266,7 +4276,7 @@ function MapExplorerTabs({
           type="button"
         >
           <span className="block truncate">{tab.label}</span>
-          <span className="mt-0.5 block text-[9px] font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
+          <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
         </button>
       ))}
     </nav>
@@ -4468,7 +4478,7 @@ function DeliveryAssignmentPanel({
           <button
             aria-label={item.label}
             aria-pressed={selectedVehicleId === item.id}
-            className={`hidden h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-[10px] lg:flex ${
+            className={`hidden h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-xs lg:flex ${
               selectedVehicleId === item.id ? "border-2 border-teal-700 bg-teal-50 text-teal-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
             key={item.id}
@@ -4746,7 +4756,7 @@ function DeliveryAssignmentPanel({
                       </button>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[10px] font-bold text-amber-800">{canManageStaff ? "가입 직원 연결 정보가 없어 회사 설정에서 확인이 필요합니다." : "대표·관리자가 연결할 수 있습니다."}</p>
+                    <p className="mt-2 text-xs font-bold text-amber-800">{canManageStaff ? "가입 직원 연결 정보가 없어 회사 설정에서 확인이 필요합니다." : "대표·관리자가 연결할 수 있습니다."}</p>
                   )}
                 </div>
               );
@@ -4911,15 +4921,15 @@ function VehicleMasterManager({
                   <p className="truncate text-xs font-black text-slate-900">{vehicle.name}</p>
                   <p className="mt-0.5 text-[11px] font-bold text-slate-500">{vehicle.plateNumber} · {vehicleFuelLabels[vehicle.fuelType]}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.status === "active" ? "bg-teal-100 text-teal-800" : vehicle.status === "maintenance" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-black ${vehicle.status === "active" ? "bg-teal-100 text-teal-800" : vehicle.status === "maintenance" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
                   {vehicleStatusLabels[vehicle.status]}
                 </span>
               </div>
-              {vehicle.memo ? <p className="mt-1 truncate text-[10px] font-bold text-slate-400">{vehicle.memo}</p> : null}
+              {vehicle.memo ? <p className="mt-1 truncate text-xs font-bold text-slate-400">{vehicle.memo}</p> : null}
               {canManage ? (
                 <div className="mt-2 grid grid-cols-4 gap-1">
                   <button
-                    className="h-7 rounded border border-slate-200 bg-white text-[10px] font-black text-slate-600"
+                    className="h-7 rounded border border-slate-200 bg-white text-xs font-black text-slate-600"
                     disabled={Boolean(savingId)}
                     onClick={() => beginEdit(vehicle)}
                     type="button"
@@ -4928,7 +4938,7 @@ function VehicleMasterManager({
                   </button>
                   {(["active", "maintenance", "inactive"] as const).map((status) => (
                     <button
-                      className={`h-7 rounded border text-[10px] font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
+                      className={`h-7 rounded border text-xs font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
                       disabled={savingId === vehicle.id || vehicle.status === status}
                       key={status}
                       onClick={() => void changeStatus(vehicle, status)}
@@ -5183,7 +5193,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 카카오맵으로 길찾기
-                <span className="text-[10px] font-bold text-teal-700">기본</span>
+                <span className="text-xs font-bold text-teal-700">기본</span>
               </a>
               <a
                 aria-disabled={!links.naverAppUrl}
@@ -5196,7 +5206,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 네이버지도 앱 길찾기
-                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+                <span className="text-xs font-bold text-slate-400">앱 필요</span>
               </a>
               <a
                 aria-disabled={!links.tmapAppUrl}
@@ -5209,7 +5219,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 티맵 길찾기
-                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+                <span className="text-xs font-bold text-slate-400">앱 필요</span>
               </a>
               <a
                 className="flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50"
@@ -5651,7 +5661,7 @@ export function StoreQuickCard({
         {!isEditing && showReviews && store.reviewKeywords?.length ? (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {store.reviewKeywords.slice(0, 6).map((keyword) => (
-              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" key={keyword}>
+              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-xs font-black text-amber-700" key={keyword}>
                 #{keyword}
               </span>
             ))}
@@ -5943,7 +5953,7 @@ function MapLayerLegend({
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3 lg:hidden">
       <div
         aria-label="지도 마커 범례"
-        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-[10px] font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
+        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
       >
         <span className="font-black text-slate-500">범례</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />거래처 {counts.customers}</span>
@@ -5953,10 +5963,10 @@ function MapLayerLegend({
         {counts.salesLeads > 0 ? (
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded bg-teal-700" />영업 리드 {counts.salesLeads}</span>
         ) : null}
-        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] text-white">🚚</span>실시간 {counts.activeVehicles}</span>
-        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
-        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[9px] text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
-        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">🚚</span>실시간 {counts.activeVehicles}</span>
+        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-xs text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
+        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-xs text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
+        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
       </div>
     </div>
   );
@@ -6125,24 +6135,24 @@ function LiveVehicleStatusPanel({
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
                   <div className="min-w-0">
                     <p className="truncate text-[11px] font-black text-slate-900">{vehicle.displayName}</p>
-                    <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
                       {vehicle.deliveryVehicle || "차량 미배정"} · {currentStore ? `작업 ${currentStore.name}` : "현재 작업 없음"} · {checkedAt}
                       {ageText ? ` · ${ageText}` : ""}
                     </p>
                   </div>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
                   {getVehicleStatusLabel(vehicle)}
                 </span>
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
+                <p className="min-w-0 truncate text-xs font-bold text-slate-400">
                   {checkedAt} · 가까운 장소 {currentStore?.name || "확인 중"} · {getVehicleStatusLabel(vehicle)}
                   {completedCount ? <span className="font-black text-emerald-600"> · 완료 {completedCount}곳</span> : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
-                    className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
+                    className="rounded-full bg-teal-700 px-2 py-0.5 text-xs font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
                     onClick={() => onFocusVehicle(vehicle.id)}
                     type="button"
                   >
@@ -6150,7 +6160,7 @@ function LiveVehicleStatusPanel({
                   </button>
                   {onToggleRoute ? (
                     <button
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset transition ${
+                      className={`rounded-full px-2 py-0.5 text-xs font-black ring-1 ring-inset transition ${
                         isActiveRoute
                           ? "bg-slate-900 text-white ring-slate-900 hover:bg-slate-700"
                           : "bg-white text-slate-600 ring-slate-200 hover:text-teal-700 hover:ring-teal-200"
@@ -6162,7 +6172,7 @@ function LiveVehicleStatusPanel({
                     </button>
                   ) : null}
                   <button
-                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                    className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
                     onClick={() => onAnalyze(vehicle)}
                     type="button"
                   >
@@ -6170,7 +6180,7 @@ function LiveVehicleStatusPanel({
                   </button>
                   {currentStore ? (
                     <button
-                      className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                      className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                       onClick={() => onPreviewStore(currentStore.id)}
                       type="button"
                     >
@@ -6305,18 +6315,18 @@ function VehicleAnalysisModal({
                           <p className="min-w-0 truncate text-[11px] font-black text-slate-900">
                             {completion.actualOrder}. {completion.customerName}
                           </p>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
                             {getCompletionOrderLabel(completion)}
                           </span>
                         </div>
-                        <p className="mt-1 truncate text-[10px] font-bold text-slate-500">
+                        <p className="mt-1 truncate text-xs font-bold text-slate-500">
                           {new Date(completion.completedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                           {completion.statusLabel ? ` · ${completion.statusLabel}` : ""}
                         </p>
                         <div className="mt-1 flex items-center justify-between gap-2">
-                          <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
+                          <p className="min-w-0 truncate text-xs font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
                           <button
-                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                             onClick={() => onOpenStore(completion.customerId)}
                             type="button"
                           >
@@ -6336,7 +6346,7 @@ function VehicleAnalysisModal({
               {events.slice(-8).reverse().map((event) => (
                 <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
                   <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
-                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                  <p className="mt-1 text-xs font-bold text-slate-500">
                     가까운 장소 {event.currentCustomerId && event.currentCustomerId === currentStore?.id ? currentStore.name : "운행 경로"} · {event.currentCustomerId ? "배송 업무 중" : "이동 기록"}
                   </p>
                 </div>
@@ -6404,7 +6414,7 @@ function StoreManagementPanel({
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Store className="h-4 w-4 text-slate-500" />
-          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-xs font-black leading-none text-white">
             {stores.length}
           </span>
         </span>
@@ -6648,7 +6658,7 @@ function LeadListPanel({
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Radar className="h-4 w-4 text-teal-700" />
-          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-xs font-black leading-none text-white">
             {leads.length}
           </span>
         </span>
@@ -7945,7 +7955,7 @@ function PermitLeadMapQuickCard({
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
+            <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
             {typeof lead.distanceKm === "number" ? (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
@@ -7959,7 +7969,7 @@ function PermitLeadMapQuickCard({
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
             ) : null}
             {isNearAnchor ? (
-              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
+              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
                 <Star className="h-2.5 w-2.5 fill-cyan-600 text-cyan-600" />
                 기거래처 근접
               </span>
@@ -8099,7 +8109,7 @@ function PermitLeadMapQuickCard({
             G
           </a>
           {instagramHandle ? (
-            <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
+            <a className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
               인스타그램
             </a>
           ) : null}
@@ -8607,7 +8617,7 @@ function QuoteDrawer({
                 <p className="text-xs font-black text-teal-900">메뉴·리뷰 기반 추천</p>
                 <p className="mt-1 text-[11px] font-semibold text-teal-700">원하는 품목 수를 누르면 현재 목록을 추천 결과로 바꿉니다.</p>
               </div>
-              {recommendationBasis ? <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">{recommendationBasis}</span> : null}
+              {recommendationBasis ? <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-teal-800 ring-1 ring-inset ring-teal-100">{recommendationBasis}</span> : null}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {([10, 20, 30] as const).map((count) => (
@@ -8654,7 +8664,7 @@ function QuoteDrawer({
 
           <div className="rounded-lg border border-slate-200">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <div><p className="text-xs font-black text-slate-700">실제 매입 상품 연결</p><p className="text-[10px] font-semibold text-slate-400">업로드된 상품명과 일치하는 품목의 매입가를 적용합니다.</p></div>
+              <div><p className="text-xs font-black text-slate-700">실제 매입 상품 연결</p><p className="text-xs font-semibold text-slate-400">업로드된 상품명과 일치하는 품목의 매입가를 적용합니다.</p></div>
               <button className="maju-button-secondary h-8 px-3 text-xs" disabled={catalogLoading} onClick={() => void loadProductCatalog()} type="button">
                 {catalogLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 {catalogLoading ? "불러오는 중" : catalog.length ? `원장 ${catalog.length}개 다시 매칭` : "매입 원장 불러오기"}
@@ -8686,11 +8696,11 @@ function QuoteDrawer({
                         value={row.item}
                       />
                       <div className="mt-1 flex items-center gap-1.5">
-                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
                           {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
                         </span>
                         {row.matchStatus === "requested" ? (
-                          <label className="cursor-pointer text-[9px] font-black text-teal-700">
+                          <label className="cursor-pointer text-xs font-black text-teal-700">
                             {row.requestPhotoName || "사진 첨부"}
                             <input accept="image/*" className="sr-only" onChange={(event) => updateRow(row.id, { requestPhotoName: event.target.files?.[0]?.name || "" })} type="file" />
                           </label>
@@ -8707,7 +8717,7 @@ function QuoteDrawer({
                         value={row.qty}
                       />
                     </td>
-                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-[9px] text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-xs text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
                     <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowMargin(row.id, Number(event.target.value) || 0)} type="number" value={row.marginRate} /></td>
                     <td className="px-2 py-1.5">
                       <input
@@ -8733,7 +8743,7 @@ function QuoteDrawer({
                   <div className="space-y-2.5 p-3" key={row.id}>
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <label className="text-[10px] font-black text-slate-500">상품명</label>
+                        <label className="text-xs font-black text-slate-500">상품명</label>
                         <input
                           className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs font-bold outline-none focus:border-teal-300"
                           onChange={(event) => updateRow(row.id, { item: event.target.value })}
@@ -8746,20 +8756,20 @@ function QuoteDrawer({
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <label className="text-[10px] font-black text-slate-500">
+                      <label className="text-xs font-black text-slate-500">
                         수량
                         <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { qty: Number(event.target.value) || 0 })} type="number" value={row.qty} />
                       </label>
-                      <label className="text-[10px] font-black text-slate-500">
+                      <label className="text-xs font-black text-slate-500">
                         판매가
                         <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { unitPrice: Number(event.target.value) || 0 })} type="number" value={row.unitPrice} />
                       </label>
-                      <div className="text-[10px] font-black text-slate-500">
+                      <div className="text-xs font-black text-slate-500">
                         금액
                         <p className="mt-1 flex h-8 items-center justify-end rounded-md bg-slate-50 px-2 text-xs text-slate-800">{(row.qty * row.unitPrice).toLocaleString()}원</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500">
                       <span>{[row.spec, row.unit].filter(Boolean).join(" · ") || "규격·단위는 확장 보기에서 편집"}</span>
                       <span className={`rounded px-1.5 py-0.5 font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
                         {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
@@ -9500,7 +9510,7 @@ function StoreDetail({
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
                 {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
-                <span className="ml-1 text-[10px] font-bold text-amber-700">단계 저장 미연결</span>
+                <span className="ml-1 text-xs font-bold text-amber-700">단계 저장 미연결</span>
               </div>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
@@ -10620,9 +10630,9 @@ function Kpi({
   return (
     <div className={`relative min-w-0 overflow-hidden border-r border-b border-slate-200/80 px-2.5 py-2 last:border-r-0 sm:px-4 sm:py-2.5 ${backgroundClass}`}>
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
-      <p className="truncate text-[10px] font-black text-slate-500 sm:text-[11px]">{label}</p>
+      <p className="truncate text-xs font-black text-slate-500 sm:text-[11px]">{label}</p>
       <p className={`mt-1 truncate text-[15px] font-black leading-none sm:text-[20px] ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-1.5 truncate text-[10px] font-bold text-slate-400">{helper}</p> : null}
+      {helper ? <p className="mt-1.5 truncate text-xs font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -10692,7 +10702,7 @@ function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly
         <span className="truncate">{label}</span>
       </p>
       <p className={`mt-1 truncate text-sm font-black ${valueClass}`}>{value}</p>
-      {helper ? <p className="truncate text-[10px] font-bold text-slate-500">{helper}</p> : null}
+      {helper ? <p className="truncate text-xs font-bold text-slate-500">{helper}</p> : null}
     </div>
   );
 }

@@ -6,7 +6,13 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 
 
 import { marginSource } from "./pricing-margin-group-options";
+import { PricingMarginTemplates } from "./pricing-margin-templates";
+import { PricingFolderMargin } from "./pricing-folder-margin";
+import { PricingFolderMove } from "./pricing-folder-move";
 import { PricingMarginGroups } from "./pricing-margin-groups";
+import { Tabs } from "./ui/tabs";
+import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { buildMarginTree, inFolder } from "@/domains/pricing/margin-tree";
 export { marginSource } from "./pricing-margin-group-options";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
@@ -17,7 +23,7 @@ const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
  * ② 카테고리별 마진은 기존 그룹과 분류 연결을 카드에서 고릅니다.
  * ③ 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
  */
-export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
+export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { companyId: string; marginTemplates?: boolean }) {
   const [state, setState] = useState<PriceState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +36,8 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkMargin, setBulkMargin] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState("default");
+  const [folder, setFolder] = useState<string | null>(null);
 
   const send = useCallback(async (command?: PricingCommand | PricingBulkCommand) => {
     const query = new URLSearchParams({ companyId, q: search, page: String(page) });
@@ -68,9 +76,19 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
 
   if (!state) return <div className="space-y-3">{error ? <p className="text-red-700" role="alert">{error}</p> : <p role="status">불러오는 중…</p>}</div>;
 
-  const items = state.items;
+  // shortcut: 트리·폴더 필터는 지금 불러온 페이지(50개) 기준, 전체 상품 순회 불러오기는 후속.
+  const tree = buildMarginTree(state.items, state);
+  const items = state.items.filter((i) => inFolder(i.category, folder));
   const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
   const zeroMargin = state.defaultMargin === 0;
+  const allColumns: CommonTableColumn<PriceItem>[] = [
+    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true },
+    { key: "name", label: "상품", value: (i) => i.name, sortable: true },
+    { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, render: (i) => `${i.cost.toLocaleString()}원` },
+    { key: "source", label: "적용 마진", value: (i) => { const s = marginSource(i, state); return s.margin === null ? s.label : `${s.margin}% · ${s.label}`; }, sortable: true },
+    { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, render: (i) => `${i.price.toLocaleString()}원` },
+    { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
+  ];
   const preview = (item: PriceItem) => {
     const raw = edits[item.id];
     if (raw === undefined || raw === "") return null;
@@ -83,8 +101,15 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
     {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
 
+    {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
+    <Tabs ariaLabel="마진 설정" items={[{ id: "default", label: "기본 마진" }, { id: "category", label: "분류별 마진" }, { id: "items", label: "상품별 예외" }, { id: "all", label: "전체 판매가 보기" }]} onChange={setTab} value={tab} />
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
+      <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
+      <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
+    </div>
     {/* ① 기본 마진 */}
-    <section aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
+    <section hidden={tab !== "default"} aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-black">① 기본 마진</h2>
@@ -106,25 +131,26 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
     </section>
 
     {/* ② 카테고리별 */}
-    <section aria-label="카테고리별 마진" className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+    <section hidden={tab !== "category"} aria-label="카테고리별 마진" className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
       <div>
         <h2 className="text-lg font-black">② 카테고리별 마진</h2>
         <p className="text-sm text-slate-600">상품관리와 같은 전체 분류 경로를 골라 마진을 연결하세요. 상위 분류를 골라도 하위 분류는 자동으로 연결되지 않습니다.</p>
       </div>
       <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} />
-      <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-sm">
-        <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
-        <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
-        <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
-      </div>
     </section>
 
     {/* ③ 상품별 */}
-    <section aria-label="상품별 예외" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <section hidden={tab !== "items"} aria-label="상품별 예외" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div>
         <h2 className="text-lg font-black">③ 상품별 예외</h2>
         <p className="text-sm text-slate-600">기본 마진과 다르게 받을 상품만 고치세요. 체크해서 여러 개를 한 번에 바꿀 수 있습니다. 칸을 비우고 저장하면 기본 마진으로 돌아갑니다.</p>
       </div>
+      <nav aria-label="분류 폴더" className="flex flex-wrap gap-1.5">
+        <button aria-pressed={folder === null} className={`rounded-full border px-3 py-1 text-sm font-bold ${folder === null ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white"}`} onClick={() => setFolder(null)} type="button">전체 {state.items.length}</button>
+        {tree.map((node) => <button aria-pressed={folder === node.path} className={`rounded-full border px-3 py-1 text-sm ${folder === node.path ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white"}`} key={node.path} onClick={() => setFolder(node.path)} style={{ marginLeft: node.depth * 12 }} type="button">{node.name} {node.count} · {node.badge}</button>)}
+      </nav>
+      {folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null}
+      {folder ? <PricingFolderMove busy={busy} companyId={companyId} folder={folder} onError={setError} onMoved={(to, count) => { setFolder(to); setPage(1); void run([{ action: "recalculate" }], `폴더를 "${to}"(으)로 옮기고(상품 ${count}개) 판매가를 다시 계산했습니다.`, false); }} /> : null}
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setSearch(searchInput.trim()); setPage(1); }}>
         <input aria-label="상품 검색" className={`${box} min-w-[220px] flex-1`} maxLength={100} onChange={(e) => setSearchInput(e.target.value)} placeholder="상품명·카테고리 검색" value={searchInput} />
         <button className={box} disabled={busy} type="submit">검색</button>
@@ -193,5 +219,13 @@ export function PriceSheetsWorkspace({ companyId }: { companyId: string }) {
       </div>
     </section>
 
+    {/* ④ 전체 판매가 보기 */}
+    <section hidden={tab !== "all"} aria-label="전체 판매가 보기" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <h2 className="text-lg font-black">④ 전체 판매가 보기</h2>
+        <p className="text-sm text-slate-600">지금 마진 규칙으로 계산된 기본 판매가표입니다. 열 편집·CSV 내보내기는 표 위 버튼을 쓰세요. 지금은 불러온 페이지({state.items.length}개) 기준입니다.</p>
+      </div>
+      <CommonDataTable columns={allColumns} filename="기본-판매가표.csv" rowKey={(i) => i.id} rows={state.items} settingsKey="margin-all-prices" />
+    </section>
   </div>;
 }

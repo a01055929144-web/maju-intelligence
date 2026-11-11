@@ -180,6 +180,24 @@ export function PricingDocumentsWorkspace({
   function rows(lines: PrintLine[]) {
     if (draft) change({ ...draft.content, lines });
   }
+  // CC-20: "행사·임박 자동 포함"을 켠 문서는 진행 중인 행사·임박을 빠짐없이 넣는다(이미 넣은 줄·찾지 못한 상품은 건너뜀).
+  const autoPromos = draft?.content.display?.autoPromos === true;
+  const autoTried = useRef(new Set<string>());
+  useEffect(() => {
+    if (!draft || draft.archivedAt || !autoPromos) return;
+    const day = koreaDay();
+    const missing = promotions.filter((p) => day >= p.startsOn && day <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet)
+      && !draft.content.lines.some((l) => l.promotionId === p.id) && !autoTried.current.has(`${draft.id}:${p.id}`));
+    if (!missing.length) return;
+    missing.forEach((p) => autoTried.current.add(`${draft.id}:${p.id}`));
+    void read<{ items: CatalogChoice[] }>("catalog", { productIds: missing.map((p) => p.productId) }).then((r) => {
+      const byId = new Map(r.items.map((item) => [item.id, item]));
+      const added = missing.flatMap((p) => { const item = byId.get(p.productId); return item ? [{ p, item }] : []; });
+      if (!added.length) return;
+      setBaselines((previous) => ({ ...previous, ...Object.fromEntries(added.map(({ p, item }) => [p.productId, item.price])) }));
+      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType }))] });
+    }).catch((e) => setError(e instanceof Error ? e.message : "행사·임박을 자동으로 넣지 못했습니다."));
+  }, [draft, autoPromos, promotions]); // eslint-disable-line react-hooks/exhaustive-deps
   function discard() {
     return !dirty || window.confirm("저장하지 않은 변경을 버리고 이동할까요?");
   }
@@ -533,7 +551,7 @@ export function PricingDocumentsWorkspace({
     {leadNotice}
     {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
     <div className="flex flex-wrap justify-end gap-2">
-      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">행사·묶음·템플릿</button>
+      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">묶음·템플릿</button>
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
@@ -592,7 +610,7 @@ export function PricingDocumentsWorkspace({
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
-            <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
+            <h1 className="text-xl font-bold">{tab === "library" ? "묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
           </div>
         )}
       </header>
@@ -610,7 +628,7 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "행사·묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
+      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
@@ -666,20 +684,18 @@ export function PricingDocumentsWorkspace({
           </p>
         </form>
       )}
+      {tab === "library" && <p className="text-sm text-slate-600">행사·임박은 <a className="font-bold text-teal-800 underline" href="/revenue/pricing/promotions">행사·임박 화면</a>에서 등록합니다. 여기서는 문서에 담는 묶음·템플릿을 관리합니다.</p>}
       {tab === "library" && (
         <PricingDocumentLibrary
           companyId={companyId}
           manager={manager}
           sets={sets}
-          promotions={promotions}
           selectedProductIds={
             draft?.content.lines.map((l) => l.productId) || []
           }
           run={task}
           reload={loadLibrary}
           loadSet={loadSet}
-          addPromotion={addPromotion}
-          previewPromotion={(version) => setPreview(version)}
           catalog={catalog}
           profile={profile.content}
           busy={busy}

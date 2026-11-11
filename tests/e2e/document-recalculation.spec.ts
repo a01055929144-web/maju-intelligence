@@ -82,10 +82,11 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/revenue/pricing/margins");
   await expect(page.getByRole("heading", { name: "① 기본 마진", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
   await expect(page.getByRole("heading", { name: "② 카테고리별 마진", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "상품별 예외", exact: true }).click();
   await expect(page.getByRole("heading", { name: "③ 상품별 예외", exact: true })).toBeVisible();
-  await expect(page.locator('section[aria-label="회사 기본 마진"] + section[aria-label="카테고리별 마진"]')).toHaveCount(1);
-  await expect(page.locator('section[aria-label="카테고리별 마진"] + section[aria-label="상품별 예외"]')).toHaveCount(1);
+  await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
   const panel = page.getByRole("region", { name: "마진 그룹 만들기·수정", exact: true });
   await expect(panel.getByRole("button", { name: "합성 기존 그룹 · 12% · 10원 올림", exact: true })).toBeVisible();
   await expect(panel.getByRole("button", { name: "분류·상품 수 다시 조회", exact: true })).toBeEnabled();
@@ -109,6 +110,7 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   await expect(page.getByRole("alert").filter({ hasText: failure === "create-response" ? "합성 생성 응답 유실" : "합성 분류 연결 실패" })).toBeVisible();
   expect(groupCreates).toBe(1);
   await page.reload();
+  await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
   if (failure === "create-response") {
     await expect(save).toBeDisabled();
     await panel.getByRole("button", { name: "생성 결과 다시 조회", exact: true }).click();

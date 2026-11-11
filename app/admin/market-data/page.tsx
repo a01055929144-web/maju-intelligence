@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AdminMarketPriceTable } from "@/components/admin-readonly-tables";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAdminSession } from "@/lib/auth";
 import { AdminPageHeader } from "../admin-page-header";
@@ -22,9 +23,7 @@ export default async function AdminMarketDataPage({ searchParams }: { searchPara
             {Object.entries(categories).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
           </select></label><button className="mt-2 min-h-11 rounded border px-4 text-sm" type="submit">조회</button></form>
         <p role="status" className="text-sm text-slate-600">{prices.message}</p>
-        {prices.items.length > 0 && <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b"><th className="p-2">품목</th><th className="p-2">품종·등급</th><th className="p-2">조사 단위</th><th className="p-2">도매가</th><th className="p-2">조사일</th></tr></thead><tbody>
-          {prices.items.map((item, index) => <tr className="border-b" key={`${item.name}-${item.variety}-${index}`}><td className="p-2">{item.name}</td><td className="p-2">{item.variety} {item.grade}</td><td className="p-2">{item.unit}</td><td className="p-2">{item.price}원</td><td className="p-2">{item.date}</td></tr>)}
-        </tbody></table></div>}
+        {prices.items.length > 0 && <AdminMarketPriceTable rows={prices.items.map((item, index) => ({ key: `${item.name}-${item.variety}-${index}`, name: item.name, varietyGrade: `${item.variety} ${item.grade}`.trim(), unit: item.unit, price: item.price, date: item.date }))} />}
         <a className="text-sm text-teal-700 underline" href="https://www.kamis.or.kr/customer/reference/openapi_list.do" rel="noreferrer" target="_blank">KAMIS 자료·이용 조건 확인</a>
       </CardContent></Card>
       <Card><CardHeader><CardTitle>전국 행사 표본 · 한국관광공사</CardTitle></CardHeader><CardContent className="space-y-3">
