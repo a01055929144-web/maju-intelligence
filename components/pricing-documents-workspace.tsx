@@ -690,15 +690,12 @@ export function PricingDocumentsWorkspace({
           companyId={companyId}
           manager={manager}
           sets={sets}
-          promotions={promotions}
           selectedProductIds={
             draft?.content.lines.map((l) => l.productId) || []
           }
           run={task}
           reload={loadLibrary}
           loadSet={loadSet}
-          addPromotion={addPromotion}
-          previewPromotion={(version) => setPreview(version)}
           catalog={catalog}
           profile={profile.content}
           busy={busy}
