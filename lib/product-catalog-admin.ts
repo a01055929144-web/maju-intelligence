@@ -41,6 +41,8 @@ export type ProductCatalogAdminItem = {
   trackingEnabled?: boolean;
   onHand?: number;
   createdAt?: string;
+  /** CC-20b: 오늘 진행 중인 행사·임박(여러 개면 종료가 가장 빠른 것). 읽기 전용. */
+  promotion?: { badge: "행사" | "임박"; price: number; startsOn: string; endsOn: string };
 };
 export type SaveProductCatalogInput = Omit<
   ProductCatalogAdminItem,
@@ -115,7 +117,8 @@ export async function listProductCatalogForAdmin(
   const search = query.trim()
     ? `&or=(canonical_name.ilike.*${enc(query.trim())}*,purchase_product_name.ilike.*${enc(query.trim())}*,product_code.ilike.*${enc(query.trim())}*)`
     : "";
-  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances, effective] = await Promise.all([
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); // 한국 날짜
+  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances, effective, promotions] = await Promise.all([
     request<Row[]>(
       `product_catalog?select=${select}&company_id=eq.${enc(companyId)}${search}&order=updated_at.desc&limit=1000`,
     ),
@@ -138,7 +141,16 @@ export async function listProductCatalogForAdmin(
     request<Row[]>(
       `pricing_p0_effective?select=product_id,price&company_id=eq.${enc(companyId)}&limit=5000`,
     ).catch(() => []),
+    // CC-20b: 오늘 진행 중인 행사(읽기만). 못 읽어도 상품 목록은 그대로.
+    request<Row[]>(
+      `pricing_promotions?select=product_id,badge,price,starts_on,ends_on&company_id=eq.${enc(companyId)}&starts_on=lte.${today}&ends_on=gte.${today}&order=ends_on.asc&limit=5000`,
+    ).catch(() => []),
   ]);
+  const promotionByProduct = new Map<string, NonNullable<ProductCatalogAdminItem["promotion"]>>();
+  for (const x of promotions) {
+    const id = String(x.product_id);
+    if (!promotionByProduct.has(id)) promotionByProduct.set(id, { badge: x.badge === "임박" ? "임박" : "행사", price: Number(x.price), startsOn: String(x.starts_on), endsOn: String(x.ends_on) });
+  }
   const effectivePrice = new Map(effective.map((x) => [String(x.product_id), x.price == null ? undefined : Number(x.price)]));
   const sp = new Map(supplierProducts.map((x) => [String(x.id), x])),
     supplierNames = new Map(supplierRows.map((x) => [String(x.id), String(x.name)])),
@@ -189,6 +201,7 @@ export async function listProductCatalogForAdmin(
       supplierNames: names,
       trackingEnabled: setting == null ? undefined : Boolean(setting.tracking_enabled),
       onHand: balanceByProduct.get(item.id),
+      promotion: promotionByProduct.get(item.id),
     };
   });
 }
