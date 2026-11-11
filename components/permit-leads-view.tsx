@@ -153,6 +153,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [refreshingLeads, setRefreshingLeads] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  // CC-21: 유통사|매장 대상 탭. 서버가 DISTRIBUTOR_SALES 회사에만 distributorSales=true를 내려 보여 준다(다른 회사는 탭이 없고 매장만).
+  const [distributorSales, setDistributorSales] = useState(false);
+  const [targetType, setTargetType] = useState<"restaurant" | "distributor">("restaurant");
   const [documentEntry, setDocumentEntry] = useState<LeadDocumentEntryAccess>({ canCreateQuote: false, canCreateSheet: false });
 
   const [periodFilter, setPeriodFilter] = useState<"all" | PermitLeadPeriod>("all");
@@ -448,6 +451,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     if (showExistingCustomers) params.set("includeExistingCustomers", "true");
     if (showTemporaryOperations) params.set("includeTemporaryOperations", "true");
     if (initialLeadId) params.set("leadId", initialLeadId);
+    if (targetType === "distributor") params.set("targetType", "distributor");
 
     fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" }, 12000)
       .then((response) => (response.ok ? response.json() : null))
@@ -462,11 +466,12 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         setQueues(payload.queues || null);
         setDocumentEntry(payload.documentEntry || { canCreateQuote: false, canCreateSheet: false });
         setSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
+        setDistributorSales(payload.distributorSales === true);
         setLoadState("ready");
       })
       .catch(() => setLoadState("error"))
       .finally(() => setRefreshingLeads(false));
-  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations]);
+  }, [periodFilter, industryFilter, actionFilter, statusFilter, gradeFilter, hasPhoneOnly, excludeExcluded, initialLeadId, showExistingCustomers, showOutsideSalesArea, showTemporaryOperations, targetType]);
 
   useEffect(() => {
     loadLeads();
@@ -1616,6 +1621,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     <section className={`${isSalesLeadPage ? "lead-theme-sales" : "lead-theme-new"} flex min-h-[480px] min-w-0 w-full max-w-full flex-1 flex-col gap-2 overflow-x-clip rounded-b-xl bg-[#f6f8fb] p-2 pb-6 sm:p-3 sm:pb-6 ${selectedLead && detailMode === "drawer" ? "lg:pr-[calc(min(46vw,720px)+0.75rem)]" : ""}`}>
       {/* 11/4: 신규/영업 리드는 왼쪽 메뉴 하나(리드)로 합치고, 화면 왼쪽 위 스위치로 전환합니다. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {distributorSales ? <nav aria-label="영업 대상" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+          {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={targetType === id} className={`min-h-[36px] rounded-md px-3 text-sm font-bold ${targetType === id ? "bg-teal-700 text-white" : "text-slate-600"}`} key={id} onClick={() => setTargetType(id)} type="button">{label}</button>)}
+        </nav> : null}
         <nav aria-label="리드 종류" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
           {([
             { count: summary?.newLeadCount, label: "신규 리드", sales: false, type: "permit" },
