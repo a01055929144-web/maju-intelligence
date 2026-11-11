@@ -1,3 +1,4 @@
+import { normalizeName } from "./distributor-dedupe";
 // CC-21: 유통사 리드 엑셀 가져오기 규칙(순수 함수). 개인정보 파일은 저장소에 두지 않고, 화면에서 올린 행만 처리한다.
 export const IMPORT_CHUNK = 500;
 
@@ -53,7 +54,7 @@ export function groupDuplicates(rows: readonly ImportRow[]): number[][] {
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   const seen = new Map<string, number>();
   rows.forEach((row, index) => {
-    for (const key of [`n:${row.name.replace(/\s/g, "").toLowerCase()}`, ...[row.phone, ...row.extraPhones].filter(Boolean).map((phone) => `p:${phone}`)]) {
+    for (const key of [`n:${normalizeName(row.name)}`, ...[row.phone, ...row.extraPhones].filter(Boolean).map((phone) => `p:${phone}`)]) {
       const first = seen.get(key);
       if (first === undefined) seen.set(key, index); else parent[find(index)] = find(first);
     }
