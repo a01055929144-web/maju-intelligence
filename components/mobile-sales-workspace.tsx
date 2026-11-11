@@ -518,7 +518,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   );
 }
 
-function Kpi({ label, target, value }: { label: string; target?: number; value: number }) { return <div className="mobile-card-raised rounded-lg border px-2 py-3"><p className="text-xl font-bold text-teal-700">{value}{target ? <span className="text-[10px] text-slate-400">/{target}</span> : null}</p><p className="mobile-muted mt-1 text-[11px] font-semibold">{label}</p>{target ? <span className="mt-1 block h-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-teal-600" style={{ width: `${Math.min(100, Math.round((value / target) * 100))}%` }} /></span> : null}</div>; }
+function Kpi({ label, target, value }: { label: string; target?: number; value: number }) { return <div className="mobile-card-raised rounded-lg border px-2 py-3"><p className="text-xl font-bold text-teal-700">{value}{target ? <span className="text-xs text-slate-400">/{target}</span> : null}</p><p className="mobile-muted mt-1 text-[11px] font-semibold">{label}</p>{target ? <span className="mt-1 block h-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-teal-600" style={{ width: `${Math.min(100, Math.round((value / target) * 100))}%` }} /></span> : null}</div>; }
 
 const taskCardMeta: Record<MobileSalesTaskKind, { label: string; note: string }> = {
   follow_up: { label: "다시 연락", note: "후속 일정이 잡힌 매장" },
@@ -545,9 +545,9 @@ function LeadCard({ checked = false, lead, location, onOpen, selectable = false 
   return (
     <button aria-pressed={selectable ? checked : undefined} className={`mobile-card-raised flex min-h-14 w-full items-center gap-2 rounded-lg border px-3 py-2 text-left ${checked ? "ring-2 ring-teal-500" : ""}`} onClick={onOpen} type="button">
       {selectable ? <span aria-hidden="true" className={`grid h-5 w-5 shrink-0 place-items-center rounded border text-[11px] ${checked ? "border-teal-600 bg-teal-600 text-white" : "border-[var(--mobile-border)]"}`}>{checked ? "✓" : ""}</span> : null}
-      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span>
+      <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${type === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{type === "new" ? "신규" : "영업"}</span>
       <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{lead.businessName}</span><span className="mobile-muted block truncate text-[11px]">{lead.status} · {lead.address || lead.jurisdiction || "주소 확인 필요"}</span></span>
-      <span className="shrink-0 text-right"><span className="block text-xs font-semibold">{lead.scoreTotal}점</span>{leadDistance != null ? <span className="mobile-muted block text-[10px]">{leadDistance.toFixed(1)}km</span> : null}</span>
+      <span className="shrink-0 text-right"><span className="block text-xs font-semibold">{lead.scoreTotal}점</span>{leadDistance != null ? <span className="mobile-muted block text-xs">{leadDistance.toFixed(1)}km</span> : null}</span>
       <ChevronRight className="mobile-accent h-4 w-4 shrink-0" />
     </button>
   );
