@@ -23,3 +23,8 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 
 ## 격리 검증 (CI PG17, `tests/sql/company-kind-cc22a.pg17.test.sql`)
 두 회사 값 설정 · 나머지·신규 회사 기본값 · 잘못된 값/NULL 거부 · 재적용 거부 · down 후 재up.
+
+## 운영 적용 기록 (2026-11-11 16:2x KST · 컨트롤타워)
+- 승인 문구(대표 16:18): `fcmdvveqmcgtioelzqun CC-22a 회사 구분 SQL 승인`
+- 적용: 초안 그대로 + `admin_audit_logs` `db_migration_applied`(CC-22a).
+- 읽기 검증: 비브 = `internal`, 제이에스리테일 = `pilot`. 화면(CC-22b)은 아직 이 열을 쓰지 않는다.
