@@ -308,13 +308,17 @@ export async function copyBusinessDocumentLines(companyId: string, input: {
 }
 
 export async function listErpOptions(companyId: string) {
-  const [customers, suppliers, products, supplierProducts] = await Promise.all([
+  const [customers, suppliers, products, supplierProducts, effective] = await Promise.all([
     supabaseRequest<Array<{ id: string; customer_name: string }>>(`normalized_customers?select=id,customer_name&company_id=eq.${enc(companyId)}&order=customer_name&limit=5000`),
     supabaseRequest<Array<{ id: string; name: string }>>(`product_suppliers?select=id,name&company_id=eq.${enc(companyId)}&is_active=eq.true&order=name&limit=1000`),
     supabaseRequest<Array<{ id: string; product_code: string | null; canonical_name: string | null; purchase_product_name: string; specification_value: string | null; specification_unit: string | null; sales_unit: string | null; tax_type: ErpTaxType | null; default_sales_price: number | null }>>(`product_catalog?select=id,product_code,canonical_name,purchase_product_name,specification_value,specification_unit,sales_unit,tax_type,default_sales_price&company_id=eq.${enc(companyId)}&is_active=eq.true&order=updated_at.desc&limit=5000`),
     supabaseRequest<Array<{ id: string; supplier_id: string; raw_name: string; raw_spec: string | null; raw_unit: string | null; latest_cost: number | null; parsed_tax_type: ErpTaxType | null }>>(`supplier_products?select=id,supplier_id,raw_name,raw_spec,raw_unit,latest_cost,parsed_tax_type&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=5000`),
+    // CC-30 E1: 매출 전표 기본 단가는 가격 관리의 판매가(단가표·주문과 같은 값). 못 읽으면 상품관리 판매가로.
+    supabaseRequest<Array<{ product_id: string; price: number | null }>>(`pricing_p0_effective?select=product_id,price&company_id=eq.${enc(companyId)}&limit=5000`).catch(() => []),
   ]);
-  return { customers: customers.map((x) => ({ id: x.id, name: x.customer_name })), suppliers, products, supplierProducts };
+  const effectivePrice = new Map(effective.filter((x) => x.price != null && Number(x.price) > 0).map((x) => [x.product_id, Number(x.price)]));
+  const pricedProducts = products.map((x) => ({ ...x, default_sales_price: effectivePrice.get(x.id) ?? x.default_sales_price }));
+  return { customers: customers.map((x) => ({ id: x.id, name: x.customer_name })), suppliers, products: pricedProducts, supplierProducts };
 }
 
 export async function getPartnerLedger(companyId: string, input: { partnerType: "customer" | "supplier"; partnerId: string; dateFrom: string; dateTo: string }) {
