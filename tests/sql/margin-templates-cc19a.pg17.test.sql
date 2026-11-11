@@ -63,6 +63,13 @@ begin
  perform move_product_category(c,'수산 > 생선','수산 > 활어');
  if exists(select 1 from margin_group_categories where company_id=c and category='수산 > 생선') then raise exception 'merge left source link'; end if;
 
+ -- LIKE wildcards in folder names match literally: moving 'x_y' must not touch 'xzy' or 'x%y' folders.
+ insert into product_catalog(id,company_id,category,purchase_product_name,purchase_price) values
+  ('10000000-0000-4000-8000-000000000011',c,'x_y > 하위','W1',1000),('10000000-0000-4000-8000-000000000012',c,'xzy > 하위','W2',1000),('10000000-0000-4000-8000-000000000013',c,'x%y > 하위','W3',1000);
+ r := move_product_category(c,'x_y','moved');
+ if (r->>'productCount')::int <> 1 then raise exception 'wildcard folder moved wrong rows: %', r; end if;
+ if (select count(*) from product_catalog where company_id=c and category in ('xzy > 하위','x%y > 하위')) <> 2 then raise exception 'wildcard sibling moved'; end if;
+
  begin perform move_product_category(c,'식품','식품 > 채소 > 안으로'); raise exception 'move into itself accepted';
  exception when others then if sqlerrm <> 'cc17_cannot_move_into_itself' then raise; end if; end;
  begin perform move_product_category(c,'식품',''); raise exception 'empty path accepted';
