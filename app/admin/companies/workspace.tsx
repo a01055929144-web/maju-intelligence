@@ -652,7 +652,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">기본 로그인</span> : null}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-black">{company.name}{company.id === defaultCompanyId ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">기본 로그인</span> : null}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {company.ownerName || "대표자 미등록"} · {company.originAddress.split(" ").slice(0, 2).join(" ") || "지역 미등록"} · {company.businessRegistrationNumber ? `사업자번호 끝 ${company.businessRegistrationNumber.slice(-4)}` : "사업자번호 필요"}
                   </p>

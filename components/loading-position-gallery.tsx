@@ -61,7 +61,7 @@ export function LoadingPositionGallery({ emptyMessage, items }: { emptyMessage?:
                   </>
                 )}
               </span>
-              <span className="block truncate bg-white px-1.5 py-1 text-[10px] font-bold text-slate-500">{item.createdAt}</span>
+              <span className="block truncate bg-white px-1.5 py-1 text-xs font-bold text-slate-500">{item.createdAt}</span>
             </button>
           );
         })}
