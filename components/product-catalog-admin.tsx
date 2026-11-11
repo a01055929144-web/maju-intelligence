@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { compareCategoryPath, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { categoryAncestors, categoryLevelOptions, isUnder, joinCategory, splitCategory, suggestCategory } from "@/domains/pricing/product-category";
 import { Edit3, Loader2, PackagePlus, X } from "lucide-react";
 import {
@@ -33,6 +34,7 @@ const units = ["박스", "kg", "g", "개", "단", "봉", "판", "통"];
 const origins = ["국내산", "중국산", "미국산", "호주산", "수입산"];
 export function ProductCatalogAdmin({
   categoriesEnabled = false,
+  canManageCategories = false,
   companyId = "",
   settingsKey = "products:current",
 }: {
@@ -53,7 +55,34 @@ export function ProductCatalogAdmin({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null),
-    [reviewingCategories, setReviewingCategories] = useState(false);
+    [reviewingCategories, setReviewingCategories] = useState(false),
+    // CC-26: 폴더 순서(모든 분류 화면 공통). 읽지 못하면 이름순.
+    [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
+  useEffect(() => {
+    void fetch(`/api/price-sheets/folder-order${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : { folders: [] }))
+      .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
+      .catch(() => setFolderOrder(new Map()));
+  }, [companyId]);
+  // CC-26: 폴더를 다른 폴더로 끌어 놓으면 그 안으로 옮긴다(CC-17 폴더 이동 API — 상품·마진 연결이 한 번에, 같은 경로가 있으면 대상 마진 유지, 끝나면 판매가 재계산).
+  const [dragFolder, setDragFolder] = useState<string | null>(null),
+    [dropTarget, setDropTarget] = useState<string | null>(null),
+    [moveMessage, setMoveMessage] = useState("");
+  const canDrop = (from: string | null, target: string) => Boolean(from) && from !== target && !isUnder(target, from as string) && splitCategory(`${target} > x`).length <= 3 && splitCategory(from as string).slice(0, -1).join(" > ") !== target;
+  async function moveFolder(from: string, target: string) {
+    const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
+    if (!window.confirm(`"${from}" 폴더를 "${target}" 안으로 옮길까요?\n하위 폴더와 상품 분류가 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n옮긴 뒤 판매가를 바로 다시 계산합니다.`)) return;
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/price-sheets/move-category", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, from, to }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "폴더를 옮기지 못했습니다.");
+      const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
+      setMoveMessage(`"${from}"을(를) "${to}"(으)로 옮겼습니다(상품 ${Number(body.productCount || 0)}개).${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 마진 설정에서 다시 해 주세요."}`);
+      setSideFilter("");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "폴더를 옮기지 못했습니다."); }
+  }
   // 매입가 업로드 완료 안내의 "미분류 상품 보기" 링크(?category=unsorted)로 들어오면 미분류만 보여 준다.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("category") === "unsorted") { setSideTab("category"); setSideFilter("미분류"); }
@@ -117,7 +146,7 @@ export function ProductCatalogAdmin({
       // 대 › 중 › 소 트리(위 분류에 아래 상품 수를 더함), 순서는 경로 순
       for (const item of items) for (const path of item.category ? categoryAncestors(item.category) : ["미분류"]) counts.set(path, (counts.get(path) || 0) + 1);
       return Array.from(counts, ([name, count]) => ({ name, count, depth: name === "미분류" ? 0 : splitCategory(name).length - 1 }))
-        .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : a.name.localeCompare(b.name, "ko")));
+        .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : compareCategoryPath(a.name, b.name, folderOrder)));
     }
     for (const item of items) {
       const names = sideTab === "supplier"
@@ -126,7 +155,7 @@ export function ProductCatalogAdmin({
       for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
     }
     return Array.from(counts, ([name, count]) => ({ name, count, depth: 0 })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [items, sideTab]);
+  }, [items, sideTab, folderOrder]);
   const sideVisible = sideItems.filter((item) => {
     if (item.depth === 0) return true;
     const parent = splitCategory(item.name).slice(0, -1).join(" > ");
@@ -167,7 +196,7 @@ export function ProductCatalogAdmin({
             const hasChildren = sideTab === "category" && sideItems.some((x) => x.depth === item.depth + 1 && x.name.startsWith(item.name + " > "));
             const openNow = sideOpen.has(item.name);
             return (
-              <div className={`flex items-center gap-1 rounded-lg text-sm ${sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={item.name} style={{ paddingLeft: 4 + item.depth * 14 }}>
+              <div className={`flex items-center gap-1 rounded-lg text-sm ${dropTarget === item.name ? "bg-amber-100 ring-2 ring-amber-400" : sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} draggable={sideTab === "category" && canManageCategories && item.name !== "미분류"} key={item.name} onDragEnd={() => { setDragFolder(null); setDropTarget(null); }} onDragLeave={() => setDropTarget((current) => (current === item.name ? null : current))} onDragOver={(event) => { if (canDrop(dragFolder, item.name)) { event.preventDefault(); setDropTarget(item.name); } }} onDragStart={(event) => { setDragFolder(item.name); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.name); }} onDrop={(event) => { event.preventDefault(); const from = dragFolder; setDragFolder(null); setDropTarget(null); if (from && canDrop(from, item.name)) void moveFolder(from, item.name); }} style={{ paddingLeft: 4 + item.depth * 14 }}>
                 {hasChildren ? <button aria-label={`${label} ${openNow ? "접기" : "펼치기"}`} className="w-5 shrink-0 text-xs text-slate-500" onClick={() => setSideOpen((prev) => { const next = new Set(prev); if (next.has(item.name)) next.delete(item.name); else next.add(item.name); return next; })} type="button">{openNow ? "▾" : "▸"}</button> : <span className="w-5 shrink-0" />}
                 <button className={`flex min-w-0 flex-1 items-center justify-between py-2 pr-2 text-left ${item.depth === 0 ? "font-bold" : ""}`} onClick={() => setSideFilter(sideFilter === item.name ? "" : item.name)} type="button">
                   <span className="truncate">{label}</span><span className="text-xs text-slate-500">{item.count}</span>
@@ -178,6 +207,7 @@ export function ProductCatalogAdmin({
         </div>
       </aside>
       <div className="min-w-0 space-y-4">
+      {moveMessage ? <p className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900" role="status">{moveMessage}</p> : null}
       {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
