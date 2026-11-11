@@ -533,7 +533,7 @@ export function PricingDocumentsWorkspace({
     {leadNotice}
     {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
     <div className="flex flex-wrap justify-end gap-2">
-      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">행사·묶음·템플릿</button>
+      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">묶음·템플릿</button>
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
@@ -592,7 +592,7 @@ export function PricingDocumentsWorkspace({
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
-            <h1 className="text-xl font-bold">{tab === "library" ? "행사·묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
+            <h1 className="text-xl font-bold">{tab === "library" ? "묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
           </div>
         )}
       </header>
@@ -610,7 +610,7 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "행사·묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
+      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
@@ -666,6 +666,7 @@ export function PricingDocumentsWorkspace({
           </p>
         </form>
       )}
+      {tab === "library" && <p className="text-sm text-slate-600">행사·임박은 <a className="font-bold text-teal-800 underline" href="/revenue/pricing/promotions">행사·임박 화면</a>에서 등록합니다. 여기서는 문서에 담는 묶음·템플릿을 관리합니다.</p>}
       {tab === "library" && (
         <PricingDocumentLibrary
           companyId={companyId}
