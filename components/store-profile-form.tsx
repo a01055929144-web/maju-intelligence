@@ -63,7 +63,7 @@ export function StoreProfileForm() {
       <label className="block text-sm font-semibold" htmlFor="store-address-query">매장 주소</label>
       <div className="flex gap-2">
         <input className={`${field} font-normal`} id="store-address-query" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void searchAddress(); } }} placeholder="도로명·건물명으로 검색" value={query} />
-        <Button onClick={() => void searchAddress()} type="button" variant="outline">검색</Button>
+        <Button className="min-h-[44px] shrink-0" onClick={() => void searchAddress()} type="button" variant="outline">검색</Button>
       </div>
       {results.length ? <ul aria-label="주소 검색 결과" className="max-h-56 divide-y overflow-auto rounded-lg border">
         {results.map((item) => <li key={item.address}><button className="min-h-[44px] w-full px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setBaseAddress(item.address); setResults([]); }} type="button">{item.address}{item.buildingName ? ` · ${item.buildingName}` : ""}</button></li>)}
@@ -73,6 +73,6 @@ export function StoreProfileForm() {
     </div>
     <label className="flex min-h-[44px] items-center gap-2 text-sm"><input checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required type="checkbox" />MAJU 매장 이용 약관에 동의합니다.</label>
     {message ? <p className="text-sm text-rose-700" role="alert">{message}</p> : null}
-    <Button className="w-full" disabled={busy || !baseAddress} type="submit">{busy ? "가입 중…" : "매장 등록하기"}</Button>
+    <Button className="min-h-[44px] w-full" disabled={busy || !baseAddress} type="submit">{busy ? "가입 중…" : "매장 등록하기"}</Button>
   </form>;
 }

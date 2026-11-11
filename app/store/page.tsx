@@ -72,8 +72,11 @@ export default async function StorePage({ searchParams }: {
       customerName:"합성 공개 가입 매장",hasCostAccess:false,canManageMembers:true,canManageAddress:true,
       documents:[{title:"합성 가입 단가표",kind:"sheet",href:"/pricing-document#synthetic-source",canOrder:false,validUntil:"2099-12-31"}]}];
   }
+  // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
+  const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
+  if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : []; }
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
     {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
-    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} error={portalError} loginEnabled={storeMemberSessionEnabled()} />} />
+    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} fixture={directFixture} error={portalError} loginEnabled={directFixture ? true : storeMemberSessionEnabled()} />} />
     {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
 }
