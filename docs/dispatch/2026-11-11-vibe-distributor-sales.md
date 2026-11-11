@@ -44,3 +44,29 @@
 - **Files**: 리드 목록·상세 화면의 탭/필터(대상 유형), `lib/customer-navigation.ts` 변경 없음(리드 화면 안 탭), 가져오기 화면(`app/dashboard/settings/leads/workspace.tsx`)의 유통사 모드, `lib/feature-flags` 키 1개, 테스트.
 - **Done**: 비브에서 유통사 가져오기(합성 100행)·중복 묶음·상태 변환·연락 기록 e2e, 제이에스리테일에서는 유통사 탭·데이터 안 보임(회사 격리), CI, Ponytail.
 - **순서**: 제이에스리테일 운영 최적화 작업을 막지 않는 범위에서 병렬(파일이 겹치지 않음). DB-1·2 승인 후 시작.
+
+## 4. CC-22 회사 구분(고객사·파일럿·내부) — 관리자 화면 (11/11 14:39 대표 승인안)
+
+**문제**: `companies.workspace_type`은 회사/개인 작업공간 구분뿐이라 본사 계정(비브)이 관리자 화면에서 일반 고객사로 잡힌다 — 운영 현황 지표·결제(카드 미등록)·휴면/온보딩 알림에 섞임.
+
+**원칙**: 비브를 별도 시스템으로 떼지 않는다(같은 MAJU 위에서 실사용 점검). 회사마다 **구분**만 둔다.
+
+| 구분 `company_kind` | 대상 | 관리자 화면 규칙 |
+| --- | --- | --- |
+| `customer`(기본) | 영업할 고객사 | 지금처럼 지표·결제·알림 포함 |
+| `pilot` | 제이에스리테일 | 목록 "파일럿" 배지 · 지표 포함(따로 걸러 보기 가능) · 결제는 "면제" 표시(청구·카드 경고 안 함) |
+| `internal` | 비브 | 목록 맨 위 **"본사"** 칸에 따로 · 고객사 지표·결제·휴면/온보딩 알림에서 **제외** |
+
+### SQL 초안 (CC-22a — 운영 적용은 대표 승인 문구)
+- `alter table companies add column company_kind text not null default 'customer' check (company_kind in ('customer','pilot','internal'))`
+- 값: 비브 `898d85fc…` → `internal`, 제이에스리테일 `04ebb7bb…` → `pilot`. down = 열 삭제. PG17 테스트. 승인표 `docs/work-orders/db-approval/CC-22-company-kind.md`.
+- 회사 가입(셀프·관리자 대행)으로 생기는 회사는 항상 `customer`. 구분 변경은 **MAJU 관리자만**(고객사 화면·API에서 변경 불가), 변경마다 `admin_audit_logs`.
+
+### 화면 (CC-22b)
+- `/admin/companies` 목록: 구분 배지 + 위에 "본사" 묶음, 구분 필터(공용 탭/칩). 상세 개요에 "구분 [고객사|파일럿|내부]" 변경(확인 대화상자·감사 기록).
+- `/admin`(운영 현황) 핵심 숫자·고객사 건강 표·사용·성과: `internal` 제외(“본사 제외” 문구 표시), `pilot` 포함 + "파일럿 제외하고 보기" 토글.
+- `/admin/billing`: `internal`·`pilot`은 청구 대상 목록에서 빼고 "면제" 칸에 따로.
+- 기능 스위치: `lib/feature-flags`에 회사 목록 외에 "내부 계정" 일괄 켜기 옵션(예: `DISTRIBUTOR_SALES`는 `internal`만).
+- **Files**: `docs/sql-drafts/*CC-22*`, 승인표, `lib/store.ts`의 관리자 회사 조회 함수(구분 칸 select·필터) **만**, `app/admin/page.tsx`·`app/admin/companies/*`·`app/admin/billing/page.tsx`, `lib/feature-flags.ts`, 테스트.
+- **Done**: PG17(기본값·check·회사 경계), 관리자 화면 3곳 e2e(비브 제외·제이에스리테일 파일럿 배지·변경 감사 기록), 고객사 화면·API로 구분 변경 불가 테스트, CI, Ponytail.
+- **순서**: CC-22a SQL 초안 먼저(다른 SQL 승인과 같이 받아도 됨) → 승인·적용 → CC-22b. 제이에스리테일 운영 최적화 작업은 막지 않는다.
