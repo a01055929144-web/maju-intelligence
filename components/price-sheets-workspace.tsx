@@ -8,6 +8,7 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 import { marginSource } from "./pricing-margin-group-options";
 import { PricingMarginTemplates } from "./pricing-margin-templates";
 import { PricingFolderMargin } from "./pricing-folder-margin";
+import { PricingSheetFromPrices } from "./pricing-sheet-from-prices";
 import { PricingFolderMove } from "./pricing-folder-move";
 import { PricingMarginGroups } from "./pricing-margin-groups";
 import { Tabs } from "./ui/tabs";
@@ -225,6 +226,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
         <h2 className="text-lg font-black">④ 전체 판매가 보기</h2>
         <p className="text-sm text-slate-600">지금 마진 규칙으로 계산된 기본 판매가표입니다. 열 편집·CSV 내보내기는 표 위 버튼을 쓰세요. 지금은 불러온 페이지({state.items.length}개) 기준입니다.</p>
       </div>
+      <PricingSheetFromPrices busy={busy} companyId={companyId} folder={folder} />
       <CommonDataTable columns={allColumns} filename="기본-판매가표.csv" rowKey={(i) => i.id} rows={state.items} settingsKey="margin-all-prices" />
     </section>
   </div>;
