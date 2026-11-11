@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
+import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import NextLink from "next/link";
 
 type Draft = { id: string; content: { title: string }; revision: number };
@@ -169,6 +170,22 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       setDetail({ id, events: result.events ?? [] });
     } catch (error) { setMessage(error instanceof Error ? error.message : "열람 기록을 불러오지 못했습니다."); }
   }
+  // CC-13: 매장별 링크 표도 공용 표(열 편집·너비·정렬·엑셀). 동작 버튼은 그대로.
+  const linkColumns: CommonTableColumn<Link>[] = [
+    { key: "customer", label: "매장", value: (link) => link.customerName, sortable: true, render: (link) => <button className="underline" onClick={() => void showDetail(link.id)} type="button">{link.customerName}</button> },
+    { key: "document", label: "문서", value: (link) => `${link.documentTitle} v${link.documentVersion ?? ""}`, sortable: true },
+    { key: "issued", label: "발행", value: (link) => link.issuedAt, sortable: true, render: (link) => new Date(link.issuedAt).toLocaleDateString("ko-KR") },
+    { key: "activity", label: "열람·주문", value: (link) => link.viewCount, sortable: true, render: (link) => `열람 ${link.viewCount}회 · 주문 ${link.orderCount}건` },
+    { key: "status", label: "관심·상태", value: (link) => `${link.interest} · ${link.revokedAt ? "회수" : link.canOrder ? "주문 가능" : "주문 중지"}`, sortable: true },
+    { key: "actions", label: "동작", sortable: false, value: () => "", render: (link) => <span className="flex flex-wrap gap-1"><button className="rounded border px-2 py-1" onClick={() => {
+        setCreatedUrl(link.url);
+        void navigator.clipboard.writeText(link.url).then(() => setMessage("매장 링크를 복사했습니다."))
+          .catch(() => setMessage("복사 권한이 없어 위 주소를 직접 복사해 주세요."));
+      }} type="button">복사</button>
+      <button className="rounded border px-2 py-1" disabled={busy} onClick={() => void action({ action: "mark-sent", id: link.id })} title="직접 전달한 뒤에만 누르세요. 자동 발송하지 않습니다." type="button">전달 기록</button>
+      {!link.revokedAt && <><button className="rounded border px-2 py-1" disabled={busy} onClick={() => void action({ action: "set-ordering", id: link.id, canOrder: !link.canOrder })} type="button">{link.canOrder ? "주문 끄기" : "주문 켜기"}</button>
+        <button className="rounded border px-2 py-1" disabled={busy} onClick={() => void action({ action: "revoke", id: link.id })} type="button">회수</button></>}</span> },
+  ];
   return <div className="space-y-6">
     <header><h1 className="text-xl font-semibold">공개 범위 · 매장 링크</h1>
       <p className="text-sm text-slate-600">매장마다 별도 링크를 만듭니다. 받은 매장만 해당 매장의 주문과 내역을 볼 수 있습니다.</p></header>
@@ -225,30 +242,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       </div>
     </section>
     <section className="space-y-3"><h2 className="font-semibold">매장별 링크</h2>
-      {linksLoaded && !links.length && <p className="text-sm text-slate-600">표시할 매장 링크가 없습니다. 등록된 거래처와 발행 버전을 확인해 주세요.</p>}
-      <div className="overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-sm">
-        <thead className="sticky top-0 bg-white"><tr className="border-b text-left">
-          <th className="p-2">매장</th><th className="p-2">문서</th><th className="p-2">발행</th>
-          <th className="p-2">열람·주문</th><th className="p-2">관심·상태</th><th className="p-2">동작</th></tr></thead>
-        <tbody>{links.map((link) => <tr key={link.id} className="border-b">
-          <td className="p-2"><button className="underline" onClick={() => void showDetail(link.id)}>{link.customerName}</button></td>
-          <td className="p-2">{link.documentTitle} v{link.documentVersion}</td>
-          <td className="p-2">{new Date(link.issuedAt).toLocaleDateString("ko-KR")}</td>
-          <td className="p-2">열람 {link.viewCount}회 · 주문 {link.orderCount}건</td>
-          <td className="p-2">{link.interest} · {link.revokedAt ? "회수" : link.canOrder ? "주문 가능" : "주문 중지"}</td>
-          <td className="flex gap-1 p-2"><button className="rounded border px-2 py-1" onClick={() => {
-            setCreatedUrl(link.url);
-            void navigator.clipboard.writeText(link.url).then(() => setMessage("매장 링크를 복사했습니다."))
-              .catch(() => setMessage("복사 권한이 없어 위 주소를 직접 복사해 주세요."));
-          }}>복사</button>
-            <button className="rounded border px-2 py-1" disabled={busy}
-              title="직접 전달한 뒤에만 누르세요. 자동 발송하지 않습니다."
-              onClick={() => void action({ action: "mark-sent", id: link.id })}>전달 기록</button>
-            {!link.revokedAt && <><button className="rounded border px-2 py-1" disabled={busy}
-              onClick={() => void action({ action: "set-ordering", id: link.id, canOrder: !link.canOrder })}>{link.canOrder ? "주문 끄기" : "주문 켜기"}</button>
-              <button className="rounded border px-2 py-1" disabled={busy}
-                onClick={() => void action({ action: "revoke", id: link.id })}>회수</button></>}</td>
-        </tr>)}</tbody></table></div>
+      <CommonDataTable columns={linkColumns} emptyMessage={linksLoaded ? "표시할 매장 링크가 없습니다. 등록된 거래처와 발행 버전을 확인해 주세요." : "불러오는 중…"} filename="매장링크.csv" rowKey={(link) => link.id} rows={links} settingsKey={`store-links:${companyId || "me"}`} />
       <div className="flex gap-2"><button disabled={page <= 1} className="rounded border px-3 py-2" onClick={() => setPage(page - 1)}>이전</button>
         <span className="p-2">{page}페이지</span><button disabled={!hasMore} className="rounded border px-3 py-2" onClick={() => setPage(page + 1)}>다음</button></div>
     </section>
