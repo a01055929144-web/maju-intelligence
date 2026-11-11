@@ -1,6 +1,6 @@
 -- DRAFT ONLY (CC-24). Never run against production without the CEO's explicit approval phrase.
--- Product delete: products nobody has used are deleted for good; products that appear in orders, documents,
--- stock, contract prices, receipts or deliveries are only hidden (is_active = false) so history stays intact.
+-- Product delete: products nobody has used are deleted for good; products that appear in orders, documents
+-- (including saved/published/archived document content), promotions, stock, contract prices, receipts or deliveries are only hidden (is_active = false) so history stays intact.
 -- One function, one transaction. p_apply = false only counts (the confirm dialog shows both numbers first).
 -- Service-only: no anon/authenticated grants; the app server enforces company boundaries and roles.
 begin;
@@ -25,7 +25,9 @@ declare
     ['inventory_document_positions','product_catalog_id'], ['inventory_movements','product_catalog_id'],
     ['inventory_stocktake_lines','product_catalog_id'], ['purchase_receipt_lines','product_catalog_id'],
     ['purchase_receipt_line_overrides','product_catalog_id'], ['sales_offer_items','product_id'],
-    ['sales_quote_items','product_catalog_id'], ['store_order_lines','product_id']];
+    ['sales_quote_items','product_catalog_id'], ['store_order_lines','product_id'], ['pricing_promotions','product_id']];
+  -- Documents keep product ids inside their JSON content (drafts, published versions, archived ones too).
+  doc_tables constant text[] := array['pricing_documents','pricing_document_versions'];
   ids uuid[]; used uuid[] := '{}'; part uuid[]; i integer; del integer := 0; hid integer := 0;
 begin
   if p_ids is null or cardinality(p_ids) = 0 or cardinality(p_ids) > 500 then raise exception 'cc24_invalid_ids'; end if;
@@ -35,6 +37,12 @@ begin
   for i in 1 .. array_length(refs, 1) loop
     if to_regclass('public.' || refs[i][1]) is not null then
       execute format('select coalesce(array_agg(distinct %I), ''{}'') from public.%I where %I = any($1)', refs[i][2], refs[i][1], refs[i][2]) into part using ids;
+      used := used || part;
+    end if;
+  end loop;
+  for i in 1 .. array_length(doc_tables, 1) loop
+    if to_regclass('public.' || doc_tables[i]) is not null then
+      execute format('select coalesce(array_agg(u), ''{}'') from unnest($1) u where exists (select 1 from public.%I d where d.company_id = $2 and position(u::text in d.content::text) > 0)', doc_tables[i]) into part using ids, p_company;
       used := used || part;
     end if;
   end loop;

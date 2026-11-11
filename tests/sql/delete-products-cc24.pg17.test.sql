@@ -18,9 +18,19 @@ insert into product_catalog(id,company_id,category,purchase_product_name,purchas
  ('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','농산','in agreement',1),
  ('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','농산','in order',1),
  ('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','농산','free 2',1),
- ('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000002','농산','other company',1);
+ ('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000002','농산','other company',1),
+ ('10000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','농산','in published document',1),
+ ('10000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-000000000001','농산','in promotion',1),
+ ('10000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','농산','in draft document',1);
 insert into customer_price_agreements(company_id, product_catalog_id) values ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
 insert into store_order_lines(company_id, product_id) values ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');
+-- Product 6 only appears inside a published document version, 8 only inside a document draft, 7 only in a promotion.
+insert into pricing_documents(id,company_id,owner_key,kind,revision,content) values
+ ('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001',repeat('a',64),'quote',1,'{"lines":[{"productId":"10000000-0000-4000-8000-000000000008"}]}'::jsonb);
+insert into pricing_document_versions(company_id,document_id,version,revision,content) values
+ ('00000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',1,1,'{"lines":[{"productId":"10000000-0000-4000-8000-000000000006"}]}'::jsonb);
+insert into pricing_promotions(id,company_id,product_id,name,display_name,starts_on,ends_on,purchase_cost,margin_bp,price,tax_type,badge,revision) values
+ ('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000007','p','p',current_date,current_date,1,1000,2,'taxable','행사',1);
 -- A derived row that must disappear with its product (cascade), not block the delete.
 insert into pricing_items(company_id, product_id) select company_id, id from product_catalog where company_id = '00000000-0000-4000-8000-000000000001' on conflict do nothing;
 
@@ -28,34 +38,34 @@ insert into pricing_items(company_id, product_id) select company_id, id from pro
 
 do $$
 declare c uuid := '00000000-0000-4000-8000-000000000001'; o uuid := '00000000-0000-4000-8000-000000000002';
- all_ids uuid[] := array['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000005']::uuid[];
+ all_ids uuid[] := array['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000005','10000000-0000-4000-8000-000000000006','10000000-0000-4000-8000-000000000007','10000000-0000-4000-8000-000000000008']::uuid[];
  r jsonb; v text;
 begin
  if has_function_privilege('anon','public.cc24_delete_products(uuid,uuid[],boolean)','execute')
    or has_function_privilege('authenticated','public.cc24_delete_products(uuid,uuid[],boolean)','execute') then raise exception 'executable by app roles'; end if;
  if not has_function_privilege('service_role','public.cc24_delete_products(uuid,uuid[],boolean)','execute') then raise exception 'service_role cannot run'; end if;
 
- -- count only: 2 free, 2 used; the other company's id is ignored; nothing changes.
+ -- count only: 2 free, 5 used (agreement, order, published document, draft document, promotion); the other company's id is ignored; nothing changes.
  r := cc24_delete_products(c, all_ids);
- if (r->>'found')::int <> 4 or (r->>'deletable')::int <> 2 or (r->>'hideOnly')::int <> 2 or (r->>'applied')::boolean then raise exception 'dry run counts wrong: %', r; end if;
- if (select count(*) from product_catalog) <> 5 or (select count(*) from product_catalog where not is_active) <> 0 then raise exception 'dry run changed data'; end if;
+ if (r->>'found')::int <> 7 or (r->>'deletable')::int <> 2 or (r->>'hideOnly')::int <> 5 or (r->>'applied')::boolean then raise exception 'dry run counts wrong: %', r; end if;
+ if (select count(*) from product_catalog) <> 8 or (select count(*) from product_catalog where not is_active) <> 0 then raise exception 'dry run changed data'; end if;
 
  -- apply: free ones are deleted (cascade rows too), used ones are hidden, history stays, the other company is untouched.
  r := cc24_delete_products(c, all_ids, true);
- if (r->>'deletable')::int <> 2 or (r->>'hideOnly')::int <> 2 or not (r->>'applied')::boolean then raise exception 'apply counts wrong: %', r; end if;
+ if (r->>'deletable')::int <> 2 or (r->>'hideOnly')::int <> 5 or not (r->>'applied')::boolean then raise exception 'apply counts wrong: %', r; end if;
  if exists(select 1 from product_catalog where id in ('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004')) then raise exception 'free products not deleted'; end if;
- if (select count(*) from product_catalog where company_id = c and not is_active) <> 2 then raise exception 'used products not hidden'; end if;
- if (select count(*) from customer_price_agreements) <> 1 or (select count(*) from store_order_lines) <> 1 then raise exception 'history lost'; end if;
+ if (select count(*) from product_catalog where company_id = c and not is_active) <> 5 then raise exception 'used products not hidden'; end if;
+ if (select count(*) from customer_price_agreements) <> 1 or (select count(*) from store_order_lines) <> 1 or (select count(*) from pricing_promotions) <> 1 or (select count(*) from pricing_document_versions) <> 1 then raise exception 'history lost'; end if;
  if exists(select 1 from pricing_items where product_id in ('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004')) then raise exception 'cascade rows remain'; end if;
  if not (select is_active from product_catalog where id = '10000000-0000-4000-8000-000000000005') then raise exception 'other company touched'; end if;
 
  -- repeat is harmless: hidden stays hidden, nothing left to delete.
  r := cc24_delete_products(c, all_ids, true);
- if (r->>'found')::int <> 2 or (r->>'deletable')::int <> 0 or (r->>'hideOnly')::int <> 2 then raise exception 'repeat wrong: %', r; end if;
+ if (r->>'found')::int <> 5 or (r->>'deletable')::int <> 0 or (r->>'hideOnly')::int <> 5 then raise exception 'repeat wrong: %', r; end if;
 
  -- wrong company id sees nothing.
  r := cc24_delete_products(o, array['10000000-0000-4000-8000-000000000002']::uuid[], true);
- if (r->>'found')::int <> 0 or (select count(*) from product_catalog where company_id = c) <> 2 then raise exception 'cross-company effect'; end if;
+ if (r->>'found')::int <> 0 or (select count(*) from product_catalog where company_id = c) <> 5 then raise exception 'cross-company effect'; end if;
 
  -- invalid inputs.
  begin perform cc24_delete_products(c, '{}'::uuid[]); raise exception 'empty accepted'; exception when others then get stacked diagnostics v = message_text; if v <> 'cc24_invalid_ids' then raise; end if; end;
