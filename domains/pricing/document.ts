@@ -58,6 +58,8 @@ export type DocumentContent = {
   showSpec: boolean;
   lines: PrintLine[];
   display?: DocumentDisplay;
+  /** CC-19c: 가격 기준 마진 템플릿(없으면 기본). 일반 품목 가격을 이 템플릿으로 계산해 넣었다는 기록. */
+  marginTemplateId?: string;
 };
 export type DocumentDraft = {
   id: string;
@@ -269,6 +271,7 @@ export function parseDocument(value: unknown): DocumentContent {
     showSpec: d.showSpec === true,
     lines,
     display: parseDisplay(d.display),
+    ...(isId(d.marginTemplateId) ? { marginTemplateId: d.marginTemplateId } : {}),
   };
 }
 /** Refresh live availability only for the selected, immutable publication. */
