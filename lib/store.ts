@@ -10711,7 +10711,8 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
   if (!filters.includeTemporaryOperations && filters.status !== "임시 영업") params.push(`status=neq.${encodeURIComponent("임시 영업")}`);
-  if (!filters.includeOutsideSalesArea) {
+  // 영업 지역은 매장(음식점) 영업용이다 — 유통사 리드는 행정구역이 없으니 지역 필터로 숨기지 않는다.
+  if (!filters.includeOutsideSalesArea && filters.targetType !== "distributor") {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     if (shouldApplySalesAreaFilter(salesAreas, Boolean(filters.includeOutsideSalesArea))) {
       params.push(salesAreaPostgrestFilter(salesAreas));
