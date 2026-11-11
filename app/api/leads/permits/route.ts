@@ -7,6 +7,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 
 export const dynamic = "force-dynamic";
+// 리드가 많은 회사는 목록 + 액션 큐 조회가 10초 기본값을 넘겼다(11/11 시간 초과 6건). 조회를 줄인 뒤에도 안전 여유로 30초.
+export const maxDuration = 30;
 
 // GET: 리드 목록(필터 포함) + 4개 액션 큐(오늘 전화/이번 주 방문/DM/보강 필요)를 함께 내려줍니다.
 // 화면이 두 번 호출하지 않도록 한 번에 묶어서 반환합니다.
