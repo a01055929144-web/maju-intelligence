@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, getStoreOwnerActivationProof } from "@/lib/auth";
+import { getRequestAuthScope, getStoreOwnerActivationProof, getStoreSession } from "@/lib/auth";
+import { storeDirectSignupEnabled } from "../../../lib/store/11-direct-signup-flag";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,9 @@ type KakaoAddressDocument = {
 export async function GET(request: NextRequest) {
   // 회사 로그인 또는 카카오 인증을 마친 점주 개통 화면에서만 검색합니다.
   const scope = await getRequestAuthScope(request);
-  if (!scope.ok && (await getStoreOwnerActivationProof())?.stage !== "profile")
+  // 직접 가입(STORE_DIRECT_SIGNUP_ENABLED, 기본 OFF)을 켰을 때만 로그인한 카카오 매장 세션도 주소를 검색할 수 있다.
+  const storeSignup = !scope.ok && storeDirectSignupEnabled() && Boolean(await getStoreSession());
+  if (!scope.ok && !storeSignup && (await getStoreOwnerActivationProof())?.stage !== "profile")
     return NextResponse.json({ message: "Unauthorized", results: [] }, { status: 401 });
 
   const query = request.nextUrl.searchParams.get("query")?.trim();
