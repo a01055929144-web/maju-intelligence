@@ -10610,6 +10610,8 @@ export async function syncAllCompaniesKakaoKeywordLeads(): Promise<KakaoKeywordL
 export type PermitLeadFilters = {
   action?: string;
   excludeExcluded?: boolean;
+  /** CC-21: 대상 유형. 없으면 전체(기존 동작). 유통사는 라우트에서 DISTRIBUTOR_SALES 회사만 허용한다. */
+  targetType?: "restaurant" | "distributor";
   grade?: string;
   hasPhone?: boolean;
   industry?: string;
@@ -10688,6 +10690,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
+  if (filters.targetType) params.push(`target_type=eq.${filters.targetType}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
   if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
     const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
