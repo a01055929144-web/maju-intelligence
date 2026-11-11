@@ -35,6 +35,7 @@ const publicRoutes = new Map([
 
 const sessionGuardPatterns = [
   /\bgetRequestAuthScope\s*\(/,
+  /\bmarginTemplateGate\s*\(/, // lib/pricing/margin-template-gate.ts wraps getRequestAuthScope + feature switch + manage_sales
   /\bgetCustomerSession\s*\(/,
   /\bgetStoreMemberContext\s*\(/,
   /\bgetAdminSession\s*\(/,
