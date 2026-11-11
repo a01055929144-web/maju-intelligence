@@ -1,6 +1,7 @@
 "use client";
 
 import { LeadChangeHistory } from "@/components/lead-change-history";
+import { DistributorKakaoDrawer } from "@/components/distributor-kakao-drawer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -155,6 +156,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [viewMode, setViewMode] = useState<"table" | "map">("table");
   // CC-21: 유통사|매장 대상 탭. 서버가 DISTRIBUTOR_SALES 회사에만 distributorSales=true를 내려 보여 준다(다른 회사는 탭이 없고 매장만).
   const [distributorSales, setDistributorSales] = useState(false);
+  const [kakaoDrawer, setKakaoDrawer] = useState(false);
   const [targetType, setTargetType] = useState<"restaurant" | "distributor">("restaurant");
   const [documentEntry, setDocumentEntry] = useState<LeadDocumentEntryAccess>({ canCreateQuote: false, canCreateSheet: false });
 
@@ -1624,6 +1626,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         {distributorSales ? <nav aria-label="영업 대상" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
           {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={targetType === id} className={`min-h-[36px] rounded-md px-3 text-sm font-bold ${targetType === id ? "bg-teal-700 text-white" : "text-slate-600"}`} key={id} onClick={() => setTargetType(id)} type="button">{label}</button>)}
         </nav> : null}
+        {distributorSales && targetType === "distributor" ? <button className="min-h-[44px] rounded-lg border border-teal-700 bg-white px-3 text-sm font-bold text-teal-800" onClick={() => setKakaoDrawer(true)} type="button">+ 카카오에서 찾기</button> : null}
+        {kakaoDrawer ? <DistributorKakaoDrawer buildUrl={withPermitLeadCompanyQuery} onAdded={() => loadLeads()} onClose={() => setKakaoDrawer(false)} /> : null}
         <nav aria-label="리드 종류" className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
           {([
             { count: summary?.newLeadCount, label: "신규 리드", sales: false, type: "permit" },

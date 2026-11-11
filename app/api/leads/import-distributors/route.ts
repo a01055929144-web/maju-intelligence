@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { isFeatureEnabled } from "@/lib/feature-flags";
+import { distributorGate } from "@/lib/distributor-gate";
 import { supabaseRequest } from "@/lib/store";
 import { geocodeAddress } from "@/lib/kakao-address-geocode";
 import { runLimited } from "@/lib/run-limited";
@@ -12,14 +11,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const enc = encodeURIComponent;
 const DEFAULT_FIELDS: ReadonlyArray<readonly [string, "text" | "date"]> = [["취급 품목", "text"], ["사용 ERP", "text"], ["다음 연락일", "date"]];
 
-// CC-21: 유통사 리드 가져오기 저장(500행 단위) · 되돌리기. 기능 스위치 DISTRIBUTOR_SALES + 리드 관리 권한이 있는 회사만.
-async function gate(request: NextRequest, companyId?: string) {
-  const scope = await getRequestAuthScope(request, companyId);
-  if (!scope.ok) return { error: NextResponse.json({ message: "Unauthorized" }, { status: 401 }) };
-  if (!scopeHasCapability(scope, "manage_customers")) return { error: NextResponse.json({ message: "리드를 가져올 권한이 없습니다." }, { status: 403 }) };
-  if (!isFeatureEnabled("DISTRIBUTOR_SALES", scope.companyId)) return { error: NextResponse.json({ message: "준비 중인 기능입니다." }, { status: 404 }) };
-  return { scope, companyId: scope.companyId! };
-}
 const actorOf = (scope: { customerSession?: { userId?: string | null; operationalDisplayName?: string | null; invitedEmployeeName?: string | null; name?: string | null } | null; adminSession?: { name?: string | null } | null }) => ({
   id: scope.customerSession?.userId || null,
   name: scope.customerSession?.operationalDisplayName || scope.customerSession?.invitedEmployeeName || scope.customerSession?.name || scope.adminSession?.name || null,
@@ -29,14 +20,14 @@ const valid = (r: Partial<ImportRow>): r is ImportRow => Boolean(r && typeof r.n
 
 /** 화면이 저장 상자를 보일지 확인(스위치 꺼진 회사는 404 → 상자 숨김). */
 export async function GET(request: NextRequest) {
-  const g = await gate(request, request.nextUrl.searchParams.get("companyId") || undefined); if ("error" in g) return g.error;
+  const g = await distributorGate(request, request.nextUrl.searchParams.get("companyId") || undefined); if ("error" in g) return g.error;
   return NextResponse.json({ enabled: true });
 }
 
 /** body: { companyId, fileName, sheetName, total, batchId?, rows } — batchId 없이 보내면 새 묶음을 만들고, 이어지는 호출은 같은 batchId로 500행씩. */
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as { companyId?: string; fileName?: string; sheetName?: string; total?: number; batchId?: string; rows?: Partial<ImportRow>[] } | null;
-  const g = await gate(request, body?.companyId); if ("error" in g) return g.error;
+  const g = await distributorGate(request, body?.companyId); if ("error" in g) return g.error;
   const { scope, companyId } = g;
   const rows = body?.rows;
   if (!Array.isArray(rows) || !rows.length || rows.length > IMPORT_CHUNK || !rows.every(valid)) return NextResponse.json({ message: `행은 1~${IMPORT_CHUNK}개, 상호가 있어야 합니다.` }, { status: 400 });
@@ -85,7 +76,7 @@ export async function POST(request: NextRequest) {
 /** 되돌리기: DELETE ?companyId=&batchId= — 연락 기록이 하나라도 있는 리드가 있으면 거절(기록 보호). */
 export async function DELETE(request: NextRequest) {
   const companyId = request.nextUrl.searchParams.get("companyId") || undefined, batchId = request.nextUrl.searchParams.get("batchId") || "";
-  const g = await gate(request, companyId); if ("error" in g) return g.error;
+  const g = await distributorGate(request, companyId); if ("error" in g) return g.error;
   if (!UUID.test(batchId)) return NextResponse.json({ message: "묶음 번호가 올바르지 않습니다." }, { status: 400 });
   const actor = actorOf(g.scope);
   try {
