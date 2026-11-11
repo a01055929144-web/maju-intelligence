@@ -150,6 +150,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     const oldPreview = page.getByRole("dialog", { name: "미리보기", exact: true });
     const oldPaper = oldPreview.locator(".pricing-online");
     // CC-15: 과세·면세 글자는 옵션을 켠 문서(단가표)에만 16개, 기본(견적서)은 0개.
+    const taxShown = kind === "sheet";
+    await expect(oldPaper.locator("[data-document-tax]")).toHaveCount(taxShown ? 16 : 0);
     await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "면세" })).toHaveCount(taxShown ? 8 : 0);
     await expect(oldPaper.locator("[data-document-tax]").filter({ hasText: "과세" })).toHaveCount(taxShown ? 8 : 0);
     const downloadEvent = page.waitForEvent("download");
