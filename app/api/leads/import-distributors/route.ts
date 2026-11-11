@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { supabaseRequest } from "@/lib/store";
+import { geocodeAddress } from "@/lib/kakao-address-geocode";
+import { runLimited } from "@/lib/run-limited";
 import { chunk, IMPORT_CHUNK, type ImportRow } from "@/domains/lead/distributor-import";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // 500행 주소 좌표 변환(동시 8건) 시간
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const enc = encodeURIComponent;
+const DEFAULT_FIELDS: ReadonlyArray<readonly [string, "text" | "date"]> = [["취급 품목", "text"], ["사용 ERP", "text"], ["다음 연락일", "date"]];
 
 // CC-21: 유통사 리드 가져오기 저장(500행 단위) · 되돌리기. 기능 스위치 DISTRIBUTOR_SALES + 리드 관리 권한이 있는 회사만.
 async function gate(request: NextRequest, companyId?: string) {
@@ -49,19 +53,28 @@ export async function POST(request: NextRequest) {
       const [batch] = await supabaseRequest<Array<{ id: string }>>("lead_import_batches?select=id", { method: "POST", body: JSON.stringify({ company_id: companyId, file_name: fileName, sheet_name: str(body?.sheetName, 100) || null, row_count: total, created_by_user_id: actor.id, created_by_name: actor.name, result_summary: { targetType: "distributor" } }) });
       batchId = batch.id;
     }
-    // 칸 이름이 "취급 품목·사용 ERP·다음 연락일"인 회사 칸이 있으면 그 키로, 없으면 고정 키로 저장.
-    const fields = await supabaseRequest<Array<{ key: string; label: string }>>(`company_lead_fields?select=key,label&company_id=eq.${companyId}&archived_at=is.null`).catch(() => []);
-    const keyOf = (label: string, fallback: string) => fields.find((f) => f.label.replace(/\s/g, "") === label.replace(/\s/g, ""))?.key || fallback;
-    const kItems = keyOf("취급 품목", "items"), kErp = keyOf("사용 ERP", "erp"), kNext = keyOf("다음 연락일", "next_contact");
+    // 유통사 리드 칸 기본값(취급 품목·사용 ERP·다음 연락일; 등급은 리드의 등급 열). 없는 칸만 이 회사에 만든다(여러 번 불러도 한 번만).
+    const fields: Array<{ key: string; label: string }> = await supabaseRequest<Array<{ key: string; label: string }>>(`company_lead_fields?select=key,label&company_id=eq.${companyId}&archived_at=is.null`);
+    const norm = (label: string) => label.replace(/\s/g, "");
+    for (const [label, fieldType] of DEFAULT_FIELDS) {
+      if (fields.some((f) => norm(f.label) === norm(label))) continue;
+      const key = `field_${crypto.randomUUID().replaceAll("-", "")}`;
+      await supabaseRequest("company_lead_fields", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ company_id: companyId, key, label, field_type: fieldType, show_in_list: true, filterable: true, created_by_user_id: actor.id, created_by_name: actor.name }) });
+      fields.push({ key, label });
+    }
+    const keyOf = (label: string) => fields.find((f) => norm(f.label) === norm(label))!.key;
+    const kItems = keyOf("취급 품목"), kErp = keyOf("사용 ERP"), kNext = keyOf("다음 연락일");
     // 같은 묶음을 다시 보내거나 이미 있는 유통사 번호는 건너뛴다(재시도 안전).
     const phones = Array.from(new Set(rows.map((r) => r.phone).filter((p): p is string => Boolean(p))));
     const existing: Array<{ phone: string }> = [];
     for (const part of chunk(phones, 100)) existing.push(...await supabaseRequest<Array<{ phone: string }>>(`business_permit_leads?select=phone&company_id=eq.${companyId}&target_type=eq.distributor&merged_into_lead_id=is.null&phone=in.(${part.map(enc).join(",")})`));
     const have = new Set(existing.map((e) => e.phone));
     const fresh = rows.filter((r) => !r.phone || !have.has(r.phone));
-    const created = fresh.length ? await supabaseRequest<Array<{ id: string }>>("business_permit_leads?select=id", { method: "POST", body: JSON.stringify(fresh.map((r) => ({
+    // 주소 → 좌표(카카오). 못 찾아도 저장은 계속(지도에만 안 보임).
+    const points = await runLimited(fresh, 8, (r) => (r.address ? geocodeAddress(r.address) : Promise.resolve(null)));
+    const created = fresh.length ? await supabaseRequest<Array<{ id: string }>>("business_permit_leads?select=id", { method: "POST", body: JSON.stringify(fresh.map((r, i) => ({
       company_id: companyId, target_type: "distributor", source: "distributor_import", import_batch_id: batchId, lead_period: "recent", is_target_industry: true,
-      business_name: str(r.name, 300).trim(), address: str(r.address, 300) || null, phone: r.phone || null, fax: r.fax || null, email: r.email || null, grade: str(r.grade, 40) || null, status: r.status,
+      business_name: str(r.name, 300).trim(), address: str(r.address, 300) || null, latitude: points[i]?.lat ?? null, longitude: points[i]?.lng ?? null, phone: r.phone || null, fax: r.fax || null, email: r.email || null, grade: str(r.grade, 40) || null, status: r.status,
       custom_values: { [kItems]: str(r.items, 300), [kErp]: str(r.erp, 300), [kNext]: r.nextContact || "", ...(r.extraPhones?.length ? { extra_phones: r.extraPhones.slice(0, 5) } : {}), ...(r.owner ? { owner_note: str(r.owner, 100) } : {}) },
     }))) }) : [];
     if (created.length) await supabaseRequest("lead_import_batch_items", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(created.map((c) => ({ company_id: companyId, batch_id: batchId, lead_id: c.id, action: "created" }))) });
