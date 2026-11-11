@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope, scopeHasCapability } from "../../../lib/auth";
-import { canManagePriceSheets } from "../../../domains/pricing/access";
-import { priceSheetsEnabled } from "../../../lib/pricing/feature";
-import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { supabaseRequest } from "../../../lib/store";
+import { marginTemplateGate } from "../../../lib/pricing/margin-template-gate";
 export const dynamic = "force-dynamic";
 
 // CC-19b: 마진 템플릿(거래처 등급별 마진) 목록·저장·보관. 스위치 MARGIN_TEMPLATES를 켠 회사의 대표·관리자만.
@@ -11,15 +8,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const bp = (percent: number) => Math.round(percent * 100);
 type Row = { id: string; name: string; margin_bp: number; rounding: number; sort_order: number };
 type CatRow = { template_id: string; category: string; margin_bp: number };
-
-async function gate(request: NextRequest, companyId?: string) {
-  if (!priceSheetsEnabled()) return { error: NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 }) };
-  const scope = await getRequestAuthScope(request, companyId);
-  if (!scope.ok) return { error: NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 }) };
-  if (!scope.companyId || !isFeatureEnabled("PRICING", scope.companyId) || !isFeatureEnabled("MARGIN_TEMPLATES", scope.companyId)) return { error: NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 }) };
-  if (!scopeHasCapability(scope, "manage_sales") || (scope.customerSession && !canManagePriceSheets(scope.customerSession))) return { error: NextResponse.json({ message: "대표·관리자 권한이 필요합니다." }, { status: 403 }) };
-  return { companyId: scope.companyId, userId: scope.customerSession?.userId || null };
-}
 
 async function list(companyId: string) {
   const [templates, categories] = await Promise.all([
@@ -30,7 +18,8 @@ async function list(companyId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const g = await gate(request, request.nextUrl.searchParams.get("companyId") || undefined); if ("error" in g) return g.error;
+  const g = await marginTemplateGate(request, request.nextUrl.searchParams.get("companyId") || undefined, false); // 목록은 영업도 본다
+  if ("error" in g) return g.error;
   try { return NextResponse.json(await list(g.companyId), { headers: { "Cache-Control": "no-store" } }); }
   catch { return NextResponse.json({ message: "템플릿을 불러오지 못했습니다." }, { status: 500 }); }
 }
@@ -38,7 +27,7 @@ export async function GET(request: NextRequest) {
 /** body: { companyId, action: "save"|"archive", id?, name, margin, rounding, categories: [{category, margin}] } */
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as { companyId?: string; action?: string; id?: string; name?: string; margin?: number; rounding?: number; categories?: Array<{ category?: string; margin?: number }> } | null;
-  const g = await gate(request, body?.companyId); if ("error" in g) return g.error;
+  const g = await marginTemplateGate(request, body?.companyId, true); if ("error" in g) return g.error;
   const { companyId } = g;
   try {
     if (body?.action === "archive") {

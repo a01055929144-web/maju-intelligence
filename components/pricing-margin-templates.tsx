@@ -86,7 +86,47 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
       <table className="min-w-[480px] text-sm"><thead><tr><th className="border bg-slate-50 p-2 text-left">상품</th><th className="border bg-slate-50 p-2 text-right">기본</th>{templates.map((t) => <th className="border bg-slate-50 p-2 text-right" key={t.id}>{t.name}</th>)}</tr></thead>
         <tbody>{compare.map(({ item, prices }) => <tr key={item.id}><td className="border p-2">{item.name}</td><td className="border p-2 text-right">{item.price.toLocaleString()}원</td>{prices.map((price, i) => <td className="border p-2 text-right" key={templates[i].id}>{price.toLocaleString()}원</td>)}</tr>)}</tbody></table>
     </div> : null}
+    {templates.length ? <CustomerAssign companyId={companyId} templates={templates} /> : null}
   </section>;
+}
+
+// CC-19c: 거래처에 템플릿 지정(없으면 기본). 검색한 거래처 20곳까지.
+function CustomerAssign({ companyId, templates }: { companyId: string; templates: Template[] }) {
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<Array<{ id: string; name: string; templateId: string | null }>>([]);
+  const [message, setMessage] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const search = useCallback(async (text: string) => {
+    const response = await fetch(`/api/margin-templates/customers?${new URLSearchParams({ companyId, q: text })}`, { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) { setMessage(body.message || "거래처를 불러오지 못했습니다."); return; }
+    setRows(body.customers); setMessage("");
+  }, [companyId]);
+  async function assign(customerId: string, templateId: string) {
+    setBusyId(customerId); setMessage("");
+    try {
+      const response = await fetch("/api/margin-templates/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId, templateId: templateId || null }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "지정하지 못했습니다.");
+      setRows((list) => list.map((r) => (r.id === customerId ? { ...r, templateId: templateId || null } : r)));
+      setMessage("지정했습니다.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "지정하지 못했습니다."); }
+    finally { setBusyId(""); }
+  }
+  return <div className="space-y-2 border-t pt-3" aria-label="거래처 템플릿 지정">
+    <p className="text-sm font-bold">거래처에 템플릿 지정</p>
+    <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void search(q); }}>
+      <input aria-label="거래처 검색" className={`${field} min-w-0 flex-1`} onChange={(e) => setQ(e.target.value)} placeholder="거래처 이름" value={q} />
+      <button className="min-h-[44px] rounded-lg border px-4 text-sm font-bold" type="submit">검색</button>
+    </form>
+    {message ? <p role="status" className="text-sm text-teal-900">{message}</p> : null}
+    {rows.map((r) => <div className="flex items-center gap-2" key={r.id}>
+      <span className="min-w-0 flex-1 break-words text-sm">{r.name}</span>
+      <select aria-label={`${r.name} 마진 템플릿`} className={`${field} w-40`} disabled={busyId === r.id} onChange={(e) => void assign(r.id, e.target.value)} value={r.templateId ?? ""}>
+        <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+    </div>)}
+  </div>;
 }
 
 function AddCategory({ known, taken, onAdd }: { known: string[]; taken: string[]; onAdd: (category: string) => void }) {

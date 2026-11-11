@@ -72,6 +72,8 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [basisBusy, setBasisBusy] = useState(false);
   const display = content.display || DEFAULT_DISPLAY;
   const latest = useRef(content);
   latest.current = content;
@@ -84,6 +86,34 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
       .catch(() => { if (active) setProfile({}); });
     return () => { active = false; };
   }, [companyId]);
+
+  // CC-19c: 마진 템플릿이 켜진 회사만 목록이 온다(꺼져 있으면 404 → 선택 칸 숨김).
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/margin-templates?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { templates?: Array<{ id: string; name: string }> } | null) => { if (active) setTemplates(payload?.templates || []); })
+      .catch(() => { if (active) setTemplates([]); });
+    return () => { active = false; };
+  }, [companyId]);
+  // 가격 기준을 바꾸면 행사·임박이 아닌 품목 가격만 그 템플릿(없으면 기본) 값으로 다시 계산한다. 이미 확정한 버전은 그대로.
+  async function setBasis(templateId: string) {
+    const current = latest.current;
+    const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
+    if (!productIds.length) { onContent({ ...current, ...(templateId ? { marginTemplateId: templateId } : { marginTemplateId: undefined }) }); return; }
+    if (!window.confirm("일반 품목의 가격을 선택한 가격 기준으로 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?")) return;
+    setBasisBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, templateId: templateId || null, productIds: productIds.slice(0, 300) }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
+      const prices = body.prices as Record<string, number>;
+      const fresh = latest.current;
+      onContent({ ...fresh, marginTemplateId: templateId || undefined, lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId] })) });
+      setMessage("가격 기준을 적용했습니다. 매입가가 없는 품목은 가격을 그대로 뒀습니다.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
+    finally { setBasisBusy(false); }
+  }
 
   // 회사명이 비어 있으면 회사 정보 이름으로 채웁니다. 문서에 넣은 값은 문서에서 고친 그대로 둡니다.
   useEffect(() => {
@@ -290,6 +320,12 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
           <span className="w-16">형식</span>
           {([["auto", "자동"], ["table", "표"], ["cards", "카드"]] as const).map(([value, label]) => <button aria-pressed={content.layout === value} className={chip(content.layout === value)} disabled={!editable} key={value} onClick={() => onContent({ ...content, layout: value })} type="button">{label}</button>)}
         </div>
+        {templates.length ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-16">가격 기준</span>
+          <select aria-label="가격 기준" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
+            <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label> : null}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <span className="w-16">행사 블록</span>
           {([["cards", "카드"], ["table", "표"]] as const).map(([value, label]) => <button aria-pressed={display.promoLayout === value} className={chip(display.promoLayout === value)} disabled={!editable} key={value} onClick={() => setDisplay({ promoLayout: value })} type="button">{label}</button>)}
