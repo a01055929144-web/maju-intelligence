@@ -110,6 +110,7 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   await expect(page.getByRole("alert").filter({ hasText: failure === "create-response" ? "합성 생성 응답 유실" : "합성 분류 연결 실패" })).toBeVisible();
   expect(groupCreates).toBe(1);
   await page.reload();
+  await page.getByRole("tab", { name: "분류별 마진", exact: true }).click();
   if (failure === "create-response") {
     await expect(save).toBeDisabled();
     await panel.getByRole("button", { name: "생성 결과 다시 조회", exact: true }).click();
