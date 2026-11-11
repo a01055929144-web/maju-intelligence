@@ -68,6 +68,23 @@ export function ProductCatalogAdmin({
   const [dragFolder, setDragFolder] = useState<string | null>(null),
     [dropTarget, setDropTarget] = useState<string | null>(null),
     [moveMessage, setMoveMessage] = useState("");
+  // CC-26: ▲▼로 같은 상위 폴더 안에서 순서를 바꾼다(DB 함수가 형제 순서를 다시 매김). 순서만 바뀌므로 판매가 재계산은 필요 없다.
+  async function reorderFolder(path: string, direction: -1 | 1) {
+    const parent = splitCategory(path).slice(0, -1).join(" > ");
+    const siblings = sideItems.filter((x) => x.name !== "미분류" && x.depth === splitCategory(path).length - 1 && splitCategory(x.name).slice(0, -1).join(" > ") === parent).map((x) => x.name);
+    const index = siblings.indexOf(path), target = index + direction;
+    if (index < 0 || target < 0 || target >= siblings.length) return;
+    // 위로: 위 형제 앞. 아래로: 아래 형제의 다음 형제 앞(없으면 맨 끝).
+    const before = direction === -1 ? siblings[target] : siblings[target + 1] ?? "";
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/price-sheets/reorder-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, path, before }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "순서를 바꾸지 못했습니다.");
+      const order = await fetch(`/api/price-sheets/folder-order${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { folders: [] }));
+      setFolderOrder(toFolderOrder(order.folders ?? []));
+    } catch (e) { setError(e instanceof Error ? e.message : "순서를 바꾸지 못했습니다."); }
+  }
   const canDrop = (from: string | null, target: string) => Boolean(from) && from !== target && !isUnder(target, from as string) && splitCategory(`${target} > x`).length <= 3 && splitCategory(from as string).slice(0, -1).join(" > ") !== target;
   async function moveFolder(from: string, target: string) {
     const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
@@ -201,6 +218,12 @@ export function ProductCatalogAdmin({
                 <button className={`flex min-w-0 flex-1 items-center justify-between py-2 pr-2 text-left ${item.depth === 0 ? "font-bold" : ""}`} onClick={() => setSideFilter(sideFilter === item.name ? "" : item.name)} type="button">
                   <span className="truncate">{label}</span><span className="text-xs text-slate-500">{item.count}</span>
                 </button>
+                {sideTab === "category" && canManageCategories && item.name !== "미분류" ? (
+                  <span className="flex shrink-0 pr-1">
+                    <button aria-label={`${label} 위로`} className="px-1 text-xs text-slate-400 hover:text-teal-700" onClick={() => void reorderFolder(item.name, -1)} type="button">▲</button>
+                    <button aria-label={`${label} 아래로`} className="px-1 text-xs text-slate-400 hover:text-teal-700" onClick={() => void reorderFolder(item.name, 1)} type="button">▼</button>
+                  </span>
+                ) : null}
               </div>
             );
           })}
