@@ -14,6 +14,7 @@ import { PricingMarginGroups } from "./pricing-margin-groups";
 import { Tabs } from "./ui/tabs";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { buildMarginTree, inFolder } from "@/domains/pricing/margin-tree";
+import { toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 export { marginSource } from "./pricing-margin-group-options";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
@@ -39,6 +40,14 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [tab, setTab] = useState("default");
   const [folder, setFolder] = useState<string | null>(null);
+  // CC-26: 폴더 순서(상품관리와 같은 순서). 읽지 못하면 이름순으로 계속 보여 준다.
+  const [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
+  useEffect(() => {
+    void fetch(`/api/price-sheets/folder-order?${new URLSearchParams({ companyId })}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : { folders: [] }))
+      .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
+      .catch(() => setFolderOrder(new Map()));
+  }, [companyId]);
 
   const send = useCallback(async (command?: PricingCommand | PricingBulkCommand) => {
     const query = new URLSearchParams({ companyId, q: search, page: String(page) });
@@ -78,7 +87,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
   if (!state) return <div className="space-y-3">{error ? <p className="text-red-700" role="alert">{error}</p> : <p role="status">불러오는 중…</p>}</div>;
 
   // shortcut: 트리·폴더 필터는 지금 불러온 페이지(50개) 기준, 전체 상품 순회 불러오기는 후속.
-  const tree = buildMarginTree(state.items, state);
+  const tree = buildMarginTree(state.items, state, folderOrder);
   const items = state.items.filter((i) => inFolder(i.category, folder));
   const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
   const zeroMargin = state.defaultMargin === 0;

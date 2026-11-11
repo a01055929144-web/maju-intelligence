@@ -1,3 +1,4 @@
+import { compareCategoryPath, type FolderOrder } from "./category-tree";
 import type { PriceItem, PriceState } from "./price-rules";
 
 // CC-18: 분류(폴더) 트리와 폴더별 마진 표시. 순수 함수 — 화면은 이 결과만 그린다.
@@ -42,14 +43,14 @@ export function rawPathsInFolder(items: readonly PriceItem[], links: readonly { 
   }).sort((a, b) => a.localeCompare(b, "ko"));
 }
 
-export function buildMarginTree(items: readonly PriceItem[], state: PriceState): MarginTreeNode[] {
+export function buildMarginTree(items: readonly PriceItem[], state: PriceState, folderOrder?: FolderOrder): MarginTreeNode[] {
   const paths = new Set<string>();
   for (const item of items) {
     if (!item.active) continue;
     const parts = categoryParts(item.category);
     for (let depth = 1; depth <= parts.length; depth += 1) paths.add(joinParts(parts.slice(0, depth)));
   }
-  return Array.from(paths).sort((a, b) => a.localeCompare(b, "ko")).map((path) => {
+  return Array.from(paths).sort((a, b) => compareCategoryPath(a, b, folderOrder)).map((path) => {
     const parts = categoryParts(path);
     const members = items.filter((item) => item.active && inFolder(item.category, path));
     const found = members.map((item) => effectiveMargin(item, state));
