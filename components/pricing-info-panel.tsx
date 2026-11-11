@@ -283,6 +283,9 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
         <div className="flex items-center gap-2 text-xs text-slate-600">표시 단가
           {([false, true] as const).map((included) => <button aria-pressed={display.priceIncludesTax === included} className={chip(display.priceIncludesTax === included)} disabled={!editable} key={String(included)} onClick={() => setDisplay({ priceIncludesTax: included })} type="button">부가세 {included ? "포함" : "별도"}</button>)}
         </div>
+        <div className="flex items-center gap-2 text-xs text-slate-600">과세·면세 표시
+          {([false, true] as const).map((shown) => <button aria-pressed={display.showTaxType === shown} className={chip(display.showTaxType === shown)} disabled={!editable} key={String(shown)} onClick={() => setDisplay({ showTaxType: shown })} type="button">{shown ? "표시" : "숨김"}</button>)}
+        </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <span className="w-16">형식</span>
           {([["auto", "자동"], ["table", "표"], ["cards", "카드"]] as const).map(([value, label]) => <button aria-pressed={content.layout === value} className={chip(content.layout === value)} disabled={!editable} key={value} onClick={() => onContent({ ...content, layout: value })} type="button">{label}</button>)}

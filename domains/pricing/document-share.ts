@@ -32,7 +32,7 @@ export function publicDocumentOutput(version: DocumentVersion, day?: string) {
     title: d.title, companyName: d.companyName, contact: "", recipient: "", footer: "",
     validUntil: d.validUntil, version: d.version, publishedAt: d.publishedAt, expired: d.expired,
     theme: d.theme, kind: d.kind, layout: d.layout,
-    display: { columns: d.display.columns, promoLayout: d.display.promoLayout, info: [], productWidth: d.display.productWidth, priceIncludesTax: d.display.priceIncludesTax },
+    display: { columns: d.display.columns, promoLayout: d.display.promoLayout, info: [], productWidth: d.display.productWidth, priceIncludesTax: d.display.priceIncludesTax, showTaxType: d.display.showTaxType },
     lines: d.lines.map(l => ({ displayName: l.displayName, brand: l.brand, spec: l.spec, unit: l.unit,
       price: l.price, taxType: l.taxType, badge: l.badge, endsOn: l.endsOn, remaining: l.remaining })),
   };

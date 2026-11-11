@@ -88,7 +88,7 @@ function EditablePricingDocPaper({
               {promos.map(({ index, line }) => (
                 <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`}>
                   <td className="py-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
-                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원</td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -101,6 +101,7 @@ function EditablePricingDocPaper({
                   <p className="text-sm font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
                   <p className="text-xs text-slate-600">{line.spec} {line.unit}{line.endsOn ? ` · ${line.endsOn}까지` : ""}</p>
                   <p className="font-black text-orange-700">{visiblePrice(line).toLocaleString()}원</p>
+                  {display.showTaxType ? <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   {editable ? <button aria-label={`${line.displayName} 빼기`} className="absolute right-1.5 top-1.5 text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
                 </div>
               ))}
@@ -137,6 +138,7 @@ function EditablePricingDocPaper({
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
                       <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value }); }} value={visiblePrice(line).toLocaleString()} />
+                      {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
                   ) : null}
                 </tr>
