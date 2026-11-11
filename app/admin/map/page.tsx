@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminDistrictTable } from "@/components/admin-readonly-tables";
 import { BarChart3, Building2, MapPinned, ShieldCheck, Store } from "lucide-react";
 import { AdminPageHeader } from "../admin-page-header";
 import { AdminAreaKakaoMap } from "@/components/admin-area-kakao-map";
@@ -124,7 +125,7 @@ export default async function AdminMapPage({ searchParams }: { searchParams: Pro
         <Card className="border-slate-200 shadow-sm">
           <CardHeader><CardTitle className="text-base">{district} 회사별 집계</CardTitle></CardHeader>
           <CardContent className="overflow-x-auto p-0">
-            <table className="min-w-[720px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">고객사</th><th className="px-4 py-3">영업권</th><th className="px-4 py-3">영업 지역</th><th className="px-4 py-3 text-right">거래처</th><th className="px-4 py-3 text-right">최근 리드</th><th className="px-4 py-3 text-right">전체 리드</th></tr></thead><tbody>{overview.companies.map((company) => { const area = company.areas.find((item) => item.administrativeArea === district); return <tr className="border-t border-slate-100" key={company.companyId}><td className="px-4 py-3 font-bold text-slate-900">{company.companyName}</td><td className="px-4 py-3">{area?.territoryCovered ? "포함" : "-"}</td><td className="px-4 py-3">{area?.salesCovered ? "포함" : "-"}</td><td className="px-4 py-3 text-right">{area?.customerCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.recentLeadCount.toLocaleString() || 0}</td><td className="px-4 py-3 text-right">{area?.totalLeadCount.toLocaleString() || 0}</td></tr>; })}</tbody></table>
+            <AdminDistrictTable district={district} rows={overview.companies.map((company) => { const area = company.areas.find((item) => item.administrativeArea === district); return { id: company.companyId, name: company.companyName, territory: Boolean(area?.territoryCovered), sales: Boolean(area?.salesCovered), customers: area?.customerCount || 0, recentLeads: area?.recentLeadCount || 0, totalLeads: area?.totalLeadCount || 0 }; })} />
           </CardContent>
         </Card>
       </section>
