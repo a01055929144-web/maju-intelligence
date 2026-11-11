@@ -39,10 +39,41 @@
 - **Files**: `components/price-sheets-workspace.tsx`(탭 구조로 분해), `components/pricing-margin-groups.tsx`(분류에서 시작하는 흐름으로), 신규 `components/category-tree-sidebar.tsx`(상품관리 aside에서 추출 — 상품관리도 이걸 쓰게), 신규 `domains/pricing/margin-tree.ts`(폴더별 마진 출처 계산 순수 함수 + 테스트). API 변경 없음(필요 시 `GET /api/price-sheets?category=` 필터만).
 - **Done**: 4탭 PC 1440·1920·390 e2e, 상위 폴더 + 하위 적용 시 하위 경로 모두 연결 테스트, 상품관리 왼쪽 트리 회귀 없음, CI, Ponytail.
 
-## CC-19 마진 템플릿 (요청 ④ 2단계 — 설계·결정 필요)
+## CC-19 마진 템플릿 — (가)·(나) 모두 진행 (11/11 11:50 대표 결정)
 
-- 요청 ④를 "거래처 등급별로 다른 마진 묶음(예: 기본 15% · 도매 10% · VIP 8%)을 템플릿으로 저장해 단가표·견적서에서 고르기"로 해석하면 **DB 변경이 필요**하다(`margin_templates` + 템플릿별 기본/분류/상품 마진, 문서·거래처에 템플릿 연결).
-- 지금 단계는 **CC-18의 "전체 판매가 보기" 탭이 기본 템플릿 역할**을 한다. 여러 템플릿이 필요하면 대표 확인 후 SQL 초안부터.
+**(가) 기본 판매가표** = CC-18 "전체 판매가 보기" 탭. 지금 회사 마진 규칙이 곧 **"기본" 템플릿**이다(데이터 이전 없음).
+
+**(나) 거래처 등급별 마진 템플릿** (예: 기본 15% · 도매 10% · VIP 8%) — DB 추가 필요.
+
+### 규칙
+- 템플릿 = 기본 마진·끝자리 올림 + 분류별 마진 + 상품별 마진/직접 단가 묶음. **"기본" 템플릿은 지금 테이블 그대로**(`pricing_settings`·`margin_groups`·`margin_group_categories`·`pricing_items`). 추가 템플릿만 새 테이블.
+- 가격 계산 우선순위(추가 템플릿): 상품 직접 단가 > 템플릿 상품 마진 > 템플릿 분류 마진(가장 깊은 경로) > 템플릿 기본 마진. 템플릿에 없는 값은 **그 템플릿의 기본 마진**으로(회사 기본으로 새지 않음 — 등급이 섞이지 않게).
+- 매입가는 같은 원장(`pricing_items` cost) 사용. 템플릿 판매가는 저장하지 않고 계산(순수 함수 `domains/pricing/margin-template.ts`) — 문서 작성·확정 때 그 값으로 스냅샷(발행 버전은 지금처럼 고정).
+- 연결: **거래처**에 템플릿 지정(없으면 기본) → 그 거래처 앞 견적서를 만들면 자동 선택. **문서**는 오른쪽 설정 "가격 기준 [템플릿 ▾]"으로 바꿀 수 있음(전체 단가표는 기본값 기본). 매장 주문 가격은 발행 버전 스냅샷 그대로라 영향 없음.
+
+### 데이터 (SQL 초안 — 대표 승인 후 적용)
+| 테이블 | 열 |
+| --- | --- |
+| `margin_templates` | company_id, id, name, margin_bp, rounding, sort_order, archived_at, created_by, timestamps · (company_id, name) 고유 |
+| `margin_template_categories` | company_id, template_id, category(경로), margin_bp · (template_id, category) 고유 |
+| `margin_template_items` | company_id, template_id, product_id, margin_bp NULL, direct_price NULL · (template_id, product_id) 고유 |
+| `normalized_customers.margin_template_id` | NULL = 기본 · (company_id, margin_template_id) 회사 경계 FK |
+| 문서 초안 content | `marginTemplateId`(JSON, 스키마 변경 없음) |
+- RLS·service_role 전용, `(company_id, id)` 경계, 템플릿 보관(archive) 시 연결 거래처는 기본으로 안내(삭제 금지 아님 — 보관만).
+- CC-17 폴더 이동 RPC가 `margin_template_categories.category`도 같이 바꾸도록(CC-17과 CC-19 SQL 중 나중 것이 앞 것을 포함).
+
+### 화면
+- **마진 설정 상단에 템플릿 선택** `[기본 ▾] [도매] [VIP] [+ 새 템플릿]` — CC-18의 탭 4개(기본·분류별·상품 예외·전체 판매가)가 고른 템플릿을 편집. 새 템플릿은 "기본 복사해서 시작" / "빈 템플릿".
+- **전체 판매가 보기**에 "템플릿 비교" 열 켜기(열 편집): 기본·도매·VIP 판매가를 나란히.
+- 거래처 상세·거래처 목록: "마진 템플릿" 칸(공용 표 열). 문서 편집 오른쪽 설정: "가격 기준".
+- 권한: owner·manager만 템플릿 편집, 영업은 문서에서 고르기만.
+
+### 단계
+| ID | 내용 | 승인 |
+| --- | --- | --- |
+| CC-19a | SQL 초안 + down + PG17 + 승인표, 순수 계산 함수 + 단위 테스트 | 운영 DB 대표 승인 |
+| CC-19b | 마진 설정 템플릿 선택·새 템플릿·비교 열 (CC-18 위에) | 기능 스위치 `MARGIN_TEMPLATES_ENABLED` 대표 회사부터 |
+| CC-19c | 거래처 템플릿 지정 + 문서 "가격 기준" + 견적서 자동 선택 | — |
 
 ## CC-20 행사·템플릿 메뉴 개편 (11/11 11:49 대표 — 분류별 공통 코드로 사용성 높게)
 
@@ -64,4 +95,4 @@
 
 ## 순서
 
-CC-18(DB 변경 없음, 공용 분류 트리 생성) → **CC-20**(행사·템플릿, CC-18 트리 재사용) → CC-17(폴더 이동 SQL 초안 → 대표 승인 → 화면) → CC-19(대표 결정 후).
+CC-18(DB 변경 없음, 공용 분류 트리 + 전체 판매가 보기 = (가)) → CC-19a(템플릿 SQL 초안 — CC-17 폴더 이동 SQL과 함께 승인표) → CC-20(행사·템플릿) → [대표 SQL 승인] → CC-17 화면 · CC-19b → CC-19c.
