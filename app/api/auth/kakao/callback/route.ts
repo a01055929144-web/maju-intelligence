@@ -7,6 +7,7 @@ import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-stat
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
 import { hasAllowedStorePortalMembership } from "@/lib/store/07-store-portal";
+import { storeDirectSignupEnabled } from "@/lib/store/11-store-direct-signup";
 import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
   resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
 import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
@@ -125,9 +126,21 @@ export async function GET(request: NextRequest) {
       return redirectStoreScope(request.url, invitation.companyId, invitation.storeAccountId);
     }
 
+
     if (storePortalMode) {
-      const authUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
-      if (!authUserId || !(await hasAllowedStorePortalMembership(authUserId)) || !(await setStoreSession(authUserId)))
+      const existingAuthUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
+      const isMember = existingAuthUserId ? await hasAllowedStorePortalMembership(existingAuthUserId) : false;
+      // 직접 가입(STORE_DIRECT_SIGNUP_ENABLED, 기본 OFF): 아직 구성원이 아닌 카카오 사용자도 로그인시켜 /store에서 매장 정보를 입력하게 한다.
+      // 세션만으로는 어떤 유통사 자료도 열리지 않는다(모든 조회가 구성원 확인을 따로 한다).
+      const authUserId = isMember ? existingAuthUserId : storeDirectSignupEnabled()
+        ? existingAuthUserId ?? await resolveOrCreateStoreKakaoUser({
+          avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+          email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+          name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+          phoneNumber: kakaoUser.kakao_account?.phone_number
+        })
+        : null;
+      if (!authUserId || !(await setStoreSession(authUserId)))
         return redirectStore(request.url, "store_membership_required");
       return NextResponse.redirect(new URL("/store", request.url));
     }
