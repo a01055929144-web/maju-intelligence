@@ -121,7 +121,7 @@ function Check({ checked, disabled, label, note, onChange, wide }: { checked: bo
     <label className={`flex min-h-9 items-center gap-2 rounded-md px-2 py-1 ${wide ? "sm:col-span-2" : ""} ${disabled ? "opacity-60" : "cursor-pointer hover:bg-teal-50"}`}>
       <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
       <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{label}</span>
-      {note ? <span className="shrink-0 text-[10px] font-semibold text-slate-500">{note}</span> : null}
+      {note ? <span className="shrink-0 text-xs font-semibold text-slate-500">{note}</span> : null}
     </label>
   );
 }
