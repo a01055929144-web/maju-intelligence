@@ -136,6 +136,8 @@ type AdminDashboardPayload = {
   scoringWeights: Array<{ label: string; value: number; note: string }>;
   leadQueue: Array<{ id: string; name: string; region: string; score: number; status: string; statusValue: string; companyId: string }>;
   uploadHistory: UploadHistoryItem[];
+  /** CC-22b: 본사(internal)는 항상 제외, 파일럿은 토글 */
+  scope?: { internalExcluded: boolean; pilotExcluded: boolean };
 };
 export type ExcelMappingPreset = {
   id?: string;
@@ -14783,8 +14785,14 @@ export async function deleteCompanyPermanently(
   return { deleted: true };
 }
 
-export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
+export async function getAdminDashboardPayload(options: { excludePilot?: boolean } = {}): Promise<AdminDashboardPayload> {
   if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
+
+  // CC-22b: 본사(internal)는 항상 제외, 파일럿은 "파일럿 제외하고 보기"를 켰을 때만 제외한다.
+  const kindRows = await supabaseRequest<Array<{ id: string; company_kind: string }>>("companies?select=id,company_kind&company_kind=in.(internal,pilot)").catch(() => []);
+  const excludedIds = kindRows.filter((row) => row.company_kind === "internal" || (options.excludePilot && row.company_kind === "pilot")).map((row) => row.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  const scope = excludedIds.length ? `&company_id=not.in.(${excludedIds.join(",")})` : "";
+  const idScope = excludedIds.length ? `&id=not.in.(${excludedIds.join(",")})` : "";
 
   const weekStart = new Date(Date.now() - 7 * 86400000).toISOString();
   const kstNow = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).formatToParts(new Date());
@@ -14797,7 +14805,7 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
     companies, imports, reports, leads, uploadHistory, recentMembers, activeCompanyActions, contactCount,
     quoteCount, conversionCount, statusQuoteContractCount, syncErrorCount, staleSyncCount
   ] = await Promise.all([
-    supabaseRequest<Array<{ id: string; status?: string }>>("companies?select=id,status"),
+    supabaseRequest<Array<{ id: string; status?: string }>>(`companies?select=id,status${idScope}`),
     supabaseRequest<
       Array<{
         id: string;
@@ -14809,23 +14817,23 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
         companies: { name: string };
       }>
     >(
-      "customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name)&order=created_at.desc&limit=20"
+      `customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name)${scope}&order=created_at.desc&limit=20`
     ),
     supabaseRequest<Array<{ health_score: number }>>("ai_reports?select=health_score&order=created_at.desc&limit=50"),
     supabaseRequest<Array<{ id: string; name: string; region: string; score: number; status: string; company_id: string }>>(
-      "lead_recommendations?select=id,name,region,score,status,company_id&order=score.desc&limit=20"
+      `lead_recommendations?select=id,name,region,score,status,company_id${scope}&order=score.desc&limit=20`
     ),
     getUploadHistory(),
     supabaseRequest<Array<{ company_id: string; user_id: string; app_users: { last_login_at: string | null } | null }>>(
-      `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}`
+      `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}${scope}`
     ).catch(() => []),
-    supabaseRequest<Array<{ company_id: string }>>(`lead_actions?select=company_id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}&limit=10000`).catch(() => []),
-    supabaseExactCount(`lead_actions?select=id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.quote&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.convert&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.status&result=in.(%EA%B2%AC%EC%A0%81%20%EC%A0%84%EB%8B%AC,%EA%B3%84%EC%95%BD)&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount("lead_sync_runs?select=id&status=eq.error").catch(() => 0),
-    supabaseExactCount(`lead_sync_runs?select=id&status=eq.running&started_at=lt.${encodeURIComponent(syncRunningCutoff)}`).catch(() => 0)
+    supabaseRequest<Array<{ company_id: string }>>(`lead_actions?select=company_id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}${scope}&limit=10000`).catch(() => []),
+    supabaseExactCount(`lead_actions?select=id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.quote&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.convert&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.status&result=in.(%EA%B2%AC%EC%A0%81%20%EC%A0%84%EB%8B%AC,%EA%B3%84%EC%95%BD)&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_sync_runs?select=id&status=eq.error${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_sync_runs?select=id&status=eq.running&started_at=lt.${encodeURIComponent(syncRunningCutoff)}${scope}`).catch(() => 0)
   ]);
 
   const avgHealthScore = reports.length
@@ -14883,7 +14891,8 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       statusValue: lead.status,
       companyId: lead.company_id
     })),
-    uploadHistory
+    uploadHistory: uploadHistory.filter((item) => !excludedIds.includes(item.companyId)),
+    scope: { internalExcluded: true, pilotExcluded: Boolean(options.excludePilot) }
   };
 }
 
@@ -15922,7 +15931,7 @@ export async function listSubscriptionPayments(companyId: string, limit = 100): 
 
 /** 관리자용 — 전체 고객사의 구독 상태를 한 번에 조회합니다(고객사명 포함). */
 export async function listSubscriptionsForAdmin(): Promise<
-  Array<Omit<Subscription, "status"> & { companyName: string; status: SubscriptionStatus | "none" }>
+  Array<Omit<Subscription, "status"> & { companyName: string; companyKind: CompanyKind; status: SubscriptionStatus | "none" }>
 > {
   if (!isProductionStoreConfigured()) return [];
   const [subscriptionRows, companies] = await Promise.all([
@@ -15930,17 +15939,19 @@ export async function listSubscriptionsForAdmin(): Promise<
       if (isMissingSubscriptionsTableError(error)) return [];
       throw error;
     }),
-    supabaseRequest<Array<{ id: string; name: string }>>("companies?select=id,name&order=created_at.desc").catch(() => [])
+    supabaseRequest<Array<{ id: string; name: string; company_kind?: string | null }>>("companies?select=id,name,company_kind&order=created_at.desc").catch(() => [])
   ]);
   const subscriptionByCompany = new Map(subscriptionRows.map((row) => [row.company_id, row]));
 
   return companies.map((company) => {
     const row = subscriptionByCompany.get(company.id);
-    if (row) return { ...mapSubscriptionRow(row), companyName: company.name };
+    const companyKind = normalizeCompanyKind(company.company_kind);
+    if (row) return { ...mapSubscriptionRow(row), companyName: company.name, companyKind };
     return {
       id: `none-${company.id}`,
       companyId: company.id,
       companyName: company.name,
+      companyKind,
       tossCustomerKey: "",
       billingKey: null,
       cardIssuerCode: null,
