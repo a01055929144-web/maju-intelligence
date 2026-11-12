@@ -13,3 +13,13 @@ describe("map distributor toggle (CC-21)", () => {
     expect(map.indexOf('aria-label="영업 대상"')).toBeLessThan(map.indexOf('mapFilterPop === "stage"'));
   });
 });
+
+import { matchesMapLeadType } from "../lib/map-layer-selection";
+
+describe("map distributor lead type filter (CC-21)", () => {
+  it("default 'new' filter hides them for stores but not for distributors", () => {
+    expect(matchesMapLeadType("sales", "new", false)).toBe(false);
+    expect(matchesMapLeadType("sales", "new", true)).toBe(true);
+    expect(matchesMapLeadType("sales", "sales", true)).toBe(true);
+  });
+});

@@ -85,7 +85,7 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
-import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
+import { matchesMapLeadType, nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
 import type { MapFilterPresetFilters } from "@/lib/map-filter-presets";
 import type {
@@ -1543,9 +1543,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [mapFilterPop]);
   const filteredAllLeadsForMap = useMemo(() => {
-    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if ((mapLeadTypeFilter === "all" || mapTargetType === "distributor") && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
-      if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
+      if (!matchesMapLeadType(getPermitLeadType(lead), mapLeadTypeFilter, mapTargetType === "distributor")) return false;
       if (mapLeadIndustryFilter && !splitMultiFilter(mapLeadIndustryFilter).includes(lead.industryPrimary || "미분류")) return false;
       if (mapLeadStageFilter && !splitMultiFilter(mapLeadStageFilter).includes(toLeadStageValue(lead.status))) return false;
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange && !isStoreAreaInRange(lead.storeAreaSqm, mapLeadAreaRange)) return false;
@@ -1560,7 +1560,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -1572,9 +1572,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         address: lead.address!,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
-        label: getPermitLeadType(lead) === "new" ? "신규" : "영업",
+        label: mapTargetType === "distributor" ? "유통사" : getPermitLeadType(lead) === "new" ? "신규" : "영업",
         leadType: getPermitLeadType(lead),
-        markerColor: getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
+        // 유통사는 색을 정하지 않아 등급별 색을 씁니다.
+        markerColor: mapTargetType === "distributor" ? undefined : getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
         // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
         // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
@@ -1591,9 +1592,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 화면 맞추기에 포함되면 지도가 극단적으로 축소돼 사실상 빈 화면처럼 보이므로 제외합니다
         // (kakao-address-map.tsx의 KakaoMapMarker.excludeFromAutoBounds 참고). 반경이 제한된
         // "반경 리드"(leadRadiusMapMarkers)에는 이 플래그를 붙이지 않아 그쪽 동작은 그대로입니다.
-        excludeFromAutoBounds: true
+        // 유통사는 수가 적어 마커 범위로 지도를 맞춥니다.
+        excludeFromAutoBounds: mapTargetType !== "distributor"
       }));
-  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
+  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers, mapTargetType]);
   // 우측 목록은 원본 조회 결과가 아니라 실제 생성된 지도 마커 ID를 기준으로 만듭니다. 반경과 전체
   // 보기를 함께 켠 경우 두 집합을 합치고, 주소가 없어 마커를 만들 수 없는 리드는 목록에서도 제외합니다.
   const detailLead = useMemo(
@@ -3280,7 +3282,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 지역 밖도 보기
               </label>
             ) : null}
-            <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+            {mapTargetType === "distributor" ? null : <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
                 <button
                   className={`h-8 px-2.5 text-xs font-semibold transition ${mapLeadTypeFilter === option.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
@@ -3295,7 +3297,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   {option.label}
                 </button>
               ))}
-            </div>
+            </div>}
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               <button
                 className={`h-8 px-2.5 text-xs font-semibold transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
