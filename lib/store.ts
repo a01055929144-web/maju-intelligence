@@ -9626,6 +9626,13 @@ function singleSalesAreaPostgrestFilter(area: string) {
   return `${column}=eq.${encodeURIComponent(area)}`;
 }
 
+/** CC-31: {신규수} — 그 시·군·구(예: "서울특별시 강남구")에서 최근 30일 새로 열었거나 인허가가 난 음식점 리드 수(합쳐지거나 중복인 것 제외). 지역이 없으면 0. */
+export async function countRecentNewRestaurantLeads(companyId: string, area: string): Promise<number> {
+  if (!area) return 0;
+  const recentFrom = kstDateDaysAgo(29);
+  return supabasePermitLeadCount([`company_id=eq.${encodeURIComponent(companyId)}`, "merged_into_lead_id=is.null", "is_active=eq.true", "is_duplicate=eq.false", "target_type=eq.restaurant", `or=(open_date.gte.${recentFrom},permit_date.gte.${recentFrom})`, singleSalesAreaPostgrestFilter(area)]);
+}
+
 async function getDailyLeadTargetSnapshot(companyId: string): Promise<DailyLeadTargetSnapshot> {
   const areas = await getCompanySalesAdministrativeAreas(companyId);
   const asOfKst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
@@ -14606,24 +14613,28 @@ export async function getCompanyMessageTemplates(companyId: string): Promise<Del
 }
 
 /** 리드 DM 기본 문구·제외 품목. 배송 문구와 같은 표를 쓰지만 template_key가 lead_dm* 인 행만 다룹니다. */
-export async function getLeadDmSettings(companyId: string): Promise<{ excluded: string; template: string }> {
-  if (!isProductionStoreConfigured()) return { excluded: "", template: "" };
+export async function getLeadDmSettings(companyId: string): Promise<{ excluded: string; template: string; distributorTemplate: string }> {
+  if (!isProductionStoreConfigured()) return { excluded: "", template: "", distributorTemplate: "" };
   const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
     `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&template_key=like.lead_dm*&is_active=eq.true`
   );
   return {
     excluded: rows.find((row) => row.template_key === "lead_dm_exclude")?.body || "",
-    template: rows.find((row) => row.template_key === "lead_dm")?.body || ""
+    template: rows.find((row) => row.template_key === "lead_dm")?.body || "",
+    // CC-31: 유통사 리드용 회사 문구. 키가 lead_dm으로 시작해 이 조회와 replaceCompanyMessageTemplates의 not.like.lead_dm* 보호를 그대로 탄다.
+    distributorTemplate: rows.find((row) => row.template_key === "lead_dm_distributor")?.body || ""
   };
 }
 
-export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string }) {
+/** distributorTemplate가 undefined면 저장된 유통사 문구는 그대로 둔다(매장용만 고치는 기존 호출 보호). */
+export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string; distributorTemplate?: string }) {
   if (!isProductionStoreConfigured()) return { persisted: false };
   // 11/4: 영업 자료(lead_dm_kit·lead_dm_link_*)는 지우지 않도록 두 키만 지웁니다.
-  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=in.(lead_dm,lead_dm_exclude)`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=in.(lead_dm,lead_dm_exclude${input.distributorTemplate === undefined ? "" : ",lead_dm_distributor"})`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   const rows = [
     { company_id: companyId, template_key: "lead_dm", label: "리드 DM 기본 문구", body: input.template.trim(), sort_order: 9000, is_active: true },
-    ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : [])
+    ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : []),
+    ...(input.distributorTemplate?.trim() ? [{ company_id: companyId, template_key: "lead_dm_distributor", label: "리드 DM 유통사용 문구", body: input.distributorTemplate.trim(), sort_order: 9020, is_active: true }] : [])
   ];
   await supabaseRequest("company_message_templates", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(rows) });
   return { persisted: true };
