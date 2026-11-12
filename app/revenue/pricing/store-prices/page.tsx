@@ -4,6 +4,7 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { PricingStorePrices } from "@/components/pricing-store-prices";
+import { PricingTabs } from "@/components/pricing-tabs";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,6 @@ export default async function StorePricesPage({ searchParams }: { searchParams?:
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && (!canManagePriceSheets(customer) || !customerHasCapability(customer, "manage_sales")))) notFound();
   const preview = Boolean(admin && !customer);
   return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="매장 가격" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="mx-auto max-w-[1600px] p-4"><PricingStorePrices companyId={companyId} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
+    <main className="mx-auto max-w-[1600px] space-y-4 p-4"><PricingTabs active="store-prices" previewCompanyId={preview ? companyId : undefined} showStorePrices /><PricingStorePrices companyId={companyId} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
   </CustomerAppShell>;
 }
