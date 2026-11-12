@@ -24,3 +24,10 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 
 ## 격리 검증 (CI PG17, `tests/sql/promotion-audience-cc29a.pg17.test.sql`)
 기본값 all·전 매장 참 · 권한(앱 역할 불가) · only+매장 · only+등급 · only 대상 없음=아무도 아님 · except+등급(등급 없는 매장은 해당) · except 대상 없음=모두 · except+매장 · 없는 행사/다른 회사 행사·매장 거짓 · 제약(둘 다/둘 다 없음/중복/다른 회사 매장·등급/잘못된 audience 거부) · 행사 삭제 시 대상 삭제 · down 거부 후 down·재 up.
+
+## 적용 기록 (2026-11-12)
+- 승인: 대표 승인 문구 `fcmdvveqmcgtioelzqun CC-29a 행사 노출 대상 SQL승인(공백 한 칸 차이, 의도 동일로 판단)` 수신(11/12 새벽).
+- 적용: 운영 `fcmdvveqmcgtioelzqun`에 초안 SQL 1회 적용(Supabase `apply_migration` `cc29a_promotion_audience`, 성공). 선행 검사 통과(이미 적용 아님).
+- 사전 읽기: `pricing_promotion_targets` 없음, `pricing_promotions.audience` 없음.
+- 사후 읽기: `pricing_promotion_targets` 존재·RLS 켜짐, `audience` 열 1개, `audience<>'all'` 행 0개(기존 행사 전부 all), `promotion_applies_to(uuid,uuid,uuid)` 존재, anon·authenticated·PUBLIC 권한 없음. 주문 함수는 건드리지 않음(CC-29b 별도).
+- 데이터 변경: 없음. 화면·배포는 별도 단계.
