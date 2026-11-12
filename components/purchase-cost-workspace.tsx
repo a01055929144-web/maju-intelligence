@@ -18,6 +18,7 @@ import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import type { DocumentDraft } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
+import { matchesExcludedCode, type ExcludedCode } from "../domains/pricing/purchase-excluded-codes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
@@ -57,6 +58,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [historyOnlyDefaultEnabled, setHistoryOnlyDefaultEnabled] = useState(false);
   const [updateCurrentPrices, setUpdateCurrentPrices] = useState(false);
   const [excludedImportRows, setExcludedImportRows] = useState(0);
+  // CC-24b: 이번 업로드에서 직접 제외한 줄 · "다음에도 제외"로 저장할 줄 · 이미 저장된 제외 코드(회사별, 서버)
+  const [skipRows, setSkipRows] = useState<Set<number>>(new Set());
+  const [rememberRows, setRememberRows] = useState<Set<number>>(new Set());
+  const [rememberScope, setRememberScope] = useState<"supplier" | "company">("supplier");
+  const [savedExcluded, setSavedExcluded] = useState<ExcludedCode[]>([]);
   const [saveReview, setSaveReview] = useState(false);
   const [confirmedReview, setConfirmedReview] = useState("");
   const [purchaseDateEnabled, setPurchaseDateEnabled] = useState(false);
@@ -235,7 +241,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const dateIssues = parsed.dateIssues;
       if (dateIssues.length) throw new Error(`구매일을 읽지 못한 원본 ${dateIssues.join(", ")}행을 수정해 주세요. 날짜 오류 행을 생략하고 저장하지 않습니다.`);
       const hasDates = mapping.purchaseDate !== undefined;
-      const lines: PurchaseImportLine[] = parsed.lines.map((line: PurchaseImportLine) => {
+      const savedOut = (line: PurchaseImportLine) => matchesExcludedCode(line, savedExcluded);
+      const kept = parsed.lines.filter(line => !skipRows.has(line.rowNumber) && !savedOut(line));
+      const all = parsed.lines.map(line => ({ ...line, purchaseDate: hasDates ? line.purchaseDate : receiptDate }));
+      const savedSkipped = parsed.lines.filter(savedOut).length;
+      // 모두 제외했으면 적용은 막고(error) 표(all)는 남겨 체크를 다시 풀 수 있게 한다.
+      if (!kept.length) return { lines: [], merged: [], conflicts: [], skipped: [], hasDates, all, savedSkipped, error: "모든 줄이 제외되었습니다. 제외를 풀거나 다른 파일을 올려 주세요." };
+      const lines: PurchaseImportLine[] = kept.map((line: PurchaseImportLine) => {
         const date = hasDates ? line.purchaseDate : receiptDate;
         if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
           throw new Error(`${line.rowNumber}행의 적용일을 확인해 주세요. 구매일 열이 있으면 빈 날짜를 업로드 적용일로 대신하지 않습니다.`);
@@ -261,11 +273,11 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       }
       return { lines, merged: merged.filter(line => !covered.has(line.rowNumber)),
         conflicts: [...merged.conflicts.filter(group => !group.candidates.some(line => covered.has(line.rowNumber))), ...supplierConflicts],
-        skipped: parsed.skipped, hasDates, error: "" };
+        skipped: parsed.skipped, hasDates, all, savedSkipped, error: "" };
     } catch (cause) {
-      return { lines: [], merged: [], conflicts: [], skipped: [], hasDates: false, error: cause instanceof Error ? cause.message : "파일과 열 연결을 확인해 주세요." };
+      return { lines: [], merged: [], conflicts: [], skipped: [], hasDates: false, all: [] as PurchaseImportLine[], savedSkipped: 0, error: cause instanceof Error ? cause.message : "파일과 열 연결을 확인해 주세요." };
     }
-  }, [sheet, mapping, vatMode, receiptDate, products, unique]);
+  }, [sheet, mapping, vatMode, receiptDate, products, unique, skipRows, savedExcluded]);
   const unresolvedConflicts = importPreview?.conflicts.filter(group => !conflictChoices[group.key]).length || 0;
   const reviewDates = Array.from(importedLines.reduce((dates, line) => {
     const date = line.purchaseDate || receiptDate;
@@ -360,6 +372,24 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "엑셀을 읽지 못했습니다."); }
   }
 
+  const toggleRow = (set: Set<number>, row: number, on: boolean) => { const next = new Set(set); if (on) next.add(row); else next.delete(row); return next; };
+  const loadExcluded = useCallback(() => fetch(`/api/price-sheets/excluded-codes?companyId=${encodeURIComponent(companyId)}`).then(response => response.ok ? response.json() : { items: [] }).then(body => setSavedExcluded(body.items || [])).catch(() => setSavedExcluded([])), [companyId]);
+  useEffect(() => { void loadExcluded(); }, [loadExcluded]);
+  useEffect(() => { setSkipRows(new Set()); setRememberRows(new Set()); }, [sheet]);
+  async function removeExcluded(id: string) {
+    const response = await fetch(`/api/price-sheets/excluded-codes?companyId=${encodeURIComponent(companyId)}&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (response.ok) await loadExcluded(); else setError("제외 코드를 지우지 못했습니다.");
+  }
+  // "다음에도 제외"로 고른 줄의 코드를 서버(회사별)에 저장한다. 실패해도 이번 업로드는 계속하되 알려 준다.
+  async function saveRememberedCodes() {
+    if (!importPreview || !rememberRows.size) return;
+    const items = importPreview.all.filter(line => rememberRows.has(line.rowNumber) && skipRows.has(line.rowNumber) && line.code.trim()).map(line => ({ code: line.code.trim(), supplierName: rememberScope === "supplier" ? line.supplier.trim() : "" }));
+    if (!items.length) return;
+    const response = await fetch("/api/price-sheets/excluded-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, items }) });
+    if (response.ok) { setRememberRows(new Set()); await loadExcluded(); }
+    else setError(((await response.json().catch(() => null)) as { message?: string } | null)?.message || "제외 코드를 저장하지 못했습니다.");
+  }
+
   function applyFile() {
     if (!catalogReady) { setError("상품 목록을 불러온 뒤 다시 시도해 주세요."); return; }
     try {
@@ -367,6 +397,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (!importPreview || importPreview.error) throw new Error(importPreview?.error || "파일을 확인해 주세요.");
       if ((!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts) throw new Error("현재 가격을 변경하려면 서로 다른 단가가 있는 그룹마다 적용할 행을 선택해 주세요.");
       const { lines, skipped } = importPreview;
+      void saveRememberedCodes();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
         matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products) || matchCostImportRow(line, products)]));
       const productByLine = new Map<string, string>();
@@ -848,10 +879,25 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {importPreview ? <section aria-label="업로드 적용일과 단가 확인" className="maju-section-card min-w-0 space-y-3 p-4">
       <h3 className="font-semibold">적용 날짜·중복 단가 확인</h3>
       <p className="text-sm">{mapping.purchaseDate !== undefined ? "파일의 구매일을 행별 적용일로 사용합니다. 빈 날짜나 잘못된 날짜는 먼저 수정해 주세요." : `구매일 열이 없어 업로드 적용일 ${receiptDate || "(날짜 선택 필요)"}을 사용합니다.`}</p>
-      {importPreview.error ? <p role="alert">{importPreview.error}</p> : <>
-        <CommonDataTable<PurchaseImportLine> settingsKey="purchase-upload-dates" filename="매입가_적용일.csv" rowKey={line => String(line.rowNumber)} rows={importPreview.lines}
-          columns={[{ key: "rowNumber", label: "원본 행", value: line => line.rowNumber }, { key: "name", label: "품목", value: line => line.name },
+      {importPreview.all.length ? <>
+        <p className="text-sm">{importPreview.savedSkipped ? `저장된 제외 코드 ${importPreview.savedSkipped}줄 건너뜀 · ` : ""}필요 없는 코드는 줄마다 ‘제외’를 체크하세요. ‘다음에도 제외’까지 체크하면 다음 업로드부터 자동으로 빠집니다.</p>
+        <CommonDataTable<PurchaseImportLine> settingsKey="purchase-upload-dates" filename="매입가_적용일.csv" rowKey={line => String(line.rowNumber)} rows={importPreview.all}
+          columns={[{ key: "skip", label: "제외", value: line => skipRows.has(line.rowNumber) ? "제외" : "", render: line => matchesExcludedCode(line, savedExcluded)
+              ? <span className="text-xs font-semibold text-slate-500">저장된 제외 코드</span>
+              : <input aria-label={`${line.rowNumber}행 제외`} checked={skipRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => { setSkipRows(toggleRow(skipRows, line.rowNumber, event.target.checked)); if (!event.target.checked) setRememberRows(toggleRow(rememberRows, line.rowNumber, false)); setConflictChoices({}); setConfirmedReview(""); }} type="checkbox" /> },
+            { key: "remember", label: "다음에도 제외", value: line => rememberRows.has(line.rowNumber) ? "예" : "", render: line => skipRows.has(line.rowNumber) && line.code.trim()
+              ? <input aria-label={`${line.rowNumber}행 이 코드 다음에도 제외`} checked={rememberRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => setRememberRows(toggleRow(rememberRows, line.rowNumber, event.target.checked))} type="checkbox" />
+              : <span className="text-xs text-slate-400">{skipRows.has(line.rowNumber) ? "코드 없음" : "-"}</span> },
+            { key: "code", label: "코드", value: line => line.code || "-" },
+            { key: "rowNumber", label: "원본 행", value: line => line.rowNumber }, { key: "name", label: "품목", value: line => line.name },
             { key: "purchaseDate", label: "적용일", value: line => line.purchaseDate }, { key: "cost", label: "단가(별도)", value: line => line.cost }, { key: "quantity", label: "수량", value: line => line.quantity ?? "-" }]} />
+        {rememberRows.size ? <label className="flex flex-wrap items-center gap-2 text-sm"><span className="font-semibold">다음에도 제외할 범위</span>
+          <select aria-label="다음에도 제외할 범위" className="maju-input min-h-[44px]" onChange={event => setRememberScope(event.target.value as "supplier" | "company")} value={rememberScope}><option value="supplier">이 매입처만</option><option value="company">회사 전체</option></select></label> : null}
+      </> : null}
+      {savedExcluded.length ? <details className="text-sm"><summary className="min-h-[44px] cursor-pointer font-semibold">저장된 제외 코드 {savedExcluded.length}개 보기·지우기</summary>
+        <ul className="mt-2 space-y-1">{savedExcluded.map(entry => <li className="flex items-center gap-2" key={entry.id}><span className="font-mono">{entry.code}</span><span className="text-slate-500">{entry.supplierName ? `${entry.supplierName}만` : "회사 전체"}</span>
+          <button aria-label={`${entry.code} 제외 코드 지우기`} className="maju-button-secondary min-h-[44px]" onClick={() => void removeExcluded(entry.id)} type="button">지우기</button></li>)}</ul></details> : null}
+      {importPreview.error ? <p role="alert">{importPreview.error}</p> : <>
         {historyOnlyDefaultEnabled ? <label className="flex min-h-[44px] items-center gap-2 rounded border border-slate-200 p-3"><input aria-label="현재 가격도 변경" checked={updateCurrentPrices} onChange={event => { setUpdateCurrentPrices(event.target.checked); setConflictChoices({}); setConfirmedReview(""); }} type="checkbox" /><span><strong>현재 가격도 변경</strong><br /><span className="text-sm text-slate-600">선택하지 않으면 연결된 모든 행은 매입 이력에만 저장되고 현재 매입가·판매가·문서는 바뀌지 않습니다.</span></span></label> : null}
         {importPreview.conflicts.length && (!historyOnlyDefaultEnabled || updateCurrentPrices) ? <><div className="flex flex-wrap items-center gap-2"><p className="mr-auto" role="status">같은 품목·같은 적용일의 상이 단가 {importPreview.conflicts.length}그룹 · 미선택 {unresolvedConflicts}그룹. 현재 가격을 바꿀 행만 선택합니다.</p>
           {unresolvedConflicts ? <button className="maju-button-secondary min-h-[44px]" onClick={() => setConflictChoices(current => ({ ...current, ...Object.fromEntries(importPreview.conflicts.filter(group => !current[group.key]).map(group => [group.key, "hold"])) }))} type="button">미선택 {unresolvedConflicts}개 모두 이번 가격 반영 보류</button> : null}</div>
