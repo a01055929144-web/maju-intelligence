@@ -24,7 +24,9 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 권한(app 역할 불가) · 숫자만 세기(변경 없음) · 적용(안 쓴 것 삭제+딸린 행 사라짐, 쓴 것 숨김, 이력 보존, 다른 회사 불변) · 반복 적용 무해 · 다른 회사 id 무효 · 빈/없음/501개 거부 · down 후 재 up.
 
 ## 적용 기록 (2026-11-12)
-- 승인: 대표 승인 문구 `fcmdvveqmcgtioelzqun CC-24 상품 삭제 SQL 승인` 수신(11/12 새벽).
+- 승인 문구 원문(대표 메시지 그대로): `fcmdvveqmcgtioelzqun CC-24 상품 삭제 SQL 승인`
+- 승인 시각: 2026-11-12 09:46 KST 직전(메시지 수신의 정확한 시각은 기록하지 못함 — 적용 09:46:02 KST 이전). 초안 커밋 `4d35584`.
+- **감사 기록(`admin_audit_logs`)**: 적용 직후 같은 날 별도로 추가(id `f817fd12-622e-4ef2-8d39-6f171816970a`, action `db_migration_applied`, target_type `migration`, actor·company 없음 — 기존 CC-22a·19a·26a와 같은 형식, metadata에 id·승인 문구·시각·초안 커밋·`recorded_late: true`). 읽기로 확인함. **이번 3건만 사후 기록**이며, 이후 적용은 같은 트랜잭션 안에서 남긴다(`README.md`).
 - 적용: 운영 `fcmdvveqmcgtioelzqun`에 초안 SQL 1회 적용(Supabase `apply_migration` `cc24_delete_products`, 성공). 선행 검사 통과(이미 적용 아님).
 - 사전 읽기: 함수 없음.
 - 사후 읽기: `cc24_delete_products(uuid,uuid[],boolean)` 존재, anon·authenticated·PUBLIC 실행 권한 없음. 제이에스리테일 상품 5개로 `p_apply=false` 시험: found 5 · deletable 0 · hideOnly 5 · applied false(숫자만 셈, 변경 없음).
