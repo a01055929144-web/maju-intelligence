@@ -1,7 +1,7 @@
-# CC-29b 행사 노출 대상 저장 함수 + 주문 함수 2개 수정 — 운영 승인 대기
+# CC-29b 행사 노출 대상 저장 함수 + 주문 함수 2개 수정 — 운영 적용 완료(11/12)
 
 Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026-11-11-category-margin.md` CC-29 · `2026-11-11-pricing-simplify.md` CC-30c.
-**운영 SQL 미실행.** 기능 스위치·배포 변경 없음. 적용은 대표 명시 승인 문구 후.
+**운영 적용 완료(11/12 12:07 KST).** 기능 스위치·배포 변경 없음(`PROMOTION_AUDIENCE` 스위치는 계속 OFF).
 요청 문구(안): `fcmdvveqmcgtioelzqun CC-29b 행사 노출 대상 저장·주문 함수 SQL 승인`
 선행: CC-29a 운영 적용 완료(11/12).
 
@@ -32,3 +32,13 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 ## 남은 것 (이 SQL 밖)
 - 서버가 등급가를 계산해 줄에 `normalPrice`로 넘기는 연결(앱 코드, 별도 PR). 안 넘기면 등급가 대신 문서 정상 줄 가격이 쓰인다.
 - 서랍 화면(대상 고르기)은 기능 스위치 OFF로 올리고, 이 SQL 적용 뒤에만 켠다.
+
+## 적용 기록 (2026-11-12)
+- 승인 문구 원문(대표 메시지 그대로): `fcmdvveqmcgtioelzqun CC-29b 행사 노출 대상 저장·주문 함수 SQL 승인, 다음 진행`
+- 승인 시각: 2026-11-12 12:04 KST 직전(메시지 수신 직후 사전 읽기 12:04:33). 적용 12:07:09 KST. 초안 커밋 `a51826a`(#608).
+- **감사 기록(`admin_audit_logs`)**: 같은 트랜잭션 안에서 기록(id `6571f752-c70f-4a03-b66c-51b529201d60`, action `db_migration_applied`, target_type `migration`, actor·company 없음, metadata에 id·승인 문구 원문·시각·초안 커밋). 읽기로 확인함.
+- 적용: 운영 `fcmdvveqmcgtioelzqun`에 초안 SQL 1회 적용(Supabase `apply_migration` `cc29b_promotion_audience_orders`, 성공).
+- 사전 읽기: `save_promotion_audience_v1` 없음, 주문 함수 `-- cc29b` 표식 없음, 제한된 행사 0건, `default_sales_price`·`promotion_applies_to` 있음, 치환 지점 7개 각 1번(앞서 확인).
+- 사후 읽기: 새 함수 존재(service_role만 실행, invoker), 두 주문 함수 ACL 그대로(`postgres`·`service_role`)·invoker, 각 함수 `-- cc29b` 표식 4개씩·`promotionNotApplied` 포함, 제한된 행사 0건(기존 행사 전부 `all`), audit 기록 1건.
+- 참고: 초안의 줄바꿈 판별 코드(`nl`)는 저장소 사본에서 항상 LF로 동작한다(함수에 끼워 넣은 줄도 LF). 동작에는 영향이 없고 PG17 테스트(up·down 정확 복원)가 같은 사본으로 통과했다.
+- 데이터 변경: 없음. 화면(서랍)은 #609 병합·스위치 OFF. 다음: 서버 `normalPrice` 연결 · 매장 화면·견적서 블록·주문함 표시 → 스위치 켜기(대표 승인).

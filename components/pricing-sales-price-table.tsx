@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import type { MarginTreeNode } from "@/domains/pricing/margin-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
@@ -20,7 +20,12 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   items: PriceItem[]; state: PriceState; tree: MarginTreeNode[]; folder: string | null; onFolder: (path: string | null) => void;
   busy: boolean; run: (commands: PricingCommand[], done: string, apply?: boolean) => Promise<void>; folderTools: React.ReactNode;
 }) {
-  const rows = useMemo(() => items.filter((item) => inFolder(item.category, folder)), [items, folder]);
+  const [chip, setChip] = useState<"changed" | "fixed" | null>(null);
+  const inScope = useMemo(() => items.filter((item) => inFolder(item.category, folder)), [items, folder]);
+  // 바뀐 상품 = 매입가가 마지막 반영 때와 달라진 상품, 고정 가격 = 마진 없이 가격을 정한 상품.
+  const changedItems = useMemo(() => inScope.filter((i) => i.appliedCost !== null && i.appliedCost !== i.cost), [inScope]);
+  const fixedItems = useMemo(() => inScope.filter((i) => i.directPrice !== null), [inScope]);
+  const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
     { key: "name", label: "상품", value: (i) => i.name, sortable: true, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
     { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true },
@@ -67,6 +72,10 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
       {folder ? <div className="border-t pt-2">{folderTools}</div> : null}
     </aside>
     <div className="min-w-0 space-y-2">
+      <div aria-label="필터" className="flex flex-wrap gap-1.5" role="group">
+        {([["changed", "바뀐 상품", changedItems.length], ["fixed", "고정 가격", fixedItems.length]] as const).map(([id, label, n]) =>
+          <button aria-pressed={chip === id} className={`min-h-[32px] rounded-full border px-3 text-xs font-bold ${chip === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} key={id} onClick={() => setChip(chip === id ? null : id)} type="button">{label} {n}</button>)}
+      </div>
       {loss ? <p className="text-sm font-bold text-rose-700">손해 {loss}개 — 이익이 0원 이하인 상품입니다.</p> : null}
       <CommonDataTable columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price" />
     </div>

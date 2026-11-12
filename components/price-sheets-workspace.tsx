@@ -28,6 +28,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [undoable, setUndoable] = useState(false); // CC-30a: 방금 즉시 반영한 변경만 토스트에서 되돌린다(직전 1회)
   const search = "", page = 1; // 판매가 탭은 전체 상품을 한 번에 읽는다(서버 쪽 검색·쪽 나누기는 쓰지 않음)
   const [defaultMargin, setDefaultMargin] = useState("");
   const [defaultRounding, setDefaultRounding] = useState("10");
@@ -57,12 +58,14 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
 
   /** 바꾼 뒤에는 판매가에 바로 반영(다시 계산)까지 한 번에. */
   const run = useCallback(async (commands: Array<PricingCommand | PricingBulkCommand>, done: string, apply = true) => {
-    setBusy(true); setError(""); setMessage("");
+    setBusy(true); setError(""); setMessage(""); setUndoable(false);
     try {
       let last: PriceState | null = null;
       for (const command of commands) last = await send(command);
+      const changed = apply && last ? last.pendingCount : 0; // 반영 전 대기 수 = 이번에 바뀌는 판매가 수
       if (apply && last && last.pendingCount > 0) last = await send({ action: "recalculate" });
-      setMessage(done);
+      setMessage(changed > 0 ? `${done} 판매가 ${changed}개 바뀜.` : done);
+      setUndoable(changed > 0);
     } catch (e) { setError(e instanceof Error ? e.message : "다시 시도해 주세요."); }
     finally { setBusy(false); setVersion((v) => v + 1); }
   }, [send]);
@@ -84,7 +87,8 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
   const zeroMargin = state.defaultMargin === 0;
   return <div className="space-y-4" aria-busy={busy}>
     {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-    {message && <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p>}
+    {message && <p role="status" className="flex flex-wrap items-center gap-2 rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}
+      {undoable && state.lastBatch && !state.restored ? <button className="rounded border border-teal-700 px-2 py-1 text-xs font-bold" disabled={busy} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">되돌리기</button> : null}</p>}
 
     {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
     <div className="flex flex-wrap items-center justify-between gap-2">
