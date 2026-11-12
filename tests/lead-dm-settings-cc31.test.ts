@@ -32,3 +32,19 @@ describe("lead DM settings (CC-31b)", () => {
     expect(store).toContain('row.target_type === "distributor" ? "distributor" : "restaurant"');
   });
 });
+
+describe("영업 문구 card (CC-31d)", () => {
+  const card = readFileSync("components/lead-dm-template-settings.tsx", "utf8");
+  it("has the two tabs (distributor only when enabled), three templates per tab, variable chips and saves the right text per tab", () => {
+    expect(card).toContain("data.distributorEnabled");
+    expect(card).toContain("LEAD_DM_TEMPLATES[tab].map");
+    expect(card).toContain("이 템플릿으로 시작");
+    expect(card).toContain('restaurant: ["{상호}", "{회사명}", "{지역}", "{업종}", "{품목}", "{주력품목}"]');
+    expect(card).toContain('distributor: ["{상호}", "{회사명}", "{지역}", "{주력품목}", "{신규수}"]');
+    expect(card).toContain("distributorTemplate: draft");
+  });
+  it("is on the company's 영업 정보 page and, with companyId, on the admin setup helper", () => {
+    expect(readFileSync("app/dashboard/settings/sales/page.tsx", "utf8")).toContain("<LeadDmTemplateSettings />");
+    expect(readFileSync("app/admin/companies/[id]/setup/page.tsx", "utf8")).toContain("<LeadDmTemplateSettings companyId={company.id} />");
+  });
+});
