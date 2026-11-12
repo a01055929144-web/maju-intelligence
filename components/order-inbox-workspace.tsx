@@ -7,11 +7,12 @@ import { STORE_ORDER_STATUSES, canConfirmStoreOrder, storeOrderStatusLabel } fro
 
 type Line = { name: string; spec: string; unit: string; quantity: number; total: number | null; marketPrice: boolean };
 type Order = {
-  id: string; customerName: string; deliveryAddress: string | null; orderedBy: string;
+  id: string; storeAccountId: string | null; customerName: string; deliveryAddress: string | null; orderedBy: string;
   deliveryDate: string | null; status: string; knownTotal: number; hasMarketPrice: boolean;
   requestMemo: string; submittedAt: string; revision: number; lines: Line[];
 };
 
+type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
 const kst = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 
@@ -25,6 +26,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [review, setReview] = useState<{ order: Order; candidates: Candidate[] | null } | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -50,9 +52,28 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     await load();
   }
 
+  // CC-08: 첫 거래 거래처 확인 — 후보 보기, 새 거래처로 확인, 기존 거래처에 연결. 규칙은 서버(DB 함수)가 정한다.
+  async function post(payload: Record<string, unknown>) {
+    const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ...payload }) });
+    const result = await response.json().catch(() => ({})) as { message?: string; candidates?: Candidate[] };
+    if (!response.ok) throw new Error(result.message || "처리하지 못했습니다.");
+    return result;
+  }
+  async function openReview(order: Order) {
+    setNotice(""); setReview({ order, candidates: null });
+    try { setReview({ order, candidates: (await post({ action: "candidates", storeAccountId: order.storeAccountId })).candidates ?? [] }); }
+    catch (e) { setReview(null); setNotice(e instanceof Error ? e.message : "후보를 불러오지 못했습니다."); }
+  }
+  async function decide(order: Order, action: "confirm_customer" | "link_customer", customerId?: string) {
+    setBusyId(order.id);
+    try { await post({ action, storeAccountId: order.storeAccountId, customerId }); setNotice(action === "confirm_customer" ? `${order.customerName}을(를) 새 거래처로 확인했습니다.` : "기존 거래처에 연결했습니다."); setReview(null); }
+    catch (e) { setNotice(e instanceof Error ? e.message : "처리하지 못했습니다."); }
+    setBusyId(""); await load();
+  }
+
   const columns: CommonTableColumn<Order>[] = [
     { key: "submittedAt", label: "접수 시각", sortable: true, value: (row) => row.submittedAt, render: (row) => kst(row.submittedAt) },
-    { key: "customer", label: "매장", sortable: true, value: (row) => row.customerName },
+    { key: "customer", label: "매장", sortable: true, value: (row) => row.customerName, render: (row) => <span>{row.customerName}{row.storeAccountId ? <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">거래처 확인 필요</span> : null}</span> },
     { key: "deliveryDate", label: "배송일", sortable: true, value: (row) => row.deliveryDate ?? "", render: (row) => row.deliveryDate ?? "배송일 확인 대기" },
     { key: "total", label: "금액", align: "right", sortable: true, value: (row) => row.knownTotal,
       render: (row) => `${won(row.knownTotal)}${row.hasMarketPrice ? " + 시가" : ""}` },
@@ -68,7 +89,9 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     </details> },
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
-    { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && canConfirmStoreOrder(row.status)
+    { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
+      ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void openReview(row)} size="sm" variant="outline">거래처 확인</Button>
+      : canConfirm && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm">{busyId === row.id ? "확인 중…" : "확인"}</Button>
       : null },
   ];
@@ -88,6 +111,17 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     </form>
     {!canConfirm && <p className="text-sm text-slate-600">{preview ? "관리자 미리보기입니다. 확인 처리는 고객사 계정에서 합니다." : "주문 확인은 대표·관리자가 합니다. 이 계정은 보기만 할 수 있습니다."}</p>}
     {notice && <p className="rounded-lg bg-teal-50 p-3 text-sm text-teal-800" role="status">{notice}</p>}
+    {review ? <div aria-label="거래처 확인" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm" role="region">
+      <p className="font-bold">{review.order.customerName} — 처음 거래하는 매장입니다. 같은 거래처가 이미 있는지 확인해 주세요.</p>
+      <p className="text-slate-600">확인하기 전에는 이 매장 주문을 확인·배송 처리할 수 없습니다. 기존 거래처에 연결하면 접수된 주문도 그 거래처로 옮겨지고, 자동으로 만든 거래처는 중복으로 표시됩니다.</p>
+      {review.candidates === null ? <p>후보를 찾는 중…</p> : review.candidates.length ? <ul className="divide-y rounded border bg-white">
+        {review.candidates.map((c) => <li className="flex flex-wrap items-center justify-between gap-2 p-2" key={c.customerId}>
+          <span><b>{c.name}</b> <span className="text-slate-500">{c.address || "주소 없음"} · {c.reason === "business_number" ? "사업자번호 일치" : "이름·주소 비슷함"}</span></span>
+          <Button disabled={busyId !== ""} onClick={() => { if (window.confirm(`'${c.name}' 거래처에 연결할까요? 되돌릴 수 없습니다.`)) void decide(review.order, "link_customer", c.customerId); }} size="sm" variant="outline">이 거래처에 연결</Button></li>)}
+      </ul> : <p className="text-slate-600">같은 거래처로 보이는 후보가 없습니다.</p>}
+      <div className="flex gap-2"><Button disabled={busyId !== ""} onClick={() => void decide(review.order, "confirm_customer")} size="sm">새 거래처로 확인</Button>
+        <Button onClick={() => setReview(null)} size="sm" variant="outline">닫기</Button></div>
+    </div> : null}
     {error ? <div className="rounded-xl border bg-white p-6 text-center">
       <p className="text-slate-700">{error}</p>
       <Button className="mt-3" onClick={() => void load()} variant="outline">다시 시도</Button>

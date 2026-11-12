@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestAuthScope } from "@/lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope } from "@/lib/auth";
+import { StoreReviewError, confirmNewCustomer, linkExistingCustomer, reviewCandidates } from "../../../lib/pricing/store-customer-review";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
@@ -16,7 +17,7 @@ const MEMBER_ROLE: Record<string, string> = { owner: "점주", manager: "관리�
 type OrderRow = {
   id: string; customer_id: string; delivery_date: string | null; status: string;
   known_total: number; has_market_price: boolean; request_memo: string;
-  submitted_at: string; revision: number; ordered_by_member_id: string | null;
+  submitted_at: string; revision: number; ordered_by_member_id: string | null; store_account_id: string | null;
   store_order_lines: Array<{ product_name: string; specification: string; sales_unit: string;
     quantity: number; total_amount: number | null; is_market_price: boolean }>;
 };
@@ -79,21 +80,26 @@ export async function GET(request: NextRequest) {
     }
     const orders = await supabaseRequest<OrderRow[]>(
       `store_orders?company_id=eq.${company}${status === "all" ? "" : `&status=eq.${status}`}${customerFilter}` +
-      "&select=id,customer_id,delivery_date,status,known_total,has_market_price,request_memo,submitted_at,revision,ordered_by_member_id," +
+      "&select=id,customer_id,delivery_date,status,known_total,has_market_price,request_memo,submitted_at,revision,ordered_by_member_id,store_account_id," +
       "store_order_lines(product_name,specification,sales_unit,quantity,total_amount,is_market_price)" +
       `&order=submitted_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${(page - 1) * PAGE_SIZE}`,
     );
     const items = orders.slice(0, PAGE_SIZE);
     const customerIds = Array.from(new Set(items.map((order) => order.customer_id)));
     const memberIds = Array.from(new Set(items.map((order) => order.ordered_by_member_id).filter((id): id is string => Boolean(id))));
-    const [customers, members] = await Promise.all([
+    const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
+    const [customers, members, pending] = await Promise.all([
       customerIds.length ? supabaseRequest<CustomerRow[]>(
         `normalized_customers?company_id=eq.${company}&id=in.(${customerIds.join(",")})&select=id,customer_name,address,delivery_base_address,delivery_address_detail`,
       ) : Promise.resolve([]),
       memberIds.length ? supabaseRequest<Array<{ id: string; role: string; app_users: { name: string | null } | null }>>(
         `store_account_members?company_id=eq.${company}&id=in.(${memberIds.join(",")})&select=id,role,app_users(name)`,
       ) : Promise.resolve([]),
+      accountIds.length ? supabaseRequest<Array<{ id: string }>>(
+        `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
+      ) : Promise.resolve([]),
     ]);
+    const needsReview = new Set(pending.map((row) => row.id));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const memberLabel = new Map(members.map((member) => [member.id,
       `${member.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${MEMBER_ROLE[member.role] || "구성원"}`]));
@@ -104,6 +110,7 @@ export async function GET(request: NextRequest) {
         const base = customer?.delivery_base_address?.trim();
         return {
           id: order.id,
+          storeAccountId: order.store_account_id && needsReview.has(order.store_account_id) ? order.store_account_id : null,
           customerName: customer?.customer_name ?? "이름 없는 거래처",
           // 주문 당시 배송지 저장(#410)이 적용되기 전이라 지금 거래처에 저장된 주소를 보여 준다.
           deliveryAddress: base ? [base, customer?.delivery_address_detail?.trim()].filter(Boolean).join(" ") : customer?.address?.trim() || null,
@@ -136,6 +143,7 @@ export async function POST(request: NextRequest) {
   } catch { return NextResponse.json({ message: "입력값을 확인해 주세요." }, { status: 400 }); }
   const scope = await authorize(request, true, typeof body.companyId === "string" ? body.companyId : undefined);
   if (typeof scope !== "string") return scope;
+  if (body.action === "candidates" || body.action === "confirm_customer" || body.action === "link_customer") return reviewAction(request, scope, body);
   const { orderId, revision } = body;
   if (body.action !== "confirm" || typeof orderId !== "string" || !UUID.test(orderId) ||
     typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1)
@@ -150,7 +158,26 @@ export async function POST(request: NextRequest) {
     if (!order)
       return NextResponse.json({ message: "점주가 방금 수정했거나 이미 처리된 주문입니다. 새로고침 후 다시 확인해 주세요." }, { status: 409 });
     return NextResponse.json({ order });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("store_customer_review_required"))
+      return NextResponse.json({ message: "이 매장은 첫 거래 거래처 확인이 필요합니다. 주문 줄의 '거래처 확인'을 먼저 해 주세요." }, { status: 409 });
     return NextResponse.json({ message: "주문을 확인 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 500 });
+  }
+}
+
+// CC-08: 첫 거래 거래처 확인(후보 보기·새 거래처로 확인·기존 거래처에 연결). 대표·관리자만(authorize가 막음).
+async function reviewAction(request: NextRequest, companyId: string, body: Record<string, unknown>) {
+  const auth = await getRequestAuthScope(request, companyId);
+  const accountId = body.storeAccountId;
+  if (typeof accountId !== "string" || !UUID.test(accountId)) return NextResponse.json({ message: "매장을 다시 선택해 주세요." }, { status: 400 });
+  const actor = { userId: auth.ok ? auth.customerSession?.userId : null, name: (auth.ok && getCustomerOperationalName(auth.customerSession)) || "운영자" };
+  try {
+    if (body.action === "candidates") return NextResponse.json({ candidates: await reviewCandidates(companyId, accountId) });
+    if (body.action === "confirm_customer") return NextResponse.json(await confirmNewCustomer(companyId, accountId, actor));
+    if (typeof body.customerId !== "string" || !UUID.test(body.customerId)) return NextResponse.json({ message: "연결할 거래처를 다시 선택해 주세요." }, { status: 400 });
+    return NextResponse.json(await linkExistingCustomer(companyId, accountId, body.customerId, actor));
+  } catch (error) {
+    if (error instanceof StoreReviewError) return NextResponse.json({ message: error.message }, { status: error.status });
+    return NextResponse.json({ message: "거래처 확인을 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 500 });
   }
 }

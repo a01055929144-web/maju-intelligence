@@ -33,3 +33,5 @@ Ponytail: 사용함 (Claude Code ponytail-review). 결정: 대표 11/12 "C · G1
 - `admin_audit_logs` `db_migration_applied`를 **같은 트랜잭션**에서 기록: id `f414c486-0384-4b94-84ea-a7c057aae596`.
 - 사후 읽기: `needs_review` 0건·`confirmed` 1건(기존 계정은 확인됨), 이벤트 0건, RLS 켜짐, anon·authenticated는 함수 실행 불가·service_role만 가능, 가드 트리거 1개, 초대 연결 함수에 `-- cx13` 패치 반영.
 - 주의: 이제부터 초대 코드로 연결되는 새 매장은 `needs_review`로 시작하므로, 거래처 확인 화면(CC-08)이 배포되기 전에는 주문함에서 그 매장 주문을 "확인"하면 `store_customer_review_required` 오류가 납니다. **CC-08 화면 배포 전까지 초대 연결 신규 매장이 생기지 않게 주의.**
+
+- CC-08 화면(주문함 "거래처 확인 필요" 배지·[거래처 확인]·후보·연결, 가드 오류 409 안내)은 PR `claude/CC-08-store-customer-review`에 있음. **배포 전**에는 위 주의가 그대로 적용됩니다. 알려진 한계: 연결 뒤 "중복으로 표시된" 자동 생성 거래처는 거래처 목록에 계속 보입니다(목록 필터는 기존 가져오기의 중복 표시와 겹쳐 따로 정해야 함).
