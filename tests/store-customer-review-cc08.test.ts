@@ -30,3 +30,12 @@ describe("store customer review (CC-08)", () => {
     expect(ui).toContain("새 거래처로 확인");
   });
 });
+
+describe("customer list hides duplicates (CC-08)", () => {
+  it("every customer master list query skips rows marked duplicate_of (the auto-created customer after a link)", () => {
+    const src = readFileSync("lib/store.ts", "utf8");
+    const lines = src.split(/\r?\n/).filter((l) => l.includes("normalized_customers?select=") && l.includes("order=created_at.desc") && l.includes("CUSTOMER_MASTER_FETCH_LIMIT"));
+    expect(lines.length).toBeGreaterThanOrEqual(6);
+    for (const l of lines) expect(l).toContain("duplicate_of=is.null");
+  });
+});

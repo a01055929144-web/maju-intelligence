@@ -5117,7 +5117,7 @@ export async function getCustomerMaster(
   for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
     try {
       fetched = await supabaseRequest<Array<CustomerMasterRow>>(
-        `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
       fetchedAssignmentIds = select.includes("assigned_staff_member_id");
       fetchedGradeOverride = select.includes("grade_override");
@@ -5136,7 +5136,7 @@ export async function getCustomerMaster(
   if (!fetchedGradeOverride && fetched.length) {
     try {
       const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
-        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
       const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
       fetched = fetched.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
@@ -5277,7 +5277,7 @@ export async function getCustomerMapSummaries(
   let fetchedGradeOverride = false;
   try {
     rows = await supabaseRequest<CustomerMapRow[]>(
-      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
     fetchedAssignmentIds = true;
     fetchedGradeOverride = true;
@@ -5285,12 +5285,12 @@ export async function getCustomerMapSummaries(
     if (!isMissingColumnError(error)) throw error;
     try {
       rows = await supabaseRequest<CustomerMapRow[]>(
-        `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
     } catch (fallbackError) {
       if (!isMissingColumnError(fallbackError)) throw fallbackError;
       rows = await supabaseRequest<CustomerMapRow[]>(
-        `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
     }
   }
@@ -5301,7 +5301,7 @@ export async function getCustomerMapSummaries(
   if (!fetchedGradeOverride && rows.length) {
     try {
       const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
-        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
       const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
       rows = rows.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
