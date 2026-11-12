@@ -358,6 +358,7 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
+  readonly distributorSales?: boolean; // CC-21: 서버가 첫 화면부터 알려 줘서 "매장|유통사" 전환이 로드 전에도 보인다.
   readonly documentEntry?: LeadDocumentEntryAccess;
   readonly holdModulesEnabled?: boolean;
   readonly initialCustomerId?: string;
@@ -477,7 +478,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, orderLinkStatus = "off", routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, distributorSales = false, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, orderLinkStatus = "off", routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -676,7 +677,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapFilterPopRef = useRef<HTMLDivElement>(null);
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
   // CC-21: 유통사 영업을 켠 회사만 "매장|유통사" 전환이 보인다(서버가 distributorSales로 알려 줌).
-  const [mapDistributorSales, setMapDistributorSales] = useState(false);
+  const [mapDistributorSales, setMapDistributorSales] = useState(distributorSales);
   const [mapTargetType, setMapTargetType] = useState<"restaurant" | "distributor">("restaurant");
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
@@ -2462,6 +2463,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 <Layers className="h-4 w-4" />
                 <span>{allLeadsLoadState === "loading" ? "불러오는 중" : "전체 리드"}</span>
               </button>
+              {mapDistributorSales ? (
+                <div aria-label="영업 대상" className="flex items-center gap-1" role="group">
+                  {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={mapTargetType === id} className={`h-9 rounded-md px-3 text-xs font-semibold ${mapTargetType === id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"}`} key={id} onClick={() => { setMapTargetType(id); setMapLeadsVisible(true); }} type="button">{label}</button>)}
+                </div>
+              ) : null}
                 </div>
           ) : null}
               {activeView === "map" ? (
@@ -3033,11 +3039,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
                     숨김 리드 보기
                   </label>
-                  {mapDistributorSales ? (
-                    <div aria-label="영업 대상" className="flex gap-1.5" role="group">
-                      {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={mapTargetType === id} className={`min-h-[36px] rounded-full border px-3 text-xs font-bold ${mapTargetType === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={id} onClick={() => setMapTargetType(id)} type="button">{label}</button>)}
-                    </div>
-                  ) : null}
                   {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
                     <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                       <input checked={showOutsideSalesAreaOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
