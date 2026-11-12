@@ -5,6 +5,7 @@ import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { attachmentLabel, attachmentTitleFromType, buildPlaceSearchLinks, extractRegion, formatBusinessNumberInput, formatBusinessRegistrationNumber, formatPhoneNumberInput, gradeClassName, guessMimeType, isValidBusinessRegistrationNumber, normalizeBusinessRegistrationNumber, noteTypeLabel } from "@/components/customers/customer-format";
+import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -514,10 +515,10 @@ export default function CrmTimelinePage() {
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
-  const [workspaceSection] = useState<"list" | "ledger" | "history">(() => {
+  const [workspaceSection] = useState<"list" | "ledger" | "history" | "products" | "transactions">(() => {
     if (typeof window === "undefined") return "list";
     const requested = new URLSearchParams(window.location.search).get("section");
-    return requested === "ledger" || requested === "history" ? requested : "list";
+    return requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
   });
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -1294,10 +1295,24 @@ export default function CrmTimelinePage() {
           items={[
             { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },
             { active: workspaceSection === "ledger", description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: withCompanyQuery("/crm/timeline?section=ledger"), icon: Pencil, label: "원장" },
-            { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" }
+            { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" },
+            { active: workspaceSection === "products", description: "매출 전표와 매장 주문을 상품별로 합쳐 봅니다.", href: withCompanyQuery(`/crm/timeline?section=products${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`), icon: PackageCheck, label: "매출 상품" },
+            { active: workspaceSection === "transactions", description: "매출 전표·주문·입금을 날짜순으로 봅니다.", href: withCompanyQuery(`/crm/timeline?section=transactions${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`), icon: Banknote, label: "거래내역" }
           ]}
           title="거래처 관리"
         />
+
+        {workspaceSection === "products" || workspaceSection === "transactions" ? (
+          <div className="mb-4 min-w-0 space-y-3">
+            <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">
+              매출처
+              <select aria-label="매출처 선택" className="maju-input min-h-11 sm:min-h-9" onChange={(event) => setSelectedIndex(Number(event.target.value))} value={selectedIndex}>
+                {customers.map((customer, index) => <option key={customer.id || index} value={index}>{customer.customerName}</option>)}
+              </select>
+            </label>
+            <SalesPartnerPanel companyId={adminCompanyId} customerId={selectedCustomer.id} customerName={selectedCustomer.customerName} view={workspaceSection === "products" ? "products" : "history"} />
+          </div>
+        ) : null}
 
         <div className="min-w-0 space-y-4">
         <div className={`${workspaceSection === "list" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="customer-ledger-list">
