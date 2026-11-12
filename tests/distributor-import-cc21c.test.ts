@@ -39,6 +39,7 @@ describe("CC-21 import: custom columns (no column is dropped)", () => {
 });
 
 // ---- API: 칸 만들기·저장·이력 ----
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 합성 요청 본문을 자유롭게 읽는 테스트 기록용
 const calls: Array<{ path: string; method: string; body: any }> = [];
 const existingFields = [{ key: "f_items", label: "취급 품목" }, { key: "f_erp", label: "사용 ERP" }, { key: "f_next", label: "다음 연락일" }];
 vi.mock("@/lib/distributor-gate", () => ({ distributorGate: async () => ({ scope: { customerSession: { userId: "u1", name: "합성" } }, companyId: "c1" }) }));
