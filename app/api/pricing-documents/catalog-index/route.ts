@@ -9,7 +9,7 @@ import { customerErpCode } from "../../../../domains/product/customer-erp-code";
 
 export const dynamic = "force-dynamic";
 
-type Row = { id: string; product_code: string | null; canonical_name: string | null; purchase_product_name: string | null; sales_product_name: string | null; sales_spec: string | null; spec_value: number | null; spec_unit: string | null; sales_unit: string | null };
+type Row = { id: string; product_code: string | null; canonical_name: string | null; purchase_product_name: string | null; sales_product_name: string | null; category: string | null; sales_spec: string | null; spec_value: number | null; spec_unit: string | null; sales_unit: string | null };
 
 /**
  * 11/4: 단가표·견적서 왼쪽 상품 목록의 빠른 필터(코드·상품명·규격·단위)용 가벼운 목록. 가격은 담지 않습니다
@@ -24,13 +24,13 @@ export async function GET(request: NextRequest) {
   if (!manager && auth.customerSession?.workspaceRole !== "sales") return NextResponse.json({ message: "문서 작성 권한이 없습니다." }, { status: 403 });
   try {
     const rows = await supabaseRequest<Row[]>(
-      `product_catalog?select=id,product_code,canonical_name,purchase_product_name,sales_product_name,sales_spec,spec_value,spec_unit,sales_unit&company_id=eq.${encodeURIComponent(auth.companyId)}&is_active=eq.true&order=product_code.asc.nullslast&limit=5000`
+      `product_catalog?select=id,product_code,canonical_name,purchase_product_name,sales_product_name,category,sales_spec,spec_value,spec_unit,sales_unit&company_id=eq.${encodeURIComponent(auth.companyId)}&is_active=eq.true&order=product_code.asc.nullslast&limit=5000`
     );
     const items = rows.flatMap((row) => {
       const sales = (row.sales_product_name || "").trim();
       if (!manager && !sales) return [];
       const name = manager ? (row.canonical_name || row.purchase_product_name || sales || "").trim() : sales;
-      return [{ id: row.id, code: customerErpCode(row.product_code), name, displayName: sales, spec: catalogDisplaySpec(row), unit: row.sales_unit || "" }];
+      return [{ id: row.id, code: customerErpCode(row.product_code), name, displayName: sales, spec: catalogDisplaySpec(row), unit: row.sales_unit || "", category: (row.category || "").trim() }];
     });
     return NextResponse.json({ items }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
