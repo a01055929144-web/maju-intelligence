@@ -1,7 +1,7 @@
-# CC-29c 비대상 행사 줄 정상가를 서버 계산으로 — 컨트롤타워 검토 대기
+# CC-29c 비대상 행사 줄 정상가를 서버 계산으로 — 운영 적용 완료(11/12)
 
 Ponytail: 사용함 (Claude Code ponytail-review). CC-29b(운영 적용 11/12 12:07) 수정분. 지시: 대표 11/12 "P2, 행사 대상 스위치 켜기 전 필수".
-**운영 SQL 미실행. 상태: 컨트롤타워 검토 대기** — 검토 후 대표 승인 문구 안내. 승인 전에는 `PROMOTION_AUDIENCE` 스위치를 켜지 않는다.
+**운영 적용 완료(11/12 13:02 KST).** `PROMOTION_AUDIENCE` 스위치는 계속 OFF(켜기는 대표 승인).
 요청 문구(안): `fcmdvveqmcgtioelzqun CC-29c 비대상 행사 정상가 서버 계산 SQL 승인`
 
 ## 무엇이 문제였나 (29b 운영 반영분)
@@ -31,3 +31,12 @@ legacy·member 두 함수 모두:
 - 등급 규칙: 상품 고정가 1111 > 상품 마진(5%)→1050 > 깊은 분류 마진(10%→1100) > 상위 분류(30%→1300) > 등급 기본(20%→1200), 등급 없으면 NULL.
 - 대상 매장은 행사가 900 유지·`promotion_id` 그대로.
 - 정의에 `normalPrice`·`default_sales_price`가 남지 않음, ACL·invoker 불변, down 정확 복원 후 재 up.
+
+## 적용 기록 (2026-11-12)
+- 승인 문구 원문(대표 메시지 그대로): `fcmdvveqmcgtioelzqun CC-29c 행사 비대상 정상가 서버 계산 SQL 승인` ← 안내한 문구와 단어 순서가 달랐음("비대상 행사" → "행사 비대상"). 프로젝트 ID·작업 ID·내용이 같아 의도 동일로 판단(CC-29a와 같은 처리).
+- 승인 시각: 2026-11-12 13:01 KST 직전(메시지 수신 직후 사전 읽기 13:01:50). 적용 13:02:10 KST. 초안 커밋 `f75aac6`(#611).
+- **감사 기록(`admin_audit_logs`)**: 같은 트랜잭션 안에서 기록(id `fe82675e-8bec-4c8f-b90b-7205c4e0318d`, action `db_migration_applied`, target_type `migration`, actor·company 없음). 읽기로 확인함.
+- 적용: 운영 `fcmdvveqmcgtioelzqun`에 초안 SQL 1회 적용(Supabase `apply_migration` `cc29c_promotion_normal_price_server`, 성공).
+- 사전 읽기: `margin_template_price_v1` 없음, 두 주문 함수에서 29b 문장 2개가 각 1번, `-- cc29c` 표식 없음, 제한된 행사 0건.
+- 사후 읽기: `margin_template_price_v1` 존재(service_role만, invoker), 두 주문 함수 ACL 그대로(`postgres`·`service_role`)·invoker, 각 함수 `-- cc29c` 표식 2개씩, `normalPrice`·`default_sales_price` 문자열 없음, 제한된 행사 0건, audit 기록 1건.
+- 데이터 변경: 없음. 다음: 스위치 켜기 전 매장 화면·견적서 블록·주문함 표시(2번 나머지).
