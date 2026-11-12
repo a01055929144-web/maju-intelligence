@@ -18,9 +18,46 @@ export function cleanPhones(raw: unknown): { phone: string | null; extra: string
 const HEADERS: Record<string, "name" | "region" | "address" | "grade" | "items" | "erp" | "phone" | "tel" | "fax" | "email" | "status" | "nextContact" | "owner"> = {
   상호: "name", 업체명: "name", 유통사: "name", 회사명: "name", 지역: "region", 주소: "address", 등급: "grade", 취급품목: "items", 사용erp: "erp", erp: "erp",
   휴대폰: "phone", 연락처: "phone", 전화: "tel", 전화번호: "tel", 팩스: "fax", 이메일: "email", 상태: "status", 영업상태: "status", 다음연락일: "nextContact", 담당: "owner", 담당자: "owner",
+  // 비브 유통사 시트(11/12): "상호명"은 중개 상대방 상호, "대표자명"은 커스텀 칸이라 일부러 넣지 않는다.
+  유통사명: "name", 주문톡상태: "status", icp: "grade", icp등급: "grade", 다음액션일: "nextContact",
 };
 export type ImportField = (typeof HEADERS)[string];
-export const mapHeaders = (headers: readonly string[]) => headers.map((header) => HEADERS[header.replace(/\s/g, "").toLowerCase()] ?? null);
+const norm = (header: string) => header.replace(/\s/g, "").toLowerCase();
+export const mapHeaders = (headers: readonly string[]) => headers.map((header) => (Object.hasOwn(HEADERS, norm(header)) ? HEADERS[norm(header)] : null));
+
+/**
+ * 칸 이름 줄의 표시 이름. 같은 이름이 여러 번 나오면(최근진행일·메모 ×3) 바로 윗줄의 그룹명(병합 칸은 왼쪽 값을 이어받음)을 앞에 붙여
+ * 서로 다른 칸으로 만든다. 윗줄에 그룹명이 없으면 "(2)"처럼 번호를 붙인다.
+ */
+export function headerLabels(table: readonly (readonly unknown[])[], headerRow: number): string[] {
+  const headers = (table[headerRow] ?? []).map((cell) => String(cell ?? "").trim());
+  const above = headerRow > 0 ? table[headerRow - 1] ?? [] : [];
+  let group = "";
+  const groups = headers.map((_, index) => { const cell = String(above[index] ?? "").trim(); if (cell) group = cell; return group; });
+  const count = new Map<string, number>();
+  for (const header of headers) if (header) count.set(norm(header), (count.get(norm(header)) ?? 0) + 1);
+  const used = new Set<string>();
+  return headers.map((header, index) => {
+    if (!header || (count.get(norm(header)) ?? 0) < 2) { if (header) used.add(norm(header)); return header; }
+    const base = groups[index] ? `${groups[index]} ${header}` : header;
+    let label = base, n = 2;
+    while (used.has(norm(label))) label = `${base} (${n++})`;
+    used.add(norm(label));
+    return label;
+  });
+}
+
+/** 칸 이름 줄 자동 감지: 알려진 칸 이름이 가장 많은 줄(제목·그룹 줄·데이터 줄보다 앞선다), 없으면 글자 칸이 가장 많은 줄. 위쪽 30줄만 본다. */
+export function detectHeaderRow(rows: readonly (readonly unknown[])[]): number {
+  let best = 0, bestScore = -1;
+  rows.slice(0, 30).forEach((row, index) => {
+    const cells = row.map((cell) => String(cell ?? "").trim()).filter(Boolean);
+    const known = cells.filter((cell) => Object.hasOwn(HEADERS, norm(cell))).length;
+    const score = known * 100 + cells.filter((cell) => !/^[\d\s,.\-+/:]+$/.test(cell)).length;
+    if (score > bestScore) { best = index; bestScore = score; }
+  });
+  return best;
+}
 
 export type ImportRow = { name: string; region: string; address: string; grade: string; items: string; erp: string; phone: string | null; extraPhones: string[]; fax: string | null; email: string | null; status: string; nextContact: string | null; owner: string };
 export type ParsedImport = { rows: ImportRow[]; errors: Array<{ line: number; message: string }> };
@@ -30,7 +67,7 @@ const day = (value: unknown) => { const m = String(value ?? "").match(/(\d{4})[-
 
 /** headerRow 아래 행들을 읽어 표준 행으로. 상호가 없으면 오류 줄. line은 엑셀 줄 번호(1부터). */
 export function parseImportRows(table: readonly (readonly unknown[])[], headerRow: number): ParsedImport {
-  const fields = mapHeaders((table[headerRow] ?? []).map(String));
+  const fields = mapHeaders(headerLabels(table, headerRow));
   const rows: ImportRow[] = [], errors: ParsedImport["errors"] = [];
   table.slice(headerRow + 1).forEach((cells, offset) => {
     if (!cells.some((cell) => String(cell ?? "").trim())) return;

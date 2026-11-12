@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { decodeCsvText } from "@/lib/csv-text";
 import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
@@ -346,7 +347,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
       const workbook = file.name.toLocaleLowerCase().endsWith(".csv")
-        ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
+        ? XLSX.read(decodeCsvText(buffer), { type: "string" })
         : XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "yyyy-mm-dd" });
       // 11/4: 위쪽 제목 줄을 건너뛰고 실제 머리글 줄을 찾습니다(빈 머리글은 'A열'로 표시).
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[workbook.SheetNames[0]], { defval: "", header: 1, raw: false, dateNF: "yyyy-mm-dd" });

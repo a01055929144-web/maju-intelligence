@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { decodeCsvText } from "@/lib/csv-text";
 import { ExcelHeaderMappingPreview } from "./excel-mapping-preview";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { Button } from "./ui/button";
@@ -59,7 +60,7 @@ export function StoreCostUploadPanel({ companyId, storeAccountId, onSaved, onClo
       const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
       const workbook = file.name.toLowerCase().endsWith(".csv")
-        ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
+        ? XLSX.read(decodeCsvText(buffer), { type: "string" })
         : XLSX.read(buffer, { type: "array", cellDates: false });
       const first = workbook.Sheets[workbook.SheetNames[0]];
       if (!first) throw new Error("파일에 시트가 없습니다. 첫 시트에 원가 자료를 넣어 다시 선택해 주세요.");

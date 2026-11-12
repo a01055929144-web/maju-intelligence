@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { decodeCsvText } from "@/lib/csv-text";
 import { Tabs } from "@/components/ui/tabs";
 import { Toolbar } from "@/components/ui/toolbar";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -518,7 +519,7 @@ export function PricingDocumentsWorkspace({
     const XLSX = await import("xlsx");
     const buffer = await file.arrayBuffer();
     const workbook = file.name.toLocaleLowerCase().endsWith(".csv")
-      ? XLSX.read(new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, ""), { type: "string" })
+      ? XLSX.read(decodeCsvText(buffer), { type: "string" })
       : XLSX.read(buffer, { type: "array" });
     const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: false });
     const imported = parseDocumentExcelRows(raw);
