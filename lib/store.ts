@@ -8714,6 +8714,8 @@ export type PermitLeadIngestRow = {
 
 export type PermitLeadItem = {
   id: string;
+  /** CC-31: 유통사 리드면 "distributor", 그 밖(없음 포함)은 매장 영업 대상. */
+  targetType?: "restaurant" | "distributor";
   businessName: string;
   businessNumber?: string;
   representativeName?: string;
@@ -8797,6 +8799,7 @@ type PermitLeadRow = {
   permit_status: string | null;
   is_active: boolean;
   permit_date: string | null;
+  target_type?: string | null;
   open_date: string | null;
   address: string | null;
   administrative_area: string | null;
@@ -8978,6 +8981,7 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     permitStatus: row.permit_status || undefined,
     isActive: row.is_active,
     permitDate: row.permit_date || undefined,
+    targetType: row.target_type === "distributor" ? "distributor" : "restaurant",
     openDate: row.open_date || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,

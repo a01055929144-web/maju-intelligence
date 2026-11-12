@@ -21,4 +21,14 @@ describe("lead DM settings (CC-31b)", () => {
     const fn = store.slice(store.indexOf("export async function countRecentNewRestaurantLeads"), store.indexOf("async function getDailyLeadTargetSnapshot("));
     for (const part of ["target_type=eq.restaurant", "merged_into_lead_id=is.null", "is_duplicate=eq.false", "kstDateDaysAgo(29)"]) expect(fn).toContain(part);
   });
+  it("a distributor lead gets the distributor text, ignores 업종·품목 and edits only the distributor text from the lead detail", () => {
+    const ws = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+    expect(ws).toContain('lead.targetType === "distributor"');
+    expect(ws).toContain("LEAD_DM_TEMPLATES.distributor[0].body");
+    expect(ws).toContain("target: distributor");
+    const panel = readFileSync("components/lead-contact-channels-panel.tsx", "utf8");
+    expect(panel).toContain("isDistributorLead ? { excluded: dmSettings?.excluded");
+    expect(panel).toContain("{isDistributorLead ? null : <input");
+    expect(store).toContain('row.target_type === "distributor" ? "distributor" : "restaurant"');
+  });
 });
