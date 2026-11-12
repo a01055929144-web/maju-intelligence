@@ -89,20 +89,28 @@ export function ProductCatalogAdmin({
   }
   const canDrop = (from: string | null, target: string) => Boolean(from) && from !== target && !isUnder(target, from as string) && splitCategory(`${target} > x`).length <= 3 && splitCategory(from as string).slice(0, -1).join(" > ") !== target;
   const canMoveProduct = (product: ProductCatalogAdminItem | null, target: string) => Boolean(product) && canManageCategories && target !== "미분류" && (product!.category || "미분류") !== target;
-  async function moveProduct(product: ProductCatalogAdminItem, target: string) {
+  const moveProduct = (product: ProductCatalogAdminItem, target: string) => moveProducts([product], target);
+  // CC-26: 끌어 놓기와 "옮기기" 메뉴(키보드·휴대폰)가 같은 길을 쓴다. 이미 그 폴더에 있는 상품은 건너뛴다.
+  async function moveProducts(list: ProductCatalogAdminItem[], target: string) {
     setError(""); setMoveMessage("");
+    const product = list[0], moving = list.filter((item) => (item.category || "미분류") !== target).slice(0, 50); // 서버는 한 번에 50개까지
+    if (!moving.length) { setMoveMessage(`선택한 상품은 이미 "${target}"에 있습니다.`); return; }
     try {
-      const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-categories", companyId, updates: [{ id: product.id, category: target, expectedCategory: product.category }] }) });
-      const body = await response.json().catch(() => ({})) as { message?: string; results?: Array<{ ok: boolean; message?: string }> };
-      const result = body.results?.[0];
-      if (!response.ok || !result?.ok) throw new Error(result?.message || body.message || "분류를 바꾸지 못했습니다.");
-      setItems((current) => current.map((item) => (item.id === product.id ? { ...item, category: target } : item)));
+      const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-categories", companyId, updates: moving.map((item) => ({ id: item.id, category: target, expectedCategory: item.category })) }) });
+      const body = await response.json().catch(() => ({})) as { message?: string; results?: Array<{ id: string; ok: boolean; message?: string }> };
+      const failed = (body.results ?? []).filter((result) => !result.ok);
+      if (!response.ok || !body.results?.length || failed.length === body.results.length) throw new Error(failed[0]?.message || body.message || "분류를 바꾸지 못했습니다.");
+      const okIds = new Set(body.results.filter((result) => result.ok).map((result) => result.id));
+      setItems((current) => current.map((item) => (okIds.has(item.id) ? { ...item, category: target } : item)));
+      setPicked((current) => new Set(Array.from(current).filter((id) => !okIds.has(id))));
       // 분류가 바뀌면 이어받는 마진이 달라질 수 있어 폴더 옮기기와 같이 판매가를 다시 계산한다(실패해도 분류 변경은 유지).
       const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
-      setMoveMessage(`"${product.name}"을(를) "${target}"(으)로 옮겼습니다.${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 가격 관리에서 다시 해 주세요."}`);
+      setMoveMessage(`${list.length === 1 ? `"${product.name}"` : `${okIds.size}개`}을(를) "${target}"(으)로 옮겼습니다.${failed.length ? ` ${failed.length}개는 옮기지 못했습니다(그 사이 분류가 바뀜).` : ""}${list.length > 50 ? " 한 번에 50개까지라 나머지는 한 번 더 옮겨 주세요." : ""}${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 가격 관리에서 다시 해 주세요."}`);
     } catch (e) { setError(e instanceof Error ? e.message : "분류를 바꾸지 못했습니다."); }
   }
   const pickedItems = items.filter((item) => picked.has(item.id));
+  const moveTargets = useMemo(() => Array.from(new Set(items.flatMap((item) => (item.category ? categoryAncestors(item.category) : [])))).sort((a, b) => compareCategoryPath(a, b, folderOrder)), [items, folderOrder]);
+  const [moveTarget, setMoveTarget] = useState("");
   async function productAction(body: Record<string, unknown>) {
     const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ids: pickedItems.map((item) => item.id), ...body }) });
     const result = await response.json().catch(() => ({})) as { message?: string; found?: number; deletable?: number; hideOnly?: number; restored?: number };
@@ -285,6 +293,10 @@ export function ProductCatalogAdmin({
       <div className="min-w-0 space-y-4">
       {pickedItems.length ? <div aria-label="선택한 상품" className="flex flex-wrap items-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-4 py-2 text-sm" role="group">
         <b>{pickedItems.length}개 선택</b>
+        {canManageCategories && moveTargets.length ? <span className="flex items-center gap-1">
+          <select aria-label="옮길 폴더" className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-2" onChange={(event) => setMoveTarget(event.target.value)} value={moveTarget}>
+            <option value="">옮길 폴더 선택</option>{moveTargets.map((path) => <option key={path} value={path}>{"  ".repeat(splitCategory(path).length - 1)}{splitCategory(path).slice(-1)[0]}</option>)}</select>
+          <button className="maju-button-primary min-h-[36px] px-3 disabled:bg-slate-300" disabled={!moveTarget} onClick={() => void moveProducts(pickedItems, moveTarget)} type="button">옮기기</button></span> : null}
         <button className="maju-button-primary min-h-[36px] px-3" onClick={() => void deletePicked()} type="button">삭제</button>
         {pickedItems.some((item) => !item.isActive) ? <button className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-3 font-bold" onClick={() => void restorePicked()} type="button">되살리기</button> : null}
         <button className="min-h-[36px] px-2 text-xs font-bold text-slate-600 underline" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
