@@ -22,6 +22,14 @@ describe("setStorePrice", () => {
   afterEach(() => { calls.length = 0; customerFound = true; productRow = { id: prod, sales_unit: "BOX", tax_type: "exempt" }; activeRows = []; });
   productRow = { id: prod, sales_unit: "BOX", tax_type: "exempt" };
 
+  it("saves a valid end date and rejects a wrong-format or past one", async () => {
+    const { setStorePrice } = await import("../lib/pricing/store-price-agreement");
+    await expect(setStorePrice("co", cust, prod, 1200, "합성", day(5))).resolves.toEqual({ ended: 0, created: true });
+    expect(writes()[0].body).toMatchObject({ effective_until: day(5) });
+    await expect(setStorePrice("co", cust, prod, 1200, "합성", "내일")).rejects.toThrow();
+    await expect(setStorePrice("co", cust, prod, 1200, "합성", day(-1))).rejects.toThrow();
+  });
+
   it("creates a store price starting today with the product's unit and tax type", async () => {
     const { setStorePrice } = await import("../lib/pricing/store-price-agreement");
     await expect(setStorePrice("co", cust, prod, 1200, "합성")).resolves.toEqual({ ended: 0, created: true });
