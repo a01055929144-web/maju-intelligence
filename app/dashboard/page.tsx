@@ -170,6 +170,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
           holdModulesEnabled={showHoldModules}
+          distributorSales={isFeatureEnabled("DISTRIBUTOR_SALES", companyId)}
           documentEntry={documentEntry}
           initialView={initialView}
           initialLeadId={params.lead}
