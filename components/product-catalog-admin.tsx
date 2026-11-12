@@ -63,9 +63,10 @@ export function ProductCatalogAdmin({
       .then((response) => (response.ok ? response.json() : { folders: [] }))
       .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
       .catch(() => setFolderOrder(new Map()));
-  }, [companyId]);
+  }, [companyId, canManageCategories]);
   // CC-26: 폴더를 다른 폴더로 끌어 놓으면 그 안으로 옮긴다(CC-17 폴더 이동 API — 상품·마진 연결이 한 번에, 같은 경로가 있으면 대상 마진 유지, 끝나면 판매가 재계산).
   const [dragFolder, setDragFolder] = useState<string | null>(null),
+    [dragProduct, setDragProduct] = useState<ProductCatalogAdminItem | null>(null), // CC-26: 표의 상품을 트리 폴더로 끌어 분류 변경
     [dropTarget, setDropTarget] = useState<string | null>(null),
     [moveMessage, setMoveMessage] = useState("");
   // CC-26: ▲▼로 같은 상위 폴더 안에서 순서를 바꾼다(DB 함수가 형제 순서를 다시 매김). 순서만 바뀌므로 판매가 재계산은 필요 없다.
@@ -86,6 +87,20 @@ export function ProductCatalogAdmin({
     } catch (e) { setError(e instanceof Error ? e.message : "순서를 바꾸지 못했습니다."); }
   }
   const canDrop = (from: string | null, target: string) => Boolean(from) && from !== target && !isUnder(target, from as string) && splitCategory(`${target} > x`).length <= 3 && splitCategory(from as string).slice(0, -1).join(" > ") !== target;
+  const canMoveProduct = (product: ProductCatalogAdminItem | null, target: string) => Boolean(product) && canManageCategories && target !== "미분류" && (product!.category || "미분류") !== target;
+  async function moveProduct(product: ProductCatalogAdminItem, target: string) {
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-categories", companyId, updates: [{ id: product.id, category: target, expectedCategory: product.category }] }) });
+      const body = await response.json().catch(() => ({})) as { message?: string; results?: Array<{ ok: boolean; message?: string }> };
+      const result = body.results?.[0];
+      if (!response.ok || !result?.ok) throw new Error(result?.message || body.message || "분류를 바꾸지 못했습니다.");
+      setItems((current) => current.map((item) => (item.id === product.id ? { ...item, category: target } : item)));
+      // 분류가 바뀌면 이어받는 마진이 달라질 수 있어 폴더 옮기기와 같이 판매가를 다시 계산한다(실패해도 분류 변경은 유지).
+      const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
+      setMoveMessage(`"${product.name}"을(를) "${target}"(으)로 옮겼습니다.${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 가격 관리에서 다시 해 주세요."}`);
+    } catch (e) { setError(e instanceof Error ? e.message : "분류를 바꾸지 못했습니다."); }
+  }
   async function moveFolder(from: string, target: string) {
     const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
     if (!window.confirm(`"${from}" 폴더를 "${target}" 안으로 옮길까요?\n하위 폴더와 상품 분류가 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n옮긴 뒤 판매가를 바로 다시 계산합니다.`)) return;
@@ -182,6 +197,8 @@ export function ProductCatalogAdmin({
     return sideOpen.has(parent) || (Boolean(sideFilter) && isUnder(sideFilter, parent));
   });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
+    ...(canManageCategories ? [{ key: "dragHandle", label: "이동", width: 52, sortable: false, value: () => "", render: (i: ProductCatalogAdminItem) =>
+      <span aria-label={`${i.name} 폴더로 끌어 옮기기`} className="cursor-grab select-none px-2 text-slate-400" draggable onDragEnd={() => setDragProduct(null)} onDragStart={(event) => { setDragProduct(i); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", i.id); }} role="img" title="폴더로 끌어 옮기기">⋮⋮</span> }] : []),
     { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
     { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""} ${i.category || "미분류"}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span><span className="block max-w-[180px] truncate text-[11px] font-normal text-teal-700" title={i.category || "미분류"}>{(i.category || "미분류").replaceAll(" > ", " › ")}</span></button> },
     { key: "spec", label: "규격", width: 75, value: (i) => i.spec || "-" },
@@ -218,7 +235,7 @@ export function ProductCatalogAdmin({
             const hasChildren = sideTab === "category" && sideItems.some((x) => x.depth === item.depth + 1 && x.name.startsWith(item.name + " > "));
             const openNow = sideOpen.has(item.name);
             return (
-              <div className={`flex items-center gap-1 rounded-lg text-sm ${dropTarget === item.name ? "bg-amber-100 ring-2 ring-amber-400" : sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} draggable={sideTab === "category" && canManageCategories && item.name !== "미분류"} key={item.name} onDragEnd={() => { setDragFolder(null); setDropTarget(null); }} onDragLeave={() => setDropTarget((current) => (current === item.name ? null : current))} onDragOver={(event) => { if (canDrop(dragFolder, item.name)) { event.preventDefault(); setDropTarget(item.name); } }} onDragStart={(event) => { setDragFolder(item.name); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.name); }} onDrop={(event) => { event.preventDefault(); const from = dragFolder; setDragFolder(null); setDropTarget(null); if (from && canDrop(from, item.name)) void moveFolder(from, item.name); }} style={{ paddingLeft: 4 + item.depth * 14 }}>
+              <div className={`flex items-center gap-1 rounded-lg text-sm ${dropTarget === item.name ? "bg-amber-100 ring-2 ring-amber-400" : sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} draggable={sideTab === "category" && canManageCategories && item.name !== "미분류"} key={item.name} onDragEnd={() => { setDragFolder(null); setDropTarget(null); }} onDragLeave={() => setDropTarget((current) => (current === item.name ? null : current))} onDragOver={(event) => { if (canDrop(dragFolder, item.name) || (sideTab === "category" && canMoveProduct(dragProduct, item.name))) { event.preventDefault(); setDropTarget(item.name); } }} onDragStart={(event) => { setDragFolder(item.name); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.name); }} onDrop={(event) => { event.preventDefault(); const from = dragFolder, product = dragProduct; setDragFolder(null); setDragProduct(null); setDropTarget(null); if (from && canDrop(from, item.name)) void moveFolder(from, item.name); else if (product && sideTab === "category" && canMoveProduct(product, item.name)) void moveProduct(product, item.name); }} style={{ paddingLeft: 4 + item.depth * 14 }}>
                 {hasChildren ? <button aria-label={`${label} ${openNow ? "접기" : "펼치기"}`} className="w-5 shrink-0 text-xs text-slate-500" onClick={() => setSideOpen((prev) => { const next = new Set(prev); if (next.has(item.name)) next.delete(item.name); else next.add(item.name); return next; })} type="button">{openNow ? "▾" : "▸"}</button> : <span className="w-5 shrink-0" />}
                 <button className={`flex min-w-0 flex-1 items-center justify-between py-2 pr-2 text-left ${item.depth === 0 ? "font-bold" : ""}`} onClick={() => setSideFilter(sideFilter === item.name ? "" : item.name)} type="button">
                   <span className="truncate">{label}</span><span className="text-xs text-slate-500">{item.count}</span>
