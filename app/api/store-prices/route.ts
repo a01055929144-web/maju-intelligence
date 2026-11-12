@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       const count = new Map<string, number>();
       for (const row of agreements) count.set(row.customer_id, (count.get(row.customer_id) ?? 0) + 1);
       const grade = new Map(templates.map((t) => [t.id, t.name]));
-      return NextResponse.json({ stores: stores.map((s) => ({ id: s.id, name: s.customer_name, grade: s.margin_template_id ? grade.get(s.margin_template_id) ?? null : null, priceCount: count.get(s.id) ?? 0 })) }, { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({ grades: templates, stores: stores.map((s) => ({ id: s.id, name: s.customer_name, gradeId: s.margin_template_id && grade.has(s.margin_template_id) ? s.margin_template_id : null, grade: s.margin_template_id ? grade.get(s.margin_template_id) ?? null : null, priceCount: count.get(s.id) ?? 0 })) }, { headers: { "Cache-Control": "no-store" } });
     }
     if (!UUID.test(customerId)) return NextResponse.json({ message: "매장을 확인해 주세요." }, { status: 400 });
     const [products, agreements] = await Promise.all([
