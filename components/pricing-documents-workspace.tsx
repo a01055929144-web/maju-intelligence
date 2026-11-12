@@ -392,6 +392,14 @@ export function PricingDocumentsWorkspace({
     add(s.productIds.map((id) => byId.get(id)!));
     setTab("documents");
   }
+  // 폴더 끌어 담기: 이미 담긴 상품은 건너뛰고 100개씩 가격을 불러와 한 번에 담는다.
+  async function addByIds(ids: string[]) {
+    const have = new Set(draft?.content.lines.map((l) => l.productId));
+    const todo = ids.filter((id) => !have.has(id));
+    const choices: CatalogChoice[] = [];
+    for (let start = 0; start < todo.length; start += 100) choices.push(...await loadPrices(todo.slice(start, start + 100)));
+    if (choices.length) add(choices);
+  }
   async function addPromotion(p: Promotion) {
     if (!draft) throw new Error("먼저 문서를 작성해 주세요.");
     if (draft.content.kind === "sheet" && !p.allowSheet)
@@ -765,7 +773,7 @@ export function PricingDocumentsWorkspace({
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>

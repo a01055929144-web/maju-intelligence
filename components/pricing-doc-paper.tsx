@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
 import type { DocumentOutput } from "@/domains/pricing/document";
+import { FOLDER_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
@@ -25,6 +26,7 @@ function EditablePricingDocPaper({
   content,
   editable,
   onContent,
+  onDropProducts,
   onQuickAdd,
   onQuickSearch
 }: {
@@ -32,6 +34,7 @@ function EditablePricingDocPaper({
   readonly content: DocumentContent;
   readonly editable: boolean;
   readonly onContent: (content: DocumentContent) => void;
+  readonly onDropProducts?: (ids: string[]) => void;
   readonly onQuickAdd?: (item: CatalogChoice) => void;
   readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
@@ -64,7 +67,14 @@ function EditablePricingDocPaper({
   const cell = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500 focus:bg-white disabled:hover:border-transparent";
 
   return (
-    <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10" style={{ borderTop: `6px solid ${accent}` }}>
+    <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10"
+      onDragOver={(event) => { if (editable && onDropProducts && event.dataTransfer.types.includes(FOLDER_DRAG)) event.preventDefault(); }}
+      onDrop={(event) => {
+        if (!editable || !onDropProducts || !event.dataTransfer.types.includes(FOLDER_DRAG)) return;
+        event.preventDefault();
+        try { const ids: unknown = JSON.parse(event.dataTransfer.getData(FOLDER_DRAG)); if (Array.isArray(ids)) onDropProducts(ids.filter((id): id is string => typeof id === "string").slice(0, 300)); } catch { /* 깨진 끌기 값은 무시 */ }
+      }}
+      style={{ borderTop: `6px solid ${accent}` }}>
       {/* 11/4: 문서를 주는 회사가 가장 먼저 보이도록 — 회사명 크게, 연락처·주소는 바로 아래 */}
       <header className="border-b pb-3">
         <input aria-label="회사명" className={`${cell} text-2xl font-black`} disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, companyName: e.target.value })} placeholder="회사명을 입력하세요" style={{ color: accent }} value={content.companyName} />
