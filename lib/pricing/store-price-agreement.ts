@@ -16,11 +16,14 @@ type Agreement = { id: string; source_quote_id: string | null; effective_from: s
  * 이 매장의 한 상품 가격을 정하거나(price 있음) 끝낸다(price = null).
  * - 단위·과세 칸은 상품 기본값. 단위·과세가 없는 상품은 거부.
  * - 이미 있는 이 매장 가격은 먼저 끝낸다(오늘 시작분은 취소, 그 밖은 어제까지) — DB가 같은 상품의 기간 겹침을 막는다.
+ * - until(선택): 끝나는 날(오늘 이후). 시작일은 항상 오늘 — shortcut: 미래 시작 입력은 아직 없음, 필요해지면 from 추가.
  * - 견적서 수락으로 생긴 가격(source_quote_id 있음)은 덮어쓰지 않고 거부 — 먼저 거래처 상세에서 종료.
  */
-export async function setStorePrice(companyId: string, customerId: string, productId: string, price: number | null, actorName?: string | null) {
+export async function setStorePrice(companyId: string, customerId: string, productId: string, price: number | null, actorName?: string | null, until: string | null = null) {
   if (!UUID.test(customerId) || !UUID.test(productId)) throw new StorePriceError("매장과 상품을 확인해 주세요.");
   if (price !== null && (!Number.isSafeInteger(price) || price < 0 || price > 1_000_000_000_000)) throw new StorePriceError("가격은 0원 이상의 원 단위 숫자로 입력해 주세요.");
+  const today = kstDay();
+  if (until !== null && (!/^d{4}-d{2}-d{2}$/.test(until) || until < today || Number.isNaN(Date.parse(until)))) throw new StorePriceError("끝나는 날은 오늘 이후 날짜(YYYY-MM-DD)로 입력해 주세요.");
   const company = enc(companyId);
   const [customer] = await supabaseRequest<Array<{ id: string }>>(`normalized_customers?select=id&company_id=eq.${company}&id=eq.${customerId}&limit=1`);
   if (!customer) throw new StorePriceError("이 회사의 매장이 아닙니다.", 404);
@@ -30,7 +33,7 @@ export async function setStorePrice(companyId: string, customerId: string, produ
   if (price !== null && (!product.sales_unit?.trim() || (product.tax_type !== "taxable" && product.tax_type !== "exempt"))) throw new StorePriceError("상품의 판매 단위·과세 구분을 먼저 정해 주세요.");
   const active = await supabaseRequest<Agreement[]>(`customer_price_agreements?select=id,source_quote_id,effective_from,sales_unit&company_id=eq.${company}&customer_id=eq.${customerId}&product_catalog_id=eq.${productId}&status=eq.active`);
   if (active.some((row) => row.source_quote_id)) throw new StorePriceError("견적서 수락으로 만든 가격이 있습니다. 거래처 상세에서 먼저 종료해 주세요.", 409);
-  const today = kstDay(), now = new Date().toISOString();
+  const now = new Date().toISOString();
   for (const row of active) {
     const body = row.effective_from >= today
       ? { status: "cancelled", ended_at: now, ended_by_name: actorName || null, updated_at: now }
@@ -40,7 +43,7 @@ export async function setStorePrice(companyId: string, customerId: string, produ
   if (price === null) return { ended: active.length, created: false };
   await supabaseRequest("customer_price_agreements", {
     method: "POST", headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ company_id: companyId, customer_id: customerId, product_catalog_id: productId, sales_unit: product.sales_unit!.trim(), unit_price: price, tax_type: product.tax_type, price_includes_tax: false, effective_from: today, effective_until: null, status: "active", created_by_name: actorName || null }),
+    body: JSON.stringify({ company_id: companyId, customer_id: customerId, product_catalog_id: productId, sales_unit: product.sales_unit!.trim(), unit_price: price, tax_type: product.tax_type, price_includes_tax: false, effective_from: today, effective_until: until, status: "active", created_by_name: actorName || null }),
   });
   return { ended: active.length, created: true };
 }

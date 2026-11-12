@@ -46,6 +46,12 @@ describe("store price screen contract", () => {
     expect(manager).toContain('action: "archive"');
     expect(screen).toContain("StoreGradeManager");
   });
+  it("the end date is validated on the server and sent from the screen", () => {
+    const lib = readFileSync("lib/pricing/store-price-agreement.ts", "utf8");
+    expect(lib).toContain("until < today");
+    expect(lib).toContain("effective_until: until");
+    expect(screen).toContain("끝나는 날");
+  });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
     expect(screen).toContain("이 매장 등급");
