@@ -7,6 +7,9 @@ import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/documen
 import type { DocumentOutput } from "@/domains/pricing/document";
 import { PageContent } from "./pricing-document-preview";
 
+// CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
+const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "등급가", base: "기본가", edited: "문서에서 고침" };
+
 export function PricingDocPaper(props: { output: DocumentOutput } | React.ComponentProps<typeof EditablePricingDocPaper>) {
   if ("output" in props) return <article className="pricing-online mx-auto max-w-[860px] rounded border bg-white p-4"><PageContent data={props.output} page={1} pages={1} /></article>;
   return <EditablePricingDocPaper {...props} />;
@@ -137,7 +140,8 @@ function EditablePricingDocPaper({
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value }); }} value={visiblePrice(line).toLocaleString()} />
+                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line).toLocaleString()} />
+                      {editable && line.priceSource ? <span className="block px-1 text-right text-xs text-slate-500 print:hidden" data-price-source={line.priceSource}>{SOURCE_LABEL[line.priceSource]}</span> : null}
                       {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
                   ) : null}

@@ -1,5 +1,7 @@
 import { calculatePrice } from "./price-rules";
 export type DocumentKind = "sheet" | "quote";
+export type PriceSource = "store" | "grade" | "base" | "edited";
+export const PRICE_SOURCES: readonly string[] = ["store", "grade", "base", "edited"];
 export type PrintLine = {
   productId: string;
   displayName: string;
@@ -14,6 +16,8 @@ export type PrintLine = {
   endsOn: string | null;
   remaining: number | null;
   badge: "" | "행사" | "임박";
+  /** CC-30d: 이 줄 가격이 어디서 왔는지(편집 화면 배지용). 직접 고치면 "edited". 없으면 배지 없음. */
+  priceSource?: PriceSource;
 };
 /** 11/4: 회사 정보에서 골라 넣는 줄(위쪽/아래쪽). 확정 시점 값으로 고정됩니다. */
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
@@ -234,6 +238,7 @@ export function parseDocument(value: unknown): DocumentContent {
       spec: field(l.spec ?? "", 80, false, `${index + 1}번째 품목 규격`),
       unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
+      ...(typeof l.priceSource === "string" && PRICE_SOURCES.includes(l.priceSource) ? { priceSource: l.priceSource as PriceSource } : {}),
       taxType: l.taxType as "taxable" | "exempt",
       visible: l.visible,
       promotionId: l.promotionId,

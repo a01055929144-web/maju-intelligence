@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { DocumentContent, DocumentInfoItem } from "@/domains/pricing/document";
+import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
 import { PAYMENT_CYCLE_OPTIONS } from "@/domains/organization/company-profile";
 import { formatPhoneNumber } from "@/lib/phone";
@@ -107,9 +107,9 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
       const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, templateId: templateId || null, productIds: productIds.slice(0, 300) }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
-      const prices = body.prices as Record<string, number>;
+      const prices = body.prices as Record<string, number>, sources = (body.sources || {}) as Record<string, PriceSource>;
       const fresh = latest.current;
-      onContent({ ...fresh, marginTemplateId: templateId || undefined, lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId] })) });
+      onContent({ ...fresh, marginTemplateId: templateId || undefined, lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId], priceSource: sources[line.productId] })) });
       setMessage("가격 기준을 적용했습니다. 매입가가 없는 품목은 가격을 그대로 뒀습니다.");
     } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
     finally { setBasisBusy(false); }
@@ -134,16 +134,16 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     if (productIds.length && !window.confirm(`"${customer.name}" 가격으로 일반 품목 가격을 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?`)) return;
     setBasisBusy(true); setMessage("");
     try {
-      let prices: Record<string, number> = {}, gradeId: string | null = null;
+      let prices: Record<string, number> = {}, sources: Record<string, PriceSource> = {}, gradeId: string | null = null;
       if (productIds.length) {
         const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId: customer.id, productIds: productIds.slice(0, 300) }) });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
-        prices = body.prices as Record<string, number>; gradeId = (body.gradeId as string | null) ?? null;
+        prices = body.prices as Record<string, number>; sources = (body.sources || {}) as Record<string, PriceSource>; gradeId = (body.gradeId as string | null) ?? null;
       }
       const fresh = latest.current;
       onContent({ ...fresh, customerId: customer.id, marginTemplateId: gradeId || undefined, recipient: fresh.recipient.trim() ? fresh.recipient : customer.name.slice(0, 100),
-        lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId] })) });
+        lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId], priceSource: sources[line.productId] })) });
       setMessage(`"${customer.name}" 가격(매장 가격 > 등급가 > 기본가)을 적용했습니다. 가격이 없는 품목은 그대로 뒀습니다.`);
     } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
     finally { setBasisBusy(false); }
@@ -354,15 +354,16 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
           <span className="w-16">형식</span>
           {([["auto", "자동"], ["table", "표"], ["cards", "카드"]] as const).map(([value, label]) => <button aria-pressed={content.layout === value} className={chip(content.layout === value)} disabled={!editable} key={value} onClick={() => onContent({ ...content, layout: value })} type="button">{label}</button>)}
         </div>
-        {templates.length ? <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+        {templates.length && content.kind === "quote" ? <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <span className="w-16">받는 매장</span>
           {content.customerId ? <><span className="font-semibold text-slate-800">{content.recipient || "연결됨"}</span><button className={chip(false)} disabled={!editable || basisBusy} onClick={() => void pickStore(null)} type="button">연결 풀기</button></>
             : <input aria-label="받는 매장 찾기" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void searchStores(event.target.value)} placeholder="매장 이름으로 찾아 가격 자동 적용" value={storeQuery} />}
-          {storeFound.length ? <ul className="w-full space-y-1" role="listbox">{storeFound.map((c) => <li key={c.id}><button className={chip(false)} disabled={basisBusy} onClick={() => void pickStore(c)} role="option" type="button">{c.name}</button></li>)}</ul> : null}
+          {storeFound.length ? <ul className="w-full space-y-1" role="listbox">{storeFound.map((c) => <li key={c.id}><button className={chip(false)} disabled={basisBusy} aria-selected={false} onClick={() => void pickStore(c)} role="option" type="button">{c.name}</button></li>)}</ul> : null}
         </div> : null}
-        {templates.length ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-          <span className="w-16">가격 기준</span>
-          <select aria-label="가격 기준" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
+        {/* 견적서는 받는 매장이 가격을 정하고, 단가표(받는 매장 없음)만 등급 하나를 고른다. */}
+        {templates.length && content.kind === "sheet" ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-16">등급</span>
+          <select aria-label="등급" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
             <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label> : null}
