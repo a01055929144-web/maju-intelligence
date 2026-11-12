@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
+import { canManagePriceSheets } from "@/domains/pricing/access";
 import {
   createProductCatalogForAdmin,
+  deleteProductsForAdmin,
+  restoreProductsForAdmin,
   listProductCategorySuggestions,
   listProductCatalogForAdmin,
   updateProductCatalogForAdmin,
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
 }
 async function payload(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
-    | ({ action?: string; companyId?: string; id?: string; updates?: Array<{ id: string; category: string; expectedCategory: string }> } & Partial<SaveProductCatalogInput>)
+    | ({ action?: string; companyId?: string; id?: string; ids?: string[]; apply?: boolean; updates?: Array<{ id: string; category: string; expectedCategory: string }> } & Partial<SaveProductCatalogInput>)
     | null;
   return { body, scope: await getRequestAuthScope(request, body?.companyId) };
 }
@@ -92,6 +95,17 @@ export async function PATCH(request: NextRequest) {
   const { body, scope } = await payload(request),
     error = denied(scope);
   if (error) return error;
+  if (body?.action === "delete-products" || body?.action === "restore-products") {
+    // CC-24: 삭제·숨김·되살리기는 대표·관리자만(직원은 불가). 관리자 미리보기는 세션 없음 = 허용.
+    if (scope.ok && scope.customerSession && !canManagePriceSheets(scope.customerSession)) return NextResponse.json({ message: "대표·관리자만 상품을 삭제할 수 있습니다." }, { status: 403 });
+    if (!Array.isArray(body.ids)) return NextResponse.json({ message: "상품을 골라 주세요." }, { status: 400 });
+    try {
+      if (body.action === "restore-products") return NextResponse.json({ restored: await restoreProductsForAdmin(scope.companyId!, body.ids) });
+      return NextResponse.json(await deleteProductsForAdmin(scope.companyId!, body.ids, body.apply === true));
+    } catch (e) {
+      return NextResponse.json({ message: e instanceof Error && /상품을 1~500개/.test(e.message) ? e.message : "상품을 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 400 });
+    }
+  }
   if (body?.action === "update-categories") {
     if (!Array.isArray(body.updates)) return NextResponse.json({ message: "저장할 추천을 확인해 주세요." }, { status: 400 });
     try {
