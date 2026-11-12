@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogChoice, Promotion } from "@/domains/pricing/document";
 import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
+import { buildFolderTree, orderByFolder, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
+import { inFolder } from "@/domains/pricing/margin-tree";
 
 const PAGE = 50;
+const UNSORTED = "__unsorted__";
 
 /**
  * 11/4: 문서 보기 왼쪽 — 상품관리 상품을 표로 보고 골라 담습니다.
@@ -42,6 +45,16 @@ export function PricingProductPicker({
   const [page, setPage] = useState(1);
   const [prices, setPrices] = useState<Record<string, CatalogChoice>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // CC-26: 분류 폴더(상품관리와 같은 순서)로 거르고, 폴더를 통째로 담는다. 폴더 순서를 못 읽으면 이름순으로 계속 보여 준다.
+  const [folder, setFolder] = useState("");
+  const [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
+  const [folderMessage, setFolderMessage] = useState("");
+  useEffect(() => {
+    void fetch(`/api/price-sheets/folder-order?${new URLSearchParams({ companyId })}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { folders: [] }))
+      .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
+      .catch(() => setFolderOrder(new Map()));
+  }, [companyId]);
 
   useEffect(() => {
     let alive = true;
@@ -60,12 +73,28 @@ export function PricingProductPicker({
     if (filters.unit && !count.has(filters.unit)) list.unshift([filters.unit, 0]);
     return list;
   }, [index, filters]);
-  const filtered = useMemo(() => filterIndex(index || [], filters), [index, filters]);
+  const tree = useMemo(() => buildFolderTree((index || []).flatMap((item) => (item.category ? [item.category] : [])), folderOrder), [index, folderOrder]);
+  const inPickedFolder = (item: IndexItem) => !folder || (folder === UNSORTED ? !item.category : inFolder(item.category || "", folder));
+  const filtered = useMemo(() => orderByFolder(filterIndex(index || [], filters).filter(inPickedFolder), folderOrder), [index, filters, folder, folderOrder]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderItems = useMemo(() => (index || []).filter(inPickedFolder), [index, folder]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderAddable = folderItems.filter((item) => !added.has(item.id));
+  async function addFolder() {
+    const ids = folderAddable.slice(0, 300).map((item) => item.id);
+    if (!ids.length) return;
+    setFolderMessage("");
+    try {
+      const choices: CatalogChoice[] = [];
+      for (let start = 0; start < ids.length; start += 100) choices.push(...await loadPrices(ids.slice(start, start + 100)));
+      onAdd(choices);
+      setFolderMessage(`${choices.length}개 담음${folderItems.length - folderAddable.length ? ` · 이미 담긴 ${folderItems.length - folderAddable.length}개 건너뜀` : ""}${folderAddable.length > 300 ? ` · 한 번에 300개까지라 ${folderAddable.length - 300}개는 한 번 더 눌러 주세요` : ""}`);
+    } catch (e) { setFolderMessage(e instanceof Error ? e.message : "폴더를 담지 못했습니다."); }
+  }
+
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
   const visible = filtered.slice((page - 1) * PAGE, page * PAGE);
   const visibleKey = visible.map((item) => item.id).join(",");
 
-  useEffect(() => { setPage(1); }, [filters]);
+  useEffect(() => { setPage(1); }, [filters, folder]);
   useEffect(() => {
     const missing = visibleKey ? visibleKey.split(",").filter((id) => !prices[id]) : [];
     if (!missing.length) return;
@@ -99,6 +128,15 @@ export function PricingProductPicker({
               <input aria-label="추가할 품목 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" maxLength={100} onChange={(e) => setFilter("all", e.target.value)} placeholder="코드·상품명·규격·단위 한 번에 찾기" value={filters.all} />
               <button aria-expanded={detail} className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${detail || activeDetail ? "border-teal-600 text-teal-800" : "border-slate-300"}`} onClick={() => setDetail((v) => !v)} type="button">상세{activeDetail ? ` ${activeDetail}` : ""}</button>
             </div>
+            {tree.length ? <div className="flex gap-1.5">
+              <select aria-label="분류 폴더" className="h-8 min-w-0 flex-1 rounded border border-slate-300 px-1 text-xs" onChange={(e) => { setFolder(e.target.value); setFolderMessage(""); }} value={folder}>
+                <option value="">분류 전체 ({(index || []).length.toLocaleString()})</option>
+                {tree.map((node) => <option key={node.path} value={node.path}>{"\u00a0\u00a0".repeat(node.depth)}{node.name} ({node.count})</option>)}
+                {(index || []).some((item) => !item.category) ? <option value={UNSORTED}>미분류 ({(index || []).filter((item) => !item.category).length})</option> : null}
+              </select>
+              {folder ? <button className="h-8 shrink-0 rounded bg-teal-700 px-2 text-xs font-bold text-white disabled:bg-slate-300" disabled={busy || !folderAddable.length} onClick={() => void addFolder()} type="button">이 폴더 {folderAddable.length}개 담기</button> : null}
+            </div> : null}
+            {folderMessage ? <p className="text-xs font-bold text-teal-800" role="status">{folderMessage}</p> : null}
             {detail ? (
               <div className="grid grid-cols-2 gap-1.5">
                 <input aria-label="상품 코드로 거르기" className={filterInput} onChange={(e) => setFilter("code", e.target.value)} placeholder="상품 코드" value={filters.code} />

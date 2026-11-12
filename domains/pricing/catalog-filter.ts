@@ -1,5 +1,5 @@
 /** 11/4: 단가표·견적서 상품 목록 빠른 필터(순수 함수). */
-export type IndexItem = { id: string; code: string; name: string; displayName: string; spec: string; unit: string };
+export type IndexItem = { id: string; code: string; name: string; displayName: string; spec: string; unit: string; category?: string };
 const norm = (value: string) => value.toLowerCase().replace(/\s+/g, "");
 
 /** 상세 조건(코드·상품명·규격·단위)과 통합 검색으로 상품을 거릅니다. */

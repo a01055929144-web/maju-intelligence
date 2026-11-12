@@ -28,3 +28,30 @@ export function compareCategoryPath(a: string, b: string, folderOrder: FolderOrd
 export function sortCategoryPaths<T extends string>(paths: readonly T[], folderOrder?: FolderOrder): T[] {
   return [...paths].sort((a, b) => compareCategoryPath(a, b, folderOrder));
 }
+
+export type FolderNode = { path: string; name: string; depth: number; count: number };
+
+/** 상품 분류 목록 → 폴더 트리(폴더 순서대로, 상위 폴더 바로 아래에 하위). count는 하위 폴더 상품 포함. 분류 없는 상품은 트리에 넣지 않는다. */
+export function buildFolderTree(categories: readonly string[], folderOrder?: FolderOrder): FolderNode[] {
+  const counts = new Map<string, number>();
+  for (const category of categories) {
+    const parts = splitCategory(category);
+    for (let depth = 1; depth <= parts.length; depth += 1) {
+      const path = parts.slice(0, depth).join(" > ");
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+    }
+  }
+  return sortCategoryPaths(Array.from(counts.keys()), folderOrder).map((path) => {
+    const parts = splitCategory(path);
+    return { path, name: parts[parts.length - 1], depth: parts.length - 1, count: counts.get(path) as number };
+  });
+}
+
+/** 상품을 폴더 순서대로(같은 폴더 안은 기존 순서 그대로, 분류 없는 상품은 맨 뒤). */
+export function orderByFolder<T extends { category?: string }>(items: readonly T[], folderOrder?: FolderOrder): T[] {
+  return [...items].sort((a, b) => {
+    const x = a.category?.trim() ?? "", y = b.category?.trim() ?? "";
+    if (!x || !y) return x === y ? 0 : x ? -1 : 1;
+    return compareCategoryPath(x, y, folderOrder);
+  });
+}
