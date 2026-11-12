@@ -7,7 +7,7 @@ import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/
 // CC-30b: 매장 가격 — 왼쪽 매장 목록(검색·등급·"매장 가격 N개"), 오른쪽 이 매장의 상품별 가격표. "이 매장 가격" 칸을 고치면(Enter·칸 밖 클릭) 바로 저장, 비우면 끝내기.
 type Store = { id: string; name: string; grade: string | null; gradeId: string | null; priceCount: number };
 type Grade = { id: string; name: string };
-type Row = { productId: string; name: string; category: string; basePrice: number; storePrice: number | null; since: string | null; source: StorePriceSource };
+type Row = { productId: string; name: string; category: string; basePrice: number; storePrice: number | null; since: string | null; until: string | null; source: StorePriceSource };
 const badge: Record<StorePriceSource, string> = { 기본: "bg-slate-100 text-slate-600", 매장: "bg-indigo-100 text-indigo-800", 견적: "border border-indigo-400 text-indigo-800" };
 
 export function PricingStorePrices({ companyId, userKey }: { companyId: string; userKey: string }) {
@@ -38,11 +38,11 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
   }, [fetchJson]);
   useEffect(() => { setRows([]); if (store) void loadRows(store.id); }, [store, loadRows]);
 
-  async function save(row: Row, price: number | null) {
+  async function save(row: Row, price: number | null, until: string | null = null) {
     if (!store) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(`/api/customers/${store.id}/contract-prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: row.productId, price }) });
+      const response = await fetch(`/api/customers/${store.id}/contract-prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: row.productId, price, until }) });
       const body = await response.json().catch(() => ({})) as { message?: string };
       if (!response.ok) throw new Error(body.message || "저장하지 못했습니다.");
       setMessage(price === null ? `${row.name}: 이 매장 가격을 끝냈습니다(기본 판매가로 돌아감).` : `${row.name}: 이 매장 가격을 ${price.toLocaleString()}원으로 정했습니다.`);
@@ -83,6 +83,7 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(r.storePrice ?? ""); e.currentTarget.blur(); } }} /> },
     { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{d.toLocaleString()}원</span>; } },
     { key: "source", label: "출처", value: (r) => r.source, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
+    { key: "until", label: "끝나는 날", value: (r) => r.until ?? "", render: (r) => r.storePrice === null || r.source === "견적" ? "-" : <input aria-label={`${r.name} 끝나는 날`} className="h-8 rounded border border-slate-300 px-1 text-xs" defaultValue={r.until ?? ""} disabled={busy} key={`${r.productId}-${r.until}`} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { if (e.currentTarget.value !== (r.until ?? "")) void save(r, r.storePrice, e.currentTarget.value || null); }} type="date" /> },
     { key: "since", label: "시작일", value: (r) => r.since ?? "", render: (r) => r.since ?? "-" },
   ];
 

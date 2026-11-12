@@ -36,9 +36,9 @@ export async function GET(request: NextRequest) {
     if (!UUID.test(customerId)) return NextResponse.json({ message: "매장을 확인해 주세요." }, { status: 400 });
     const [products, agreements] = await Promise.all([
       supabaseRequest<Array<{ product_id: string; name: string; category: string; price: number }>>(`pricing_p0_effective?select=product_id,name,category,price&company_id=eq.${company}&active=eq.true&price=gt.0&order=name&limit=1000`),
-      supabaseRequest<Array<{ product_catalog_id: string; unit_price: number; effective_from: string; source_quote_id: string | null }>>(`customer_price_agreements?select=product_catalog_id,unit_price,effective_from,source_quote_id&company_id=eq.${company}&customer_id=eq.${customerId}&status=eq.active`),
+      supabaseRequest<Array<{ product_catalog_id: string; unit_price: number; effective_from: string; effective_until: string | null; source_quote_id: string | null }>>(`customer_price_agreements?select=product_catalog_id,unit_price,effective_from,effective_until,source_quote_id&company_id=eq.${company}&customer_id=eq.${customerId}&status=eq.active`),
     ]);
     const byProduct = new Map(agreements.map((a) => [a.product_catalog_id, a]));
-    return NextResponse.json({ rows: products.map((p) => { const a = byProduct.get(p.product_id); return { productId: p.product_id, name: p.name, category: p.category, basePrice: p.price, storePrice: a?.unit_price ?? null, since: a?.effective_from ?? null, source: storePriceSource(a ? { fromQuote: Boolean(a.source_quote_id) } : null) }; }) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ rows: products.map((p) => { const a = byProduct.get(p.product_id); return { productId: p.product_id, name: p.name, category: p.category, basePrice: p.price, storePrice: a?.unit_price ?? null, since: a?.effective_from ?? null, until: a?.effective_until ?? null, source: storePriceSource(a ? { fromQuote: Boolean(a.source_quote_id) } : null) }; }) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ message: "매장 가격을 불러오지 못했습니다." }, { status: 500 }); }
 }
