@@ -6,6 +6,8 @@ import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 import { buildFolderTree, orderByFolder, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
 
+/** 폴더 끌어 담기: 끌 때 담을 상품 id(최대 300개)를 실어 보낸다. 종이(PricingDocPaper)가 같은 이름으로 받는다. */
+export const FOLDER_DRAG = "application/x-maju-products";
 const PAGE = 50;
 const UNSORTED = "__unsorted__";
 
@@ -136,6 +138,7 @@ export function PricingProductPicker({
               </select>
               {folder ? <button className="h-8 shrink-0 rounded bg-teal-700 px-2 text-xs font-bold text-white disabled:bg-slate-300" disabled={busy || !folderAddable.length} onClick={() => void addFolder()} type="button">이 폴더 {folderAddable.length}개 담기</button> : null}
             </div> : null}
+            {folder && folderAddable.length ? <span className="inline-block cursor-grab rounded border border-dashed border-teal-600 px-2 py-1 text-xs font-bold text-teal-800" draggable onDragStart={(e) => { e.dataTransfer.setData(FOLDER_DRAG, JSON.stringify(folderAddable.slice(0, 300).map((item) => item.id))); e.dataTransfer.effectAllowed = "copy"; }} title="끌어서 오른쪽 종이에 놓으면 이 폴더 상품이 담깁니다(위 버튼과 같음)">⠿ 이 폴더를 종이로 끌어 담기</span> : null}
             {folderMessage ? <p className="text-xs font-bold text-teal-800" role="status">{folderMessage}</p> : null}
             {detail ? (
               <div className="grid grid-cols-2 gap-1.5">
