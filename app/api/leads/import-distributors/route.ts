@@ -111,8 +111,13 @@ export async function DELETE(request: NextRequest) {
   if (!UUID.test(batchId)) return NextResponse.json({ message: "묶음 번호가 올바르지 않습니다." }, { status: 400 });
   const actor = actorOf(g.scope);
   try {
-    const items = await supabaseRequest<Array<{ lead_id: string }>>(`lead_import_batch_items?select=lead_id&company_id=eq.${g.companyId}&batch_id=eq.${batchId}`);
-    const ids = items.map((i) => i.lead_id);
+    // PostgREST는 한 번에 1000줄까지만 주므로 끝까지 나눠 읽는다(연락 기록 확인·되돌린 개수가 1000에서 잘리던 문제).
+    const ids: string[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const page = await supabaseRequest<Array<{ lead_id: string }>>(`lead_import_batch_items?select=lead_id&company_id=eq.${g.companyId}&batch_id=eq.${batchId}&order=lead_id&limit=1000&offset=${offset}`);
+      ids.push(...page.map((i) => i.lead_id));
+      if (page.length < 1000) break;
+    }
     if (ids.length) {
       for (const part of chunk(ids, 100)) { // 주소 길이 제한을 피해 100개씩 확인
         const touched = await supabaseRequest<Array<{ lead_id: string }>>(`lead_actions?select=lead_id&company_id=eq.${g.companyId}&lead_id=in.(${part.join(",")})&limit=1`);
