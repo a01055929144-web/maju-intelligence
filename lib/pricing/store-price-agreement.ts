@@ -23,7 +23,7 @@ export async function setStorePrice(companyId: string, customerId: string, produ
   if (!UUID.test(customerId) || !UUID.test(productId)) throw new StorePriceError("매장과 상품을 확인해 주세요.");
   if (price !== null && (!Number.isSafeInteger(price) || price < 0 || price > 1_000_000_000_000)) throw new StorePriceError("가격은 0원 이상의 원 단위 숫자로 입력해 주세요.");
   const today = kstDay();
-  if (until !== null && (!/^d{4}-d{2}-d{2}$/.test(until) || until < today || Number.isNaN(Date.parse(until)))) throw new StorePriceError("끝나는 날은 오늘 이후 날짜(YYYY-MM-DD)로 입력해 주세요.");
+  if (until !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today || Number.isNaN(Date.parse(until)))) throw new StorePriceError("끝나는 날은 오늘 이후 날짜(YYYY-MM-DD)로 입력해 주세요.");
   const company = enc(companyId);
   const [customer] = await supabaseRequest<Array<{ id: string }>>(`normalized_customers?select=id&company_id=eq.${company}&id=eq.${customerId}&limit=1`);
   if (!customer) throw new StorePriceError("이 회사의 매장이 아닙니다.", 404);
