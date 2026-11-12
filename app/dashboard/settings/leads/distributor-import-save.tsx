@@ -3,17 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import { chunk, groupDuplicates, parseImportRows } from "@/domains/lead/distributor-import";
 
 // CC-21: 유통사로 저장. 중복 의심 묶음은 대표가 고르고(기본: 묶음의 첫 줄만 저장), 500행씩 저장, 저장 뒤 되돌리기.
-export function DistributorImportSave({ companyId, fileName, sheetName, table, headerRow }: { companyId?: string; fileName: string; sheetName: string; table: unknown[][]; headerRow: number }) {
+export function DistributorImportSave({ companyId, fileName, sheetName, table, headerRow, onChanged }: { onChanged?: () => void; companyId?: string; fileName: string; sheetName: string; table: unknown[][]; headerRow: number }) {
   const parsed = useMemo(() => parseImportRows(table, headerRow), [table, headerRow]);
   const groups = useMemo(() => groupDuplicates(parsed.rows), [parsed.rows]);
   const [skip, setSkip] = useState<Set<number>>(() => new Set(groups.flatMap((g) => g.slice(1))));
   const [state, setState] = useState<{ busy: boolean; message: string; error: string; batchId: string }>({ busy: false, message: "", error: "", batchId: "" });
   const [enabled, setEnabled] = useState(false);
-  const [history, setHistory] = useState<Array<{ id: string; fileName: string; createdAt: string; saved: number }>>([]); // 되돌릴 수 있는 이전 가져오기
-  const loadHistory = () => void fetch(`/api/leads/import-distributors?${new URLSearchParams({ ...(companyId ? { companyId } : {}), list: "1" })}`, { cache: "no-store" })
-    .then(async (r) => { setEnabled(r.ok); if (r.ok) setHistory(((await r.json()) as { batches?: typeof history }).batches ?? []); })
+  const checkEnabled = () => void fetch(`/api/leads/import-distributors?${new URLSearchParams({ ...(companyId ? { companyId } : {}), list: "1" })}`, { cache: "no-store" })
+    .then(async (r) => { setEnabled(r.ok); })
     .catch(() => setEnabled(false));
-  useEffect(() => { loadHistory(); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { checkEnabled(); }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
   const toSave = parsed.rows.filter((_, i) => !skip.has(i));
 
   async function save() {
@@ -28,16 +27,16 @@ export function DistributorImportSave({ companyId, fileName, sheetName, table, h
         setState((s) => ({ ...s, batchId, message: `${created}개 저장 중…` }));
       }
       setState({ busy: false, error: "", batchId, message: `${created}개 저장했습니다.${fieldsCreated ? ` 새 회사 칸 ${fieldsCreated}개를 만들었습니다.` : ""}${skipped ? ` 이미 있는 번호 ${skipped}개는 건너뜀.` : ""}` });
-      loadHistory();
+      onChanged?.();
     } catch (e) { setState({ busy: false, message: "", batchId, error: `${e instanceof Error ? e.message : "저장하지 못했습니다."}${batchId ? " 이미 저장된 것은 '되돌리기'로 지울 수 있습니다." : ""}` }); }
   }
-  async function undo(id = state.batchId, label = "이번 가져오기") {
-    if (!id || !window.confirm(`${label}로 저장한 유통사 리드를 모두 지울까요? (연락 기록이 있으면 되돌릴 수 없습니다. 이미 만든 회사 칸은 남습니다.)`)) return;
+  async function undo() {
+    const id = state.batchId;
+    if (!id || !window.confirm("이번 가져오기로 저장한 유통사 리드를 모두 지울까요? (연락 기록이 있으면 되돌릴 수 없습니다. 이미 만든 회사 칸은 남습니다.)")) return;
     setState((s) => ({ ...s, busy: true, error: "" }));
-    const response = await fetch(`/api/leads/import-distributors?${new URLSearchParams({ ...(companyId ? { companyId } : {}), batchId: id })}`, { method: "DELETE" });
-    const body = await response.json().catch(() => ({}));
-    setState(response.ok ? { busy: false, message: `${body.removed}개를 되돌렸습니다.`, error: "", batchId: id === state.batchId ? "" : state.batchId } : (s) => ({ ...s, busy: false, error: body.message || "되돌리지 못했습니다." }));
-    if (response.ok) loadHistory();
+    const result = await undoDistributorBatch(companyId, id);
+    setState(result.ok ? { busy: false, message: `${result.removed.toLocaleString()}개를 되돌렸습니다.`, error: "", batchId: "" } : (s) => ({ ...s, busy: false, error: result.message }));
+    if (result.ok) onChanged?.();
   }
 
   if (!enabled) return null;
@@ -52,10 +51,44 @@ export function DistributorImportSave({ companyId, fileName, sheetName, table, h
       <button className="maju-button-primary min-h-[44px] px-4" disabled={state.busy || !toSave.length} onClick={() => void save()} type="button">{toSave.length.toLocaleString()}개 저장</button>
       {state.batchId ? <button className="min-h-[44px] rounded-lg border px-4" disabled={state.busy} onClick={() => void undo()} type="button">되돌리기</button> : null}
     </div>
-    {history.length ? <details className="rounded border bg-white p-2 text-sm"><summary className="min-h-[36px] cursor-pointer font-bold">이전 가져오기 되돌리기 ({history.length})</summary>
-      <ul className="mt-2 divide-y">{history.map((b) => <li className="flex flex-wrap items-center justify-between gap-2 py-2" key={b.id}>
-        <span className="min-w-0 truncate">{b.fileName} · {new Date(b.createdAt).toLocaleString("ko-KR")} · {b.saved.toLocaleString()}개</span>
-        <button className="min-h-[36px] rounded-lg border px-3 text-xs font-bold" disabled={state.busy} onClick={() => void undo(b.id, `"${b.fileName}" ${b.saved.toLocaleString()}개`)} type="button">되돌리기</button>
-      </li>)}</ul></details> : null}
   </div>;
+}
+
+async function undoDistributorBatch(companyId: string | undefined, batchId: string): Promise<{ ok: true; removed: number } | { ok: false; message: string }> {
+  try {
+    const response = await fetch(`/api/leads/import-distributors?${new URLSearchParams({ ...(companyId ? { companyId } : {}), batchId })}`, { method: "DELETE" });
+    const body = await response.json().catch(() => ({}));
+    return response.ok ? { ok: true, removed: Number(body.removed) || 0 } : { ok: false, message: body.message || "되돌리지 못했습니다." };
+  } catch { return { ok: false, message: "되돌리지 못했습니다. 네트워크를 확인해 주세요." }; }
+}
+
+/** CC-21: 엑셀 가져오기 탭 첫 화면에 항상 보이는 "이전 가져오기 되돌리기" 목록(파일을 고르기 전에도). 스위치 꺼진 회사는 아무것도 안 그린다. */
+export function DistributorImportHistory({ companyId, refreshKey, onChanged }: { companyId?: string; refreshKey: number; onChanged: () => void }) {
+  const [batches, setBatches] = useState<Array<{ id: string; fileName: string; createdAt: string; saved: number }>>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fetch(`/api/leads/import-distributors?${new URLSearchParams({ ...(companyId ? { companyId } : {}), list: "1" })}`, { cache: "no-store" })
+      .then(async (r) => { if (alive) setBatches(r.ok ? ((await r.json()) as { batches?: typeof batches }).batches ?? [] : []); })
+      .catch(() => { if (alive) setBatches([]); });
+    return () => { alive = false; };
+  }, [companyId, refreshKey]);
+  async function undo(b: (typeof batches)[number]) {
+    if (!window.confirm(`"${b.fileName}" ${b.saved.toLocaleString()}개로 저장한 유통사 리드를 모두 지울까요? (연락 기록이 있으면 되돌릴 수 없습니다. 이미 만든 회사 칸은 남습니다.)`)) return;
+    setBusy(true); setMessage(null);
+    const result = await undoDistributorBatch(companyId, b.id);
+    setBusy(false);
+    setMessage(result.ok ? { ok: true, text: `${result.removed.toLocaleString()}개를 되돌렸습니다.` } : { ok: false, text: result.message });
+    if (result.ok) onChanged();
+  }
+  if (!batches.length && !message) return null;
+  return <section aria-label="이전 가져오기 되돌리기" className="rounded-xl border bg-white p-3 text-sm">
+    <h3 className="font-black">이전 가져오기 되돌리기 ({batches.length})</h3>
+    {message ? <p className={`mt-1 text-sm font-bold ${message.ok ? "text-teal-800" : "text-rose-700"}`} role={message.ok ? "status" : "alert"}>{message.text}</p> : null}
+    <ul className="mt-2 divide-y">{batches.map((b) => <li className="flex flex-wrap items-center justify-between gap-2 py-2" key={b.id}>
+      <span className="min-w-0 truncate">{b.fileName} · {new Date(b.createdAt).toLocaleString("ko-KR")} · {b.saved.toLocaleString()}개</span>
+      <button className="min-h-[36px] rounded-lg border px-3 text-xs font-bold" disabled={busy} onClick={() => void undo(b)} type="button">되돌리기</button>
+    </li>)}</ul>
+  </section>;
 }
