@@ -17,6 +17,6 @@ export default async function PromotionsPage({ searchParams }: { searchParams?: 
   const preview = Boolean(admin && !customer);
   const manager = !customer || canManagePriceSheets(customer);
   return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="행사·임박" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="mx-auto max-w-[1600px] p-4"><PricingPromotionsWorkspace companyId={companyId} manager={manager} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
+    <main className="mx-auto max-w-[1600px] p-4"><PricingPromotionsWorkspace audienceEnabled={isFeatureEnabled("PROMOTION_AUDIENCE", companyId)} companyId={companyId} manager={manager} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
   </CustomerAppShell>;
 }
