@@ -15,11 +15,12 @@ export function cleanPhones(raw: unknown): { phone: string | null; extra: string
   return { phone: fixed[0] ?? null, extra: fixed.slice(1) };
 }
 
-const HEADERS: Record<string, "name" | "region" | "address" | "grade" | "items" | "erp" | "phone" | "tel" | "fax" | "email" | "status" | "nextContact" | "owner"> = {
+const HEADERS: Record<string, "name" | "region" | "address" | "grade" | "items" | "erp" | "phone" | "tel" | "fax" | "email" | "status" | "nextContact" | "owner" | "lastContact" | "nextAction"> = {
   상호: "name", 업체명: "name", 유통사: "name", 회사명: "name", 지역: "region", 주소: "address", 등급: "grade", 취급품목: "items", 사용erp: "erp", erp: "erp",
   휴대폰: "phone", 연락처: "phone", 전화: "tel", 전화번호: "tel", 팩스: "fax", 이메일: "email", 상태: "status", 영업상태: "status", 다음연락일: "nextContact", 담당: "owner", 담당자: "owner",
   // 비브 유통사 시트(11/12): "상호명"은 중개 상대방 상호, "대표자명"은 커스텀 칸이라 일부러 넣지 않는다.
   유통사명: "name", 주문톡상태: "status", icp: "grade", icp등급: "grade", 다음액션일: "nextContact",
+  구분: "items", 최근접촉일: "lastContact", 다음액션내용: "nextAction",
 };
 export type ImportField = (typeof HEADERS)[string];
 const norm = (header: string) => header.replace(/\s/g, "").toLowerCase();
@@ -59,19 +60,36 @@ export function detectHeaderRow(rows: readonly (readonly unknown[])[]): number {
   return best;
 }
 
-export type ImportRow = { name: string; region: string; address: string; grade: string; items: string; erp: string; phone: string | null; extraPhones: string[]; fax: string | null; email: string | null; status: string; nextContact: string | null; owner: string };
-export type ParsedImport = { rows: ImportRow[]; errors: Array<{ line: number; message: string }> };
+/** 표준 칸에 안 맞는 칸은 회사 커스텀 칸으로 저장한다(label → 값). 날짜만 들어 있는 칸은 날짜 칸. */
+export type ImportColumn = { label: string; type: "text" | "date" };
+export type ImportRow = { name: string; region: string; address: string; grade: string; items: string; erp: string; phone: string | null; extraPhones: string[]; fax: string | null; email: string | null; status: string; nextContact: string | null; owner: string; lastContact: string | null; nextAction: string; extras: Record<string, string> };
+export type ParsedImport = { rows: ImportRow[]; errors: Array<{ line: number; message: string }>; columns: ImportColumn[] };
+export const MAX_IMPORT_COLUMNS = 60;
 
 const text = (value: unknown) => String(value ?? "").trim().slice(0, 300);
 const day = (value: unknown) => { const m = String(value ?? "").match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null; };
+const onlyDate = (value: unknown) => /^\s*\d{4}[-./]\d{1,2}[-./]\d{1,2}\s*$/.test(String(value ?? ""));
 
 /** headerRow 아래 행들을 읽어 표준 행으로. 상호가 없으면 오류 줄. line은 엑셀 줄 번호(1부터). */
 export function parseImportRows(table: readonly (readonly unknown[])[], headerRow: number): ParsedImport {
-  const fields = mapHeaders(headerLabels(table, headerRow));
+  const labels = headerLabels(table, headerRow);
+  const fields = mapHeaders(labels);
+  // 같은 표준 칸에 맞는 칸이 둘 이상이면 첫 칸만 표준으로 쓰고 나머지는 커스텀 칸으로 살린다(버리지 않는다).
+  const standard = new Set(fields.flatMap((field, index) => (field !== null && fields.indexOf(field) === index ? [index] : [])));
+  const extraIndexes = labels.flatMap((label, index) => (label && !standard.has(index) ? [index] : []));
+  const body = table.slice(headerRow + 1);
+  const columns: ImportColumn[] = [];
+  for (const index of extraIndexes.slice(0, MAX_IMPORT_COLUMNS)) {
+    const values = body.map((cells) => String(cells[index] ?? "").trim()).filter(Boolean);
+    if (values.length) columns.push({ label: labels[index], type: values.every(onlyDate) ? "date" : "text" });
+  }
+  const typeOf = new Map(columns.map((column) => [column.label, column.type]));
   const rows: ImportRow[] = [], errors: ParsedImport["errors"] = [];
   table.slice(headerRow + 1).forEach((cells, offset) => {
     if (!cells.some((cell) => String(cell ?? "").trim())) return;
     const pick = (field: ImportField) => cells[fields.indexOf(field)];
+    const extras: Record<string, string> = {};
+    for (const index of extraIndexes) { const label = labels[index], value = typeOf.has(label) ? (typeOf.get(label) === "date" ? day(cells[index]) ?? "" : text(cells[index])) : ""; if (value) extras[label] = value; }
     const line = headerRow + offset + 2, name = text(pick("name"));
     if (!name) { errors.push({ line, message: "상호가 비어 있습니다." }); return; }
     const mobile = cleanPhones(pick("phone")), tel = cleanPhones(pick("tel"));
@@ -80,9 +98,10 @@ export function parseImportRows(table: readonly (readonly unknown[])[], headerRo
       name, region: text(pick("region")), address: text(pick("address")) || text(pick("region")), grade: text(pick("grade")), items: text(pick("items")), erp: text(pick("erp")),
       phone: all[0] ?? null, extraPhones: all.slice(1), fax: cleanPhones(pick("fax")).phone, email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(pick("email"))) ? text(pick("email")).toLowerCase() : null,
       status: mapImportStatus(pick("status")), nextContact: day(pick("nextContact")), owner: text(pick("owner")),
+      lastContact: day(pick("lastContact")), nextAction: text(pick("nextAction")), extras,
     });
   });
-  return { rows, errors };
+  return { rows, errors, columns };
 }
 
 /** 같은 상호(공백·대소문자 무시)이거나 같은 번호면 한 묶음 — 대표가 고르도록 "중복 의심"으로 보여 준다. 묶음마다 줄 번호 순서 index 목록. */
