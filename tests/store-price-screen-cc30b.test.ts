@@ -57,6 +57,12 @@ describe("store price screen contract", () => {
     expect(screen).toContain("예정 가격");
     expect(screen).toContain("JSON.stringify({ productId: row.productId, price, until, from })");
   });
+  it("on a phone the store list collapses to one line once a store is chosen and the table becomes cards", () => {
+    expect(screen).toContain("hidden lg:block");
+    expect(screen).toContain("매장: {store.name}");
+    expect(screen).toContain("space-y-2 lg:hidden");
+    expect(screen).toContain("commitPrice(r, e.currentTarget)");
+  });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
     expect(screen).toContain("이 매장 등급");
