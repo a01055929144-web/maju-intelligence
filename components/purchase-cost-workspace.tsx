@@ -880,7 +880,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       <h3 className="font-semibold">적용 날짜·중복 단가 확인</h3>
       <p className="text-sm">{mapping.purchaseDate !== undefined ? "파일의 구매일을 행별 적용일로 사용합니다. 빈 날짜나 잘못된 날짜는 먼저 수정해 주세요." : `구매일 열이 없어 업로드 적용일 ${receiptDate || "(날짜 선택 필요)"}을 사용합니다.`}</p>
       {importPreview.all.length ? <>
-        <p className="text-sm" role="status">{importPreview.savedSkipped ? `저장된 제외 코드 ${importPreview.savedSkipped}줄 건너뜀 · ` : ""}필요 없는 코드는 줄마다 ‘제외’를 체크하세요. ‘다음에도 제외’까지 체크하면 다음 업로드부터 자동으로 빠집니다.</p>
+        <p className="text-sm">{importPreview.savedSkipped ? `저장된 제외 코드 ${importPreview.savedSkipped}줄 건너뜀 · ` : ""}필요 없는 코드는 줄마다 ‘제외’를 체크하세요. ‘다음에도 제외’까지 체크하면 다음 업로드부터 자동으로 빠집니다.</p>
         <CommonDataTable<PurchaseImportLine> settingsKey="purchase-upload-dates" filename="매입가_적용일.csv" rowKey={line => String(line.rowNumber)} rows={importPreview.all}
           columns={[{ key: "skip", label: "제외", value: line => skipRows.has(line.rowNumber) ? "제외" : "", render: line => matchesExcludedCode(line, savedExcluded)
               ? <span className="text-xs font-semibold text-slate-500">저장된 제외 코드</span>
