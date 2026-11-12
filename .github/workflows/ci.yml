@@ -272,6 +272,17 @@ jobs:
           psql --dbname=delete_products_cc24_test --set=ON_ERROR_STOP=1 --file=docs/sql-drafts/20261030-pricing-p1.sql
           psql --dbname=delete_products_cc24_test --file=tests/sql/delete-products-cc24.pg17.test.sql
 
+      - name: Verify purchase-cost excluded codes (CC-24b) on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb purchase_excluded_codes_cc24b_test
+          psql --dbname=purchase_excluded_codes_cc24b_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-p0-fixture.sql
+          psql --dbname=purchase_excluded_codes_cc24b_test --file=tests/sql/purchase-cost-excluded-codes-cc24b.pg17.test.sql
+
       - name: Verify promotion audience (CC-29a) on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
