@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { StoreGradeManager } from "./store-grade-manager";
 import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/domains/pricing/store-price";
 
 // CC-30b: 매장 가격 — 왼쪽 매장 목록(검색·등급·"매장 가격 N개"), 오른쪽 이 매장의 상품별 가격표. "이 매장 가격" 칸을 고치면(Enter·칸 밖 클릭) 바로 저장, 비우면 끝내기.
@@ -94,6 +95,7 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
           <span className="shrink-0 text-xs text-slate-500">{s.grade ? `${s.grade} · ` : ""}{s.priceCount ? `매장 가격 ${s.priceCount}` : ""}</span></button></li>)}
         {!stores.length ? <li className="p-3 text-center text-xs text-slate-500">매장이 없습니다.</li> : null}
       </ul>
+      <StoreGradeManager companyId={companyId} onChanged={() => void loadStores()} />
     </aside>
     <div className="min-w-0 space-y-2">
       {error ? <p className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
