@@ -517,6 +517,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-member-order.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/promotion-reservation-cx08.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/promotion-audience-orders-cc29b.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/promotion-normal-price-cc29c.pg17.test.sql
           node scripts/test-promotion-reservation-cx08.mjs
 
       - name: Verify disposable storefront fixture on PostgreSQL 17
