@@ -39,6 +39,13 @@ describe("store price screen contract", () => {
     expect(screen).toContain('r.source === "견적"');
     expect(screen).toContain("parseStorePriceInput");
   });
+  it("grade management only adds (no categories sent would wipe edits) and archives through the margin-template API", () => {
+    const manager = readFileSync("components/store-grade-manager.tsx", "utf8");
+    expect(manager).toContain('action: "save"');
+    expect(manager).not.toContain("id: t.id, action: \"save\"");
+    expect(manager).toContain('action: "archive"');
+    expect(screen).toContain("StoreGradeManager");
+  });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
     expect(screen).toContain("이 매장 등급");
