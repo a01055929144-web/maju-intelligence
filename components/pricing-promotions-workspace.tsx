@@ -5,6 +5,9 @@ import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { discountPercent, regularPrice } from "@/domains/pricing/promotion-display";
 import { Tabs } from "./ui/tabs";
+import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
+import { buildFolderTree, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
+import { inFolder } from "@/domains/pricing/margin-tree";
 import { audienceLabel, type Audience, type AudienceSummary, type AudienceTarget } from "@/domains/pricing/promotion-audience";
 
 // CC-20: 행사·임박 독립 화면. 데이터·명령은 기존 pricing_promotions API(documentRequest) 그대로, DB 변경 없음.
@@ -86,6 +89,11 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
 function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, onClose, onSaved, preset, promo }: { audienceEnabled: boolean; companyId: string; initialAudience: Audience; kind: Kind; onClose: () => void; onSaved: (text: string) => void; preset: string; promo: Promotion | null }) {
   const today = koreaDay();
   const [choices, setChoices] = useState<CatalogChoice[]>([]);
+  // CC-26: 상품 고르기에 분류 폴더 필터(상품관리와 같은 폴더·순서). 폴더 목록을 못 읽으면 폴더 칸만 숨기고 검색은 그대로 쓴다.
+  const [index, setIndex] = useState<IndexItem[]>([]);
+  const [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
+  const [folder, setFolder] = useState("");
+  const [query, setQuery] = useState("");
   const [productId, setProductId] = useState(promo?.productId || preset);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -114,12 +122,22 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
     catch (e) { setError(e instanceof Error ? e.message : "상품을 찾지 못했습니다."); }
   };
   useEffect(() => { void search(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const q = new URLSearchParams({ companyId });
+    void fetch(`/api/pricing-documents/catalog-index?${q}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { items: [] })).then((b: { items?: IndexItem[] }) => setIndex(b.items ?? [])).catch(() => setIndex([]));
+    void fetch(`/api/price-sheets/folder-order?${q}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { folders: [] })).then((b: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(b.folders ?? []))).catch(() => setFolderOrder(new Map()));
+  }, [companyId]);
+  const tree = useMemo(() => buildFolderTree(index.flatMap((item) => (item.category ? [item.category] : [])), folderOrder), [index, folderOrder]);
+  // 폴더를 고르면 그 폴더(하위 포함) 상품 중 검색어에 맞는 것을 보여 준다(한 번에 300개까지).
+  const options = useMemo<Array<{ id: string; name: string }>>(() => folder
+    ? filterIndex(index.filter((item) => inFolder(item.category || "", folder)), { all: query, code: "", name: "", spec: "", unit: "" }).slice(0, 300).map((item) => ({ id: item.id, name: item.displayName || item.name }))
+    : choices, [folder, index, query, choices]);
 
   async function save(form: FormData) {
     setBusy(true); setError("");
     try {
       const num = (key: string) => (form.get(key) === "" ? null : Number(form.get(key)));
-      const product = choices.find((c) => c.id === productId);
+      const product = options.find((c) => c.id === productId) || choices.find((c) => c.id === productId);
       const savedId = promo?.id || crypto.randomUUID();
       await documentRequest(companyId, "save-promotion", {
         id: savedId, expected: promo?.revision || 0,
@@ -154,13 +172,19 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
       <h2 className="text-lg font-black">{kind} {promo ? "수정" : "등록"}</h2>
       {error ? <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{error}</p> : null}
       <label className="block text-sm font-bold">상품 검색
-        <input aria-label="상품 검색" className={`${field} mt-1`} onChange={(e) => void search(e.target.value)} placeholder="상품명·분류" />
+        <input aria-label="상품 검색" className={`${field} mt-1`} onChange={(e) => { setQuery(e.target.value); void search(e.target.value); }} placeholder="상품명·분류" />
       </label>
+      {tree.length ? <label className="block text-sm font-bold">분류 폴더
+        <select aria-label="분류 폴더" className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => setFolder(e.target.value)} value={folder}>
+          <option value="">분류 전체</option>
+          {tree.map((node) => <option key={node.path} value={node.path}>{"  ".repeat(node.depth)}{node.name} ({node.count})</option>)}
+        </select>
+      </label> : null}
       <label className="block text-sm font-bold">상품
         <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => setProductId(e.target.value)} required value={productId}>
           <option value="">상품 선택</option>
-          {productId && !choices.some((c) => c.id === productId) ? <option value={productId}>{promo?.name || "선택한 상품"}</option> : null}
-          {choices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {productId && !options.some((c) => c.id === productId) ? <option value={productId}>{promo?.name || "선택한 상품"}</option> : null}
+          {options.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </label>
       <div className="grid grid-cols-2 gap-2">
