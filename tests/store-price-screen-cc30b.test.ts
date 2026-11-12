@@ -52,6 +52,11 @@ describe("store price screen contract", () => {
     expect(lib).toContain("effective_until: until");
     expect(screen).toContain("끝나는 날");
   });
+  it("a scheduled price is returned apart from the current one and the screen sends its start date", () => {
+    expect(api).toContain("plannedByProduct");
+    expect(screen).toContain("예정 가격");
+    expect(screen).toContain("JSON.stringify({ productId: row.productId, price, until, from })");
+  });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
     expect(screen).toContain("이 매장 등급");
