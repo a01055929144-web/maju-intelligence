@@ -31,14 +31,16 @@ do $$ begin
 end $$;
 
 -- Fixture: two stores connect by code (they start as needs_review), plus existing customers for candidates and linking.
-insert into app_users values ('f1300000-0000-4000-8000-000000000001','active'), ('f1300000-0000-4000-8000-000000000002','active'), ('f1300000-0000-4000-8000-000000000003','active') on conflict do nothing;
+insert into app_users values ('f1300000-0000-4000-8000-000000000001','active'), ('f1300000-0000-4000-8000-000000000002','active'), ('f1300000-0000-4000-8000-000000000003','active'), ('f1300000-0000-4000-8000-000000000004','active'), ('f1300000-0000-4000-8000-000000000005','active') on conflict do nothing;
 insert into customer_imports(id, company_id, source, row_count, status, quality_score, completed_at) values ('f1300000-0000-4000-8000-0000000000a0','00000000-0000-4000-8000-000000000001','excel',1,'completed',100,now());
 insert into normalized_customers(id, company_id, import_id, customer_name, business_registration_number, address, normalized_key) values
  ('f1300000-0000-4000-8000-0000000000c1','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 번호일치 매장','2223334445','다른로 1','existing:biznum'),
  ('f1300000-0000-4000-8000-0000000000c2','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 이름주소 매장','','합성로 77길 3층','existing:nameaddr'),
  ('f1300000-0000-4000-8000-0000000000c3','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 이미 계정 있는 매장','2223334445','다른로 1','existing:hasaccount'),
  ('f1300000-0000-4000-8000-0000000000c4','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 연결 대상','','먼곳 9','existing:linktarget'),
- ('f1300000-0000-4000-8000-0000000000c5','00000000-0000-4000-8000-000000000002','f1300000-0000-4000-8000-0000000000a0','CX13 다른 회사 매장','2223334445','다른로 1','other-company');
+ ('f1300000-0000-4000-8000-0000000000c5','00000000-0000-4000-8000-000000000002','f1300000-0000-4000-8000-0000000000a0','CX13 다른 회사 매장','2223334445','다른로 1','other-company'),
+ ('f1300000-0000-4000-8000-0000000000c6','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 첫 주문 후 연결 대상','','먼곳 61','existing:after-order'),
+ ('f1300000-0000-4000-8000-0000000000c7','00000000-0000-4000-8000-000000000001','f1300000-0000-4000-8000-0000000000a0','CX13 다른 상태 주문 대상','','먼곳 71','existing:other-status');
 
 create function public.cx13_expect(sql text, message text) returns void language plpgsql as $$
 begin
@@ -52,11 +54,11 @@ grant all on cx13_ctx to service_role;
 set role service_role;
 do $$
 declare a uuid := '00000000-0000-4000-8000-000000000001'; h text := md5('cx13-a') || md5('cx13-a2');
-  o1 uuid := 'f1300000-0000-4000-8000-000000000001'; o2 uuid := 'f1300000-0000-4000-8000-000000000002'; o3 uuid := 'f1300000-0000-4000-8000-000000000003';
+  o1 uuid := 'f1300000-0000-4000-8000-000000000001'; o2 uuid := 'f1300000-0000-4000-8000-000000000002'; o3 uuid := 'f1300000-0000-4000-8000-000000000003'; o4 uuid := 'f1300000-0000-4000-8000-000000000004'; o5 uuid := 'f1300000-0000-4000-8000-000000000005';
   p uuid; r jsonb; n text; owner uuid; pname text; pbiz text; paddr text; pdetail text;
 begin
   perform issue_company_store_invite_code_v1(a, h, clock_timestamp() + interval '7 days', 'ci');
-  for n, owner, pname, pbiz, paddr, pdetail in values ('one', o1, 'CX13 번호일치 후보용', '2223334445', '새주소 1', ''), ('two', o2, 'CX13 이름주소 매장', '', '합성로 77길', '3층'), ('three', o3, 'CX13 연결 매장', '', '완전다른 주소 5', '') loop
+  for n, owner, pname, pbiz, paddr, pdetail in values ('one', o1, 'CX13 번호일치 후보용', '2223334445', '새주소 1', ''), ('two', o2, 'CX13 이름주소 매장', '', '합성로 77길', '3층'), ('three', o3, 'CX13 연결 매장', '', '완전다른 주소 5', ''), ('four', o4, 'CX13 첫 주문 매장', '', '완전다른 주소 6', ''), ('five', o5, 'CX13 다른 상태 주문 매장', '', '완전다른 주소 7', '') loop
     p := (create_store_profile_v1(owner, pname, pbiz, paddr, pdetail, 'v1', 'direct')->>'storeProfileId')::uuid;
     r := connect_store_profile_by_invite_code_v1(owner, p, h);
     insert into cx13_ctx select n, (r->>'storeAccountId')::uuid, s.customer_id, (select m.id from store_account_members m where m.store_account_id = s.id limit 1) from store_accounts s where s.id = (r->>'storeAccountId')::uuid;
@@ -76,13 +78,26 @@ insert into store_orders(id, company_id, customer_id, link_id, document_version_
 insert into store_orders(id, company_id, customer_id, link_id, document_version_id, delivery_date, idempotency_key)
   values ('f1300000-0000-4000-8000-0000000000e2', '00000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', '90000000-0000-4000-8000-000000000001', '80000000-0000-4000-8000-000000000001', '2099-01-05', gen_random_uuid());
 
+insert into storefront_links(id, company_id, customer_id, document_version_id, token_nonce, token_hash, expires_at)
+  select 'f1300000-0000-4000-8000-0000000000d3', '00000000-0000-4000-8000-000000000001', customer, '80000000-0000-4000-8000-000000000001', md5('cx13-l3'), md5('cx13-l3') || md5('cx13-l3b'), '2099-12-31' from cx13_ctx where name = 'four';
+insert into storefront_links(id, company_id, customer_id, document_version_id, token_nonce, token_hash, expires_at)
+  select 'f1300000-0000-4000-8000-0000000000d4', '00000000-0000-4000-8000-000000000001', customer, '80000000-0000-4000-8000-000000000001', md5('cx13-l4'), md5('cx13-l4') || md5('cx13-l4b'), '2099-12-31' from cx13_ctx where name = 'five';
+insert into store_orders(id, company_id, customer_id, link_id, document_version_id, delivery_date, idempotency_key, store_account_id, ordered_by_member_id)
+  select 'f1300000-0000-4000-8000-0000000000e3', '00000000-0000-4000-8000-000000000001', customer, 'f1300000-0000-4000-8000-0000000000d3', '80000000-0000-4000-8000-000000000001', '2099-01-05', gen_random_uuid(), account, member from cx13_ctx where name = 'four';
+insert into store_order_lines(company_id, order_id, product_id, product_name, specification, sales_unit, quantity, unit_price, tax_type, price_includes_tax, is_market_price)
+  values ('00000000-0000-4000-8000-000000000001', 'f1300000-0000-4000-8000-0000000000e3', '60000000-0000-4000-8000-000000000001', 'cx13 line', '', 'BOX', 2, 1200, 'exempt', false, false);
+insert into store_orders(id, company_id, customer_id, link_id, document_version_id, delivery_date, idempotency_key, store_account_id, ordered_by_member_id)
+  select 'f1300000-0000-4000-8000-0000000000e4', '00000000-0000-4000-8000-000000000001', customer, 'f1300000-0000-4000-8000-0000000000d4', '80000000-0000-4000-8000-000000000001', '2099-01-05', gen_random_uuid(), account, member from cx13_ctx where name = 'five';
+insert into store_orders(id, company_id, customer_id, link_id, document_version_id, delivery_date, idempotency_key, store_account_id, ordered_by_member_id, status)
+  select 'f1300000-0000-4000-8000-0000000000e5', '00000000-0000-4000-8000-000000000001', customer, 'f1300000-0000-4000-8000-0000000000d4', '80000000-0000-4000-8000-000000000001', '2099-01-06', gen_random_uuid(), account, member, 'received' from cx13_ctx where name = 'five';
+
 set role service_role;
 do $$
 declare a uuid := '00000000-0000-4000-8000-000000000001'; acct1 uuid; acct2 uuid; acct3 uuid; cust2 uuid; cust3 uuid; c jsonb; r jsonb;
   actor uuid := 'f1300000-0000-4000-8000-000000000001';
 begin
   select account into acct1 from cx13_ctx where name = 'one'; select account, customer into acct2, cust2 from cx13_ctx where name = 'two'; select account, customer into acct3, cust3 from cx13_ctx where name = 'three';
-  if (select count(*) from store_accounts where customer_review_status = 'needs_review') <> 3 then raise exception 'cx13_new_connects_not_needs_review'; end if;
+  if (select count(*) from store_accounts where customer_review_status = 'needs_review') <> 5 then raise exception 'cx13_new_connects_not_needs_review'; end if;
 
   -- candidates: business number (not the account-holding customer, not another company), name+address, none.
   c := store_customer_review_candidates_v1(a, acct1);
@@ -121,6 +136,32 @@ begin
     or not exists(select 1 from normalized_customers where id = cust3 and duplicate_of = 'f1300000-0000-4000-8000-0000000000c4')
     or not exists(select 1 from store_customer_review_events where store_account_id = acct3 and event_type = 'linked_existing' and from_customer_id = cust3 and to_customer_id = 'f1300000-0000-4000-8000-0000000000c4')
     then raise exception 'cx13_link_wrong'; end if;
+end $$;
+
+-- First order BEFORE the link (the real G1 flow): the submitted order, its lines and its link move with the account.
+do $$
+declare a uuid := '00000000-0000-4000-8000-000000000001'; actor uuid := 'f1300000-0000-4000-8000-000000000001';
+  acct4 uuid; cust4 uuid; acct5 uuid; cust5 uuid; r jsonb; target4 uuid := 'f1300000-0000-4000-8000-0000000000c6'; target5 uuid := 'f1300000-0000-4000-8000-0000000000c7';
+begin
+  select account, customer into acct4, cust4 from cx13_ctx where name = 'four'; select account, customer into acct5, cust5 from cx13_ctx where name = 'five';
+  -- an order in another state (or a link used by it) on the auto-created customer refuses the link, and nothing changes.
+  perform cx13_expect(format('select link_store_account_to_customer_v1(%L,%L,%L,%L,%L)', a, acct5, target5, actor, 'x'), 'store_review_placeholder_in_use: store_orders');
+  if exists(select 1 from store_orders where id in ('f1300000-0000-4000-8000-0000000000e4', 'f1300000-0000-4000-8000-0000000000e5') and customer_id <> cust5)
+    or exists(select 1 from storefront_links where id = 'f1300000-0000-4000-8000-0000000000d4' and customer_id <> cust5)
+    or exists(select 1 from store_accounts where id = acct5 and (customer_id <> cust5 or customer_review_status <> 'needs_review')) then raise exception 'cx13_refused_order_link_changed_data'; end if;
+  -- the only order is submitted: link succeeds, the order, its lines and its link now belong to the existing customer.
+  r := link_store_account_to_customer_v1(a, acct4, target4, actor, '합성 담당');
+  if (r->>'movedOrders')::int <> 1 or (r->>'movedLinks')::int <> 1 then raise exception 'cx13_link_after_order_counts_wrong: %', r; end if;
+  if not exists(select 1 from store_orders where id = 'f1300000-0000-4000-8000-0000000000e3' and customer_id = target4 and status = 'submitted' and store_account_id = acct4)
+    or not exists(select 1 from storefront_links where id = 'f1300000-0000-4000-8000-0000000000d3' and customer_id = target4)
+    or (select count(*) from store_order_lines where order_id = 'f1300000-0000-4000-8000-0000000000e3') <> 1
+    or not exists(select 1 from store_accounts where id = acct4 and customer_id = target4 and customer_review_status = 'confirmed')
+    or not exists(select 1 from normalized_customers where id = cust4 and duplicate_of = target4)
+    or not exists(select 1 from store_customer_review_events where store_account_id = acct4 and event_type = 'linked_existing' and moved_order_count = 1 and moved_link_count = 1 and from_customer_id = cust4 and to_customer_id = target4)
+    then raise exception 'cx13_link_after_order_wrong'; end if;
+  -- the account is confirmed now, so the moved order can be confirmed (link scope foreign key still consistent).
+  update store_orders set status = 'received' where id = 'f1300000-0000-4000-8000-0000000000e3';
+  if exists(select 1 from store_orders where customer_id = cust4) or exists(select 1 from storefront_links where customer_id = cust4) then raise exception 'cx13_auto_created_customer_still_referenced'; end if;
 end $$;
 reset role;
 

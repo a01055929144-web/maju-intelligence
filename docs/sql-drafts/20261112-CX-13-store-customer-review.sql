@@ -34,6 +34,9 @@ create table public.store_customer_review_events (
   to_customer_id uuid not null,
   actor_user_id uuid,
   actor_name text,
+  -- linked_existing: how many submitted orders (and the store links they were placed through) moved to the existing customer.
+  moved_order_count integer not null default 0,
+  moved_link_count integer not null default 0,
   created_at timestamptz not null default now(),
   foreign key (company_id, store_account_id) references public.store_accounts(company_id, id) on delete cascade
 );
@@ -117,13 +120,18 @@ revoke all on function public.store_customer_review_candidates_v1(uuid,uuid) fro
 grant execute on function public.store_customer_review_candidates_v1(uuid,uuid) to service_role;
 
 -- 7) Link the store account to an EXISTING customer ("기존 거래처에 연결"). Only while the account awaits review, the current customer was
---    auto-created by the invite connect (normalized_key 'profile:…'), nothing refers to it yet, and the target customer has no store account.
---    The account then points at the existing customer and is confirmed; the empty auto-created customer is kept and marked as a duplicate of it.
+--    auto-created by the invite connect (normalized_key 'profile:…') and the target customer has no store account.
+--    G1 lets the first order arrive before this review, so THIS account's submitted orders move to the existing customer together with the
+--    account, and so do the store links those orders were placed through (an order's link scope key includes customer_id). Order lines and
+--    requests have no customer column and follow their order. Anything else that refers to the auto-created customer refuses the link:
+--    an order in another state or of another account, a link no moved order used, documents, agreements, deliveries, vouchers, ...
+--    The account then points at the existing customer and is confirmed; the emptied auto-created customer is kept and marked as a duplicate of it.
 create function public.link_store_account_to_customer_v1(p_company uuid, p_store_account uuid, p_customer uuid, p_actor uuid, p_actor_name text) returns jsonb
 language plpgsql security invoker set search_path = public,pg_temp as $$
 declare a public.store_accounts%rowtype; placeholder public.normalized_customers%rowtype; i integer; used boolean;
+  moved_orders uuid[]; moved_links uuid[]; n_orders integer; n_links integer;
   refs constant text[][] := array[
-    ['store_orders','customer_id'], ['customer_price_agreements','customer_id'], ['storefront_links','customer_id'],
+    ['customer_price_agreements','customer_id'],
     ['pricing_document_acceptance_requests','customer_id'], ['pricing_document_sends','customer_id'], ['customer_pricing_document_links','customer_id'],
     ['business_documents','customer_id'], ['delivery_events','customer_id'], ['store_order_customer_rules','customer_id'],
     ['store_product_preferences','customer_id'], ['tax_invoices','customer_id'], ['partner_ledger_entries','customer_id'],
@@ -139,18 +147,32 @@ begin
   if exists(select 1 from public.store_accounts where company_id = p_company and customer_id = p_customer) then raise exception 'store_review_target_has_store_account'; end if;
   select * into placeholder from public.normalized_customers where company_id = p_company and id = a.customer_id for update;
   if not found or placeholder.normalized_key not like 'profile:%' then raise exception 'store_review_customer_not_auto_created'; end if;
+  -- Serialise with order placement (it locks the link row first), then decide what moves.
+  perform 1 from public.storefront_links where company_id = p_company and customer_id = placeholder.id for update;
+  perform 1 from public.store_orders where company_id = p_company and customer_id = placeholder.id for update;
+  select coalesce(array_agg(o.id), '{}'), coalesce(array_agg(distinct o.link_id), '{}') into moved_orders, moved_links
+    from public.store_orders o where o.company_id = p_company and o.customer_id = placeholder.id and o.store_account_id = a.id and o.status = 'submitted';
+  if exists(select 1 from public.store_orders o where o.company_id = p_company and o.customer_id = placeholder.id and not (o.id = any(moved_orders)))
+    then raise exception 'store_review_placeholder_in_use: store_orders'; end if;
+  if exists(select 1 from public.storefront_links l where l.company_id = p_company and l.customer_id = placeholder.id and not (l.id = any(moved_links)))
+    then raise exception 'store_review_placeholder_in_use: storefront_links'; end if;
   for i in 1 .. array_length(refs, 1) loop
     if to_regclass('public.' || refs[i][1]) is not null then
       execute format('select exists(select 1 from public.%I where company_id = $1 and %I = $2)', refs[i][1], refs[i][2]) into used using p_company, placeholder.id;
       if used then raise exception 'store_review_placeholder_in_use: %', refs[i][1]; end if;
     end if;
   end loop;
+  -- Links first, then orders (the order's link scope foreign key is deferred; both land in this transaction).
+  update public.storefront_links set customer_id = p_customer where company_id = p_company and id = any(moved_links) and customer_id = placeholder.id;
+  get diagnostics n_links = row_count;
+  update public.store_orders set customer_id = p_customer where company_id = p_company and id = any(moved_orders) and customer_id = placeholder.id;
+  get diagnostics n_orders = row_count;
   update public.store_accounts set customer_id = p_customer, customer_review_status = 'confirmed', customer_confirmed_by_user_id = p_actor,
     customer_confirmed_at = clock_timestamp(), updated_at = clock_timestamp() where company_id = p_company and id = a.id;
   update public.normalized_customers set duplicate_of = p_customer where company_id = p_company and id = placeholder.id;
-  insert into public.store_customer_review_events(company_id, store_account_id, event_type, from_customer_id, to_customer_id, actor_user_id, actor_name)
-    values (p_company, a.id, 'linked_existing', placeholder.id, p_customer, p_actor, left(p_actor_name, 100));
-  return jsonb_build_object('storeAccountId', a.id, 'customerId', p_customer, 'replacedCustomerId', placeholder.id);
+  insert into public.store_customer_review_events(company_id, store_account_id, event_type, from_customer_id, to_customer_id, actor_user_id, actor_name, moved_order_count, moved_link_count)
+    values (p_company, a.id, 'linked_existing', placeholder.id, p_customer, p_actor, left(p_actor_name, 100), n_orders, n_links);
+  return jsonb_build_object('storeAccountId', a.id, 'customerId', p_customer, 'replacedCustomerId', placeholder.id, 'movedOrders', n_orders, 'movedLinks', n_links);
 end $$;
 revoke all on function public.link_store_account_to_customer_v1(uuid,uuid,uuid,uuid,text) from public, anon, authenticated;
 grant execute on function public.link_store_account_to_customer_v1(uuid,uuid,uuid,uuid,text) to service_role;
