@@ -8,6 +8,7 @@ import { getManagedCompanyAccounts } from "@/lib/store";
 import { canShowLeadWorkspaceSettings } from "@/lib/feature-modules";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { LeadWorkspaceSettings } from "@/app/dashboard/settings/leads/workspace";
+import { LeadDmTemplateSettings } from "@/components/lead-dm-template-settings";
 import { AdminCompanySetupWorkspace } from "./workspace";
 
 type SetupStep = {
@@ -91,6 +92,7 @@ export default async function AdminCompanySetupPage({ params }: { params: Promis
         </div>
 
         <div id="assisted-setup"><AdminCompanySetupWorkspace company={company} /></div>
+        <div id="lead-dm"><LeadDmTemplateSettings companyId={company.id} /></div>
         <div id="lead-import">
           {!salesAreaConfigured && !distributorSales
             ? <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">영업 지역을 저장하면 엑셀 가져오기 대행을 진행할 수 있습니다.</p>
