@@ -28,3 +28,9 @@ Ponytail: 사용함 (Claude Code ponytail-review). 지시서 `docs/dispatch/2026
 
 ## 격리 검증 (CI PG17, `tests/sql/purchase-cost-excluded-codes-cc24b.pg17.test.sql`, 로컬 Docker PG17에서도 통과)
 권한(앱 역할 불가·service_role 읽기/넣기/지우기만·수정 불가)·RLS 켜짐 · 같은 코드를 두 회사에 넣기 허용 · 같은 회사 대소문자만 다른 코드 거부 · **매입처 A·B·회사 전체에 같은 코드 허용, 같은 범위 안 중복(대소문자 무시·회사 전체 NULL 포함) 거부, 다른 회사 매입처 거부, 매입처 삭제 시 그 매입처 코드만 삭제(회사 전체 코드로 안 바뀜)** · 공백 낀·빈·81자 코드 거부 · 없는 회사 거부 · 회사 삭제 시 그 회사 코드만 삭제 · down 거부(코드 있을 때) → 비운 뒤 down → 재 up.
+
+## 적용 기록 (2026-11-12)
+- 승인 문구 원문: `fcmdvveqmcgtioelzqun CC-24b 매입가 업로드 제외 코드 SQL 승인`. 초안 커밋 `c578310` 그대로(BEGIN/COMMIT만 마이그레이션 래퍼로 대체) 적용, migration `cc24b_purchase_cost_excluded_codes`.
+- `admin_audit_logs` `db_migration_applied`를 **같은 트랜잭션**에서 기록: id `19c4c746-9b7c-463d-b7b5-0cadfebe8c06`.
+- 사후 읽기: RLS 켜짐, 행 0개, anon·authenticated 접근 불가, service_role 넣기·지우기 가능. (service_role의 update 권한은 스키마 기본 권한으로 열려 있음 — 앱은 쓰지 않음.)
+- 다음: 제외 코드 API·업로드 미리보기("제외" 체크) 별도 PR. 스위치·배포 변경 없음.

@@ -27,3 +27,9 @@ Ponytail: 사용함 (Claude Code ponytail-review). 결정: 대표 11/12 "C · G1
 
 ## 격리 검증 (CI PG17, `tests/sql/store-customer-review-cx13.pg17.test.sql` — CX-12 테스트 직후 같은 DB, 로컬 Docker PG17에서도 통과)
 기존 계정 전부 `confirmed` · 새 연결은 `needs_review` · 후보(사업자번호/이름+주소/없음, 계정 있는 거래처·다른 회사 제외) · **G1**(주문 접수된 상태에서 확인·배송완료 시도 거부, 링크 주문 영향 없음, 확인 뒤 정상) · 확인(상태·처리자·이력·멱등·다른 회사 거부) · 연결 거부 6종(이미 확인됨·대상에 계정 있음·같은 거래처·다른 회사·새 거래처에 링크 있음·자동 생성 아님 — 거부 시 데이터 불변) · 연결 성공(계정 이동·확인·빈 거래처 표시·이력) · **첫 주문 후 연결**(제출 주문+줄+링크가 기존 거래처로 이동, 이력에 1건·1개, 이동 뒤 주문 [확인] 가능, 빈 거래처에 남은 참조 0) · **다른 상태 주문이 섞이면 거부하고 데이터 불변** · 권한 · down 거부 2종 → 정확 복원(CX-12 함수 정의·ACL 동일) → 재 up.
+
+## 적용 기록 (2026-11-12)
+- 승인 문구 원문: `fcmdvveqmcgtioelzqun CX-13 첫 거래 거래처 확인 SQL 승인`. 초안 커밋 `2fdfd99` 그대로(BEGIN/COMMIT만 마이그레이션 래퍼로 대체) 적용, migration `cx13_store_customer_review`.
+- `admin_audit_logs` `db_migration_applied`를 **같은 트랜잭션**에서 기록: id `f414c486-0384-4b94-84ea-a7c057aae596`.
+- 사후 읽기: `needs_review` 0건·`confirmed` 1건(기존 계정은 확인됨), 이벤트 0건, RLS 켜짐, anon·authenticated는 함수 실행 불가·service_role만 가능, 가드 트리거 1개, 초대 연결 함수에 `-- cx13` 패치 반영.
+- 주의: 이제부터 초대 코드로 연결되는 새 매장은 `needs_review`로 시작하므로, 거래처 확인 화면(CC-08)이 배포되기 전에는 주문함에서 그 매장 주문을 "확인"하면 `store_customer_review_required` 오류가 납니다. **CC-08 화면 배포 전까지 초대 연결 신규 매장이 생기지 않게 주의.**
