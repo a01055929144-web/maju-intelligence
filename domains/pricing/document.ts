@@ -60,6 +60,8 @@ export type DocumentContent = {
   display?: DocumentDisplay;
   /** CC-19c: 가격 기준 마진 템플릿(없으면 기본). 일반 품목 가격을 이 템플릿으로 계산해 넣었다는 기록. */
   marginTemplateId?: string;
+  /** CC-30d: 받는 매장(거래처). 있으면 가격이 매장 가격 > 등급가 > 기본가 순으로 정해진다. */
+  customerId?: string;
 };
 export type DocumentDraft = {
   id: string;
@@ -272,6 +274,7 @@ export function parseDocument(value: unknown): DocumentContent {
     lines,
     display: parseDisplay(d.display),
     ...(isId(d.marginTemplateId) ? { marginTemplateId: d.marginTemplateId } : {}),
+    ...(isId(d.customerId) ? { customerId: d.customerId } : {}),
   };
 }
 /** Refresh live availability only for the selected, immutable publication. */
