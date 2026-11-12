@@ -73,6 +73,7 @@ describe("pricing P1 documents", () => {
           cost: 18910,
           managementName: "INTERNAL",
           token: "SECRET",
+          priceSource: "store",
         },
       ],
     });
@@ -87,6 +88,7 @@ describe("pricing P1 documents", () => {
       "INTERNAL",
       "SECRET",
       "productId",
+      "priceSource",
     ])
       expect(output).not.toContain(forbidden);
     expect(output).toContain("21180");
