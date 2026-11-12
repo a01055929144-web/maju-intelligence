@@ -10,7 +10,7 @@ describe("product drag to folder (CC-26)", () => {
   });
   it("drops move one product with the expected current category (no blind overwrite) and never into 미분류 or the same folder", () => {
     expect(source).toContain('action: "update-categories"');
-    expect(source).toContain("expectedCategory: product.category");
+    expect(source).toContain("expectedCategory: item.category");
     expect(source).toContain('canManageCategories && target !== "미분류" && (product!.category || "미분류") !== target');
   });
   it("recalculates prices after the move and keeps the move when recalculation fails", () => {
