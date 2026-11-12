@@ -63,9 +63,10 @@ export function ProductCatalogAdmin({
       .then((response) => (response.ok ? response.json() : { folders: [] }))
       .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
       .catch(() => setFolderOrder(new Map()));
-  }, [companyId, canManageCategories]);
+  }, [companyId]);
   // CC-26: 폴더를 다른 폴더로 끌어 놓으면 그 안으로 옮긴다(CC-17 폴더 이동 API — 상품·마진 연결이 한 번에, 같은 경로가 있으면 대상 마진 유지, 끝나면 판매가 재계산).
   const [dragFolder, setDragFolder] = useState<string | null>(null),
+    [picked, setPicked] = useState<Set<string>>(new Set()), // CC-24: 줄 선택 → 삭제(안 쓴 상품은 완전 삭제, 쓴 상품은 숨김)·되살리기
     [dragProduct, setDragProduct] = useState<ProductCatalogAdminItem | null>(null), // CC-26: 표의 상품을 트리 폴더로 끌어 분류 변경
     [dropTarget, setDropTarget] = useState<string | null>(null),
     [moveMessage, setMoveMessage] = useState("");
@@ -100,6 +101,34 @@ export function ProductCatalogAdmin({
       const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
       setMoveMessage(`"${product.name}"을(를) "${target}"(으)로 옮겼습니다.${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 가격 관리에서 다시 해 주세요."}`);
     } catch (e) { setError(e instanceof Error ? e.message : "분류를 바꾸지 못했습니다."); }
+  }
+  const pickedItems = items.filter((item) => picked.has(item.id));
+  async function productAction(body: Record<string, unknown>) {
+    const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ids: pickedItems.map((item) => item.id), ...body }) });
+    const result = await response.json().catch(() => ({})) as { message?: string; found?: number; deletable?: number; hideOnly?: number; restored?: number };
+    if (!response.ok) throw new Error(result.message || "상품을 처리하지 못했습니다.");
+    return result;
+  }
+  async function deletePicked() {
+    setError(""); setMoveMessage("");
+    try {
+      const count = await productAction({ action: "delete-products", apply: false }); // 먼저 숫자만 센다
+      const deletable = count.deletable ?? 0, hideOnly = count.hideOnly ?? 0;
+      if (!window.confirm(`${deletable}개 완전 삭제 · ${hideOnly}개 숨김\n\n완전 삭제는 되돌릴 수 없습니다(매입가·마진·행사 연결도 함께 지워짐). 주문·문서·재고·계약 단가에 쓰인 상품은 지우지 않고 숨기며, 판매중지 필터에서 되살릴 수 있습니다. 이미 발행한 문서는 그대로입니다.\n\n진행할까요?`)) return;
+      const done = await productAction({ action: "delete-products", apply: true });
+      setMoveMessage(`${done.deletable ?? 0}개를 완전 삭제하고 ${done.hideOnly ?? 0}개를 숨겼습니다.`);
+      setPicked(new Set());
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "상품을 처리하지 못했습니다."); }
+  }
+  async function restorePicked() {
+    setError(""); setMoveMessage("");
+    try {
+      const done = await productAction({ action: "restore-products" });
+      setMoveMessage(`${done.restored ?? 0}개를 되살렸습니다.`);
+      setPicked(new Set());
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "상품을 처리하지 못했습니다."); }
   }
   async function moveFolder(from: string, target: string) {
     const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
@@ -197,6 +226,8 @@ export function ProductCatalogAdmin({
     return sideOpen.has(parent) || (Boolean(sideFilter) && isUnder(sideFilter, parent));
   });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
+    ...(canManageCategories ? [{ key: "pick", label: "선택", width: 52, sortable: false, value: (i: ProductCatalogAdminItem) => (picked.has(i.id) ? "선택" : ""), render: (i: ProductCatalogAdminItem) =>
+      <input aria-label={`${i.name} 선택`} checked={picked.has(i.id)} className="h-4 w-4" onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(i.id); else next.delete(i.id); return next; })} type="checkbox" /> }] : []),
     ...(canManageCategories ? [{ key: "dragHandle", label: "이동", width: 52, sortable: false, value: () => "", render: (i: ProductCatalogAdminItem) =>
       <span aria-label={`${i.name} 폴더로 끌어 옮기기`} className="cursor-grab select-none px-2 text-slate-400" draggable onDragEnd={() => setDragProduct(null)} onDragStart={(event) => { setDragProduct(i); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", i.id); }} role="img" title="폴더로 끌어 옮기기">⋮⋮</span> }] : []),
     { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
@@ -218,7 +249,7 @@ export function ProductCatalogAdmin({
     { key: "promoNow", label: "행사 상태", width: 120, value: (i) => (i.promotion ? `${i.promotion.badge} ~${i.promotion.endsOn}` : ""), render: (i) => (i.promotion ? <a className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i.promotion.badge === "임박" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`} href={`/revenue/pricing/promotions?productId=${i.id}`} title={`${i.promotion.badge}가 ${money(i.promotion.price)} · ${i.promotion.startsOn} ~ ${i.promotion.endsOn}`}>{i.promotion.badge} ~{i.promotion.endsOn.slice(5).replace("-", "/")}</a> : <span className="text-slate-400">-</span>) },
     { key: "promoPrice", label: "행사가", align: "right", defaultHidden: true, width: 90, value: (i) => i.promotion?.price, render: (i) => (i.promotion ? money(i.promotion.price) : "-") },
     { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
-  ], []);
+  ], [canManageCategories, picked]);
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
@@ -252,6 +283,12 @@ export function ProductCatalogAdmin({
         </div>
       </aside>
       <div className="min-w-0 space-y-4">
+      {pickedItems.length ? <div aria-label="선택한 상품" className="flex flex-wrap items-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-4 py-2 text-sm" role="group">
+        <b>{pickedItems.length}개 선택</b>
+        <button className="maju-button-primary min-h-[36px] px-3" onClick={() => void deletePicked()} type="button">삭제</button>
+        {pickedItems.some((item) => !item.isActive) ? <button className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-3 font-bold" onClick={() => void restorePicked()} type="button">되살리기</button> : null}
+        <button className="min-h-[36px] px-2 text-xs font-bold text-slate-600 underline" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
+      </div> : null}
       {moveMessage ? <p className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900" role="status">{moveMessage}</p> : null}
       {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
       <section className="maju-section-card">
@@ -289,7 +326,7 @@ export function ProductCatalogAdmin({
             options={[
               ["all", "전체 상태"],
               ["active", "판매중"],
-              ["inactive", "판매중지"],
+              ["inactive", "판매중지·숨김"],
             ]}
           />
           <Filter

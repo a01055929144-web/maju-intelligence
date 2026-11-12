@@ -340,6 +340,28 @@ export async function listProductCategorySuggestions(
   return { candidates, hasMore: source.length === pageSize };
 }
 
+const productId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function cleanProductIds(ids: readonly string[]) {
+  const unique = Array.from(new Set(ids));
+  if (!unique.length || unique.length > 500 || !unique.every((id) => productId.test(id))) throw new Error("상품을 1~500개 골라 주세요.");
+  return unique;
+}
+
+/** CC-24: 안 쓴 상품은 완전 삭제, 쓴 상품은 숨김(DB 함수 cc24_delete_products). apply=false면 숫자만 센다(확인창용). */
+export async function deleteProductsForAdmin(companyId: string, ids: readonly string[], apply: boolean) {
+  return request<{ requested: number; found: number; deletable: number; hideOnly: number; applied: boolean }>("rpc/cc24_delete_products", {
+    method: "POST", body: JSON.stringify({ p_company: companyId, p_ids: cleanProductIds(ids), p_apply: apply }),
+  });
+}
+
+/** 숨긴(is_active=false) 상품을 되살린다. 이 회사 상품만. */
+export async function restoreProductsForAdmin(companyId: string, ids: readonly string[]) {
+  const rows = await request<Array<{ id: string }>>(`product_catalog?company_id=eq.${enc(companyId)}&id=in.(${cleanProductIds(ids).join(",")})&is_active=eq.false&select=id`, {
+    method: "PATCH", body: JSON.stringify({ is_active: true, updated_at: new Date().toISOString() }),
+  });
+  return rows.length;
+}
+
 /** 선택·확인된 추천만 회사 범위 안에서 저장합니다. 한 행 실패가 나머지를 막지 않습니다. */
 export async function updateProductCategoriesForAdmin(
   companyId: string,
