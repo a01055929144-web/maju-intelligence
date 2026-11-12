@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DEFAULT_LEAD_DM_TEMPLATE, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
+import { DEFAULT_LEAD_DM_TEMPLATE, LEAD_DM_TEMPLATES, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -7701,9 +7701,13 @@ export function buildOutboundItemNotes(industry?: string) {
 }
 
 /** 11/3 A3: 회사 기본 문구(placeholder {상호}{업종}{품목})와 제외 품목을 반영합니다. 결제 조건 기본값은 '협의'. */
-export function buildLeadDmScript(lead: PermitLeadItem, settings?: { excluded?: string; template?: string }) {
-  const items = filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
-  return renderLeadDm(settings?.template || DEFAULT_LEAD_DM_TEMPLATE, { businessName: lead.businessName, industry: lead.industryPrimary, items });
+export type LeadDmSettings = { excluded?: string; template?: string; distributorTemplate?: string; context?: { companyName?: string; region?: string; mainItems?: string; newCount?: number } };
+export function buildLeadDmScript(lead: PermitLeadItem, settings?: LeadDmSettings) {
+  // CC-31: 유통사 리드는 유통사용 회사 문구(없으면 코드 기본 D1)를 쓰고 {업종}·{품목}은 무시한다. 매장 리드는 기존 그대로.
+  const distributor = lead.targetType === "distributor";
+  const items = distributor ? [] : filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
+  const template = distributor ? settings?.distributorTemplate || LEAD_DM_TEMPLATES.distributor[0].body : settings?.template || DEFAULT_LEAD_DM_TEMPLATE;
+  return renderLeadDm(template, { businessName: lead.businessName, industry: lead.industryPrimary, items, target: distributor ? "distributor" : "restaurant", ...settings?.context });
 }
 
 function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteLine[], menuNotes: string, total: number, validUntil?: string) {
