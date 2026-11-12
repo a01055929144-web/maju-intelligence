@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
       supabaseRequest<Array<{ product_id: string; name: string; category: string; price: number }>>(`pricing_p0_effective?select=product_id,name,category,price&company_id=eq.${company}&active=eq.true&price=gt.0&order=name&limit=1000`),
       supabaseRequest<Array<{ product_catalog_id: string; unit_price: number; effective_from: string; effective_until: string | null; source_quote_id: string | null }>>(`customer_price_agreements?select=product_catalog_id,unit_price,effective_from,effective_until,source_quote_id&company_id=eq.${company}&customer_id=eq.${customerId}&status=eq.active`),
     ]);
-    const byProduct = new Map(agreements.map((a) => [a.product_catalog_id, a]));
-    return NextResponse.json({ rows: products.map((p) => { const a = byProduct.get(p.product_id); return { productId: p.product_id, name: p.name, category: p.category, basePrice: p.price, storePrice: a?.unit_price ?? null, since: a?.effective_from ?? null, until: a?.effective_until ?? null, source: storePriceSource(a ? { fromQuote: Boolean(a.source_quote_id) } : null) }; }) }, { headers: { "Cache-Control": "no-store" } });
+    // 지금 가격(시작일이 오늘 이전) 하나와 예정 가격(시작일이 미래) 하나를 나눈다.
+    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    const byProduct = new Map<string, (typeof agreements)[number]>(), plannedByProduct = new Map<string, (typeof agreements)[number]>();
+    for (const a of agreements) (a.effective_from > today ? plannedByProduct : byProduct).set(a.product_catalog_id, a);
+    return NextResponse.json({ rows: products.map((p) => { const a = byProduct.get(p.product_id); return { productId: p.product_id, name: p.name, category: p.category, basePrice: p.price, storePrice: a?.unit_price ?? null, since: a?.effective_from ?? null, until: a?.effective_until ?? null, planned: plannedByProduct.get(p.product_id) ? { price: plannedByProduct.get(p.product_id)!.unit_price, since: plannedByProduct.get(p.product_id)!.effective_from } : null, source: storePriceSource(a ? { fromQuote: Boolean(a.source_quote_id) } : null) }; }) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ message: "매장 가격을 불러오지 못했습니다." }, { status: 500 }); }
 }

@@ -7,7 +7,7 @@ import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/
 // CC-30b: 매장 가격 — 왼쪽 매장 목록(검색·등급·"매장 가격 N개"), 오른쪽 이 매장의 상품별 가격표. "이 매장 가격" 칸을 고치면(Enter·칸 밖 클릭) 바로 저장, 비우면 끝내기.
 type Store = { id: string; name: string; grade: string | null; gradeId: string | null; priceCount: number };
 type Grade = { id: string; name: string };
-type Row = { productId: string; name: string; category: string; basePrice: number; storePrice: number | null; since: string | null; until: string | null; source: StorePriceSource };
+type Row = { productId: string; name: string; category: string; basePrice: number; storePrice: number | null; since: string | null; until: string | null; planned: { price: number; since: string } | null; source: StorePriceSource };
 const badge: Record<StorePriceSource, string> = { 기본: "bg-slate-100 text-slate-600", 매장: "bg-indigo-100 text-indigo-800", 견적: "border border-indigo-400 text-indigo-800" };
 
 export function PricingStorePrices({ companyId, userKey }: { companyId: string; userKey: string }) {
@@ -38,14 +38,14 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
   }, [fetchJson]);
   useEffect(() => { setRows([]); if (store) void loadRows(store.id); }, [store, loadRows]);
 
-  async function save(row: Row, price: number | null, until: string | null = null) {
+  async function save(row: Row, price: number | null, until: string | null = null, from: string | null = null) {
     if (!store) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(`/api/customers/${store.id}/contract-prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: row.productId, price, until }) });
+      const response = await fetch(`/api/customers/${store.id}/contract-prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: row.productId, price, until, from }) });
       const body = await response.json().catch(() => ({})) as { message?: string };
       if (!response.ok) throw new Error(body.message || "저장하지 못했습니다.");
-      setMessage(price === null ? `${row.name}: 이 매장 가격을 끝냈습니다(기본 판매가로 돌아감).` : `${row.name}: 이 매장 가격을 ${price.toLocaleString()}원으로 정했습니다.`);
+      setMessage(price === null ? (from ? `${row.name}: 예정 가격을 취소했습니다.` : `${row.name}: 이 매장 가격을 끝냈습니다(기본 판매가로 돌아감).`) : from ? `${row.name}: ${from}부터 ${price.toLocaleString()}원으로 바뀝니다.` : `${row.name}: 이 매장 가격을 ${price.toLocaleString()}원으로 정했습니다.`);
       await Promise.all([loadRows(store.id), loadStores()]);
     } catch (e) { setError(e instanceof Error ? e.message : "저장하지 못했습니다."); }
     finally { setBusy(false); }
@@ -85,6 +85,11 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
     { key: "source", label: "출처", value: (r) => r.source, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
     { key: "until", label: "끝나는 날", value: (r) => r.until ?? "", render: (r) => r.storePrice === null || r.source === "견적" ? "-" : <input aria-label={`${r.name} 끝나는 날`} className="h-8 rounded border border-slate-300 px-1 text-xs" defaultValue={r.until ?? ""} disabled={busy} key={`${r.productId}-${r.until}`} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { if (e.currentTarget.value !== (r.until ?? "")) void save(r, r.storePrice, e.currentTarget.value || null); }} type="date" /> },
     { key: "since", label: "시작일", value: (r) => r.since ?? "", render: (r) => r.since ?? "-" },
+    { key: "planned", label: "예정 가격", value: (r) => r.planned?.price ?? null, render: (r) => r.source === "견적" ? "-" : r.planned
+      ? <span className="text-xs">{r.planned.since}부터 <b>{r.planned.price.toLocaleString()}원</b> <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(r, null, null, r.planned!.since)} type="button">취소</button></span>
+      : <span className="flex items-center gap-1"><input aria-label={`${r.name} 예정 시작일`} className="h-8 rounded border border-slate-300 px-1 text-xs" disabled={busy} id={`from-${r.productId}`} min={new Date(Date.now() + 9 * 3600000 + 86400000).toISOString().slice(0, 10)} type="date" />
+        <input aria-label={`${r.name} 예정가`} className="h-8 w-20 rounded border border-slate-300 px-1.5 text-right text-xs" disabled={busy} inputMode="numeric" placeholder="예정가"
+          onBlur={(e) => { const next = parseStorePriceInput(e.currentTarget.value); const from = (document.getElementById(`from-${r.productId}`) as HTMLInputElement | null)?.value; if (e.currentTarget.value.trim() === "") return; if (next === undefined || next === null || !from) { setError("예정 가격은 시작일과 0 이상의 숫자(원)를 함께 입력해 주세요."); return; } void save(r, next, null, from); }} /></span> },
   ];
 
   return <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">

@@ -30,6 +30,24 @@ describe("setStorePrice", () => {
     await expect(setStorePrice("co", cust, prod, 1200, "합성", day(-1))).rejects.toThrow();
   });
 
+  it("a future start keeps the current price active until the day before and replaces an earlier scheduled one", async () => {
+    const { setStorePrice } = await import("../lib/pricing/store-price-agreement");
+    activeRows = [{ id: "now", source_quote_id: null, effective_from: day(-10), sales_unit: "BOX" }, { id: "plan", source_quote_id: null, effective_from: day(3), sales_unit: "BOX" }];
+    await setStorePrice("co", cust, prod, 1500, "합성", null, day(7));
+    const [a, b, c] = writes();
+    expect(a.path).toContain("id=eq.now"); expect(a.body).toEqual(expect.objectContaining({ effective_until: day(6) })); expect(a.body).not.toHaveProperty("status");
+    expect(b.path).toContain("id=eq.plan"); expect(b.body).toMatchObject({ status: "cancelled" });
+    expect(c.body).toMatchObject({ unit_price: 1500, effective_from: day(7), effective_until: null, status: "active" });
+  });
+  it("price null with a future from cancels only the scheduled price; bad start or end-before-start is refused", async () => {
+    const { setStorePrice } = await import("../lib/pricing/store-price-agreement");
+    activeRows = [{ id: "now", source_quote_id: null, effective_from: day(-10), sales_unit: "BOX" }, { id: "plan", source_quote_id: null, effective_from: day(3), sales_unit: "BOX" }];
+    await expect(setStorePrice("co", cust, prod, null, "합성", null, day(3))).resolves.toEqual({ ended: 1, created: false });
+    expect(writes()).toHaveLength(1); expect(writes()[0].path).toContain("id=eq.plan");
+    await expect(setStorePrice("co", cust, prod, 1500, "합성", null, day(-1))).rejects.toThrow();
+    await expect(setStorePrice("co", cust, prod, 1500, "합성", day(2), day(5))).rejects.toThrow();
+  });
+
   it("creates a store price starting today with the product's unit and tax type", async () => {
     const { setStorePrice } = await import("../lib/pricing/store-price-agreement");
     await expect(setStorePrice("co", cust, prod, 1200, "합성")).resolves.toEqual({ ended: 0, created: true });
