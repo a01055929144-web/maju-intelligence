@@ -115,6 +115,40 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     finally { setBasisBusy(false); }
   }
 
+  // CC-30d: 받는 매장을 고르면 일반 품목 가격을 매장 가격 > 등급가 > 기본가로 다시 채운다(행사·임박 줄은 그대로). 이미 확정한 버전은 그대로.
+  const [storeQuery, setStoreQuery] = useState("");
+  const [storeFound, setStoreFound] = useState<Array<{ id: string; name: string }>>([]);
+  async function searchStores(q: string) {
+    setStoreQuery(q);
+    if (!q.trim()) { setStoreFound([]); return; }
+    try {
+      const response = await fetch(`/api/margin-templates/prices?${new URLSearchParams({ companyId, q })}`, { cache: "no-store" });
+      setStoreFound(response.ok ? ((await response.json()) as { customers?: Array<{ id: string; name: string }> }).customers ?? [] : []);
+    } catch { setStoreFound([]); }
+  }
+  async function pickStore(customer: { id: string; name: string } | null) {
+    const current = latest.current;
+    setStoreFound([]); setStoreQuery("");
+    if (!customer) { onContent({ ...current, customerId: undefined }); setMessage("받는 매장 연결을 풀었습니다. 가격은 그대로 둡니다."); return; }
+    const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
+    if (productIds.length && !window.confirm(`"${customer.name}" 가격으로 일반 품목 가격을 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?`)) return;
+    setBasisBusy(true); setMessage("");
+    try {
+      let prices: Record<string, number> = {}, gradeId: string | null = null;
+      if (productIds.length) {
+        const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId: customer.id, productIds: productIds.slice(0, 300) }) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
+        prices = body.prices as Record<string, number>; gradeId = (body.gradeId as string | null) ?? null;
+      }
+      const fresh = latest.current;
+      onContent({ ...fresh, customerId: customer.id, marginTemplateId: gradeId || undefined, recipient: fresh.recipient.trim() ? fresh.recipient : customer.name.slice(0, 100),
+        lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId] })) });
+      setMessage(`"${customer.name}" 가격(매장 가격 > 등급가 > 기본가)을 적용했습니다. 가격이 없는 품목은 그대로 뒀습니다.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
+    finally { setBasisBusy(false); }
+  }
+
   // 회사명이 비어 있으면 회사 정보 이름으로 채웁니다. 문서에 넣은 값은 문서에서 고친 그대로 둡니다.
   useEffect(() => {
     if (!profile || !editable) return;
@@ -320,6 +354,12 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
           <span className="w-16">형식</span>
           {([["auto", "자동"], ["table", "표"], ["cards", "카드"]] as const).map(([value, label]) => <button aria-pressed={content.layout === value} className={chip(content.layout === value)} disabled={!editable} key={value} onClick={() => onContent({ ...content, layout: value })} type="button">{label}</button>)}
         </div>
+        {templates.length ? <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-16">받는 매장</span>
+          {content.customerId ? <><span className="font-semibold text-slate-800">{content.recipient || "연결됨"}</span><button className={chip(false)} disabled={!editable || basisBusy} onClick={() => void pickStore(null)} type="button">연결 풀기</button></>
+            : <input aria-label="받는 매장 찾기" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void searchStores(event.target.value)} placeholder="매장 이름으로 찾아 가격 자동 적용" value={storeQuery} />}
+          {storeFound.length ? <ul className="w-full space-y-1" role="listbox">{storeFound.map((c) => <li key={c.id}><button className={chip(false)} disabled={basisBusy} onClick={() => void pickStore(c)} role="option" type="button">{c.name}</button></li>)}</ul> : null}
+        </div> : null}
         {templates.length ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <span className="w-16">가격 기준</span>
           <select aria-label="가격 기준" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
