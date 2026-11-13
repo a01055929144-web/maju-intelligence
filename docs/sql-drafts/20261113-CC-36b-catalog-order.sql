@@ -67,7 +67,7 @@ begin
   end loop;
 end $$;
 
--- E. 전체 상품 주문 공용 본문. 문서 주문 함수와 같은 배송일·마감·최소금액·멱등·수정(revision) 규칙을 따르되, 줄 가격은 요청값을 무시하고 서버에서 정한다:
+-- E. 전체 상품 주문 공용 본문. 문서 주문 함수와 같은 배송일·마감·휴일·최소금액·멱등·수정(revision) 규칙을 따르되(대표 11/13: 복사 허용 — PG17에서 같은 입력의 거부 결과를 비교 케이스로 고정), 줄 가격은 요청값을 무시하고 서버에서 정한다:
 --    행사(대상 매장·진행 중) → 매장 개별·견적 수락 가격 → margin_template_price_v1 → 가격 관리 판매가. 판매 중 상품만, 시세 품목 단가 null.
 --    ※ 기존 두 주문 함수에서 검증을 뽑아 공유하지 않고 여기에 같은 규칙을 둔다(기존 함수 무변경 조건). 후속에서 기존 쪽을 이 공용 본문 방식으로 합치는 것은 별도 승인 건.
 create or replace function public.place_store_catalog_order_core_v1(
@@ -85,8 +85,9 @@ declare
   v_reserved numeric := 0; v_store_reserved numeric := 0; v_seen text[] := '{}'; v_not_applied integer := 0; v_is_member boolean;
 begin
   v_is_member := p_store_account_id is not null or p_member_id is not null or p_auth_user_id is not null;
+  p_memo := coalesce(p_memo, ''); -- null 이면 멱등 지문(md5)이 통째로 null 이 되므로 빈 글로 다룬다
   if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$' or p_delivery_date is null or p_idempotency_key is null
-    or p_memo is null or length(p_memo) > 500 or jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) not between 1 and 100 then
+    or length(p_memo) > 500 or jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) not between 1 and 100 then
     raise exception 'Invalid order request';
   end if;
   select * into v_link from public.storefront_links where token_hash = p_token_hash for update;

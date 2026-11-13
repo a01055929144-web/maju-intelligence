@@ -109,6 +109,31 @@ do $$ declare r jsonb; begin
     assert false, 'changed body must conflict'; exception when raise_exception then assert sqlerrm = 'Idempotency conflict', sqlerrm; end;
 end $$;
 
+-- 컨트롤타워 검토 2번: p_memo 가 null 이어도 멱등 지문이 깨지지 않는다(빈 글로 취급, 같은 키 재전송은 같은 결과)
+do $$ declare a jsonb; b jsonb; begin
+  a := place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 6, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000b01', null, null, null);
+  b := place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 6, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000b01', null, null, null);
+  assert a = b and (a->>'id') is not null, 'null memo replay returns the same result';
+  assert (select request_memo from store_orders where id = (a->>'id')::uuid) = '', 'null memo stored as empty text';
+end $$;
+
+-- 비교 케이스(문서 주문 함수와 같은 규칙): 마감 지남 · 허용 요일 아님 · 휴일 · 최소금액 차단
+do $$ begin
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000c01');
+    assert false, 'cutoff passed'; exception when raise_exception then assert sqlerrm = 'Delivery date unavailable', sqlerrm; end;
+  update store_order_customer_rules set delivery_weekdays = '{}';
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000c02');
+    assert false, 'weekday not allowed'; exception when raise_exception then assert sqlerrm = 'Delivery date unavailable', sqlerrm; end;
+  update store_order_customer_rules set delivery_weekdays = '{0,1,2,3,4,5,6}';
+  insert into store_order_holidays values ('00000000-0000-0000-0000-0000000000c1', null, 'date', null, null, null, current_date + 9);
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 9, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000c03');
+    assert false, 'holiday'; exception when raise_exception then assert sqlerrm = 'Delivery date unavailable', sqlerrm; end;
+  update store_order_customer_rules set minimum_amount = 100000, minimum_policy = 'block';
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000c04');
+    assert false, 'minimum block'; exception when raise_exception then assert sqlerrm = 'Minimum order not met', sqlerrm; end;
+  update store_order_customer_rules set minimum_amount = 0, minimum_policy = 'notice';
+end $$;
+
 -- 거부: 다른 회사 상품 · 판매 중지 상품 · 메모 51자 · 메모 종류 오류 · 문서 링크 토큰
 do $$ begin
   begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a4","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a02');
