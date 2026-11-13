@@ -39,7 +39,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : chip === "loss" ? lossItems : chip === "low" ? lowItems : chip === "hidden" ? hiddenItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
     { key: "name", label: "상품", value: (i) => i.name, sortable: true, searchable: true, weight: 3, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
-    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
+    { key: "category", path: true, label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
     { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, priority: 2, width: 96, render: (i) => `${i.cost.toLocaleString()}원` },
     { key: "margin", label: "마진", value: (i) => marginSource(i, state).margin, align: "right", sortable: true, width: 104, render: (i) => {
       const s = marginSource(i, state);

@@ -107,7 +107,7 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
   const visible = useMemo(() => (onlyStore ? rows.filter((r) => r.storePrice !== null) : rows), [rows, onlyStore]);
   const columns: CommonTableColumn<Row>[] = [
     { key: "name", label: "상품", value: (r) => r.name, sortable: true, searchable: true, weight: 3, render: (r) => <span className="font-semibold">{r.name}</span> },
-    { key: "category", label: "분류", value: (r) => r.category || "미분류", sortable: true, searchable: true, priority: 3 },
+    { key: "category", path: true, label: "분류", value: (r) => r.category || "미분류", sortable: true, searchable: true, priority: 3 },
     { key: "base", label: "기본 판매가", value: (r) => r.basePrice, align: "right", sortable: true, width: 110, render: (r) => `${r.basePrice.toLocaleString()}원` },
     { key: "store", label: "이 매장 가격", value: (r) => r.storePrice, align: "right", sortable: true, width: 120, render: (r) => r.source === "견적"
       ? <span title="견적서 수락으로 생긴 가격 — 거래처 상세에서 종료">{r.storePrice?.toLocaleString()}원</span>
