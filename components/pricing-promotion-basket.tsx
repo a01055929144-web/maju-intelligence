@@ -67,7 +67,7 @@ export function PricingPromotionBasket({ companyId, kind, onClose, onSaved }: { 
       </div>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)]">
         <PricingProductPicker added={new Set(lines.map((l) => l.id))} busy={busy} companyId={companyId} loadPrices={loadPrices} manager onAdd={add}
-          onAddPromotion={() => undefined} onOpenLibrary={() => undefined} onRefreshPromotions={() => undefined} promotions={NO_PROMOTIONS} />
+          onAddPromotion={() => undefined} onAddPromotions={() => undefined} onOpenLibrary={() => undefined} onRefreshPromotions={() => undefined} promotions={NO_PROMOTIONS} />
         <div className="min-w-0 space-y-2">
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full min-w-[640px] text-sm">
