@@ -1,4 +1,5 @@
 "use client";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
@@ -67,7 +68,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     </div>
     {error ? <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{error}</p> : null}
     {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900">{message}</p> : null}
-    {selected === "" ? <p className="text-sm text-slate-600">&quot;기본&quot;은 지금 쓰는 회사 마진 규칙(아래 탭)입니다. 도매·VIP처럼 매장마다 다른 마진이 필요하면 새 카탈로그를 만드세요. 카탈로그에 없는 값은 그 카탈로그의 기본 마진으로 계산합니다.</p> : null}
+    {selected === "" ? <p className="flex items-center gap-1 text-sm font-bold text-slate-700">기본 카탈로그 <InfoTooltip size="sm" text="기본은 지금 쓰는 회사 마진 규칙(아래 탭)입니다. 도매·VIP처럼 매장마다 다른 마진이 필요하면 새 카탈로그를 만드세요. 카탈로그에 없는 값은 그 카탈로그의 기본 마진으로 계산합니다." /></p> : null}
     {draft ? <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void save(); }}>
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="text-sm font-bold">이름<input aria-label="카탈로그 이름" className={`${field} mt-1 w-full`} maxLength={60} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required value={draft.name} /></label>
