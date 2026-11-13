@@ -19,7 +19,8 @@ describe("audienceLabel", () => {
   it("names the audience for the table column", () => {
     expect(audienceLabel(undefined)).toBe("전체 매장");
     expect(audienceLabel({ audience: "all", customers: 0, templates: 0 })).toBe("전체 매장");
-    expect(audienceLabel({ audience: "only", customers: 3, templates: 1 })).toBe("매장 3 · 등급 1");
+    expect(audienceLabel({ audience: "only", customers: 3, templates: 1 })).toBe("매장 3 · 카탈로그 1");
+    expect(audienceLabel({ audience: "only", customers: 0, templates: 0, grades: 2 })).toBe("등급 2");
     expect(audienceLabel({ audience: "except", customers: 2, templates: 0 })).toBe("제외: 매장 2");
   });
 });

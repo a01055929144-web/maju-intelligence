@@ -109,18 +109,20 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [templateIds, setTemplateIds] = useState<string[]>([]);
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [gradeIds, setGradeIds] = useState<string[]>([]);
+  const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([]);
   const [found, setFound] = useState<Array<{ id: string; name: string }>>([]);
   const audienceCall = async (query: Record<string, string>) => {
     const res = await fetch(`/api/promotion-audience?${new URLSearchParams({ companyId, ...query })}`, { cache: "no-store" });
-    const data = await res.json().catch(() => ({})) as { message?: string; templates?: Array<{ id: string; name: string }>; customers?: Array<{ id: string; name: string }>; selected?: { customers: Array<{ id: string; name: string }>; templateIds: string[] } | null };
+    const data = await res.json().catch(() => ({})) as { message?: string; templates?: Array<{ id: string; name: string }>; grades?: Array<{ id: string; name: string }>; customers?: Array<{ id: string; name: string }>; selected?: { customers: Array<{ id: string; name: string }>; templateIds: string[]; gradeIds?: string[] } | null };
     if (!res.ok) throw new Error(data.message || "노출 대상을 불러오지 못했습니다.");
     return data;
   };
   useEffect(() => {
     if (!audienceEnabled) return;
     audienceCall(promo && initialAudience !== "all" ? { promotionId: promo.id } : {}).then((data) => {
-      setTemplates(data.templates ?? []);
-      if (data.selected) { setCustomers(data.selected.customers); setTemplateIds(data.selected.templateIds); }
+      setTemplates(data.templates ?? []); setGrades(data.grades ?? []);
+      if (data.selected) { setCustomers(data.selected.customers); setTemplateIds(data.selected.templateIds); setGradeIds(data.selected.gradeIds ?? []); }
     }).catch((e) => setError(e instanceof Error ? e.message : "노출 대상을 불러오지 못했습니다."));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const searchStores = async (q: string) => { if (!q.trim()) return setFound([]); try { setFound((await audienceCall({ q })).customers ?? []); } catch (e) { setError(e instanceof Error ? e.message : "매장을 찾지 못했습니다."); } };
@@ -158,7 +160,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
       if (audienceEnabled && (aud !== "all" || initialAudience !== "all")) {
         // 저장이 revision을 올리므로 최신 revision을 다시 읽어 대상을 한 번에 교체한다(실패하면 행사는 저장된 상태로 알린다).
         const latest = (await documentRequest<Promotion[]>(companyId, "promotions")).result.find((x) => x.id === savedId);
-        const targets: AudienceTarget[] = aud === "all" ? [] : [...customers.map((c) => ({ kind: "customer" as const, id: c.id })), ...templateIds.map((t) => ({ kind: "template" as const, id: t }))];
+        const targets: AudienceTarget[] = aud === "all" ? [] : [...customers.map((c) => ({ kind: "customer" as const, id: c.id })), ...templateIds.map((t) => ({ kind: "template" as const, id: t })), ...gradeIds.map((t) => ({ kind: "store_grade" as const, id: t }))];
         const res = await fetch("/api/promotion-audience", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, promotionId: savedId, expected: latest?.revision ?? 0, audience: aud, targets }) });
         if (!res.ok) throw new Error(`${kind}은 저장했지만 노출 대상은 저장하지 못했습니다: ${((await res.json().catch(() => ({}))) as { message?: string }).message || "다시 시도해 주세요."} (대상 저장 전까지 전체 매장에 노출될 수 있습니다.)`);
       }
@@ -211,7 +213,8 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
           {found.length ? <ul className="max-h-32 divide-y overflow-y-auto rounded border text-sm">{found.map((c) => <li key={c.id}><button className="min-h-[36px] w-full px-2 text-left hover:bg-slate-50 disabled:text-slate-400" disabled={customers.some((x) => x.id === c.id)} onClick={() => setCustomers([...customers, c])} type="button">{c.name}</button></li>)}</ul> : null}
           <div className="flex flex-wrap gap-1.5">{customers.map((c) => <button aria-label={`${c.name} 빼기`} className="min-h-[32px] rounded-full border border-teal-700 px-2 text-xs font-bold text-teal-800" key={c.id} onClick={() => setCustomers(customers.filter((x) => x.id !== c.id))} type="button">{c.name} ✕</button>)}</div>
           {more && templates.length ? <div aria-label="카탈로그" className="flex flex-wrap gap-1.5" role="group">{templates.map((t) => <button aria-pressed={templateIds.includes(t.id)} className={`min-h-[32px] rounded-full border px-2 text-xs font-bold ${templateIds.includes(t.id) ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300"}`} key={t.id} onClick={() => setTemplateIds(templateIds.includes(t.id) ? templateIds.filter((x) => x !== t.id) : [...templateIds, t.id])} type="button">카탈로그 {t.name}</button>)}</div> : null}
-          {customers.length + templateIds.length === 0 ? <p className="text-xs text-rose-700">대상을 하나 이상 골라 주세요.</p> : null}
+          {more && grades.length ? <div aria-label="매장 등급" className="flex flex-wrap gap-1.5" role="group">{grades.map((t) => <button aria-pressed={gradeIds.includes(t.id)} className={`min-h-[32px] rounded-full border px-2 text-xs font-bold ${gradeIds.includes(t.id) ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300"}`} key={t.id} onClick={() => setGradeIds(gradeIds.includes(t.id) ? gradeIds.filter((x) => x !== t.id) : [...gradeIds, t.id])} type="button">등급 {t.name}</button>)}</div> : null}
+          {customers.length + templateIds.length + gradeIds.length === 0 ? <p className="text-xs text-rose-700">대상을 하나 이상 골라 주세요.</p> : null}
         </div> : null}
       </fieldset> : null}
       <button aria-expanded={more} className="min-h-[44px] text-sm font-bold text-slate-600 underline" onClick={() => setMore(!more)} type="button">더보기</button>
@@ -221,7 +224,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         <label className="flex items-center gap-2 text-sm font-bold"><input defaultChecked={promo?.allowSheet ?? true} name="allowSheet" type="checkbox" />단가표에도 넣기</label>
       </div>
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <button className="maju-button-primary min-h-[44px] px-4" disabled={busy || !productId || (audienceEnabled && aud !== "all" && customers.length + templateIds.length === 0)} type="submit">저장</button>
+        <button className="maju-button-primary min-h-[44px] px-4" disabled={busy || !productId || (audienceEnabled && aud !== "all" && customers.length + templateIds.length + gradeIds.length === 0)} type="submit">저장</button>
         <button className="min-h-[44px] rounded-lg border px-4" onClick={onClose} type="button">닫기</button>
         {promo ? <button className="ml-auto min-h-[44px] px-3 text-sm font-bold text-rose-700" disabled={busy} onClick={() => void remove()} type="button">삭제</button> : null}
       </div>
