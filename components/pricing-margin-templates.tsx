@@ -4,7 +4,7 @@ import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
 
 // CC-19b: 카탈로그(가격 묶음) 선택·만들기·비교. 스위치(MARGIN_TEMPLATES)를 켠 회사에만 보인다.
-type Template = { id: string; name: string; margin: number; rounding: number; categories: { category: string; margin: number }[] };
+type Template = { id: string; name: string; storeCount?: number; margin: number; rounding: number; categories: { category: string; margin: number }[] };
 const field = "h-10 rounded-md border border-slate-300 bg-white px-2 text-sm";
 const asTemplate = (t: Template): MarginTemplate => ({ margin: t.margin, rounding: t.rounding, categories: t.categories, items: [] });
 
@@ -52,9 +52,16 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const compare = useMemo(() => state.items.slice(0, 20).map((item: PriceItem) => ({ item, prices: templates.map((t) => templatePrice(asTemplate(t), { id: item.id, category: item.category, cost: item.cost }).price) })), [state.items, templates]);
 
   return <section aria-label="카탈로그" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="카탈로그 선택">
-      <button aria-pressed={selected === ""} className={`min-h-[44px] rounded-full border px-4 text-sm font-bold ${selected === "" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200"}`} onClick={() => setSelected("")} type="button">기본</button>
-      {templates.map((t) => <button aria-pressed={selected === t.id} className={`min-h-[44px] rounded-full border px-4 text-sm font-bold ${selected === t.id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200"}`} key={t.id} onClick={() => setSelected(t.id)} type="button">{t.name}</button>)}
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="카탈로그 선택">
+      <button aria-pressed={selected === ""} className={`rounded-xl border p-3 text-left ${selected === "" ? "border-teal-700 bg-teal-50 ring-1 ring-teal-700" : "border-slate-200 hover:bg-slate-50"}`} onClick={() => setSelected("")} type="button">
+        <span className="flex items-center gap-2"><b className="text-sm">기본 카탈로그</b><span className="rounded bg-teal-700 px-1.5 py-0.5 text-[11px] font-bold text-white">기본</span></span>
+        <span className="mt-1 block text-xs text-slate-500">품목 {state.items.length.toLocaleString("ko-KR")}개 · 지정하지 않은 매장이 씁니다</span>
+      </button>
+      {templates.map((t) => <button aria-pressed={selected === t.id} className={`rounded-xl border p-3 text-left ${selected === t.id ? "border-teal-700 bg-teal-50 ring-1 ring-teal-700" : "border-slate-200 hover:bg-slate-50"}`} key={t.id} onClick={() => setSelected(t.id)} type="button">
+        <b className="block truncate text-sm">{t.name}</b>
+        <span className="mt-1 flex flex-wrap gap-1 text-[11px] font-bold text-slate-700"><span className="rounded bg-slate-100 px-1.5 py-0.5">기본 {t.margin}%</span>{t.categories.slice(0, 3).map((c) => <span className="rounded bg-slate-100 px-1.5 py-0.5" key={c.category}>{c.category.split(">").pop()?.trim()} {c.margin}%</span>)}{t.categories.length > 3 ? <span className="px-1 py-0.5 text-slate-500">+{t.categories.length - 3}</span> : null}</span>
+        <span className="mt-1 block text-xs text-slate-500">품목 {state.items.length.toLocaleString("ko-KR")}개 · 매장 {(t.storeCount ?? 0).toLocaleString("ko-KR")}곳</span>
+      </button>)}
       <button className="min-h-[44px] rounded-full border border-dashed border-teal-700 px-4 text-sm font-bold text-teal-800" onClick={() => startNew(true)} type="button">+ 새 카탈로그(기본 복사)</button>
       <button className="min-h-[44px] rounded-full border border-dashed border-slate-400 px-4 text-sm font-bold text-slate-700" onClick={() => startNew(false)} type="button">+ 빈 카탈로그</button>
     </div>
