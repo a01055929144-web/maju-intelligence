@@ -382,23 +382,26 @@ export function PricingDocumentsWorkspace({
     for (let start = 0; start < todo.length; start += 100) choices.push(...await loadPrices(todo.slice(start, start + 100)));
     if (choices.length) add(choices);
   }
-  async function addPromotion(p: Promotion) {
+  // 여러 행사를 한 번에 담는다(rows()를 한 번만 불러야 앞서 담은 줄이 덮어써지지 않는다).
+  async function addPromotions(list: Promotion[]) {
     if (!draft) throw new Error("먼저 문서를 작성해 주세요.");
-    if (draft.content.kind === "sheet" && !p.allowSheet)
+    const todo = list.filter((p) => !draft.content.lines.some((l) => l.promotionId === p.id));
+    if (draft.content.kind === "sheet" && todo.some((p) => !p.allowSheet))
       throw new Error("이 행사는 견적서에만 넣을 수 있습니다.");
-    if (draft.content.lines.some((l) => l.promotionId === p.id)) return;
+    if (!todo.length) return;
     const r = await read<{ items: CatalogChoice[] }>("catalog", {
-      productIds: [p.productId],
+      productIds: todo.map((p) => p.productId),
     });
-    if (!r.items[0]) throw new Error("행사 상품을 확인해 주세요.");
+    const found = todo.flatMap((p) => { const item = r.items.find((x) => x.id === p.productId); return item ? [{ p, item }] : []; });
+    if (!found.length) throw new Error("행사 상품을 확인해 주세요.");
     setBaselines((previous) => ({
       ...previous,
-      [p.productId]: r.items[0].price,
+      ...Object.fromEntries(found.map(({ p, item }) => [p.productId, item.price])),
     }));
     rows([
       ...draft.content.lines,
-      {
-        ...lineFromCatalog(r.items[0]),
+      ...found.map(({ p, item }) => ({
+        ...lineFromCatalog(item),
         displayName: p.displayName,
         price: p.price,
         promotionId: p.id,
@@ -407,10 +410,11 @@ export function PricingDocumentsWorkspace({
         remaining: p.stock,
         badge: p.badge,
         taxType: p.taxType,
-      },
+      })),
     ]);
     setTab("documents");
   }
+  const addPromotion = (p: Promotion) => addPromotions([p]);
   useEffect(() => { setPicked(new Set()); }, [draft?.id]);
   function bulkRows(update: (line: PrintLine) => PrintLine | null) {
     if (!draft) return;
@@ -725,13 +729,14 @@ export function PricingDocumentsWorkspace({
                           manager={manager}
                           onAdd={(items) => void task(async () => add(items))}
                           onAddPromotion={(p) => void task(() => addPromotion(p))}
+                          onAddPromotions={(list) => void task(() => addPromotions(list))}
                           onOpenLibrary={() => window.open("/revenue/pricing/promotions?add=1", "_blank", "noopener")}
                           onRefreshPromotions={() => void task(loadLibrary)}
                           promotions={promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet))}
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>
