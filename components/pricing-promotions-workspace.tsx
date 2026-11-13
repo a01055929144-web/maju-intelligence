@@ -5,6 +5,7 @@ import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { discountPercent, regularPrice } from "@/domains/pricing/promotion-display";
 import { Tabs } from "./ui/tabs";
+import { PricingPromotionBasket } from "./pricing-promotion-basket";
 import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 import { buildFolderTree, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
@@ -29,6 +30,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [drawer, setDrawer] = useState<{ promo: Promotion | null } | null>(null);
+  const [basketOpen, setBasketOpen] = useState(false);
   const [audiences, setAudiences] = useState<Record<string, AudienceSummary>>({});
   const today = koreaDay();
 
@@ -74,7 +76,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <Tabs ariaLabel="행사·임박" items={[{ id: "행사", label: "행사" }, { id: "임박", label: "임박" }]} onChange={(id) => setKind(id as Kind)} value={kind} />
-      {manager ? <button className="maju-button-primary min-h-[44px] px-4" onClick={() => { setPresetProduct(""); setDrawer({ promo: null }); }} type="button">{kind} 등록</button> : null}
+      {manager ? <button className="maju-button-primary min-h-[44px] px-4" onClick={() => setBasketOpen(true)} type="button">+ {kind} 상품 담기</button> : null}
     </div>
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="상태">
       {([["active", "진행 중"], ["upcoming", "예정"], ["ended", "끝남"], ["all", "전체"]] as const).map(([id, label]) =>
@@ -82,6 +84,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
     </div>
     {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p> : null}
     <CommonDataTable columns={columns} emptyMessage={`${status === "all" ? "" : "해당 상태의 "}${kind} 상품이 없습니다.`} error={error || null} filename={`${kind}.csv`} loading={loading} phoneCards rowKey={(x) => x.id} rows={visible} settingsKey={`promotions-${kind}:${userKey}`} />
+    {basketOpen ? <PricingPromotionBasket companyId={companyId} kind={kind} onClose={() => setBasketOpen(false)} onSaved={(text) => { setBasketOpen(false); setMessage(text); void load(); }} /> : null}
     {drawer ? <PromotionDrawer audienceEnabled={audienceEnabled} companyId={companyId} initialAudience={drawer.promo ? audiences[drawer.promo.id]?.audience ?? "all" : "all"} kind={kind} onClose={() => setDrawer(null)} onSaved={(text) => { setDrawer(null); setMessage(text); void load(); }} preset={presetProduct} promo={drawer.promo} /> : null}
   </div>;
 }
