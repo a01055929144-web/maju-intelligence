@@ -124,7 +124,7 @@ export function ProductCatalogAdmin({
       const deletable = count.deletable ?? 0, hideOnly = count.hideOnly ?? 0;
       if (!window.confirm(`${deletable}개 완전 삭제 · ${hideOnly}개 숨김\n\n완전 삭제는 되돌릴 수 없습니다(매입가·마진·행사 연결도 함께 지워짐). 주문·문서·재고·계약 단가에 쓰인 상품은 지우지 않고 숨기며, 판매중지 필터에서 되살릴 수 있습니다. 이미 발행한 문서는 그대로입니다.\n\n진행할까요?`)) return;
       const done = await productAction({ action: "delete-products", apply: true });
-      setMoveMessage(`${done.deletable ?? 0}개를 완전 삭제하고 ${done.hideOnly ?? 0}개를 숨겼습니다.`);
+      setMoveMessage(`${done.deletable ?? 0}개 완전 삭제 · ${done.hideOnly ?? 0}개 숨김(문서·매입 기록에 쓰여 보관 — 가격·문서·주문 화면에서 안 보임)`);
       setPicked(new Set());
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "상품을 처리하지 못했습니다."); }
