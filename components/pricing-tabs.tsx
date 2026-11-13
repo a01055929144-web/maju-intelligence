@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 // CC-30b: 가격 관리 세 화면(판매가·행사·임박·매장 가격)을 한 줄 탭으로 묶는다. 매장 가격 탭은 그 회사가 매장 가격을 쓰기 시작한 뒤에만(사이드 메뉴 "매장 가격"에서는 언제든 열 수 있음).
-export type PricingTab = "margins" | "promotions" | "store-prices";
+export type PricingTab = "catalog" | "promotions" | "store-prices";
 const TABS: Array<{ key: PricingTab; label: string; href: string }> = [
-  { key: "margins", label: "판매가", href: "/revenue/pricing/margins" },
+  { key: "catalog", label: "카탈로그", href: "/revenue/pricing/catalog" },
   { key: "promotions", label: "행사·임박", href: "/revenue/pricing/promotions" },
   { key: "store-prices", label: "매장 가격", href: "/revenue/pricing/store-prices" },
 ];

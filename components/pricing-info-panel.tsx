@@ -115,7 +115,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     finally { setBasisBusy(false); }
   }
 
-  // CC-30d: 받는 매장을 고르면 일반 품목 가격을 매장 가격 > 등급가 > 기본가로 다시 채운다(행사·임박 줄은 그대로). 이미 확정한 버전은 그대로.
+  // CC-30d: 받는 매장을 고르면 일반 품목 가격을 매장 가격 > 카탈로그가 > 기본가로 다시 채운다(행사·임박 줄은 그대로). 이미 확정한 버전은 그대로.
   const [storeQuery, setStoreQuery] = useState("");
   const [storeFound, setStoreFound] = useState<Array<{ id: string; name: string }>>([]);
   async function searchStores(q: string) {
@@ -144,7 +144,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
       const fresh = latest.current;
       onContent({ ...fresh, customerId: customer.id, marginTemplateId: gradeId || undefined, recipient: fresh.recipient.trim() ? fresh.recipient : customer.name.slice(0, 100),
         lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId], priceSource: sources[line.productId] })) });
-      setMessage(`"${customer.name}" 가격(매장 가격 > 등급가 > 기본가)을 적용했습니다. 가격이 없는 품목은 그대로 뒀습니다.`);
+      setMessage(`"${customer.name}" 가격(매장 가격 > 카탈로그가 > 기본가)을 적용했습니다. 가격이 없는 품목은 그대로 뒀습니다.`);
     } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
     finally { setBasisBusy(false); }
   }
@@ -360,10 +360,10 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
             : <input aria-label="받는 매장 찾기" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void searchStores(event.target.value)} placeholder="매장 이름으로 찾아 가격 자동 적용" value={storeQuery} />}
           {storeFound.length ? <ul className="w-full space-y-1" role="listbox">{storeFound.map((c) => <li key={c.id}><button className={chip(false)} disabled={basisBusy} aria-selected={false} onClick={() => void pickStore(c)} role="option" type="button">{c.name}</button></li>)}</ul> : null}
         </div> : null}
-        {/* 견적서는 받는 매장이 가격을 정하고, 단가표(받는 매장 없음)만 등급 하나를 고른다. */}
+        {/* 견적서는 받는 매장이 가격을 정하고, 단가표(받는 매장 없음)만 카탈로그 하나를 고른다. */}
         {templates.length && content.kind === "sheet" ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-          <span className="w-16">등급</span>
-          <select aria-label="등급" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
+          <span className="w-16">카탈로그</span>
+          <select aria-label="카탈로그" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
             <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label> : null}
