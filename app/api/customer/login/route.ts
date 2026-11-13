@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearAdminSession, setCustomerSession, validateCustomerCredentials } from "@/lib/auth";
+import { setCustomerSession, validateCustomerCredentials } from "@/lib/auth";
 import { checkLoginThrottle, clearLoginThrottle, recordLoginFailure } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
   }
 
   await clearLoginThrottle(identifier);
-  await clearAdminSession();
   await setCustomerSession(session, { remember: body?.remember !== false });
   return NextResponse.json({ ok: true, mustChangePassword: Boolean(session.mustChangePassword), session });
 }

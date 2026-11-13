@@ -75,7 +75,7 @@ describe("store Kakao session route boundary", () => {
   });
 
   it("clears the store cookie through the existing logout and never elevates a public order token", () => {
-    const logout = source("app/api/customer/logout/route.ts");
+    const logout = source("app/api/auth/logout-all/route.ts");
     const storefront = source("app/api/storefront/route.ts");
     expect(logout).toContain("clearStoreSession");
     expect(storefront).not.toContain("getStoreSession");

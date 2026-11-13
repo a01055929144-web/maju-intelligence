@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearAdminSession, setCustomerSession } from "@/lib/auth";
+import { setCustomerSession } from "@/lib/auth";
 import { createCompanySignup } from "@/lib/store";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 import { checkLoginThrottle, clearLoginThrottle, recordLoginFailure } from "@/lib/rate-limit";
@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
     });
 
     await clearLoginThrottle(identifier);
-    await clearAdminSession();
     await setCustomerSession({
       appRole: "customer_user",
       companyId: result.companyId,
