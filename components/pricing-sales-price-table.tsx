@@ -27,6 +27,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const fixedItems = useMemo(() => inScope.filter((i) => i.directPrice !== null), [inScope]);
   const [selected, setSelected] = useState<Set<string>>(new Set()); // CC-30a: 줄 선택 → 마진 일괄 변경·고정 해제(서버는 한 번에 300개까지)
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(true); // P5: 분류 트리 240px, 접으면 표가 전체 너비
   const [bulkMargin, setBulkMargin] = useState("");
   const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
@@ -74,10 +75,12 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const marginValue = Number(bulkMargin);
   const marginOk = bulkMargin.trim() !== "" && Number.isFinite(marginValue) && marginValue >= 0 && marginValue <= 1000;
   const loss = rows.filter((i) => i.price - i.cost <= 0).length;
-  return <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
-    <aside aria-label="분류" className="space-y-2 rounded-xl border border-slate-200 bg-white p-2">
+  return <div className={`grid gap-4 lg:items-start ${treeOpen ? "lg:grid-cols-[240px_minmax(0,1fr)]" : "lg:grid-cols-[auto_minmax(0,1fr)]"}`}>
+    {!treeOpen ? <button aria-expanded={false} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setTreeOpen(true)} type="button">분류 펼치기 ▸</button> : null}
+    <aside aria-label="분류" className={`space-y-1 rounded-xl border border-slate-200 bg-white p-2 ${treeOpen ? "" : "hidden"}`}>
+      <button aria-expanded className="h-7 w-full text-right text-xs font-bold text-slate-500" onClick={() => setTreeOpen(false)} type="button">◂ 분류 접기</button>
       <button aria-pressed={folder === null} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold ${folder === null ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} onClick={() => onFolder(null)} type="button"><span>전체</span><span className="text-xs text-slate-500">{items.length}</span></button>
-      {tree.map((node) => <button aria-pressed={folder === node.path} className={`flex w-full items-center justify-between gap-2 rounded-lg py-2 pr-3 text-left text-sm ${folder === node.path ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={node.path} onClick={() => onFolder(node.path)} style={{ paddingLeft: 12 + node.depth * 14 }} type="button">
+      {tree.map((node) => <button aria-pressed={folder === node.path} className={`flex min-h-9 w-full items-center justify-between gap-2 rounded-lg py-1.5 pr-3 text-left text-sm ${folder === node.path ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={node.path} onClick={() => onFolder(node.path)} style={{ paddingLeft: 12 + node.depth * 12 }} type="button">
         <span className={`truncate ${node.depth === 0 ? "font-bold" : ""}`}>{node.name}</span><span className="shrink-0 text-xs text-slate-500">{node.badge} · {node.count}</span></button>)}
       {folder ? <div className="border-t pt-2">{folderTools}</div> : null}
     </aside>

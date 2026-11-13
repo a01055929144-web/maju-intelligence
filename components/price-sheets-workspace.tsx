@@ -92,23 +92,18 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
       {undoable && state.lastBatch && !state.restored ? <button className="rounded border border-teal-700 px-2 py-1 text-xs font-bold" disabled={busy} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">되돌리기</button> : null}</p>}
 
     {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm font-bold">기본 마진 {state.defaultMargin}% · {state.defaultRounding}원 올림 <button className="ml-2 rounded border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => setShowDefault((v) => !v)} type="button">{showDefault ? "닫기" : "바꾸기"}</button></p>
-      <PricingSheetFromPrices busy={busy} companyId={companyId} folder={folder} />
-    </div>
     {state.pendingCount > 0 || (state.lastBatch && !state.restored) ? <div className="flex flex-wrap items-center gap-2 text-sm">
       <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
       <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
       <button className={box} disabled={busy || !state.lastBatch || state.restored} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">직전 반영 되돌리기</button>
     </div> : null}
     {/* ① 기본 마진 */}
-    <section aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="flex items-center gap-1 text-sm font-bold text-slate-700">기본 마진 <InfoTooltip size="sm" text="모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다." /></p>
-          {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
-        </div>
+    <section aria-label="회사 기본 마진" className={`rounded-xl border px-3 py-2 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-bold">기본 마진 {state.defaultMargin}% · {state.defaultRounding}원 올림 <InfoTooltip size="sm" text="모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다." /> <button className="ml-2 rounded border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => setShowDefault((v) => !v)} type="button">{showDefault ? "닫기" : "바꾸기"}</button></p>
+      <PricingSheetFromPrices busy={busy} companyId={companyId} folder={folder} />
       </div>
+      {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
       {showDefault || zeroMargin ? <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); void run([{ action: "defaults", margin: Number(defaultMargin), rounding: Number(defaultRounding) }], `기본 마진 ${defaultMargin}%를 저장하고 판매가에 반영했습니다.`); }}>
         <label className="text-sm font-bold">기본 마진
           <span className="mt-1 flex items-center gap-1"><input aria-label="기본 마진율" className={`${box} w-24 text-right text-lg font-black`} inputMode="decimal" max="1000" min="0" onChange={(e) => setDefaultMargin(e.target.value)} required step="0.01" type="number" value={defaultMargin} /><span className="text-lg font-black">%</span></span>
