@@ -39,7 +39,7 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
       title="영업 성과"
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-4 sm:px-4">
+      <section className="w-full space-y-4 px-3 py-4 sm:px-4">
         <SalesWorkspaceNav active="performance" companyId={companyId} />
         <div className="maju-section-card overflow-hidden">
           <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

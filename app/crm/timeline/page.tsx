@@ -1318,7 +1318,7 @@ export default function CrmTimelinePage() {
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <section className="mx-auto max-w-[1560px]">
+      <section className="w-full">
         <WorkspaceSectionNav
           items={[
             { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },

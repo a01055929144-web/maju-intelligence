@@ -64,7 +64,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <main className="mx-auto w-full max-w-[1480px] space-y-4 px-3 py-4 sm:px-5">
+      <main className="w-full space-y-4 px-3 py-4 sm:px-5">
         <header className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-teal-700" /><h1 className="text-xl font-black text-slate-950">성과 대시보드</h1></div>
