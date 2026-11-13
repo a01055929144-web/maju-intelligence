@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
-import { COMMON_TABLE_PAGE_SIZES, normalizeColumnState, setColumnWidth, type CommonColumnState } from "@/lib/common-data-table";
+import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, normalizeColumnState, PAGE_SIZE_ALL, pickPageSize, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
+
+const ROW_HEIGHT = 40;
 
 export type CommonTableColumn<Row> = {
   key: string;
@@ -14,6 +16,10 @@ export type CommonTableColumn<Row> = {
   defaultHidden?: boolean;
   total?: boolean;
   width?: number;
+  /** 폭이 모자랄 때 숨기는 순서(1 중요 ~ 3 덜 중요). 없으면 절대 자동 숨김 안 함. */
+  priority?: 1 | 2 | 3;
+  /** 너비를 따로 정하지 않은 열이 남는 폭을 나누는 비율(기본 1). */
+  weight?: number;
 };
 
 export function CommonDataTable<Row>({
@@ -27,6 +33,7 @@ export function CommonDataTable<Row>({
   phoneCards = false,
   rowKey,
   rows,
+  selection,
   settingsKey,
 }: {
   columns: CommonTableColumn<Row>[];
@@ -41,6 +48,8 @@ export function CommonDataTable<Row>({
   phoneCards?: boolean;
   rowKey: (row: Row) => string;
   rows: Row[];
+  /** 줄 선택(체크 열 + 머리 전체 선택). 없으면 체크 열 없음. */
+  selection?: { selected: ReadonlySet<string>; onChange: (next: Set<string>) => void };
   /** 화면 id와 사용자 id를 합친 값. 예: products:user-123 */
   settingsKey: string;
 }) {
@@ -50,6 +59,9 @@ export function CommonDataTable<Row>({
   const [page, setPage] = useState(1);
   const pageSizes = COMMON_TABLE_PAGE_SIZES[pageSizeMode];
   const [pageSize, setPageSize] = useState<number>(pageSizes[0]);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [windowRange, setWindowRange] = useState({ start: 0, end: 60 });
   const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const storageKey = `maju:table:${settingsKey}`;
   // 휴대폰(≤640px)은 표 대신 카드. 한쪽만 그려서 같은 글자가 화면에 두 번 생기지 않게 한다.
@@ -61,6 +73,17 @@ export function CommonDataTable<Row>({
     sync(); query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   }, [phoneCards]);
+
+  useEffect(() => {
+    try { setPageSize(pickPageSize(pageSizes, JSON.parse(localStorage.getItem(`${storageKey}:size`) || "null"))); } catch { /* 기본 개수 */ }
+  }, [pageSizes, storageKey]);
+  useEffect(() => {
+    const node = wrapRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setAvailableWidth(node.clientWidth));
+    observer.observe(node); setAvailableWidth(node.clientWidth);
+    return () => observer.disconnect();
+  }, [mobile]);
 
   useEffect(() => {
     try {
@@ -98,7 +121,12 @@ export function CommonDataTable<Row>({
   }
 
   const orderedColumns = columnState.map((state) => ({ ...state, column: columns.find((column) => column.key === state.key)! })).filter((item) => item.column && !item.hidden);
-  const displayColumns = [...orderedColumns.filter((item) => item.pinned), ...orderedColumns.filter((item) => !item.pinned)];
+  const needOf = (item: (typeof orderedColumns)[number]) => item.width ?? item.column.width ?? (item.column.align === "right" ? 96 : 120);
+  // 폭이 모자라면 priority 큰(덜 중요한) 열부터 자동 숨김. 사용자가 열을 직접 넓혔으면(너비 저장) 그대로 두고 좌우 스크롤.
+  const userWidened = orderedColumns.some((item) => item.width !== undefined);
+  const autoHidden = userWidened || !availableWidth ? [] : autoHiddenKeys(orderedColumns.map((item) => ({ key: item.key, need: needOf(item), priority: item.column.priority })), availableWidth - (selection ? 40 : 0));
+  const visibleColumns = orderedColumns.filter((item) => !autoHidden.includes(item.key));
+  const displayColumns = [...visibleColumns.filter((item) => item.pinned), ...visibleColumns.filter((item) => !item.pinned)];
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
     const column = columns.find((item) => item.key === sort.key);
@@ -111,7 +139,31 @@ export function CommonDataTable<Row>({
   }, [columns, rows, sort]);
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pageRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageRows = pageSize === PAGE_SIZE_ALL ? sortedRows : sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // 500줄 이상은 보이는 줄만 그린다(줄 높이 40px 고정). 묶음 머리줄이 있으면 높이가 달라 쓰지 않는다.
+  const virtual = !groupBy && !mobile && pageRows.length > VIRTUAL_THRESHOLD;
+  useEffect(() => {
+    if (!virtual) return;
+    const node = wrapRef.current;
+    if (!node) return;
+    let parent: HTMLElement | null = node.parentElement;
+    while (parent && !/(auto|scroll)/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement;
+    const target: HTMLElement | Window = parent ?? window;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = (parent ?? document.documentElement).getBoundingClientRect().top;
+      const viewport = parent ? parent.clientHeight : window.innerHeight;
+      const body = node.querySelector("tbody")?.getBoundingClientRect().top ?? 0;
+      setWindowRange(visibleRange(pageRows.length, ROW_HEIGHT, Math.max(0, (parent ? top : 0) - body), viewport));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update(); target.addEventListener("scroll", schedule, { passive: true }); window.addEventListener("resize", schedule);
+    return () => { if (frame) cancelAnimationFrame(frame); target.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); };
+  }, [virtual, pageRows.length]);
+  const renderRows = virtual ? pageRows.slice(windowRange.start, windowRange.end) : pageRows;
+  const rowOffset = virtual ? windowRange.start : 0;
+  const pageIds = pageRows.map(rowKey);
 
   function toggleSort(key: string) {
     setSort((current) => current?.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
@@ -137,7 +189,7 @@ export function CommonDataTable<Row>({
 
   return <div className="common-data-table relative">
     <div className="common-data-table-tools flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 p-3">
-      <label className="flex items-center gap-2 text-xs font-bold text-slate-600">보기 <select className="rounded-md border border-slate-200 bg-white px-2 py-1" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>{pageSizes.map((size) => <option key={size} value={size}>{size}개</option>)}</select></label>
+      <label className="flex items-center gap-2 text-xs font-bold text-slate-600">보기 <select className="rounded-md border border-slate-200 bg-white px-2 py-1" value={pageSize} onChange={(event) => { const size = Number(event.target.value); setPageSize(size); setPage(1); try { localStorage.setItem(`${storageKey}:size`, JSON.stringify(size)); } catch { /* private browsing */ } }}>{pageSizes.map((size) => <option key={size} value={size}>{size === PAGE_SIZE_ALL ? "전체" : `${size}개`}</option>)}</select>{autoHidden.length ? <span className="ml-2 font-medium text-slate-500">열 {autoHidden.length}개 숨김 · <button className="font-bold text-teal-700 underline" onClick={() => setEditorOpen(true)} type="button">열 편집</button></span> : null}</label>
       <div className="flex flex-wrap gap-2">
         <button className="maju-button-secondary h-9 text-xs" onClick={downloadCsv} type="button"><Download className="h-3.5 w-3.5" /> 엑셀 내려받기</button>
         <button className="maju-button-secondary h-9 text-xs" onClick={() => window.print()} type="button"><Printer className="h-3.5 w-3.5" /> 인쇄</button>
@@ -151,24 +203,25 @@ export function CommonDataTable<Row>({
         <span className="cursor-grab text-slate-400">⋮⋮</span><input checked={!state.hidden} onChange={() => save(columnState.map((item) => item.key === state.key ? { ...item, hidden: !item.hidden } : item))} type="checkbox" /><span className="flex-1">{column.label}</span><button aria-label={`${column.label} 고정`} className={state.pinned ? "text-teal-700" : "text-slate-300"} onClick={() => save(columnState.map((item) => item.key === state.key ? { ...item, pinned: !item.pinned } : item))} type="button"><Pin className="h-4 w-4" /></button>
       </div>; })}
     </div> : null}
-    {mobile ? null : <div className="max-h-[calc(100dvh-360px)] min-h-[360px] overflow-auto overscroll-contain">
-      <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
-        <thead className="sticky top-0 z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : "relative"}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : { minWidth: item.width ?? item.column.width, width: item.width }}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button><span aria-label={`${item.column.label} 열 너비 조절`} aria-orientation="vertical" className="common-data-table-tools absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-teal-300 focus:bg-teal-400 focus:outline-none" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => resizeByKey(event, item.key, item.width ?? item.column.width ?? 160)} onPointerDown={(event) => startResize(event, item.key)} role="separator" tabIndex={0} /></th>)}</tr></thead>
-        <tbody>{pageRows.flatMap((row, rowIndex) => {
+    {mobile ? null : <div className={userWidened ? "overflow-x-auto" : ""} ref={wrapRef}>
+      <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
+        <colgroup>{selection ? <col style={{ width: 40 }} /> : null}{displayColumns.map((item) => <col key={item.key} style={item.width ?? item.column.width ? { width: item.width ?? item.column.width } : item.column.weight ? { width: `${item.column.weight * 10}%` } : undefined} />)}</colgroup>
+        <thead className="sticky top-[var(--maju-table-sticky-top,0px)] z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{selection ? <th className="border-b border-slate-300 px-2 py-3"><input aria-label="이 페이지 전체 선택" checked={pageIds.length > 0 && pageIds.every((id) => selection.selected.has(id))} onChange={(event) => { const next = new Set(selection.selected); pageIds.forEach((id) => event.target.checked ? next.add(id) : next.delete(id)); selection.onChange(next); }} type="checkbox" /></th> : null}{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : "relative"}`} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: (selection ? 40 : 0) + displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button><span aria-label={`${item.column.label} 열 너비 조절`} aria-orientation="vertical" className="common-data-table-tools absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none hover:bg-teal-300 focus:bg-teal-400 focus:outline-none" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => resizeByKey(event, item.key, item.width ?? item.column.width ?? 160)} onPointerDown={(event) => startResize(event, item.key)} role="separator" tabIndex={0} /></th>)}</tr></thead>
+        <tbody>{virtual && windowRange.start > 0 ? <tr aria-hidden="true" style={{ height: windowRange.start * ROW_HEIGHT }}><td colSpan={displayColumns.length + (selection ? 1 : 0)} /></tr> : null}{renderRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
-          return [groupRow, <tr className="odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 py-2.5 ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0), minWidth: item.width ?? item.column.width ?? 160 } : undefined}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</td>)}</tr>];
-        })}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length} role={error ? "alert" : undefined}>{stateMessage}</td></tr> : null}</tbody>
+          return [groupRow, <tr className="h-10 odd:bg-white even:bg-slate-50/60" key={rowKey(row)}>{selection ? <td className="border-b border-slate-200 px-2"><input aria-label="줄 선택" checked={selection.selected.has(rowKey(row))} onChange={(event) => { const next = new Set(selection.selected); event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row)); selection.onChange(next); }} type="checkbox" /></td> : null}{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 ${virtual ? "py-1" : "py-2.5"} ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} key={item.key} style={item.pinned ? { left: (selection ? 40 : 0) + displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined} title={typeof item.column.value(row) === "string" ? String(item.column.value(row)) : undefined}><div className={virtual ? "max-h-8 overflow-hidden" : "line-clamp-2 break-words"}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowOffset + rowIndex) : item.column.value(row) ?? "-"}</div></td>)}</tr>];
+        })}{virtual && windowRange.end < pageRows.length ? <tr aria-hidden="true" style={{ height: (pageRows.length - windowRange.end) * ROW_HEIGHT }}><td colSpan={displayColumns.length + (selection ? 1 : 0)} /></tr> : null}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length + (selection ? 1 : 0)} role={error ? "alert" : undefined}>{stateMessage}</td></tr> : null}</tbody>
         {totals.some((value) => value !== null) ? <tfoot><tr className="font-black"><td className="border-t-4 border-double border-slate-900 px-3 py-3">합계</td>{displayColumns.slice(1).map((item, index) => <td className="border-t-4 border-double border-slate-900 px-3 py-3 text-right" key={item.key}>{totals[index + 1]?.toLocaleString("ko-KR") ?? ""}</td>)}</tr></tfoot> : null}
       </table>
     </div>}
     {/* 휴대폰(≤640px): 줄마다 카드. 같은 열 설정(보이기·순서)을 따른다. */}
     {mobile ? <ul className="divide-y divide-slate-200">
       {pageRows.map((row, rowIndex) => <li className="space-y-1 px-3 py-3 text-sm" key={rowKey(row)}>
-        {displayColumns.map((item) => <div className="flex justify-between gap-3" key={item.key}><span className="shrink-0 text-xs font-bold text-slate-500">{item.column.label}</span><span className={`min-w-0 text-right ${item.column.align === "right" ? "tabular-nums" : ""}`}>{item.column.render ? item.column.render(row, (currentPage - 1) * pageSize + rowIndex) : item.column.value(row) ?? "-"}</span></div>)}
+        {displayColumns.map((item) => <div className="flex justify-between gap-3" key={item.key}><span className="shrink-0 text-xs font-bold text-slate-500">{item.column.label}</span><span className={`min-w-0 text-right ${item.column.align === "right" ? "tabular-nums" : ""}`}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowIndex) : item.column.value(row) ?? "-"}</span></div>)}
       </li>)}
       {!pageRows.length ? <li className="px-4 py-10 text-center text-sm font-bold text-slate-500" role={error ? "alert" : undefined}>{stateMessage}</li> : null}
     </ul> : null}
-    <div className="common-data-table-tools flex items-center justify-between border-t border-slate-200 p-3 text-xs font-bold text-slate-500"><span>{sortedRows.length ? `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedRows.length)} / ${sortedRows.length}` : "0건"}</span><div className="flex items-center gap-2"><button disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)} type="button">이전</button><span>{currentPage} / {totalPages}</span><button disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">다음</button></div></div>
+    <div className="common-data-table-tools flex items-center justify-between border-t border-slate-200 p-3 text-xs font-bold text-slate-500"><span>{sortedRows.length ? (pageSize === PAGE_SIZE_ALL ? `전체 ${sortedRows.length}` : `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedRows.length)} / ${sortedRows.length}`) : "0건"}{selection && sortedRows.length > pageRows.length ? <button className="ml-3 font-bold text-teal-700 underline" onClick={() => selection.onChange(new Set(sortedRows.map(rowKey)))} type="button">필터된 {sortedRows.length.toLocaleString("ko-KR")}개 모두 선택</button> : null}</span><div className="flex items-center gap-2"><button disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)} type="button">이전</button><span>{currentPage} / {totalPages}</span><button disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">다음</button></div></div>
     <div className="common-data-table-print-legend hidden">■ 묶음 · ★ 요청 · ※ 주의·계근 · ▲ 시세 · ☐ 체크</div>
     <style>{`@media print{.common-data-table-tools{display:none!important}.common-data-table{color:#000}.common-data-table table{font-size:11px}.common-data-table th,.common-data-table td{border-color:#777!important}.common-data-table-group td{border-color:#000!important;border-width:2.5px 0!important}.common-data-table-print-legend{display:block!important;border-top:1px solid #777;margin-top:8px;padding-top:6px;font-size:10px}.common-data-table td{background:#fff!important}.common-data-table td:nth-last-child(1){font-weight:700}.common-data-table tfoot td{border-top:3px double #000!important}}`}</style>
   </div>;
