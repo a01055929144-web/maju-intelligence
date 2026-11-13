@@ -112,6 +112,18 @@ jobs:
           PGPASSWORD: postgres
         run: psql --set=ON_ERROR_STOP=1 --file=20261102-WO-25-import-audit-schema.pg17.test.sql
 
+      - name: Verify CC-32c store grades draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          psql --set=ON_ERROR_STOP=1 --command='create database cc32c_store_grades_test'
+          PGDATABASE=cc32c_store_grades_test psql --set=ON_ERROR_STOP=1 --file=20261113-CC-32c-store-grades.pg17.test.sql
+
       - name: Verify WO-03 MAJU category match draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
