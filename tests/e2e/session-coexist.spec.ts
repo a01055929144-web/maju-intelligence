@@ -30,3 +30,17 @@ test("admin and customer sessions coexist; logout is per site, logout-all clears
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/login/);
 });
+
+// CC-39 선결 조건: 두 로그인이 함께 있어도 요청 범위가 섞이지 않는다.
+test("with both sessions, an unlabeled request for another company is refused and the site header picks the scope", async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  expect((await page.request.post("/api/admin/login", { data: { email: "ci-admin@example.test", password: "ci-admin-layout-password-2026" } })).ok()).toBeTruthy();
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const other = "99999999-9999-4999-8999-999999999999";
+  // 헤더 없음 + 운영 세션 회사가 아닌 companyId → 조용히 처리하지 않고 거절(200 아님)
+  const unlabeled = await page.request.get(`/api/company-profile?companyId=${other}`);
+  expect(unlabeled.status()).not.toBe(200);
+  // 운영 화면 헤더 → 운영 세션 회사 범위로 정상 처리
+  const company = await page.request.get(`/api/company-profile?companyId=${other}`, { headers: { "x-maju-site": "company" } });
+  expect(company.ok()).toBeTruthy();
+});
