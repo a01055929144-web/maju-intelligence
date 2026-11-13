@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // CC-30c: 행사 노출 대상 조회·저장. 판정은 DB, 저장은 save_promotion_audience_v1(한 트랜잭션). 스위치 PROMOTION_AUDIENCE(기본 OFF).
 type PromoRow = { id: string; audience: Audience };
-type TargetRow = { promotion_id: string; customer_id: string | null; template_id: string | null };
+type TargetRow = { promotion_id: string; customer_id: string | null; template_id: string | null; store_grade_id: string | null };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** 제한된 행사의 대상 요약. promotionId를 주면 그 행사의 선택값, q를 주면 매장 검색 결과도 준다. */
@@ -20,11 +20,12 @@ export async function GET(request: NextRequest) {
   try {
     const [promos, targets] = await Promise.all([
       supabaseRequest<PromoRow[]>(`pricing_promotions?select=id,audience&company_id=eq.${g.companyId}&audience=neq.all&limit=1000`),
-      supabaseRequest<TargetRow[]>(`pricing_promotion_targets?select=promotion_id,customer_id,template_id&company_id=eq.${g.companyId}&limit=5000`),
+      supabaseRequest<TargetRow[]>(`pricing_promotion_targets?select=promotion_id,customer_id,template_id,store_grade_id&company_id=eq.${g.companyId}&limit=5000`),
     ]);
-    const summary = promos.map((p) => ({ promotionId: p.id, audience: p.audience, customers: targets.filter((t) => t.promotion_id === p.id && t.customer_id).length, templates: targets.filter((t) => t.promotion_id === p.id && t.template_id).length }));
+    const summary = promos.map((p) => ({ promotionId: p.id, audience: p.audience, customers: targets.filter((t) => t.promotion_id === p.id && t.customer_id).length, templates: targets.filter((t) => t.promotion_id === p.id && t.template_id).length, grades: targets.filter((t) => t.promotion_id === p.id && t.store_grade_id).length }));
     const pickedIds = promotionId ? targets.filter((t) => t.promotion_id === promotionId && t.customer_id).map((t) => t.customer_id as string) : [];
-    const [found, templates, picked] = await Promise.all([
+    const [storeGrades, found, templates, picked] = await Promise.all([
+      isFeatureEnabled("STORE_GRADES", g.companyId) ? supabaseRequest<Array<{ id: string; name: string; color: string }>>(`company_store_grades?select=id,name,color&company_id=eq.${g.companyId}&archived_at=is.null&order=sort_order,name`).catch(() => []) : Promise.resolve([] as Array<{ id: string; name: string; color: string }>),
       q ? supabaseRequest<Array<{ id: string; customer_name: string }>>(`normalized_customers?select=id,customer_name&company_id=eq.${g.companyId}&customer_name=ilike.*${encodeURIComponent(q)}*&order=customer_name&limit=30`) : Promise.resolve([]),
       isFeatureEnabled("MARGIN_TEMPLATES", g.companyId) ? supabaseRequest<Array<{ id: string; name: string }>>(`margin_templates?select=id,name&company_id=eq.${g.companyId}&archived_at=is.null&order=sort_order,name`) : Promise.resolve([]),
       pickedIds.length ? supabaseRequest<Array<{ id: string; customer_name: string }>>(`normalized_customers?select=id,customer_name&company_id=eq.${g.companyId}&id=in.(${pickedIds.join(",")})`) : Promise.resolve([]),
@@ -32,8 +33,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       summary,
       templates,
+      // CC-32c: 매장 등급(스위치 STORE_GRADES를 켠 회사만 고를 수 있다)
+      grades: isFeatureEnabled("STORE_GRADES", g.companyId) ? storeGrades : [],
       customers: found.map((c) => ({ id: c.id, name: c.customer_name })),
-      selected: promotionId ? { customers: picked.map((c) => ({ id: c.id, name: c.customer_name })), templateIds: targets.filter((t) => t.promotion_id === promotionId && t.template_id).map((t) => t.template_id as string) } : null,
+      selected: promotionId ? { customers: picked.map((c) => ({ id: c.id, name: c.customer_name })), templateIds: targets.filter((t) => t.promotion_id === promotionId && t.template_id).map((t) => t.template_id as string), gradeIds: targets.filter((t) => t.promotion_id === promotionId && t.store_grade_id).map((t) => t.store_grade_id as string) } : null,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ message: "노출 대상을 불러오지 못했습니다." }, { status: 500 }); }
 }
