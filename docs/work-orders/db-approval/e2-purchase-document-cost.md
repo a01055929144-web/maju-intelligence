@@ -19,12 +19,12 @@
 | 단위·단가 | 전표 줄 단위 = 상품 매입 단위일 때만. 단가는 부가세 제외 공급가 단가(`unit_price`), 0 이하 제외 |
 | 목록 | view `purchase_document_cost_pending_v`: 상품 연결 필요 / 단위 다름 / 단가 이상 |
 | 현재가·재계산 | 유효 최신 행(날짜→기록시각→id, CX-06)으로 `product_catalog.purchase_price(+날짜)` 갱신, 바뀌면 `pricing_p0_command(recalculate)` 1회. 날짜 없는 구 현재가는 덮지 않음(업로드와 동일) |
-| 변동 보류(CX-06) | 현재 매입가 대비 변동이 `purchase_variance_hold_percent()`(=CX-06 `PRICE_CHANGE_NEUTRAL_THRESHOLD_PERCENT` 0.5, 테스트가 TS 상수와 비교) 이상이면 줄은 기록하되 `hold_reason='variance_check'`로 **현재가·판매가 재계산 보류**. view에 `variance_check`로 올라옴 |
+| 변동 보류(CX-06) | 현재 매입가 대비 변동이 `purchase_variance_hold_percent()`(=**20%**, TS `PURCHASE_VARIANCE_HOLD_PERCENT`와 테스트로 비교, CX-06 표시 기준 0.5%와 별개) 이상이면 줄은 기록하되 `hold_reason='variance_check'`로 **현재가·판매가 재계산 보류**. view에 `variance_check`로 올라옴 |
 | 대표 [반영] | `release_purchase_document_hold(company, receipt_line, actor_user_id, actor_name)` service_role 전용. 보류 해제 → 현재가 갱신 → 바뀌면 재계산, `admin_audit_logs`(`purchase_variance_released`)를 같은 트랜잭션에 기록. 이미 풀었거나 무효인 줄은 거부 |
 | 권한 | 함수·view 모두 public/anon/authenticated 회수, service_role만 |
 
 ## 대표 확인 필요
-0. **보류 기준 = CX-06 임계값(0.5%) 그대로**라 0.5% 이상 바뀌는 매입 전표 줄은 모두 대표 [반영]을 거친다. 너무 자주 걸리면 `purchase_variance_hold_percent()` 한 곳만 바꾸면 된다(TS 상수와 같이). 기준을 따로 둘지 확인.
+0. ~~보류 기준~~ **확정(대표 11/13): 20% 이상 변동만 보류, 새로 확정·정정되는 전표부터(소급 없음). PG17에 +15% 바로 반영 · +20% 보류 케이스.**
 1. 취소·정정으로 현재가의 근거 행이 모두 무효가 되면 현재가를 **그대로 둠**(0으로 되돌리지 않음). 맞는지.
 2. 단위가 다르면 건너뛰고 목록에만 남김(환산 안 함 — 11/12 결정). 매입 단위가 비어 있는 상품도 "단위 다름"으로 분류.
 3. 기존 읽기 코드(`app/api/price-sheets/receipts/route.ts`, CX-06 변동률)가 `invalidated_at is null`만 보도록 하는 코드 PR이 필요 — 적용 전에 먼저 병합하거나 같이(컬럼 없을 때 깨지지 않게 적용 후 병합이 안전).

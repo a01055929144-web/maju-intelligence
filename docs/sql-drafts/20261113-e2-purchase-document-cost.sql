@@ -25,11 +25,12 @@ alter table public.purchase_receipt_lines
 create index if not exists purchase_receipt_lines_document_idx
   on public.purchase_receipt_lines(company_id, business_document_id) where business_document_id is not null;
 
--- CX-06 변동률 기준: domains/pricing/price-change.ts 의 PRICE_CHANGE_NEUTRAL_THRESHOLD_PERCENT(0.5)와 같은 값.
--- 현재 매입가 대비 이 값 이상 바뀌는 전표 줄은 기록만 하고 현재 매입가·판매가 반영은 대표 [반영]까지 보류(variance_check).
--- 값을 바꿀 때는 TS 상수도 함께(tests/purchase-document-cost-e2.test.ts 가 두 값을 비교한다).
+-- 보류 기준(대표 결정 11/13): 20%. CX-06 변동률 표시 기준(PRICE_CHANGE_NEUTRAL_THRESHOLD_PERCENT 0.5)과는 별개 값이다.
+-- 현재 매입가 대비 이 값 이상 바뀌는 전표 줄은 기록만 하고 현재 매입가·판매가 반영은 대표 [반영]까지 보류(variance_check). 15%는 바로 반영.
+-- 새로 확정·정정되는 전표부터 적용(이미 기록된 행은 건드리지 않음 = 소급 없음).
+-- 값을 바꿀 때는 TS 상수 PURCHASE_VARIANCE_HOLD_PERCENT 도 함께(tests/purchase-document-cost-e2.test.ts 가 두 값을 비교한다).
 create or replace function public.purchase_variance_hold_percent() returns numeric
-language sql immutable set search_path = pg_catalog as $$ select 0.5::numeric $$;
+language sql immutable set search_path = pg_catalog as $$ select 20::numeric $$;
 
 -- 줄 → 상품 해석. 우선순위: 줄에 지정된 매입처 상품(확정·자동 매칭) > 같은 매입처의 상품 코드. 후보가 정확히 1개일 때만 인정.
 -- reason: null=기록 가능 · product_link_required=상품 연결 필요 · unit_mismatch=단위 다름(건너뜀) · price_invalid=단가 0 이하

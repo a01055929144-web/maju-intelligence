@@ -71,7 +71,7 @@ update business_documents set status='confirmed', confirmed_by_name='담당' whe
 do $$ begin
   assert (select count(*) from purchase_receipt_lines where source='purchase_document' and invalidated_at is null) = 1;
   assert (select unit_cost_ex_vat from purchase_receipt_lines) = 1000, 'supply unit price excl. VAT';
-  assert (select hold_reason from purchase_receipt_lines) is null, '0.1% change is below the CX-06 threshold';
+  assert (select hold_reason from purchase_receipt_lines) is null, '0.1% change is below the 20% hold threshold';
   assert (select purchase_price from product_catalog where id='00000000-0000-0000-0000-0000000000a2') = 1000;
   assert (select purchase_price_date from product_catalog where id='00000000-0000-0000-0000-0000000000a2') = date '2026-11-10';
   assert (select count(*) from recalc_calls) = 1;
@@ -121,6 +121,18 @@ select release_purchase_document_hold('00000000-0000-0000-0000-0000000000c1',
 do $$ begin
   assert (select purchase_price from product_catalog where id='00000000-0000-0000-0000-0000000000a3') = 1000;
   assert (select count(*) from recalc_calls) = 3;
+end $$;
+
+-- +15%(1000 → 1150)는 보류 없이 바로 반영 + 재계산, 20% 미만이라 variance_check 없음
+insert into business_documents(id,company_id,document_type,supplier_id,document_number,document_date,partner_name_snapshot) values
+  ('00000000-0000-0000-0000-0000000000e4','00000000-0000-0000-0000-0000000000c1','purchase','00000000-0000-0000-0000-0000000000d1','PU-2026-000003','2026-11-12','매입처');
+insert into business_document_lines(company_id,document_id,sort_order,product_code_snapshot,product_name_snapshot,unit_snapshot,tax_type_snapshot,quantity,unit_price) values
+  ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000e4',1,'CODE-3','대파','kg','exempt',1,1150);
+update business_documents set status='confirmed', confirmed_by_name='담당' where id='00000000-0000-0000-0000-0000000000e4';
+do $$ begin
+  assert (select count(*) from purchase_receipt_lines where business_document_id='00000000-0000-0000-0000-0000000000e4' and hold_reason is null) = 1, '+15% must not hold';
+  assert (select purchase_price from product_catalog where id='00000000-0000-0000-0000-0000000000a3') = 1150, '+15% applies immediately';
+  assert (select count(*) from recalc_calls) = 4;
 end $$;
 
 -- 취소: e1의 남은 유효 행 무효 표시. 현재가는 유효 행이 없으면 유지
