@@ -87,7 +87,7 @@ insert into stub_catalog_price values ('00000000-0000-0000-0000-0000000000c1', '
 insert into store_order_customer_rules values ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000b1', '{0,1,2,3,4,5,6}', 1, '22:00', 0, 'notice', 0);
 
 -- 일반 + 시세 줄(메모 포함): 가격은 서버 계산(요청 단가 무시), 시세 단가 null, 합계는 일반 줄만
-select place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7, '[
+select place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[
   {"productId":"00000000-0000-0000-0000-0000000000a1","quantity":10,"unitPrice":1,"memo":{"text":"큰 것으로","kind":"product","tags":["big"]}},
   {"productId":"00000000-0000-0000-0000-0000000000a2","quantity":2}]'::jsonb, '00000000-0000-0000-0000-000000000a01');
 do $$ begin
@@ -101,29 +101,29 @@ end $$;
 
 -- 멱등: 같은 키·같은 내용은 같은 결과, 내용이 다르면 충돌
 do $$ declare r jsonb; begin
-  r := place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7, '[
+  r := place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[
     {"productId":"00000000-0000-0000-0000-0000000000a1","quantity":10,"unitPrice":1,"memo":{"text":"큰 것으로","kind":"product","tags":["big"]}},
     {"productId":"00000000-0000-0000-0000-0000000000a2","quantity":2}]'::jsonb, '00000000-0000-0000-0000-000000000a01');
   assert (select count(*) from store_orders where document_version_id is null) = 1, 'idempotent replay creates no second order';
-  begin perform place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a01');
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a01');
     assert false, 'changed body must conflict'; exception when raise_exception then assert sqlerrm = 'Idempotency conflict', sqlerrm; end;
 end $$;
 
 -- 거부: 다른 회사 상품 · 판매 중지 상품 · 메모 51자 · 메모 종류 오류 · 문서 링크 토큰
 do $$ begin
-  begin perform place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a4","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a02');
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a4","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a02');
     assert false, 'other company product'; exception when raise_exception then assert sqlerrm = 'Product unavailable', sqlerrm; end;
-  begin perform place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a3","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a03');
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a3","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a03');
     assert false, 'inactive product'; exception when raise_exception then assert sqlerrm = 'Product unavailable', sqlerrm; end;
-  begin perform place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7,
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7,
       jsonb_build_array(jsonb_build_object('productId', '00000000-0000-0000-0000-0000000000a1', 'quantity', 1, 'memo', jsonb_build_object('text', repeat('가', 51), 'kind', 'product'))), '00000000-0000-0000-0000-000000000a04');
     assert false, '51 chars memo'; exception when raise_exception then assert sqlerrm = 'Invalid line memo', sqlerrm; end;
-  begin perform place_store_catalog_order_v1(repeat('4', 64)::text, current_date + 7,
+  begin perform place_store_catalog_order_v1(repeat('2', 64)::text, current_date + 7,
       '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1,"memo":{"text":"x","kind":"other"}}]'::jsonb, '00000000-0000-0000-0000-000000000a05');
     assert false, 'bad memo kind'; exception when raise_exception then assert sqlerrm = 'Invalid line memo', sqlerrm; end;
   begin perform place_store_catalog_order_v1(repeat('d', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a06');
     assert false, 'document link token must not place catalog orders'; exception when raise_exception then assert sqlerrm = 'Link unavailable', sqlerrm; end;
-  begin perform place_store_catalog_member_order_v1(repeat('4', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a07');
+  begin perform place_store_catalog_member_order_v1(repeat('2', 64)::text, current_date + 7, '[{"productId":"00000000-0000-0000-0000-0000000000a1","quantity":1}]'::jsonb, '00000000-0000-0000-0000-000000000a07');
     assert false, 'member entry needs a member'; exception when raise_exception then assert sqlerrm = 'Store member unavailable', sqlerrm; end;
   assert not has_function_privilege('anon', 'place_store_catalog_order_v1(text,date,jsonb,uuid,uuid,integer,text)', 'execute');
   assert not has_function_privilege('authenticated', 'place_store_catalog_order_core_v1(text,date,jsonb,uuid,uuid,integer,text,uuid,uuid,uuid)', 'execute');
