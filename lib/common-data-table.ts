@@ -61,3 +61,17 @@ export function visibleRange(total: number, rowHeight: number, scrollTop: number
 
 /** 가상 스크롤을 켜는 줄 수(이하는 그냥 다 그린다). */
 export const VIRTUAL_THRESHOLD = 200;
+
+/** 검색어(공백 무시·대소문자 무시·일반 포함 검색)가 값 중 하나에 들어 있는가. */
+export function matchesQuery(values: Array<string | number | null | undefined>, query: string) {
+  const q = query.replace(/\s+/g, "").toLowerCase();
+  return !q || values.some((value) => String(value ?? "").replace(/\s+/g, "").toLowerCase().includes(q));
+}
+
+/** 값별 줄 수(분류 칩 개수). order에 있는 값이 먼저, 나머지는 많은 순. 빈 값은 "기타". */
+export function countByKey(keys: Array<string | null | undefined>, order: readonly string[] = []) {
+  const counts = new Map<string, number>();
+  for (const key of keys) { const k = key?.trim() || "기타"; counts.set(k, (counts.get(k) ?? 0) + 1); }
+  const rank = (k: string) => { const i = order.indexOf(k); return i < 0 ? order.length : i; };
+  return Array.from(counts, ([key, count]) => ({ key, count })).sort((a, b) => rank(a.key) - rank(b.key) || b.count - a.count || a.key.localeCompare(b.key, "ko"));
+}
