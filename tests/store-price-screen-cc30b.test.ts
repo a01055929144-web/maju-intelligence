@@ -57,9 +57,9 @@ describe("store price screen contract", () => {
     expect(screen).toContain("예정 가격");
     expect(screen).toContain("JSON.stringify({ productId: row.productId, price, until, from })");
   });
-  it("on a phone the store list collapses to one line once a store is chosen and the table becomes cards", () => {
-    expect(screen).toContain("hidden lg:block");
-    expect(screen).toContain("매장: {store.name}");
+  it("CC-33c: a store select + search sits above the table (no left column) and phones get cards", () => {
+    expect(screen).toContain('aria-label="매장 선택"');
+    expect(screen).not.toContain("lg:grid-cols-[260px");
     expect(screen).toContain("space-y-2 lg:hidden");
     expect(screen).toContain("commitPrice(r, e.currentTarget)");
   });

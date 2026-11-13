@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
-import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, normalizeColumnState, PAGE_SIZE_ALL, pickPageSize, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
+import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, normalizeColumnState, PAGE_SIZE_ALL, pickPageSize, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
 
 const ROW_HEIGHT = 40;
 
@@ -16,6 +16,8 @@ export type CommonTableColumn<Row> = {
   defaultHidden?: boolean;
   total?: boolean;
   width?: number;
+  /** 표 위 검색창이 이 열의 값에서 찾는다. 하나도 없으면 검색창이 없다. */
+  searchable?: boolean;
   /** 폭이 모자랄 때 숨기는 순서(1 중요 ~ 3 덜 중요). 없으면 절대 자동 숨김 안 함. */
   priority?: 1 | 2 | 3;
   /** 너비를 따로 정하지 않은 열이 남는 폭을 나누는 비율(기본 1). */
@@ -33,6 +35,9 @@ export function CommonDataTable<Row>({
   phoneCards = false,
   rowKey,
   rows,
+  categoryKey,
+  facets,
+  majorOrder,
   selection,
   settingsKey,
 }: {
@@ -48,6 +53,12 @@ export function CommonDataTable<Row>({
   phoneCards?: boolean;
   rowKey: (row: Row) => string;
   rows: Row[];
+  /** 상품 계열: 대분류 칩(개수 포함) + 중분류 선택을 표 위에 둔다. */
+  categoryKey?: (row: Row) => { major?: string | null; minor?: string | null };
+  /** 대분류 칩 순서(분류 폴더 순서). 없는 값은 많은 순. */
+  majorOrder?: readonly string[];
+  /** 화면별 선택 필터(예: 매장 등급·카탈로그). 값이 같은 줄끼리 묶는다. */
+  facets?: Array<{ key: string; label: string; value: (row: Row) => string | null | undefined }>;
   /** 줄 선택(체크 열 + 머리 전체 선택). 없으면 체크 열 없음. */
   selection?: { selected: ReadonlySet<string>; onChange: (next: Set<string>) => void };
   /** 화면 id와 사용자 id를 합친 값. 예: products:user-123 */
@@ -61,6 +72,12 @@ export function CommonDataTable<Row>({
   const [pageSize, setPageSize] = useState<number>(pageSizes[0]);
   const [availableWidth, setAvailableWidth] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [major, setMajor] = useState("");
+  const [minor, setMinor] = useState("");
+  const [facetSel, setFacetSel] = useState<Record<string, string>>({});
+  useEffect(() => { const t = setTimeout(() => { setQuery(queryInput); setPage(1); }, 200); return () => clearTimeout(t); }, [queryInput]);
   const [windowRange, setWindowRange] = useState({ start: 0, end: 60 });
   const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const storageKey = `maju:table:${settingsKey}`;
@@ -127,20 +144,29 @@ export function CommonDataTable<Row>({
   const autoHidden = userWidened || !availableWidth ? [] : autoHiddenKeys(orderedColumns.map((item) => ({ key: item.key, need: needOf(item), priority: item.column.priority })), availableWidth - (selection ? 40 : 0));
   const visibleColumns = orderedColumns.filter((item) => !autoHidden.includes(item.key));
   const displayColumns = [...visibleColumns.filter((item) => item.pinned), ...visibleColumns.filter((item) => !item.pinned)];
+  const searchColumns = useMemo(() => columns.filter((column) => column.searchable), [columns]);
+  const filtered = useMemo(() => rows.filter((row) => {
+    if (query && !matchesQuery(searchColumns.map((column) => column.value(row)), query)) return false;
+    if (categoryKey && (major || minor)) { const c = categoryKey(row); if (major && (c.major?.trim() || "기타") !== major) return false; if (minor && (c.minor?.trim() || "기타") !== minor) return false; }
+    return (facets ?? []).every((facet) => !facetSel[facet.key] || (facet.value(row)?.trim() || "없음") === facetSel[facet.key]);
+  }), [rows, query, searchColumns, categoryKey, major, minor, facets, facetSel]);
+  const majorCounts = useMemo(() => categoryKey ? countByKey(rows.map((row) => categoryKey(row).major), majorOrder) : [], [rows, categoryKey, majorOrder]);
+  const minorCounts = useMemo(() => categoryKey && major ? countByKey(rows.filter((row) => (categoryKey(row).major?.trim() || "기타") === major).map((row) => categoryKey(row).minor)) : [], [rows, categoryKey, major]);
+  const filtering = Boolean(query || major || minor || Object.values(facetSel).some(Boolean));
   // 열을 더 숨길 수 없는데도 모자라면 표 상자 안에서만 좌우로 민다(쪽 전체가 넘치지 않게). 아니면 상자 너비에 비례해 줄인다.
   const totalNeed = visibleColumns.reduce((sum, item) => sum + needOf(item), 0);
   const weightedNeed = visibleColumns.reduce((sum, item) => sum + needOf(item) * (item.column.weight ?? 1), 0);
   const scrolls = userWidened || (availableWidth > 0 && totalNeed + (selection ? 40 : 0) > availableWidth);
   const sortedRows = useMemo(() => {
-    if (!sort) return rows;
+    if (!sort) return filtered;
     const column = columns.find((item) => item.key === sort.key);
-    if (!column) return rows;
-    return [...rows].sort((left, right) => {
+    if (!column) return filtered;
+    return [...filtered].sort((left, right) => {
       const a = column.value(left); const b = column.value(right);
       const result = typeof a === "number" && typeof b === "number" ? a - b : String(a ?? "").localeCompare(String(b ?? ""), "ko", { numeric: true });
       return sort.direction === "asc" ? result : -result;
     });
-  }, [columns, rows, sort]);
+  }, [columns, filtered, sort]);
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageRows = pageSize === PAGE_SIZE_ALL ? sortedRows : sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -192,6 +218,16 @@ export function CommonDataTable<Row>({
   const totals = displayColumns.map((item) => item.column.total ? sortedRows.reduce((sum, row) => sum + Number(item.column.value(row) || 0), 0) : null);
 
   return <div className="common-data-table relative">
+    {searchColumns.length || categoryKey || facets?.length ? <div className="common-data-table-tools flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white p-3">
+      {searchColumns.length ? <input aria-label="표 검색" className="h-9 w-56 rounded-md border border-slate-300 px-3 text-sm" onChange={(event) => setQueryInput(event.target.value)} placeholder={`검색 (${searchColumns.map((column) => column.label).join("·")})`} type="search" value={queryInput} /> : null}
+      {categoryKey ? <div aria-label="대분류" className="flex flex-wrap gap-1.5" role="group">
+        <button aria-pressed={!major} className={`min-h-8 rounded-full border px-3 text-xs font-bold ${!major ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 text-slate-700"}`} onClick={() => { setMajor(""); setMinor(""); setPage(1); }} type="button">전체 {rows.length.toLocaleString("ko-KR")}</button>
+        {majorCounts.map((item) => <button aria-pressed={major === item.key} className={`min-h-8 rounded-full border px-3 text-xs font-bold ${major === item.key ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 text-slate-700"}`} key={item.key} onClick={() => { setMajor(item.key); setMinor(""); setPage(1); }} type="button">{item.key} {item.count.toLocaleString("ko-KR")}</button>)}
+      </div> : null}
+      {categoryKey && major && minorCounts.length > 1 ? <select aria-label="중분류" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs" onChange={(event) => { setMinor(event.target.value); setPage(1); }} value={minor}><option value="">중분류 전체</option>{minorCounts.map((item) => <option key={item.key} value={item.key}>{item.key} ({item.count})</option>)}</select> : null}
+      {(facets ?? []).map((facet) => <select aria-label={facet.label} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs" key={facet.key} onChange={(event) => { setFacetSel({ ...facetSel, [facet.key]: event.target.value }); setPage(1); }} value={facetSel[facet.key] ?? ""}><option value="">{facet.label} 전체</option>{countByKey(rows.map((row) => facet.value(row) || "없음")).map((item) => <option key={item.key} value={item.key}>{item.key} ({item.count})</option>)}</select>)}
+      {filtering ? <span className="text-xs font-bold text-slate-500">검색 결과 {sortedRows.length.toLocaleString("ko-KR")} / 전체 {rows.length.toLocaleString("ko-KR")}</span> : null}
+    </div> : null}
     <div className="common-data-table-tools flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 p-3">
       <label className="flex items-center gap-2 text-xs font-bold text-slate-600">보기 <select className="rounded-md border border-slate-200 bg-white px-2 py-1" value={pageSize} onChange={(event) => { const size = Number(event.target.value); setPageSize(size); setPage(1); try { localStorage.setItem(`${storageKey}:size`, JSON.stringify(size)); } catch { /* private browsing */ } }}>{pageSizes.map((size) => <option key={size} value={size}>{size === PAGE_SIZE_ALL ? "전체" : `${size}개`}</option>)}</select>{autoHidden.length ? <span className="ml-2 font-medium text-slate-500">열 {autoHidden.length}개 숨김 · <button className="font-bold text-teal-700 underline" onClick={() => setEditorOpen(true)} type="button">열 편집</button></span> : null}</label>
       <div className="flex flex-wrap gap-2">

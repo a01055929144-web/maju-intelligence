@@ -18,7 +18,7 @@ import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { PriceState } from "@/domains/pricing/price-rules";
 import type { DocumentDraft } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
-import { matchesExcludedCode, type ExcludedCode } from "../domains/pricing/purchase-excluded-codes";
+import { flagSummaryLines, matchesExcludedCode, type ExcludedCode } from "../domains/pricing/purchase-excluded-codes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
@@ -60,6 +60,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [excludedImportRows, setExcludedImportRows] = useState(0);
   // CC-24b: 이번 업로드에서 직접 제외한 줄 · "다음에도 제외"로 저장할 줄 · 이미 저장된 제외 코드(회사별, 서버)
   const [skipRows, setSkipRows] = useState<Set<number>>(new Set());
+  // CC-33c: 월 합계 줄처럼 보이는 줄은 미리보기에서 자동으로 "제외" 체크(주황 표시). 사용자가 풀면 다시 체크하지 않는다.
+  const [summaryRows, setSummaryRows] = useState<Set<number>>(new Set());
+  const autoSeen = useRef<{ sheet: unknown; rows: Set<number> }>({ sheet: null, rows: new Set() });
   const [rememberRows, setRememberRows] = useState<Set<number>>(new Set());
   const [rememberScope, setRememberScope] = useState<"supplier" | "company">("supplier");
   const [savedExcluded, setSavedExcluded] = useState<ExcludedCode[]>([]);
@@ -232,6 +235,18 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!sheet) { setSummaryRows(new Set()); return; }
+    try {
+      const flagged = flagSummaryLines(parsePurchaseLines(sheet, mapping, vatMode).lines);
+      if (autoSeen.current.sheet !== sheet) autoSeen.current = { sheet, rows: new Set() };
+      const fresh = flagged.filter(row => !autoSeen.current.rows.has(row));
+      fresh.forEach(row => autoSeen.current.rows.add(row));
+      setSummaryRows(new Set(flagged));
+      if (fresh.length) setSkipRows(prev => new Set([...Array.from(prev), ...fresh]));
+    } catch { /* 열 매핑이 아직 덜 되었으면 미리보기 쪽에서 안내한다 */ }
+  }, [sheet, mapping, vatMode]);
 
   const importPreview = useMemo(() => {
     if (!sheet) return null;
@@ -884,7 +899,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <CommonDataTable<PurchaseImportLine> settingsKey="purchase-upload-dates" filename="매입가_적용일.csv" rowKey={line => String(line.rowNumber)} rows={importPreview.all}
           columns={[{ key: "skip", label: "제외", value: line => skipRows.has(line.rowNumber) ? "제외" : "", render: line => matchesExcludedCode(line, savedExcluded)
               ? <span className="text-xs font-semibold text-slate-500">저장된 제외 코드</span>
-              : <input aria-label={`${line.rowNumber}행 제외`} checked={skipRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => { setSkipRows(toggleRow(skipRows, line.rowNumber, event.target.checked)); if (!event.target.checked) setRememberRows(toggleRow(rememberRows, line.rowNumber, false)); setConflictChoices({}); setConfirmedReview(""); }} type="checkbox" /> },
+              : <span className="inline-flex items-center gap-1">{summaryRows.has(line.rowNumber) ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold text-amber-800" title="상품명이 계·합계로 끝나거나 날짜로 시작하거나 단가가 다른 줄의 100배가 넘어 합계 줄로 보입니다">합계 줄?</span> : null}<input aria-label={`${line.rowNumber}행 제외`} checked={skipRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => { setSkipRows(toggleRow(skipRows, line.rowNumber, event.target.checked)); if (!event.target.checked) setRememberRows(toggleRow(rememberRows, line.rowNumber, false)); setConflictChoices({}); setConfirmedReview(""); }} type="checkbox" /></span> },
             { key: "remember", label: "다음에도 제외", value: line => rememberRows.has(line.rowNumber) ? "예" : "", render: line => skipRows.has(line.rowNumber) && line.code.trim()
               ? <input aria-label={`${line.rowNumber}행 이 코드 다음에도 제외`} checked={rememberRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => setRememberRows(toggleRow(rememberRows, line.rowNumber, event.target.checked))} type="checkbox" />
               : <span className="text-xs text-slate-400">{skipRows.has(line.rowNumber) ? "코드 없음" : "-"}</span> },

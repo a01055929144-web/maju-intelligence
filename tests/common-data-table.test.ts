@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, normalizeColumnState, pickPageSize, setColumnWidth, visibleRange } from "../lib/common-data-table";
+import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, normalizeColumnState, pickPageSize, setColumnWidth, visibleRange } from "../lib/common-data-table";
 
 const columns = [
   { key: "code", label: "코드", value: (row: { code: string }) => row.code },
@@ -48,5 +48,16 @@ describe("common data table contract", () => {
     expect(visibleRange(1000, 40, 0, 800, 0)).toEqual({ start: 0, end: 20 });
     expect(visibleRange(1000, 40, 4000, 800, 5)).toEqual({ start: 95, end: 125 });
     expect(visibleRange(10, 40, 9999, 800, 12)).toEqual({ start: 10, end: 10 });
+  });
+  it("matches search text ignoring spaces and case across any value", () => {
+    expect(matchesQuery(["대파 1단", 1200], "대파1")).toBe(true);
+    expect(matchesQuery(["Onion", null], "onion")).toBe(true);
+    expect(matchesQuery(["양파"], "대파")).toBe(false);
+    expect(matchesQuery(["양파"], "  ")).toBe(true);
+  });
+  it("counts categories in folder order, others by size, empty as 기타", () => {
+    expect(countByKey(["축산", "농산", "농산", null, "수산", "공산품"], ["농산", "축산", "수산"])).toEqual([
+      { key: "농산", count: 2 }, { key: "축산", count: 1 }, { key: "수산", count: 1 }, { key: "공산품", count: 1 }, { key: "기타", count: 1 },
+    ]);
   });
 });
