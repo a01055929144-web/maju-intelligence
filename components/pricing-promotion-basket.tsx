@@ -93,7 +93,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
       </div>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)]">
         <PricingProductPicker added={new Set(lines.map((l) => l.id))} busy={busy} companyId={companyId} loadPrices={loadPrices} manager onAdd={add}
-          onAddPromotion={() => undefined} onOpenLibrary={() => undefined} onRefreshPromotions={() => undefined} promotions={NO_PROMOTIONS} />
+          onAddPromotion={() => undefined} onAddPromotions={() => undefined} onOpenLibrary={() => undefined} onRefreshPromotions={() => undefined} promotions={NO_PROMOTIONS} />
         <div className="min-w-0 space-y-2">
           {audienceEnabled ? <div className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-3"><span className="font-bold">노출 대상</span>

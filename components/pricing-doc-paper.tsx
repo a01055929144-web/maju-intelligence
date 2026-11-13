@@ -5,7 +5,7 @@ import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
 import type { DocumentOutput } from "@/domains/pricing/document";
-import { FOLDER_DRAG } from "./pricing-product-picker";
+import { FOLDER_DRAG, PROMO_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
@@ -27,6 +27,7 @@ function EditablePricingDocPaper({
   editable,
   onContent,
   onDropProducts,
+  onDropPromotions,
   onQuickAdd,
   onQuickSearch
 }: {
@@ -35,6 +36,7 @@ function EditablePricingDocPaper({
   readonly editable: boolean;
   readonly onContent: (content: DocumentContent) => void;
   readonly onDropProducts?: (ids: string[]) => void;
+  readonly onDropPromotions?: (ids: string[]) => void;
   readonly onQuickAdd?: (item: CatalogChoice) => void;
   readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
@@ -70,8 +72,13 @@ function EditablePricingDocPaper({
 
   return (
     <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10"
-      onDragOver={(event) => { if (editable && onDropProducts && event.dataTransfer.types.includes(FOLDER_DRAG)) event.preventDefault(); }}
+      onDragOver={(event) => { if (editable && ((onDropProducts && event.dataTransfer.types.includes(FOLDER_DRAG)) || (onDropPromotions && event.dataTransfer.types.includes(PROMO_DRAG)))) event.preventDefault(); }}
       onDrop={(event) => {
+        if (editable && onDropPromotions && event.dataTransfer.types.includes(PROMO_DRAG)) {
+          event.preventDefault();
+          try { const ids: unknown = JSON.parse(event.dataTransfer.getData(PROMO_DRAG)); if (Array.isArray(ids)) onDropPromotions(ids.filter((id): id is string => typeof id === "string").slice(0, 100)); } catch { /* 깨진 끌기 값은 무시 */ }
+          return;
+        }
         if (!editable || !onDropProducts || !event.dataTransfer.types.includes(FOLDER_DRAG)) return;
         event.preventDefault();
         try { const ids: unknown = JSON.parse(event.dataTransfer.getData(FOLDER_DRAG)); if (Array.isArray(ids)) onDropProducts(ids.filter((id): id is string => typeof id === "string").slice(0, 300)); } catch { /* 깨진 끌기 값은 무시 */ }

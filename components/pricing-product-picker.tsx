@@ -8,6 +8,8 @@ import { inFolder } from "@/domains/pricing/margin-tree";
 
 /** 폴더 끌어 담기: 끌 때 담을 상품 id(최대 300개)를 실어 보낸다. 종이(PricingDocPaper)가 같은 이름으로 받는다. */
 export const FOLDER_DRAG = "application/x-maju-products";
+/** CC-35: 행사 카드 끌어 담기 — 끌 때 행사 id 목록(체크한 카드가 있으면 그 전부)을 싣는다. */
+export const PROMO_DRAG = "application/x-maju-promotions";
 const PAGE = 50;
 const UNSORTED = "__unsorted__";
 
@@ -24,6 +26,7 @@ export function PricingProductPicker({
   manager,
   onAdd,
   onAddPromotion,
+  onAddPromotions,
   onOpenLibrary,
   onRefreshPromotions,
   promotions
@@ -35,6 +38,7 @@ export function PricingProductPicker({
   readonly manager: boolean;
   readonly onAdd: (items: CatalogChoice[]) => void;
   readonly onAddPromotion: (promotion: Promotion) => void;
+  readonly onAddPromotions: (promotions: Promotion[]) => void;
   readonly onOpenLibrary: () => void;
   readonly onRefreshPromotions: () => void;
   readonly promotions: readonly Promotion[];
@@ -200,7 +204,7 @@ export function PricingProductPicker({
       ) : (
         <div className="min-h-0 flex-1 space-y-2 overflow-auto p-2">
           {promotions.length ? promotions.map((p) => (
-            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs" key={p.id}>
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs" draggable={!added.has(`promo:${p.id}`)} key={p.id} onDragStart={(e) => { const ids = pickedPromos.has(p.id) ? promotions.filter((x) => pickedPromos.has(x.id) && !added.has(`promo:${x.id}`)).map((x) => x.id) : [p.id]; e.dataTransfer.setData(PROMO_DRAG, JSON.stringify(ids)); e.dataTransfer.effectAllowed = "copy"; }}>
               {added.has(`promo:${p.id}`) ? null : <input aria-label={`${p.displayName} 선택`} checked={pickedPromos.has(p.id)} className="h-4 w-4" onChange={(e) => setPickedPromos((prev) => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} type="checkbox" />}
               <span className="rounded bg-amber-200 px-1 font-bold text-amber-900">{p.badge}</span>
               <span className="min-w-0 flex-1">
@@ -210,7 +214,7 @@ export function PricingProductPicker({
               {added.has(`promo:${p.id}`) ? <span className="font-bold text-slate-500">담김</span> : <button className="rounded bg-amber-600 px-2 py-1 font-bold text-white" disabled={busy} onClick={() => onAddPromotion(p)} type="button">담기</button>}
             </div>
           )) : <p className="p-3 text-center text-xs text-slate-500">진행 중인 행사·임박 상품이 없습니다.</p>}
-          {pickedPromos.size ? <button className="w-full rounded-lg bg-amber-600 py-2 text-xs font-bold text-white" disabled={busy} onClick={() => { promotions.filter((p) => pickedPromos.has(p.id) && !added.has(`promo:${p.id}`)).forEach(onAddPromotion); setPickedPromos(new Set()); }} type="button">선택 {pickedPromos.size}개 담기</button> : null}
+          {pickedPromos.size ? <button className="w-full rounded-lg bg-amber-600 py-2 text-xs font-bold text-white" disabled={busy} onClick={() => { onAddPromotions(promotions.filter((p) => pickedPromos.has(p.id) && !added.has(`promo:${p.id}`))); setPickedPromos(new Set()); }} type="button">선택 {pickedPromos.size}개 담기</button> : null}
           <div className="flex gap-1.5">
             <button className="flex-1 rounded-lg border border-dashed border-amber-400 py-2 text-xs font-bold text-amber-900" onClick={onOpenLibrary} type="button">+ 행사·임박 상품 등록 (새 탭)</button>
             <button className="rounded-lg border border-slate-300 px-2 text-xs font-bold" disabled={busy} onClick={onRefreshPromotions} type="button">새로고침</button>
