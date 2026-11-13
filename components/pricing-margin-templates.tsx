@@ -1,5 +1,6 @@
 "use client";
 import { InfoTooltip } from "@/components/info-tooltip";
+import { CatalogStoreLinkTable } from "./catalog-store-link-table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { averageDeltaPercent, previewTemplate, suggestTemplateName, templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
@@ -29,12 +30,18 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
 
   const current = templates.find((t) => t.id === selected) ?? null;
   useEffect(() => { setDraft(current ? { ...current, categories: current.categories.map((c) => ({ ...c })) } : null); }, [current]);
-
-  // 새 카탈로그: 기본 복사(분류에 연결된 그룹 마진 그대로) 또는 빈 카탈로그(회사 기본 마진만 채움)
-  const startNew = (copy: boolean) => {
-    setSelected("new");
-    setDraft({ id: "", name: "", margin: state.defaultMargin, rounding: state.defaultRounding, categories: copy ? state.categories.flatMap((link) => { const group = state.groups.find((g) => g.id === link.groupId); return group ? [{ category: link.category, margin: group.margin }] : []; }) : [] });
-  };
+  // 카탈로그 추가는 이름만: 지금 기본 마진 규칙을 그대로 복사해 만들고, 분류 마진은 만든 뒤 상세에서 고친다.
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  async function createByName() {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const categories = state.categories.flatMap((link) => { const group = state.groups.find((g) => g.id === link.groupId); return group ? [{ category: link.category, margin: group.margin }] : []; });
+      const result = await call({ action: "save", name: newName.trim(), margin: state.defaultMargin, rounding: state.defaultRounding, categories });
+      setTemplates(result.templates); setSelected(result.id || ""); setAdding(false); setNewName(""); setMessage("카탈로그를 만들었습니다. 아래에서 분류 마진을 고쳐 보세요.");
+    } catch (e) { setError(e instanceof Error ? e.message : "만들지 못했습니다."); }
+    finally { setBusy(false); }
+  }
   async function save() {
     if (!draft) return;
     setBusy(true); setError(""); setMessage("");
@@ -56,6 +63,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const avg = useMemo(() => new Map(templates.map((tp) => [tp.id, averageDeltaPercent(asTemplate(tp), state.items)])), [templates, state.items]);
   const avgLabel = (id: string) => { const v = avg.get(id); return v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v}%`; };
   const preview = useMemo(() => (draft ? previewTemplate({ margin: draft.margin, rounding: draft.rounding, categories: draft.categories, items: [] }, state.items) : { changed: 0, average: null }), [draft, state.items]);
+  const majors = useMemo(() => Array.from(new Set(state.items.map((i) => i.category.split(">")[0].trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko")), [state.items]);
   const compare = useMemo(() => state.items.slice(0, 20).map((item: PriceItem) => ({ item, prices: templates.map((t) => templatePrice(asTemplate(t), { id: item.id, category: item.category, cost: item.cost }).price) })), [state.items, templates]);
 
   return <section aria-label="카탈로그" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -79,8 +87,11 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
         <span className="mt-1 flex flex-wrap gap-1 text-[11px] font-bold text-slate-700"><span className="rounded bg-slate-100 px-1.5 py-0.5">기본 {t.margin}%</span>{t.categories.slice(0, 3).map((c) => <span className="rounded bg-slate-100 px-1.5 py-0.5" key={c.category}>{c.category.split(">").pop()?.trim()} {c.margin}%</span>)}{t.categories.length > 3 ? <span className="px-1 py-0.5 text-slate-500">+{t.categories.length - 3}</span> : null}</span>
         <span className="mt-1 block text-xs text-slate-500">품목 {state.items.length.toLocaleString("ko-KR")}개 · 매장 {(t.storeCount ?? 0).toLocaleString("ko-KR")}곳 · 기본 대비 {avgLabel(t.id)}</span>
       </button>)}
-      <button className="min-h-[44px] rounded-full border border-dashed border-teal-700 px-4 text-sm font-bold text-teal-800" onClick={() => startNew(true)} type="button">+ 새 카탈로그(기본 복사)</button>
-      <button className="min-h-[44px] rounded-full border border-dashed border-slate-400 px-4 text-sm font-bold text-slate-700" onClick={() => startNew(false)} type="button">+ 빈 카탈로그</button>
+      {adding ? <form className="flex min-h-[44px] items-center gap-1 rounded-xl border border-dashed border-teal-700 px-2" onSubmit={(e) => { e.preventDefault(); void createByName(); }}>
+        <input aria-label="새 카탈로그 이름" autoFocus className="h-9 min-w-0 flex-1 rounded border border-slate-300 px-2 text-sm" maxLength={60} onChange={(e) => setNewName(e.target.value)} placeholder="카탈로그 이름" value={newName} />
+        <button className="maju-button-primary h-9 px-3 text-sm" disabled={busy || !newName.trim()} type="submit">만들기</button>
+        <button className="h-9 px-2 text-sm text-slate-600" onClick={() => { setAdding(false); setNewName(""); }} type="button">취소</button>
+      </form> : <button className="min-h-[44px] rounded-full border border-dashed border-teal-700 px-4 text-sm font-bold text-teal-800" onClick={() => setAdding(true)} type="button">+ 새 카탈로그</button>}
     </div>
     {error ? <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{error}</p> : null}
     {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900">{message}</p> : null}
@@ -92,6 +103,9 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
         <label className="text-sm font-bold">끝자리 올림<select className={`${field} mt-1 w-full`} onChange={(e) => setDraft({ ...draft, rounding: Number(e.target.value) })} value={draft.rounding}>{[1, 10, 100].map((v) => <option key={v} value={v}>{v}원</option>)}</select></label>
       </div>
       <div className="space-y-1" aria-label="분류별 마진">
+        <p className="flex items-center gap-1 text-sm font-bold">대분류 마진 <InfoTooltip size="sm" text="가격은 이 순서로 정해집니다: 행사 → 매장 개별·견적 수락 가격 → 고정 가격·품목 마진 → 카탈로그 대분류 → 분류 → 기본 마진. 비워 두면 기본 마진을 따라갑니다." /></p>
+        <div aria-label="대분류 마진" className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">{majors.map((major) => { const entry = draft.categories.find((c) => c.category === major); return <label className="flex items-center gap-2 rounded border border-slate-200 px-2 py-1 text-sm" key={major}><span className="min-w-0 flex-1 truncate font-semibold">{major}</span>
+          <input aria-label={`${major} 대분류 마진`} className={`${field} h-8 w-20 text-right`} max="1000" min="0" onChange={(e) => setDraft({ ...draft, categories: e.target.value === "" ? draft.categories.filter((c) => c.category !== major) : entry ? draft.categories.map((c) => (c.category === major ? { ...c, margin: Number(e.target.value) } : c)) : [...draft.categories, { category: major, margin: Number(e.target.value) }] })} placeholder={`기본 ${draft.margin}`} step="0.01" type="number" value={entry ? entry.margin : ""} />%</label>; })}</div>
         <p className="text-sm font-bold">분류별 마진 {draft.categories.length}개</p>
         <p aria-live="polite" className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700" role="status">미리보기: 기본 판매가와 달라지는 품목 {preview.changed.toLocaleString("ko-KR")}개{preview.average === null ? "" : ` · 평균 ${preview.average > 0 ? "+" : ""}${preview.average}%`}{!draft.name.trim() && suggestTemplateName(draft.categories) ? <> · <button className="font-bold text-teal-800 underline" onClick={() => setDraft({ ...draft, name: suggestTemplateName(draft.categories) })} type="button">이름 제안 &quot;{suggestTemplateName(draft.categories)}&quot; 쓰기</button></> : null}</p>
         {draft.categories.map((c, index) => <div className="flex items-center gap-2" key={c.category}>
@@ -111,47 +125,8 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
       <table className="min-w-[480px] text-sm"><thead><tr><th className="border bg-slate-50 p-2 text-left">상품</th><th className="border bg-slate-50 p-2 text-right">기본</th>{templates.map((t) => <th className="border bg-slate-50 p-2 text-right" key={t.id}>{t.name}</th>)}</tr></thead>
         <tbody>{compare.map(({ item, prices }) => <tr key={item.id}><td className="border p-2">{item.name}</td><td className="border p-2 text-right">{item.price.toLocaleString()}원</td>{prices.map((price, i) => <td className="border p-2 text-right" key={templates[i].id}>{price.toLocaleString()}원</td>)}</tr>)}</tbody></table>
     </div> : null}
-    {templates.length ? <CustomerAssign companyId={companyId} templates={templates} /> : null}
+    {templates.length ? <CatalogStoreLinkTable companyId={companyId} templates={templates} userKey={companyId} /> : null}
   </section>;
-}
-
-// CC-19c: 거래처에 카탈로그 지정(없으면 기본). 검색한 거래처 20곳까지.
-function CustomerAssign({ companyId, templates }: { companyId: string; templates: Template[] }) {
-  const [q, setQ] = useState("");
-  const [rows, setRows] = useState<Array<{ id: string; name: string; templateId: string | null }>>([]);
-  const [message, setMessage] = useState("");
-  const [busyId, setBusyId] = useState("");
-  const search = useCallback(async (text: string) => {
-    const response = await fetch(`/api/margin-templates/customers?${new URLSearchParams({ companyId, q: text })}`, { cache: "no-store" });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) { setMessage(body.message || "거래처를 불러오지 못했습니다."); return; }
-    setRows(body.customers); setMessage("");
-  }, [companyId]);
-  async function assign(customerId: string, templateId: string) {
-    setBusyId(customerId); setMessage("");
-    try {
-      const response = await fetch("/api/margin-templates/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId, templateId: templateId || null }) });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || "지정하지 못했습니다.");
-      setRows((list) => list.map((r) => (r.id === customerId ? { ...r, templateId: templateId || null } : r)));
-      setMessage("지정했습니다.");
-    } catch (e) { setMessage(e instanceof Error ? e.message : "지정하지 못했습니다."); }
-    finally { setBusyId(""); }
-  }
-  return <div className="space-y-2 border-t pt-3" aria-label="거래처 카탈로그 지정">
-    <p className="text-sm font-bold">거래처에 카탈로그 지정</p>
-    <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void search(q); }}>
-      <input aria-label="거래처 검색" className={`${field} min-w-0 flex-1`} onChange={(e) => setQ(e.target.value)} placeholder="거래처 이름" value={q} />
-      <button className="min-h-[44px] rounded-lg border px-4 text-sm font-bold" type="submit">검색</button>
-    </form>
-    {message ? <p role="status" className="text-sm text-teal-900">{message}</p> : null}
-    {rows.map((r) => <div className="flex items-center gap-2" key={r.id}>
-      <span className="min-w-0 flex-1 break-words text-sm">{r.name}</span>
-      <select aria-label={`${r.name} 카탈로그`} className={`${field} w-40`} disabled={busyId === r.id} onChange={(e) => void assign(r.id, e.target.value)} value={r.templateId ?? ""}>
-        <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-      </select>
-    </div>)}
-  </div>;
 }
 
 function AddCategory({ known, taken, onAdd }: { known: string[]; taken: string[]; onAdd: (category: string) => void }) {
