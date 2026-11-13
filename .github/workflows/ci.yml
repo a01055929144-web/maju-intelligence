@@ -124,6 +124,19 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --command='create database cc32c_store_grades_test'
           PGDATABASE=cc32c_store_grades_test psql --set=ON_ERROR_STOP=1 --file=20261113-CC-32c-store-grades.pg17.test.sql
 
+      - name: Verify E2 purchase document cost draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        # 다른 테스트의 public 테이블과 겹치지 않게 별도 DB에서 실행한다.
+        run: |
+          psql --set=ON_ERROR_STOP=1 --command='create database e2_purchase_doc_test'
+          PGDATABASE=e2_purchase_doc_test psql --set=ON_ERROR_STOP=1 --file=20261113-e2-purchase-document-cost.pg17.test.sql
+
       - name: Verify WO-03 MAJU category match draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:

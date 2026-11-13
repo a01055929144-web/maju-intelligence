@@ -1,4 +1,6 @@
 export const PRICE_CHANGE_NEUTRAL_THRESHOLD_PERCENT = 0.5;
+// 매입 전표 단가 변동이 이 값(%) 이상이면 대표 [반영] 전까지 현재 매입가·판매가 반영 보류. docs/sql-drafts/20261113-e2-*.sql 의 purchase_variance_hold_percent() 와 같은 값.
+export const PURCHASE_VARIANCE_HOLD_PERCENT = 20;
 
 export type PurchasePriceRecord = {
   id: string;
