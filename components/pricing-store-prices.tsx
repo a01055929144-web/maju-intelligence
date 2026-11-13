@@ -17,6 +17,9 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
   const [store, setStore] = useState<Store | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [onlyStore, setOnlyStore] = useState(false);
+  const [periodProductId, setPeriodProductId] = useState<string | null>(null);
+  const [plannedFrom, setPlannedFrom] = useState("");
+  const [plannedPrice, setPlannedPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -74,6 +77,8 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
   }
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 
+  const periodRow = rows.find((r) => r.productId === periodProductId) ?? null;
+  const setPeriodRow = (r: Row | null) => { setPeriodProductId(r?.productId ?? null); setPlannedFrom(""); setPlannedPrice(""); };
   const visible = useMemo(() => (onlyStore ? rows.filter((r) => r.storePrice !== null) : rows), [rows, onlyStore]);
   const columns: CommonTableColumn<Row>[] = [
     { key: "name", label: "상품", value: (r) => r.name, sortable: true, searchable: true, weight: 3, render: (r) => <span className="font-semibold">{r.name}</span> },
@@ -86,13 +91,10 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(r.storePrice ?? ""); e.currentTarget.blur(); } }} /> },
     { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", priority: 2, width: 100, render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{d.toLocaleString()}원</span>; } },
     { key: "source", label: "출처", value: (r) => r.source, priority: 2, width: 80, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
-    { key: "until", label: "끝나는 날", value: (r) => r.until ?? "", priority: 3, width: 140, render: (r) => r.storePrice === null || r.source === "견적" ? "-" : <input aria-label={`${r.name} 끝나는 날`} className="h-8 rounded border border-slate-300 px-1 text-xs" defaultValue={r.until ?? ""} disabled={busy} key={`${r.productId}-${r.until}`} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { if (e.currentTarget.value !== (r.until ?? "")) void save(r, r.storePrice, e.currentTarget.value || null); }} type="date" /> },
-    { key: "since", label: "시작일", value: (r) => r.since ?? "", priority: 3, width: 100, render: (r) => r.since ?? "-" },
-    { key: "planned", label: "예정 가격", value: (r) => r.planned?.price ?? null, priority: 3, width: 260, render: (r) => r.source === "견적" ? "-" : r.planned
-      ? <span className="text-xs">{r.planned.since}부터 <b>{r.planned.price.toLocaleString()}원</b> <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(r, null, null, r.planned!.since)} type="button">취소</button></span>
-      : <span className="flex items-center gap-1"><input aria-label={`${r.name} 예정 시작일`} className="h-8 rounded border border-slate-300 px-1 text-xs" disabled={busy} id={`from-${r.productId}`} min={new Date(Date.now() + 9 * 3600000 + 86400000).toISOString().slice(0, 10)} type="date" />
-        <input aria-label={`${r.name} 예정가`} className="h-8 w-20 rounded border border-slate-300 px-1.5 text-right text-xs" disabled={busy} inputMode="numeric" placeholder="예정가"
-          onBlur={(e) => { const next = parseStorePriceInput(e.currentTarget.value); const from = (document.getElementById(`from-${r.productId}`) as HTMLInputElement | null)?.value; if (e.currentTarget.value.trim() === "") return; if (next === undefined || next === null || !from) { setError("예정 가격은 시작일과 0 이상의 숫자(원)를 함께 입력해 주세요."); return; } void save(r, next, null, from); }} /></span> },
+    { key: "period", label: "기간·예정", value: (r) => r.until ?? r.planned?.since ?? "", priority: 3, width: 220, sortable: false, render: (r) => r.source === "견적" ? "-" : <span className="flex items-center gap-1.5 text-xs">
+      {r.storePrice !== null && r.until ? <span className="rounded bg-slate-100 px-1.5 py-0.5 font-bold text-slate-700">~{r.until.slice(5).replace("-", "/")}</span> : null}
+      {r.planned ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">{r.planned.since.slice(5).replace("-", "/")}부터 {r.planned.price.toLocaleString()}원</span> : null}
+      <button aria-label={`${r.name} 기간·예정 가격`} className="h-7 rounded border border-slate-300 px-2 font-black text-slate-600" disabled={busy} onClick={() => setPeriodRow(r)} type="button">⋯</button></span> },
   ];
 
   return <div className="space-y-3">
@@ -121,6 +123,16 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
           {r.planned ? <p className="mt-1 text-xs text-slate-600">{r.planned.since}부터 <b>{r.planned.price.toLocaleString()}원</b> 예정</p> : null}
         </li>)}
           {!visible.length ? <li className="p-6 text-center text-sm text-slate-500">표시할 상품이 없습니다. 가격 관리에서 판매가를 먼저 정해 주세요.</li> : null}</ul>
+      {periodRow && store ? <div aria-label={`${periodRow.name} 기간·예정 가격`} className="fixed inset-y-0 right-0 z-50 w-full max-w-sm space-y-4 overflow-y-auto border-l border-slate-300 bg-white p-4 shadow-xl" role="dialog">
+        <div className="flex items-start justify-between gap-2"><div><h3 className="text-base font-black">기간·예정 가격</h3><p className="text-xs text-slate-500">{store.name} · {periodRow.name}</p></div><button className="maju-button-secondary h-8 text-xs" onClick={() => setPeriodRow(null)} type="button">닫기</button></div>
+        {periodRow.storePrice !== null ? <label className="block text-sm font-bold">끝나는 날<input aria-label={`${periodRow.name} 끝나는 날`} className="mt-1 block h-9 w-full rounded border border-slate-300 px-2" defaultValue={periodRow.until ?? ""} disabled={busy} key={`until-${periodRow.until}`} min={today} onChange={(e) => { if (e.currentTarget.value !== (periodRow.until ?? "")) void save(periodRow, periodRow.storePrice, e.currentTarget.value || null); }} type="date" /><span className="text-xs font-normal text-slate-500">시작일 {periodRow.since ?? "-"} · 비우면 계속 적용</span></label> : <p className="text-xs text-slate-500">이 매장 가격이 없어 끝나는 날은 정할 수 없습니다.</p>}
+        {periodRow.planned
+          ? <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm">{periodRow.planned.since}부터 <b>{periodRow.planned.price.toLocaleString()}원</b> 예정 <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(periodRow, null, null, periodRow.planned!.since)} type="button">취소</button></p>
+          : <div className="space-y-2"><p className="text-sm font-bold">예정 가격</p>
+            <input aria-label={`${periodRow.name} 예정 시작일`} className="block h-9 w-full rounded border border-slate-300 px-2 text-sm" min={new Date(Date.now() + 9 * 3600000 + 86400000).toISOString().slice(0, 10)} onChange={(e) => setPlannedFrom(e.target.value)} type="date" value={plannedFrom} />
+            <input aria-label={`${periodRow.name} 예정가`} className="block h-9 w-full rounded border border-slate-300 px-2 text-right text-sm" inputMode="numeric" onChange={(e) => setPlannedPrice(e.target.value)} placeholder="예정가(원)" value={plannedPrice} />
+            <button className="maju-button h-9 text-sm" disabled={busy} onClick={() => { const next = parseStorePriceInput(plannedPrice); if (next === undefined || next === null || !plannedFrom) { setError("예정 가격은 시작일과 0 이상의 숫자(원)를 함께 입력해 주세요."); return; } void save(periodRow, next, null, plannedFrom).then(() => setPeriodRow(null)); }} type="button">예정 가격 저장</button></div>}
+      </div> : null}
       </> : <p className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm font-bold text-slate-500">위에서 매장을 고르세요.</p>}
     </div>
   </div>;
