@@ -1,4 +1,5 @@
 "use client";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { calculatePrice } from "@/domains/pricing/price-rules";
@@ -104,7 +105,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     <section aria-label="회사 기본 마진" className={`rounded-xl border p-4 ${zeroMargin ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-sm text-slate-600">모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다.</p>
+          <p className="flex items-center gap-1 text-sm font-bold text-slate-700">기본 마진 <InfoTooltip size="sm" text="모든 상품의 판매가 = 매입가 × (1 + 기본 마진). 단가표·견적서·주문 링크가 이 판매가를 씁니다." /></p>
           {zeroMargin ? <p className="mt-1 text-sm font-bold text-amber-900">지금 기본 마진이 0%라 판매가가 매입가와 같습니다. 먼저 기본 마진을 정해 주세요.</p> : null}
         </div>
       </div>
