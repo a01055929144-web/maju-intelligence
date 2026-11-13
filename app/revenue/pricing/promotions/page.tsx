@@ -19,7 +19,7 @@ export default async function PromotionsPage({ searchParams }: { searchParams?: 
   const preview = Boolean(admin && !customer);
   const manager = !customer || canManagePriceSheets(customer);
   const showStorePrices = manager && await companyUsesStorePrices(companyId);
-  return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="행사·임박" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="mx-auto max-w-[1600px] space-y-4 p-4">{manager ? <PricingTabs active="promotions" previewCompanyId={preview ? companyId : undefined} showStorePrices={showStorePrices} /> : null}<PricingPromotionsWorkspace audienceEnabled={isFeatureEnabled("PROMOTION_AUDIENCE", companyId)} companyId={companyId} manager={manager} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
+  return <CustomerAppShell headerNav={manager ? <PricingTabs active="promotions" previewCompanyId={preview ? companyId : undefined} showStorePrices={showStorePrices} /> : undefined} active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="행사·임박" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
+    <main className="w-full space-y-4"><PricingPromotionsWorkspace audienceEnabled={isFeatureEnabled("PROMOTION_AUDIENCE", companyId)} companyId={companyId} manager={manager} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
   </CustomerAppShell>;
 }

@@ -570,7 +570,7 @@ export default function Home() {
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
       workspaceRole={isAdminPreview ? undefined : sessionWorkspaceRole || undefined}
     >
-      <div className="mx-auto max-w-[1880px] space-y-3">
+      <div className="w-full space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
         {screen === "onboarding" && (
