@@ -11,11 +11,12 @@ import { AdminPageHeader } from "./admin-page-header";
 
 const SHOW_LEGACY_ADMIN_ANALYTICS = false;
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams?: Promise<{ excludePilot?: string }> }) {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
 
-  const dashboard = await getAdminDashboardPayload();
+  const excludePilot = (await searchParams)?.excludePilot === "1";
+  const dashboard = await getAdminDashboardPayload({ excludePilot });
   const overview = [
     ["사용 중 고객사", `${dashboard.operations.activeCompanies}곳`, Database],
     ["이번 주 활동 직원", `${dashboard.operations.activeStaffThisWeek}명`, Users],
@@ -43,6 +44,13 @@ export default async function AdminPage() {
       label: "시스템 상태",
       ready: dashboard.source === "supabase",
       value: dashboard.source === "supabase" ? "연결됨" : "확인 필요"
+    },
+    {
+      description: "회사별 적재·품목·링크·주문의 명시적 원천 오류를 확인합니다.",
+      href: "/admin/operations",
+      label: "Stage F 오류 큐",
+      ready: process.env.ADMIN_STAGE_F_QUEUE_ENABLED === "true",
+      value: process.env.ADMIN_STAGE_F_QUEUE_ENABLED === "true" ? "조회 가능" : "기본 OFF"
     }
   ];
   const uploadIssues = dashboard.uploadHistory.filter(
@@ -109,6 +117,11 @@ export default async function AdminPage() {
             ))}
           </CardContent>
         </Card>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <p className="font-bold text-slate-600" role="status">본사(내부) 계정은 지표에서 제외했습니다.{excludePilot ? " 파일럿도 제외한 숫자입니다." : " 파일럿은 포함한 숫자입니다."}</p>
+          <Link className="inline-flex min-h-[44px] items-center rounded-md border border-slate-300 bg-white px-3 font-black" href={excludePilot ? "/admin" : "/admin?excludePilot=1"}>{excludePilot ? "파일럿 포함해서 보기" : "파일럿 제외하고 보기"}</Link>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-4">
           {overview.map(([label, value, Icon]) => (

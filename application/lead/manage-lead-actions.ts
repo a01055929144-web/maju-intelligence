@@ -1,5 +1,5 @@
-import type { LeadActionRepository, LeadActionType } from "@/domains/lead/lead-action";
-import { normalizeLeadActionLimit } from "@/domains/lead/lead-action";
+import type { LeadActionRepository, LeadActionType } from "../../domains/lead/lead-action";
+import { normalizeLeadActionLimit } from "../../domains/lead/lead-action";
 
 export function recordLeadContact(
   repository: LeadActionRepository,

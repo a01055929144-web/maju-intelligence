@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DEFAULT_LEAD_DM_TEMPLATE, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
+import { DEFAULT_LEAD_DM_TEMPLATE, LEAD_DM_TEMPLATES, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -85,7 +85,7 @@ import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
 import { normalizeStoredMapPanelMode } from "@/lib/map-preferences";
-import { nextLeadLayerSelection } from "@/lib/map-layer-selection";
+import { matchesMapLeadType, nextLeadLayerSelection } from "@/lib/map-layer-selection";
 import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
 import type { MapFilterPresetFilters } from "@/lib/map-filter-presets";
 import type {
@@ -104,8 +104,10 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
+import type { RouteOrderFields, RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
+import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
   QUOTE_MARGIN_PRESETS,
@@ -121,6 +123,7 @@ import {
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { formatPhoneNumber } from "@/lib/phone";
 import {
   clamp,
   deliveryCostRatio,
@@ -239,7 +242,7 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
   return { id: customerId, name: result.name };
 }
 
-export type StoreRow = RoutePlanStop & {
+export type StoreRow = RoutePlanStop & RouteOrderFields & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
   birthDate: string;
@@ -355,6 +358,8 @@ type SalesRouteMapWorkspaceProps = {
   readonly churnRiskCompanyId?: string;
   /** 견적서 DM/문자 문안 헤더에 "MAJU" 대신 표시할, 로그인한 고객사 이름입니다. */
   readonly companyName?: string;
+  readonly distributorSales?: boolean; // CC-21: 서버가 첫 화면부터 알려 줘서 "매장|유통사" 전환이 로드 전에도 보인다.
+  readonly documentEntry?: LeadDocumentEntryAccess;
   readonly holdModulesEnabled?: boolean;
   readonly initialCustomerId?: string;
   readonly initialLeadId?: string;
@@ -365,6 +370,7 @@ type SalesRouteMapWorkspaceProps = {
    * 네트워크 왕복을 없앱니다. */
   readonly churnRiskCustomers?: ChurnRiskCustomer[];
   readonly mapMarkers: KakaoMapMarker[];
+  readonly orderLinkStatus?: RouteOrderLinkStatus;
   readonly routePlan: RoutePlan;
   readonly staffVehicleLocations?: StaffVehicleLocation[];
   readonly staffInvitations?: StaffInvitation[];
@@ -472,7 +478,7 @@ function loadEditCacheWithTtl<T>(valueKey: string, savedAtKey: string): { values
   return { values: freshValues, savedAt: freshSavedAt };
 }
 
-export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
+export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompanyId, churnRiskCustomers, companyName, distributorSales = false, documentEntry = { canCreateQuote: false, canCreateSheet: false }, holdModulesEnabled = false, initialCustomerId, initialLeadId, initialLeadType = "new", initialView = "map", leadDetailMode = "drawer", mapMarkers, orderLinkStatus = "off", routePlan, showOriginAddressBanner, staffInvitations = [], staffVehicleLocations = [], timelineHref, vehicleFuelTypes, vehicleMasterAvailable = false, vehicleMasterVehicles = [] }: SalesRouteMapWorkspaceProps & { readonly initialView?: WorkspaceView }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
@@ -670,6 +676,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapFilterPopTop, setMapFilterPopTop] = useState(48);
   const mapFilterPopRef = useRef<HTMLDivElement>(null);
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
+  // CC-21: 유통사 영업을 켠 회사만 "매장|유통사" 전환이 보인다(서버가 distributorSales로 알려 줌).
+  const [mapDistributorSales, setMapDistributorSales] = useState(distributorSales);
+  const [mapTargetType, setMapTargetType] = useState<"restaurant" | "distributor">("restaurant");
   // 지도 위 "리드 전체" 표시에도 업종·개시일 필터를 걸 수 있게 합니다(2026-08-24 피드백: "지도상에서
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
@@ -905,6 +914,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
       const params = new URLSearchParams({ excludeExcluded: "false" });
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
+      if (mapTargetType === "distributor") params.set("targetType", "distributor");
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
       const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
       const payload = await response.json().catch(() => null);
@@ -912,6 +922,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         setAllLeadsLoadState("error");
         return;
       }
+      setMapDistributorSales(payload.distributorSales === true);
       setAllLeadsForMap(Array.isArray(payload.leads) ? payload.leads : []);
       setMapSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
       setAllLeadsLoadState("ready");
@@ -1017,7 +1028,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 데이터로 새로고침됩니다.
   useEffect(() => {
     if (showAllLeadsOnMap) void loadAllLeadsForMap();
-  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange]);
+  }, [showAllLeadsOnMap, showOutsideSalesAreaOnMap, mapLeadAreaRange, mapTargetType]);
   // 검색창에서 "기거래처·리드·미등록 매장"을 한 번에 찾을 수 있어야 한다는 피드백(2026-08-24: "검색창에도
   // 검색하면 기거래처랑, 리드랑, 다른 거래처 검색까지 다양하게 진행하면 될 것 같아")에 맞춰, "리드 전체
   // 보기"를 켜지 않은 상태에서 검색만 하더라도 리드 데이터를 미리 불러와 검색 결과에 포함시킵니다.
@@ -1532,9 +1543,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     };
   }, [mapFilterPop]);
   const filteredAllLeadsForMap = useMemo(() => {
-    if (mapLeadTypeFilter === "all" && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
+    if ((mapLeadTypeFilter === "all" || mapTargetType === "distributor") && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
     return statusScopedLeadsForMap.filter((lead) => {
-      if (mapLeadTypeFilter !== "all" && getPermitLeadType(lead) !== mapLeadTypeFilter) return false;
+      if (!matchesMapLeadType(getPermitLeadType(lead), mapLeadTypeFilter, mapTargetType === "distributor")) return false;
       if (mapLeadIndustryFilter && !splitMultiFilter(mapLeadIndustryFilter).includes(lead.industryPrimary || "미분류")) return false;
       if (mapLeadStageFilter && !splitMultiFilter(mapLeadStageFilter).includes(toLeadStageValue(lead.status))) return false;
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange && !isStoreAreaInRange(lead.storeAreaSqm, mapLeadAreaRange)) return false;
@@ -1549,7 +1560,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }
       return true;
     });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -1561,9 +1572,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         address: lead.address!,
         grade: (lead.grade || undefined) as "A" | "B" | "C" | undefined,
         id: lead.id,
-        label: getPermitLeadType(lead) === "new" ? "신규" : "영업",
+        label: mapTargetType === "distributor" ? "유통사" : getPermitLeadType(lead) === "new" ? "신규" : "영업",
         leadType: getPermitLeadType(lead),
-        markerColor: getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
+        // 유통사는 색을 정하지 않아 등급별 색을 씁니다.
+        markerColor: mapTargetType === "distributor" ? undefined : getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
         // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
         // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
@@ -1580,9 +1592,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         // 화면 맞추기에 포함되면 지도가 극단적으로 축소돼 사실상 빈 화면처럼 보이므로 제외합니다
         // (kakao-address-map.tsx의 KakaoMapMarker.excludeFromAutoBounds 참고). 반경이 제한된
         // "반경 리드"(leadRadiusMapMarkers)에는 이 플래그를 붙이지 않아 그쪽 동작은 그대로입니다.
-        excludeFromAutoBounds: true
+        // 유통사는 수가 적어 마커 범위로 지도를 맞춥니다.
+        excludeFromAutoBounds: mapTargetType !== "distributor"
       }));
-  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers]);
+  }, [showAllLeadsOnMap, filteredAllLeadsForMap, leadRadiusMapMarkers, mapTargetType]);
   // 우측 목록은 원본 조회 결과가 아니라 실제 생성된 지도 마커 ID를 기준으로 만듭니다. 반경과 전체
   // 보기를 함께 켠 경우 두 집합을 합치고, 주소가 없어 마커를 만들 수 없는 리드는 목록에서도 제외합니다.
   const detailLead = useMemo(
@@ -2452,6 +2465,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 <Layers className="h-4 w-4" />
                 <span>{allLeadsLoadState === "loading" ? "불러오는 중" : "전체 리드"}</span>
               </button>
+              {mapDistributorSales ? (
+                <div aria-label="영업 대상" className="flex items-center gap-1" role="group">
+                  {([["restaurant", "매장"], ["distributor", "유통사"]] as const).map(([id, label]) => <button aria-pressed={mapTargetType === id} className={`h-9 rounded-md px-3 text-xs font-semibold ${mapTargetType === id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-white hover:text-slate-900"}`} key={id} onClick={() => { setMapTargetType(id); setMapLeadsVisible(true); }} type="button">{label}</button>)}
+                </div>
+              ) : null}
                 </div>
           ) : null}
               {activeView === "map" ? (
@@ -3023,7 +3041,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
                     숨김 리드 보기
                   </label>
-                  {mapSalesRegionsConfigured === true ? (
+                  {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
                     <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                       <input checked={showOutsideSalesAreaOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
                       영업 지역 밖도 보기
@@ -3264,7 +3282,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 지역 밖도 보기
               </label>
             ) : null}
-            <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+            {mapTargetType === "distributor" ? null : <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               {PERMIT_LEAD_TYPE_OPTIONS.map((option) => (
                 <button
                   className={`h-8 px-2.5 text-xs font-semibold transition ${mapLeadTypeFilter === option.value ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
@@ -3279,7 +3297,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   {option.label}
                 </button>
               ))}
-            </div>
+            </div>}
             <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
               <button
                 className={`h-8 px-2.5 text-xs font-semibold transition ${!showDismissedLeadsOnMap ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
@@ -3518,7 +3536,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                           </p>
                         </div>
                         <button
-                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 hover:bg-slate-200"
+                          className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-600 hover:bg-slate-200"
                           onClick={() => {
                             setMainMapRouteVehicleId("");
                             setMainMapRouteEvents([]);
@@ -3602,6 +3620,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 {previewLeadId ? (
                   <PermitLeadMapQuickCard
                     allStores={allStores}
+                    documentEntry={documentEntry}
                     headerOffsetPx={mapHeaderHeightPx}
                     lead={
                       leadRadiusResult?.leads.find((lead) => lead.id === previewLeadId) ||
@@ -3829,6 +3848,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           onSummaryChange={setCourseSummary}
           onSelectStore={setSelectedId}
           onSelectVehicle={selectVehicle}
+          orderLinkStatus={orderLinkStatus}
           pendingAddStoreId={pendingCourseStoreId}
           selectedStoreId={selectedId}
           selectedVehicle={selectedVehicle}
@@ -3993,7 +4013,7 @@ function QuickRegisterDrawer({
 }) {
   const [customerName, setCustomerName] = useState(result.name);
   const [address, setAddress] = useState(result.roadAddress || result.address);
-  const [phone, setPhone] = useState(result.phone);
+  const [phone, setPhone] = useState(formatPhoneNumber(result.phone));
   const [industry, setIndustry] = useState(result.industry);
   const [deliveryManager, setDeliveryManager] = useState("");
   const [deliveryVehicle, setDeliveryVehicle] = useState("");
@@ -4038,7 +4058,7 @@ function QuickRegisterDrawer({
           deliveryVehicle: deliveryVehicle || undefined,
           industry: industry || "미분류",
           kakaoPlaceUrl: result.kakaoPlaceUrl,
-          phone,
+          phone: normalizePhoneNumber(phone),
           validateBusinessNumber: false
         })
       });
@@ -4121,7 +4141,7 @@ function QuickRegisterDrawer({
                 <span className="text-xs font-black text-slate-500">연락처</span>
                 <input
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-300 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => setPhone(formatPhoneNumberInput(event.target.value))}
+                  onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
                   value={phone}
                 />
               </label>
@@ -4251,7 +4271,7 @@ function MapExplorerTabs({
       {tabs.map((tab) => (
         <button
           aria-current={active === tab.value ? "page" : undefined}
-          className={`min-w-0 rounded-md px-1.5 py-1.5 text-[10px] font-bold transition ${
+          className={`min-w-0 rounded-md px-1.5 py-1.5 text-xs font-bold transition ${
             active === tab.value ? "bg-white text-teal-800 shadow-sm ring-1 ring-inset ring-slate-200" : "text-slate-500 hover:bg-white hover:text-slate-900"
           }`}
           key={tab.value}
@@ -4259,7 +4279,7 @@ function MapExplorerTabs({
           type="button"
         >
           <span className="block truncate">{tab.label}</span>
-          <span className="mt-0.5 block text-[9px] font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
+          <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
         </button>
       ))}
     </nav>
@@ -4461,7 +4481,7 @@ function DeliveryAssignmentPanel({
           <button
             aria-label={item.label}
             aria-pressed={selectedVehicleId === item.id}
-            className={`hidden h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-[10px] lg:flex ${
+            className={`hidden h-11 w-11 shrink-0 flex-col items-center justify-center rounded-[10px] text-xs lg:flex ${
               selectedVehicleId === item.id ? "border-2 border-teal-700 bg-teal-50 text-teal-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
             key={item.id}
@@ -4739,7 +4759,7 @@ function DeliveryAssignmentPanel({
                       </button>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[10px] font-bold text-amber-800">{canManageStaff ? "가입 직원 연결 정보가 없어 회사 설정에서 확인이 필요합니다." : "대표·관리자가 연결할 수 있습니다."}</p>
+                    <p className="mt-2 text-xs font-bold text-amber-800">{canManageStaff ? "가입 직원 연결 정보가 없어 회사 설정에서 확인이 필요합니다." : "대표·관리자가 연결할 수 있습니다."}</p>
                   )}
                 </div>
               );
@@ -4904,15 +4924,15 @@ function VehicleMasterManager({
                   <p className="truncate text-xs font-black text-slate-900">{vehicle.name}</p>
                   <p className="mt-0.5 text-[11px] font-bold text-slate-500">{vehicle.plateNumber} · {vehicleFuelLabels[vehicle.fuelType]}</p>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.status === "active" ? "bg-teal-100 text-teal-800" : vehicle.status === "maintenance" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-black ${vehicle.status === "active" ? "bg-teal-100 text-teal-800" : vehicle.status === "maintenance" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>
                   {vehicleStatusLabels[vehicle.status]}
                 </span>
               </div>
-              {vehicle.memo ? <p className="mt-1 truncate text-[10px] font-bold text-slate-400">{vehicle.memo}</p> : null}
+              {vehicle.memo ? <p className="mt-1 truncate text-xs font-bold text-slate-400">{vehicle.memo}</p> : null}
               {canManage ? (
                 <div className="mt-2 grid grid-cols-4 gap-1">
                   <button
-                    className="h-7 rounded border border-slate-200 bg-white text-[10px] font-black text-slate-600"
+                    className="h-7 rounded border border-slate-200 bg-white text-xs font-black text-slate-600"
                     disabled={Boolean(savingId)}
                     onClick={() => beginEdit(vehicle)}
                     type="button"
@@ -4921,7 +4941,7 @@ function VehicleMasterManager({
                   </button>
                   {(["active", "maintenance", "inactive"] as const).map((status) => (
                     <button
-                      className={`h-7 rounded border text-[10px] font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
+                      className={`h-7 rounded border text-xs font-black ${vehicle.status === status ? "border-teal-600 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`}
                       disabled={savingId === vehicle.id || vehicle.status === status}
                       key={status}
                       onClick={() => void changeStatus(vehicle, status)}
@@ -5176,7 +5196,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 카카오맵으로 길찾기
-                <span className="text-[10px] font-bold text-teal-700">기본</span>
+                <span className="text-xs font-bold text-teal-700">기본</span>
               </a>
               <a
                 aria-disabled={!links.naverAppUrl}
@@ -5189,7 +5209,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 네이버지도 앱 길찾기
-                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+                <span className="text-xs font-bold text-slate-400">앱 필요</span>
               </a>
               <a
                 aria-disabled={!links.tmapAppUrl}
@@ -5202,7 +5222,7 @@ export function NavigateMenu({
                 target="_blank"
               >
                 티맵 길찾기
-                <span className="text-[10px] font-bold text-slate-400">앱 필요</span>
+                <span className="text-xs font-bold text-slate-400">앱 필요</span>
               </a>
               <a
                 className="flex items-center justify-between rounded-md px-2 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50"
@@ -5334,7 +5354,7 @@ export function StoreQuickCard({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draft, setDraft] = useState({
     name: store.name,
-    phone: store.phone || "",
+    phone: formatPhoneNumber(store.phone),
     deliveryDriver: store.deliveryDriver || "",
     deliveryVehicleName: store.deliveryVehicleName || "",
     memo: store.memo || "",
@@ -5379,7 +5399,7 @@ export function StoreQuickCard({
   useEffect(() => {
     setDraft({
       name: store.name,
-      phone: store.phone || "",
+      phone: formatPhoneNumber(store.phone),
       deliveryDriver: store.deliveryDriver || "",
       deliveryVehicleName: store.deliveryVehicleName || "",
       memo: store.memo || "",
@@ -5437,7 +5457,7 @@ export function StoreQuickCard({
     setIsSaving(true);
     setSaveError("");
     try {
-      await onSave(draft);
+      await onSave({ ...draft, phone: normalizePhoneNumber(draft.phone) });
       setIsEditing(false);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "거래처 정보 저장에 실패했습니다.");
@@ -5528,7 +5548,7 @@ export function StoreQuickCard({
             </p>
             <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-bold text-slate-700">
               <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate">{store.phone || "연락처 미등록"}</span>
+              <span className="min-w-0 flex-1 truncate">연락처 · {formatPhoneNumber(store.phone) || "미등록"}</span>
             </p>
           </div>
         ) : null}
@@ -5644,7 +5664,7 @@ export function StoreQuickCard({
         {!isEditing && showReviews && store.reviewKeywords?.length ? (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {store.reviewKeywords.slice(0, 6).map((keyword) => (
-              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" key={keyword}>
+              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-xs font-black text-amber-700" key={keyword}>
                 #{keyword}
               </span>
             ))}
@@ -5660,7 +5680,7 @@ export function StoreQuickCard({
           <div className="mt-2 space-y-1.5">
             <input
               className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-teal-300"
-              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumberInput(event.target.value) }))}
+              onChange={(event) => setDraft((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))}
               placeholder="연락처"
               value={draft.phone}
             />
@@ -5713,7 +5733,7 @@ export function StoreQuickCard({
               <p className="mt-2.5 truncate text-[10.5px] font-bold text-slate-400">
                 {[
                   store.representativeName ? `대표 ${store.representativeName}` : null,
-                  store.businessRegistrationNumber ? `사업자 ${store.businessRegistrationNumber}` : null,
+                  store.businessRegistrationNumber ? `사업자번호 · ${formatBusinessRegistrationNumber(store.businessRegistrationNumber)}` : null,
                   store.openingDate ? `개업 ${store.openingDate}` : null
                 ]
                   .filter(Boolean)
@@ -5936,7 +5956,7 @@ function MapLayerLegend({
     <div className="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex justify-center sm:inset-x-3 sm:bottom-3 lg:hidden">
       <div
         aria-label="지도 마커 범례"
-        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-[10px] font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
+        className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
       >
         <span className="font-black text-slate-500">범례</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />거래처 {counts.customers}</span>
@@ -5946,10 +5966,10 @@ function MapLayerLegend({
         {counts.salesLeads > 0 ? (
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded bg-teal-700" />영업 리드 {counts.salesLeads}</span>
         ) : null}
-        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[9px] text-white">🚚</span>실시간 {counts.activeVehicles}</span>
-        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
-        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[9px] text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
-        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
+        <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">🚚</span>실시간 {counts.activeVehicles}</span>
+        {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-xs text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
+        {counts.lastOperationVehicles ? <span className="inline-flex items-center gap-1 text-slate-400"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-xs text-slate-700">🚚</span>마지막 운행 {counts.lastOperationVehicles}</span> : null}
+        <span className="inline-flex items-center gap-1 text-emerald-700"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">✓</span>오늘 완료 {counts.completedCustomers}</span>
       </div>
     </div>
   );
@@ -6118,24 +6138,24 @@ function LiveVehicleStatusPanel({
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
                   <div className="min-w-0">
                     <p className="truncate text-[11px] font-black text-slate-900">{vehicle.displayName}</p>
-                    <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">
+                    <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
                       {vehicle.deliveryVehicle || "차량 미배정"} · {currentStore ? `작업 ${currentStore.name}` : "현재 작업 없음"} · {checkedAt}
                       {ageText ? ` · ${ageText}` : ""}
                     </p>
                   </div>
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-black ${vehicle.isStale ? "bg-slate-200 text-slate-700" : "bg-teal-100 text-teal-800"}`}>
                   {getVehicleStatusLabel(vehicle)}
                 </span>
               </div>
               <div className="mt-1.5 flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">
+                <p className="min-w-0 truncate text-xs font-bold text-slate-400">
                   {checkedAt} · 가까운 장소 {currentStore?.name || "확인 중"} · {getVehicleStatusLabel(vehicle)}
                   {completedCount ? <span className="font-black text-emerald-600"> · 완료 {completedCount}곳</span> : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
-                    className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
+                    className="rounded-full bg-teal-700 px-2 py-0.5 text-xs font-black text-white ring-1 ring-inset ring-teal-700 transition hover:bg-teal-800"
                     onClick={() => onFocusVehicle(vehicle.id)}
                     type="button"
                   >
@@ -6143,7 +6163,7 @@ function LiveVehicleStatusPanel({
                   </button>
                   {onToggleRoute ? (
                     <button
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset transition ${
+                      className={`rounded-full px-2 py-0.5 text-xs font-black ring-1 ring-inset transition ${
                         isActiveRoute
                           ? "bg-slate-900 text-white ring-slate-900 hover:bg-slate-700"
                           : "bg-white text-slate-600 ring-slate-200 hover:text-teal-700 hover:ring-teal-200"
@@ -6155,7 +6175,7 @@ function LiveVehicleStatusPanel({
                     </button>
                   ) : null}
                   <button
-                    className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
+                    className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-slate-600 ring-1 ring-inset ring-slate-200 transition hover:text-teal-700 hover:ring-teal-200"
                     onClick={() => onAnalyze(vehicle)}
                     type="button"
                   >
@@ -6163,7 +6183,7 @@ function LiveVehicleStatusPanel({
                   </button>
                   {currentStore ? (
                     <button
-                      className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                      className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                       onClick={() => onPreviewStore(currentStore.id)}
                       type="button"
                     >
@@ -6298,18 +6318,18 @@ function VehicleAnalysisModal({
                           <p className="min-w-0 truncate text-[11px] font-black text-slate-900">
                             {completion.actualOrder}. {completion.customerName}
                           </p>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-black ring-1 ring-inset ${getCompletionOrderClass(completion)}`}>
                             {getCompletionOrderLabel(completion)}
                           </span>
                         </div>
-                        <p className="mt-1 truncate text-[10px] font-bold text-slate-500">
+                        <p className="mt-1 truncate text-xs font-bold text-slate-500">
                           {new Date(completion.completedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                           {completion.statusLabel ? ` · ${completion.statusLabel}` : ""}
                         </p>
                         <div className="mt-1 flex items-center justify-between gap-2">
-                          <p className="min-w-0 truncate text-[10px] font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
+                          <p className="min-w-0 truncate text-xs font-bold text-slate-400">{completion.memoSnippet || "완료 메모 없음"}</p>
                           <button
-                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
+                            className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-black text-teal-700 ring-1 ring-inset ring-teal-100 transition hover:bg-teal-50"
                             onClick={() => onOpenStore(completion.customerId)}
                             type="button"
                           >
@@ -6329,7 +6349,7 @@ function VehicleAnalysisModal({
               {events.slice(-8).reverse().map((event) => (
                 <div className="rounded-lg border border-slate-100 bg-white p-2" key={event.id}>
                   <p className="text-[11px] font-black text-slate-900">{new Date(event.recordedAt).toLocaleString("ko-KR")}</p>
-                  <p className="mt-1 text-[10px] font-bold text-slate-500">
+                  <p className="mt-1 text-xs font-bold text-slate-500">
                     가까운 장소 {event.currentCustomerId && event.currentCustomerId === currentStore?.id ? currentStore.name : "운행 경로"} · {event.currentCustomerId ? "배송 업무 중" : "이동 기록"}
                   </p>
                 </div>
@@ -6397,7 +6417,7 @@ function StoreManagementPanel({
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Store className="h-4 w-4 text-slate-500" />
-          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-xs font-black leading-none text-white">
             {stores.length}
           </span>
         </span>
@@ -6641,7 +6661,7 @@ function LeadListPanel({
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Radar className="h-4 w-4 text-teal-700" />
-          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-[9px] font-black leading-none text-white">
+          <span className="absolute -right-2 -top-2 grid h-4 min-w-[16px] place-items-center rounded-full bg-teal-700 px-1 text-xs font-black leading-none text-white">
             {leads.length}
           </span>
         </span>
@@ -7683,9 +7703,13 @@ export function buildOutboundItemNotes(industry?: string) {
 }
 
 /** 11/3 A3: 회사 기본 문구(placeholder {상호}{업종}{품목})와 제외 품목을 반영합니다. 결제 조건 기본값은 '협의'. */
-export function buildLeadDmScript(lead: PermitLeadItem, settings?: { excluded?: string; template?: string }) {
-  const items = filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
-  return renderLeadDm(settings?.template || DEFAULT_LEAD_DM_TEMPLATE, { businessName: lead.businessName, industry: lead.industryPrimary, items });
+export type LeadDmSettings = { excluded?: string; template?: string; distributorTemplate?: string; context?: { companyName?: string; region?: string; mainItems?: string; newCount?: number } };
+export function buildLeadDmScript(lead: PermitLeadItem, settings?: LeadDmSettings) {
+  // CC-31: 유통사 리드는 유통사용 회사 문구(없으면 코드 기본 D1)를 쓰고 {업종}·{품목}은 무시한다. 매장 리드는 기존 그대로.
+  const distributor = lead.targetType === "distributor";
+  const items = distributor ? [] : filterDmItems(buildOutboundItemNotes(lead.industryPrimary), parseExcludedItems(settings?.excluded || "")).slice(0, 4);
+  const template = distributor ? settings?.distributorTemplate || LEAD_DM_TEMPLATES.distributor[0].body : settings?.template || DEFAULT_LEAD_DM_TEMPLATE;
+  return renderLeadDm(template, { businessName: lead.businessName, industry: lead.industryPrimary, items, target: distributor ? "distributor" : "restaurant", ...settings?.context });
 }
 
 function buildQuoteShareText(companyName: string, subject: QuoteSubject, rows: QuoteLine[], menuNotes: string, total: number, validUntil?: string) {
@@ -7779,6 +7803,7 @@ function getRecommendedDelivery(
 
 function PermitLeadMapQuickCard({
   allStores,
+  documentEntry,
   headerOffsetPx,
   lead,
   leftPanelCollapsed,
@@ -7791,6 +7816,7 @@ function PermitLeadMapQuickCard({
 }: {
   /** 배송담당자·배송차 추천(getRecommendedDelivery)에 씁니다. */
   readonly allStores: StoreRow[];
+  readonly documentEntry: LeadDocumentEntryAccess;
   /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
   readonly headerOffsetPx?: number;
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
@@ -7936,7 +7962,7 @@ function PermitLeadMapQuickCard({
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-[15px] font-black leading-5 text-slate-950">{lead.businessName}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <Badge className={`px-1.5 py-0 text-[10px] ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
+            <Badge className={`px-1.5 py-0 text-xs ${permitGradeToneClassName(lead.grade, isPermitLeadUnscored(lead))}`}>{lead.grade || (isPermitLeadUnscored(lead) ? "채점 전" : "-")}</Badge>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{lead.industryPrimary}</span>
             {typeof lead.distanceKm === "number" ? (
               <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-black text-teal-700">{lead.distanceKm}km</span>
@@ -7950,7 +7976,7 @@ function PermitLeadMapQuickCard({
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700">개업 임박</span>
             ) : null}
             {isNearAnchor ? (
-              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
+              <span className="flex items-center gap-0.5 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-black text-cyan-700 ring-1 ring-inset ring-cyan-100">
                 <Star className="h-2.5 w-2.5 fill-cyan-600 text-cyan-600" />
                 기거래처 근접
               </span>
@@ -8090,7 +8116,7 @@ function PermitLeadMapQuickCard({
             G
           </a>
           {instagramHandle ? (
-            <a className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
+            <a className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100" href={instagramUrl} rel="noreferrer" target="_blank">
               인스타그램
             </a>
           ) : null}
@@ -8107,8 +8133,18 @@ function PermitLeadMapQuickCard({
           </button>
           {onOpenQuote ? (
             <button className="maju-button-secondary h-8 justify-center text-xs" onClick={() => onOpenQuote(lead)} type="button">
-              견적서 작성
+              임시 견적
             </button>
+          ) : null}
+          {documentEntry.canCreateSheet ? (
+            <Link className="maju-button-secondary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("sheet", lead.id))}>
+              단가표 만들기
+            </Link>
+          ) : null}
+          {documentEntry.canCreateQuote ? (
+            <Link className="maju-button-primary min-h-11 justify-center text-xs" href={withPermitLeadCompanyQuery(leadDocumentEntryHref("quote", lead.id))}>
+              견적서 만들기
+            </Link>
           ) : null}
           <button className="maju-button-primary h-8 justify-center text-xs disabled:opacity-60" disabled={isConverting} onClick={() => void convert()} type="button">
             {isConverting ? "전환 중..." : "거래처로 전환"}
@@ -8588,7 +8624,7 @@ function QuoteDrawer({
                 <p className="text-xs font-black text-teal-900">메뉴·리뷰 기반 추천</p>
                 <p className="mt-1 text-[11px] font-semibold text-teal-700">원하는 품목 수를 누르면 현재 목록을 추천 결과로 바꿉니다.</p>
               </div>
-              {recommendationBasis ? <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-teal-800 ring-1 ring-inset ring-teal-100">{recommendationBasis}</span> : null}
+              {recommendationBasis ? <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-teal-800 ring-1 ring-inset ring-teal-100">{recommendationBasis}</span> : null}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {([10, 20, 30] as const).map((count) => (
@@ -8635,7 +8671,7 @@ function QuoteDrawer({
 
           <div className="rounded-lg border border-slate-200">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <div><p className="text-xs font-black text-slate-700">실제 매입 상품 연결</p><p className="text-[10px] font-semibold text-slate-400">업로드된 상품명과 일치하는 품목의 매입가를 적용합니다.</p></div>
+              <div><p className="text-xs font-black text-slate-700">실제 매입 상품 연결</p><p className="text-xs font-semibold text-slate-400">업로드된 상품명과 일치하는 품목의 매입가를 적용합니다.</p></div>
               <button className="maju-button-secondary h-8 px-3 text-xs" disabled={catalogLoading} onClick={() => void loadProductCatalog()} type="button">
                 {catalogLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 {catalogLoading ? "불러오는 중" : catalog.length ? `원장 ${catalog.length}개 다시 매칭` : "매입 원장 불러오기"}
@@ -8667,11 +8703,11 @@ function QuoteDrawer({
                         value={row.item}
                       />
                       <div className="mt-1 flex items-center gap-1.5">
-                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
                           {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
                         </span>
                         {row.matchStatus === "requested" ? (
-                          <label className="cursor-pointer text-[9px] font-black text-teal-700">
+                          <label className="cursor-pointer text-xs font-black text-teal-700">
                             {row.requestPhotoName || "사진 첨부"}
                             <input accept="image/*" className="sr-only" onChange={(event) => updateRow(row.id, { requestPhotoName: event.target.files?.[0]?.name || "" })} type="file" />
                           </label>
@@ -8688,7 +8724,7 @@ function QuoteDrawer({
                         value={row.qty}
                       />
                     </td>
-                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-[9px] text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
+                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-xs text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
                     <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowMargin(row.id, Number(event.target.value) || 0)} type="number" value={row.marginRate} /></td>
                     <td className="px-2 py-1.5">
                       <input
@@ -8714,7 +8750,7 @@ function QuoteDrawer({
                   <div className="space-y-2.5 p-3" key={row.id}>
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <label className="text-[10px] font-black text-slate-500">상품명</label>
+                        <label className="text-xs font-black text-slate-500">상품명</label>
                         <input
                           className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs font-bold outline-none focus:border-teal-300"
                           onChange={(event) => updateRow(row.id, { item: event.target.value })}
@@ -8727,20 +8763,20 @@ function QuoteDrawer({
                       </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <label className="text-[10px] font-black text-slate-500">
+                      <label className="text-xs font-black text-slate-500">
                         수량
                         <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { qty: Number(event.target.value) || 0 })} type="number" value={row.qty} />
                       </label>
-                      <label className="text-[10px] font-black text-slate-500">
+                      <label className="text-xs font-black text-slate-500">
                         판매가
                         <input className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-right text-xs font-bold" onChange={(event) => updateRow(row.id, { unitPrice: Number(event.target.value) || 0 })} type="number" value={row.unitPrice} />
                       </label>
-                      <div className="text-[10px] font-black text-slate-500">
+                      <div className="text-xs font-black text-slate-500">
                         금액
                         <p className="mt-1 flex h-8 items-center justify-end rounded-md bg-slate-50 px-2 text-xs text-slate-800">{(row.qty * row.unitPrice).toLocaleString()}원</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-500">
                       <span>{[row.spec, row.unit].filter(Boolean).join(" · ") || "규격·단위는 확장 보기에서 편집"}</span>
                       <span className={`rounded px-1.5 py-0.5 font-black ${row.matchStatus === "matched" ? "bg-emerald-50 text-emerald-700" : row.matchStatus === "requested" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
                         {row.matchStatus === "matched" ? "원장 매칭" : row.matchStatus === "requested" ? "추가 의뢰" : "매칭 필요"}
@@ -9269,7 +9305,7 @@ function StoreDetail({
   const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
   const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
   const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
-  const [draftBusinessNumber, setDraftBusinessNumber] = useState(store.businessRegistrationNumber);
+  const [draftBusinessNumber, setDraftBusinessNumber] = useState(formatBusinessRegistrationNumber(store.businessRegistrationNumber));
   const [draftBusinessStatus, setDraftBusinessStatus] = useState(store.businessStatus);
   const [draftBusinessHours, setDraftBusinessHours] = useState(store.businessHours || "");
   const [draftMenuSummary, setDraftMenuSummary] = useState(store.menuSummary || "");
@@ -9291,7 +9327,7 @@ function StoreDetail({
   const [draftIndustry, setDraftIndustry] = useState(store.industry);
   const [draftName, setDraftName] = useState(store.name);
   const [draftOpeningDate, setDraftOpeningDate] = useState(store.openingDate);
-  const [draftPhone, setDraftPhone] = useState(store.phone);
+  const [draftPhone, setDraftPhone] = useState(formatPhoneNumber(store.phone));
   const [draftRelationshipStatus, setDraftRelationshipStatus] = useState(store.relationshipStatus || "거래중");
   const [draftRepresentativeName, setDraftRepresentativeName] = useState(store.representativeName);
   const [draftRevenue, setDraftRevenue] = useState(String(store.expectedRevenue));
@@ -9326,7 +9362,7 @@ function StoreDetail({
       bankAccount: draftBankAccount,
       birthDate: draftBirthDate,
       businessCertificateStatus: draftBusinessCertificateStatus,
-      businessRegistrationNumber: draftBusinessNumber,
+      businessRegistrationNumber: normalizeBusinessRegistrationNumber(draftBusinessNumber),
       businessStatus: draftBusinessStatus,
       businessHours: draftBusinessHours,
       menuSummary: draftMenuSummary,
@@ -9348,7 +9384,7 @@ function StoreDetail({
       industry: draftIndustry,
       name: draftName,
       openingDate: draftOpeningDate,
-      phone: draftPhone,
+      phone: normalizePhoneNumber(draftPhone),
       representativeName: draftRepresentativeName
       });
       const persistedLabel = result?.persisted === false ? "저장 미확인" : "저장 완료";
@@ -9476,9 +9512,12 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                연락처 · {formatPhoneNumber(draftPhone) || "미등록"} · 사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}
+              </p>
               <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
                 {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
-                <span className="ml-1 text-[10px] font-bold text-amber-700">단계 저장 미연결</span>
+                <span className="ml-1 text-xs font-bold text-amber-700">단계 저장 미연결</span>
               </div>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}
               {saveError ? <p className="mt-2 text-xs font-black text-rose-600">{saveError}</p> : null}
@@ -9532,7 +9571,7 @@ function StoreDetail({
 
         <nav aria-label="매장 정보 탭" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4">
           {([
-            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문 (준비 중)"], ["ledger", "매출 원장 (준비 중)"]
+            ["overview", "개요"], ["delivery", "배송·반품 기록"], ["sales", "영업 기록"], ["order", "주문·링크"], ["ledger", "매출 원장 (준비 중)"]
           ] as const).map(([value, label]) => (
             <button className={`h-11 shrink-0 border-b-[3px] px-3 text-sm font-black ${detailTab === value ? "border-teal-700 text-teal-800" : "border-transparent text-slate-500"}`} key={value} onClick={() => setDetailTab(value)} type="button">{label}</button>
           ))}
@@ -9545,7 +9584,7 @@ function StoreDetail({
                   <EditRow label="거래처명" onChange={setDraftName} value={draftName} />
                   <BusinessNumberEditRow onChange={setDraftBusinessNumber} valid={businessNumberValid} value={draftBusinessNumber} />
                   <EditRow label="대표자명" onChange={setDraftRepresentativeName} value={draftRepresentativeName} />
-                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumberInput(value))} value={draftPhone} />
+                  <EditRow label="연락처" onChange={(value) => setDraftPhone(formatPhoneNumber(value))} value={draftPhone} />
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
@@ -9782,7 +9821,7 @@ function StoreDetail({
                         representativeName: draftRepresentativeName
                       }}
                       onApply={() => {
-                        setDraftBusinessNumber(activeOcrSuggestion.businessRegistrationNumber);
+                        setDraftBusinessNumber(formatBusinessRegistrationNumber(activeOcrSuggestion.businessRegistrationNumber));
                         setDraftBusinessStatus(activeOcrSuggestion.businessStatus);
                         setDraftBusinessCertificateStatus("received");
                         setDraftName(activeOcrSuggestion.companyName);
@@ -9929,8 +9968,15 @@ function StoreDetail({
             </div>
           ) : null}
 
-          {detailTab === "order" || detailTab === "ledger" ? (
-            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-black text-slate-950">{detailTab === "order" ? "주문" : "매출 원장"} 연결 준비 중</h4><p className="mt-2 text-sm font-bold text-slate-500">같은 매장 ID에 연결할 SQL 원장이 아직 적용되지 않아 읽기·쓰기를 모두 OFF로 유지합니다.</p></div>
+          {detailTab === "order" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center">
+              <h4 className="text-base font-semibold text-slate-950">문서에서 주문 링크 만들기</h4>
+              <p className="mt-2 text-sm text-slate-600">발행한 견적서·단가표의 공개 링크·QR을 만들면 매장이 카카오로 가입하고 주문할 수 있습니다. 주문 가능 여부는 매장 주소와 배송 권역·요일로 확인합니다.</p>
+              <Link className="maju-button-primary mt-4 inline-flex min-h-[44px] items-center px-4" href="/revenue/pricing/documents">견적서·단가표에서 링크 만들기</Link>
+              <p className="mt-3 text-xs text-slate-500">이 거래처 상세에서 주문 내역을 직접 보는 기능은 준비 중입니다.</p>
+            </div>
+          ) : detailTab === "ledger" ? (
+            <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-8 text-center"><Lock className="mx-auto h-6 w-6 text-slate-400" /><h4 className="mt-3 text-base font-semibold text-slate-950">매출 원장 연결 준비 중</h4><p className="mt-2 text-sm text-slate-600">이 거래처 상세에서 매출 원장을 조회하는 기능은 준비 중입니다.</p></div>
           ) : null}
         </div>
     </MapStoreDetailDrawer>
@@ -9992,7 +10038,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         body: JSON.stringify({
           role: draftRole || "담당자",
           name: draftName.trim(),
-          phone: draftPhone.trim(),
+          phone: normalizePhoneNumber(draftPhone),
           birthDate: draftBirthDate,
           memo: draftMemo.trim()
         })
@@ -10020,7 +10066,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
     setEditingId(contact.id);
     setEditRole(contact.role);
     setEditName(contact.name);
-    setEditPhone(contact.phone || "");
+    setEditPhone(formatPhoneNumber(contact.phone));
     setEditBirthDate(contact.birthDate || "");
     setEditMemo(contact.memo || "");
   };
@@ -10035,7 +10081,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         body: JSON.stringify({
           role: editRole || "담당자",
           name: editName.trim(),
-          phone: editPhone.trim(),
+          phone: normalizePhoneNumber(editPhone),
           birthDate: editBirthDate,
           memo: editMemo.trim()
         })
@@ -10090,7 +10136,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
                 <div className="flex flex-wrap items-center gap-1.5">
                   <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setEditRole(event.target.value)} placeholder="직책" value={editRole} />
                   <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditName(event.target.value)} placeholder="이름" value={editName} />
-                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumberInput(event.target.value))} placeholder="연락처" value={editPhone} />
+                  <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditPhone(formatPhoneNumber(event.target.value))} placeholder="연락처" value={editPhone} />
                   <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditBirthDate(event.target.value)} type="date" value={editBirthDate} />
                   <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setEditMemo(event.target.value)} placeholder="메모" value={editMemo} />
                   <button className="maju-button-primary h-9 px-3 text-xs" disabled={rowBusyId === contact.id} onClick={() => saveEdit(contact.id)} type="button">
@@ -10107,7 +10153,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
                   {contact.phone ? (
                     <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500">
                       <Phone className="h-3.5 w-3.5" />
-                      {contact.phone}
+                      {formatPhoneNumber(contact.phone)}
                     </span>
                   ) : null}
                   {contact.birthDate ? (
@@ -10150,7 +10196,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
         <div className="flex flex-wrap items-center gap-1.5">
           <input className="h-9 w-24 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" list="contact-role-presets" onChange={(event) => setDraftRole(event.target.value)} placeholder="직책" value={draftRole} />
           <input className="h-9 w-28 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftName(event.target.value)} placeholder="담당자 이름" value={draftName} />
-          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumberInput(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
+          <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftPhone(formatPhoneNumber(event.target.value))} placeholder="010-0000-0000" value={draftPhone} />
           <input className="h-9 w-36 min-w-0 rounded-md border border-slate-200 px-2 text-sm font-bold text-slate-500 outline-none focus:border-teal-300 focus:text-slate-950" onChange={(event) => setDraftBirthDate(event.target.value)} type="date" value={draftBirthDate} />
           <input className="h-9 min-w-[120px] flex-1 rounded-md border border-slate-200 px-2 text-sm font-bold outline-none focus:border-teal-300" onChange={(event) => setDraftMemo(event.target.value)} placeholder="메모(선택)" value={draftMemo} />
           <button className="maju-button-primary inline-flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm" disabled={isAdding} onClick={addContact} type="button">
@@ -10591,9 +10637,9 @@ function Kpi({
   return (
     <div className={`relative min-w-0 overflow-hidden border-r border-b border-slate-200/80 px-2.5 py-2 last:border-r-0 sm:px-4 sm:py-2.5 ${backgroundClass}`}>
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
-      <p className="truncate text-[10px] font-black text-slate-500 sm:text-[11px]">{label}</p>
+      <p className="truncate text-xs font-black text-slate-500 sm:text-[11px]">{label}</p>
       <p className={`mt-1 truncate text-[15px] font-black leading-none sm:text-[20px] ${valueClass}`}>{value}</p>
-      {helper ? <p className="mt-1.5 truncate text-[10px] font-bold text-slate-400">{helper}</p> : null}
+      {helper ? <p className="mt-1.5 truncate text-xs font-bold text-slate-400">{helper}</p> : null}
     </div>
   );
 }
@@ -10663,7 +10709,7 @@ function RouteBasisMetric({ helper, label, tone = "default", value }: { readonly
         <span className="truncate">{label}</span>
       </p>
       <p className={`mt-1 truncate text-sm font-black ${valueClass}`}>{value}</p>
-      {helper ? <p className="truncate text-[10px] font-bold text-slate-500">{helper}</p> : null}
+      {helper ? <p className="truncate text-xs font-bold text-slate-500">{helper}</p> : null}
     </div>
   );
 }
@@ -11292,21 +11338,8 @@ function isValidBusinessRegistrationNumber(value: string) {
 }
 
 // 휴대폰(010 등, 3-4-4)과 서울(02)/지역 번호를 입력 자릿수에 맞춰 실시간으로 하이픈 처리합니다.
-function formatPhoneNumberInput(value: string) {
-  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
-  if (!digits) return "";
-
-  if (digits.startsWith("02")) {
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
-  }
-
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+function normalizePhoneNumber(value: string) {
+  return value.replace(/[^0-9]/g, "").slice(0, 11);
 }
 
 function getBusinessRegistrationCheckDigit(firstNineDigits: string) {

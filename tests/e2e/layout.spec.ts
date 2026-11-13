@@ -25,7 +25,7 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
   { auth: "customer", path: "/revenue/products", slug: "products" },
   { auth: "customer", path: "/crm/timeline", slug: "customers" },
   { auth: "customer", path: "/purchasing/suppliers", slug: "suppliers" },
-  { auth: "customer", path: "/revenue/products?tab=imports", slug: "product-imports" },
+  { auth: "customer", path: "/revenue/products?tab=categories", slug: "product-categories" },
   { auth: "customer", path: "/settings/billing", slug: "settings-billing" },
   { auth: "customer", path: "/dashboard/settings/company", slug: "settings-company" },
   { auth: "customer", path: "/dashboard/settings/staff", slug: "settings-staff" },
@@ -70,9 +70,14 @@ for (const width of [1440, 390]) {
     try {
       const page = await context.newPage();
       const product = { id: "30000000-0000-4000-8000-000000000001", code: "P-000001", name: "양파", spec: "10kg", unit: "박스", cost: 10000, supplierName: "한빛유통", supplierCode: "ERP-1", supplierProductId: "40000000-0000-4000-8000-000000000001" };
+      const variants = [
+        { id: "30000000-0000-4000-8000-000000000002", code: "P-000002", name: "미림", spec: "1.8L", unit: "병", cost: 3000 },
+        { id: "30000000-0000-4000-8000-000000000003", code: "P-000003", name: "미림", spec: "18L", unit: "통", cost: 20000 },
+        { id: "30000000-0000-4000-8000-000000000004", code: "P-000004", name: "미림", spec: "500ml", unit: "병", cost: 1200 }
+      ];
       let currentCost = product.cost;
       await page.route("**/api/price-sheets/costs?*", async (route) => {
-        await route.fulfill({ json: { products: [{ ...product, cost: currentCost }], suppliers: ["한빛유통"] } });
+        await route.fulfill({ json: { products: [{ ...product, cost: currentCost }, ...variants], suppliers: ["한빛유통"] } });
       });
       await page.route("**/api/price-sheets/costs", async (route) => {
         const body = route.request().postDataJSON() as { changes: Array<Record<string, unknown>> };
@@ -87,6 +92,7 @@ for (const width of [1440, 390]) {
       await page.route("**/api/pricing-documents?*", async (route) => {
         await route.fulfill({ json: { result: { items: [], total: 0 }, manager: true } });
       });
+      await page.route("**/api/price-sheets/receipts*", route => route.fulfill({ json: { summary: [], saved: 1 } }));
       const catalogReady = page.waitForResponse(response => response.url().includes("/api/price-sheets/costs?") && response.ok());
       const response = await page.goto("/revenue/pricing", { waitUntil: "domcontentloaded" });
       await catalogReady;
@@ -98,9 +104,19 @@ for (const width of [1440, 390]) {
       await expect.poll(async () => (await page.locator('[role="status"],[role="alert"]').allTextContents()).join(" | ")).toContain("변경 후보 1개");
       expect(saved).toHaveLength(0);
       await page.getByRole("button", { name: "③ 저장 (1건)" }).click();
+      const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+      await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
+      expect(saved).toHaveLength(0);
+      await review.getByRole("checkbox").check();
+      await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);
       expect(saved[0].cost).toBe(12000);
+      await page.getByRole("button", { name: "엑셀 올리기" }).click();
+      await page.locator('input[type="file"]').setInputFiles({ name: "규격확인.csv", mimeType: "text/csv", buffer: Buffer.from("품목,단위,매입가\n미림 5L,병,5000\n") });
+      await page.getByRole("button", { name: "② 열 정렬" }).click();
+      await expect(page.getByText("규격이 다른 상품", { exact: false }).first()).toBeVisible();
+      await expect(page.getByText(/중복 의심 1개/).first()).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`purchase-cost-${width}.png`), fullPage: false });
       expect((await collectLayoutProblems(page)).filter((problem) => problem.startsWith("horizontal-overflow"))).toEqual([]);
     } finally { await context.close(); }
@@ -122,7 +138,7 @@ test("category selection stays compact and hides the internal code at 390px", as
     ], options: ["농산", "농산 > 채소류", "농산 > 채소류 > 조미채소", "공산품", "공산품 > 조미·장류", "공산품 > 조미·장류 > 소스·드레싱"] } }));
     await page.route("**/api/price-sheets/products", (route) => { const items = route.request().postDataJSON().items as Array<{ id: string; category: string }>; for (const item of items) categories[item.id] = item.category; return route.fulfill({ json: { updated: items.length } }); });
     await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0 } }));
-    await page.goto("/revenue/products#product-category-management", { waitUntil: "domcontentloaded" });
+    await page.goto("/revenue/products?tab=categories#product-category-management", { waitUntil: "domcontentloaded" });
     const manager = page.locator("#product-category-management");
     await expect(page.locator(".common-data-table-group")).toHaveCount(0);
     await expect(manager.getByLabel("양파 분류 검색 선택")).toBeVisible();
@@ -426,9 +442,6 @@ for (const viewport of viewports) {
         }
         if (route.path === "/revenue/products") {
           await expect(page.getByText("깐양파").first()).toBeVisible();
-        }
-        if (route.slug === "product-imports") {
-          await expect(page.getByText("한빛유통_11월_단가표.xlsx").first()).toBeVisible();
         }
         if (route.slug === "lead-detail") {
           await expect(page.getByText("테스트 매장 01").first()).toBeVisible();

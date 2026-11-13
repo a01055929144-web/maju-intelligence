@@ -58,6 +58,10 @@ export function validateDeliveryPolicy(policy: DeliveryPolicy) {
     throw new Error("마감 시각을 확인해 주세요.");
   if (![0, 1, 2].includes(policy.cutoffDaysBefore))
     throw new Error("마감일을 확인해 주세요.");
+  validateOrderAmounts(policy);
+}
+
+function validateOrderAmounts(policy: DeliveryPolicy) {
   if (![policy.minimumAmount, policy.deliveryFee].every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 1e12))
     throw new Error("최소 주문금액과 배송비를 확인해 주세요.");
   if (!["block", "fee", "notice"].includes(policy.minimumPolicy))

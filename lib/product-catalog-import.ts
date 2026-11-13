@@ -44,6 +44,7 @@ export type SupplierProductAdminItem = {
   matchStatus: "auto" | "candidate" | "confirmed" | "unmatched";
   matchedCatalogId?: string;
   matchedCatalogName?: string;
+  matchedCatalogUnit?: string;
   suggestedRatio?: number;
   conversionConfirmed: boolean;
 };
@@ -96,7 +97,7 @@ export async function listProductImportWorkspace(companyId: string) {
       `supplier_product_matches?select=supplier_product_id,product_catalog_id,match_status,candidate_rank,purchase_to_sales_ratio,conversion_confirmed&company_id=eq.${enc(companyId)}&order=candidate_rank.asc.nullslast`,
     ),
     db<Array<Record<string, unknown>>>(
-      `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
+      `product_catalog?select=id,canonical_name,purchase_product_name,brand_name,origin_name,spec_value,spec_unit,purchase_unit,sales_unit,barcodes,is_active&company_id=eq.${enc(companyId)}&order=updated_at.desc&limit=3000`,
     ),
     db<Array<Record<string, unknown>>>(
       `product_catalog_imports?select=id,supplier_id,file_name,status,total_rows,created_count,updated_count,excluded_count,warning_count,created_by_name,created_at,completed_at,error_message&company_id=eq.${enc(companyId)}&order=created_at.desc&limit=1000`,
@@ -109,6 +110,7 @@ export async function listProductImportWorkspace(companyId: string) {
       String(x.canonical_name || x.purchase_product_name || ""),
     ]),
   );
+  const catalogUnits = new Map(catalog.map((x) => [String(x.id), String(x.sales_unit || "")]));
   const matchMap = new Map<string, (typeof matches)[number]>();
   for (const m of matches) {
     if (!matchMap.has(m.supplier_product_id) || m.match_status !== "candidate")
@@ -150,6 +152,7 @@ export async function listProductImportWorkspace(companyId: string) {
         matchedCatalogName: m
           ? catalogNames.get(m.product_catalog_id)
           : undefined,
+        matchedCatalogUnit: m ? catalogUnits.get(m.product_catalog_id) : undefined,
         suggestedRatio:
           m?.purchase_to_sales_ratio == null
             ? p.parsed_pack_quantity == null
@@ -458,6 +461,11 @@ export async function saveProductCatalogImport(input: {
     return {
       importId,
       supplierId,
+      supplierProductMappings: input.products.flatMap((product) => {
+        const supplierProductId = idByKey.get(product.sourceFingerprint);
+        return supplierProductId ? [{ sourceFingerprint: product.sourceFingerprint, supplierProductId }] : [];
+      }),
+      unresolvedSourceFingerprints: input.products.filter((product) => !idByKey.has(product.sourceFingerprint)).map((product) => product.sourceFingerprint),
       unmatchedSupplierProductIds: supplierProductIds.filter((id) =>
         !existingMatches.some((match) => match.supplier_product_id === id && ["auto", "confirmed"].includes(match.match_status)) &&
         !matches.some((match) => match.supplier_product_id === id && match.match_status === "auto"),
@@ -500,9 +508,11 @@ export async function saveProductCatalogImport(input: {
 export async function createCatalogFromSupplierProducts(
   companyId: string,
   ids: string[],
+  options: { initialPurchasePrice?: "supplier-latest" | "dated-batch" } = {},
 ) {
-  if (!ids.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
-  const products = await collectInChunks(ids, (part) =>
+  const requestedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (!requestedIds.length) throw new Error("표준 품목으로 만들 상품을 선택해 주세요.");
+  const products = await collectInChunks(requestedIds, (part) =>
     db<Array<Record<string, unknown>>>(
       `supplier_products?select=*&company_id=eq.${enc(companyId)}&id=in.(${part.map(enc).join(",")})`,
     ),
@@ -527,7 +537,20 @@ export async function createCatalogFromSupplierProducts(
       purchase_product_name: p.raw_name,
       purchase_spec: p.raw_spec || null,
       purchase_unit: p.raw_unit || "EA",
-      purchase_price: p.latest_cost || 0,
+      ...(options.initialPurchasePrice === "dated-batch"
+        ? {
+            sales_unit:
+              !p.parsed_pack_quantity || Number(p.parsed_pack_quantity) === 1
+                ? p.raw_unit || "EA"
+                : null,
+          }
+        : {}),
+      // The dated batch owns the first real cost and its effective date.
+      // Zero is the schema-safe unpriced sentinel; legacy undated nonzero costs stay protected.
+      purchase_price:
+        options.initialPurchasePrice === "dated-batch"
+          ? 0
+          : p.latest_cost || 0,
       canonical_name: p.parsed_name || p.raw_name,
       brand_name: p.parsed_brand || null,
       origin_name: p.parsed_origin || null,
@@ -626,5 +649,10 @@ export async function createCatalogFromSupplierProducts(
   return {
     createdCount: created.length,
     categorySuggestedCount: products.filter((product) => suggestCategory(String(product.parsed_name || product.raw_name || ""), String(product.raw_spec || ""))).length,
+    productMappings: products.flatMap((product) => {
+      const productCatalogId = catalogBySource.get(`standard:${product.id}`);
+      return productCatalogId ? [{ productCatalogId, supplierProductId: String(product.id) }] : [];
+    }),
+    unresolvedSupplierProductIds: requestedIds.filter((id) => !catalogBySource.has(`standard:${id}`)),
   };
 }

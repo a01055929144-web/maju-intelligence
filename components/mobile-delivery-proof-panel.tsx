@@ -31,7 +31,14 @@ type OperationNote = {
 };
 type LocationTag = { accuracy: number; lat: number; lng: number };
 type LocationStatus = "denied" | "granted" | "idle" | "loading" | "unavailable";
-type DeliverySaveProgress = { attachments: Record<string, Attachment>; attemptId: string; key: string; noteId?: string };
+type DeliverySaveProgress = {
+  attachments: Record<string, Attachment>;
+  attemptId: string;
+  completedAt: string;
+  completionEventId: string;
+  key: string;
+  noteId?: string;
+};
 type RecentStructuredDelivery = {
   action_amount?: number | string;
   action_code?: DeliveryAction;
@@ -53,6 +60,8 @@ type MessageLog = {
 };
 
 const deliveryStatuses = DELIVERY_RECORD_TYPES;
+const EMPTY_ORDER_IDS: string[] = [];
+const EMPTY_ORDER_REVISIONS: Record<string, number> = {};
 
 const messageChannels: Array<{ label: string; value: MessageChannel }> = [
   { label: "카카오로 보내기", value: "kakao" },
@@ -60,12 +69,14 @@ const messageChannels: Array<{ label: string; value: MessageChannel }> = [
 ];
 
 export function MobileDeliveryProofPanel({
+  companyId,
   companyName,
   customerId,
   customerName,
   driverName,
   driverPhone,
   deliveryCompleteMessage,
+  deliveryDate,
   deliveryIssueMessage,
   deliveryPartialMessage,
   loadingPosition,
@@ -73,14 +84,19 @@ export function MobileDeliveryProofPanel({
   nextCustomerName,
   notificationPhone,
   notificationSenderName,
+  orderCompletionEnabled = false,
+  orderIds = EMPTY_ORDER_IDS,
+  orderRevisions = EMPTY_ORDER_REVISIONS,
   structuredRecordsEnabled = false
 }: {
+  companyId: string;
   companyName?: string;
   customerId: string;
   customerName: string;
   driverName: string;
   driverPhone?: string;
   deliveryCompleteMessage?: string;
+  deliveryDate: string;
   deliveryIssueMessage?: string;
   deliveryPartialMessage?: string;
   loadingPosition?: string;
@@ -88,6 +104,9 @@ export function MobileDeliveryProofPanel({
   nextCustomerName?: string;
   notificationPhone?: string;
   notificationSenderName?: string;
+  orderCompletionEnabled?: boolean;
+  orderIds?: string[];
+  orderRevisions?: Record<string, number>;
   structuredRecordsEnabled?: boolean;
 }) {
   const router = useRouter();
@@ -232,7 +251,13 @@ export function MobileDeliveryProofPanel({
     ]);
     const progress = saveProgressRef.current?.key === attemptKey
       ? saveProgressRef.current
-      : { attachments: {}, attemptId: `delivery:${crypto.randomUUID()}`, key: attemptKey };
+      : {
+          attachments: {},
+          attemptId: `delivery:${crypto.randomUUID()}`,
+          completedAt: new Date().toISOString(),
+          completionEventId: crypto.randomUUID(),
+          key: attemptKey
+        };
     const isNotificationRetry = Boolean(progress.noteId) && files.every((file) => Boolean(progress.attachments[fileKey(file)]));
 
     setSaving(true);
@@ -293,7 +318,14 @@ export function MobileDeliveryProofPanel({
     }
     const noteOk = Boolean(noteId);
     const attachmentOk = files.every((file) => Boolean(uploadedAttachments[fileKey(file)]));
-    saveProgressRef.current = { attachments: uploadedAttachments, attemptId: progress.attemptId, key: attemptKey, noteId };
+    saveProgressRef.current = {
+      attachments: uploadedAttachments,
+      attemptId: progress.attemptId,
+      completedAt: progress.completedAt,
+      completionEventId: progress.completionEventId,
+      key: attemptKey,
+      noteId
+    };
     if (!noteOk || !attachmentOk) {
       // 2026-08-28 피드백 대응(배송완료 저장 실패가 성공처럼 보임/부분 실패 시 재시도하면 중복 업로드됨):
       // 메모는 성공했는데 사진 업로드만 실패한 경우, 재시도 시 메모가 또 한 번 저장되지 않도록 사진만
@@ -316,6 +348,38 @@ export function MobileDeliveryProofPanel({
     setErrorDetail("");
     const savedAttachments = Object.values(uploadedAttachments);
     setAttachments((current) => [...savedAttachments.filter((item) => !current.some((existing) => existing.id === item.id)), ...current]);
+    if (orderCompletionEnabled && deliveryStatus === "arrived") {
+      if (!orderIds.length || orderIds.some((orderId) => !Number.isInteger(orderRevisions[orderId]))) {
+        setErrorDetail("주문 연결 정보를 다시 불러온 후 재시도해 주세요.");
+        setSaving(false);
+        setProgressLabel("");
+        setStatus("error");
+        return;
+      }
+      setProgressLabel("주문 배송완료 저장 중");
+      const completionResponse = await fetchWithTimeout("/api/routes/delivery-completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          customerId,
+          deliveryDate,
+          completionEventId: progress.completionEventId,
+          idempotencyKey: progress.completionEventId,
+          completedAt: progress.completedAt,
+          orders: orderIds.map((orderId) => ({ orderId, orderRevision: orderRevisions[orderId] })),
+          proof: { noteId, attachmentIds: savedAttachments.map((item) => item.id) }
+        })
+      }, 15000).catch(() => null);
+      const completionPayload = (await completionResponse?.json().catch(() => null)) as { message?: string } | null;
+      if (!completionResponse?.ok) {
+        setErrorDetail(completionPayload?.message || "주문 배송완료를 저장하지 못했습니다. 같은 버튼을 다시 누르면 저장된 사진과 메모는 재사용합니다.");
+        setSaving(false);
+        setProgressLabel("");
+        setStatus("error");
+        return;
+      }
+    }
     setProgressLabel("알림 처리 중");
     const messageResponse = await fetchWithTimeout("/api/customer-messages/send", {
       method: "POST",
@@ -506,7 +570,7 @@ export function MobileDeliveryProofPanel({
         <Plus className="h-4 w-4" />
         {files.length ? `사진 추가 (${files.length}/5)` : "1. 완료 사진 촬영"}
       </label>
-      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="mobile-card-raised relative rounded-lg border p-2" key={fileKey(file)}><ImageIcon className="mobile-accent h-8 w-8" /><p className="mobile-muted mt-1 truncate pr-7 text-[10px] font-bold">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950 ring-1 ring-slate-200"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
+      {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="mobile-card-raised relative rounded-lg border p-2" key={fileKey(file)}><ImageIcon className="mobile-accent h-8 w-8" /><p className="mobile-muted mt-1 truncate pr-7 text-xs font-bold">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950 ring-1 ring-slate-200"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
       {files.length ? (
@@ -753,7 +817,7 @@ export function MobileDeliveryProofPanel({
               <div className="rounded-lg border border-blue-100 bg-white p-3" key={item.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="mb-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">
+                    <span className="mb-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-black text-blue-700 ring-1 ring-inset ring-blue-100">
                       {item.noteType === "delivery_message" ? "알림" : "배송"}
                     </span>
                     <p className="truncate text-xs font-black text-blue-700">{item.nextAction || "배송 기록"}</p>
@@ -780,7 +844,7 @@ export function MobileDeliveryProofPanel({
           <div className="rounded-lg border border-slate-200 bg-white p-3" key={log.id}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${log.status === "sent" ? "bg-emerald-50 text-emerald-700" : log.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-black ${log.status === "sent" ? "bg-emerald-50 text-emerald-700" : log.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>
                   {log.status === "sent" ? "발송 완료" : log.status === "failed" ? "발송 실패" : "발송 대기"}
                 </span>
                 <p className="mt-1 truncate text-xs font-bold text-slate-600">{log.recipientPhone || "수신번호 확인 필요"} · {log.createdAt}</p>

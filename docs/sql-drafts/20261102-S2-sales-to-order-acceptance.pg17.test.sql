@@ -20,10 +20,31 @@ create table pricing_document_versions(id uuid primary key,company_id uuid not n
 create unique index pricing_document_versions_company_id_id_uq on pricing_document_versions(company_id,id);
 create table customer_price_agreements(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,product_catalog_id uuid not null,sales_unit text not null,unit_price bigint not null,tax_type text not null,unique(company_id,id));
 alter table customer_price_agreements add column price_includes_tax boolean not null default false, add column effective_from date not null default current_date, add column effective_until date, add column status text not null default 'active', add column created_by_name text, add column ended_at timestamptz, add column updated_at timestamptz not null default now();
-create table storefront_links(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,document_version_id uuid not null,revoked_at timestamptz,can_order boolean not null default true,unique(company_id,id));
+create table storefront_links(id uuid primary key default gen_random_uuid(),company_id uuid not null,customer_id uuid not null,document_version_id uuid not null,token_nonce text,token_hash text,expires_at timestamptz,issued_by_user_id uuid,revoked_at timestamptz,can_order boolean not null default true,unique(company_id,id));
 create table store_orders(id uuid primary key default gen_random_uuid(),company_id uuid not null,unique(company_id,id));
+create table store_order_settings(company_id uuid primary key references companies(id));
 
 \ir 20261102-S2-sales-to-order-acceptance.sql
+
+-- Production P2 already owns this RPC. The fixture keeps only its reuse/idempotency contract.
+create function issue_storefront_links(p_company uuid,p_document_version uuid,p_links jsonb,p_expires_at timestamptz,p_actor_user_id uuid default null,p_actor_key text default null)
+returns table(issued_customer_id uuid,issued_link_id uuid,issued_token_nonce text,issued_token_hash text,was_created boolean)
+language plpgsql security definer set search_path=public,pg_temp as $$
+declare x jsonb; c uuid; existing storefront_links%rowtype;
+begin
+  perform 1 from companies where id=p_company for update;
+  x:=p_links->0; c:=(x->>'customerId')::uuid;
+  if not exists(select from normalized_customers where company_id=p_company and id=c) then raise exception 'cross_company_customer'; end if;
+  select * into existing from storefront_links where company_id=p_company and customer_id=c and document_version_id=p_document_version and revoked_at is null and expires_at>now();
+  if found then return query select c,existing.id,existing.token_nonce,existing.token_hash,false; return; end if;
+  insert into storefront_links(id,company_id,customer_id,document_version_id,token_nonce,token_hash,expires_at,issued_by_user_id,can_order)
+  values((x->>'id')::uuid,p_company,c,p_document_version,x->>'nonce',x->>'hash',p_expires_at,p_actor_user_id,false)
+  returning storefront_links.id into existing.id;
+  return query select c,existing.id,x->>'nonce',x->>'hash',true;
+end $$;
+
+\ir 20261108-S2-acceptance-order-link.sql
+\ir 20261110-03-lead-customer-mismatch-order-hold.sql
 
 insert into companies values('00000000-0000-4000-8000-000000000001'),('00000000-0000-4000-8000-000000000002');
 insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001');
@@ -48,6 +69,7 @@ do $$ begin
   exception when others then if sqlerrm='duplicate product validation did not fail' then raise; end if; end;
 end $$;
 insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',1,1,'{"kind":"sheet","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","taxType":"taxable"}]}');
+insert into pricing_document_versions(id,company_id,document_id,version,revision,content) values('50000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003',1,1,'{"kind":"quote","validUntil":"2099-12-31","lines":[{"visible":true,"productId":"30000000-0000-4000-8000-000000000001","unit":"BOX","price":1000,"taxType":"taxable"}]}');
 
 insert into pricing_document_sends(company_id,document_id,document_version_id,lead_id,template_id,layout,channel,idempotency_key,sent_by_key)
 values('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','sheet-v1','table','kakao','60000000-0000-4000-8000-000000000001','staff:1');
@@ -73,12 +95,22 @@ do $$ declare a jsonb; begin
   if a->>'needsReview'<>'true' or a->>'leadId' is not null then raise exception 'ambiguous lead did not continue for review'; end if;
 end $$;
 
--- 기존 리드가 다른 거래처에 연결돼도 예외 대신 검토 표시로 수락을 계속한다.
+-- 기존 리드가 다른 거래처에 연결돼 있으면 연결을 보존하고 주문 활성화를 보류한다.
 insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key)
 values('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','second','second');
-do $$ declare a jsonb; begin
-  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000004',repeat('c',64),'staff','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',null,false,null,null,'{}');
-  if a->>'needsReview'<>'true' or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000001')<>'10000000-0000-4000-8000-000000000001' then raise exception 'lead mismatch review boundary failed'; end if;
+insert into storefront_links(id,company_id,customer_id,document_version_id,can_order)
+values('80000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000001',false);
+do $$ declare a jsonb; before_links integer; before_agreements integer; begin
+  select count(*) into before_links from customer_pricing_document_links;
+  select count(*) into before_agreements from customer_price_agreements;
+  a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000004',repeat('c',64),'staff','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',null,false,null,'80000000-0000-4000-8000-000000000004','{}');
+  if a->>'needsReview'<>'true' or a->>'orderEnabled'<>'false'
+    or (select review_reason from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000004')<>'lead_customer_mismatch'
+    or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000001')<>'10000000-0000-4000-8000-000000000001'
+    or (select count(*) from customer_pricing_document_links)<>before_links
+    or (select count(*) from customer_price_agreements)<>before_agreements
+    or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000004')
+    then raise exception 'lead mismatch review boundary failed'; end if;
 end $$;
 
 -- 거래처 후보가 여러 개면 신규 거래처·가격 연결·주문 활성화를 만들지 않는다.
@@ -86,11 +118,18 @@ insert into normalized_customers(id,company_id,import_id,customer_name,address,p
 ('10000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','duplicate shop','same address','01077776666','dup-1'),
 ('10000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','duplicate shop','same address','01077776666','dup-2');
 insert into storefront_links(id,company_id,customer_id,document_version_id,can_order) values('80000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000001',false);
-do $$ declare a jsonb; before_count integer; begin
+do $$ declare a jsonb; before_count integer; before_links integer; before_agreements integer; begin
   select count(*) into before_count from normalized_customers;
+  select count(*) into before_links from customer_pricing_document_links;
+  select count(*) into before_agreements from customer_price_agreements;
   a:=record_pricing_document_acceptance('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000005',repeat('b',64),'store',null,null,null,false,null,'80000000-0000-4000-8000-000000000001','{"businessName":"duplicate shop","phone":"010-7777-6666","address":"same address"}');
   if a->>'needsReview'<>'true' or a->>'customerId' is not null or a->>'orderEnabled'<>'false' then raise exception 'ambiguous customer was not held'; end if;
-  if (select count(*) from normalized_customers)<>before_count or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000001') then raise exception 'ambiguous customer created or activated order'; end if;
+  if (select review_reason from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000005')<>'ambiguous_customer_match'
+    or (select count(*) from normalized_customers)<>before_count
+    or (select count(*) from customer_pricing_document_links)<>before_links
+    or (select count(*) from customer_price_agreements)<>before_agreements
+    or (select can_order from storefront_links where id='80000000-0000-4000-8000-000000000001')
+    then raise exception 'ambiguous customer created price state or activated order'; end if;
 end $$;
 
 -- 만료 게시본은 수락할 수 없다.
@@ -124,6 +163,53 @@ do $$ declare a jsonb; begin
   if not exists(select from customer_imports where company_id='00000000-0000-4000-8000-000000000001' and source='pricing_acceptance') then raise exception 'acceptance import audit missing'; end if;
 end $$;
 
+-- A placeholder customer can accept an existing quote before ordering without duplicating links or agreements.
+do $$ declare a jsonb; b jsonb; customer_count integer; lead_count integer; v_customer_id uuid; v_lead_id uuid; begin
+  select count(*) into customer_count from normalized_customers where company_id='00000000-0000-4000-8000-000000000001';
+  select count(*) into lead_count from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001';
+  a:=record_pricing_document_acceptance(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003',
+    '70000000-0000-4000-8000-000000000019',repeat('8',64),'store',null,null,null,false,null,null,
+    '{"businessName":"[TEST-NO-MATCH]-03","phone":"010-0000-0303","address":"TEST-ONLY-03"}');
+  b:=record_pricing_document_acceptance(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003',
+    '70000000-0000-4000-8000-000000000019',repeat('8',64),'store',null,null,null,false,null,null,
+    '{"businessName":"[TEST-NO-MATCH]-03","phone":"010-0000-0303","address":"TEST-ONLY-03"}');
+  if a<>b or a->>'needsReview'<>'false' or a->>'kind'<>'quote' then raise exception 'placeholder acceptance retry changed result'; end if;
+  v_customer_id:=(a->>'customerId')::uuid; v_lead_id:=(a->>'leadId')::uuid;
+  if (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001')<>customer_count+1
+    or (select count(*) from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001')<>lead_count+1
+    then raise exception 'placeholder retry duplicated customer or lead'; end if;
+  if not exists(select from business_permit_leads l where l.company_id='00000000-0000-4000-8000-000000000001' and l.id=v_lead_id
+      and l.matched_customer_id=v_customer_id and l.is_duplicate and l.status='거래처 전환')
+    or (select count(*) from customer_pricing_document_links p where p.company_id='00000000-0000-4000-8000-000000000001'
+      and p.customer_id=v_customer_id and p.document_version_id='50000000-0000-4000-8000-000000000003' and p.document_kind='quote' and p.active)<>1
+    or (select count(*) from customer_price_agreements p where p.company_id='00000000-0000-4000-8000-000000000001'
+      and p.customer_id=v_customer_id and p.source_pricing_document_version_id='50000000-0000-4000-8000-000000000003' and p.status='active')<>1
+    then raise exception 'placeholder customer quote linkage incomplete'; end if;
+  if exists(select from storefront_links s where s.company_id='00000000-0000-4000-8000-000000000001' and s.customer_id=v_customer_id)
+    or exists(select from store_orders where company_id='00000000-0000-4000-8000-000000000001')
+    or a->>'storefrontLinkId' is not null
+    then raise exception 'placeholder customer reached ordering before link issuance'; end if;
+end $$;
+
+-- The same published document IDs cannot create a placeholder customer in another company.
+do $$ declare before_count integer; begin
+  select count(*) into before_count from normalized_customers where company_id='00000000-0000-4000-8000-000000000002';
+  begin
+    perform record_pricing_document_acceptance(
+      '00000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003',
+      '70000000-0000-4000-8000-000000000020',repeat('9',64),'store',null,null,null,false,null,null,
+      '{"businessName":"[TEST-NO-MATCH]-OTHER","phone":"010-0000-0404","address":"TEST-ONLY-OTHER"}');
+    raise exception 'cross-company placeholder acceptance was allowed';
+  exception when others then
+    if sqlerrm='cross-company placeholder acceptance was allowed' then raise;
+    elsif sqlerrm<>'document_not_acceptable' then raise; end if;
+  end;
+  if (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000002')<>before_count
+    then raise exception 'cross-company placeholder customer was created'; end if;
+end $$;
+
 do $$ declare h text:=repeat('a',64); begin
   if pricing_s2_public_request_guard('00000000-0000-4000-8000-000000000001','accept',h,'{}',1)<>'allowed' then raise exception 'guard allow failed'; end if;
   if pricing_s2_public_request_guard('00000000-0000-4000-8000-000000000001','accept',h,'{}',1)<>'rate_limited' then raise exception 'guard rate failed'; end if;
@@ -138,6 +224,111 @@ end $$;
 update normalized_customers set delivery_drop_location='rear door' where id='10000000-0000-4000-8000-000000000001';
 do $$ begin if (select delivery_drop_location from normalized_customers where id='10000000-0000-4000-8000-000000000001')<>'rear door' then raise exception 'delivery drop location missing'; end if; end $$;
 
+insert into store_order_settings values('00000000-0000-4000-8000-000000000001');
+
+-- A single existing customer candidate is reused, linked to the lead, and receives one order link.
+insert into normalized_customers(id,company_id,import_id,customer_name,address,phone,normalized_key) values
+('10000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','single shop','single road','01055554444','single-shop');
+insert into business_permit_leads(id,company_id,business_name,address,phone) values
+('20000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','single lead','lead road','01011112222');
+do $$ declare a jsonb; b jsonb; before_count integer; begin
+  select count(*) into before_count from normalized_customers;
+  a:=accept_pricing_document_and_issue_storefront_link(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000018',repeat('8',64),'store',null,'20000000-0000-4000-8000-000000000004',null,false,null,
+    '{"businessName":"single shop","phone":"010-5555-4444","address":"single road"}',
+    '81000000-0000-4000-8000-000000000012',repeat('8',32),repeat('8',64),now()+interval '1 year');
+  b:=accept_pricing_document_and_issue_storefront_link(
+    '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',
+    '70000000-0000-4000-8000-000000000018',repeat('8',64),'store',null,'20000000-0000-4000-8000-000000000004',null,false,null,
+    '{"businessName":"single shop","phone":"010-5555-4444","address":"single road"}',
+    '81000000-0000-4000-8000-000000000013',repeat('3',32),repeat('3',64),now()+interval '1 year');
+  if a->>'customerId'<>'10000000-0000-4000-8000-000000000005' or a->>'leadId'<>'20000000-0000-4000-8000-000000000004'
+    or a<>b or a->>'needsReview'<>'false' or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId'<>'81000000-0000-4000-8000-000000000012'
+    then raise exception 'single customer candidate did not reach order link'; end if;
+  if (select count(*) from normalized_customers)<>before_count
+    or (select matched_customer_id from business_permit_leads where id='20000000-0000-4000-8000-000000000004')<>'10000000-0000-4000-8000-000000000005'
+    or (select count(*) from pricing_document_acceptance_requests where company_id='00000000-0000-4000-8000-000000000001' and idempotency_key='70000000-0000-4000-8000-000000000018')<>1
+    or not exists(select from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001'
+      and customer_id='10000000-0000-4000-8000-000000000005' and document_version_id='50000000-0000-4000-8000-000000000001' and active)
+    or exists(select from storefront_links where id='81000000-0000-4000-8000-000000000013')
+    then raise exception 'single customer candidate duplicated or missed linkage'; end if;
+end $$;
+
+-- Quote acceptance is supported; an expired issued link cannot be replaced by retrying the same acceptance.
+do $$ declare a jsonb; b jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000017',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000010',repeat('a',32),repeat('a',64),now()+interval '1 year');
+  update storefront_links set expires_at=now()-interval '1 second' where id=(a->>'storefrontLinkId')::uuid;
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003','70000000-0000-4000-8000-000000000017',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000011',repeat('b',32),repeat('b',64),now()+interval '1 year');
+  if a<>b or a->>'kind'<>'quote' then raise exception 'quote expired-link retry changed stored result'; end if;
+  if exists(select from storefront_links where id='81000000-0000-4000-8000-000000000011') then raise exception 'expired link retry reissued storefront link'; end if;
+end $$;
+
+-- Existing customer and retry converge on one acceptance and one active order link.
+do $$ declare a jsonb; b jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000010',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000001',repeat('1',32),repeat('2',64),now()+interval '1 year');
+  update storefront_links set revoked_at=now() where id=(a->>'storefrontLinkId')::uuid;
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000010',repeat('1',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000002',repeat('3',32),repeat('4',64),now()+interval '1 year');
+  if a<>b or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'existing customer order link retry failed'; end if;
+  if (select count(*) from storefront_links where acceptance_request_id is not null and customer_id='10000000-0000-4000-8000-000000000001' and document_version_id='50000000-0000-4000-8000-000000000001')<>1 then raise exception 'retry duplicated storefront link'; end if;
+  if exists(select from storefront_links where id='81000000-0000-4000-8000-000000000002') then raise exception 'revoked link retry reissued storefront link'; end if;
+end $$;
+
+-- New customer receives a link; a distinct acceptance reuses it without overwriting the first audit link.
+do $$ declare a jsonb; b jsonb; c jsonb; first_request uuid; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000003',repeat('5',32),repeat('6',64),now()+interval '1 year');
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000011',repeat('5',64),'kakao_start',null,null,null,false,null,'{"businessName":"brand new","phone":"010-5555-6666","address":"new road"}','81000000-0000-4000-8000-000000000014',repeat('4',32),repeat('4',64),now()+interval '1 year');
+  if a<>b or a->>'customerId' is null or a->>'leadId' is null or a->>'orderEnabled'<>'true' or a->>'storefrontLinkId' is null then raise exception 'new customer order link failed'; end if;
+  if (select count(*) from normalized_customers where company_id='00000000-0000-4000-8000-000000000001' and customer_name='brand new' and phone='01055556666' and address='new road')<>1
+    or (select count(*) from business_permit_leads where company_id='00000000-0000-4000-8000-000000000001' and source='pricing_sheet_acceptance' and phone='01055556666')<>1
+    or (select count(*) from customer_pricing_document_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id=(a->>'customerId')::uuid and document_version_id='50000000-0000-4000-8000-000000000001' and active)<>1
+    or (select count(*) from storefront_links where company_id='00000000-0000-4000-8000-000000000001' and customer_id=(a->>'customerId')::uuid and document_version_id='50000000-0000-4000-8000-000000000001')<>1
+    or exists(select from storefront_links where id='81000000-0000-4000-8000-000000000014')
+    then raise exception 'new customer retry duplicated acceptance state'; end if;
+  select acceptance_request_id into first_request from storefront_links where id=(a->>'storefrontLinkId')::uuid;
+  c:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000016',repeat('6',64),'staff',(a->>'customerId')::uuid,(a->>'leadId')::uuid,null,false,null,'{}','81000000-0000-4000-8000-000000000009',repeat('9',32),repeat('9',64),now()+interval '1 year');
+  if c->>'storefrontLinkId'<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not reuse active link'; end if;
+  if (select acceptance_request_id from storefront_links where id=(a->>'storefrontLinkId')::uuid)<>first_request then raise exception 'distinct acceptance overwrote first audit link'; end if;
+  if (select result->>'storefrontLinkId' from pricing_document_acceptance_requests where idempotency_key='70000000-0000-4000-8000-000000000016')<>a->>'storefrontLinkId' then raise exception 'distinct acceptance did not preserve per-request link result'; end if;
+end $$;
+
+-- Ambiguous customer stays review-only and cannot receive an order link.
+do $$ declare a jsonb; before_links integer; begin
+  select count(*) into before_links from storefront_links;
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000012',repeat('7',64),'store',null,null,null,false,null,'{"businessName":"duplicate shop","phone":"010-7777-6666","address":"same address"}','81000000-0000-4000-8000-000000000004',repeat('7',32),repeat('8',64),now()+interval '1 year');
+  if a->>'needsReview'<>'true' or a->>'orderEnabled'<>'false' or a->>'storefrontLinkId' is not null then raise exception 'ambiguous customer order boundary failed'; end if;
+  if (select count(*) from storefront_links)<>before_links then raise exception 'ambiguous customer received link'; end if;
+end $$;
+
+-- Cross-company customer references are rejected before link issuance.
+insert into customer_imports(id,company_id) values('90000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002');
+insert into normalized_customers(id,company_id,import_id,customer_name,normalized_key) values('10000000-0000-4000-8000-000000000099','00000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000002','other','other');
+do $$ begin
+  begin
+    perform accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000014',repeat('a',64),'staff','10000000-0000-4000-8000-000000000099',null,null,false,null,'{}','81000000-0000-4000-8000-000000000006',repeat('b',32),repeat('c',64),now()+interval '1 year');
+    raise exception 'cross-company acceptance was allowed';
+  exception when others then if sqlerrm='cross-company acceptance was allowed' then raise; end if; end;
+end $$;
+
+-- Order setup absence is part of the stored idempotent result; later setup cannot mutate the same request.
+delete from store_order_settings where company_id='00000000-0000-4000-8000-000000000001';
+do $$ declare a jsonb; b jsonb; begin
+  a:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000015',repeat('d',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000007',repeat('d',32),repeat('e',64),now()+interval '1 year');
+  insert into store_order_settings values('00000000-0000-4000-8000-000000000001');
+  b:=accept_pricing_document_and_issue_storefront_link('00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001','70000000-0000-4000-8000-000000000015',repeat('d',64),'staff','10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',null,false,null,'{}','81000000-0000-4000-8000-000000000008',repeat('f',32),repeat('f',64),now()+interval '1 year');
+  if a<>b or a->>'orderEnabled'<>'false' or a->>'orderSetupRequired'<>'true' then raise exception 'order setup retry changed stored result'; end if;
+  if exists(select from storefront_links where id in('81000000-0000-4000-8000-000000000007','81000000-0000-4000-8000-000000000008')) then raise exception 'order setup retry issued storefront link'; end if;
+end $$;
+
+-- The scoped rollback restores only the reviewed mismatch branch.
+\ir 20261110-03-lead-customer-mismatch-order-hold.down.sql
+do $$ declare definition text; needle constant text:='if not found then v_needs_review:=true; v_review_reason:=''lead_customer_mismatch''; end if;'; begin
+  definition:=pg_get_functiondef('public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)'::regprocedure);
+  if (length(definition)-length(replace(definition,needle,'')))/length(needle)<>1 then
+    raise exception 'lead mismatch rollback did not restore original guard';
+  end if;
+end $$;
+
 select 'S2 sales-to-order acceptance PG17 checks passed' as result;
 
 -- send/audit 등 어떤 신규 이력이라도 있으면 down은 전체 롤백되어야 한다.
@@ -146,4 +337,22 @@ select 'S2 sales-to-order acceptance PG17 checks passed' as result;
 \set ON_ERROR_STOP on
 do $$ begin
   if to_regclass('public.pricing_document_sends') is null then raise exception 'destructive down was not refused'; end if;
+end $$;
+
+-- 데이터가 없는 승인된 복구 경로는 후속 wrapper를 먼저 제거한 뒤 기반 S-2 객체를 되돌린다.
+truncate table
+  pricing_document_sends, pricing_document_acceptance_requests, pricing_public_request_audit,
+  customer_pricing_document_links, store_account_member_events, store_account_members,
+  store_accounts, storefront_links, store_orders, customer_price_agreements cascade;
+update normalized_customers set delivery_recipient_name=null,delivery_contact_phone=null,
+  preferred_delivery_time=null,delivery_drop_location=null;
+\ir 20261102-S2-sales-to-order-acceptance.down.sql
+do $$ begin
+  if to_regprocedure('public.accept_pricing_document_and_issue_storefront_link(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,jsonb,uuid,text,text,timestamptz,uuid,text)') is not null
+    then raise exception 'acceptance order-link wrapper survived down'; end if;
+  if to_regprocedure('public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)') is not null
+    then raise exception 'base acceptance function survived down'; end if;
+  if to_regclass('public.pricing_document_sends') is not null then raise exception 'S2 tables survived down'; end if;
+  if exists(select from information_schema.columns where table_schema='public' and table_name='storefront_links' and column_name='acceptance_request_id')
+    then raise exception 'storefront acceptance column survived down'; end if;
 end $$;

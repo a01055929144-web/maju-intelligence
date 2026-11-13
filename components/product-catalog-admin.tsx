@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { compareCategoryPath, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { categoryAncestors, categoryLevelOptions, isUnder, joinCategory, splitCategory, suggestCategory } from "@/domains/pricing/product-category";
 import { Edit3, Loader2, PackagePlus, X } from "lucide-react";
 import {
@@ -11,7 +12,6 @@ import {
   type ProductTaxType,
 } from "@/lib/product-catalog-admin";
 import { productCatalogMargin } from "@/lib/product-catalog-presentation";
-import { ProductCategoryWorkspace } from "@/components/product-category-manager";
 const blank: ProductCatalogAdminItem = {
   id: "",
   name: "",
@@ -28,7 +28,7 @@ const blank: ProductCatalogAdminItem = {
 const money = (v?: number) =>
   v == null ? "-" : `${Math.round(v).toLocaleString("ko-KR")}원`;
 const margin = productCatalogMargin;
-type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo";
+type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo" | "promo" | "soon" | "no-promo";
 type SideTab = "category" | "supplier" | "maju-category";
 const units = ["박스", "kg", "g", "개", "단", "봉", "판", "통"];
 const origins = ["국내산", "중국산", "미국산", "호주산", "수입산"];
@@ -55,7 +55,107 @@ export function ProductCatalogAdmin({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [editing, setEditing] = useState<ProductCatalogAdminItem | null>(null),
-    [reviewingCategories, setReviewingCategories] = useState(false);
+    [reviewingCategories, setReviewingCategories] = useState(false),
+    // CC-26: 폴더 순서(모든 분류 화면 공통). 읽지 못하면 이름순.
+    [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
+  useEffect(() => {
+    void fetch(`/api/price-sheets/folder-order${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : { folders: [] }))
+      .then((body: { folders?: Array<{ path: string; sortOrder: number }> }) => setFolderOrder(toFolderOrder(body.folders ?? [])))
+      .catch(() => setFolderOrder(new Map()));
+  }, [companyId]);
+  // CC-26: 폴더를 다른 폴더로 끌어 놓으면 그 안으로 옮긴다(CC-17 폴더 이동 API — 상품·마진 연결이 한 번에, 같은 경로가 있으면 대상 마진 유지, 끝나면 판매가 재계산).
+  const [dragFolder, setDragFolder] = useState<string | null>(null),
+    [picked, setPicked] = useState<Set<string>>(new Set()), // CC-24: 줄 선택 → 삭제(안 쓴 상품은 완전 삭제, 쓴 상품은 숨김)·되살리기
+    [dragProduct, setDragProduct] = useState<ProductCatalogAdminItem | null>(null), // CC-26: 표의 상품을 트리 폴더로 끌어 분류 변경
+    [dropTarget, setDropTarget] = useState<string | null>(null),
+    [moveMessage, setMoveMessage] = useState("");
+  // CC-26: ▲▼로 같은 상위 폴더 안에서 순서를 바꾼다(DB 함수가 형제 순서를 다시 매김). 순서만 바뀌므로 판매가 재계산은 필요 없다.
+  async function reorderFolder(path: string, direction: -1 | 1) {
+    const parent = splitCategory(path).slice(0, -1).join(" > ");
+    const siblings = sideItems.filter((x) => x.name !== "미분류" && x.depth === splitCategory(path).length - 1 && splitCategory(x.name).slice(0, -1).join(" > ") === parent).map((x) => x.name);
+    const index = siblings.indexOf(path), target = index + direction;
+    if (index < 0 || target < 0 || target >= siblings.length) return;
+    // 위로: 위 형제 앞. 아래로: 아래 형제의 다음 형제 앞(없으면 맨 끝).
+    const before = direction === -1 ? siblings[target] : siblings[target + 1] ?? "";
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/price-sheets/reorder-folder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, path, before }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "순서를 바꾸지 못했습니다.");
+      const order = await fetch(`/api/price-sheets/folder-order${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { folders: [] }));
+      setFolderOrder(toFolderOrder(order.folders ?? []));
+    } catch (e) { setError(e instanceof Error ? e.message : "순서를 바꾸지 못했습니다."); }
+  }
+  const canDrop = (from: string | null, target: string) => Boolean(from) && from !== target && !isUnder(target, from as string) && splitCategory(`${target} > x`).length <= 3 && splitCategory(from as string).slice(0, -1).join(" > ") !== target;
+  const canMoveProduct = (product: ProductCatalogAdminItem | null, target: string) => Boolean(product) && canManageCategories && target !== "미분류" && (product!.category || "미분류") !== target;
+  const moveProduct = (product: ProductCatalogAdminItem, target: string) => moveProducts([product], target);
+  // CC-26: 끌어 놓기와 "옮기기" 메뉴(키보드·휴대폰)가 같은 길을 쓴다. 이미 그 폴더에 있는 상품은 건너뛴다.
+  async function moveProducts(list: ProductCatalogAdminItem[], target: string) {
+    setError(""); setMoveMessage("");
+    const product = list[0], moving = list.filter((item) => (item.category || "미분류") !== target).slice(0, 50); // 서버는 한 번에 50개까지
+    if (!moving.length) { setMoveMessage(`선택한 상품은 이미 "${target}"에 있습니다.`); return; }
+    try {
+      const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-categories", companyId, updates: moving.map((item) => ({ id: item.id, category: target, expectedCategory: item.category })) }) });
+      const body = await response.json().catch(() => ({})) as { message?: string; results?: Array<{ id: string; ok: boolean; message?: string }> };
+      const failed = (body.results ?? []).filter((result) => !result.ok);
+      if (!response.ok || !body.results?.length || failed.length === body.results.length) throw new Error(failed[0]?.message || body.message || "분류를 바꾸지 못했습니다.");
+      const okIds = new Set(body.results.filter((result) => result.ok).map((result) => result.id));
+      setItems((current) => current.map((item) => (okIds.has(item.id) ? { ...item, category: target } : item)));
+      setPicked((current) => new Set(Array.from(current).filter((id) => !okIds.has(id))));
+      // 분류가 바뀌면 이어받는 마진이 달라질 수 있어 폴더 옮기기와 같이 판매가를 다시 계산한다(실패해도 분류 변경은 유지).
+      const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
+      setMoveMessage(`${list.length === 1 ? `"${product.name}"` : `${okIds.size}개`}을(를) "${target}"(으)로 옮겼습니다.${failed.length ? ` ${failed.length}개는 옮기지 못했습니다(그 사이 분류가 바뀜).` : ""}${list.length > 50 ? " 한 번에 50개까지라 나머지는 한 번 더 옮겨 주세요." : ""}${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 가격 관리에서 다시 해 주세요."}`);
+    } catch (e) { setError(e instanceof Error ? e.message : "분류를 바꾸지 못했습니다."); }
+  }
+  const pickedItems = items.filter((item) => picked.has(item.id));
+  const moveTargets = useMemo(() => Array.from(new Set(items.flatMap((item) => (item.category ? categoryAncestors(item.category) : [])))).sort((a, b) => compareCategoryPath(a, b, folderOrder)), [items, folderOrder]);
+  const [moveTarget, setMoveTarget] = useState("");
+  async function productAction(body: Record<string, unknown>) {
+    const response = await fetch("/api/product-catalog", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, ids: pickedItems.map((item) => item.id), ...body }) });
+    const result = await response.json().catch(() => ({})) as { message?: string; found?: number; deletable?: number; hideOnly?: number; restored?: number };
+    if (!response.ok) throw new Error(result.message || "상품을 처리하지 못했습니다.");
+    return result;
+  }
+  async function deletePicked() {
+    setError(""); setMoveMessage("");
+    try {
+      const count = await productAction({ action: "delete-products", apply: false }); // 먼저 숫자만 센다
+      const deletable = count.deletable ?? 0, hideOnly = count.hideOnly ?? 0;
+      if (!window.confirm(`${deletable}개 완전 삭제 · ${hideOnly}개 숨김\n\n완전 삭제는 되돌릴 수 없습니다(매입가·마진·행사 연결도 함께 지워짐). 주문·문서·재고·계약 단가에 쓰인 상품은 지우지 않고 숨기며, 판매중지 필터에서 되살릴 수 있습니다. 이미 발행한 문서는 그대로입니다.\n\n진행할까요?`)) return;
+      const done = await productAction({ action: "delete-products", apply: true });
+      setMoveMessage(`${done.deletable ?? 0}개를 완전 삭제하고 ${done.hideOnly ?? 0}개를 숨겼습니다.`);
+      setPicked(new Set());
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "상품을 처리하지 못했습니다."); }
+  }
+  async function restorePicked() {
+    setError(""); setMoveMessage("");
+    try {
+      const done = await productAction({ action: "restore-products" });
+      setMoveMessage(`${done.restored ?? 0}개를 되살렸습니다.`);
+      setPicked(new Set());
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "상품을 처리하지 못했습니다."); }
+  }
+  async function moveFolder(from: string, target: string) {
+    const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
+    if (!window.confirm(`"${from}" 폴더를 "${target}" 안으로 옮길까요?\n하위 폴더와 상품 분류가 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n옮긴 뒤 판매가를 바로 다시 계산합니다.`)) return;
+    setError(""); setMoveMessage("");
+    try {
+      const response = await fetch("/api/price-sheets/move-category", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, from, to }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "폴더를 옮기지 못했습니다.");
+      const recalc = await fetch(`/api/price-sheets${companyId ? `?${new URLSearchParams({ companyId })}` : ""}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recalculate" }) });
+      setMoveMessage(`"${from}"을(를) "${to}"(으)로 옮겼습니다(상품 ${Number(body.productCount || 0)}개).${recalc.ok ? " 판매가를 다시 계산했습니다." : " 판매가 재계산은 마진 설정에서 다시 해 주세요."}`);
+      setSideFilter("");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "폴더를 옮기지 못했습니다."); }
+  }
+  // 매입가 업로드 완료 안내의 "미분류 상품 보기" 링크(?category=unsorted)로 들어오면 미분류만 보여 준다.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("category") === "unsorted") { setSideTab("category"); setSideFilter("미분류"); }
+  }, []);
   async function load() {
     setLoading(true);
     setError("");
@@ -95,7 +195,10 @@ export function ProductCatalogAdmin({
           (view === "no-price" && i.salesPrice == null) ||
           (view === "no-code" && !i.productCode) ||
           (view === "duplicate-code" && Boolean(i.productCode && (codeCounts.get(i.productCode) || 0) > 1)) ||
-          (view === "no-photo" && !i.photoUrl);
+          (view === "no-photo" && !i.photoUrl) ||
+          (view === "promo" && i.promotion?.badge === "행사") ||
+          (view === "soon" && i.promotion?.badge === "임박") ||
+          (view === "no-promo" && !i.promotion);
         // 11/5: 왼쪽 분류·매입처를 누르면 그 상품만
         const matchesSide = !sideFilter || (sideTab === "category"
           ? (sideFilter === "미분류" ? !i.category : Boolean(i.category) && isUnder(i.category!, sideFilter))
@@ -115,7 +218,7 @@ export function ProductCatalogAdmin({
       // 대 › 중 › 소 트리(위 분류에 아래 상품 수를 더함), 순서는 경로 순
       for (const item of items) for (const path of item.category ? categoryAncestors(item.category) : ["미분류"]) counts.set(path, (counts.get(path) || 0) + 1);
       return Array.from(counts, ([name, count]) => ({ name, count, depth: name === "미분류" ? 0 : splitCategory(name).length - 1 }))
-        .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : a.name.localeCompare(b.name, "ko")));
+        .sort((a, b) => (a.name === "미분류" ? 1 : b.name === "미분류" ? -1 : compareCategoryPath(a.name, b.name, folderOrder)));
     }
     for (const item of items) {
       const names = sideTab === "supplier"
@@ -124,30 +227,37 @@ export function ProductCatalogAdmin({
       for (const name of names) counts.set(name, (counts.get(name) || 0) + 1);
     }
     return Array.from(counts, ([name, count]) => ({ name, count, depth: 0 })).sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [items, sideTab]);
+  }, [items, sideTab, folderOrder]);
   const sideVisible = sideItems.filter((item) => {
     if (item.depth === 0) return true;
     const parent = splitCategory(item.name).slice(0, -1).join(" > ");
     return sideOpen.has(parent) || (Boolean(sideFilter) && isUnder(sideFilter, parent));
   });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
-    { key: "code", label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
+    ...(canManageCategories ? [{ key: "pick", label: "선택", width: 52, sortable: false, value: (i: ProductCatalogAdminItem) => (picked.has(i.id) ? "선택" : ""), render: (i: ProductCatalogAdminItem) =>
+      <input aria-label={`${i.name} 선택`} checked={picked.has(i.id)} className="h-4 w-4" onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(i.id); else next.delete(i.id); return next; })} type="checkbox" /> }] : []),
+    ...(canManageCategories ? [{ key: "dragHandle", label: "이동", width: 52, sortable: false, value: () => "", render: (i: ProductCatalogAdminItem) =>
+      <span aria-label={`${i.name} 폴더로 끌어 옮기기`} className="cursor-grab select-none px-2 text-slate-400" draggable onDragEnd={() => setDragProduct(null)} onDragStart={(event) => { setDragProduct(i); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", i.id); }} role="img" title="폴더로 끌어 옮기기">⋮⋮</span> }] : []),
+    { key: "code", priority: 3, label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
     { key: "name", label: "상품명 / 관리명", width: 150, value: (i) => `${i.name} ${i.managementName || ""} ${i.category || "미분류"}`, render: (i) => <button className="text-left font-bold hover:text-teal-700" onClick={() => setEditing(i)} type="button">{i.name}<span className="block text-xs font-normal text-slate-500">{i.managementName || "-"}</span><span className="block max-w-[180px] truncate text-[11px] font-normal text-teal-700" title={i.category || "미분류"}>{(i.category || "미분류").replaceAll(" > ", " › ")}</span></button> },
-    { key: "spec", label: "규격", width: 75, value: (i) => i.spec || "-" },
-    { key: "unit", label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
-    { key: "supplier", label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
-    { key: "stockMode", label: "재고 방식", width: 75, value: (i) => i.trackingEnabled == null ? "미설정" : i.trackingEnabled ? "재고" : "사입" },
+    { key: "spec", priority: 3, label: "규격", width: 75, value: (i) => i.spec || "-" },
+    { key: "unit", priority: 3, label: "단위", width: 60, value: (i) => i.salesUnit || i.unit },
+    { key: "supplier", priority: 3, label: "매입처", width: 110, value: (i) => i.supplierNames?.join(", ") || "매입처 없음" },
+    { key: "stockMode", priority: 2, label: "재고 방식", width: 75, value: (i) => i.trackingEnabled == null ? "미설정" : i.trackingEnabled ? "재고" : "사입" },
     { key: "purchase", label: "매입가", align: "right", width: 90, value: (i) => i.purchasePrice, render: (i) => i.hasUnconfirmedConversion ? <span className="text-amber-700">환산 미확인</span> : money(i.purchasePrice) },
-    { key: "margin", label: "마진", align: "right", width: 65, value: (i) => margin(i), render: (i) => margin(i) == null ? "-" : <span className={(margin(i) || 0) < 0 ? "font-black text-rose-700" : ""}>{margin(i)!.toFixed(1)}%</span> },
+    { key: "margin", priority: 2, label: "마진", align: "right", width: 65, value: (i) => margin(i), render: (i) => margin(i) == null ? "-" : <span className={(margin(i) || 0) < 0 ? "font-black text-rose-700" : ""}>{margin(i)!.toFixed(1)}%</span> },
     { key: "sales", label: "판매가", align: "right", width: 90, value: (i) => i.salesPrice, render: (i) => <span className={(margin(i) || 0) < 0 ? "font-black text-rose-700" : ""}>{money(i.salesPrice)}</span> },
-    { key: "stock", label: "재고", align: "right", width: 60, value: (i) => i.onHand, render: (i) => i.onHand?.toLocaleString("ko-KR") || "-" },
-    { key: "status", label: "상태", width: 65, value: (i) => i.isActive ? "판매중" : "중지" },
+    { key: "stock", priority: 2, label: "재고", align: "right", width: 60, value: (i) => i.onHand, render: (i) => i.onHand?.toLocaleString("ko-KR") || "-" },
+    { key: "status", priority: 3, label: "상태", width: 65, value: (i) => i.isActive ? "판매중" : "중지" },
     { key: "barcode", label: "바코드", defaultHidden: true, width: 150, value: (i) => i.barcodes?.join(", ") || "-" },
     { key: "tax", label: "과세", defaultHidden: true, width: 80, value: (i) => i.taxType === "taxable" ? "과세" : i.taxType === "exempt" ? "면세" : "미정" },
     { key: "storage", label: "보관", defaultHidden: true, width: 80, value: () => "미설정" },
     { key: "brand", label: "브랜드", defaultHidden: true, width: 120, value: (i) => i.brand || "-" },
     { key: "edit", label: "수정", defaultHidden: true, sortable: false, width: 60, value: () => "", render: (i) => <button aria-label={`${i.name} 편집`} className="maju-button-secondary" onClick={() => setEditing(i)} type="button"><Edit3 className="h-4 w-4" /></button> },
-  ], []);
+    { key: "promoNow", priority: 2, label: "행사 상태", width: 120, value: (i) => (i.promotion ? `${i.promotion.badge} ~${i.promotion.endsOn}` : ""), render: (i) => (i.promotion ? <a className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i.promotion.badge === "임박" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`} href={`/revenue/pricing/promotions?productId=${i.id}`} title={`${i.promotion.badge}가 ${money(i.promotion.price)} · ${i.promotion.startsOn} ~ ${i.promotion.endsOn}`}>{i.promotion.badge} ~{i.promotion.endsOn.slice(5).replace("-", "/")}</a> : <span className="text-slate-400">-</span>) },
+    { key: "promoPrice", label: "행사가", align: "right", defaultHidden: true, width: 90, value: (i) => i.promotion?.price, render: (i) => (i.promotion ? money(i.promotion.price) : "-") },
+    { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
+  ], [canManageCategories, picked]);
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
@@ -156,7 +266,6 @@ export function ProductCatalogAdmin({
           <button className={`rounded-lg px-3 py-2 text-sm font-bold ${sideTab === "supplier" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => { setSideTab("supplier"); setSideFilter(""); }} type="button">매입처</button>
           {categoriesEnabled ? <button className={`rounded-lg px-2 py-2 text-xs font-bold ${sideTab === "maju-category" ? "bg-teal-700 text-white" : "text-slate-600"}`} onClick={() => setSideTab("maju-category")} type="button">마주 공통 카테고리</button> : null}
         </div>
-        {sideTab === "category" && canManageCategories ? <a className="block border-b bg-slate-50 px-3 py-2 text-xs font-bold text-teal-700" href="#product-category-management">분류 정리·분류별 마진 ↓</a> : null}
         {sideTab === "maju-category" ? <p className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-600">CategoryMatch 연결 전 상품은 미연결로 모아 봅니다. 연결 편집은 SQL 승인 후 제공합니다.</p> : null}
         <div className="max-h-[70vh] overflow-y-auto p-2">
           {sideFilter ? <button className="mb-1 w-full rounded-lg px-3 py-1.5 text-left text-xs font-bold text-teal-700 hover:bg-teal-50" onClick={() => setSideFilter("")} type="button">← 전체 보기</button> : null}
@@ -165,19 +274,35 @@ export function ProductCatalogAdmin({
             const hasChildren = sideTab === "category" && sideItems.some((x) => x.depth === item.depth + 1 && x.name.startsWith(item.name + " > "));
             const openNow = sideOpen.has(item.name);
             return (
-              <div className={`flex items-center gap-1 rounded-lg text-sm ${sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={item.name} style={{ paddingLeft: 4 + item.depth * 14 }}>
+              <div className={`flex items-center gap-1 rounded-lg text-sm ${dropTarget === item.name ? "bg-amber-100 ring-2 ring-amber-400" : sideFilter === item.name ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} draggable={sideTab === "category" && canManageCategories && item.name !== "미분류"} key={item.name} onDragEnd={() => { setDragFolder(null); setDropTarget(null); }} onDragLeave={() => setDropTarget((current) => (current === item.name ? null : current))} onDragOver={(event) => { if (canDrop(dragFolder, item.name) || (sideTab === "category" && canMoveProduct(dragProduct, item.name))) { event.preventDefault(); setDropTarget(item.name); } }} onDragStart={(event) => { setDragFolder(item.name); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.name); }} onDrop={(event) => { event.preventDefault(); const from = dragFolder, product = dragProduct; setDragFolder(null); setDragProduct(null); setDropTarget(null); if (from && canDrop(from, item.name)) void moveFolder(from, item.name); else if (product && sideTab === "category" && canMoveProduct(product, item.name)) void moveProduct(product, item.name); }} style={{ paddingLeft: 4 + item.depth * 14 }}>
                 {hasChildren ? <button aria-label={`${label} ${openNow ? "접기" : "펼치기"}`} className="w-5 shrink-0 text-xs text-slate-500" onClick={() => setSideOpen((prev) => { const next = new Set(prev); if (next.has(item.name)) next.delete(item.name); else next.add(item.name); return next; })} type="button">{openNow ? "▾" : "▸"}</button> : <span className="w-5 shrink-0" />}
                 <button className={`flex min-w-0 flex-1 items-center justify-between py-2 pr-2 text-left ${item.depth === 0 ? "font-bold" : ""}`} onClick={() => setSideFilter(sideFilter === item.name ? "" : item.name)} type="button">
                   <span className="truncate">{label}</span><span className="text-xs text-slate-500">{item.count}</span>
                 </button>
+                {sideTab === "category" && canManageCategories && item.name !== "미분류" ? (
+                  <span className="flex shrink-0 pr-1">
+                    <button aria-label={`${label} 위로`} className="px-1 text-xs text-slate-400 hover:text-teal-700" onClick={() => void reorderFolder(item.name, -1)} type="button">▲</button>
+                    <button aria-label={`${label} 아래로`} className="px-1 text-xs text-slate-400 hover:text-teal-700" onClick={() => void reorderFolder(item.name, 1)} type="button">▼</button>
+                  </span>
+                ) : null}
               </div>
             );
           })}
         </div>
       </aside>
       <div className="min-w-0 space-y-4">
+      {pickedItems.length ? <div aria-label="선택한 상품" className="flex flex-wrap items-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-4 py-2 text-sm" role="group">
+        <b>{pickedItems.length}개 선택</b>
+        {canManageCategories && moveTargets.length ? <span className="flex items-center gap-1">
+          <select aria-label="옮길 폴더" className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-2" onChange={(event) => setMoveTarget(event.target.value)} value={moveTarget}>
+            <option value="">옮길 폴더 선택</option>{moveTargets.map((path) => <option key={path} value={path}>{"  ".repeat(splitCategory(path).length - 1)}{splitCategory(path).slice(-1)[0]}</option>)}</select>
+          <button className="maju-button-primary min-h-[36px] px-3 disabled:bg-slate-300" disabled={!moveTarget} onClick={() => void moveProducts(pickedItems, moveTarget)} type="button">옮기기</button></span> : null}
+        <button className="maju-button-primary min-h-[36px] px-3" onClick={() => void deletePicked()} type="button">삭제</button>
+        {pickedItems.some((item) => !item.isActive) ? <button className="min-h-[36px] rounded-lg border border-slate-300 bg-white px-3 font-bold" onClick={() => void restorePicked()} type="button">되살리기</button> : null}
+        <button className="min-h-[36px] px-2 text-xs font-bold text-slate-600 underline" onClick={() => setPicked(new Set())} type="button">선택 해제</button>
+      </div> : null}
+      {moveMessage ? <p className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900" role="status">{moveMessage}</p> : null}
       {sideTab === "maju-category" && categoriesEnabled ? <CategoryMatchPanel companyId={companyId} /> : null}
-      {canManageCategories ? <ProductCategoryWorkspace companyId={companyId} /> : null}
       <section className="maju-section-card">
         <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -197,7 +322,7 @@ export function ProductCatalogAdmin({
           {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <input aria-label={`${label} 검색`} className="maju-input w-full" key={key} onChange={(e) => setSearch((value) => ({ ...value, [key]: e.target.value }))} placeholder={`${label} 검색`} value={search[key]} />)}
         </div>
         <div className="flex flex-wrap gap-2 border-b p-4">
-          {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
+          {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음'],['promo','행사 중'],['soon','임박'],['no-promo','행사 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
           <Filter
             value={tax}
             onChange={(v) => setTax(v as typeof tax)}
@@ -213,7 +338,7 @@ export function ProductCatalogAdmin({
             options={[
               ["all", "전체 상태"],
               ["active", "판매중"],
-              ["inactive", "판매중지"],
+              ["inactive", "판매중지·숨김"],
             ]}
           />
           <Filter

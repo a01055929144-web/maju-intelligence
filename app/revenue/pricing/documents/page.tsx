@@ -14,6 +14,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { resolveDocumentEntry } from "@/application/pricing/document-entry";
 import { findDocumentEntryLead } from "@/lib/pricing/document-entry";
 import { documentSharingEnabled } from "@/lib/pricing/document-share-feature";
+import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-order-feature";
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
   searchParams,
@@ -44,7 +45,7 @@ export default async function DocumentsPage({
   if (!entry) notFound();
   return (
     <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="견적서·단가표" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="mx-auto max-w-[1600px] p-4">
+    <main className="w-full p-4">
       <Suspense fallback={null}>
         <PricingDocumentsWorkspace
           key={`${companyId}:${entry.leadContext?.id || ""}:${entry.initialStartKind || ""}`}
@@ -52,6 +53,7 @@ export default async function DocumentsPage({
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}
+          publicSharingAvailable={publicDocumentOrderEntryEnabled(companyId)}
           storeLinksEnabled={storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId)}
           manager={manager}
         />

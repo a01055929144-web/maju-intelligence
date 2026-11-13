@@ -52,6 +52,11 @@ export function isLeadWorkspaceV2Enabled(companyId?: string | null, value?: stri
   return Boolean(companyId && getLeadWorkspaceV2EnabledCompanyIds(value).has(companyId));
 }
 
+/** CC-21: 리드 설정 묶음(칸·엑셀 가져오기·유통사)은 리드 작업공간 V2 회사 또는 유통사 영업(DISTRIBUTOR_SALES) 회사에 보인다. */
+export function canShowLeadWorkspaceSettings(companyId: string | null | undefined, distributorSales: boolean, value?: string) {
+  return distributorSales || isLeadWorkspaceV2Enabled(companyId, value);
+}
+
 export function isMapFilterPersistenceEnabled(value = process.env.MAP_FILTER_PERSISTENCE_ENABLED || "") {
   return value === "true" || value === "1";
 }

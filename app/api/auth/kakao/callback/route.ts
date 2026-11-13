@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreOwnerActivationProof, setCustomerSession, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
+import { consumeInvitePhoneProof, consumeOAuthState, getCustomerSession, getStoreMemberInvitationProof, getStoreOwnerActivationProof,
+  setCustomerSession, setPublicStoreOwnerProfileProof, setStoreSession, storeMemberSessionEnabled } from "@/lib/auth";
 import { isStoreMemberCompanyAllowlisted } from "@/lib/store/07-store-member-feature";
 import { checkBusinessRegistrationStatusesWithHealth } from "@/lib/business-status";
 import { acceptStaffKakaoInvitation, createPersonalKakaoWorkspace, linkKakaoToAppUser } from "@/lib/store";
 import { getStoreCostMemberAccess, resolveStoreAuthUserId } from "@/lib/store/08-store-cost-access";
-import { activateStoreOwner, getPreparedStoreOwnerActivation, resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
+import { hasAllowedStorePortalMembership } from "@/lib/store/07-store-portal";
+import { storeDirectSignupEnabled } from "@/lib/store/11-store-direct-signup";
+import { activateStoreOwner, getPreparedStoreOwnerActivation, publicStoreOwnerOnboardingEnabled,
+  resolveOrCreateStoreKakaoUser } from "@/lib/store/07-store-owner-provisioning";
+import { acceptStoreMemberInvitation, getPreparedStoreMemberInvitation } from "@/lib/store/07-store-member-management";
+import { findSingleActiveStoreAccount } from "@/lib/store/07-store-member-context";
 import { normalizeWorkspaceRole } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -39,17 +45,20 @@ export async function GET(request: NextRequest) {
   const linkMode = stateOk && statePayload === "link";
   const storeOwnerMatch = stateOk ? statePayload.match(/^store-owner:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeOwnerMode = Boolean(storeOwnerMatch);
+  const storeInviteMatch = stateOk ? statePayload.match(/^store-invite:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
+  const storeInviteMode = Boolean(storeInviteMatch);
   const storeMatch = stateOk ? statePayload.match(/^store:([0-9a-f-]{36}):([0-9a-f-]{36})$/i) : null;
   const storeMode = Boolean(storeMatch);
-  const storeFlow = storeMode || storeOwnerMode;
-  const storeCompanyId = storeOwnerMatch?.[1] || storeMatch?.[1] || "";
+  const storePortalMode = stateOk && statePayload === "store-portal";
+  const storeFlow = storeMode || storeOwnerMode || storeInviteMode || storePortalMode;
+  const storeCompanyId = storeOwnerMatch?.[1] || storeInviteMatch?.[1] || storeMatch?.[1] || "";
   const inviteCode = stateOk && statePayload !== "personal" && !linkMode && !storeFlow ? statePayload : "";
 
   if (!stateOk) {
     return redirectJoin(request.url, "", "invalid_oauth_state");
   }
   if (storeFlow && !storeMemberSessionEnabled()) return redirectStore(request.url, "store_login_unavailable");
-  if (storeFlow && !isStoreMemberCompanyAllowlisted(storeCompanyId)) return redirectStore(request.url, "store_login_unavailable");
+  if (storeFlow && !storePortalMode && !isStoreMemberCompanyAllowlisted(storeCompanyId)) return redirectStore(request.url, "store_login_unavailable");
   if (!code) {
     return storeFlow ? redirectStore(request.url, "missing_kakao_code") : redirectJoin(request.url, inviteCode, "missing_kakao_code");
   }
@@ -70,10 +79,6 @@ export async function GET(request: NextRequest) {
       const activation = proof ? await getPreparedStoreOwnerActivation(proof.token) : null;
       if (!proof || !activation || !storeOwnerMatch || activation.companyId !== storeOwnerMatch[1] || activation.storeAccountId !== storeOwnerMatch[2])
         return redirectStore(request.url, "store_activation_required");
-      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
-      const status = results.get(activation.businessRegistrationNumber);
-      if (failedNumbers.has(activation.businessRegistrationNumber) || status?.label !== "정상")
-        return redirectStore(request.url, "business_status_verification_required");
       const authUserId = await resolveOrCreateStoreKakaoUser({
         avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
         email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
@@ -81,10 +86,63 @@ export async function GET(request: NextRequest) {
         phoneNumber: kakaoUser.kakao_account?.phone_number
       });
       if (!authUserId) return redirectStore(request.url, "store_activation_required");
+      if (proof.stage === "kakao" && proof.returnTo && activation.publicOnboarding && publicStoreOwnerOnboardingEnabled(activation.companyId)) {
+        if (await findSingleActiveStoreAccount(activation.companyId, authUserId)) {
+          if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+          return NextResponse.redirect(new URL(proof.returnTo.replace("/pricing-document#", "/pricing-document?continueOrder=1#"), request.url));
+        }
+        if (!(await setPublicStoreOwnerProfileProof({ authUserId, returnTo: proof.returnTo, token: proof.token,
+          storePhone: kakaoUser.kakao_account?.phone_number })))
+          return redirectStore(request.url, "store_activation_required");
+        return NextResponse.redirect(new URL("/store/activate?profile=1", request.url));
+      }
+      if (!proof.termsAcceptedAt || activation.profileRequired) return redirectStore(request.url, "store_activation_required");
+      const { failedNumbers, results } = await checkBusinessRegistrationStatusesWithHealth([activation.businessRegistrationNumber]);
+      const status = results.get(activation.businessRegistrationNumber);
+      if (failedNumbers.has(activation.businessRegistrationNumber) || status?.label !== "정상")
+        return redirectStore(request.url, "business_status_verification_required");
       const activated = await activateStoreOwner({ authUserId, businessRegistrationNumber: activation.businessRegistrationNumber,
         termsAcceptedAt: proof.termsAcceptedAt, token: proof.token, verificationRequestId: randomUUID(), verifiedAt: new Date().toISOString() });
       if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+      if (proof.returnTo) return NextResponse.redirect(new URL(proof.returnTo, request.url));
       return redirectStoreScope(request.url, activated.companyId, activated.storeAccountId);
+    }
+
+    if (storeInviteMode && storeInviteMatch) {
+      const proof = await getStoreMemberInvitationProof({ consume: true });
+      const invitation = proof ? await getPreparedStoreMemberInvitation(proof.token) : null;
+      if (!proof || !invitation || invitation.companyId !== storeInviteMatch[1] || invitation.storeAccountId !== storeInviteMatch[2])
+        return redirectStore(request.url, "store_invitation_required");
+      const authUserId = await resolveOrCreateStoreKakaoUser({
+        avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+        email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+        name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+        phoneNumber: kakaoUser.kakao_account?.phone_number
+      });
+      if (!authUserId) return redirectStore(request.url, "store_invitation_required");
+      await acceptStoreMemberInvitation({ authUserId, companyId: invitation.companyId,
+        storeAccountId: invitation.storeAccountId, token: proof.token });
+      if (!(await setStoreSession(authUserId))) return redirectStore(request.url, "store_login_unavailable");
+      return redirectStoreScope(request.url, invitation.companyId, invitation.storeAccountId);
+    }
+
+
+    if (storePortalMode) {
+      const existingAuthUserId = await resolveStoreAuthUserId(String(kakaoUser.id));
+      const isMember = existingAuthUserId ? await hasAllowedStorePortalMembership(existingAuthUserId) : false;
+      // 직접 가입(STORE_DIRECT_SIGNUP_ENABLED, 기본 OFF): 아직 구성원이 아닌 카카오 사용자도 로그인시켜 /store에서 매장 정보를 입력하게 한다.
+      // 세션만으로는 어떤 유통사 자료도 열리지 않는다(모든 조회가 구성원 확인을 따로 한다).
+      const authUserId = isMember ? existingAuthUserId : storeDirectSignupEnabled()
+        ? existingAuthUserId ?? await resolveOrCreateStoreKakaoUser({
+          avatarUrl: kakaoUser.kakao_account?.profile?.profile_image_url || kakaoUser.properties?.profile_image,
+          email: kakaoUser.kakao_account?.email, kakaoUserId: String(kakaoUser.id),
+          name: kakaoUser.kakao_account?.profile?.nickname || kakaoUser.properties?.nickname,
+          phoneNumber: kakaoUser.kakao_account?.phone_number
+        })
+        : null;
+      if (!authUserId || !(await setStoreSession(authUserId)))
+        return redirectStore(request.url, "store_membership_required");
+      return NextResponse.redirect(new URL("/store", request.url));
     }
 
     if (storeMode && storeMatch) {

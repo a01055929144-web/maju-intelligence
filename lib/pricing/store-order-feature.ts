@@ -1,5 +1,8 @@
+import { publicOwnerTestAccessAllowed } from "../store/public-owner-test-mode";
+
 /** P2 stays dormant until its schema and the P0/P1 schemas are approved and applied. */
 export function storeOrderingEnabled() {
+  if (!publicOwnerTestAccessAllowed()) return false;
   if (process.env.STORE_ORDERING_ENABLED !== "true" ||
     (process.env.STORE_LINK_SECRET?.length ?? 0) < 32 ||
     !process.env.STORE_PUBLIC_BASE_URL) return false;

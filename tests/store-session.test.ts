@@ -9,7 +9,8 @@ vi.mock("next/headers", () => ({
   }))
 }));
 
-import { clearStoreSession, getStoreOwnerActivationProof, getStoreSession, setStoreOwnerActivationProof, setStoreSession } from "../lib/auth";
+import { clearStoreSession, getStoreOwnerActivationProof, getStoreSession, setPublicStoreOwnerKakaoProof,
+  setPublicStoreOwnerProfileProof, setStoreOwnerActivationProof, setStoreSession } from "../lib/auth";
 
 const authUserId = "00000000-0000-4000-8000-000000000003";
 
@@ -61,5 +62,38 @@ describe("store member session cookie", () => {
     await expect(getStoreOwnerActivationProof()).resolves.toMatchObject({ token, termsAcceptedAt: "2026-11-07T00:00:00.000Z" });
     await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token });
     expect(state.values.has("maju_store_owner_activation")).toBe(false);
+  });
+
+  it("binds public onboarding return only to the pricing document route", async () => {
+    vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
+    const token = "a".repeat(43), returnTo = "/pricing-document#opaque-share-token";
+    await expect(setStoreOwnerActivationProof(token, "https://evil.example/")).resolves.toBe(false);
+    await expect(setStoreOwnerActivationProof(token, returnTo)).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token, returnTo });
+  });
+
+  it("keeps Kakao-first onboarding incomplete until the verified identity reaches the profile step", async () => {
+    vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
+    const token = "a".repeat(43), returnTo = "/pricing-document#opaque-share-token";
+    await expect(setPublicStoreOwnerKakaoProof(token, returnTo)).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ token, returnTo, stage: "kakao" });
+    await expect(setPublicStoreOwnerProfileProof({ authUserId, returnTo, token })).resolves.toBe(true);
+    await expect(getStoreOwnerActivationProof({ consume: true })).resolves.toMatchObject({ authUserId, token, returnTo, stage: "profile" });
+    expect(state.values.has("maju_store_session")).toBe(false);
+  });
+
+  it("carries only a bounded current OAuth contact into the signed profile proof without granting a store session", async () => {
+    vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true");
+    const input = { authUserId, returnTo: "/pricing-document#synthetic", token: "a".repeat(43) };
+    await setPublicStoreOwnerProfileProof({ ...input, storePhone: "+82 10-1234-5678" });
+    const proof = await getStoreOwnerActivationProof();
+    expect(proof?.storePhone).toBe("01012345678");
+    expect(proof).not.toHaveProperty("email"); expect(proof).not.toHaveProperty("nickname");
+    expect(state.options.get("maju_store_owner_activation")).toMatchObject({ httpOnly: true, maxAge: 900 });
+    expect(state.values.has("maju_store_session")).toBe(false);
+    await setPublicStoreOwnerProfileProof({ ...input, storePhone: "invalid-contact" });
+    expect(await getStoreOwnerActivationProof()).not.toHaveProperty("storePhone");
+    vi.advanceTimersByTime(901_000);
+    expect(await getStoreOwnerActivationProof()).toBeNull();
   });
 });

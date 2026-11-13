@@ -15,6 +15,6 @@ export default async function PricingPage({ searchParams }: { searchParams?: Pro
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && !canManagePriceSheets(customer))) notFound();
   const preview = Boolean(admin && !customer);
   return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="매입가 업로드" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <section className="mx-auto max-w-[1560px] space-y-4 p-4"><PurchaseCostWorkspace companyId={companyId} /></section>
+    <section className="w-full space-y-4 p-4"><PurchaseCostWorkspace companyId={companyId} /></section>
   </CustomerAppShell>;
 }

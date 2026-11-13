@@ -3,17 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
-  Clock3,
   FileSpreadsheet,
-  History,
   Loader2,
   PackagePlus,
   X,
 } from "lucide-react";
-import {
-  CommonDataTable,
-  type CommonTableColumn,
-} from "@/components/common-data-table";
 import {
   buildCatalogPreview,
   catalogFields,
@@ -23,6 +17,8 @@ import {
   type RawCatalogRow,
 } from "@/domains/product/catalog-import";
 import { ProductCatalogAdmin } from "@/components/product-catalog-admin";
+import { CategoryHealthCard } from "@/components/category-health-card";
+import { ProductCategoryWorkspace } from "@/components/product-category-manager";
 import { ImportRowEditor } from "@/components/import-row-editor";
 import { CustomerItemsImportDrawer } from "./customer-items-import-drawer";
 import type { ImportPreviewField, ImportPreviewRow } from "@/domains/product/import-row-editor";
@@ -30,6 +26,8 @@ import type {
   ProductImportAuditItem,
   SupplierProductAdminItem,
 } from "@/lib/product-catalog-import";
+import { defaultConversionReviewRatio } from "@/lib/product-conversion-review";
+import { runLimited } from "@/lib/run-limited";
 
 type Workspace = {
   catalogCount: number;
@@ -37,7 +35,7 @@ type Workspace = {
   items: SupplierProductAdminItem[];
   suppliers: Array<{ id: string; name: string }>;
 };
-type Tab = "catalog" | "supplier" | "mapping" | "imports";
+type Tab = "catalog" | "categories" | "supplier" | "mapping";
 const labels: Record<CatalogField, string> = {
   productName: "상품명",
   spec: "규격",
@@ -55,6 +53,9 @@ const labels: Record<CatalogField, string> = {
 };
 const money = (value?: number) =>
   value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
+const canConfirmConversion = (item: SupplierProductAdminItem) =>
+  !!item.matchedCatalogId && !item.conversionConfirmed &&
+  (item.matchStatus === "auto" || item.matchStatus === "confirmed");
 const importPreviewFields: ImportPreviewField[] = [
   { key: "rawName", label: "상품명" },
   { key: "rawSpec", label: "규격" },
@@ -95,6 +96,11 @@ export function ProductCatalogWorkspace({
   const [loading, setLoading] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [conversionSelected, setConversionSelected] = useState<string[]>([]);
+  const [conversionRatios, setConversionRatios] = useState<Record<string, string>>({});
+  const [conversionErrors, setConversionErrors] = useState<Record<string, string>>({});
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [showAllSupplierItems, setShowAllSupplierItems] = useState(false);
   const [message, setMessage] = useState("");
   useEffect(() => setTab(initialTab), [initialTab]);
   async function load() {
@@ -116,7 +122,7 @@ export function ProductCatalogWorkspace({
     }
   }
   useEffect(() => {
-    if (tab !== "catalog") void load();
+    if (tab !== "catalog" && tab !== "categories") void load();
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   async function createStandards() {
     if (!selected.length) return;
@@ -161,14 +167,12 @@ export function ProductCatalogWorkspace({
       setLoading(false);
     }
   }
-  async function confirmConversion(item: SupplierProductAdminItem) {
-    const ratio = Number(
-      window.prompt(
-        "매입 1단위가 판매 몇 단위인지 확인해 주세요.",
-        String(item.suggestedRatio || 1),
-      ),
-    );
-    if (!ratio || ratio <= 0) return;
+  function reviewRatio(item: SupplierProductAdminItem) {
+    return conversionRatios[item.id] ?? defaultConversionReviewRatio(item);
+  }
+  async function saveConversion(item: SupplierProductAdminItem) {
+    const ratio = Number(reviewRatio(item));
+    if (!Number.isFinite(ratio) || ratio <= 0) throw new Error("매입 1단위에 해당하는 기본 단위 수를 입력해 주세요.");
     const response = await fetch("/api/product-catalog/imports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -179,20 +183,63 @@ export function ProductCatalogWorkspace({
         ratio,
       }),
     });
-    const payload = await response.json();
-    if (!response.ok) {
-      setMessage(payload.message || "환산 비율을 저장하지 못했습니다.");
-      return;
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.message || "환산 비율을 저장하지 못했습니다.");
+  }
+  async function confirmConversion(item: SupplierProductAdminItem) {
+    setLoading(true);
+    try {
+      await saveConversion(item);
+      setMessage(`${item.rawName}의 환산 비율을 확정했습니다.`);
+      setConversionErrors((current) => ({ ...current, [item.id]: "" }));
+      setConversionSelected((current) => current.filter((id) => id !== item.id));
+      await load();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "환산 비율을 저장하지 못했습니다.";
+      setConversionErrors((current) => ({ ...current, [item.id]: detail }));
+      setMessage(detail);
+    } finally {
+      setLoading(false);
     }
-    setMessage("환산 비율을 확정했습니다.");
-    await load();
+  }
+  async function confirmSelectedConversions() {
+    const pending = items.filter((item) => conversionSelected.includes(item.id) && canConfirmConversion(item));
+    if (!pending.length) return;
+    setLoading(true);
+    try {
+      const results = await runLimited(pending, 5, async (item) => {
+        try {
+          await saveConversion(item);
+          return { id: item.id, error: "" };
+        } catch (error) {
+          return { id: item.id, error: error instanceof Error ? error.message : "환산 비율을 저장하지 못했습니다." };
+        }
+      });
+      const failures = Object.fromEntries(results.filter((result) => result.error).map((result) => [result.id, result.error]));
+      setConversionErrors(failures);
+      setConversionSelected(Object.keys(failures));
+      setMessage(`${results.length - Object.keys(failures).length}개 확정${Object.keys(failures).length ? ` · ${Object.keys(failures).length}개 실패 (항목별 오류 확인 후 재시도)` : ""}`);
+      await load();
+    } finally {
+      setLoading(false);
+    }
   }
   const items = workspace?.items || [];
+  const unconfirmed = items.filter(canConfirmConversion);
+  const visibleItems = (tab === "supplier" && !showAllSupplierItems ? unconfirmed : items).filter((item) => {
+    if (tab !== "supplier") return true;
+    const query = supplierSearch.trim().toLowerCase();
+    return !query || [item.rawName, item.supplierName, item.matchedCatalogName, item.productCode]
+      .some((value) => value?.toLowerCase().includes(query));
+  });
+  const oneToOneVisible = visibleItems.filter((item) =>
+    canConfirmConversion(item) && defaultConversionReviewRatio(item) === "1" && reviewRatio(item) === "1",
+  );
   const readyToCreate = items
     .filter((item) => !item.matchedCatalogId && item.costConfirmed)
     .map((item) => item.id);
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         <div className="flex max-w-full gap-1 overflow-x-auto">
           {(
@@ -200,8 +247,8 @@ export function ProductCatalogWorkspace({
             // (매입처 가격 파일은 매입가 반영, 품목 맞추기는 업로드 미리보기에서).
             [
               ["catalog", "전체 상품"],
+              ...(canManageCategories ? ([["categories", "분류·마진"]] as const) : []),
               ["upload", "전체 상품 업로드"],
-              ["imports", "업로드 이력"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -214,6 +261,13 @@ export function ProductCatalogWorkspace({
             </button>
           ))}
         </div>
+        <button
+          className="maju-button-secondary min-h-11"
+          onClick={() => setTab("supplier")}
+          type="button"
+        >
+          매입처 환산 확인{workspace ? ` · 미확정 ${unconfirmed.length}개` : ""}
+        </button>
       </div>
       {message ? (
         <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-900">
@@ -227,12 +281,11 @@ export function ProductCatalogWorkspace({
           companyId={companyId}
           settingsKey={tableSettingsKey}
         />
-      ) : tab === "imports" ? (
-        <ImportAuditPanel
-          auditV2Enabled={importAuditV2Enabled}
-          imports={workspace?.imports || []}
-          loading={loading && !workspace}
-        />
+      ) : tab === "categories" ? (
+        <div className="space-y-4">
+          <CategoryHealthCard companyId={companyId} />
+          <ProductCategoryWorkspace companyId={companyId} />
+        </div>
       ) : (
         <section className="maju-section-card">
           <div className="maju-card-header flex items-center justify-between">
@@ -247,7 +300,7 @@ export function ProductCatalogWorkspace({
                 {workspace?.catalogCount || 0}개
               </p>
             </div>
-            {tab === "supplier" ? (
+            {tab === "supplier" && showAllSupplierItems ? (
               <div className="flex flex-wrap gap-2">
                 <button
                   className="maju-button-secondary"
@@ -271,6 +324,45 @@ export function ProductCatalogWorkspace({
               </div>
             ) : null}
           </div>
+          {tab === "supplier" ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
+              <label className="text-sm font-semibold" htmlFor="supplier-conversion-search">매입처 상품 검색</label>
+              <input
+                className="maju-input min-h-11 min-w-0 flex-1 sm:max-w-xs"
+                id="supplier-conversion-search"
+                onChange={(event) => setSupplierSearch(event.target.value)}
+                placeholder="상품명·매입처·코드"
+                value={supplierSearch}
+              />
+              <button
+                aria-pressed={!showAllSupplierItems}
+                className="maju-button-secondary min-h-11"
+                onClick={() => setShowAllSupplierItems((value) => !value)}
+                type="button"
+              >
+                {showAllSupplierItems ? `미확정 ${unconfirmed.length}개만 보기` : "전체 매입처 상품 보기"}
+              </button>
+              <button
+                className="maju-button-secondary min-h-11"
+                disabled={loading || !oneToOneVisible.length}
+                onClick={() => {
+                  setConversionSelected((current) => Array.from(new Set([...current, ...oneToOneVisible.map((item) => item.id)])));
+                  setMessage("단위가 같은 1:1 항목을 선택했습니다. 매입·기본 단위를 확인한 뒤 환산 확정을 눌러 주세요.");
+                }}
+                type="button"
+              >
+                검색 결과의 1:1 항목 선택 ({oneToOneVisible.length})
+              </button>
+              <button
+                className="maju-button-primary min-h-11"
+                disabled={loading || !conversionSelected.length}
+                onClick={() => void confirmSelectedConversions()}
+                type="button"
+              >
+                선택 {conversionSelected.length}개 환산 확정
+              </button>
+            </div>
+          ) : null}
           {loading && !workspace ? (
             <div className="flex justify-center p-12">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -291,20 +383,18 @@ export function ProductCatalogWorkspace({
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {items.map((item) => (
+                  {visibleItems.map((item) => (
                     <tr key={item.id}>
                       {tab === "supplier" ? (
                         <td className="px-4 py-3">
                           <input
-                            aria-label={`${item.rawName} 선택`}
-                            checked={selected.includes(item.id)}
-                            disabled={loading || !!item.matchedCatalogId}
+                            aria-label={`${item.rawName} ${canConfirmConversion(item) ? "환산 확인 선택" : "표준 품목 생성 선택"}`}
+                            checked={canConfirmConversion(item) ? conversionSelected.includes(item.id) : selected.includes(item.id)}
+                            disabled={loading || (!!item.matchedCatalogId && (!canConfirmConversion(item) || !(Number(reviewRatio(item)) > 0)))}
                             onChange={(e) =>
-                              setSelected((v) =>
-                                e.target.checked
-                                  ? [...v, item.id]
-                                  : v.filter((id) => id !== item.id),
-                              )
+                              canConfirmConversion(item)
+                                ? setConversionSelected((v) => e.target.checked ? [...v, item.id] : v.filter((id) => id !== item.id))
+                                : setSelected((v) => e.target.checked ? [...v, item.id] : v.filter((id) => id !== item.id))
                             }
                             type="checkbox"
                           />
@@ -338,15 +428,24 @@ export function ProductCatalogWorkspace({
                             <div className="mt-1 text-xs">
                               {item.conversionConfirmed ? (
                                 `환산 ${item.suggestedRatio || 1}:1 확정`
-                              ) : (
-                                <button
-                                  className="font-bold text-amber-700 underline"
-                                  onClick={() => void confirmConversion(item)}
-                                  type="button"
-                                >
-                                  환산 {item.suggestedRatio || 1}:1 확인
-                                </button>
-                              )}
+                              ) : canConfirmConversion(item) ? (
+                                <div className="flex min-w-52 flex-wrap items-center gap-2">
+                                  <input
+                                    aria-label={`매입 1${item.rawUnit || "단위"}당 기본 단위 수`}
+                                    className="maju-input min-h-11 w-24"
+                                    id={`conversion-${item.id}`}
+                                    min="0.001"
+                                    onChange={(event) => setConversionRatios((current) => ({ ...current, [item.id]: event.target.value }))}
+                                    placeholder={item.suggestedRatio ? `추천 ${item.suggestedRatio}` : "비율 입력"}
+                                    step="any"
+                                    type="number"
+                                    value={reviewRatio(item)}
+                                  />
+                                  <span className="text-slate-500">{item.rawUnit || "매입 단위"} → {item.matchedCatalogUnit || "기본 단위"}</span>
+                                  <button className="maju-button-secondary min-h-11" disabled={loading || !(Number(reviewRatio(item)) > 0)} onClick={() => void confirmConversion(item)} type="button">확정</button>
+                                  {conversionErrors[item.id] ? <span className="w-full text-red-700" role="alert">{conversionErrors[item.id]}</span> : null}
+                                </div>
+                              ) : <span className="text-amber-700">매핑 확인 필요</span>}
                             </div>
                           </div>
                         ) : (
@@ -357,9 +456,9 @@ export function ProductCatalogWorkspace({
                   ))}
                 </tbody>
               </table>
-              {!items.length ? (
+              {!visibleItems.length ? (
                 <div className="p-12 text-center text-sm font-semibold text-slate-500">
-                  먼저 매입 단가표를 업로드해 주세요.
+                  {tab === "supplier" ? "조건에 맞는 환산 미확정 상품이 없습니다. 검색어를 지우거나 전체 보기를 선택해 주세요." : "먼저 매입 단가표를 업로드해 주세요."}
                 </div>
               ) : null}
             </div>
@@ -383,160 +482,6 @@ export function ProductCatalogWorkspace({
         />
       ) : null}
     </div>
-  );
-}
-
-const importStatus: Record<string, string> = {
-  processing: "처리 중",
-  completed: "완료",
-  failed: "실패",
-};
-
-function ImportAuditPanel({
-  auditV2Enabled,
-  imports,
-  loading,
-}: {
-  auditV2Enabled: boolean;
-  imports: ProductImportAuditItem[];
-  loading: boolean;
-}) {
-  const columns = useMemo<CommonTableColumn<ProductImportAuditItem>[]>(
-    () => [
-      {
-        key: "createdAt",
-        label: "실행 시각",
-        width: 150,
-        value: (item) => item.createdAt,
-        render: (item) =>
-          new Date(item.createdAt).toLocaleString("ko-KR", {
-            timeZone: "Asia/Seoul",
-          }),
-      },
-      {
-        key: "supplier",
-        label: "매입처",
-        width: 130,
-        value: (item) => item.supplierName,
-      },
-      {
-        key: "file",
-        label: "파일",
-        width: 220,
-        value: (item) => item.fileName,
-      },
-      {
-        key: "status",
-        label: "상태",
-        width: 90,
-        value: (item) => importStatus[item.status] || item.status,
-        render: (item) => (
-          <span
-            className={
-              item.status === "completed"
-                ? "font-bold text-emerald-700"
-                : item.status === "failed"
-                  ? "font-bold text-rose-700"
-                  : "font-bold text-amber-700"
-            }
-          >
-            {importStatus[item.status] || item.status}
-          </span>
-        ),
-      },
-      {
-        key: "total",
-        label: "전체",
-        align: "right",
-        total: true,
-        width: 70,
-        value: (item) => item.totalRows,
-      },
-      {
-        key: "created",
-        label: "신규",
-        align: "right",
-        total: true,
-        width: 70,
-        value: (item) => item.createdCount,
-      },
-      {
-        key: "updated",
-        label: "갱신",
-        align: "right",
-        total: true,
-        width: 70,
-        value: (item) => item.updatedCount,
-      },
-      {
-        key: "excluded",
-        label: "제외",
-        align: "right",
-        total: true,
-        width: 70,
-        value: (item) => item.excludedCount,
-      },
-      {
-        key: "warnings",
-        label: "경고",
-        align: "right",
-        total: true,
-        width: 70,
-        value: (item) => item.warningCount,
-      },
-      {
-        key: "actor",
-        label: "실행자",
-        width: 110,
-        value: (item) => item.createdByName || "-",
-      },
-      {
-        key: "error",
-        label: "오류",
-        defaultHidden: true,
-        width: 260,
-        value: (item) => item.errorMessage || "-",
-      },
-    ],
-    [],
-  );
-
-  return (
-    <section className="maju-section-card">
-      <div className="maju-card-header flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-teal-700" />
-            <h2 className="maju-section-title">가져오기 감사</h2>
-          </div>
-          <p className="mt-1 maju-muted-label">
-            파일별 처리 결과와 실행자를 기존 승인 이력에서 확인합니다.
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-          <Clock3 className="h-3.5 w-3.5" /> 최근 {imports.length.toLocaleString()}건
-        </span>
-      </div>
-      {!auditV2Enabled ? (
-        <p className="border-y border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          행별 이전값·오류 상세 감사 OFF · WO-25 SQL 승인 대기
-        </p>
-      ) : null}
-      {loading ? (
-        <div className="flex justify-center p-12">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
-      ) : (
-        <CommonDataTable
-          columns={columns}
-          emptyMessage="가져오기 이력이 없습니다."
-          filename="상품_가져오기_감사.csv"
-          rowKey={(item) => item.id}
-          rows={imports}
-          settingsKey="product-import-audit"
-        />
-      )}
-    </section>
   );
 }
 

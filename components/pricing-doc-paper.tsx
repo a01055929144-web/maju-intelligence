@@ -5,7 +5,11 @@ import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
 import type { DocumentOutput } from "@/domains/pricing/document";
+import { FOLDER_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
+
+// CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
+const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "카탈로그가", base: "기본가", edited: "문서에서 고침" };
 
 export function PricingDocPaper(props: { output: DocumentOutput } | React.ComponentProps<typeof EditablePricingDocPaper>) {
   if ("output" in props) return <article className="pricing-online mx-auto max-w-[860px] rounded border bg-white p-4"><PageContent data={props.output} page={1} pages={1} /></article>;
@@ -22,6 +26,7 @@ function EditablePricingDocPaper({
   content,
   editable,
   onContent,
+  onDropProducts,
   onQuickAdd,
   onQuickSearch
 }: {
@@ -29,6 +34,7 @@ function EditablePricingDocPaper({
   readonly content: DocumentContent;
   readonly editable: boolean;
   readonly onContent: (content: DocumentContent) => void;
+  readonly onDropProducts?: (ids: string[]) => void;
   readonly onQuickAdd?: (item: CatalogChoice) => void;
   readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
@@ -53,6 +59,8 @@ function EditablePricingDocPaper({
   }
   function dropLine(target: number) {
     if (draggedLine.current === null) return;
+    // CC-35: 행사 칸 줄은 행사끼리, 일반 줄은 일반끼리만 순서가 바뀐다(다른 칸에 놓으면 무시).
+    if (Boolean(content.lines[draggedLine.current]?.promotionId) !== Boolean(content.lines[target]?.promotionId)) { draggedLine.current = null; return; }
     const next = [...content.lines];
     next.splice(target, 0, next.splice(draggedLine.current, 1)[0]);
     draggedLine.current = null;
@@ -61,7 +69,14 @@ function EditablePricingDocPaper({
   const cell = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 hover:border-slate-200 focus:border-teal-500 focus:bg-white disabled:hover:border-transparent";
 
   return (
-    <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10" style={{ borderTop: `6px solid ${accent}` }}>
+    <article className="mx-auto w-full max-w-[860px] space-y-4 rounded-md bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,.10)] sm:p-10"
+      onDragOver={(event) => { if (editable && onDropProducts && event.dataTransfer.types.includes(FOLDER_DRAG)) event.preventDefault(); }}
+      onDrop={(event) => {
+        if (!editable || !onDropProducts || !event.dataTransfer.types.includes(FOLDER_DRAG)) return;
+        event.preventDefault();
+        try { const ids: unknown = JSON.parse(event.dataTransfer.getData(FOLDER_DRAG)); if (Array.isArray(ids)) onDropProducts(ids.filter((id): id is string => typeof id === "string").slice(0, 300)); } catch { /* 깨진 끌기 값은 무시 */ }
+      }}
+      style={{ borderTop: `6px solid ${accent}` }}>
       {/* 11/4: 문서를 주는 회사가 가장 먼저 보이도록 — 회사명 크게, 연락처·주소는 바로 아래 */}
       <header className="border-b pb-3">
         <input aria-label="회사명" className={`${cell} text-2xl font-black`} disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, companyName: e.target.value })} placeholder="회사명을 입력하세요" style={{ color: accent }} value={content.companyName} />
@@ -86,9 +101,9 @@ function EditablePricingDocPaper({
           {display.promoLayout === "table" ? (
             <table className="w-full table-fixed text-sm"><tbody>
               {promos.map(({ index, line }) => (
-                <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`}>
-                  <td className="py-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
-                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원</td>
+                <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
+                  <td className="py-1 [overflow-wrap:anywhere]">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원{editable ? <a className="block text-[11px] font-normal text-teal-700 underline print:hidden" href="/revenue/pricing/promotions" rel="noopener" target="_blank">행사 화면에서 수정</a> : null}{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -97,10 +112,11 @@ function EditablePricingDocPaper({
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {promos.map(({ index, line }) => (
-                <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`}>
-                  <p className="text-sm font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
+                <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
+                  <p className="text-sm font-bold">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
                   <p className="text-xs text-slate-600">{line.spec} {line.unit}{line.endsOn ? ` · ${line.endsOn}까지` : ""}</p>
                   <p className="font-black text-orange-700">{visiblePrice(line).toLocaleString()}원</p>
+                  {display.showTaxType ? <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   {editable ? <button aria-label={`${line.displayName} 빼기`} className="absolute right-1.5 top-1.5 text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
                 </div>
               ))}
@@ -109,32 +125,38 @@ function EditablePricingDocPaper({
         </section>
       ) : null}
 
-      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))" }}>
+      {/* 선택한 열 수까지 나눈다. 예전 auto-fit(260px)은 3단 편집 화면의 좁은 종이(약 490px)에서 늘 1열이었다.
+          열이 150px보다 좁아지면(단가·품목명을 못 읽음) 그만큼만 줄인다. 휴대폰은 아래 media 규칙으로 1열. */}
+      <div className="pricing-edit-grid grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(max(150px, calc((100% - ${columns - 1}rem) / ${columns})), 1fr))` }}>
         {chunks.map((chunk, c) => (
           <table className="w-full table-fixed border-collapse text-sm" key={c}>
-            <colgroup><col style={{ width: `${content.showPrice ? display.productWidth * (editable ? 0.95 : 1) : editable ? 95 : 100}%` }} />{content.showPrice ? <col style={{ width: `${(100 - display.productWidth) * (editable ? 0.95 : 1)}%` }} /> : null}{editable ? <col style={{ width: "5%" }} /> : null}</colgroup>
             <thead>
               <tr className="text-left text-xs text-slate-500">
                 <th className="border-b py-1.5">품목{content.showSpec ? "·규격·단위" : ""}</th>
-                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right">단가</th> : null}
-                {editable ? <th className="w-7 border-b" /> : null}
+                {/* 단가 칸은 좁은 열에서도 7자리 가격이 들어가게 최소 6rem, 나머지는 품목명. */}
+                {content.showPrice ? <th className="border-b px-2 py-1.5 text-right" style={{ width: `max(${100 - display.productWidth}%, 6rem)` }}>단가</th> : null}
               </tr>
             </thead>
             <tbody>
               {chunk.map(({ index, line }) => (
                 <tr className={`border-b border-slate-100 ${line.visible ? "" : "opacity-40"} ${line.price < (baselines[line.productId] ?? 0) ? "bg-orange-50" : ""}`} key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
                   <td className="py-0.5">
-                    {editable ? <span aria-hidden="true" className="cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
+                    {/* 끌기 손잡이·이름·빼기를 한 줄에 둔다. 따로 둔 5% 휴지통 칸은 3열처럼 좁은 열에서 아이콘(14px)보다 좁아 칸 밖으로 넘쳤다(CC-10). */}
+                    <div className="flex min-w-0 items-center">
+                    {editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-slate-400" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 품목 순서 변경">⠿</span> : null}
                     <input aria-label={`품목 ${index + 1} 노출 상품명`} className={`${cell} font-semibold ${line.displayName.trim() ? "" : "border-rose-300 bg-rose-50"}`} disabled={!editable} maxLength={120} onChange={(e) => updateLine(index, { displayName: e.target.value })} placeholder="품목 이름 입력" value={line.displayName} />
+                    {editable ? <button aria-label={`${line.displayName} 빼기`} className="shrink-0 px-1 text-slate-300 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
+                    </div>
                     {content.showBrand && line.brand ? <span className="block px-1 text-xs text-slate-500">{line.brand}</span> : null}
                     {content.showSpec && (line.spec || line.unit) ? <span className="block px-1 text-xs text-slate-600 [overflow-wrap:anywhere]" data-document-spec>{[line.spec, line.unit].filter(Boolean).join(" · ")}</span> : null}
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value }); }} value={visiblePrice(line).toLocaleString()} />
+                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line).toLocaleString()} />
+                      {editable && line.priceSource ? <span className="block px-1 text-right text-xs text-slate-500 print:hidden" data-price-source={line.priceSource}>{SOURCE_LABEL[line.priceSource]}</span> : null}
+                      {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
                   ) : null}
-                  {editable ? <td className="py-0.5 text-right"><button aria-label={`${line.displayName} 빼기`} className="text-slate-300 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button></td> : null}
                 </tr>
               ))}
             </tbody>

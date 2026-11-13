@@ -1,4 +1,5 @@
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identity";
@@ -135,6 +136,8 @@ type AdminDashboardPayload = {
   scoringWeights: Array<{ label: string; value: number; note: string }>;
   leadQueue: Array<{ id: string; name: string; region: string; score: number; status: string; statusValue: string; companyId: string }>;
   uploadHistory: UploadHistoryItem[];
+  /** CC-22b: 본사(internal)는 항상 제외, 파일럿은 토글 */
+  scope?: { internalExcluded: boolean; pilotExcluded: boolean };
 };
 export type ExcelMappingPreset = {
   id?: string;
@@ -542,9 +545,13 @@ export type ManagedLoginAccountInput = {
   role: AppUserLoginCredential["role"];
   workspaceRole?: StaffInvitation["role"] | "owner" | "member";
 };
+/** CC-22: 회사 구분. customer=영업할 고객사, pilot=파일럿, internal=본사(지표·결제·알림에서 제외). */
+export type CompanyKind = "customer" | "pilot" | "internal";
+export const normalizeCompanyKind = (value: unknown): CompanyKind => (value === "pilot" || value === "internal" ? value : "customer");
 export type ManagedCompanyAccount = {
   id: string;
   name: string;
+  companyKind: CompanyKind;
   businessRegistrationNumber: string;
   businessType: string;
   ownerName: string;
@@ -973,6 +980,7 @@ const SUPABASE_CONNECTION_KEY_MESSAGE =
   "Supabase 연결 키가 현재 프로젝트와 맞지 않습니다. Vercel 환경변수의 SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY를 같은 Supabase 프로젝트 값으로 맞춘 뒤 재배포해주세요.";
 
 export function getSupabaseConfig(): SupabaseConfig | null {
+  if (!publicOwnerTestAccessAllowed()) return null;
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 
@@ -2270,8 +2278,9 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
           origin_address: string | null;
           status: string;
           updated_at: string;
+          company_kind?: string | null;
         }>
-      >("companies?select=id,name,business_registration_number,business_type,owner_name,origin_address,status,updated_at&order=created_at.desc"),
+      >("companies?select=id,name,business_registration_number,business_type,owner_name,origin_address,status,updated_at,company_kind&order=created_at.desc"),
       supabaseRequest<
         Array<{
           customer_company_id: string | null;
@@ -2446,6 +2455,7 @@ export async function getManagedCompanyAccounts(): Promise<{ companies: ManagedC
         return {
           id: company.id,
           name: company.name,
+          companyKind: normalizeCompanyKind(company.company_kind),
           businessRegistrationNumber: company.business_registration_number || "",
           businessType: company.business_type || "",
           ownerName: company.owner_name || "",
@@ -2501,6 +2511,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
         ownerName: input.ownerName || "",
         originAddress: input.originAddress || "",
         status: input.status || "active",
+        companyKind: "customer" as const,
         customerEmail,
         hasPassword: Boolean(input.customerPassword),
         customerCount: 0,
@@ -2560,6 +2571,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
       origin_address: string | null;
       status: string;
       updated_at: string;
+      company_kind?: string | null;
     }>
   >("companies?on_conflict=id", {
     method: "POST",
@@ -2688,6 +2700,7 @@ export async function upsertManagedCompanyAccount(input: ManagedCompanyAccountIn
     company: {
       id: company.id,
       name: company.name,
+      companyKind: normalizeCompanyKind(company.company_kind),
       businessRegistrationNumber: company.business_registration_number || "",
       businessType: company.business_type || "",
       ownerName: company.owner_name || "",
@@ -5104,7 +5117,7 @@ export async function getCustomerMaster(
   for (const select of CUSTOMER_MASTER_SELECT_TIERS) {
     try {
       fetched = await supabaseRequest<Array<CustomerMasterRow>>(
-        `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        `normalized_customers?select=${select}&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
       fetchedAssignmentIds = select.includes("assigned_staff_member_id");
       fetchedGradeOverride = select.includes("grade_override");
@@ -5123,7 +5136,7 @@ export async function getCustomerMaster(
   if (!fetchedGradeOverride && fetched.length) {
     try {
       const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
-        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}&offset=${offset}`
       );
       const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
       fetched = fetched.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
@@ -5264,7 +5277,7 @@ export async function getCustomerMapSummaries(
   let fetchedGradeOverride = false;
   try {
     rows = await supabaseRequest<CustomerMapRow[]>(
-      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      `normalized_customers?select=${baseSelect},delivery_vehicle,grade_override,assigned_staff_member_id&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
     );
     fetchedAssignmentIds = true;
     fetchedGradeOverride = true;
@@ -5272,12 +5285,12 @@ export async function getCustomerMapSummaries(
     if (!isMissingColumnError(error)) throw error;
     try {
       rows = await supabaseRequest<CustomerMapRow[]>(
-        `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=${baseSelect},delivery_vehicle&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
     } catch (fallbackError) {
       if (!isMissingColumnError(fallbackError)) throw fallbackError;
       rows = await supabaseRequest<CustomerMapRow[]>(
-        `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=${baseSelect}&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
     }
   }
@@ -5288,7 +5301,7 @@ export async function getCustomerMapSummaries(
   if (!fetchedGradeOverride && rows.length) {
     try {
       const gradeRows = await supabaseRequest<Array<{ grade_override: string | null; id: string }>>(
-        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+        `normalized_customers?select=id,grade_override&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&order=created_at.desc&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
       );
       const gradeById = new Map(gradeRows.map((row) => [row.id, row.grade_override]));
       rows = rows.map((row) => ({ ...row, grade_override: gradeById.get(row.id) ?? null }));
@@ -8701,6 +8714,8 @@ export type PermitLeadIngestRow = {
 
 export type PermitLeadItem = {
   id: string;
+  /** CC-31: 유통사 리드면 "distributor", 그 밖(없음 포함)은 매장 영업 대상. */
+  targetType?: "restaurant" | "distributor";
   businessName: string;
   businessNumber?: string;
   representativeName?: string;
@@ -8784,6 +8799,7 @@ type PermitLeadRow = {
   permit_status: string | null;
   is_active: boolean;
   permit_date: string | null;
+  target_type?: string | null;
   open_date: string | null;
   address: string | null;
   administrative_area: string | null;
@@ -8965,6 +8981,7 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     permitStatus: row.permit_status || undefined,
     isActive: row.is_active,
     permitDate: row.permit_date || undefined,
+    targetType: row.target_type === "distributor" ? "distributor" : "restaurant",
     openDate: row.open_date || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,
@@ -9611,6 +9628,13 @@ function singleSalesAreaPostgrestFilter(area: string) {
   }
   const column = extractCustomerAdministrativeSubarea(area) ? "administrative_subarea" : "administrative_area";
   return `${column}=eq.${encodeURIComponent(area)}`;
+}
+
+/** CC-31: {신규수} — 그 시·군·구(예: "서울특별시 강남구")에서 최근 30일 새로 열었거나 인허가가 난 음식점 리드 수(합쳐지거나 중복인 것 제외). 지역이 없으면 0. */
+export async function countRecentNewRestaurantLeads(companyId: string, area: string): Promise<number> {
+  if (!area) return 0;
+  const recentFrom = kstDateDaysAgo(29);
+  return supabasePermitLeadCount([`company_id=eq.${encodeURIComponent(companyId)}`, "merged_into_lead_id=is.null", "is_active=eq.true", "is_duplicate=eq.false", "target_type=eq.restaurant", `or=(open_date.gte.${recentFrom},permit_date.gte.${recentFrom})`, singleSalesAreaPostgrestFilter(area)]);
 }
 
 async function getDailyLeadTargetSnapshot(companyId: string): Promise<DailyLeadTargetSnapshot> {
@@ -10608,10 +10632,14 @@ export async function syncAllCompaniesKakaoKeywordLeads(): Promise<KakaoKeywordL
 export type PermitLeadFilters = {
   action?: string;
   excludeExcluded?: boolean;
+  /** CC-21: 대상 유형. 없으면 전체(기존 동작). 유통사는 라우트에서 DISTRIBUTOR_SALES 회사만 허용한다. */
+  targetType?: "restaurant" | "distributor";
   grade?: string;
   hasPhone?: boolean;
   industry?: string;
   limit?: number;
+  /** 전체 건수(count=exact) 조회를 건너뛴다. 건수를 안 쓰는 호출(액션 큐)용. */
+  skipTotal?: boolean;
   period?: PermitLeadPeriod | "all";
   status?: string;
   includeOutsideSalesArea?: boolean;
@@ -10633,11 +10661,14 @@ type LeadBusinessHourRow = {
 export async function listLeadBusinessHours(companyId: string, leadIds: string[]) {
   if (!isProductionStoreConfigured() || !leadIds.length) return new Map<string, LeadBusinessHourInterval[]>();
   const result = new Map<string, LeadBusinessHourInterval[]>();
-  for (let offset = 0; offset < leadIds.length; offset += 200) {
-    const ids = leadIds.slice(offset, offset + 200).map(encodeURIComponent).join(",");
-    const rows = await supabaseRequest<LeadBusinessHourRow[]>(
+  // 11/12: 리드 3,000건이면 15번을 차례로 기다리다 /api/leads/permits가 10초를 넘겼다. 묶음별 조회를 동시에 보내고(한 리드는 한 묶음에만 있어 순서 유지), 합칠 때만 차례대로.
+  const batches = Array.from({ length: Math.ceil(leadIds.length / 200) }, (_, index) => leadIds.slice(index * 200, index * 200 + 200).map(encodeURIComponent).join(","));
+  const batchRows = await Promise.all(batches.map((ids) =>
+    supabaseRequest<LeadBusinessHourRow[]>(
       `lead_business_hour_intervals?select=lead_id,weekday,interval_index,opens_at,closes_at,is_closed&company_id=eq.${encodeURIComponent(companyId)}&source=eq.manual&lead_id=in.(${ids})&order=weekday,interval_index`
-    ).catch(() => []);
+    ).catch(() => [] as LeadBusinessHourRow[])
+  ));
+  for (const rows of batchRows) {
     for (const row of rows) {
       const current = result.get(row.lead_id) || [];
       current.push({ weekday: row.weekday, intervalIndex: row.interval_index, opensAt: row.opens_at?.slice(0, 5), closesAt: row.closes_at?.slice(0, 5), isClosed: row.is_closed });
@@ -10686,6 +10717,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.action) params.push(`next_action=eq.${encodeURIComponent(filters.action)}`);
   if (filters.status) params.push(`status=eq.${encodeURIComponent(filters.status)}`);
   if (filters.grade) params.push(`grade=eq.${encodeURIComponent(filters.grade)}`);
+  if (filters.targetType) params.push(`target_type=eq.${filters.targetType}`);
   if (filters.hasPhone) params.push("phone=not.is.null");
   if (process.env.LEAD_STORE_AREA_ENABLED === "true" && filters.storeAreaRange) {
     const bounds = getStoreAreaSqmFilterBounds(filters.storeAreaRange);
@@ -10695,7 +10727,8 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   if (filters.excludeExcluded) params.push(`status=neq.제외`);
   if (!filters.includeExistingCustomers && filters.status !== "기존 거래처") params.push(`status=neq.${encodeURIComponent("기존 거래처")}`);
   if (!filters.includeTemporaryOperations && filters.status !== "임시 영업") params.push(`status=neq.${encodeURIComponent("임시 영업")}`);
-  if (!filters.includeOutsideSalesArea) {
+  // 영업 지역은 매장(음식점) 영업용이다 — 유통사 리드는 행정구역이 없으니 지역 필터로 숨기지 않는다.
+  if (!filters.includeOutsideSalesArea && filters.targetType !== "distributor") {
     const salesAreas = await getCompanySalesAdministrativeAreas(companyId);
     if (shouldApplySalesAreaFilter(salesAreas, Boolean(filters.includeOutsideSalesArea))) {
       params.push(salesAreaPostgrestFilter(salesAreas));
@@ -10718,7 +10751,7 @@ export async function listPermitLeads(companyId: string, filters: PermitLeadFilt
   // (예: DB에 500건이어도 300건만 받아와 "총 300건"으로 잘못 표시). hasPhone처럼 조회 이후
   // 자바스크립트로만 걸러지는 필터가 없을 때는, 같은 조건으로 count=exact를 별도 조회해 진짜
   // 전체 건수를 돌려줍니다.
-  const total = await supabasePermitLeadCount(params).catch(() => leads.length);
+  const total = filters.skipTotal ? leads.length : await supabasePermitLeadCount(params).catch(() => leads.length);
 
   return { leads, total };
 }
@@ -10777,7 +10810,7 @@ export type PermitLeadQueues = {
  * 묶일 때만 방문을 권장합니다. 큐당 기본 20곳까지만 노출해 하루 작업량을 넘기지 않습니다.
  */
 export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20): Promise<PermitLeadQueues> {
-  const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500 });
+  const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500, skipTotal: true });
   const active = leads.filter((lead) => lead.status !== "제외" && lead.isActive);
 
   const regionCounts = new Map<string, number>();
@@ -14584,24 +14617,28 @@ export async function getCompanyMessageTemplates(companyId: string): Promise<Del
 }
 
 /** 리드 DM 기본 문구·제외 품목. 배송 문구와 같은 표를 쓰지만 template_key가 lead_dm* 인 행만 다룹니다. */
-export async function getLeadDmSettings(companyId: string): Promise<{ excluded: string; template: string }> {
-  if (!isProductionStoreConfigured()) return { excluded: "", template: "" };
+export async function getLeadDmSettings(companyId: string): Promise<{ excluded: string; template: string; distributorTemplate: string }> {
+  if (!isProductionStoreConfigured()) return { excluded: "", template: "", distributorTemplate: "" };
   const rows = await supabaseRequest<DeliveryMessageTemplateRow[]>(
     `company_message_templates?select=id,template_key,label,body,sort_order&company_id=eq.${encodeURIComponent(companyId)}&template_key=like.lead_dm*&is_active=eq.true`
   );
   return {
     excluded: rows.find((row) => row.template_key === "lead_dm_exclude")?.body || "",
-    template: rows.find((row) => row.template_key === "lead_dm")?.body || ""
+    template: rows.find((row) => row.template_key === "lead_dm")?.body || "",
+    // CC-31: 유통사 리드용 회사 문구. 키가 lead_dm으로 시작해 이 조회와 replaceCompanyMessageTemplates의 not.like.lead_dm* 보호를 그대로 탄다.
+    distributorTemplate: rows.find((row) => row.template_key === "lead_dm_distributor")?.body || ""
   };
 }
 
-export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string }) {
+/** distributorTemplate가 undefined면 저장된 유통사 문구는 그대로 둔다(매장용만 고치는 기존 호출 보호). */
+export async function saveLeadDmSettings(companyId: string, input: { excluded: string; template: string; distributorTemplate?: string }) {
   if (!isProductionStoreConfigured()) return { persisted: false };
   // 11/4: 영업 자료(lead_dm_kit·lead_dm_link_*)는 지우지 않도록 두 키만 지웁니다.
-  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=in.(lead_dm,lead_dm_exclude)`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  await supabaseRequest(`company_message_templates?company_id=eq.${encodeURIComponent(companyId)}&template_key=in.(lead_dm,lead_dm_exclude${input.distributorTemplate === undefined ? "" : ",lead_dm_distributor"})`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
   const rows = [
     { company_id: companyId, template_key: "lead_dm", label: "리드 DM 기본 문구", body: input.template.trim(), sort_order: 9000, is_active: true },
-    ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : [])
+    ...(input.excluded.trim() ? [{ company_id: companyId, template_key: "lead_dm_exclude", label: "리드 DM 제외 품목", body: input.excluded.trim(), sort_order: 9010, is_active: true }] : []),
+    ...(input.distributorTemplate?.trim() ? [{ company_id: companyId, template_key: "lead_dm_distributor", label: "리드 DM 유통사용 문구", body: input.distributorTemplate.trim(), sort_order: 9020, is_active: true }] : [])
   ];
   await supabaseRequest("company_message_templates", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(rows) });
   return { persisted: true };
@@ -14716,6 +14753,18 @@ export async function closeCompanyAccount(
  * supabase/migrations/*) 거래처/매출/업로드/직원 초대/구독 등 관련 데이터가 전부 함께 영구
  * 삭제되며 되돌릴 수 없습니다. 호출부(관리자 화면)에서 회사명 재입력 확인을 반드시 거치게 해야 합니다.
  */
+/** CC-22b: 회사 구분 변경(MAJU 관리자 API만 호출). 바꾸기 전 값을 읽어 감사 로그에 남긴다. */
+export async function setCompanyKind(companyId: string, kind: CompanyKind, actorName: string): Promise<{ from: CompanyKind; to: CompanyKind }> {
+  const [row] = await supabaseRequest<Array<{ company_kind: string | null }>>(`companies?select=company_kind&id=eq.${encodeURIComponent(companyId)}`);
+  if (!row) throw new Error("company_not_found");
+  const from = normalizeCompanyKind(row.company_kind);
+  if (from !== kind) {
+    await supabaseRequest(`companies?id=eq.${encodeURIComponent(companyId)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ company_kind: kind }) });
+    await writeAdminAuditLog({ action: "company_kind_changed", companyId, metadata: { from, to: kind, actorName }, targetId: companyId, targetType: "company" });
+  }
+  return { from, to: kind };
+}
+
 export async function deleteCompanyPermanently(
   input: { companyId: string; confirmCompanyName: string },
   auditContext: AuditActorContext = {}
@@ -14757,8 +14806,14 @@ export async function deleteCompanyPermanently(
   return { deleted: true };
 }
 
-export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload> {
+export async function getAdminDashboardPayload(options: { excludePilot?: boolean } = {}): Promise<AdminDashboardPayload> {
   if (!isProductionStoreConfigured()) return getEmptyAdminDashboardPayload("empty");
+
+  // CC-22b: 본사(internal)는 항상 제외, 파일럿은 "파일럿 제외하고 보기"를 켰을 때만 제외한다.
+  const kindRows = await supabaseRequest<Array<{ id: string; company_kind: string }>>("companies?select=id,company_kind&company_kind=in.(internal,pilot)").catch(() => []);
+  const excludedIds = kindRows.filter((row) => row.company_kind === "internal" || (options.excludePilot && row.company_kind === "pilot")).map((row) => row.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  const scope = excludedIds.length ? `&company_id=not.in.(${excludedIds.join(",")})` : "";
+  const idScope = excludedIds.length ? `&id=not.in.(${excludedIds.join(",")})` : "";
 
   const weekStart = new Date(Date.now() - 7 * 86400000).toISOString();
   const kstNow = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit" }).formatToParts(new Date());
@@ -14771,7 +14826,7 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
     companies, imports, reports, leads, uploadHistory, recentMembers, activeCompanyActions, contactCount,
     quoteCount, conversionCount, statusQuoteContractCount, syncErrorCount, staleSyncCount
   ] = await Promise.all([
-    supabaseRequest<Array<{ id: string; status?: string }>>("companies?select=id,status"),
+    supabaseRequest<Array<{ id: string; status?: string }>>(`companies?select=id,status${idScope}`),
     supabaseRequest<
       Array<{
         id: string;
@@ -14783,23 +14838,23 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
         companies: { name: string };
       }>
     >(
-      "customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name)&order=created_at.desc&limit=20"
+      `customer_imports?select=id,row_count,status,quality_score,duplicate_count,created_at,companies(name)${scope}&order=created_at.desc&limit=20`
     ),
     supabaseRequest<Array<{ health_score: number }>>("ai_reports?select=health_score&order=created_at.desc&limit=50"),
     supabaseRequest<Array<{ id: string; name: string; region: string; score: number; status: string; company_id: string }>>(
-      "lead_recommendations?select=id,name,region,score,status,company_id&order=score.desc&limit=20"
+      `lead_recommendations?select=id,name,region,score,status,company_id${scope}&order=score.desc&limit=20`
     ),
     getUploadHistory(),
     supabaseRequest<Array<{ company_id: string; user_id: string; app_users: { last_login_at: string | null } | null }>>(
-      `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}`
+      `company_members?select=company_id,user_id,app_users!inner(last_login_at)&status=eq.active&app_users.last_login_at=gte.${encodeURIComponent(weekStart)}${scope}`
     ).catch(() => []),
-    supabaseRequest<Array<{ company_id: string }>>(`lead_actions?select=company_id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}&limit=10000`).catch(() => []),
-    supabaseExactCount(`lead_actions?select=id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.quote&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.convert&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount(`lead_actions?select=id&action_type=eq.status&result=in.(%EA%B2%AC%EC%A0%81%20%EC%A0%84%EB%8B%AC,%EA%B3%84%EC%95%BD)&created_at=gte.${encodeURIComponent(monthStart)}`).catch(() => 0),
-    supabaseExactCount("lead_sync_runs?select=id&status=eq.error").catch(() => 0),
-    supabaseExactCount(`lead_sync_runs?select=id&status=eq.running&started_at=lt.${encodeURIComponent(syncRunningCutoff)}`).catch(() => 0)
+    supabaseRequest<Array<{ company_id: string }>>(`lead_actions?select=company_id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}${scope}&limit=10000`).catch(() => []),
+    supabaseExactCount(`lead_actions?select=id&action_type=in.(${contactTypes})&created_at=gte.${encodeURIComponent(weekStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.quote&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.convert&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_actions?select=id&action_type=eq.status&result=in.(%EA%B2%AC%EC%A0%81%20%EC%A0%84%EB%8B%AC,%EA%B3%84%EC%95%BD)&created_at=gte.${encodeURIComponent(monthStart)}${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_sync_runs?select=id&status=eq.error${scope}`).catch(() => 0),
+    supabaseExactCount(`lead_sync_runs?select=id&status=eq.running&started_at=lt.${encodeURIComponent(syncRunningCutoff)}${scope}`).catch(() => 0)
   ]);
 
   const avgHealthScore = reports.length
@@ -14857,7 +14912,8 @@ export async function getAdminDashboardPayload(): Promise<AdminDashboardPayload>
       statusValue: lead.status,
       companyId: lead.company_id
     })),
-    uploadHistory
+    uploadHistory: uploadHistory.filter((item) => !excludedIds.includes(item.companyId)),
+    scope: { internalExcluded: true, pilotExcluded: Boolean(options.excludePilot) }
   };
 }
 
@@ -15896,7 +15952,7 @@ export async function listSubscriptionPayments(companyId: string, limit = 100): 
 
 /** 관리자용 — 전체 고객사의 구독 상태를 한 번에 조회합니다(고객사명 포함). */
 export async function listSubscriptionsForAdmin(): Promise<
-  Array<Omit<Subscription, "status"> & { companyName: string; status: SubscriptionStatus | "none" }>
+  Array<Omit<Subscription, "status"> & { companyName: string; companyKind: CompanyKind; status: SubscriptionStatus | "none" }>
 > {
   if (!isProductionStoreConfigured()) return [];
   const [subscriptionRows, companies] = await Promise.all([
@@ -15904,17 +15960,19 @@ export async function listSubscriptionsForAdmin(): Promise<
       if (isMissingSubscriptionsTableError(error)) return [];
       throw error;
     }),
-    supabaseRequest<Array<{ id: string; name: string }>>("companies?select=id,name&order=created_at.desc").catch(() => [])
+    supabaseRequest<Array<{ id: string; name: string; company_kind?: string | null }>>("companies?select=id,name,company_kind&order=created_at.desc").catch(() => [])
   ]);
   const subscriptionByCompany = new Map(subscriptionRows.map((row) => [row.company_id, row]));
 
   return companies.map((company) => {
     const row = subscriptionByCompany.get(company.id);
-    if (row) return { ...mapSubscriptionRow(row), companyName: company.name };
+    const companyKind = normalizeCompanyKind(company.company_kind);
+    if (row) return { ...mapSubscriptionRow(row), companyName: company.name, companyKind };
     return {
       id: `none-${company.id}`,
       companyId: company.id,
       companyName: company.name,
+      companyKind,
       tossCustomerKey: "",
       billingKey: null,
       cardIssuerCode: null,

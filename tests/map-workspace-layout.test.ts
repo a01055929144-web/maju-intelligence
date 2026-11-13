@@ -114,7 +114,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     expect(dashboardSource).toContain("initialCustomerId={params.customer}");
     expect(workspaceSource).toContain('const [selectedId, setSelectedId] = useState(initialCustomerId || "")');
     expect(workspaceSource).toContain("const selectedStore = allStores.find((store) => store.id === selectedId)");
-    expect(mapDrawerSource).toContain('title="매장전화"');
+    expect(mapDrawerSource).toContain('title={`매장전화 · ${displayedPhone}`}');
     expect(mapDrawerSource).toContain('title="이메일"');
     expect(mapDrawerSource).toContain("const canSms = isMobilePhoneNumber(phone)");
     expect(mapLeadChannelsSource).toContain("isMobilePhoneNumber(lead.phone)");
@@ -123,6 +123,15 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   it("keeps an unknown current relationship stage selectable", () => {
     expect(mapDrawerSource).toContain("RELATIONSHIP_STAGE_OPTIONS.some");
     expect(mapDrawerSource).toContain("<option value={currentStage}>{currentStage}</option>");
+  });
+
+  it("formats customer contact fields for display while saving digits", () => {
+    expect(workspaceSource).toContain('import { formatPhoneNumber } from "@/lib/phone"');
+    expect(workspaceSource).toContain('연락처 · {formatPhoneNumber(draftPhone) || "미등록"}');
+    expect(workspaceSource).toContain('사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}');
+    expect(workspaceSource).toContain("phone: normalizePhoneNumber(draftPhone)");
+    expect(workspaceSource).toContain("businessRegistrationNumber: normalizeBusinessRegistrationNumber(draftBusinessNumber)");
+    expect(mapDrawerSource).toContain("formatPhoneNumber(phone)");
   });
 });
 

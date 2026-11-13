@@ -1,0 +1,50 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+describe("lead DM settings (CC-31b)", () => {
+  const route = readFileSync("app/api/leads/dm-template/route.ts", "utf8");
+  const store = readFileSync("lib/store.ts", "utf8");
+  it("stores the distributor text under lead_dm_distributor and leaves it alone when a caller does not send it", () => {
+    expect(store).toContain('"lead_dm_distributor"');
+    expect(store).toContain('input.distributorTemplate === undefined ? "" : ",lead_dm_distributor"');
+  });
+  it("the distributor text can only be saved by companies with DISTRIBUTOR_SALES", () => {
+    expect(route).toContain('isFeatureEnabled("DISTRIBUTOR_SALES", scope.companyId)');
+    expect(route).toContain("status: 403");
+  });
+  it("an admin proxy save leaves an audit record and the GET returns the variable values", () => {
+    expect(route).toContain('scope.role === "admin"');
+    expect(route).toContain("lead_dm_template_saved");
+    for (const key of ["companyName", "region", "mainItems", "newCount"]) expect(route).toContain(key);
+  });
+  it("the new-lead count only counts restaurant leads of the last 30 days that are not merged or duplicates", () => {
+    const fn = store.slice(store.indexOf("export async function countRecentNewRestaurantLeads"), store.indexOf("async function getDailyLeadTargetSnapshot("));
+    for (const part of ["target_type=eq.restaurant", "merged_into_lead_id=is.null", "is_duplicate=eq.false", "kstDateDaysAgo(29)"]) expect(fn).toContain(part);
+  });
+  it("a distributor lead gets the distributor text, ignores 업종·품목 and edits only the distributor text from the lead detail", () => {
+    const ws = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+    expect(ws).toContain('lead.targetType === "distributor"');
+    expect(ws).toContain("LEAD_DM_TEMPLATES.distributor[0].body");
+    expect(ws).toContain("target: distributor");
+    const panel = readFileSync("components/lead-contact-channels-panel.tsx", "utf8");
+    expect(panel).toContain("isDistributorLead ? { excluded: dmSettings?.excluded");
+    expect(panel).toContain("{isDistributorLead ? null : <input");
+    expect(store).toContain('row.target_type === "distributor" ? "distributor" : "restaurant"');
+  });
+});
+
+describe("영업 문구 card (CC-31d)", () => {
+  const card = readFileSync("components/lead-dm-template-settings.tsx", "utf8");
+  it("has the two tabs (distributor only when enabled), three templates per tab, variable chips and saves the right text per tab", () => {
+    expect(card).toContain("data.distributorEnabled");
+    expect(card).toContain("LEAD_DM_TEMPLATES[tab].map");
+    expect(card).toContain("이 템플릿으로 시작");
+    expect(card).toContain('restaurant: ["{상호}", "{회사명}", "{지역}", "{업종}", "{품목}", "{주력품목}"]');
+    expect(card).toContain('distributor: ["{상호}", "{회사명}", "{지역}", "{주력품목}", "{신규수}"]');
+    expect(card).toContain("distributorTemplate: draft");
+  });
+  it("is on the company's 영업 정보 page and, with companyId, on the admin setup helper", () => {
+    expect(readFileSync("app/dashboard/settings/sales/page.tsx", "utf8")).toContain("<LeadDmTemplateSettings />");
+    expect(readFileSync("app/admin/companies/[id]/setup/page.tsx", "utf8")).toContain("<LeadDmTemplateSettings companyId={company.id} />");
+  });
+});

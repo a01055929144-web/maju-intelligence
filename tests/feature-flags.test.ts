@@ -54,4 +54,19 @@ describe("company pricing gates", () => {
     expect(isFeatureEnabled("STORE_COSTS", "company-a")).toBe(true);
     expect(isFeatureEnabled("STORE_COSTS", "company-b")).toBe(false);
   });
+
+  it("keeps Stage D order IDs off until a company is explicitly allowed", () => {
+    expect(isFeatureEnabled("STAGE_D_ORDER_IDS", "company-a")).toBe(false);
+    process.env.FEATURE_STAGE_D_ORDER_IDS_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("STAGE_D_ORDER_IDS", "company-a")).toBe(true);
+    expect(isFeatureEnabled("STAGE_D_ORDER_IDS", "company-b")).toBe(false);
+  });
+
+  it("keeps Stage D completion off independently from order ID projection", () => {
+    process.env.FEATURE_STAGE_D_ORDER_IDS_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("STAGE_D_ORDER_COMPLETION", "company-a")).toBe(false);
+    process.env.FEATURE_STAGE_D_ORDER_COMPLETION_COMPANY_IDS = "company-a";
+    expect(isFeatureEnabled("STAGE_D_ORDER_COMPLETION", "company-a")).toBe(true);
+    expect(isFeatureEnabled("STAGE_D_ORDER_COMPLETION", "company-b")).toBe(false);
+  });
 });

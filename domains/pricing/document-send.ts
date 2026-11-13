@@ -25,6 +25,8 @@ export function parseDocumentSend(body: Record<string, unknown>): DocumentSendIn
   let templateId: string;
   if (body.shareLinkId !== undefined && (!isId(body.shareLinkId) || !leadId || customerId != null))
     throw new DocumentSendError("리드에게 준비한 공유 링크를 확인해 주세요.", 400);
+  if (leadId != null && body.shareLinkId === undefined)
+    throw new DocumentSendError("리드에게 전달할 공유 링크를 먼저 준비해 주세요.", 400);
   try { templateId = field(body.templateId, 100, true); }
   catch { throw new DocumentSendError("실제 사용한 템플릿을 확인해 주세요.", 400); }
   return { documentVersionId: documentVersionId.toLowerCase(), idempotencyKey: idempotencyKey.toLowerCase(),

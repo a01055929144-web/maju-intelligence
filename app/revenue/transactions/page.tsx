@@ -106,7 +106,7 @@ export default async function RevenueTransactionsPage({
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
+      <section className="w-full px-4 py-4 sm:px-4">
         <WorkspaceSectionNav
           items={[
             { active: section === "summary", badge: hasSalesData ? "연결" : "필요", description: "매출액·행 수·거래처 수", href: sectionHref("summary"), icon: ReceiptText, label: "현황" },

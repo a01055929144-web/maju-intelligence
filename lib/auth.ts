@@ -70,7 +70,16 @@ export type StoreSession = {
 
 type StoreOwnerActivationProof = {
   token: string;
-  termsAcceptedAt: string;
+  storePhone?: string;
+  returnTo?: string;
+  termsAcceptedAt?: string;
+  authUserId?: string;
+  stage?: "kakao" | "profile";
+  expiresAt: number;
+};
+
+type StoreMemberInvitationProof = {
+  token: string;
   expiresAt: number;
 };
 
@@ -78,6 +87,7 @@ const ADMIN_COOKIE_NAME = "maju_admin_session";
 const CUSTOMER_COOKIE_NAME = "maju_customer_session";
 const STORE_COOKIE_NAME = "maju_store_session";
 const STORE_OWNER_ACTIVATION_COOKIE = "maju_store_owner_activation";
+const STORE_MEMBER_INVITATION_COOKIE = "maju_store_member_invitation";
 const CUSTOMER_DEVICE_COOKIE_NAME = "maju_customer_device";
 const sessionObservationThrottle = new Map<string, number>();
 const DEFAULT_CUSTOMER_EMAIL = "owner@maju.local";
@@ -123,9 +133,27 @@ export async function consumeInvitePhoneProof(inviteCode: string) {
   return code === inviteCode && signature.length === expected.length && timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
-function encodeSession(session: AdminSession | CustomerSession | StoreSession | StoreOwnerActivationProof) {
+function encodeSession(session: AdminSession | CustomerSession | StoreSession | StoreOwnerActivationProof | StoreMemberInvitationProof) {
   const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
   return `${payload}.${sign(payload)}`;
+}
+
+export async function setStoreMemberInvitationProof(token: string) {
+  if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  const cookieStore = await cookies();
+  cookieStore.set(STORE_MEMBER_INVITATION_COOKIE, encodeSession({ token, expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function getStoreMemberInvitationProof(options: { consume?: boolean } = {}): Promise<StoreMemberInvitationProof | null> {
+  if (!storeMemberSessionEnabled()) return null;
+  const cookieStore = await cookies();
+  const proof = decodeSession<StoreMemberInvitationProof>(cookieStore.get(STORE_MEMBER_INVITATION_COOKIE)?.value);
+  if (options.consume) cookieStore.delete(STORE_MEMBER_INVITATION_COOKIE);
+  return proof && /^[A-Za-z0-9_-]{43}$/.test(proof.token) && proof.expiresAt > Math.floor(Date.now() / 1000) ? proof : null;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -146,11 +174,34 @@ export async function getStoreSession(): Promise<StoreSession | null> {
   return session;
 }
 
-export async function setStoreOwnerActivationProof(token: string) {
+export async function setStoreOwnerActivationProof(token: string, returnTo?: string) {
   if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  if (returnTo && (!returnTo.startsWith("/pricing-document#") || returnTo.startsWith("//") || returnTo.length > 1500)) return false;
   const now = Math.floor(Date.now() / 1000);
   const cookieStore = await cookies();
-  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, termsAcceptedAt: new Date().toISOString(), expiresAt: now + 900 }), {
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, termsAcceptedAt: new Date().toISOString(), expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function setPublicStoreOwnerKakaoProof(token: string, returnTo: string) {
+  if (!storeMemberSessionEnabled() || !/^[A-Za-z0-9_-]{43}$/.test(token) ||
+    !returnTo.startsWith("/pricing-document#") || returnTo.startsWith("//") || returnTo.length > 1500) return false;
+  const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ token, returnTo, stage: "kakao", expiresAt: now + 900 }), {
+    httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
+  });
+  return true;
+}
+
+export async function setPublicStoreOwnerProfileProof(input: { authUserId: string; returnTo: string; token: string; storePhone?: string }) {
+  if (!storeMemberSessionEnabled() || !UUID_PATTERN.test(input.authUserId) || !/^[A-Za-z0-9_-]{43}$/.test(input.token) ||
+    !input.returnTo.startsWith("/pricing-document#") || input.returnTo.startsWith("//") || input.returnTo.length > 1500) return false;
+  const now = Math.floor(Date.now() / 1000), cookieStore = await cookies();
+  const phone = input.storePhone?.replace(/^\+82\s?/, "0").replace(/\D/g, "") || "";
+  cookieStore.set(STORE_OWNER_ACTIVATION_COOKIE, encodeSession({ authUserId: input.authUserId, returnTo: input.returnTo,
+    token: input.token, ...(/^\d{9,11}$/.test(phone) ? { storePhone: phone } : {}), stage: "profile", expiresAt: now + 900 }), {
     httpOnly: true, maxAge: 900, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production"
   });
   return true;
@@ -162,8 +213,10 @@ export async function getStoreOwnerActivationProof(options: { consume?: boolean 
   const proof = decodeSession<StoreOwnerActivationProof>(cookieStore.get(STORE_OWNER_ACTIVATION_COOKIE)?.value);
   if (options.consume) cookieStore.delete(STORE_OWNER_ACTIVATION_COOKIE);
   const now = Math.floor(Date.now() / 1000);
-  return proof && /^[A-Za-z0-9_-]{43}$/.test(proof.token) && proof.expiresAt > now &&
-    !Number.isNaN(Date.parse(proof.termsAcceptedAt)) ? proof : null;
+  if (!proof || !/^[A-Za-z0-9_-]{43}$/.test(proof.token) || proof.expiresAt <= now) return null;
+  if (proof.stage === "kakao") return proof.returnTo ? proof : null;
+  if (proof.stage === "profile") return proof.returnTo && proof.authUserId && UUID_PATTERN.test(proof.authUserId) ? proof : null;
+  return proof.termsAcceptedAt && !Number.isNaN(Date.parse(proof.termsAcceptedAt)) ? proof : null;
 }
 
 function decodeSession<TSession>(value?: string): TSession | null {

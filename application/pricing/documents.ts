@@ -8,6 +8,7 @@ import {
   money,
   object,
   parseDocument,
+  PricingInputError,
 } from "../../domains/pricing/document";
 export type DocumentScope = {
   companyId: string;
@@ -29,11 +30,11 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
           "catalog",
           "versions",
           "promotions",
-          "sets",
           "profile",
         ].includes(action)
       )
-        throw new Error("조회 요청을 확인해 주세요.");
+        // CC-35: 묶음·템플릿("sets")은 기능 자체를 없앴다 — 부르면 없는 요청(404).
+        throw action === "sets" ? new DocumentSendError("없어진 기능입니다.", 404) : new PricingInputError("조회 요청을 확인해 주세요.");
       return repository.request<T>(scope, action, payload);
     },
     execute<T>(scope: DocumentScope, input: unknown) {
@@ -46,37 +47,37 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
         if (!isId(body.shareLinkId)) throw new DocumentSendError("공유 링크를 확인해 주세요.", 400);
         return repository.request<T>(scope, action, { shareLinkId: body.shareLinkId.toLowerCase() });
       }
-      if (!isId(id)) throw new Error("저장 번호를 확인해 주세요.");
+      if (action === "save-set" || action === "delete-set") throw new DocumentSendError("없어진 기능입니다.", 404);
+      if (!isId(id)) throw new PricingInputError("저장 번호를 확인해 주세요.");
       if (!Number.isSafeInteger(body.expected) || Number(body.expected) < 0)
-        throw new Error("저장 버전을 확인해 주세요.");
+        throw new PricingInputError("저장 버전을 확인해 주세요.");
       const expected = Number(body.expected);
       if (action === "archive") {
-        if (!scope.archiveEnabled || expected < 1 || typeof body.archived !== "boolean") throw new Error("문서 보관을 사용할 수 없습니다.");
+        if (!scope.archiveEnabled || expected < 1 || typeof body.archived !== "boolean") throw new PricingInputError("문서 보관을 사용할 수 없습니다.");
         return repository.request<T>(scope, action, { id, expected, archived: body.archived });
       }
       if (action === "save") {
         const content = parseDocument(body.content);
         if (!scope.manager && content.kind !== "quote")
-          throw new Error("견적서만 작성할 수 있습니다.");
+          throw new PricingInputError("견적서만 작성할 수 있습니다.");
         return repository.request<T>(scope, action, { id, expected, content });
       }
       if (
         action === "publish" ||
-        action === "delete-set" ||
         action === "delete-promotion"
       )
         return repository.request<T>(scope, action, { id, expected });
       const d = object(body.content);
       if (action === "save-promotion") {
         if (!scope.manager || !isId(d.productId))
-          throw new Error("행사 관리 권한을 확인해 주세요.");
+          throw new PricingInputError("행사 관리 권한을 확인해 주세요.");
         const startsOn = dateField(d.startsOn),
           endsOn = dateField(d.endsOn);
         if (d.taxType !== "taxable" && d.taxType !== "exempt")
-          throw new Error("과세를 확인해 주세요.");
+          throw new PricingInputError("과세를 확인해 주세요.");
         calculatePrice(Number(d.cost), Number(d.margin), 10);
         if (d.perStoreLimit === 0)
-          throw new Error(
+          throw new PricingInputError(
             "매장별 최대 수량은 1 이상 또는 빈 값으로 입력해 주세요.",
           );
         if (
@@ -89,14 +90,14 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
           d.margin > 1000 ||
           Math.abs(d.margin * 100 - Math.round(d.margin * 100)) > 1e-8
         )
-          throw new Error("행사 기간·매입가·마진율을 확인해 주세요.");
+          throw new PricingInputError("행사 기간·매입가·마진율을 확인해 주세요.");
         return repository.request<T>(scope, action, {
           id,
           expected,
           content: {
             productId: d.productId,
-            name: field(d.name, 120, true),
-            displayName: field(d.displayName, 120, true),
+            name: field(d.name, 120, true, "행사 상품 이름"),
+            displayName: field(typeof d.displayName === "string" && d.displayName.trim() ? d.displayName : d.name, 120, true, "노출 이름"),
             startsOn,
             endsOn,
             cost: d.cost,
@@ -110,28 +111,6 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
           },
         });
       }
-      if (action === "save-set") {
-        if (
-          !Array.isArray(d.productIds) ||
-          !d.productIds.length ||
-          d.productIds.length > 100 ||
-          !d.productIds.every(isId) ||
-          new Set(d.productIds).size !== d.productIds.length
-        )
-          throw new Error("품목 번호는 중복 없이 1~100개를 선택해 주세요.");
-        if (d.shared === true && !scope.manager)
-          throw new Error("공용 묶음·템플릿은 대표·관리자가 저장합니다.");
-        return repository.request<T>(scope, action, {
-          id,
-          expected,
-          content: {
-            name: field(d.name, 100, true),
-            kind: d.kind === "template" ? "template" : "bundle",
-            shared: d.shared === true,
-            productIds: d.productIds,
-          },
-        });
-      }
       if (action === "save-profile" && scope.manager)
         return repository.request<T>(scope, action, {
           id,
@@ -142,7 +121,7 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
             footer: field(d.footer, 400),
           },
         });
-      throw new Error("저장 요청을 확인해 주세요.");
+      throw new PricingInputError("저장 요청을 확인해 주세요.");
     },
   };
 }

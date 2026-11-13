@@ -10,7 +10,7 @@ afterEach(() => vi.unstubAllEnvs());
 it("keeps the link's published selling price and compares only its preceding version; hides overrides and OFF", async () => {
   vi.stubEnv("STOREFRONT_PRICE_DIRECTION_ENABLED", "true");
   let agreement = false, market = false, active = true, optedIn = true, historyError = false;
-  const line = { productId: "product", unit: "bag", spec: "1kg", visible: true, price: 1200, taxType: "exempt", promotionId: null };
+  const line = { productId: "product", displayName: "게시 품목", unit: "bag", spec: "1kg", visible: true, price: 1200, taxType: "exempt", promotionId: null };
   const content = { kind: "sheet", recipient: "store", showPrice: true, validUntil: "2099-12-31", lines: [line] };
   const seen: string[] = [];
   db.mockImplementation(async (path: string) => {
@@ -26,14 +26,14 @@ it("keeps the link's published selling price and compares only its preceding ver
     }
     if (path.startsWith("normalized_customers?")) return [{ id: "customer", customer_name: "synthetic", delivery_territory_id: null }];
     if (path.startsWith("store_order_settings?")) return [{ cutoff_days_before: 1, cutoff_time: "22:00", minimum_amount: 0, minimum_policy: "notice", delivery_fee: 0, show_storefront_price_direction: optedIn }];
-    if (path.startsWith("product_catalog?")) return [{ id: "product", is_active: active, order_pricing_mode: market ? "market" : "fixed" }];
+    if (path.startsWith("product_catalog?")) return [{ id: "product", is_active: active, order_pricing_mode: market ? "market" : "fixed", name: "변경된 원장 품목", spec: "999kg", sales_unit: "BOX", tax_type: "taxable", sales_price: 9900 }];
     if (path.startsWith("store_order_customer_rules?")) return [{ delivery_weekdays: [0, 1, 2, 3, 4, 5, 6], cutoff_days_before: 0, cutoff_time: "23:59" }];
     if (path.startsWith("customer_price_agreements?") && agreement) return [{ product_catalog_id: "product", sales_unit: "bag", unit_price: 900, tax_type: "exempt", price_includes_tax: false }];
     return [];
   });
   const result = await readStorefront("token");
   expect(result?.version).toBe(3);
-  expect(toPublicStorefront(result!).lines[0]).toMatchObject({ unitPrice: 1200, salesPriceDirection: "up" });
+  expect(toPublicStorefront(result!).lines[0]).toMatchObject({ name: "게시 품목", spec: "1kg", unit: "bag", taxType: "exempt", unitPrice: 1200, salesPriceDirection: "up" });
   expect(seen.find(path => path.includes("&version=eq.2&"))).toContain("company_id=eq.company&document_id=eq.doc");
   expect(seen.some(path => /purchase_receipt|product_base_prices|supplier|margin/.test(path))).toBe(false);
   historyError = true;

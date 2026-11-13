@@ -15,13 +15,36 @@ export const PURCHASE_IMPORT_FIELDS = [
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
   { key: "totalAmount", label: "합계", aliases: ["합계", "합계금액", "총액", "금액"] },
   { key: "code", label: "ERP 코드", aliases: ["erp코드", "기본코드", "상품코드", "품목코드", "코드"] },
-  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] }
+  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] },
+  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "날짜"] }
 ] as const;
 export type PurchaseImportFieldKey = (typeof PURCHASE_IMPORT_FIELDS)[number]["key"];
 export type PurchaseImportMapping = Partial<Record<PurchaseImportFieldKey, number>>;
 export type VatMode = "auto" | "included" | "excluded";
 
 const norm = (value: unknown) => String(value ?? "").normalize("NFKC").toLowerCase().replace(/[\s_\-./()[\]]/g, "");
+
+const CAPACITY_TOKEN = /\d+(?:[.,]\d+)?\s*(?:ml|kg|l|g)\b/gi;
+const GRADE_TOKEN = /b\s*급|정상|정품|특급|상급/gi;
+
+/** 상품명·규격에 섞인 용량과 등급을 같은 비교 형식으로 만듭니다. */
+export function purchaseSpecification(name: string, spec = "", unit = "") {
+  const source = `${name} ${spec} ${unit}`.normalize("NFKC");
+  const tokens = (source.match(CAPACITY_TOKEN) || []).map((raw) => {
+    const match = raw.replace(",", ".").match(/([\d.]+)\s*(ml|kg|l|g)/i)!;
+    const amount = Number(match[1]);
+    const measure = match[2].toLowerCase();
+    return measure === "l" ? `${amount * 1000}ml` : measure === "kg" ? `${amount * 1000}g` : `${amount}${measure}`;
+  });
+  for (const raw of source.match(GRADE_TOKEN) || []) tokens.push(raw.replace(/\s/g, "").toLowerCase());
+  const withoutKnown = name.normalize("NFKC").replace(CAPACITY_TOKEN, " ").replace(GRADE_TOKEN, " ");
+  const singleGrade = withoutKnown.match(/(?:^|[\s()[\]{}_/.-])([특상])(?:$|[\s()[\]{}_/.-])|([특상])$/);
+  if (singleGrade) tokens.push(singleGrade[1] || singleGrade[2]);
+  return {
+    baseName: norm(singleGrade ? withoutKnown.replace(singleGrade[0], " ") : withoutKnown),
+    key: Array.from(new Set(tokens)).sort().join("|")
+  };
+}
 
 export function columnLetter(index: number) {
   let n = index + 1;
@@ -79,6 +102,21 @@ const toNumber = (value: string | undefined) => {
   if (!raw) return undefined;
   const n = Number(raw.replace(/[,원\s]/g, ""));
   return Number.isFinite(n) ? n : undefined;
+};
+
+const toPurchaseDate = (value: string | undefined) => {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  if (/^\d{5}(?:\.\d+)?$/.test(raw)) return new Date((Number(raw) - 25569) * 86400000).toISOString().slice(0, 10);
+  const monthFirst = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const normalized = monthFirst
+    ? `${monthFirst[3]}-${monthFirst[1]}-${monthFirst[2]}`
+    : raw.replace(/\s/g, "").replace(/[.일]$/, "").replace(/[년월./]/g, "-");
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return undefined;
+  const date = `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const parsed = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return parsed.toISOString().slice(0, 10) === date ? date : undefined;
 };
 
 /** 11/4: 자주 쓰는 단위. 고객사마다 다른 말은 직접 입력하면 됩니다. */
@@ -144,12 +182,15 @@ export type PurchaseImportLine = {
   raw: string[];
   /** 엑셀 원문 상품명(대괄호 포함 그대로). 원문 연결(별칭)에 씁니다. */
   rawName: string;
+  /** 파일에 구매일 열이 있을 때만 설정됩니다. 없으면 업로드 화면의 날짜를 사용합니다. */
+  purchaseDate?: string;
 };
 
-export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[] } {
+export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[]; dateIssues: number[] } {
   if (mapping.name === undefined || mapping.cost === undefined) throw new Error("필수 열(품목·단가)을 골라 주세요.");
   const lines: PurchaseImportLine[] = [];
   const skipped: number[] = [];
+  const dateIssues: number[] = [];
   const read = (cells: string[], key: PurchaseImportFieldKey) => (mapping[key] === undefined ? "" : cells[mapping[key]!] || "");
   for (const row of sheet.rows) {
     const rawName = read(row.cells, "name");
@@ -159,6 +200,11 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       continue;
     }
     const { name, spec, unit } = splitNameSpec(rawName, read(row.cells, "spec"), read(row.cells, "unit"));
+    const purchaseDate = toPurchaseDate(read(row.cells, "purchaseDate"));
+    if (mapping.purchaseDate !== undefined && !purchaseDate) {
+      dateIssues.push(row.rowNumber);
+      continue;
+    }
     const quantity = toNumber(read(row.cells, "quantity"));
     const supplyAmount = toNumber(read(row.cells, "supplyAmount"));
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
@@ -170,6 +216,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       cost: costExcludingVat(rawCost, vatIncluded),
       lineKey: purchaseLineKey(name, `${spec}${unit}`),
       name,
+      purchaseDate,
       quantity,
       raw: row.cells,
       rawName,
@@ -185,16 +232,40 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
       vatIncluded
     });
   }
-  return { lines, skipped };
+  return { lines, skipped, dateIssues };
 }
 
-/** 한 파일 안에 같은 품목이 여러 줄이면 하나로 합칩니다(수량은 더하고 단가는 마지막 줄). */
-export function mergeDuplicateLines(lines: readonly PurchaseImportLine[]) {
-  const byKey = new Map<string, PurchaseImportLine>();
+export type PurchasePriceConflict = {
+  key: string;
+  purchaseDate?: string;
+  name: string;
+  spec: string;
+  unit: string;
+  supplier: string;
+  candidates: PurchaseImportLine[];
+};
+
+export type PurchaseImportMergeResult = PurchaseImportLine[] & { conflicts: PurchasePriceConflict[] };
+
+/** 같은 품목·구매일·단가만 합치고, 가격이 다르면 자동 선택하지 않고 후보를 반환합니다. */
+export function mergeDuplicateLines(lines: readonly PurchaseImportLine[]): PurchaseImportMergeResult {
+  const groups = new Map<string, PurchaseImportLine[]>();
   for (const line of lines) {
-    const key = `${line.code ? `code:${norm(line.code)}` : line.lineKey}|${norm(line.supplier)}`;
-    const previous = byKey.get(key);
-    byKey.set(key, previous ? { ...line, quantity: (previous.quantity || 0) + (line.quantity || 0) || undefined } : line);
+    const key = `${line.code ? `code:${norm(line.code)}` : line.lineKey}|${norm(line.supplier)}|${line.purchaseDate || "undated"}`;
+    groups.set(key, [...(groups.get(key) || []), line]);
   }
-  return Array.from(byKey.values());
+  const merged: PurchaseImportLine[] = [];
+  const conflicts: PurchasePriceConflict[] = [];
+  for (const [key, candidates] of Array.from(groups.entries())) {
+    if (new Set(candidates.map((line) => line.cost)).size > 1) {
+      const first = candidates[0];
+      conflicts.push({ key, purchaseDate: first.purchaseDate, name: first.name, spec: first.spec, unit: first.unit, supplier: first.supplier, candidates: [...candidates] });
+      continue;
+    }
+    merged.push(candidates.slice(1).reduce((line, next) => ({
+      ...next,
+      quantity: (line.quantity || 0) + (next.quantity || 0) || undefined
+    }), candidates[0]));
+  }
+  return Object.assign(merged, { conflicts });
 }

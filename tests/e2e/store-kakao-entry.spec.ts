@@ -54,6 +54,69 @@ for (const width of [1440, 390]) {
   });
 }
 
+for (const width of [1440, 390]) {
+  test(`public document onboarding authenticates Kakao before collecting store profile at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const intent = `${"a".repeat(80)}.${"b".repeat(43)}`;
+    const posted: Array<Record<string, unknown>> = [];
+    const profileFailures = [
+      { status: 422, code: "synthetic_failure" },
+      { status: 503, code: "synthetic_failure" },
+      { status: 409, code: "profile_retry_mismatch" },
+      { status: 409, code: "customer_match_needs_review" },
+    ];
+    const context = page.context();
+    await context.route("**/api/store/accounts/activate", route => {
+      posted.push(route.request().postDataJSON() as Record<string, unknown>);
+      if (posted.length > 1 && profileFailures.length) {
+        const failure = profileFailures.shift()!;
+        return route.fulfill({ status: failure.status, json: { code: failure.code } });
+      }
+      return route.fulfill({ json: posted.length === 1 ? { loginUrl, next: "kakao", termsVersion: "2026-11-07" } :
+        { next: "document", redirectTo: "/pricing-document#opaque", termsVersion: "2026-11-07" } });
+    });
+    await context.route("**/api/auth/kakao/start?**", route => route.fulfill({ contentType: "text/html", body: "<main>합성 카카오 인증 경계</main>" }));
+    await context.route("**/api/address-search?**", route => route.fulfill({ json: { results: [{ address: "서울시 중구", postalCode: "04500" }] } }));
+    await page.goto(`/store/activate?fixture=store-owner-activation#${intent}`);
+    await expect(page.getByLabel("매장명")).toHaveCount(0);
+    const kakao = page.getByRole("button", { name: "카카오로 점주 가입" });
+    expect((await kakao.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const [authResponse] = await Promise.all([
+      page.waitForResponse(response => { const url = new URL(response.url()); return url.pathname === "/api/auth/kakao/start" && url.searchParams.get("activation") === "1"; }),
+      kakao.click()
+    ]);
+    expect(authResponse.status()).toBe(200);
+    expect(posted[0]).toEqual({ onboardingIntent: intent });
+    expect(JSON.stringify(posted[0])).not.toMatch(/customerId|storeAccountId|companyId|storeName/);
+    const profilePage = await context.newPage();
+    await profilePage.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await profilePage.goto("/store/activate?fixture=store-owner-activation&profile=1");
+    await expect(profilePage.getByText(/카카오 계정 인증을 마쳤습니다/)).toBeVisible();
+    await expect(profilePage.getByRole("textbox", { name: "이메일", exact: true })).toHaveCount(0);
+    await expect(profilePage.getByRole("textbox", { name: "닉네임", exact: true })).toHaveCount(0);
+    for (const [label, value] of [["매장명", "새 매장"], ["대표자명", "새 대표"], ["사업자등록번호", "1234567890"],
+      ["연락처", "01012345678"], ["매장 주소", "서울시 중구"], ["상세주소", "1층"]] as const) await profilePage.getByLabel(label).fill(value);
+    await profilePage.getByRole("button", { name: "주소 검색" }).click();
+    await profilePage.getByRole("button", { name: "서울시 중구 (04500)" }).click();
+    await profilePage.getByRole("checkbox").check();
+    const start = profilePage.getByRole("button", { name: "동의하고 매장 개통" });
+    expect((await start.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    for (const message of ["이 화면에서 다시 시도", "잠시 후 다시 시도", "처음 제출한 매장 정보와 다릅니다", "문서를 보낸 회사에 매장 연결 확인을 요청"]) {
+      await start.click();
+      await expect(profilePage.getByRole("main").getByRole("alert")).toContainText(message);
+      await expect(profilePage.getByLabel("매장명")).toHaveValue("새 매장");
+      await expect(start).toBeEnabled();
+      expect(new URL(profilePage.url()).pathname).toBe("/store/activate");
+      expect(await profilePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    }
+    await start.click();
+    expect(posted[1]).toMatchObject({ termsAccepted: true, store: { storeName: "새 매장",
+      representativeName: "새 대표", businessRegistrationNumber: "1234567890", phone: "01012345678", address: "서울시 중구", addressDetail: "1층" } });
+    expect(JSON.stringify(posted[1])).not.toMatch(/customerId|storeAccountId|companyId|onboardingIntent/);
+  });
+}
+
 test("invalid, expired and unavailable activation links show recovery guidance", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   let status = 410, posts = 0;
@@ -104,6 +167,15 @@ test("390px can read callback errors without receiving an unscoped login action"
   await expect(page.getByRole("main").getByRole("alert")).toContainText("권한");
   await expect(page.getByRole("button", { name: "카카오로 매장 로그인", exact: true })).toBeDisabled();
   await page.screenshot({ path: info.outputPath("store-kakao-error-390.png"), fullPage: true });
+});
+
+test("standalone store home fits 390px and explains how first-time owners enter", async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/store");
+  await expect(page.getByRole("heading", { name: "MAJU 매장" })).toBeVisible();
+  await expect(page.getByText("첫 가입은 받은 견적서·단가표 링크에서 진행합니다.", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: info.outputPath("store-portal-390.png"), fullPage: true });
 });
 
 
@@ -297,3 +369,37 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+// CX-07 synthetic session/profile boundary: no real OAuth, signup or operating DB.
+for(const width of [1440,390])test(`public signup source returns in store home and address anchor at ${width}px`,async({page},info)=>{
+  page.setDefaultTimeout(15_000);
+  await page.setViewportSize({width,height:900});let orderReads=0;
+  await page.route("**/api/storefront",route=>{orderReads++;return route.fulfill({status:404,json:{message:"unexpected bearer request"}});});
+  await page.route(/\/store(?:\?|$)/,async route=>{
+    const url=new URL(route.request().url());if(url.pathname!=="/store")return route.fallback();
+    url.searchParams.set("fixture","store-portal-source-document");
+    const response=await route.fetch({url:url.toString(),maxRedirects:0});return route.fulfill({response});
+  });
+  await page.route("**/api/store/address?**",route=>route.fulfill({json:{address:"서울특별시 송파구 합성로 1 1층",baseAddress:"서울특별시 송파구 합성로 1",addressDetail:"1층"}}));
+  await page.route("**/api/address-search?**",route=>route.fulfill({json:{results:[{address:"서울특별시 송파구 합성로 1",postalCode:"00000"}]}}));
+  await page.route("**/api/store/accounts/activate",route=>route.fulfill({json:{redirectTo:"/pricing-document#synthetic-source"}}));
+  // Return document fixture is outside this task; the real portal component is rendered below.
+  await page.route(/\/pricing-document(?:\?|$)/,route=>route.fulfill({contentType:"text/html; charset=utf-8",body:'<main><h1>합성 가입 단가표</h1><a href="/store">매장 홈</a></main>'}));
+  await page.goto("/store/activate?fixture=store-owner-activation&profile=1");
+  for(const [label,value] of [["매장명","합성 공개 가입 매장"],["사업자 대표자명","합성 대표"],["사업자등록번호","1234567890"],["매장 연락처","01012345678"],["매장 주소","합성로 1"],["상세주소","1층"]] as const)await page.getByLabel(label,{exact:true}).fill(value);
+  await page.getByRole("button",{name:"주소 검색",exact:true}).click();await page.getByRole("button",{name:"서울특별시 송파구 합성로 1 (00000)",exact:true}).click();
+  await page.getByRole("checkbox").check();await page.getByRole("button",{name:"동의하고 매장 개통",exact:true}).click();
+  await expect(page).toHaveURL(/pricing-document\?continueOrder=1#synthetic-source$/);
+  await page.getByRole("link",{name:"매장 홈",exact:true}).click();
+  const source=page.getByRole("link",{name:"단가표 · 합성 가입 단가표 문서 확인",exact:true});
+  await expect(source).toHaveCount(1);await expect(source).toHaveAttribute("href","/pricing-document#synthetic-source");
+  await page.reload();await expect(source).toHaveCount(1);expect(orderReads).toBe(0);
+  await page.screenshot({path:info.outputPath(`CX-07-source-home-${width}.png`),fullPage:true});
+  const address=page.getByRole("link",{name:"배송지 주소",exact:true});
+  await expect(address).toHaveAttribute("href",`/store?companyId=${companyId}&storeAccountId=${storeAccountId}#store-address-management`);
+  expect((await address.boundingBox())!.height).toBeGreaterThanOrEqual(44);await address.click();
+  await expect(page).toHaveURL(/#store-address-management$/);
+  await expect(page.getByRole("heading",{name:"배송지 주소",exact:true})).toBeInViewport();expect(orderReads).toBe(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+3)).toBe(false);
+  await page.screenshot({path:info.outputPath(`CX-07-address-anchor-${width}.png`),fullPage:true});
+});

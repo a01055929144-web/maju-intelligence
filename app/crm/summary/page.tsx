@@ -417,7 +417,7 @@ export default function CrmSummaryPage() {
       title="전체 현황"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <section className="mx-auto max-w-[1560px] space-y-3">
+      <section className="w-full space-y-3">
         <div className="maju-section-card">
           <SectionHeader
             eyebrow="운영 기준"
@@ -641,7 +641,7 @@ export default function CrmSummaryPage() {
                바꿉니다. */}
           <p className="print-only hidden px-3 pb-2 pt-3 text-sm font-black text-slate-950">거래처 전체 현황 · 사업자 상태·메모·첨부 현황</p>
           {filteredRows.length ? (
-            <div className="hidden min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-400 md:grid print:grid">
+            <div className="hidden min-w-[860px] grid-cols-[minmax(160px,1.3fr)_100px_120px_120px_84px_minmax(180px,1.4fr)_74px_74px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-400 md:grid print:grid">
               <span>거래처명</span>
               <span>대표자명</span>
               <span>연락처</span>
@@ -688,7 +688,7 @@ export default function CrmSummaryPage() {
                       <span className="min-w-0 flex-1 truncate">{customer.customerName}</span>
                     </span>
                     <span className="mt-0.5 flex items-center gap-1">
-                      <Badge className={`px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                      <Badge className={`px-1.5 py-0 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
                       {customer.address ? <span className="truncate text-[11px] font-bold text-slate-400">{customer.address}</span> : null}
                     </span>
                     <span className={`mt-1 block text-[11px] font-black ${primaryAction.filter === "all" ? "text-teal-700" : "text-amber-700"}`}>
@@ -701,7 +701,7 @@ export default function CrmSummaryPage() {
                     {customer.businessNumber ? formatBusinessRegistrationNumber(customer.businessNumber) : "—"}
                   </span>
                   <span className="text-center">
-                    <Badge className={`px-1.5 py-0 text-[10px] ${businessStatusToneClassName(status)}`}>{status}</Badge>
+                    <Badge className={`px-1.5 py-0 text-xs ${businessStatusToneClassName(status)}`}>{status}</Badge>
                   </span>
                   <span className="min-w-0 truncate text-xs font-bold text-slate-600">
                     {summaryEntry?.latestMemo ? (
@@ -770,8 +770,8 @@ export default function CrmSummaryPage() {
                       <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{customer.address || "주소 미등록"}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5">
-                      <Badge className={`px-1.5 py-0 text-[10px] ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
-                      <Badge className={`px-1.5 py-0 text-[10px] ${businessStatusToneClassName(status)}`}>{status}</Badge>
+                      <Badge className={`px-1.5 py-0 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                      <Badge className={`px-1.5 py-0 text-xs ${businessStatusToneClassName(status)}`}>{status}</Badge>
                     </span>
                   </span>
                   <span className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
@@ -835,7 +835,7 @@ function MiniLedgerMetric({ label, tone, value }: { label: string; tone: "ready"
 function MobileCustomerField({ label, value }: { label: string; value: string }) {
   return (
     <span className="min-w-0">
-      <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="block text-xs font-black uppercase tracking-wide text-slate-400">{label}</span>
       <span className="mt-0.5 block truncate font-bold text-slate-700">{value}</span>
     </span>
   );

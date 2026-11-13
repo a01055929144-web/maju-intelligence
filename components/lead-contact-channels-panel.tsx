@@ -30,8 +30,11 @@ import {
 import { composeDmWithKit, type SalesKitField, type SalesKitLine } from "@/domains/lead/sales-kit";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { PermitLeadItem } from "@/lib/store";
+import { LEAD_DM_TEMPLATES } from "@/domains/lead/dm-template";
 import {
   buildLeadDmScript,
+
+  type LeadDmSettings,
   type PermitLeadActionKind,
   type PermitLeadActionResult,
   withPermitLeadCompanyQuery
@@ -83,9 +86,10 @@ export function LeadContactChannelsPanel({
   const [savingDnc, setSavingDnc] = useState<LeadContactChannel | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   // 11/3 A3: 회사 기본 DM 문구·제외 품목
-  const [dmSettings, setDmSettings] = useState<{ canEdit: boolean; excluded: string; template: string } | null>(null);
+  const [dmSettings, setDmSettings] = useState<({ canEdit: boolean; excluded: string; template: string } & LeadDmSettings) | null>(null);
   const [dmSettingsOpen, setDmSettingsOpen] = useState(false);
-  const [dmSettingsDraft, setDmSettingsDraft] = useState({ excluded: "", template: "" });
+  const [dmSettingsDraft, setDmSettingsDraft] = useState({ excluded: "", template: "", distributorTemplate: "" });
+  const isDistributorLead = lead.targetType === "distributor";
   const [dmSettingsSaving, setDmSettingsSaving] = useState(false);
   const [messageEdited, setMessageEdited] = useState(false);
   // 11/4: 문구 아래에 붙는 영업 자료(단가표·주문 링크·연락처 등) — 회사 정보 › 영업 정보에서 설정.
@@ -108,11 +112,11 @@ export function LeadContactChannelsPanel({
 
   useEffect(() => {
     let active = true;
-    void fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/dm-template"), { cache: "no-store" }, 12000)
+    void fetchWithTimeout(withPermitLeadCompanyQuery(`/api/leads/dm-template${lead.address ? `?address=${encodeURIComponent(lead.address)}` : ""}`), { cache: "no-store" }, 12000)
       .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as { canEdit?: boolean; excluded?: string; template?: string } | null;
+        const payload = (await response.json().catch(() => null)) as ({ canEdit?: boolean; excluded?: string; template?: string } & LeadDmSettings) | null;
         if (!active || !response.ok || !payload) return;
-        setDmSettings({ canEdit: Boolean(payload.canEdit), excluded: payload.excluded || "", template: payload.template || "" });
+        setDmSettings({ canEdit: Boolean(payload.canEdit), excluded: payload.excluded || "", template: payload.template || "", distributorTemplate: payload.distributorTemplate || "", context: payload.context });
       })
       .catch(() => null);
     return () => { active = false; };
@@ -129,12 +133,13 @@ export function LeadContactChannelsPanel({
       const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/leads/dm-template"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dmSettingsDraft)
+        // 유통사 리드에서는 유통사용 문구만 바꾸고(매장용·제외 품목은 그대로 다시 보냄), 매장 리드에서는 유통사용 문구를 건드리지 않는다.
+        body: JSON.stringify(isDistributorLead ? { excluded: dmSettings?.excluded || "", template: dmSettings?.template || "", distributorTemplate: dmSettingsDraft.distributorTemplate } : { excluded: dmSettingsDraft.excluded, template: dmSettingsDraft.template })
       }, 12000);
       const payload = (await response.json().catch(() => null)) as { message?: string } | null;
       if (!response.ok) throw new Error(payload?.message || "기본 문구를 저장하지 못했습니다.");
       setMessageEdited(false);
-      setDmSettings((current) => ({ canEdit: current?.canEdit ?? true, ...dmSettingsDraft }));
+      setDmSettings((current) => ({ canEdit: current?.canEdit ?? true, ...current, ...(isDistributorLead ? { distributorTemplate: dmSettingsDraft.distributorTemplate } : { excluded: dmSettingsDraft.excluded, template: dmSettingsDraft.template }) } as typeof current & { canEdit: boolean; excluded: string; template: string }));
       setDmSettingsOpen(false);
       setNotice({ tone: "ok", text: "기본 문구를 저장했습니다. 모든 매장에 적용됩니다." });
     } catch (error) {
@@ -410,7 +415,7 @@ export function LeadContactChannelsPanel({
     <div className="flex min-w-0 items-center gap-2">
       <span className="text-slate-500">{icon}</span>
       <span className="text-xs font-black text-slate-900">{LEAD_CONTACT_CHANNEL_LABELS[channel]}</span>
-      {primary === channel ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-[10px] font-black text-white">먼저</span> : null}
+      {primary === channel ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-xs font-black text-white">먼저</span> : null}
       <span className={`min-w-0 truncate text-xs font-semibold ${value ? "text-slate-700" : "text-slate-400"}`}>{value || "없음"}</span>
     </div>
   );
@@ -484,12 +489,12 @@ export function LeadContactChannelsPanel({
           <button
             className="text-[11px] font-bold text-teal-700 underline-offset-2 hover:underline"
             onClick={() => {
-              setDmSettingsDraft({ excluded: dmSettings.excluded, template: dmSettings.template });
+              setDmSettingsDraft({ excluded: dmSettings.excluded, template: dmSettings.template, distributorTemplate: dmSettings.distributorTemplate || LEAD_DM_TEMPLATES.distributor[0].body });
               setDmSettingsOpen((open) => !open);
             }}
             type="button"
           >
-            {dmSettingsOpen ? "기본 문구 닫기" : "기본 문구·제외 품목 설정"}
+            {dmSettingsOpen ? "기본 문구 닫기" : isDistributorLead ? "유통사용 기본 문구 설정" : "기본 문구·제외 품목 설정"}
           </button>
           {dmSettingsOpen ? (
             <div className="mt-1.5 rounded-lg border border-slate-200 bg-white p-2">
@@ -497,18 +502,18 @@ export function LeadContactChannelsPanel({
               <textarea
                 aria-label="기본 DM 문구"
                 className="mt-1 w-full resize-y rounded-md border border-slate-200 p-2 text-xs leading-5"
-                onChange={(event) => setDmSettingsDraft((draft) => ({ ...draft, template: event.target.value }))}
+                onChange={(event) => setDmSettingsDraft((draft) => isDistributorLead ? { ...draft, distributorTemplate: event.target.value } : { ...draft, template: event.target.value })}
                 rows={4}
-                value={dmSettingsDraft.template}
+                value={isDistributorLead ? dmSettingsDraft.distributorTemplate : dmSettingsDraft.template}
               />
-              <input
+              {isDistributorLead ? null : <input
                 aria-label="제외 품목"
                 className="mt-1 h-8 w-full rounded-md border border-slate-200 px-2 text-xs"
                 onChange={(event) => setDmSettingsDraft((draft) => ({ ...draft, excluded: event.target.value }))}
                 placeholder="제외 품목 (쉼표로 구분, 예: 육류, 주류)"
                 value={dmSettingsDraft.excluded}
-              />
-              <button className="maju-button-primary mt-1.5 h-8 w-full justify-center text-xs" disabled={dmSettingsSaving || !dmSettingsDraft.template.trim()} onClick={() => void saveDmSettings()} type="button">
+              />}
+              <button className="maju-button-primary mt-1.5 h-8 w-full justify-center text-xs" disabled={dmSettingsSaving || !(isDistributorLead ? dmSettingsDraft.distributorTemplate : dmSettingsDraft.template).trim()} onClick={() => void saveDmSettings()} type="button">
                 {dmSettingsSaving ? "저장 중" : "기본 문구 저장"}
               </button>
             </div>

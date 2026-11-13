@@ -570,7 +570,7 @@ export default function Home() {
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
       workspaceRole={isAdminPreview ? undefined : sessionWorkspaceRole || undefined}
     >
-      <div className="mx-auto max-w-[1880px] space-y-3">
+      <div className="w-full space-y-3">
         <WorkspaceModeTabs active={screen} hasReport={pipelineMeta.rows > 0} onMove={setScreen} />
         {screen === "briefing" && <Briefing analysis={analysis} onStart={startUploadFlow} onGenerateReport={generateCurrentReport} />}
         {screen === "onboarding" && (
@@ -2538,7 +2538,7 @@ function DataRegistrationFlowCard({
                     {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
                   </span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-black ${
                       step.done
                         ? "bg-emerald-100 text-emerald-800"
                         : index === currentIndex

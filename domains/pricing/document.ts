@@ -1,5 +1,7 @@
 import { calculatePrice } from "./price-rules";
 export type DocumentKind = "sheet" | "quote";
+export type PriceSource = "store" | "grade" | "base" | "edited";
+export const PRICE_SOURCES: readonly string[] = ["store", "grade", "base", "edited"];
 export type PrintLine = {
   productId: string;
   displayName: string;
@@ -14,12 +16,15 @@ export type PrintLine = {
   endsOn: string | null;
   remaining: number | null;
   badge: "" | "행사" | "임박";
+  /** CC-30d: 이 줄 가격이 어디서 왔는지(편집 화면 배지용). 직접 고치면 "edited". 없으면 배지 없음. */
+  priceSource?: PriceSource;
 };
 /** 11/4: 회사 정보에서 골라 넣는 줄(위쪽/아래쪽). 확정 시점 값으로 고정됩니다. */
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
 /** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
-export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean };
-export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false };
+/** autoPromos: 켜면 진행 중인 행사·임박을 문서에 자동으로 넣는다(CC-20). 꺼져 있으면 키 자체가 없다. */
+export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean };
+export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
 export function parseDisplay(value: unknown): DocumentDisplay {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_DISPLAY, info: [] };
@@ -37,7 +42,7 @@ export function parseDisplay(value: unknown): DocumentDisplay {
       })
     : [];
   const productWidth = typeof d.productWidth === "number" && Number.isFinite(d.productWidth) ? Math.max(45, Math.min(80, Math.round(d.productWidth))) : DEFAULT_DISPLAY.productWidth;
-  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true };
+  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}) };
 }
 export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean) {
   return includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
@@ -57,6 +62,10 @@ export type DocumentContent = {
   showSpec: boolean;
   lines: PrintLine[];
   display?: DocumentDisplay;
+  /** CC-19c: 가격 기준 마진 템플릿(없으면 기본). 일반 품목 가격을 이 템플릿으로 계산해 넣었다는 기록. */
+  marginTemplateId?: string;
+  /** CC-30d: 받는 매장(거래처). 있으면 가격이 매장 가격 > 등급가 > 기본가 순으로 정해진다. */
+  customerId?: string;
 };
 export type DocumentDraft = {
   id: string;
@@ -123,15 +132,6 @@ export type Promotion = {
   revision: number;
   taxType: "taxable" | "exempt";
 };
-export type ProductSet = {
-  id: string;
-  name: string;
-  kind: "bundle" | "template";
-  shared: boolean;
-  productIds: string[];
-  editable: boolean;
-  revision: number;
-};
 export function koreaDay(now = new Date()) {
   return new Date(now.getTime() + 32400000).toISOString().slice(0, 10);
 }
@@ -169,16 +169,18 @@ export function isId(value: unknown): value is string {
     )
   );
 }
+/** 사용자가 고칠 수 있는 입력 오류. API가 400 + 이 메시지 그대로 돌려준다(충돌·서버 오류와 구분). */
+export class PricingInputError extends Error {}
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("입력 내용을 확인해 주세요.");
+    throw new PricingInputError("입력 내용을 확인해 주세요.");
   return value as Record<string, unknown>;
 }
 export function field(value: unknown, max: number, required = false, label = "") {
   if (typeof value !== "string" || (required && !value.trim()))
-    throw new Error(label ? `'${label}' 칸을 입력해 주세요.` : "필수 항목과 입력 길이를 확인해 주세요.");
+    throw new PricingInputError(label ? `'${label}' 칸을 입력해 주세요.` : "필수 항목과 입력 길이를 확인해 주세요.");
   if (value.trim().length > max)
-    throw new Error(label ? `'${label}' 칸은 ${max}자까지 입력할 수 있습니다.` : "필수 항목과 입력 길이를 확인해 주세요.");
+    throw new PricingInputError(label ? `'${label}' 칸은 ${max}자까지 입력할 수 있습니다.` : "필수 항목과 입력 길이를 확인해 주세요.");
   return value.trim();
 }
 export function dateField(value: unknown) {
@@ -188,7 +190,7 @@ export function dateField(value: unknown) {
     Number.isNaN(Date.parse(day)) ||
     new Date(day).toISOString().slice(0, 10) !== day
   )
-    throw new Error("날짜를 확인해 주세요.");
+    throw new PricingInputError("날짜를 확인해 주세요.");
   return day;
 }
 export function money(value: unknown): number {
@@ -198,20 +200,20 @@ export function money(value: unknown): number {
     value < 0 ||
     value > 1e12
   )
-    throw new Error("단가는 0~1조원의 정수 원으로 입력해 주세요.");
+    throw new PricingInputError("단가는 0~1조원의 정수 원으로 입력해 주세요.");
   return value;
 }
 /** A strict whitelist shared by storage and output. Never spread staff/catalog records. */
 export function parseDocument(value: unknown): DocumentContent {
   const d = object(value);
   if (d.kind !== "sheet" && d.kind !== "quote")
-    throw new Error("문서 종류를 확인해 주세요.");
+    throw new PricingInputError("문서 종류를 확인해 주세요.");
   if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
-    throw new Error(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
+    throw new PricingInputError(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
   const lines = d.lines.map((value, index) => {
     const l = object(value);
     if (l.taxType === "unknown")
-      throw new Error(
+      throw new PricingInputError(
         "과세 미확정 품목이 있습니다. 과세·면세를 확인한 후 저장해 주세요.",
       );
     if (
@@ -220,7 +222,7 @@ export function parseDocument(value: unknown): DocumentContent {
       (l.taxType !== "taxable" && l.taxType !== "exempt") ||
       (l.promotionId !== null && !isId(l.promotionId))
     )
-      throw new Error("품목을 확인해 주세요.");
+      throw new PricingInputError("품목을 확인해 주세요.");
     const promotional = l.promotionId !== null;
     return {
       productId: l.productId,
@@ -229,6 +231,7 @@ export function parseDocument(value: unknown): DocumentContent {
       spec: field(l.spec ?? "", 80, false, `${index + 1}번째 품목 규격`),
       unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
+      ...(typeof l.priceSource === "string" && PRICE_SOURCES.includes(l.priceSource) ? { priceSource: l.priceSource as PriceSource } : {}),
       taxType: l.taxType as "taxable" | "exempt",
       visible: l.visible,
       promotionId: l.promotionId,
@@ -246,13 +249,13 @@ export function parseDocument(value: unknown): DocumentContent {
   });
   const keys = lines.map((l) => `${l.productId}:${l.promotionId}`);
   if (new Set(keys).size !== keys.length || !lines.some((l) => l.visible))
-    throw new Error("중복 품목을 제거하고 표시할 품목을 선택해 주세요.");
+    throw new PricingInputError("중복 품목을 제거하고 표시할 품목을 선택해 주세요.");
   if (
     !["blue", "green", "mono"].includes(String(d.theme)) ||
     !["auto", "table", "cards"].includes(String(d.layout)) ||
     [d.showPrice, d.showBrand, d.showSpec].some((v) => typeof v !== "boolean")
   )
-    throw new Error("표시 설정을 확인해 주세요.");
+    throw new PricingInputError("표시 설정을 확인해 주세요.");
   return {
     kind: d.kind,
     title: field(d.title, 100, true, "문서 제목"),
@@ -268,7 +271,16 @@ export function parseDocument(value: unknown): DocumentContent {
     showSpec: d.showSpec === true,
     lines,
     display: parseDisplay(d.display),
+    ...(isId(d.marginTemplateId) ? { marginTemplateId: d.marginTemplateId } : {}),
+    ...(isId(d.customerId) ? { customerId: d.customerId } : {}),
   };
+}
+/** Refresh live availability only for the selected, immutable publication. */
+export function refreshedDocumentVersion(expected: DocumentVersion, received: DocumentVersion): DocumentVersion {
+  if (received.id !== expected.id || received.documentId !== expected.documentId || received.version !== expected.version || received.revision !== expected.revision ||
+    JSON.stringify(parseDocument(received.content)) !== JSON.stringify(parseDocument(expected.content)))
+    throw new Error("게시 버전 달라졌습니다. 미리보기를 닫고 버전을 다시 선택해 주세요.");
+  return { ...received, content: parseDocument(expected.content) };
 }
 export function documentOutput(version: DocumentVersion, day = koreaDay()) {
   const d = parseDocument(version.content),
@@ -326,27 +338,60 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
 export type DocumentOutput = ReturnType<typeof documentOutput>;
 export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = false) {
   const pages: DocumentOutput[] = [];
-  let lines: DocumentOutput["lines"] = [],
-    weight = 0;
-  for (const line of output.lines) {
-    const next =
-      output.layout === "cards"
-        ? 1
-        : Math.max(
-            2,
-            Math.ceil(line.displayName.length / 18) +
-              Math.ceil(line.brand.length / 18),
-            Math.ceil((line.spec + line.unit).length / 10),
-          ) + 1;
-    const columns = output.display?.columns || 1;
-    const limit = Math.max(columns, Math.floor((output.layout === "cards" ? 4 * columns : 26 * columns) / Math.max(1, fontScale)) - (hasOrderQr ? columns * (output.layout === "cards" ? 1 : 5) : 0));
-    if (lines.length && (weight + next > limit || lines.length >= 18 * columns)) {
-      pages.push({ ...output, lines });
-      lines = [];
-      weight = 0;
+  const columns = Math.max(1, Math.min(3, output.display?.columns || 1));
+  const scale = Math.max(1, fontScale);
+  const mainHeight = Math.round(16 * scale);
+  const rows = (text: string, width: number) => text.split("\n").reduce((n, line) => {
+    // Conservative system-font widths: narrow ASCII must not consume a whole CJK cell.
+    const units = line.split("").reduce((sum, char) => {
+      const glyph = /[0-9]/.test(char) ? 0.6 : /[\s.,·]/.test(char) ? 0.35 : /[A-Za-z]/.test(char) && !/[MWmw]/.test(char) ? 0.85 : 1;
+      return sum + glyph;
+    }, 0);
+    return n + Math.max(1, Math.ceil(units / width));
+  }, 0);
+  const headerInfo = output.display.info.filter(item => item.place === "header");
+  const footerInfo = output.display.info.filter(item => item.place === "footer");
+  // A4 minus 10mm on each side. Keep in sync with pricing-document-preview print CSS.
+  const header = 100 + Math.max(0, rows(output.companyName, 28) - 1) * 30 + Math.max(0, rows(output.title, 40) - 1) * 24 +
+    (output.recipient ? rows(output.recipient, 45) * 18 : 0) + (output.contact ? rows(output.contact, 45) * 16 : 0) +
+    (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 45) * 16 : 0);
+  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, 60) * 16 : 0);
+  for (let i = 0; i < footerInfo.length; i += 2) {
+    footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 26))) * 16;
+  }
+  const available = Math.max(140, 277 * 96 / 25.4 - header - footer - 30);
+  const rowHeight = (line: DocumentOutput["lines"][number], count: number) => {
+    const width = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
+      (output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
+    const mainChars = Math.max(4, Math.floor(width / Math.round(12 * scale)));
+    const textHeight = rows(line.displayName, mainChars) * mainHeight + (line.brand ? rows(line.brand, mainChars) * mainHeight : 0) +
+      (line.spec || line.unit ? rows([line.spec, line.unit].filter(Boolean).join(" · "), mainChars) * mainHeight : 0) +
+      (count > 1 ? mainHeight : 0);
+    const priceWidth = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
+      (1 - output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
+    const priceChars = Math.max(1, Math.floor(priceWidth / Math.round(11 * scale)));
+    const priceHeight = rows(line.price === null ? "—" : `${line.price.toLocaleString()}원`, priceChars) * mainHeight;
+    return Math.max(textHeight, priceHeight) + 7;
+  };
+  // ponytail: at most 300 items; full-width glyph estimates keep custom-font measurement out of this fixed A4 flow.
+  const fits = (lines: DocumentOutput["lines"]) => {
+    if (output.layout === "cards") return lines.length <= Math.max(columns, Math.floor(4 * columns / scale) - (hasOrderQr ? columns : 0));
+    const promos = lines.filter(line => line.badge), regular = lines.filter(line => !line.badge);
+    let promoHeight = promos.length ? 44 : 0;
+    if (output.display.promoLayout === "cards") {
+      for (let i = 0; i < promos.length; i += 3) promoHeight += Math.max(...promos.slice(i, i + 3).map(line => rowHeight(line, 3) + 40));
+    } else promoHeight += promos.reduce((height, line) => height + rowHeight(line, 3), 0);
+    const perColumn = Math.ceil(regular.length / columns);
+    let tallest = 0;
+    for (let i = 0; perColumn && i < regular.length; i += perColumn) {
+      tallest = Math.max(tallest, regular.slice(i, i + perColumn).reduce((height, line) => height + rowHeight(line, columns), 0));
     }
+    return promoHeight + tallest + (regular.length ? mainHeight + 8 : 0) <= available;
+  };
+  let lines: DocumentOutput["lines"] = [];
+  for (const line of output.lines) {
+    if (lines.length && !fits([...lines, line])) { pages.push({ ...output, lines }); lines = []; }
     lines.push(line);
-    weight += next;
   }
   if (lines.length || !pages.length) pages.push({ ...output, lines });
   return pages;

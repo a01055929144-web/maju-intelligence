@@ -26,7 +26,7 @@ export async function getStoreCostMemberAccess(input: StoreCostAccessInput): Pro
   if (!(await isActiveStoreAuthUser(input.authUserId))) return null;
 
   const rows = await supabaseRequest<Array<{ id: string; role: string; status: string }>>(
-    `store_account_members?select=id,role,status,store_accounts!inner(id)&company_id=eq.${encodeURIComponent(input.companyId)}&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}&auth_user_id=eq.${encodeURIComponent(input.authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
+    `store_account_members?select=id,role,status,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&company_id=eq.${encodeURIComponent(input.companyId)}&store_account_id=eq.${encodeURIComponent(input.storeAccountId)}&auth_user_id=eq.${encodeURIComponent(input.authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`
   );
   const member = rows[0];
   if (!member || member.status !== "active" || !isStoreAccountRole(member.role)) return null;
@@ -45,7 +45,7 @@ export async function hasActiveStoreMembership(authUserId: string): Promise<bool
   if (!UUID_PATTERN.test(authUserId)) return false;
   if (!(await isActiveStoreAuthUser(authUserId))) return false;
   const rows = await supabaseRequest<Array<{ id: string }>>(
-    `store_account_members?select=id,store_accounts!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=eq.active&limit=1`
+    `store_account_members?select=id,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=1`
   );
   return Boolean(rows[0]?.id);
 }

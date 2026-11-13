@@ -49,7 +49,7 @@ export function CustomerWorkspaceTabs() {
         </span>
         <span>
           <span className="block text-xs font-extrabold text-slate-900">거래처 작업</span>
-          <span className="block text-[10px] font-semibold text-slate-400">등록부터 이력까지</span>
+          <span className="block text-xs font-semibold text-slate-400">등록부터 이력까지</span>
         </span>
       </div>
       <div className="flex min-w-max flex-1 gap-1.5 lg:grid lg:min-w-0 lg:grid-cols-3">
@@ -66,13 +66,13 @@ export function CustomerWorkspaceTabs() {
               href={hrefWithCompany(tab.href)}
               key={tab.href}
             >
-              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-[10px] font-bold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md text-xs font-bold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
                 {index + 1}
               </span>
               <tab.icon className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-white" : "text-slate-400"}`} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{tab.label}</span>
-                <span className={`hidden truncate text-[10px] font-semibold xl:block ${selected ? "text-white/70" : "text-slate-400"}`}>{tab.helper}</span>
+                <span className={`hidden truncate text-xs font-semibold xl:block ${selected ? "text-white/70" : "text-slate-400"}`}>{tab.helper}</span>
               </span>
             </Link>
           );

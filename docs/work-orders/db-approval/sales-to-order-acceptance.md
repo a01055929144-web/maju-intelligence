@@ -345,3 +345,81 @@
 - 대표 승인: 대기
 - `DB-APPROVED:` **없음**
 
+### `lead_customer_mismatch` 주문 보류 보완 — 별도 적용 범위
+
+| 항목 | 내용 |
+|---|---|
+| 상태 | **승인 대기 · 운영 미적용 · 기능 OFF** |
+| SQL 초안 | `docs/sql-drafts/20261110-03-lead-customer-mismatch-order-hold.sql` |
+| down 초안 | `docs/sql-drafts/20261110-03-lead-customer-mismatch-order-hold.down.sql` |
+| 적용 대상 | 운영 `record_pricing_document_acceptance(...)`의 `lead_customer_mismatch` 분기만 교체 |
+| 보존 계약 | 리드의 기존 `matched_customer_id`를 덮어쓰지 않음 |
+| 보류 계약 | `needs_review=true`, `review_reason=lead_customer_mismatch`, `orderEnabled=false`를 저장하고 가격·주문 링크 생성 전 반환 |
+| 제외 | 07 개통, 09 주문, 배송 권역·배송일 계약, 기존 데이터 백필 |
+| 검증 | 합성 PostgreSQL 17에서 기존 연결 보존, 가격 상태 무변경, 주문 링크 비활성 유지 |
+| 운영 적용 | 프로젝트별 `DB-APPROVED:` 명시 승인 후 별도 migration PR에서만 진행 |
+
+이 초안 PR에는 `supabase/migrations/` 파일을 포함하지 않는다. 승인 전에는 `QUOTE_ACCEPTANCE`와 관련 공개 수락·주문 기능을 OFF로 유지하며 운영 DB에 SQL을 실행하지 않는다.
+
+2026-11-10 21:21:47 KST 운영 읽기 측정 결과는 `lead_customer_mismatch` 수락 기록 0건, 현재 주문 가능한 연결 0건, 과거 `can_order=true` 연결 0건이다. 회사별 조회도 결과 행이 없어 영향 회사 0곳이다. 실제 행이나 식별자는 조회·기록하지 않았고 데이터 변경은 수행하지 않았다.
+
+운영 적용 승인 전에는 아래 읽기 전용 조회를 다시 실행한다. 결과에는 회사 ID와 집계 건수만 남기고 거래처·리드·링크 식별자는 승인 문서에 복사하지 않는다.
+
+```sql
+select
+  r.company_id,
+  count(distinct r.id) as mismatch_acceptances,
+  count(distinct l.id) filter (
+    where l.can_order and l.revoked_at is null and l.expires_at>clock_timestamp()
+  ) as currently_orderable_links,
+  count(distinct l.id) filter (where l.can_order) as can_order_links
+from public.pricing_document_acceptance_requests r
+left join public.storefront_links l
+  on l.company_id=r.company_id
+ and l.acceptance_request_id=r.id
+where r.review_reason='lead_customer_mismatch'
+  and r.needs_review
+group by r.company_id
+order by r.company_id;
+```
+
+이 보완은 새 수락부터 주문 활성화를 막는다. 조회 결과가 1건 이상이면 기존 링크의 비활성화·고객 안내·감사 기록 범위를 별도로 승인하며, 이 초안이나 후속 migration에서 기존 행을 자동 수정하지 않는다.
+
+#### 적용 전·후 읽기 검증
+
+적용 직전에는 함수가 정확히 1개이고 기존 guard가 정확히 1회인지 확인한다. 적용 후에는 동일 OID·owner·ACL·`prosecdef`가 유지됐는지 비교하고, 기존 guard 0회와 새 보류 구간 1회를 확인한다. 하나라도 다르면 기능을 OFF로 유지하고 적용·재실행하지 않는다.
+
+```sql
+select
+  p.oid::regprocedure as function_signature,
+  p.oid,
+  pg_get_userbyid(p.proowner) as owner_name,
+  p.proacl,
+  p.prosecdef,
+  (length(pg_get_functiondef(p.oid))-length(replace(
+    pg_get_functiondef(p.oid),
+    'if not found then v_needs_review:=true; v_review_reason:=''lead_customer_mismatch''; end if;',
+    ''
+  )))/length('if not found then v_needs_review:=true; v_review_reason:=''lead_customer_mismatch''; end if;') as original_guard_count,
+  (length(pg_get_functiondef(p.oid))-length(replace(
+    pg_get_functiondef(p.oid),
+    '''kind'',d.kind,''needsReview'',true,''orderEnabled'',false',
+    ''
+  )))/length('''kind'',d.kind,''needsReview'',true,''orderEnabled'',false') as order_hold_count
+from pg_proc p
+where p.oid=to_regprocedure(
+  'public.record_pricing_document_acceptance(uuid,uuid,uuid,uuid,text,text,uuid,uuid,uuid,boolean,text,uuid,jsonb)'
+);
+```
+
+적용 후 영향 집계를 다시 실행해 새 불일치 수락이 모두 주문 가능 연결 0건인지 확인한다. PG17 회귀는 기존 리드 연결 보존, 수락 결과의 `needsReview=true`·`orderEnabled=false`, 가격 연결·계약 단가·주문 링크 무변경과 scoped down의 원래 guard 복원을 검증한다.
+
+#### 롤백
+
+1. `QUOTE_ACCEPTANCE`와 관련 공개 수락·주문 기능을 먼저 OFF로 유지한다.
+2. 별도 롤백 승인을 받은 뒤 down 초안을 한 번만 실행한다. 함수가 검토된 보류 구간과 정확히 일치하지 않으면 down은 중단한다.
+3. 위 함수 읽기 검증에서 동일 OID·owner·ACL·`prosecdef`, 기존 guard 1회, 새 보류 구간 0회를 확인한다.
+4. 영향 집계를 다시 기록한다. 기존 acceptance/link 행은 수정하거나 삭제하지 않는다.
+
+down은 이후의 새 수락을 원래 동작으로 돌릴 뿐 이미 저장된 `orderEnabled=false` 결과를 바꾸지 않는다. 기능을 다시 켜거나 기존 주문 가능 링크를 변경하는 것은 이 롤백 범위가 아니며 별도 승인 대상이다.
+

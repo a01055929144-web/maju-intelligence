@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { ExternalLink, Instagram, MessageCircle, Navigation } from "lucide-react";
 import { isMobilePhoneNumber } from "@/domains/lead/contact-channels";
+import { formatPhoneNumber } from "@/lib/phone";
 
 const RELATIONSHIP_STAGE_OPTIONS = ["거래중", "거래종료"] as const;
 
@@ -20,11 +21,12 @@ type ActionsProps = { readonly address: string; readonly currentStage: string; r
 export function MapStoreDetailActions({ address, currentStage, email, name, onDm, onStageChange, openHref, phone }: ActionsProps) {
   const actionClassName = "maju-button-secondary inline-flex h-11 items-center gap-2 px-3 text-sm";
   const cleanPhone = phone.replace(/[^0-9+]/g, "");
+  const displayedPhone = formatPhoneNumber(phone);
   const canSms = isMobilePhoneNumber(phone);
   return (
     <section aria-label="연락하기" className="border-b border-slate-200 bg-white px-4 py-3"><div className="flex flex-wrap items-center gap-2">
       {canSms ? <a aria-label={`${name}에게 문자 보내기`} className="maju-button-primary inline-flex h-11 items-center gap-2 px-4 text-sm" href={`sms:${cleanPhone}`} title="문자"><MessageCircle aria-hidden="true" className="h-4 w-4" />문자</a> : null}
-      {phone ? <a aria-label={`${name}에게 전화하기`} className={actionClassName} href={`tel:${cleanPhone}`} title="매장전화">매장전화</a> : null}
+      {phone ? <a aria-label={`${name}에게 전화하기 · ${displayedPhone}`} className={actionClassName} href={`tel:${cleanPhone}`} title={`매장전화 · ${displayedPhone}`}>매장전화</a> : null}
       {email ? <a aria-label={`${name}에게 이메일 보내기`} className={actionClassName} href={`mailto:${email}`} title="이메일">이메일</a> : null}
       <button aria-label={`${name} DM 문안 준비`} className={actionClassName} onClick={onDm} title="DM 문안 준비" type="button"><Instagram aria-hidden="true" className="h-4 w-4" />DM 문안</button>
       <a aria-label={`${name} 길안내`} className={actionClassName} href={`https://map.kakao.com/link/search/${encodeURIComponent(address || name)}`} rel="noreferrer" target="_blank" title="길안내"><Navigation aria-hidden="true" className="h-4 w-4" />길안내</a>

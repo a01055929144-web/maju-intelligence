@@ -7,6 +7,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 
 export const dynamic = "force-dynamic";
+// 리드가 많은 회사는 목록 + 액션 큐 조회가 10초 기본값을 넘겼다(11/11 시간 초과 6건). 조회를 줄인 뒤에도 안전 여유로 30초.
+export const maxDuration = 30;
 
 // GET: 리드 목록(필터 포함) + 4개 액션 큐(오늘 전화/이번 주 방문/DM/보강 필요)를 함께 내려줍니다.
 // 화면이 두 번 호출하지 않도록 한 번에 묶어서 반환합니다.
@@ -27,6 +29,9 @@ export async function GET(request: NextRequest) {
   const includeExistingCustomers = params.get("includeExistingCustomers") === "true";
   const includeTemporaryOperations = params.get("includeTemporaryOperations") === "true";
   const leadId = params.get("leadId") || undefined;
+  // CC-21: 유통사 리드는 DISTRIBUTOR_SALES가 켜진 회사(비브)만 본다. 꺼진 회사는 요청값과 관계없이 매장(restaurant)만.
+  const distributorSales = isFeatureEnabled("DISTRIBUTOR_SALES", scope.companyId);
+  const targetType = !distributorSales ? "restaurant" as const : leadId ? undefined : params.get("targetType") === "distributor" ? "distributor" as const : "restaurant" as const;
   const requestedStoreAreaRange = params.get("storeArea");
   const storeAreaRange = process.env.LEAD_STORE_AREA_ENABLED === "true" && isStoreAreaRange(requestedStoreAreaRange)
     ? requestedStoreAreaRange
@@ -44,7 +49,8 @@ export async function GET(request: NextRequest) {
       includeExistingCustomers: Boolean(leadId) || includeExistingCustomers,
       includeTemporaryOperations: Boolean(leadId) || includeTemporaryOperations,
       leadId,
-      storeAreaRange
+      storeAreaRange,
+      targetType
     }),
     getPermitLeadQueues(scope.companyId!),
     getCompanySalesAdministrativeAreas(scope.companyId!)
@@ -55,7 +61,7 @@ export async function GET(request: NextRequest) {
     pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", scope.companyId),
     workspaceRole: scope.customerSession?.workspaceRole,
   });
-  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry });
+  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry, distributorSales, targetType });
 }
 
 // POST: 사업자 인허가 데이터 업로드(엑셀/CSV를 클라이언트에서 미리 파싱한 행 배열)를 일괄 적재합니다.

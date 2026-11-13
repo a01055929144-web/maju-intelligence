@@ -7,6 +7,8 @@ const apiRoot = path.join(process.cwd(), "app", "api");
 // a provider/webhook secret, or intentionally expose only non-sensitive readiness data.
 // Adding an entry here is an explicit security decision and should include a short reason.
 const publicRoutes = new Map([
+  ["pricing-documents/order-intent/route.ts", "default-OFF bounded same-origin token-only POST; DB-verified issuer/document/version/revocation/expiry, tenant allowlist and S2 guard; 07 short-lived signed intent or 07-verified single-store same-version link; no browser customer/store IDs or order writes"],
+  ["pricing-document-acceptance/route.ts", "default-OFF purpose-signed delivered-document token, tenant allowlist, verified send/version/lead and S2 request guard; optional staff or 07 store-member session"],
   ["pricing-documents/public/route.ts", "default-OFF purpose-signed lead document link, same-origin bounded POST, tenant allowlist and S2 request guard; sales whitelist only"],
   ["admin/logout/route.ts", "clears the admin session cookie only"],
   ["auth/forgot-password/route.ts", "starts the rate-limited password reset flow"],
@@ -26,12 +28,19 @@ const publicRoutes = new Map([
   ["public/quotes/[token]/route.ts", "token-based public quote lookup validates UUID and expiry while excluding cost and margin fields"],
   ["staff/invite-preview/route.ts", "rate-limited invite preview required before sign-in"],
   ["store/accounts/activate/route.ts", "default-OFF one-time owner token plus explicit terms acceptance; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
+  ["store/members/accept/route.ts", "default-OFF same-origin one-time member invite token; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
+  ["store/profile/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST creates only the caller's own profile; GET lists only the caller's own profiles"],
+  ["store/connect/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST; DB-backed failure throttle; connects only the caller's own owner profile and reveals nothing about which distributor a code belongs to"],
   ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"]
 ]);
 
 const sessionGuardPatterns = [
   /\bgetRequestAuthScope\s*\(/,
+  /\bmarginTemplateGate\s*\(/,
+  /\bpromotionAudienceGate\s*\(/, // lib/pricing/promotion-audience-gate.ts: getRequestAuthScope + PROMOTION_AUDIENCE switch + manage_sales + owner/manager
+  /\bdistributorGate\s*\(/, // lib/distributor-gate.ts: getRequestAuthScope + manage_customers + DISTRIBUTOR_SALES // lib/pricing/margin-template-gate.ts wraps getRequestAuthScope + feature switch + manage_sales
   /\bgetCustomerSession\s*\(/,
+  /\bgetStoreMemberContext\s*\(/,
   /\bgetAdminSession\s*\(/,
   /\brequireAdminSession\s*\(/,
   /\bvalidateAdminCredentials\s*\(/,

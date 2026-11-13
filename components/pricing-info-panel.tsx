@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { DocumentContent, DocumentInfoItem } from "@/domains/pricing/document";
+import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
 import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
 import { PAYMENT_CYCLE_OPTIONS } from "@/domains/organization/company-profile";
 import { formatPhoneNumber } from "@/lib/phone";
@@ -72,6 +72,8 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [basisBusy, setBasisBusy] = useState(false);
   const display = content.display || DEFAULT_DISPLAY;
   const latest = useRef(content);
   latest.current = content;
@@ -84,6 +86,68 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
       .catch(() => { if (active) setProfile({}); });
     return () => { active = false; };
   }, [companyId]);
+
+  // CC-19c: 마진 템플릿이 켜진 회사만 목록이 온다(꺼져 있으면 404 → 선택 칸 숨김).
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/margin-templates?companyId=${encodeURIComponent(companyId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { templates?: Array<{ id: string; name: string }> } | null) => { if (active) setTemplates(payload?.templates || []); })
+      .catch(() => { if (active) setTemplates([]); });
+    return () => { active = false; };
+  }, [companyId]);
+  // 가격 기준을 바꾸면 행사·임박이 아닌 품목 가격만 그 템플릿(없으면 기본) 값으로 다시 계산한다. 이미 확정한 버전은 그대로.
+  async function setBasis(templateId: string) {
+    const current = latest.current;
+    const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
+    if (!productIds.length) { onContent({ ...current, ...(templateId ? { marginTemplateId: templateId } : { marginTemplateId: undefined }) }); return; }
+    if (!window.confirm("일반 품목의 가격을 선택한 가격 기준으로 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?")) return;
+    setBasisBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, templateId: templateId || null, productIds: productIds.slice(0, 300) }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
+      const prices = body.prices as Record<string, number>, sources = (body.sources || {}) as Record<string, PriceSource>;
+      const fresh = latest.current;
+      onContent({ ...fresh, marginTemplateId: templateId || undefined, lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId], priceSource: sources[line.productId] })) });
+      setMessage("가격 기준을 적용했습니다. 매입가가 없는 품목은 가격을 그대로 뒀습니다.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
+    finally { setBasisBusy(false); }
+  }
+
+  // CC-30d: 받는 매장을 고르면 일반 품목 가격을 매장 가격 > 카탈로그가 > 기본가로 다시 채운다(행사·임박 줄은 그대로). 이미 확정한 버전은 그대로.
+  const [storeQuery, setStoreQuery] = useState("");
+  const [storeFound, setStoreFound] = useState<Array<{ id: string; name: string }>>([]);
+  async function searchStores(q: string) {
+    setStoreQuery(q);
+    if (!q.trim()) { setStoreFound([]); return; }
+    try {
+      const response = await fetch(`/api/margin-templates/prices?${new URLSearchParams({ companyId, q })}`, { cache: "no-store" });
+      setStoreFound(response.ok ? ((await response.json()) as { customers?: Array<{ id: string; name: string }> }).customers ?? [] : []);
+    } catch { setStoreFound([]); }
+  }
+  async function pickStore(customer: { id: string; name: string } | null) {
+    const current = latest.current;
+    setStoreFound([]); setStoreQuery("");
+    if (!customer) { onContent({ ...current, customerId: undefined }); setMessage("받는 매장 연결을 풀었습니다. 가격은 그대로 둡니다."); return; }
+    const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
+    if (productIds.length && !window.confirm(`"${customer.name}" 가격으로 일반 품목 가격을 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?`)) return;
+    setBasisBusy(true); setMessage("");
+    try {
+      let prices: Record<string, number> = {}, sources: Record<string, PriceSource> = {}, gradeId: string | null = null;
+      if (productIds.length) {
+        const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId: customer.id, productIds: productIds.slice(0, 300) }) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || "가격을 계산하지 못했습니다.");
+        prices = body.prices as Record<string, number>; sources = (body.sources || {}) as Record<string, PriceSource>; gradeId = (body.gradeId as string | null) ?? null;
+      }
+      const fresh = latest.current;
+      onContent({ ...fresh, customerId: customer.id, marginTemplateId: gradeId || undefined, recipient: fresh.recipient.trim() ? fresh.recipient : customer.name.slice(0, 100),
+        lines: fresh.lines.map((line) => (line.promotionId || prices[line.productId] === undefined ? line : { ...line, price: prices[line.productId], priceSource: sources[line.productId] })) });
+      setMessage(`"${customer.name}" 가격(매장 가격 > 카탈로그가 > 기본가)을 적용했습니다. 가격이 없는 품목은 그대로 뒀습니다.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "가격을 계산하지 못했습니다."); }
+    finally { setBasisBusy(false); }
+  }
 
   // 회사명이 비어 있으면 회사 정보 이름으로 채웁니다. 문서에 넣은 값은 문서에서 고친 그대로 둡니다.
   useEffect(() => {
@@ -283,12 +347,31 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
         <div className="flex items-center gap-2 text-xs text-slate-600">표시 단가
           {([false, true] as const).map((included) => <button aria-pressed={display.priceIncludesTax === included} className={chip(display.priceIncludesTax === included)} disabled={!editable} key={String(included)} onClick={() => setDisplay({ priceIncludesTax: included })} type="button">부가세 {included ? "포함" : "별도"}</button>)}
         </div>
+        <div className="flex items-center gap-2 text-xs text-slate-600">과세·면세 표시
+          {([false, true] as const).map((shown) => <button aria-pressed={display.showTaxType === shown} className={chip(display.showTaxType === shown)} disabled={!editable} key={String(shown)} onClick={() => setDisplay({ showTaxType: shown })} type="button">{shown ? "표시" : "숨김"}</button>)}
+        </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
           <span className="w-16">형식</span>
           {([["auto", "자동"], ["table", "표"], ["cards", "카드"]] as const).map(([value, label]) => <button aria-pressed={content.layout === value} className={chip(content.layout === value)} disabled={!editable} key={value} onClick={() => onContent({ ...content, layout: value })} type="button">{label}</button>)}
         </div>
+        {templates.length && content.kind === "quote" ? <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-16">받는 매장</span>
+          {content.customerId ? <><span className="font-semibold text-slate-800">{content.recipient || "연결됨"}</span><button className={chip(false)} disabled={!editable || basisBusy} onClick={() => void pickStore(null)} type="button">연결 풀기</button></>
+            : <input aria-label="받는 매장 찾기" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void searchStores(event.target.value)} placeholder="매장 이름으로 찾아 가격 자동 적용" value={storeQuery} />}
+          {storeFound.length ? <ul className="w-full space-y-1" role="listbox">{storeFound.map((c) => <li key={c.id}><button className={chip(false)} disabled={basisBusy} aria-selected={false} onClick={() => void pickStore(c)} role="option" type="button">{c.name}</button></li>)}</ul> : null}
+        </div> : null}
+        {/* 견적서는 받는 매장이 가격을 정하고, 단가표(받는 매장 없음)만 카탈로그 하나를 고른다. */}
+        {templates.length && content.kind === "sheet" ? <label className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className="w-16">카탈로그</span>
+          <select aria-label="카탈로그" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs" disabled={!editable || basisBusy} onChange={(event) => void setBasis(event.target.value)} value={content.marginTemplateId ?? ""}>
+            <option value="">기본</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label> : null}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-          <span className="w-16">행사 블록</span>
+          <span className="w-16">행사·임박</span>
+          <span className="text-xs text-slate-500">자동 포함</span>
+          {([[false, "끄기"], [true, "켜기"]] as const).map(([on, label]) => <button aria-pressed={Boolean(display.autoPromos) === on} className={chip(Boolean(display.autoPromos) === on)} disabled={!editable} key={label} onClick={() => setDisplay({ autoPromos: on })} type="button">{label}</button>)}
+          <span className="ml-2 w-12">모양</span>
           {([["cards", "카드"], ["table", "표"]] as const).map(([value, label]) => <button aria-pressed={display.promoLayout === value} className={chip(display.promoLayout === value)} disabled={!editable} key={value} onClick={() => setDisplay({ promoLayout: value })} type="button">{label}</button>)}
         </div>
       </fieldset>

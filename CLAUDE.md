@@ -13,18 +13,25 @@ Claude의 기본 역할은 **Architect + Reviewer + QA Engineer + Debugger**다.
 
 가장 중요한 목표: **"고치는 것보다 먼저 무엇이 잘못됐는지 정확하게 정의하는 것."**
 
+(2026-11-10) Claude Code로 이관한 뒤에는 분석·설계 다음에 **직접 구현·테스트·PR까지** 한다. 순서는 그대로 지킨다: 원인 정의 → 영향 분석 → 최소 변경 구현 → 검증.
+
 Core Principle: **Find → Understand → Explain → Design → Handoff.** 코드를 많이 바꾸는 것이 목적이 아니라, 문제를 정확히 정의하고 안전한 수정 방향을 제시하는 것이 목적이다.
 
 새 대화/새 Project를 열었다면, 실제 코드를 고치기 전에 `AGENTS.md`, `docs/00_PROJECT_RULES.md`, `docs/01_ARCHITECTURE.md`, `docs/02_DOMAIN_MAP.md`, `docs/03_DATABASE.md`, 그리고 작업 대상 `docs/pages/*.md`를 먼저 읽는다. 문서와 실제 코드가 다르면 문서를 무조건 진실로 가정하지 않고 그 차이를 명확히 보고한다.
 
-## 1. 이 세션(Cowork)만의 환경 제약 — 반드시 숙지
+## 1. Claude Code 작업 환경 (2026-11-10 이관 — 예전 Cowork 제약은 폐기)
 
-- **저장소 위치**: `C:\maju-deploy`(메인, GitHub origin과 동기화되는 배포 저장소)와 `C:\Users\dyoun\OneDrive\문서\New project\maju-intelligence`(보조 미러). **모든 코드 변경은 두 폴더 모두에 동일하게 적용하고, `diff -w`로 완전히 동일한지 확인한다.** (docs/ 파일도 동일하게 미러링한다.)
-- **git 쓰기 명령을 직접 실행하지 않는다.** `git commit` / `git pull` / `git merge` / `git push` / `git stash`는 절대 실행하지 않는다. 이유는 정책(사용자가 직접 통제)이면서 동시에 기술적 제약이기도 하다 — 이 세션의 Linux 샌드박스에 마운트된 `C:\maju-deploy`는 파일 unlink/rename을 지원하지 않아서, `git stash`/`git commit` 등 내부적으로 lock 파일을 생성·삭제하는 작업이 `.git/index.lock`을 지운 채로 남기고 실패한다. 허용되는 것은 읽기 전용 명령(`git status`, `git log`, `git diff`, `git show`, `git fetch`)과, 파일 내용을 직접 덮어쓰는 것(`Edit`/`Write` 도구, 또는 `git show ref:path > path`처럼 open+truncate+write만 쓰는 셸 리다이렉트)뿐이다.
-- **실제 git 커밋/푸시는 사용자가 `push-latest.bat`을 직접 실행해서 수행한다.** 새로 만들거나 수정한 파일은 반드시 `push-latest.bat`의 `git add` 목록에 있는지 확인하고, 없으면 추가한다. 커밋 메시지는 `commit-message.txt`(UTF-8, git 추적 대상 아님, `git commit -F`로 읽힘)에 이번 작업 설명을 이어붙인다.
-- **`npm install`이 이 샌드박스에서 실패한다**(같은 unlink/rename 제약, `ENOTEMPTY` 에러). 따라서 `npx tsc --noEmit` / `npm run lint` / `npm run build`를 Claude가 직접 돌릴 수 없다. 대신 `node ebcheck_tmp2.js <file>`(esbuild 기반 문법 + JSX 태그 중첩 검증)과, 수정 전후 중괄호/괄호 개수를 `git show HEAD:<file>`과 비교하는 밸런스 체크로 구조적 정합성을 확인한다. 실제 typecheck/lint/build는 사용자가 로컬에서 돌리거나 Codex에게 맡긴다.
-- **줄바꿈(CRLF/LF) 차이는 이 저장소에 원래부터 있던 것**이다. 작업트리는 CRLF, git 커밋 객체는 LF로 저장돼 있어 `git status`가 손대지 않은 파일까지 "modified"로 보여준다. 실제 변경 여부 판단은 항상 `git diff -w`로 한다.
-- **이 저장소에는 Claude(Cowork) 외에 Codex로 추정되는 별도 에이전트가 동시에 커밋·푸시하고 있다.** 이는 비정상 상황이 아니라 사용자가 의도적으로 병행 운용하는 협업 구조다. origin과의 병합 충돌이 발생하면, diff의 +/- 기호만으로 방향을 판단하지 말고 `git show <ref>:<path> | grep -c <marker>` 같은 방식으로 양쪽 내용을 직접 비교해서 어느 쪽이 실제로 상위집합인지 확인한 뒤 반영한다.
+이 저장소를 **Claude Code(로컬 CLI 또는 클라우드 세션)** 에서 직접 개발한다. 예전 Cowork 세션의 "git 쓰기 금지 · 미러 폴더 동기화 · push-latest.bat · ebcheck 검증"은 더 이상 적용하지 않는다.
+
+- **시작할 때 먼저 읽기**: `docs/dispatch/README.md`와 최신 차수의 `*-claude-code.md`·`*-board.md`, `docs/handoff/2026-11-10-claude-code-migration.md`(현재 상태·열린 PR·남은 일), `AGENTS.md`(공통 규칙·승인 경계), `docs/work-orders/2026-11-08-stage-checklist.md`(단계 체크리스트).
+- **브랜치 · PR**: `main`에 직접 커밋하지 않는다. `claude/<작업>` 브랜치 → PR → CI 전체 초록 → 병합. 한 PR = 한 고객 행동. 작업은 `docs/dispatch/`의 차수별 지시서(`CC-*`)만 한다. PR 전에 Claude Code의 ponytail-review로 직접 점검하고 본문 첫 줄 `Ponytail: 사용함 (Claude Code ponytail-review)`가 있어야 병합(아래 8-2).
+- **검증(로컬에서 직접 실행)**: `npm ci` → `npx tsc --noEmit` → `npm run lint` → `npm test` → `npm run build` → `npm run check:auth-boundaries`. 화면을 바꾸면 `npm run test:e2e:layout`(PC 1440 · 모바일 390). Vitest의 `domains/*` 안에서는 `@/` 대신 상대 경로 import. CI는 Node 24 · PostgreSQL 17.
+- **배포**: Vercel Git 자동 배포는 꺼져 있다(`vercel.json`). 병합 후 Production 배포는 대표 지시가 있을 때만(횟수 제한 없음, 단 병합된 건을 모아서 한 번에 — 장애 수정만 단독, 11/11 대표 결정). 대표가 Claude Code에 직접 지시하면 Claude Code도 배포한다 — `docs/dispatch/README.md` "배포 담당" 순서(현황판 잠금 → CI 확인 → 배포 → 스모크 → 기록)를 그대로 따른다. 배포 후 `/login` `/dashboard` `/leads` `/revenue/pricing/*` `/revenue/products` `/store` 스모크, 회귀 시 직전 READY로 되돌린다. 빌드는 `next build`뿐이고 `npm run ops:migrate`는 배포에서 실행되지 않는다.
+- **운영 DB(`fcmdvveqmcgtioelzqun`)**: 읽기 조회만 자유. 스키마·데이터 변경은 `docs/sql-drafts/` 초안 + down + PG17 테스트 → 대표의 명시 승인 문구 → 적용(승인 문구를 받은 쪽이 직접, 11/11 대표 결정) → 읽기 검증 → `docs/work-orders/db-approval/`에 기록.
+- **비밀값**: 화면·로그·PR·커밋·채팅에 값을 출력하지 않는다. 로컬은 `vercel env pull .env.local`(커밋 금지). 새 임시 값은 이름만 `docs/work-orders/owner-change-later.md`에 기록.
+- **기능 플래그**: 새 기능은 기본 OFF + 회사 allowlist. 대표 회사 외 고객사에 켜기, 돈이 오가는 기능 켜기는 대표 승인 필요.
+- **Codex와 병행**: Codex 작업방(01~09)이 같은 저장소에 PR을 올린다. 작업 전 `git fetch` 후 열린 PR(`gh pr list`)의 파일과 겹치는지 확인하고, 겹치면 먼저 병합된 쪽 main 기준으로 다시 맞춘다. 공유 파일(`lib/store.ts`, 메뉴, 백엔드 계약, 중앙 체크리스트)은 한 번에 한 작업만.
+- 답변·보고는 한국어, 끝에 진행률 표.
 
 ## 2. Bug Investigation
 
@@ -61,7 +68,7 @@ God Component(한 컴포넌트에 책임 과다) · Cross-Domain Coupling(도메
 
 실제 구현이 필요하면 Codex가 바로 작업할 수 있게 다음 형태로 작성한다: Objective / Files / Do Not Touch / Required Changes / Preserve / Test / Completion Criteria / Codex Task / Verification.
 
-### 8-1. Claude ↔ Codex 역할 분담표
+### 8-1. Claude ↔ Codex 역할 분담표 (2026-11-10 이관 전 기준 — 지금은 Claude Code도 구현·테스트·git·PR을 직접 한다)
 
 (2026-09-11, 사용자 제시안에 이 세션에서 확인된 실제 제약을 반영해 확정)
 
@@ -87,6 +94,10 @@ God Component(한 컴포넌트에 책임 과다) · Cross-Domain Coupling(도메
 범례: ◎ 주 담당 · ○ 보조/가능 · △ 제한적 · ✕ 하지 않음
 
 작은 UI 수정, 명확한 버그, 단순 기능 추가는 Claude 분석 없이 `docs/pages/<page>.md`만으로 바로 Codex에 보내도 된다. Claude부터 거쳐야 하는 경우: 원인 불명 버그, 여러 페이지 간 데이터 불일치, DB 문제, 구조 변경/리팩터링, 여러 페이지가 동시에 영향받는 대규모 기능.
+
+### 8-2. Ponytail 점검 (Claude Code PR도 필수 · 2026-11-10 대표 결정)
+
+Ponytail은 Claude Code에도 설치돼 있다(2026-11-11). Claude Code PR은 **Claude Code가 ponytail-review로 직접 점검·보완**한 뒤 병합한다(Codex 검토방 CX-00은 추가 검토가 필요할 때만). 흐름과 상태 표기는 `docs/dispatch/README.md`. Claude Code는 PR을 올리기 전에 스스로도 ① 공통 컴포넌트·도메인 함수 재사용 ② 지시서 Files 밖 수정 없음 ③ 중복·죽은 코드 없음 ④ 검증·보안·접근성 유지를 확인한다.
 
 ## 9. QA Report 형식
 

@@ -6,9 +6,11 @@ import { HomeSalesDashboard, isHomeTab } from "@/components/home-sales-dashboard
 import { SalesRouteMapWorkspace } from "@/components/sales-route-map-workspace-loader";
 import { buildSalesHomeSummary } from "@/application/analytics/sales-home-summary";
 import { loadTodayTaskCounts } from "@/application/dashboard/today-task-counts";
+import { loadTodayRouteOrderProjection } from "@/application/route/today-route-order-projection";
 import { getCompanyProfile } from "@/lib/company-profile-store";
 import { companyProfileProgress } from "@/domains/organization/company-profile";
 import { canManagePriceSheets } from "@/domains/pricing/access";
+import { leadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { listVehicleMaster } from "@/application/delivery/manage-vehicle-master";
 import { customerHasCapability, getAdminSession, getCustomerAssignmentKeys, getCustomerSession, resolvePageCompanyId, shouldScopeCustomerData } from "@/lib/auth";
 import { createCustomerLedgerMapMarkers, createRouteMapMarkers } from "@/lib/route-map-markers";
@@ -51,6 +53,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   if (customerSession?.workspaceRole === "driver") redirect("/mobile/today");
   const showHoldModules = areHoldModulesEnabled(companyId);
   const isAdminPreview = Boolean(adminSession && !customerSession);
+  const documentEntry = leadDocumentEntryAccess({
+    admin: isAdminPreview,
+    pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", companyId),
+    workspaceRole: customerSession?.workspaceRole
+  });
   const isScopedStaffView = shouldScopeCustomerData(customerSession);
   const canManageStaff = Boolean(customerSession && customerHasCapability(customerSession, "manage_members"));
   const assignmentKeys = getCustomerAssignmentKeys(customerSession);
@@ -108,6 +115,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     canManageStaff && companyId ? timing.measure("db_staff_invitations", () => getCompanyStaffInvitations(companyId).catch(() => ({ invitations: [], persisted: false }))) : Promise.resolve({ invitations: [], persisted: false }),
     companyId ? timing.measure("db_vehicle_master", () => listVehicleMaster(vehicleMasterRepository, companyId).catch(() => ({ available: false, vehicles: [] }))) : Promise.resolve({ available: false, vehicles: [] })
   ]));
+  const orderProjection = await timing.measure("db_route_order_projection", () => loadTodayRouteOrderProjection(companyId, routePlan));
   const hasOperationalCustomerMaster = customerMaster.source === "supabase";
   // getCompanyOriginAddress()는 내부에서 getCompanySettings()를 다시 호출합니다. 지도 첫 요청에서
   // 같은 회사 행을 두 번 조회하지 않고, 위에서 이미 받은 설정의 정규화된 출발지 주소를 재사용합니다.
@@ -162,6 +170,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
           holdModulesEnabled={showHoldModules}
+          distributorSales={isFeatureEnabled("DISTRIBUTOR_SALES", companyId)}
+          documentEntry={documentEntry}
           initialView={initialView}
           initialLeadId={params.lead}
           initialLeadType={params.type === "keyword" ? "sales" : "new"}
@@ -169,7 +179,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           leadDetailMode={params.detailMode === "page" ? "page" : "drawer"}
           canManageStaff={canManageStaff}
           mapMarkers={mapMarkers}
-          routePlan={routePlan}
+          orderLinkStatus={orderProjection.status}
+          routePlan={orderProjection.routePlan}
           showOriginAddressBanner={showOriginAddressBanner}
           staffVehicleLocations={staffVehicleLocations}
           staffInvitations={staffInvitationResult.invitations}

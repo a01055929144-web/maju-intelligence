@@ -4,7 +4,10 @@ import Link from "next/link";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { attachmentLabel, attachmentTitleFromType, buildPlaceSearchLinks, extractRegion, formatBusinessNumberInput, formatBusinessRegistrationNumber, formatPhoneNumberInput, gradeClassName, guessMimeType, isValidBusinessRegistrationNumber, normalizeBusinessRegistrationNumber, noteTypeLabel } from "@/components/customers/customer-format";
+import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import { LinkifiedText } from "@/components/linkified-text";
 import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
@@ -184,6 +187,12 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+const EXTRA_LIST_COLS = [
+  { key: "priceCount", label: "매장 가격", width: "52px" },
+  { key: "lastDate", label: "최근 거래", width: "76px" },
+  { key: "monthSales", label: "이번 달 매출", width: "84px" },
+] as const;
+
 export default function CrmTimelinePage() {
   const initialRenderStartedAt = useRef(typeof performance === "undefined" ? 0 : performance.now());
   useEffect(() => {
@@ -209,6 +218,28 @@ export default function CrmTimelinePage() {
   const [customerPage, setCustomerPage] = useState(1);
   const [customerPageSize, setCustomerPageSize] = useState<ListPageSize>(30);
   const [storeOwnerActivationEnabled, setStoreOwnerActivationEnabled] = useState(false);
+  // CC-25: 목록 추가 열(매장 가격 수·최근 거래일·이번 달 매출). 열 편집으로 숨길 수 있고 브라우저에 기억한다.
+  const [salesSummary, setSalesSummary] = useState<Record<string, { priceCount: number; lastDate: string; monthSales: number }>>({});
+  const [hiddenExtraCols, setHiddenExtraCols] = useState<string[]>([]);
+  const [colEditorOpen, setColEditorOpen] = useState(false);
+  useEffect(() => {
+    try { setHiddenExtraCols(JSON.parse(window.localStorage.getItem("maju:customer-list-cols") || "[]")); } catch { /* 저장소를 못 쓰면 기본(모두 표시) */ }
+  }, []);
+  useEffect(() => {
+    let live = true;
+    fetchWithTimeout(withCompanyQuery("/api/customers/sales-summary"), { cache: "no-store" }, 15000)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => { if (live && payload?.summary) setSalesSummary(payload.summary); })
+      .catch(() => { /* 요약이 없으면 열은 '-' */ });
+    return () => { live = false; };
+  }, []);
+  const toggleExtraCol = (key: string) => setHiddenExtraCols((current) => {
+    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+    try { window.localStorage.setItem("maju:customer-list-cols", JSON.stringify(next)); } catch { /* 저장 실패는 이번 화면에만 적용 */ }
+    return next;
+  });
+  const extraCols = EXTRA_LIST_COLS.filter((col) => !hiddenExtraCols.includes(col.key));
+  const listGridTemplate = ["20px", "minmax(0,1fr)", "48px", ...extraCols.map((col) => col.width), "88px"].join(" ");
 
   useEffect(() => {
     if (isAdminPreview || !companyMemberId || !["owner", "manager"].includes(workspaceRole)) {
@@ -512,10 +543,10 @@ export default function CrmTimelinePage() {
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
-  const [workspaceSection] = useState<"list" | "ledger" | "history">(() => {
+  const [workspaceSection] = useState<"list" | "ledger" | "history" | "products" | "transactions">(() => {
     if (typeof window === "undefined") return "list";
     const requested = new URLSearchParams(window.location.search).get("section");
-    return requested === "ledger" || requested === "history" ? requested : "list";
+    return requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
   });
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -1287,15 +1318,29 @@ export default function CrmTimelinePage() {
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <section className="mx-auto max-w-[1560px]">
+      <section className="w-full">
         <WorkspaceSectionNav
           items={[
             { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },
             { active: workspaceSection === "ledger", description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: withCompanyQuery("/crm/timeline?section=ledger"), icon: Pencil, label: "원장" },
-            { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" }
+            { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" },
+            { active: workspaceSection === "products", description: "매출 전표와 매장 주문을 상품별로 합쳐 봅니다.", href: withCompanyQuery(`/crm/timeline?section=products${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`), icon: PackageCheck, label: "매출 상품" },
+            { active: workspaceSection === "transactions", description: "매출 전표·주문·입금을 날짜순으로 봅니다.", href: withCompanyQuery(`/crm/timeline?section=transactions${selectedCustomer.id ? `&customerId=${encodeURIComponent(selectedCustomer.id)}` : ""}`), icon: Banknote, label: "거래내역" }
           ]}
           title="거래처 관리"
         />
+
+        {workspaceSection === "products" || workspaceSection === "transactions" ? (
+          <div className="mb-4 min-w-0 space-y-3">
+            <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">
+              매출처
+              <select aria-label="매출처 선택" className="maju-input min-h-11 sm:min-h-9" onChange={(event) => setSelectedIndex(Number(event.target.value))} value={selectedIndex}>
+                {customers.map((customer, index) => <option key={customer.id || index} value={index}>{customer.customerName}</option>)}
+              </select>
+            </label>
+            <SalesPartnerPanel companyId={adminCompanyId} customerId={selectedCustomer.id} customerName={selectedCustomer.customerName} view={workspaceSection === "products" ? "products" : "history"} />
+          </div>
+        ) : null}
 
         <div className="min-w-0 space-y-4">
         <div className={`${workspaceSection === "list" ? "maju-section-card" : "hidden"} scroll-mt-28`} id="customer-ledger-list">
@@ -1327,26 +1372,23 @@ export default function CrmTimelinePage() {
               </button>
             ) : (
             <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="border-b border-slate-200/80 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-950">거래처 검색·필터</h2>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">검색 후 보완 대상을 선택하세요.</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge className="bg-slate-100 text-slate-700">{filteredCustomers.length}/{customers.length}곳</Badge>
-                    <button
-                      aria-label="거래처 검색·목록 접기"
-                      className="maju-button-secondary h-8 w-8 px-0"
-                      onClick={() => setListCollapsed(true)}
-                      type="button"
-                    >
-                      <PanelLeftClose className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
+              <ErpPartnerDirectoryToolbar
+                action={(
+                  <button
+                    aria-label="거래처 검색·목록 접기"
+                    className="maju-button-secondary min-h-11 w-11 px-0 sm:min-h-9 sm:w-9"
+                    onClick={() => setListCollapsed(true)}
+                    type="button"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                )}
+                countLabel={`${filteredCustomers.length}/${customers.length}곳`}
+                description="검색 후 등급과 보완 상태로 작업 대상을 좁히세요."
+                error={customerSource === "error" ? customerLoadError : undefined}
+                onRetry={customerSource === "error" ? loadCustomers : undefined}
+                title="거래처 목록"
+              >
                 <label className="maju-search-field">
                   <Search className="h-4 w-4 text-slate-400" />
                   <input
@@ -1413,9 +1455,6 @@ export default function CrmTimelinePage() {
                 onClear={clearOperationFilter}
                 selectedPosition={selectedFilteredPosition}
               />
-              {customerSource === "error" ? (
-                <CustomerLoadErrorBanner message={customerLoadError} onRetry={loadCustomers} />
-              ) : null}
               <LedgerListStatusStrip
                 customerSource={customerSource}
                 gradeFilter={gradeFilter}
@@ -1425,7 +1464,7 @@ export default function CrmTimelinePage() {
                 visibleCount={filteredCustomers.length}
                 totalCount={customers.length}
               />
-            </div>
+              </ErpPartnerDirectoryToolbar>
             <datalist id="bulk-manager-options">
               {managerOptions.map((manager) => (
                 <option key={manager} value={manager} />
@@ -1505,7 +1544,18 @@ export default function CrmTimelinePage() {
                   <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">
                     {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
                   </span>
+                  <button aria-expanded={colEditorOpen} className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={() => setColEditorOpen((open) => !open)} type="button">열 편집</button>
                 </div>
+                {colEditorOpen ? (
+                  <div className="flex flex-wrap gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    {EXTRA_LIST_COLS.map((col) => (
+                      <label className="flex items-center gap-1 text-xs font-semibold text-slate-700" key={col.key}>
+                        <input checked={!hiddenExtraCols.includes(col.key)} onChange={() => toggleExtraCol(col.key)} type="checkbox" />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-1">
                   <button
                     className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1550,7 +1600,7 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             {filteredCustomers.length ? (
-              <div className="grid grid-cols-[20px_minmax(0,1fr)_48px_88px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500">
+              <div className="grid items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500" style={{ gridTemplateColumns: listGridTemplate }}>
                 <input
                   aria-label="현재 페이지 전체 선택"
                   checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
@@ -1568,6 +1618,7 @@ export default function CrmTimelinePage() {
                 />
                 <span>상호명</span>
                 <span className="text-center">등급</span>
+                {extraCols.map((col) => <span className="text-right" key={col.key}>{col.label}</span>)}
                 <span className="text-right">상태</span>
               </div>
             ) : null}
@@ -1578,9 +1629,10 @@ export default function CrmTimelinePage() {
                 return (
                   <div
                     key={`${customer.customerName}-${customer.address}`}
-                    className={`grid grid-cols-[20px_minmax(0,1fr)_44px_88px] items-center gap-2 px-3 py-2 transition ${
+                    className={`grid items-center gap-2 px-3 py-2 transition ${
                       selected ? "bg-slate-50" : "bg-white hover:bg-slate-50"
                     }`}
+                    style={{ gridTemplateColumns: listGridTemplate }}
                   >
                     {customer.id ? (
                       <input
@@ -1605,6 +1657,11 @@ export default function CrmTimelinePage() {
                       <span className="block truncate text-xs font-medium text-slate-500">{customer.region}</span>
                     </button>
                     <Badge className={`justify-self-center px-2 py-0.5 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                    {extraCols.map((col) => {
+                      const sum = customer.id ? salesSummary[customer.id] : undefined;
+                      const text = col.key === "priceCount" ? String(sum?.priceCount ?? 0) : col.key === "lastDate" ? sum?.lastDate?.slice(2) || "-" : `${(sum?.monthSales ?? 0).toLocaleString("ko-KR")}원`;
+                      return <span className="truncate text-right text-xs font-medium text-slate-600" key={col.key}>{text}</span>;
+                    })}
                     <Badge className={`justify-self-end px-2 py-0.5 text-xs ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                       {issues.length ? issues[0] : "준비됨"}
                     </Badge>
@@ -2654,28 +2711,6 @@ function LedgerListStatusStrip({
   );
 }
 
-function CustomerLoadErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="mt-3 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 items-start gap-2">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-        <p className="text-xs font-bold leading-5 text-red-900">
-          거래처 원장을 불러오지 못했습니다. 실제로 거래처가 0곳이라는 뜻이 아닙니다 — 서버/네트워크 오류일 수 있으니 다시 시도해주세요.
-          {message ? <span className="mt-1 block text-[11px] font-semibold text-red-700">{message}</span> : null}
-        </p>
-      </div>
-      <button
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-black text-red-700 transition hover:bg-red-100"
-        onClick={onRetry}
-        type="button"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-        다시 시도
-      </button>
-    </div>
-  );
-}
-
 function OperationsLoadState({ error, loading, onRetry }: { error: string; loading: boolean; onRetry: () => void }) {
   return (
     <div className={`m-3 rounded-md border p-3 ${loading ? "border-slate-200 bg-slate-50" : "border-red-200 bg-red-50"}`}>
@@ -3215,20 +3250,6 @@ function PlaceLinkButton({ label, purpose, url = "" }: { label: string; purpose:
   );
 }
 
-function buildPlaceSearchLinks(customerName: string, address?: string) {
-  const fullQuery = [customerName, address].map((value) => value?.trim()).filter(Boolean).join(" ") || "거래처";
-  const encodedFullQuery = encodeURIComponent(fullQuery);
-  // 네이버 지도는 상호명+상세주소(동/호수·층수 포함)로 검색하면 네이버 DB 주소 표기와 조금만 달라도
-  // 결과가 없거나 다른 곳으로 연결되는 경우가 많아, 상호명 단독 검색이 훨씬 안정적으로 매칭됩니다.
-  const encodedNaverQuery = encodeURIComponent(customerName?.trim() || fullQuery);
-  return [
-    { href: `https://map.naver.com/p/search/${encodedNaverQuery}`, label: "네이버 지도" },
-    { href: `https://section.blog.naver.com/Search/Post.naver?keyword=${encodedFullQuery}`, label: "네이버 블로그" },
-    { href: `https://map.kakao.com/?q=${encodedFullQuery}`, label: "카카오맵" },
-    { href: `https://www.google.com/maps/search/${encodedFullQuery}`, label: "구글맵" }
-  ];
-}
-
 function EditableField({
   className = "",
   helper = "",
@@ -3303,7 +3324,7 @@ function AttachmentRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-black text-slate-800">{label}</p>
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ${statusClassName}`}>{statusLabel}</span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-black ring-1 ${statusClassName}`}>{statusLabel}</span>
         </div>
         <p className="mt-1 text-xs font-bold text-slate-500">{value}</p>
       </div>
@@ -3394,48 +3415,6 @@ function AttachmentPreviewModal({
   );
 }
 
-function attachmentLabel(type: string, title: string) {
-  if (type === "business_license") return "사업자등록증";
-  if (type === "identity_document") return "신분증";
-  if (type === "bank_account") return "통장사본";
-  if (type === "loading_position") return "배송 적재위치 사진/영상";
-  if (type === "delivery_proof") return "배송완료 증빙";
-  return title || "첨부자료";
-}
-
-function noteTypeLabel(type: string) {
-  if (type === "delivery") return "배송";
-  if (type === "sales") return "상담";
-  if (type === "settlement") return "정산";
-  return "메모";
-}
-
-function attachmentTitleFromType(type: string) {
-  if (type === "business_license") return "사업자등록증";
-  if (type === "identity_document") return "신분증";
-  if (type === "bank_account") return "통장사본";
-  if (type === "loading_position") return "배송 적재위치 사진/영상";
-  if (type === "delivery_proof") return "배송완료 증빙";
-  return "기타 첨부자료";
-}
-
-function guessMimeType(url: string) {
-  const normalized = url.toLowerCase().split("?")[0];
-  if (normalized.endsWith(".pdf")) return "application/pdf";
-  if (normalized.endsWith(".mp4")) return "video/mp4";
-  if (normalized.endsWith(".mov")) return "video/quicktime";
-  if (normalized.endsWith(".webp")) return "image/webp";
-  if (normalized.endsWith(".png")) return "image/png";
-  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
-  return "";
-}
-
-function gradeClassName(grade: string) {
-  if (grade === "A") return "bg-emerald-100 text-emerald-800";
-  if (grade === "B") return "bg-blue-100 text-blue-800";
-  return "bg-slate-100 text-slate-700";
-}
-
 function customerOperationalIssues(customer: CustomerView) {
   const issues: string[] = [];
   if (customer.businessStatus !== "정상") issues.push("사업자 확인");
@@ -3485,54 +3464,3 @@ function isOperationFilter(value: string | null): value is OperationFilter {
   );
 }
 
-function normalizeBusinessRegistrationNumber(value: string) {
-  return value.replace(/[^0-9]/g, "");
-}
-
-function formatBusinessRegistrationNumber(value: string) {
-  const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
-  if (digits.length !== 10) return value;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
-}
-
-// 입력 중에도 자동으로 하이픈이 붙도록 하는 실시간 포맷터입니다 (10자리 미만이어도 동작).
-function formatBusinessNumberInput(value: string) {
-  const digits = normalizeBusinessRegistrationNumber(value).slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
-}
-
-// 휴대폰(010 등, 3-4-4)과 서울/지역 번호(02는 2자리, 그 외는 3자리 지역번호)를
-// 입력 자릿수에 맞춰 실시간으로 하이픈을 붙여줍니다.
-function formatPhoneNumberInput(value: string) {
-  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
-  if (!digits) return "";
-
-  if (digits.startsWith("02")) {
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
-  }
-
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
-}
-
-function isValidBusinessRegistrationNumber(value: string) {
-  const digits = normalizeBusinessRegistrationNumber(value);
-  if (!/^[0-9]{10}$/.test(digits)) return false;
-
-  const weights = [1, 3, 7, 1, 3, 7, 1, 3, 5];
-  const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0) + Math.floor((Number(digits[8]) * 5) / 10);
-  const checkDigit = (10 - (sum % 10)) % 10;
-  return checkDigit === Number(digits[9]);
-}
-
-function extractRegion(address: string) {
-  const parts = address.split(/\s+/).filter(Boolean);
-  return parts.find((part) => /(구|군|시|동|읍|면)$/.test(part)) || parts[1] || parts[0] || "";
-}

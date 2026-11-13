@@ -96,7 +96,7 @@ export default async function SalesAssistantPage({ searchParams }: { searchParam
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-3 py-3 sm:px-4 sm:py-5">
+      <section className="w-full space-y-4 px-3 py-3 sm:px-4 sm:py-5">
         <div className="maju-section-card overflow-hidden">
           <div className="maju-card-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

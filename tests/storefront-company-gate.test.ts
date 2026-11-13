@@ -6,6 +6,10 @@ vi.mock("@/lib/pricing/store-link-token",()=>({verifyStoreLinkToken:()=>({id:"li
 vi.mock("@/lib/feature-flags",()=>import("../lib/feature-flags"));
 vi.mock("@/lib/pricing/feature",()=>import("../lib/pricing/feature"));
 vi.mock("@/lib/pricing/store-order-feature",()=>import("../lib/pricing/store-order-feature"));
+vi.mock("@/lib/pricing/store-order-member",()=>({getStoreOrderActor:async()=>null}));
+vi.mock("@/lib/store/07-store-member-context",()=>({getStoreOrderMemberContext:async()=>null}));
+vi.mock("@/lib/auth",()=>({storeMemberSessionEnabled:()=>false}));
+vi.mock("@/lib/store/07-store-member-feature",()=>({isStoreMemberCompanyAllowlisted:()=>false}));
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {NextRequest} from "next/server";
 const {db}=vi.hoisted(()=>({db:vi.fn()}));
@@ -35,4 +39,29 @@ describe("signed-link company feature gates",()=>{
   expect((await POST(request("POST"))).status).toBe(200);
  });
  it("global OFF rejects before link lookup",async()=>{vi.stubEnv("PRICE_SHEETS_ENABLED","false");expect((await POST(request("POST"))).status).toBe(404);expect(db).not.toHaveBeenCalled()});
+});
+vi.mock("@/lib/pricing/store-order-delivery-feature", () => import("../lib/pricing/store-order-delivery-feature"));
+vi.mock("@/lib/pricing/store-order-delivery-producer", () => import("../lib/pricing/store-order-delivery-producer"));
+
+it("OFF preserves original queries; ON shares address eligibility with submission and blocks missing fields",async()=>{
+  await readStorefront("signed","2099-01-01");
+  expect(db.mock.calls.some(([path])=>path.includes("delivery_base_address"))).toBe(false);
+  vi.stubEnv("STORE_ORDER_ADDRESS_VERIFICATION_ENABLED","true");vi.stubEnv("FEATURE_STORE_ORDER_ADDRESS_VERIFICATION_COMPANY_IDS",company);
+  let storedBase:string|null="서울특별시 강남구 합성로 1";
+  db.mockImplementation(async(path:string)=>{
+    if(path.includes("offset=")&&!path.includes("offset=0"))return [];
+    if(path.startsWith("normalized_customers?")&&path.includes("delivery_base_address"))return [{delivery_base_address:storedBase,delivery_address_detail:"1층",delivery_territory_id:"territory"}];
+    if(path.startsWith("delivery_territories?"))return [{id:"territory",name:"합성 권역",is_active:true}];
+    if(path.startsWith("delivery_territory_areas?"))return [{territory_id:"territory",administrative_area:"서울특별시 강남구"}];
+    if(path.startsWith("store_order_settings?"))return [];
+    if(path.startsWith("store_order_territory_rules?"))return [{delivery_weekdays:[0,1,2,3,4,5,6]}];
+    return fixture(path);
+  });
+  const valid=await readStorefront("signed","2099-01-01");
+  expect(valid?.deliveryEligibility?.eligible).toBe(true);expect(valid?.canOrder).toBe(true);
+  expect(valid?.policy).toMatchObject({cutoffDaysBefore:1,cutoffTime:"22:00",minimumAmount:0,minimumPolicy:"notice",deliveryFee:0});
+  storedBase=null;const missing=await readStorefront("signed","2099-01-01");
+  expect(missing?.deliveryEligibility?.reason).toBe("address_unknown");expect(missing?.canOrder).toBe(false);
+  expect((await PUT(request("PUT"))).status).toBe(422);
+  expect(db.mock.calls.some(([path])=>path.startsWith("rpc/place_store"))).toBe(false);
 });

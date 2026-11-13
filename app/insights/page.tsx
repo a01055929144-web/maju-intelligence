@@ -64,7 +64,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
       userName={customerSession?.name || adminSession?.email || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <main className="mx-auto w-full max-w-[1480px] space-y-4 px-3 py-4 sm:px-5">
+      <main className="w-full space-y-4 px-3 py-4 sm:px-5">
         <header className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-teal-700" /><h1 className="text-xl font-black text-slate-950">성과 대시보드</h1></div>
@@ -154,7 +154,7 @@ function MetricCard({ change, label, suffix = "%", value }: { change: number; la
   return <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value}</p><p className={`mt-2 flex items-center text-xs font-black ${positive ? "text-teal-700" : "text-rose-700"}`}>{positive ? <ArrowUpRight className="mr-1 h-3.5 w-3.5" /> : <ArrowDownRight className="mr-1 h-3.5 w-3.5" />}{signed(change)}{suffix} · 직전 대비</p></article>;
 }
 
-function FeatureOffBadge() { return <span className="rounded-full bg-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600">기능 OFF</span>; }
+function FeatureOffBadge() { return <span className="rounded-full bg-slate-200 px-2 py-1 text-xs font-black uppercase tracking-wide text-slate-600">기능 OFF</span>; }
 
 function RiskCard({ available = true, description, icon: Icon, label, value, warning }: { available?: boolean; description: string; icon: typeof AlertTriangle; label: string; value: string; warning: boolean }) {
   return <article className={`rounded-xl border p-4 ${warning ? "border-rose-200 bg-rose-50" : available ? "border-slate-200 bg-slate-50" : "border-dashed border-slate-300 bg-slate-50"}`} data-feature-state={available ? "on" : "off"}><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-slate-600">{label}</p>{!available ? <FeatureOffBadge /> : null}</div><p className={`mt-1 text-2xl font-black ${warning ? "text-rose-800" : "text-slate-950"}`}>{value}</p></div><Icon className={`h-6 w-6 ${warning ? "text-rose-600" : "text-slate-400"}`} /></div><p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{description}</p></article>;

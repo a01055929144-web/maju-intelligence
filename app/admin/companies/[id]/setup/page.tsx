@@ -5,8 +5,10 @@ import { AdminPageHeader } from "@/app/admin/admin-page-header";
 import { Badge } from "@/components/ui/badge";
 import { getAdminSession } from "@/lib/auth";
 import { getManagedCompanyAccounts } from "@/lib/store";
-import { isLeadWorkspaceV2Enabled } from "@/lib/feature-modules";
+import { canShowLeadWorkspaceSettings } from "@/lib/feature-modules";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { LeadWorkspaceSettings } from "@/app/dashboard/settings/leads/workspace";
+import { LeadDmTemplateSettings } from "@/components/lead-dm-template-settings";
 import { AdminCompanySetupWorkspace } from "./workspace";
 
 type SetupStep = {
@@ -38,6 +40,7 @@ export default async function AdminCompanySetupPage({ params }: { params: Promis
 
   const completedCount = SETUP_STEPS.filter((step) => step.ready(company)).length;
   const salesAreaConfigured = company.salesAreaCount > 0;
+  const distributorSales = isFeatureEnabled("DISTRIBUTOR_SALES", company.id); // 유통사 회사는 영업 지역 없이도 가져오기를 대행한다(CC-21)
   const withCompany = (href: string) => href.startsWith("#") ? href : `${href}${href.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(company.id)}`;
 
   return (
@@ -89,10 +92,11 @@ export default async function AdminCompanySetupPage({ params }: { params: Promis
         </div>
 
         <div id="assisted-setup"><AdminCompanySetupWorkspace company={company} /></div>
+        <div id="lead-dm"><LeadDmTemplateSettings companyId={company.id} /></div>
         <div id="lead-import">
-          {!salesAreaConfigured
+          {!salesAreaConfigured && !distributorSales
             ? <p className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">영업 지역을 저장하면 엑셀 가져오기 대행을 진행할 수 있습니다.</p>
-            : isLeadWorkspaceV2Enabled(company.id)
+            : canShowLeadWorkspaceSettings(company.id, distributorSales)
               ? <LeadWorkspaceSettings companyId={company.id} initialTab="import" />
               : <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">WO-4 기능 플래그를 켠 고객사에서 리드 칸·엑셀 가져오기·유통사 탭이 표시됩니다.</p>}
         </div>

@@ -41,6 +41,8 @@ export type ProductCatalogAdminItem = {
   trackingEnabled?: boolean;
   onHand?: number;
   createdAt?: string;
+  /** CC-20b: 오늘 진행 중인 행사·임박(여러 개면 종료가 가장 빠른 것). 읽기 전용. */
+  promotion?: { badge: "행사" | "임박"; price: number; startsOn: string; endsOn: string };
 };
 export type SaveProductCatalogInput = Omit<
   ProductCatalogAdminItem,
@@ -115,7 +117,8 @@ export async function listProductCatalogForAdmin(
   const search = query.trim()
     ? `&or=(canonical_name.ilike.*${enc(query.trim())}*,purchase_product_name.ilike.*${enc(query.trim())}*,product_code.ilike.*${enc(query.trim())}*)`
     : "";
-  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances, effective] = await Promise.all([
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); // 한국 날짜
+  const [rows, matches, supplierProducts, supplierRows, inventorySettings, balances, effective, promotions] = await Promise.all([
     request<Row[]>(
       `product_catalog?select=${select}&company_id=eq.${enc(companyId)}${search}&order=updated_at.desc&limit=1000`,
     ),
@@ -138,7 +141,16 @@ export async function listProductCatalogForAdmin(
     request<Row[]>(
       `pricing_p0_effective?select=product_id,price&company_id=eq.${enc(companyId)}&limit=5000`,
     ).catch(() => []),
+    // CC-20b: 오늘 진행 중인 행사(읽기만). 못 읽어도 상품 목록은 그대로.
+    request<Row[]>(
+      `pricing_promotions?select=product_id,badge,price,starts_on,ends_on&company_id=eq.${enc(companyId)}&starts_on=lte.${today}&ends_on=gte.${today}&order=ends_on.asc&limit=5000`,
+    ).catch(() => []),
   ]);
+  const promotionByProduct = new Map<string, NonNullable<ProductCatalogAdminItem["promotion"]>>();
+  for (const x of promotions) {
+    const id = String(x.product_id);
+    if (!promotionByProduct.has(id)) promotionByProduct.set(id, { badge: x.badge === "임박" ? "임박" : "행사", price: Number(x.price), startsOn: String(x.starts_on), endsOn: String(x.ends_on) });
+  }
   const effectivePrice = new Map(effective.map((x) => [String(x.product_id), x.price == null ? undefined : Number(x.price)]));
   const sp = new Map(supplierProducts.map((x) => [String(x.id), x])),
     supplierNames = new Map(supplierRows.map((x) => [String(x.id), String(x.name)])),
@@ -189,11 +201,15 @@ export async function listProductCatalogForAdmin(
       supplierNames: names,
       trackingEnabled: setting == null ? undefined : Boolean(setting.tracking_enabled),
       onHand: balanceByProduct.get(item.id),
+      promotion: promotionByProduct.get(item.id),
     };
   });
 }
 function validate(i: SaveProductCatalogInput) {
   if (!i.name.trim()) throw new Error("품목명은 필수입니다.");
+  // 수정 창 한 건 저장도 일괄 분류 저장과 같은 규칙(대·중·소 3단계, 단계마다 30자)으로 받는다.
+  const category = cleanCategory(i.category ?? null);
+  if (category && typeof category === "object") throw new Error(category.error);
   if (!i.purchaseUnit.trim() || !i.salesUnit?.trim())
     throw new Error("매입·판매 단위는 필수입니다.");
   if (
@@ -220,7 +236,7 @@ function write(i: SaveProductCatalogInput) {
     purchase_unit: i.purchaseUnit.trim(),
     purchase_to_sales_ratio: i.purchaseToSalesRatio ?? null,
     tax_type: i.taxType || null,
-    category: i.category?.trim() || null,
+    category: cleanCategory(i.category ?? null) as string | null, // validate()가 오류 값을 먼저 막는다.
     photo_url: i.photoUrl?.trim() || null,
     is_active: i.isActive,
     default_sales_price: i.salesPrice ?? null,
@@ -322,6 +338,28 @@ export async function listProductCategorySuggestions(
     return { id: String(row.id), name, category: String(row.category || ""), suggestion: suggestCategory(name, spec) };
   }).filter((item) => item.suggestion && item.suggestion !== item.category);
   return { candidates, hasMore: source.length === pageSize };
+}
+
+const productId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function cleanProductIds(ids: readonly string[]) {
+  const unique = Array.from(new Set(ids));
+  if (!unique.length || unique.length > 500 || !unique.every((id) => productId.test(id))) throw new Error("상품을 1~500개 골라 주세요.");
+  return unique;
+}
+
+/** CC-24: 안 쓴 상품은 완전 삭제, 쓴 상품은 숨김(DB 함수 cc24_delete_products). apply=false면 숫자만 센다(확인창용). */
+export async function deleteProductsForAdmin(companyId: string, ids: readonly string[], apply: boolean) {
+  return request<{ requested: number; found: number; deletable: number; hideOnly: number; applied: boolean }>("rpc/cc24_delete_products", {
+    method: "POST", body: JSON.stringify({ p_company: companyId, p_ids: cleanProductIds(ids), p_apply: apply }),
+  });
+}
+
+/** 숨긴(is_active=false) 상품을 되살린다. 이 회사 상품만. */
+export async function restoreProductsForAdmin(companyId: string, ids: readonly string[]) {
+  const rows = await request<Array<{ id: string }>>(`product_catalog?company_id=eq.${enc(companyId)}&id=in.(${cleanProductIds(ids).join(",")})&is_active=eq.false&select=id`, {
+    method: "PATCH", body: JSON.stringify({ is_active: true, updated_at: new Date().toISOString() }),
+  });
+  return rows.length;
 }
 
 /** 선택·확인된 추천만 회사 범위 안에서 저장합니다. 한 행 실패가 나머지를 막지 않습니다. */

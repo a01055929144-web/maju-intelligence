@@ -1,0 +1,34 @@
+-- DRAFT ONLY (CC-24b). Never run against production without the CEO's explicit approval phrase.
+-- List of purchase-price upload codes that must be skipped on every upload ("이 코드 다음에도 제외", CC-24 4-1).
+-- supplier_id NULL = the code is skipped for the whole company; a value = skipped only in that supplier's uploads (codes can repeat across suppliers).
+-- One new table, no changes to existing tables, no data. Service-only: no anon/authenticated grants;
+-- the app server enforces company boundaries and roles (owner/manager).
+begin;
+set local lock_timeout = '3s';
+set local statement_timeout = '30s';
+
+do $$ begin
+  if to_regclass('public.purchase_cost_excluded_codes') is not null then raise exception 'cc24b_already_applied'; end if;
+  if to_regclass('public.companies') is null or to_regclass('public.product_suppliers') is null then raise exception 'cc24b_dependency_missing'; end if;
+end $$;
+
+create table public.purchase_cost_excluded_codes (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies(id) on delete cascade,
+  -- NULL = whole company. A supplier of another company is impossible (company-scoped key). Deleting a supplier deletes only its codes
+  -- (never turns them into company-wide ones).
+  supplier_id uuid,
+  -- The upload's product code, trimmed. Compared case-insensitively (unique index below).
+  code text not null check (code = btrim(code) and length(code) between 1 and 80),
+  created_by_user_id uuid,
+  created_by_name text,
+  created_at timestamptz not null default now(),
+  unique (company_id, id),
+  foreign key (company_id, supplier_id) references public.product_suppliers(company_id, id) on delete cascade
+);
+-- One row per (company, supplier-or-whole-company, code ignoring case).
+create unique index purchase_cost_excluded_codes_scope_code_uq on public.purchase_cost_excluded_codes(company_id, coalesce(supplier_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(code));
+alter table public.purchase_cost_excluded_codes enable row level security;
+revoke all on public.purchase_cost_excluded_codes from public, anon, authenticated;
+grant select, insert, delete on public.purchase_cost_excluded_codes to service_role;
+commit;

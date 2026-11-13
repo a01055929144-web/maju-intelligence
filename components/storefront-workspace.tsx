@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { storeViewFrom, type StoreView } from "@/lib/store-navigation";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
+import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
+import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
+import { storeOrderStatusLabel } from "../domains/order/store-order-status";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
@@ -18,29 +25,53 @@ type Store = { title: string; companyName: string; customerName: string;
   deliveryAddress: string | null; version: number; validUntil: string;
   priceAvailable: boolean; canOrder: boolean; nextDeliveryDate: string | null;
   selectedDeliveryDate: string;
+  deliveryEligibility?:{eligible:boolean;reason:string;territoryName?:string;weekdays:number[]};
   notice: string; marketPriceNotice: string; policy: DeliveryPolicy; lines: Product[] };
-type Order = { id: string; deliveryDate: string; status: string; knownTotal: number;
+type Order = { id: string; deliveryDate: string | null; status: string; knownTotal: number;
+  authorLabel?: string;
   requestMemo: string; marketPricePending: boolean; submittedAt: string; revision: number;
   lines: { product_id: string; promotion_id: string | null; product_name: string; quantity: number;
+    specification?: string; sales_unit?: string; tax_type?: string;
     unit_price: number | null; total_amount: number | null }[] };
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
 type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  memberLogin?: StoreKakaoLogin;
+  memberManagement?: { href: string } | { message: string };
   historyPage: number; historyHasMore: boolean; message?: string };
 const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
 const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));
 
-export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null }) {
-  const [token, setToken] = useState("");
+export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode }) {
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => { const value = window.location.hash.slice(1); setToken(value === "store-address-management" ? "" : value.length <= 200 ? value : "invalid-link"); };
+    read(); window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  if (token === null) return <p role="status">매장 주소를 확인 중입니다.</p>;
+  // A bearer link does not prove that its customer matches the signed-in store account.
+  return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} portal={token ? null : portal} />;
+}
+
+function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode }) {
   const [data, setData] = useState<Response | null>(null);
-  const [tab, setTab] = useState<"home" | "order" | "history" | "data" | "info">("home");
+  const [tab, setTabState] = useState<StoreView>("home");
+  // PC 사이드바(?view=)와 화면 탭을 맞춘다.
+  const viewParam = useSearchParams().get("view");
+  useEffect(() => { setTabState(storeViewFrom(viewParam)); }, [viewParam]);
+  const setTab = (next: StoreView) => {
+    setTabState(next);
+    // 주소는 그대로 두고(#토큰·기존 쿼리 보호) 사이드바 강조만 알린다. 주소의 ?view=는 사이드바로 이동할 때만 바뀐다.
+    window.dispatchEvent(new CustomEvent("store:tab", { detail: next }));
+  };
   const [cart, setCart] = useState<Record<string, number>>({});
   const [deliveryDate, setDeliveryDate] = useState("");
   const [memo, setMemo] = useState("");
   const [editing, setEditing] = useState<{ id: string; revision: number } | null>(null);
-  const [productView, setProductView] = useState<"all" | "favorites" | "hidden">("all");
+  const [productView, setProductView] = useState<"all" | "favorites" | "hidden" | "complete">("all");
   const [category, setCategory] = useState("전체");
   const [orderView, setOrderView] = useState<"grid" | "table">("grid");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
@@ -48,17 +79,20 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
   const [priceChangesOnly, setPriceChangesOnly] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [message, setMessage] = useState("");
+  const [memberAccessChanged, setMemberAccessChanged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const retryKey = useRef<string | null>(null);
+  const submitting = useRef(false);
   const loadSequence = useRef(0);
-  const endpoint = "/api/storefront";
   useEffect(() => {
-    const value = window.location.hash.slice(1);
-    if (value && value.length <= 200) setToken(value);
-    else setMessage("주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.");
+    if (new URLSearchParams(window.location.search).get("products") === "all") {
+      setTab("order"); setProductView("complete"); setCategory("전체"); setPriceChangesOnly(false);
+      setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 다른 문서의 품목은 포함하지 않습니다.");
+    }
   }, []);
+  const endpoint = "/api/storefront";
   const load = useCallback(async (day?: string, historyPage = 1) => {
     if (!token) return;
     const sequence = ++loadSequence.current;
@@ -68,9 +102,13 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, deliveryDate: day, historyPage }) });
       const result = await response.json() as Response;
-      if (!response.ok) throw new Error(result.message || "매장 링크를 열 수 없습니다.");
       if (sequence !== loadSequence.current) return;
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) { setData(null); setCart({}); setEditing(null); setMemo(""); retryKey.current = null; }
+        throw new Error(result.message || "매장 링크를 열 수 없습니다.");
+      }
       setData(result);
+      setMemberAccessChanged(false);
       setDeliveryDate(result.store.selectedDeliveryDate);
     } catch (error) {
       if (sequence === loadSequence.current) setLoadError(error instanceof Error ? error.message : "매장 정보를 불러오지 못했습니다.");
@@ -81,6 +119,7 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
   }, [endpoint, token]);
   useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
   const store = data?.store;
+  const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
@@ -90,7 +129,7 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
     (line.salesPriceDirection === "up" || line.salesPriceDirection === "down")) ?? [] : [];
   const visibleProducts = (store?.lines.filter((line) => {
     const preference = preferences.get(line.productId);
-    const matchesView = productView === "hidden" ? preference?.isHidden === true :
+    const matchesView = productView === "complete" ? true : productView === "hidden" ? preference?.isHidden === true :
       productView === "favorites" ? preference?.isFavorite === true && !preference.isHidden :
         !preference?.isHidden || (cart[line.key] ?? 0) > 0;
     return matchesView && (category === "전체" || (line.category || "미분류") === category) &&
@@ -151,9 +190,9 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
     setCart(Object.fromEntries(copied.map((line) => [
       `${line.product_id}:${line.promotion_id ?? ""}`, Number(line.quantity),
     ])));
-    const day = edit ? order.deliveryDate : store?.nextDeliveryDate || "";
-    setDeliveryDate(day);
-    if (day) void load(day).catch(() => setMessage("선택한 배송일의 가격을 불러오지 못했습니다."));
+    const day = edit ? order.deliveryDate || undefined : store?.nextDeliveryDate || undefined;
+    setDeliveryDate(day || store?.selectedDeliveryDate || "");
+    void load(day).catch(() => setMessage("현재 주문 가격을 불러오지 못했습니다."));
     setMemo(edit ? order.requestMemo : "");
     setEditing(edit ? { id: order.id, revision: order.revision } : null);
     retryKey.current = null;
@@ -163,7 +202,8 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
       missing ? ` 현재 문서에 없는 품목 ${missing}개는 담지 않았습니다.` : ""}`);
   }
   async function submit() {
-    if (!store || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    if (submitting.current || !store || !deliveryReady || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    submitting.current = true;
     setBusy(true); setMessage("");
     if (!retryKey.current) retryKey.current = crypto.randomUUID();
     try {
@@ -173,7 +213,10 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
           lines: selected.map((line) => ({ productId: line.productId,
             promotionId: line.promotionId, quantity: cart[line.key] })) }) });
       const result = await response.json() as { message?: string };
-      if (!response.ok) throw new Error(result.message || "주문을 저장하지 못했습니다.");
+      if (!response.ok) {
+        if (response.status === 403 && /권한.*변경/.test(result.message || "")) setMemberAccessChanged(true);
+        throw new Error(result.message || "주문을 저장하지 못했습니다.");
+      }
       retryKey.current = null; setCart({}); setEditing(null); setMemo("");
       setTab("history");
       try {
@@ -183,13 +226,13 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         setMessage("주문은 저장됐습니다. 내역을 불러오지 못했으니 화면을 새로고침해 확인해 주세요.");
       }
     } catch (error) { setMessage(error instanceof Error ? error.message : "주문을 저장하지 못했습니다."); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   }
   const retryLoad = <div className="space-y-2 rounded border p-3 text-sm" aria-live="polite">
     <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
     {loadError && token ? <button disabled={loading || busy} className="min-h-[44px] rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
   </div>;
-  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <><h1 className="text-lg font-semibold">매장 데이터</h1><StoreCostPanel access={costAccess} /></>}{token ? retryLoad : <p role="status">{costAccess || storeLogin ? "주문은 기존 매장 주문 링크에서 이용해 주세요." : message || "매장 정보를 불러오는 중입니다."}</p>}</main>;
+  if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{portal}{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <div id="store-costs"><h2 className="text-lg font-semibold">매장 원가관리</h2><StoreCostPanel access={costAccess} /></div>}{token ? retryLoad : !portal ? <p role="status">주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.</p> : null}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
       <p className="text-xs text-slate-600">{store.companyName} · {store.customerName}</p>
@@ -197,13 +240,20 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
       {store.notice && <p className="mt-2 rounded bg-blue-50 p-2 text-sm">{store.notice}</p>}
       {!store.priceAvailable && <p className="mt-2 rounded bg-amber-50 p-2 text-sm">문서 유효기간이 지났습니다. 품목은 볼 수 있지만 가격과 주문은 잠시 숨겼습니다.</p>}
     </header>
-    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-5 border-t bg-white text-sm md:static md:max-w-none md:translate-x-0 md:border-b md:border-t-0">
+    <nav aria-label="매장 메뉴" className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-xl -translate-x-1/2 grid-cols-5 border-t bg-white text-sm sm:hidden">
       {(["home", "order", "history", "data", "info"] as const).map((item, index) =>
         <button key={item} className={`min-h-14 ${tab === item ? "font-semibold text-blue-700" : "text-slate-600"}`}
           onClick={() => setTab(item)}>{["홈", "주문", "내역", "데이터", "내 정보"][index]}</button>)}</nav>
-    {message && <p role="status" className="mx-4 mt-3 rounded border p-3 text-sm">{message}</p>}
+      {message && <div role="status" className="mx-4 mt-3 space-y-2 rounded border p-3 text-sm"><p>{message}</p>
+        {memberAccessChanged && <Button variant="outline" className="min-h-[44px]" disabled={busy || loading}
+          onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>}
+      </div>}
+      {!loading && !loadError && data?.memberLogin && <section className="space-y-2 p-4" aria-label="주문 구성원 로그인">
+        <StoreKakaoLoginPanel access={data.memberLogin} newWindow />
+        <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>
+      </section>}
     {tab === "home" && <section className="space-y-4 p-4 md:max-w-3xl md:p-6">
-      <p>다음 배송일: <strong>{store.nextDeliveryDate || "권역 배송일 설정 필요"}</strong></p>
+      <p>다음 배송일: <strong>{deliveryReady ? store.nextDeliveryDate || "배송 가능일 확인 필요" : "매장 주소·배송 권역 확인 필요"}</strong></p>
       {changedPrices.length > 0 && <div className="rounded border p-3">
         <h2 className="font-semibold">판매가 변동</h2>
         <p className="text-sm">인상 {changedPrices.filter((line) => line.salesPriceDirection === "up").length}품목 · 인하 {changedPrices.filter((line) => line.salesPriceDirection === "down").length}품목</p>
@@ -211,6 +261,7 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         <button className="mt-2 min-h-[44px] rounded border px-4 text-sm" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(true); setTab("order"); }}>변동 품목 주문하기</button>
       </div>}
       <div className="grid grid-cols-2 gap-2">
+        <Button className="min-h-[44px]" onClick={() => { setCategory("전체"); setProductView("complete"); setPriceChangesOnly(false); setTab("order"); setMessage("이 발행 문서의 주문 가능 품목 전체입니다. 숨김·즐겨찾기·분류·가격 변동 필터를 해제했습니다."); }} type="button">주문 품목 전체 보기</Button>
         <button className="min-h-14 rounded bg-slate-900 px-4 text-white" onClick={() => { setCategory("전체"); setProductView("all"); setPriceChangesOnly(false); setTab("order"); }}>주문하기</button>
         <button className="min-h-14 rounded border px-4" onClick={() => setTab("history")}>지난 주문 다시 담기</button>
       </div>
@@ -222,14 +273,19 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
     {tab === "order" && <section className="space-y-4 p-4 md:p-6">
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
+      {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
+        <p role="status">{deliveryEligibilityMessage(store.deliveryEligibility&&!store.deliveryEligibility.eligible?store.deliveryEligibility.reason:"weekdays_unconfigured")}</p>
+        <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
+      </section>}
       {!pricesReady ? retryLoad : null}
+      {deliveryReady && <p aria-live="polite">배송 가능 요일: {store.policy.weekdays.map(day=>["일","월","화","수","목","금","토"][day]).join("·")}요일</p>}
       <label className="block text-sm">배송일
-        <input className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
+        <input disabled={busy||!deliveryReady} className="mt-1 min-h-[44px] w-full rounded border p-2" type="date" value={deliveryDate}
           min={store.nextDeliveryDate || undefined}
           onChange={(event) => { const day = event.target.value; setDeliveryDate(day); retryKey.current = null;
             if (day) void load(day).catch(() => undefined);
             else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
-      <p className="text-sm text-slate-600">배송 요일·휴일·마감은 저장할 때 다시 확인합니다.</p>
+      <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
       <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
         {(["all", "favorites", "hidden"] as const).map((view) =>
           <button key={view} aria-pressed={productView === view} className="min-h-[44px] rounded border px-3"
@@ -262,7 +318,8 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
           <p className="text-sm text-slate-600">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p>
           {pricesVisible && (line.salesPriceDirection === "up" || line.salesPriceDirection === "down" || line.salesPriceDirection === "flat") ? <Badge>판매가 {line.salesPriceDirection === "up" ? "상승" : line.salesPriceDirection === "down" ? "하락" : "보합"}</Badge> : null}</div>
           <div className="text-right text-sm">{!pricesVisible ? "배송일 가격 확인 필요" : line.isMarketPrice ? "시세 · 가격 미정" :
-            line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}</div></div>
+            line.unitPrice === null ? "가격 문의" : won(line.unitPrice)}
+            {pricesVisible && <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : `과세 · 부가세 ${line.priceIncludesTax ? "포함" : "별도"}`}</p>}</div></div>
         {line.isMarketPrice && <p className="mt-1 text-xs text-amber-800">{store.marketPriceNotice}
           {pricesVisible && line.recentDispatchPrice !== null && line.recentDispatchDate &&
             <> 최근 출고 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)} (참고)</>}
@@ -276,12 +333,12 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
             {preferences.get(line.productId)?.isHidden ? "다시 표시" : "품목 숨기기"}</button>
         </div>
         <div className="mt-3 flex items-center justify-end gap-2 md:mt-0">
-          <button aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
+          <button disabled={busy} aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
           <span aria-label={`${line.name} 수량`} className="min-w-8 text-center">{cart[line.key] || 0}</span>
-          <button aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
+          <button disabled={busy} aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
         </div>
       </li>)}</ul>
-      <label className="block text-sm">요청 사항<textarea className="mt-1 w-full rounded border p-2" maxLength={500}
+      <label className="block text-sm">요청 사항<textarea disabled={busy} className="mt-1 w-full rounded border p-2" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
       {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm">
         <p>과세 공급가액 {won(summary.taxableSupply)} · 면세 공급가액 {won(summary.exemptSupply)}</p>
@@ -290,8 +347,8 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <button disabled={!pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full rounded bg-slate-900 text-white disabled:opacity-50"
-        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</button>
+      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full"
+        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
     </section>}
     {tab === "history" && <section className="space-y-3 p-4 md:p-6"><h2 className="font-semibold">주문 내역</h2>
       {!store.priceAvailable ? <p className="text-sm text-slate-600">문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다. 담당자에게 새 링크를 요청해 주세요.</p> :
@@ -300,12 +357,12 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
         <th scope="col" className="p-3 text-left">주문일 · 배송일</th><th scope="col" className="p-3 text-left">상태</th>
         <th scope="col" className="p-3 text-left">품목</th><th scope="col" className="p-3 text-left">합계</th><th scope="col" className="p-3 text-left">동작</th>
       </tr></thead><tbody>{data?.orders.map((order) => <tr key={order.id} className="block border-b py-2 md:table-row">
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate}</span></td>
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.status}</span></td>
-        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><span>{order.lines.map((line) => `${line.product_name} ${line.quantity}`).join(" · ")}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">주문일 · 배송일</span><span>{kstDay(order.submittedAt)} · {order.deliveryDate || DELIVERY_CONFIRMATION_NOTICE}{order.authorLabel && <span className="block break-words">작성자: {order.authorLabel}</span>}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">상태</span><span>{order.deliveryDate === null ? order.status === "cancelled" ? "취소됨" : "접수됨 · 배송일 확인 대기" : storeOrderStatusLabel(order.status)}</span></td>
+        <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">품목</span><ul className="min-w-0 break-words">{order.lines.map((line, index) => <li key={index}>{line.product_name} {line.quantity}{line.sales_unit || "개"}{line.specification ? ` · ${line.specification}` : ""}{line.tax_type ? ` · ${line.tax_type === "exempt" ? "면세" : "과세"}` : ""} · {line.unit_price === null ? "단가 미정" : won(line.unit_price)}</li>)}</ul></td>
         <td className="flex justify-between gap-2 p-2 md:table-cell md:p-3"><span className="text-slate-500 md:hidden">합계</span><span>{won(order.knownTotal)}{order.marketPricePending ? " + 시세 품목 가격 미정" : ""}</span></td>
         <td className="p-2 md:p-3"><div className="flex gap-2"><button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, false)}>다시 담기</button>
-          {order.status === "submitted" && store.priceAvailable && store.policy.weekdays.length > 0 &&
+          {order.status === "submitted" && order.deliveryDate && store.priceAvailable && store.policy.weekdays.length > 0 &&
             canOrderForDelivery(order.deliveryDate, store.policy) &&
             <button className="min-h-[44px] rounded border px-3" disabled={busy || !store.canOrder} onClick={() => fromOrder(order, true)}>마감 전 수정</button>}</div></td>
       </tr>)}</tbody></table>}
@@ -332,13 +389,19 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null }: { 
       </div>
       {storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}
       {costAccess ? <StoreCostPanel access={costAccess} /> : <div className="rounded border p-4"><h3 className="font-semibold">매장 자체 원가관리</h3>
-        <p className="mt-2 text-sm text-slate-600">매장 자체 원가관리는 준비 중입니다. 현재 주문 링크에서는 원가 자료를 제공하지 않습니다.</p></div>}
+        <p role="status" className="mt-2 text-sm text-slate-600">현재 주문 링크에서는 원가 자료를 제공하지 않습니다. 원가관리는 로그인한 매장의 전용 주소에서 확인해 주세요.</p></div>}
     </section>}
     {tab === "info" && <section className="space-y-3 p-4 md:p-6"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">매장 정보</h2>
       <button className="min-h-[44px] rounded border px-3" aria-expanded={showSettings} onClick={() => setShowSettings((value) => !value)}>설정</button></div>
       {showSettings && <div className="rounded border p-3 text-sm"><p>즐겨찾기와 숨긴 품목은 주문 탭에서 변경할 수 있습니다.</p>
         <button className="mt-2 min-h-[44px] rounded border px-3" onClick={() => { setCategory("전체"); setPriceChangesOnly(false); setProductView("hidden"); setTab("order"); }}>숨긴 품목 보기</button></div>}
       <p>매장: {store.customerName}</p><p>배송지: {store.deliveryAddress || "등록되지 않음"}</p>
+      {loadError ? retryLoad : null}
+      {!loading && !loadError && data?.memberManagement && <div className="space-y-2 rounded border p-3 text-sm" aria-label="구성원 관리 안내">
+        {"href" in data.memberManagement
+          ? <Link className="inline-flex min-h-[44px] items-center underline" href={data.memberManagement.href}>구성원 관리</Link>
+          : <><p role="status">{data.memberManagement.message}</p><Button variant="outline" className="min-h-[44px]" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>권한 다시 확인</Button></>}
+      </div>}
       <p className="text-sm text-slate-600">배송지와 출입 정보 변경은 담당자에게 요청해 주세요.</p>
     </section>}
   </main>;
