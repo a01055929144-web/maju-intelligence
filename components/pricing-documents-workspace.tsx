@@ -24,7 +24,6 @@ import {
   type DocumentKind,
   type DocumentVersion,
   type PrintLine,
-  type ProductSet,
   type Promotion,
   withLivePromotions,
 } from "@/domains/pricing/document";
@@ -35,7 +34,6 @@ import { PricingProductPicker } from "./pricing-product-picker";
 import { PricingInfoPanel } from "./pricing-info-panel";
 import { PricingStartGallery } from "./pricing-start-gallery";
 import { applyPreset, type DocumentPreset } from "@/domains/pricing/document-presets";
-import { PricingDocumentLibrary } from "./pricing-document-library";
 import { PricingDocumentSheets } from "./pricing-document-sheets";
 import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/pricing/document-excel";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
@@ -78,8 +76,7 @@ export function PricingDocumentsWorkspace({
     [catalogInput, setCatalogInput] = useState(""),
     [catalogPage, setCatalogPage] = useState(1),
     [catalogTotal, setCatalogTotal] = useState(0);
-  const [sets, setSets] = useState<ProductSet[]>([]),
-    [promotions, setPromotions] = useState<Promotion[]>([]),
+  const [promotions, setPromotions] = useState<Promotion[]>([]),
     [profile, setProfile] = useState<Profile>({
       revision: 0,
       content: { companyName: "", contact: "", footer: "" },
@@ -98,7 +95,7 @@ export function PricingDocumentsWorkspace({
   // 11/4: 왼쪽 메뉴 '행사·템플릿'·'인쇄 기본값'에서 바로 열기(?tab=library|profile)
   const requestedTab = useSearchParams()?.get("tab") || "";
   useEffect(() => {
-    if (!initialStartKind && (requestedTab === "library" || requestedTab === "profile")) { setTab(requestedTab); setView("editor"); }
+    if (!initialStartKind && (requestedTab === "profile")) { setTab(requestedTab); setView("editor"); }
     else { setTab("documents"); setView("list"); }
   }, [requestedTab, initialStartKind]);
   const [bulkMargin, setBulkMargin] = useState("12"),
@@ -122,12 +119,10 @@ export function PricingDocumentsWorkspace({
   const startSheet = useSearchParams()?.get("startSheet") === "products";
   const sheetStarted = useRef(false);
   const loadLibrary = useCallback(async () => {
-    const [s, p, h] = await Promise.all([
-      read<ProductSet[]>("sets"),
+    const [p, h] = await Promise.all([
       read<Promotion[]>("promotions"),
       read<Profile>("profile"),
     ]);
-    setSets(s);
     setPromotions(p);
     setProfile(h);
     setLibraryReady(true);
@@ -257,15 +252,6 @@ export function PricingDocumentsWorkspace({
     setStarting(null);
     create(kind, applyPreset(blankContent(kind), preset));
   }
-  async function startTemplate(set: ProductSet, kind: DocumentKind) {
-    const r = await read<{ items: CatalogChoice[] }>("catalog", { productIds: set.productIds });
-    if (!r.items.length) throw new Error("템플릿 품목이 비활성 상태입니다. 상품 설정을 확인해 주세요.");
-    const byId = new Map(r.items.map((i) => [i.id, i]));
-    const lines = set.productIds.map((id) => byId.get(id)).filter((i): i is CatalogChoice => Boolean(i)).map(lineFromCatalog);
-    setStarting(null);
-    create(kind, { ...blankContent(kind), title: set.name.slice(0, 100), lines });
-    if (lines.length < set.productIds.length) setMessage(`${set.productIds.length - lines.length}개 품목은 비활성이라 빠졌습니다.`);
-  }
   const loadPrices = useCallback(
     (ids: string[]) => read<{ items: CatalogChoice[] }>("catalog", { productIds: ids.slice(0, 100) }).then((r) => r.items),
     [read],
@@ -388,16 +374,6 @@ export function PricingDocumentsWorkspace({
       throw new Error(`문서당 최대 ${MAX_DOCUMENT_LINES}개 품목을 담을 수 있습니다.`);
     rows([...draft.content.lines, ...appended]);
   }
-  async function loadSet(s: ProductSet) {
-    const r = await read<{ items: CatalogChoice[] }>("catalog", {
-      productIds: s.productIds,
-    });
-    if (r.items.length !== s.productIds.length)
-      throw new Error("활성 상품·노출 상품명 설정을 확인해 주세요.");
-    const byId = new Map(r.items.map((i) => [i.id, i]));
-    add(s.productIds.map((id) => byId.get(id)!));
-    setTab("documents");
-  }
   // 폴더 끌어 담기: 이미 담긴 상품은 건너뛰고 100개씩 가격을 불러와 한 번에 담는다.
   async function addByIds(ids: string[]) {
     const have = new Set(draft?.content.lines.map((l) => l.productId));
@@ -406,23 +382,26 @@ export function PricingDocumentsWorkspace({
     for (let start = 0; start < todo.length; start += 100) choices.push(...await loadPrices(todo.slice(start, start + 100)));
     if (choices.length) add(choices);
   }
-  async function addPromotion(p: Promotion) {
+  // 여러 행사를 한 번에 담는다(rows()를 한 번만 불러야 앞서 담은 줄이 덮어써지지 않는다).
+  async function addPromotions(list: Promotion[]) {
     if (!draft) throw new Error("먼저 문서를 작성해 주세요.");
-    if (draft.content.kind === "sheet" && !p.allowSheet)
+    const todo = list.filter((p) => !draft.content.lines.some((l) => l.promotionId === p.id));
+    if (draft.content.kind === "sheet" && todo.some((p) => !p.allowSheet))
       throw new Error("이 행사는 견적서에만 넣을 수 있습니다.");
-    if (draft.content.lines.some((l) => l.promotionId === p.id)) return;
+    if (!todo.length) return;
     const r = await read<{ items: CatalogChoice[] }>("catalog", {
-      productIds: [p.productId],
+      productIds: todo.map((p) => p.productId),
     });
-    if (!r.items[0]) throw new Error("행사 상품을 확인해 주세요.");
+    const found = todo.flatMap((p) => { const item = r.items.find((x) => x.id === p.productId); return item ? [{ p, item }] : []; });
+    if (!found.length) throw new Error("행사 상품을 확인해 주세요.");
     setBaselines((previous) => ({
       ...previous,
-      [p.productId]: r.items[0].price,
+      ...Object.fromEntries(found.map(({ p, item }) => [p.productId, item.price])),
     }));
     rows([
       ...draft.content.lines,
-      {
-        ...lineFromCatalog(r.items[0]),
+      ...found.map(({ p, item }) => ({
+        ...lineFromCatalog(item),
         displayName: p.displayName,
         price: p.price,
         promotionId: p.id,
@@ -431,10 +410,11 @@ export function PricingDocumentsWorkspace({
         remaining: p.stock,
         badge: p.badge,
         taxType: p.taxType,
-      },
+      })),
     ]);
     setTab("documents");
   }
+  const addPromotion = (p: Promotion) => addPromotions([p]);
   useEffect(() => { setPicked(new Set()); }, [draft?.id]);
   function bulkRows(update: (line: PrintLine) => PrintLine | null) {
     if (!draft) return;
@@ -594,16 +574,15 @@ export function PricingDocumentsWorkspace({
   </aside> : null;
   if (view === "list" && tab === "documents") return <div className="space-y-3">
     {leadNotice}
-    {/* 11/4: 행사·묶음·템플릿과 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게) */}
+    {/* 11/4: 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게).  CC-35: 품목 묶음 기능은 없앴다. */}
     <div className="flex flex-wrap justify-end gap-2">
-      <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("library"); setView("editor"); }} type="button">묶음·템플릿</button>
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
       onCreate={(kind) => setStarting(kind)} onOpen={select}
       onCopy={(document) => create(document.content.kind, document.content)} />
     {error ? <p className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
-    {starting ? <PricingStartGallery kind={starting} loadDocuments={loadStartDocuments} manager={manager} onBlank={(kind) => { setStarting(null); create(kind); }} onClose={() => setStarting(null)} onCopy={(document, kind) => { setStarting(null); create(kind, document.content); }} onPreset={startPreset} onTemplate={(set, kind) => void task(() => startTemplate(set, kind))} sets={sets} /> : null}
+    {starting ? <PricingStartGallery kind={starting} loadDocuments={loadStartDocuments} manager={manager} onBlank={(kind) => { setStarting(null); create(kind); }} onClose={() => setStarting(null)} onCopy={(document, kind) => { setStarting(null); create(kind, document.content); }} onPreset={startPreset} /> : null}
   </div>;
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
@@ -655,7 +634,7 @@ export function PricingDocumentsWorkspace({
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
-            <h1 className="text-xl font-bold">{tab === "library" ? "묶음·템플릿" : tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
+            <h1 className="text-xl font-bold">{tab === "profile" ? "인쇄 기본값" : "견적서·단가표"}</h1>
           </div>
         )}
       </header>
@@ -673,7 +652,6 @@ export function PricingDocumentsWorkspace({
           {message}
         </p>
       )}
-      {tab !== "documents" ? <Tabs ariaLabel="문서 설정" className="pricing-no-print" items={[{ id: "library", label: "묶음·템플릿" }, { id: "profile", label: "인쇄 기본값" }]} onChange={setTab} value={tab} variant="chip" /> : null}
       {tab === "profile" && (
         <form
           className="pricing-no-print maju-section-card space-y-3 p-4"
@@ -729,23 +707,6 @@ export function PricingDocumentsWorkspace({
           </p>
         </form>
       )}
-      {tab === "library" && <p className="text-sm text-slate-600">행사·임박은 <a className="font-bold text-teal-800 underline" href="/revenue/pricing/promotions">행사·임박 화면</a>에서 등록합니다. 여기서는 문서에 담는 묶음·템플릿을 관리합니다.</p>}
-      {tab === "library" && (
-        <PricingDocumentLibrary
-          companyId={companyId}
-          manager={manager}
-          sets={sets}
-          selectedProductIds={
-            draft?.content.lines.map((l) => l.productId) || []
-          }
-          run={task}
-          reload={loadLibrary}
-          loadSet={loadSet}
-          catalog={catalog}
-          profile={profile.content}
-          busy={busy}
-        />
-      )}
       {tab === "documents" && (
         <div className="pricing-no-print min-w-0">
           {!draft ? (
@@ -758,11 +719,6 @@ export function PricingDocumentsWorkspace({
                 {docView === "doc" ? (
                   <>
                     {draft.content.lines.some((l) => l.taxType === "unknown") ? <p className="rounded border border-amber-400 bg-amber-50 p-3 text-sm" role="status">과세 미확정 품목이 있습니다 — <button className="font-bold underline" onClick={() => setDocView("table")} type="button">표 보기</button>에서 과세·면세를 고른 뒤 저장해 주세요.</p> : null}
-                    {editable && sets.length ? (
-                      <div className="flex flex-wrap gap-1.5 text-xs">
-                        {sets.map((s) => <button className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-bold" disabled={busy} key={s.id} onClick={() => void task(() => loadSet(s))} type="button">묶음 · {s.name} 담기</button>)}
-                      </div>
-                    ) : null}
                     <div className={`grid min-w-0 items-start gap-3 ${editable ? "lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]" : ""}`}>
                       {editable ? (
                         <PricingProductPicker
@@ -773,13 +729,14 @@ export function PricingDocumentsWorkspace({
                           manager={manager}
                           onAdd={(items) => void task(async () => add(items))}
                           onAddPromotion={(p) => void task(() => addPromotion(p))}
+                          onAddPromotions={(list) => void task(() => addPromotions(list))}
                           onOpenLibrary={() => window.open("/revenue/pricing/promotions?add=1", "_blank", "noopener")}
                           onRefreshPromotions={() => void task(loadLibrary)}
                           promotions={promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet))}
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>
@@ -854,16 +811,6 @@ export function PricingDocumentsWorkspace({
                       주세요. 관리 상품명은 출력에 자동 사용하지 않습니다.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {sets.map((s) => (
-                        <button
-                          key={s.id}
-                          disabled={busy}
-                          className={box}
-                          onClick={() => void task(() => loadSet(s))}
-                        >
-                          {s.name} 불러오기
-                        </button>
-                      ))}
                       {promotions
                         .filter(
                           (p) =>

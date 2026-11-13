@@ -12,5 +12,5 @@ it("CC-35-1: promo rows reuse the regular drag handle/drop code and only reorder
 });
 it("CC-35-1: the 행사·임박 tab of the picker selects several and adds them at once", () => {
   expect(picker).toContain("선택 {pickedPromos.size}개 담기");
-  expect(picker).toContain("forEach(onAddPromotion)");
+  expect(picker).toContain("onAddPromotions(promotions.filter(");
 });

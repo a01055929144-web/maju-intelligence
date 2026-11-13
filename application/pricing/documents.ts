@@ -30,11 +30,11 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
           "catalog",
           "versions",
           "promotions",
-          "sets",
           "profile",
         ].includes(action)
       )
-        throw new PricingInputError("조회 요청을 확인해 주세요.");
+        // CC-35: 묶음·템플릿("sets")은 기능 자체를 없앴다 — 부르면 없는 요청(404).
+        throw action === "sets" ? new DocumentSendError("없어진 기능입니다.", 404) : new PricingInputError("조회 요청을 확인해 주세요.");
       return repository.request<T>(scope, action, payload);
     },
     execute<T>(scope: DocumentScope, input: unknown) {
@@ -47,6 +47,7 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
         if (!isId(body.shareLinkId)) throw new DocumentSendError("공유 링크를 확인해 주세요.", 400);
         return repository.request<T>(scope, action, { shareLinkId: body.shareLinkId.toLowerCase() });
       }
+      if (action === "save-set" || action === "delete-set") throw new DocumentSendError("없어진 기능입니다.", 404);
       if (!isId(id)) throw new PricingInputError("저장 번호를 확인해 주세요.");
       if (!Number.isSafeInteger(body.expected) || Number(body.expected) < 0)
         throw new PricingInputError("저장 버전을 확인해 주세요.");
@@ -63,7 +64,6 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       }
       if (
         action === "publish" ||
-        action === "delete-set" ||
         action === "delete-promotion"
       )
         return repository.request<T>(scope, action, { id, expected });
@@ -108,28 +108,6 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
             allowSheet: d.allowSheet === true,
             badge: d.badge === "임박" ? "임박" : "행사",
             taxType: d.taxType,
-          },
-        });
-      }
-      if (action === "save-set") {
-        if (
-          !Array.isArray(d.productIds) ||
-          !d.productIds.length ||
-          d.productIds.length > 100 ||
-          !d.productIds.every(isId) ||
-          new Set(d.productIds).size !== d.productIds.length
-        )
-          throw new PricingInputError("품목 번호는 중복 없이 1~100개를 선택해 주세요.");
-        if (d.shared === true && !scope.manager)
-          throw new PricingInputError("공용 묶음·템플릿은 대표·관리자가 저장합니다.");
-        return repository.request<T>(scope, action, {
-          id,
-          expected,
-          content: {
-            name: field(d.name, 100, true),
-            kind: d.kind === "template" ? "template" : "bundle",
-            shared: d.shared === true,
-            productIds: d.productIds,
           },
         });
       }

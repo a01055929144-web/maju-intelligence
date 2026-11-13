@@ -1,6 +1,6 @@
 # CC-32c 매장 등급 승인표
 
-상태: **초안 · 운영 미적용**(대표 승인 문구 전 적용 금지). Owner: customer(매장 등급) · pricing(행사 대상). 
+상태: **운영 적용 완료 2026-11-13 17:1x(컨트롤타워, 승인 문구 원문은 `applied-20261113-cc32c-e2.md`)** — 같은 SQL이 `supabase/migrations/20261113171000_cc32c_store_grades.sql`에 있다(기록용, 다시 적용하지 않음). Owner: customer(매장 등급) · pricing(행사 대상). 
 파일: `docs/sql-drafts/20261113-CC-32c-store-grades.sql` · `.down.sql` · `.pg17.test.sql`(CI PG17 단계 추가, 별도 DB).
 
 ## 운영 DB 읽기 확인 (2026-11-13, `fcmdvveqmcgtioelzqun`)
