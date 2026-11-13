@@ -163,6 +163,12 @@ export function PricingDocumentsWorkspace({
       ),
     );
   }, [loadLibrary]);
+  // CC-35-2: 새 탭에서 행사를 등록하고 돌아오면(창에 다시 들어올 때) 행사 목록을 자동으로 다시 읽는다.
+  useEffect(() => {
+    const refresh = () => { void loadLibrary().catch(() => undefined); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [loadLibrary]);
   useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -719,7 +725,7 @@ export function PricingDocumentsWorkspace({
                           manager={manager}
                           onAdd={(items) => void task(async () => add(items))}
                           onAddPromotion={(p) => void task(() => addPromotion(p))}
-                          onOpenLibrary={() => window.open("/revenue/pricing/documents?tab=library", "_blank", "noopener")}
+                          onOpenLibrary={() => window.open("/revenue/pricing/promotions?add=1", "_blank", "noopener")}
                           onRefreshPromotions={() => void task(loadLibrary)}
                           promotions={promotions.filter((p) => koreaDay() >= p.startsOn && koreaDay() <= p.endsOn && p.stock !== 0 && (draft.content.kind === "quote" || p.allowSheet))}
                         />
