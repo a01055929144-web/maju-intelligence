@@ -417,7 +417,7 @@ export default function CrmSummaryPage() {
       title="전체 현황"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <section className="mx-auto max-w-[1560px] space-y-3">
+      <section className="w-full space-y-3">
         <div className="maju-section-card">
           <SectionHeader
             eyebrow="운영 기준"

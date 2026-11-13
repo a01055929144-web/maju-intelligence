@@ -18,5 +18,5 @@ export default async function StoreLinksPage({ searchParams }: {
   const companyId = resolvePageCompanyId(customer, admin, (await searchParams)?.companyId);
   if (!companyId || !(isFeatureEnabled("PRICING", companyId) && isFeatureEnabled("STORE_ORDERING", companyId)) ||
     (customer && !canManagePriceSheets(customer))) notFound();
-  return <main className="mx-auto max-w-6xl p-4"><StoreLinksWorkspace companyId={companyId} /></main>;
+  return <main className="w-full p-4"><StoreLinksWorkspace companyId={companyId} /></main>;
 }

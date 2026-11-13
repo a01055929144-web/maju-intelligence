@@ -106,7 +106,7 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] px-4 py-4 sm:px-4">
+      <section className="w-full px-4 py-4 sm:px-4">
         <SalesWorkspaceNav
           active={section}
           companyId={companyId}

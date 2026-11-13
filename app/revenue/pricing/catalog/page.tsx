@@ -19,7 +19,7 @@ export default async function MarginGroupsPage({ searchParams }: { searchParams?
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && (!canManagePriceSheets(customer) || !customerHasCapability(customer, "manage_sales")))) notFound();
   const preview = Boolean(admin && !customer);
   const showStorePrices = await companyUsesStorePrices(companyId);
-  return <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="카탈로그" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <section className="mx-auto max-w-6xl space-y-4 p-4"><PricingTabs active="catalog" previewCompanyId={preview ? companyId : undefined} showStorePrices={showStorePrices} /><PriceSheetsWorkspace companyId={companyId} marginTemplates={isFeatureEnabled("MARGIN_TEMPLATES", companyId)} /></section>
+  return <CustomerAppShell headerNav={<PricingTabs active="catalog" previewCompanyId={preview ? companyId : undefined} showStorePrices={showStorePrices} />} active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="카탈로그" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
+    <section className="w-full space-y-4"><PriceSheetsWorkspace companyId={companyId} marginTemplates={isFeatureEnabled("MARGIN_TEMPLATES", companyId)} /></section>
   </CustomerAppShell>;
 }

@@ -5,6 +5,7 @@ import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { discountPercent, regularPrice } from "@/domains/pricing/promotion-display";
 import { Tabs } from "./ui/tabs";
+import { PricingPromotionBasket } from "./pricing-promotion-basket";
 import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 import { buildFolderTree, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
@@ -29,6 +30,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [drawer, setDrawer] = useState<{ promo: Promotion | null } | null>(null);
+  const [basketOpen, setBasketOpen] = useState(false);
   const [audiences, setAudiences] = useState<Record<string, AudienceSummary>>({});
   const today = koreaDay();
 
@@ -51,6 +53,8 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const wanted = query.get("new");
+    // CC-35-2: 견적서·단가표의 "행사·임박 상품 등록"이 ?add=1로 열면 등록 서랍을 바로 연다.
+    if (manager && query.get("add") === "1") { setBasketOpen(true); return; }
     if (manager && (wanted === "행사" || wanted === "임박")) { setKind(wanted); setPresetProduct(query.get("productId") || ""); setDrawer({ promo: null }); }
   }, [manager]);
 
@@ -74,7 +78,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <Tabs ariaLabel="행사·임박" items={[{ id: "행사", label: "행사" }, { id: "임박", label: "임박" }]} onChange={(id) => setKind(id as Kind)} value={kind} />
-      {manager ? <button className="maju-button-primary min-h-[44px] px-4" onClick={() => { setPresetProduct(""); setDrawer({ promo: null }); }} type="button">{kind} 등록</button> : null}
+      {manager ? <button className="maju-button-primary min-h-[44px] px-4" onClick={() => setBasketOpen(true)} type="button">+ {kind} 상품 담기</button> : null}
     </div>
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="상태">
       {([["active", "진행 중"], ["upcoming", "예정"], ["ended", "끝남"], ["all", "전체"]] as const).map(([id, label]) =>
@@ -82,6 +86,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
     </div>
     {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p> : null}
     <CommonDataTable columns={columns} emptyMessage={`${status === "all" ? "" : "해당 상태의 "}${kind} 상품이 없습니다.`} error={error || null} filename={`${kind}.csv`} loading={loading} phoneCards rowKey={(x) => x.id} rows={visible} settingsKey={`promotions-${kind}:${userKey}`} />
+    {basketOpen ? <PricingPromotionBasket audienceEnabled={audienceEnabled} companyId={companyId} kind={kind} onClose={() => setBasketOpen(false)} onSaved={(text) => { setBasketOpen(false); setMessage(text); void load(); }} /> : null}
     {drawer ? <PromotionDrawer audienceEnabled={audienceEnabled} companyId={companyId} initialAudience={drawer.promo ? audiences[drawer.promo.id]?.audience ?? "all" : "all"} kind={kind} onClose={() => setDrawer(null)} onSaved={(text) => { setDrawer(null); setMessage(text); void load(); }} preset={presetProduct} promo={drawer.promo} /> : null}
   </div>;
 }
@@ -95,6 +100,8 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   const [folder, setFolder] = useState("");
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState(promo?.productId || preset);
+  // 고른 상품 이름을 기억한다: 고른 뒤 폴더·검색어를 바꾸면 목록에서 사라져 이름이 빈 값으로 저장되던 문제.
+  const [pickedName, setPickedName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [more, setMore] = useState(initialAudience === "except");
@@ -142,7 +149,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
       await documentRequest(companyId, "save-promotion", {
         id: savedId, expected: promo?.revision || 0,
         content: {
-          productId, name: promo?.name || product?.name || "", displayName: String(form.get("displayName") || ""),
+          productId, name: promo?.name || product?.name || pickedName, displayName: String(form.get("displayName") || ""),
           startsOn: String(form.get("startsOn")), endsOn: String(form.get("endsOn")),
           cost: Number(form.get("cost")), margin: Number(form.get("margin")), stock: num("stock"), perStoreLimit: num("perStoreLimit"),
           allowSheet: form.get("allowSheet") === "on", badge: kind, taxType: promo?.taxType || "taxable",
@@ -181,7 +188,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         </select>
       </label> : null}
       <label className="block text-sm font-bold">상품
-        <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => setProductId(e.target.value)} required value={productId}>
+        <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => { setProductId(e.target.value); setPickedName(e.target.selectedOptions[0]?.text ?? ""); }} required value={productId}>
           <option value="">상품 선택</option>
           {productId && !options.some((c) => c.id === productId) ? <option value={productId}>{promo?.name || "선택한 상품"}</option> : null}
           {options.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

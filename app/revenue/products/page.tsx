@@ -32,7 +32,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
       userName={customerSession?.name || "관리자"}
       workspaceRole={customerSession?.workspaceRole}
     >
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
+      <section className="w-full space-y-4 px-4 py-4">
         <ProductCatalogWorkspace
           key={companyId}
           categoriesEnabled={isFeatureEnabled("PRODUCT_CATEGORIES", companyId)}

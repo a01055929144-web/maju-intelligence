@@ -132,15 +132,6 @@ export type Promotion = {
   revision: number;
   taxType: "taxable" | "exempt";
 };
-export type ProductSet = {
-  id: string;
-  name: string;
-  kind: "bundle" | "template";
-  shared: boolean;
-  productIds: string[];
-  editable: boolean;
-  revision: number;
-};
 export function koreaDay(now = new Date()) {
   return new Date(now.getTime() + 32400000).toISOString().slice(0, 10);
 }
@@ -178,16 +169,18 @@ export function isId(value: unknown): value is string {
     )
   );
 }
+/** 사용자가 고칠 수 있는 입력 오류. API가 400 + 이 메시지 그대로 돌려준다(충돌·서버 오류와 구분). */
+export class PricingInputError extends Error {}
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("입력 내용을 확인해 주세요.");
+    throw new PricingInputError("입력 내용을 확인해 주세요.");
   return value as Record<string, unknown>;
 }
 export function field(value: unknown, max: number, required = false, label = "") {
   if (typeof value !== "string" || (required && !value.trim()))
-    throw new Error(label ? `'${label}' 칸을 입력해 주세요.` : "필수 항목과 입력 길이를 확인해 주세요.");
+    throw new PricingInputError(label ? `'${label}' 칸을 입력해 주세요.` : "필수 항목과 입력 길이를 확인해 주세요.");
   if (value.trim().length > max)
-    throw new Error(label ? `'${label}' 칸은 ${max}자까지 입력할 수 있습니다.` : "필수 항목과 입력 길이를 확인해 주세요.");
+    throw new PricingInputError(label ? `'${label}' 칸은 ${max}자까지 입력할 수 있습니다.` : "필수 항목과 입력 길이를 확인해 주세요.");
   return value.trim();
 }
 export function dateField(value: unknown) {
@@ -197,7 +190,7 @@ export function dateField(value: unknown) {
     Number.isNaN(Date.parse(day)) ||
     new Date(day).toISOString().slice(0, 10) !== day
   )
-    throw new Error("날짜를 확인해 주세요.");
+    throw new PricingInputError("날짜를 확인해 주세요.");
   return day;
 }
 export function money(value: unknown): number {
@@ -207,20 +200,20 @@ export function money(value: unknown): number {
     value < 0 ||
     value > 1e12
   )
-    throw new Error("단가는 0~1조원의 정수 원으로 입력해 주세요.");
+    throw new PricingInputError("단가는 0~1조원의 정수 원으로 입력해 주세요.");
   return value;
 }
 /** A strict whitelist shared by storage and output. Never spread staff/catalog records. */
 export function parseDocument(value: unknown): DocumentContent {
   const d = object(value);
   if (d.kind !== "sheet" && d.kind !== "quote")
-    throw new Error("문서 종류를 확인해 주세요.");
+    throw new PricingInputError("문서 종류를 확인해 주세요.");
   if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
-    throw new Error(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
+    throw new PricingInputError(`품목은 1~${MAX_DOCUMENT_LINES}개를 선택해 주세요.`);
   const lines = d.lines.map((value, index) => {
     const l = object(value);
     if (l.taxType === "unknown")
-      throw new Error(
+      throw new PricingInputError(
         "과세 미확정 품목이 있습니다. 과세·면세를 확인한 후 저장해 주세요.",
       );
     if (
@@ -229,7 +222,7 @@ export function parseDocument(value: unknown): DocumentContent {
       (l.taxType !== "taxable" && l.taxType !== "exempt") ||
       (l.promotionId !== null && !isId(l.promotionId))
     )
-      throw new Error("품목을 확인해 주세요.");
+      throw new PricingInputError("품목을 확인해 주세요.");
     const promotional = l.promotionId !== null;
     return {
       productId: l.productId,
@@ -256,13 +249,13 @@ export function parseDocument(value: unknown): DocumentContent {
   });
   const keys = lines.map((l) => `${l.productId}:${l.promotionId}`);
   if (new Set(keys).size !== keys.length || !lines.some((l) => l.visible))
-    throw new Error("중복 품목을 제거하고 표시할 품목을 선택해 주세요.");
+    throw new PricingInputError("중복 품목을 제거하고 표시할 품목을 선택해 주세요.");
   if (
     !["blue", "green", "mono"].includes(String(d.theme)) ||
     !["auto", "table", "cards"].includes(String(d.layout)) ||
     [d.showPrice, d.showBrand, d.showSpec].some((v) => typeof v !== "boolean")
   )
-    throw new Error("표시 설정을 확인해 주세요.");
+    throw new PricingInputError("표시 설정을 확인해 주세요.");
   return {
     kind: d.kind,
     title: field(d.title, 100, true, "문서 제목"),
@@ -286,7 +279,7 @@ export function parseDocument(value: unknown): DocumentContent {
 export function refreshedDocumentVersion(expected: DocumentVersion, received: DocumentVersion): DocumentVersion {
   if (received.id !== expected.id || received.documentId !== expected.documentId || received.version !== expected.version || received.revision !== expected.revision ||
     JSON.stringify(parseDocument(received.content)) !== JSON.stringify(parseDocument(expected.content)))
-    throw new Error("게시 버전이 달라졌습니다. 미리보기를 닫고 버전을 다시 선택해 주세요.");
+    throw new Error("게시 버전 달라졌습니다. 미리보기를 닫고 버전을 다시 선택해 주세요.");
   return { ...received, content: parseDocument(expected.content) };
 }
 export function documentOutput(version: DocumentVersion, day = koreaDay()) {

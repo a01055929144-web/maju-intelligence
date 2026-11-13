@@ -27,3 +27,9 @@ export function templatePrice(template: MarginTemplate, product: { id: string; c
   if (best) return { price: calculatePrice(product.cost, best.margin, template.rounding), margin: best.margin, source: "category" };
   return { price: calculatePrice(product.cost, template.margin, template.rounding), margin: template.margin, source: "default" };
 }
+
+/** 기본 판매가 대비 이 카탈로그 가격의 평균 변화율(%, 소수 1자리). 기본가가 0인 품목은 뺀다. 비교할 품목이 없으면 null. */
+export function averageDeltaPercent(template: MarginTemplate, products: ReadonlyArray<{ id: string; category: string; cost: number; price: number }>): number | null {
+  const deltas = products.filter((p) => p.price > 0).map((p) => (templatePrice(template, p).price / p.price - 1) * 100);
+  return deltas.length ? Math.round((deltas.reduce((sum, v) => sum + v, 0) / deltas.length) * 10) / 10 : null;
+}

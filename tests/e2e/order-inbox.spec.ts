@@ -49,6 +49,8 @@ for (const width of [1440, 390]) test(`order inbox filters, expands and confirms
   expect(requests.at(-1)!.searchParams.get("q")).toBe("잠실");
   await page.getByRole("textbox", { name: "매장 이름 검색" }).fill("");
   await page.getByRole("button", { name: "검색", exact: true }).click();
+  // 검색을 비운 뒤 전체 목록이 다시 올 때까지 기다린다(안 기다리면 필터된 잠실 줄의 "확인"을 눌러 간헐적으로 실패했다).
+  await expect(page.getByText("합성 송파 시험 매장", { exact: true }).first()).toBeVisible();
 
   const confirmButtons = page.getByRole("button", { name: "확인", exact: true });
   // 누르기 쉬운 크기(44px) 기준은 모바일 화면 규칙이다(AGENTS.md 0-0-1).

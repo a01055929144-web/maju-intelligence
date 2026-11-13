@@ -1,6 +1,6 @@
 # E2 매입 전표 → 매입가 기록 승인표
 
-상태: **초안 · 운영 미적용**(대표 승인 문구 전 적용 금지). Owner: pricing. Related: purchase(ERP 전표).
+상태: **운영 적용 완료 2026-11-13 17:1x(컨트롤타워, 승인 문구 원문은 `applied-20261113-cc32c-e2.md`)** — 같은 SQL이 `supabase/migrations/20261113171100_e2_purchase_document_cost.sql`에 있다(기록용, 다시 적용하지 않음). Owner: pricing. Related: purchase(ERP 전표).
 파일: `docs/sql-drafts/20261113-e2-purchase-document-cost.sql` · `.down.sql` · `.pg17.test.sql`(CI PG17 단계 추가).
 
 ## 운영 DB 읽기 확인 (2026-11-13, `fcmdvveqmcgtioelzqun`, `pg_get_functiondef`)

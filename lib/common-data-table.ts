@@ -1,7 +1,9 @@
 export type CommonColumnState = { key: string; hidden: boolean; pinned: boolean; width?: number };
 
+/** 보기 개수 "전체"를 뜻하는 값. */
+export const PAGE_SIZE_ALL = 0;
 export const COMMON_TABLE_PAGE_SIZES = {
-  list: [30, 50, 100],
+  list: [100, 500, 1000, PAGE_SIZE_ALL],
   order: [50, 100, 300, 500],
 } as const;
 
@@ -28,4 +30,48 @@ export function normalizeColumnState(columns: Array<{ key: string; defaultHidden
     });
   for (const column of columns) if (!state.some((item) => item.key === column.key)) state.push({ key: column.key, hidden: Boolean(column.defaultHidden), pinned: false });
   return state;
+}
+
+/** 저장된 보기 개수가 이 화면의 허용값일 때만 쓰고, 아니면 첫 값(기본). */
+export function pickPageSize(sizes: readonly number[], saved: unknown) {
+  return typeof saved === "number" && sizes.includes(saved) ? saved : sizes[0];
+}
+
+/**
+ * 열이 화면보다 넓으면 중요도 낮은 열(priority 큰 수)부터 자동으로 숨긴다. priority가 없는 열은 절대 숨기지 않는다.
+ * need = 열별 최소 너비. 반환: 숨길 열 key 목록.
+ */
+export function autoHiddenKeys(cols: Array<{ key: string; need: number; priority?: number }>, available: number) {
+  const hidden: string[] = [];
+  let total = cols.reduce((sum, col) => sum + col.need, 0);
+  const candidates = cols.filter((col) => col.priority !== undefined).sort((a, b) => (b.priority! - a.priority!) || (cols.indexOf(b) - cols.indexOf(a)));
+  for (const col of candidates) {
+    if (total <= available) break;
+    hidden.push(col.key); total -= col.need;
+  }
+  return hidden;
+}
+
+/** 줄 높이가 같을 때 화면에 보이는 줄 범위(앞뒤 overscan). scrollTop = 표 윗면이 화면 위에서 얼마나 올라갔는지. */
+export function visibleRange(total: number, rowHeight: number, scrollTop: number, viewport: number, overscan = 12) {
+  const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const last = Math.min(total, Math.ceil((scrollTop + viewport) / rowHeight) + overscan);
+  return { start: Math.min(first, total), end: Math.max(Math.min(first, total), last) };
+}
+
+/** 가상 스크롤을 켜는 줄 수(이하는 그냥 다 그린다). */
+export const VIRTUAL_THRESHOLD = 200;
+
+/** 검색어(공백 무시·대소문자 무시·일반 포함 검색)가 값 중 하나에 들어 있는가. */
+export function matchesQuery(values: Array<string | number | null | undefined>, query: string) {
+  const q = query.replace(/\s+/g, "").toLowerCase();
+  return !q || values.some((value) => String(value ?? "").replace(/\s+/g, "").toLowerCase().includes(q));
+}
+
+/** 값별 줄 수(분류 칩 개수). order에 있는 값이 먼저, 나머지는 많은 순. 빈 값은 "기타". */
+export function countByKey(keys: Array<string | null | undefined>, order: readonly string[] = []) {
+  const counts = new Map<string, number>();
+  for (const key of keys) { const k = key?.trim() || "기타"; counts.set(k, (counts.get(k) ?? 0) + 1); }
+  const rank = (k: string) => { const i = order.indexOf(k); return i < 0 ? order.length : i; };
+  return Array.from(counts, ([key, count]) => ({ key, count })).sort((a, b) => rank(a.key) - rank(b.key) || b.count - a.count || a.key.localeCompare(b.key, "ko"));
 }

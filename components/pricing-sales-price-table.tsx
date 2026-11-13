@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import type { MarginTreeNode } from "@/domains/pricing/margin-tree";
-import { inFolder } from "@/domains/pricing/margin-tree";
+import { categoryParts, inFolder } from "@/domains/pricing/margin-tree";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { marginSource } from "./pricing-margin-group-options";
@@ -27,15 +27,16 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const fixedItems = useMemo(() => inScope.filter((i) => i.directPrice !== null), [inScope]);
   const [selected, setSelected] = useState<Set<string>>(new Set()); // CC-30a: 줄 선택 → 마진 일괄 변경·고정 해제(서버는 한 번에 300개까지)
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(true); // P5: 분류 트리 240px, 접으면 표가 전체 너비
   const [bulkMargin, setBulkMargin] = useState("");
   const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
     { key: "select", label: "선택", value: (i) => (selected.has(i.id) ? "선택" : ""), sortable: false, width: 56, render: (i) =>
       <input aria-label={`${i.name} 선택`} checked={selected.has(i.id)} className="h-4 w-4" disabled={busy} onChange={(e) => setSelected((prev) => { const next = new Set(prev); if (e.target.checked) next.add(i.id); else next.delete(i.id); return next; })} type="checkbox" /> },
-    { key: "name", label: "상품", value: (i) => i.name, sortable: true, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
-    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true },
-    { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, render: (i) => `${i.cost.toLocaleString()}원` },
-    { key: "margin", label: "마진", value: (i) => marginSource(i, state).margin, align: "right", sortable: true, render: (i) => {
+    { key: "name", label: "상품", value: (i) => i.name, sortable: true, searchable: true, weight: 3, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
+    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
+    { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, priority: 2, width: 96, render: (i) => `${i.cost.toLocaleString()}원` },
+    { key: "margin", label: "마진", value: (i) => marginSource(i, state).margin, align: "right", sortable: true, width: 104, render: (i) => {
       const s = marginSource(i, state);
       return <input aria-label={`${i.name} 마진율`} className="h-8 w-16 rounded border border-slate-300 px-1.5 text-right text-sm disabled:bg-slate-100" defaultValue={i.itemMargin ?? ""} disabled={busy || s.kind === "direct"} inputMode="decimal" key={`m-${i.id}-${i.itemMargin}-${i.directPrice}`}
         onBlur={(e) => {
@@ -48,7 +49,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(i.itemMargin ?? ""); e.currentTarget.blur(); } }}
         placeholder={s.margin !== null ? String(s.margin) : "-"} /> ;
     } },
-    { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, render: (i) => (
+    { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, width: 120, render: (i) => (
       <input aria-label={`${i.name} 판매가`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" defaultValue={i.price} disabled={busy} inputMode="numeric" key={`p-${i.id}-${i.price}-${i.directPrice}`}
         onBlur={(e) => {
           const raw = e.currentTarget.value.trim();
@@ -61,8 +62,8 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
         }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(i.price); e.currentTarget.blur(); } }} />
     ) },
-    { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
-    { key: "source", label: "출처", value: (i) => { const s = source(i, state); return `${s.badge} ${s.detail}`; }, render: (i) => {
+    { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, priority: 2, width: 100, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
+    { key: "source", label: "출처", value: (i) => { const s = source(i, state); return `${s.badge} ${s.detail}`; }, priority: 3, width: 180, render: (i) => {
       const s = source(i, state);
       return <span className="inline-flex items-center gap-1" title={s.title}><span className={`rounded px-1.5 py-0.5 text-xs font-bold ${s.tone}`}>{s.badge}</span><span className="text-xs text-slate-500">{s.detail}</span>
         {i.directPrice !== null ? <button className="text-xs text-teal-700 underline" disabled={busy} onClick={() => void run([{ action: "direct", productId: i.id, price: null }], `${i.name} 고정 가격을 풀고 마진으로 계산합니다.`)} type="button">마진으로 계산</button> : null}</span>;
@@ -74,10 +75,12 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const marginValue = Number(bulkMargin);
   const marginOk = bulkMargin.trim() !== "" && Number.isFinite(marginValue) && marginValue >= 0 && marginValue <= 1000;
   const loss = rows.filter((i) => i.price - i.cost <= 0).length;
-  return <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
-    <aside aria-label="분류" className="space-y-2 rounded-xl border border-slate-200 bg-white p-2">
+  return <div className={`grid gap-4 lg:items-start ${treeOpen ? "lg:grid-cols-[240px_minmax(0,1fr)]" : "lg:grid-cols-[auto_minmax(0,1fr)]"}`}>
+    {!treeOpen ? <button aria-expanded={false} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" onClick={() => setTreeOpen(true)} type="button">분류 펼치기 ▸</button> : null}
+    <aside aria-label="분류" className={`space-y-1 rounded-xl border border-slate-200 bg-white p-2 ${treeOpen ? "" : "hidden"}`}>
+      <button aria-expanded className="h-7 w-full text-right text-xs font-bold text-slate-500" onClick={() => setTreeOpen(false)} type="button">◂ 분류 접기</button>
       <button aria-pressed={folder === null} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold ${folder === null ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} onClick={() => onFolder(null)} type="button"><span>전체</span><span className="text-xs text-slate-500">{items.length}</span></button>
-      {tree.map((node) => <button aria-pressed={folder === node.path} className={`flex w-full items-center justify-between gap-2 rounded-lg py-2 pr-3 text-left text-sm ${folder === node.path ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={node.path} onClick={() => onFolder(node.path)} style={{ paddingLeft: 12 + node.depth * 14 }} type="button">
+      {tree.map((node) => <button aria-pressed={folder === node.path} className={`flex min-h-9 w-full items-center justify-between gap-2 rounded-lg py-1.5 pr-3 text-left text-sm ${folder === node.path ? "bg-teal-50 text-teal-800" : "hover:bg-slate-50"}`} key={node.path} onClick={() => onFolder(node.path)} style={{ paddingLeft: 12 + node.depth * 12 }} type="button">
         <span className={`truncate ${node.depth === 0 ? "font-bold" : ""}`}>{node.name}</span><span className="shrink-0 text-xs text-slate-500">{node.badge} · {node.count}</span></button>)}
       {folder ? <div className="border-t pt-2">{folderTools}</div> : null}
     </aside>
@@ -98,7 +101,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
           <button aria-pressed={chip === id} className={`min-h-[32px] rounded-full border px-3 text-xs font-bold ${chip === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} key={id} onClick={() => setChip(chip === id ? null : id)} type="button">{label} {n}</button>)}
       </div>
       {loss ? <p className="text-sm font-bold text-rose-700">손해 {loss}개 — 이익이 0원 이하인 상품입니다.</p> : null}
-      <CommonDataTable columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price-v2" />
+      <CommonDataTable categoryKey={(i) => { const parts = categoryParts(i.category || ""); return { major: parts[0], minor: parts[1] }; }} columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price-v2" />
     </div>
   </div>;
 }
