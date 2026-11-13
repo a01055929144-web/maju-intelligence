@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DocumentDraft, DocumentKind, ProductSet } from "@/domains/pricing/document";
+import type { DocumentDraft, DocumentKind } from "@/domains/pricing/document";
 import { DOCUMENT_PRESETS, type DocumentPreset } from "@/domains/pricing/document-presets";
 
 /**
- * 11/4: 새 문서 시작 화면(시안 Start) — 빈 문서 · 우리 문서 복사 · MAJU 추천 · 내 템플릿 중 하나를 고릅니다.
+ * 11/4: 새 문서 시작 화면(시안 Start) — 빈 문서 · 우리 문서 복사 · MAJU 추천 중 하나를 고릅니다.
  */
-export function PricingStartGallery({ kind, loadDocuments, manager, onBlank, onClose, onCopy, onPreset, onTemplate, sets }: {
+export function PricingStartGallery({ kind, loadDocuments, manager, onBlank, onClose, onCopy, onPreset }: {
   readonly kind: DocumentKind;
   readonly loadDocuments: () => Promise<DocumentDraft[]>;
   readonly manager: boolean;
@@ -15,8 +15,6 @@ export function PricingStartGallery({ kind, loadDocuments, manager, onBlank, onC
   readonly onClose: () => void;
   readonly onCopy: (document: DocumentDraft, kind: DocumentKind) => void;
   readonly onPreset: (preset: DocumentPreset, kind: DocumentKind) => void;
-  readonly onTemplate: (set: ProductSet, kind: DocumentKind) => void;
-  readonly sets: readonly ProductSet[];
 }) {
   const [current, setCurrent] = useState<DocumentKind>(kind);
   const [documents, setDocuments] = useState<DocumentDraft[] | null>(null);
@@ -87,20 +85,6 @@ export function PricingStartGallery({ kind, loadDocuments, manager, onBlank, onC
           ) : <p className="text-sm text-slate-500">아직 복사할 문서가 없습니다.</p>}
         </section>
 
-        <section className="space-y-2">
-          <h3 className="text-sm font-black text-slate-700">품목 템플릿·묶음 <span className="font-semibold text-slate-500">· 품목·순서만 불러오며 단가는 현재 마진 규칙으로 계산</span></h3>
-          {sets.length ? (
-            <div className="grid gap-2 sm:grid-cols-3">
-              {sets.map((set) => (
-                <button className={card} key={set.id} onClick={() => onTemplate(set, current)} type="button">
-                  <span className="rounded bg-amber-100 px-1.5 text-xs font-bold text-amber-900">{set.kind === "template" ? "템플릿" : "묶음"}</span>
-                  <span className="line-clamp-1 font-bold">{set.name}</span>
-                  <span className="text-xs text-slate-500">{set.productIds.length}개 품목</span>
-                </button>
-              ))}
-            </div>
-          ) : <p className="text-sm text-slate-500">저장한 템플릿이 없습니다. 목록 화면의 &lsquo;행사·묶음·템플릿&rsquo;에서 만들 수 있습니다.</p>}
-        </section>
       </div>
     </div>
   );

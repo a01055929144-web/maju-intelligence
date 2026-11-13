@@ -132,15 +132,6 @@ export type Promotion = {
   revision: number;
   taxType: "taxable" | "exempt";
 };
-export type ProductSet = {
-  id: string;
-  name: string;
-  kind: "bundle" | "template";
-  shared: boolean;
-  productIds: string[];
-  editable: boolean;
-  revision: number;
-};
 export function koreaDay(now = new Date()) {
   return new Date(now.getTime() + 32400000).toISOString().slice(0, 10);
 }
