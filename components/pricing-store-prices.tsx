@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { StoreGradeManager } from "./store-grade-manager";
+import { MoneyInput } from "./money-input";
 import { StoreGradeDrawer, type StoreGrade } from "./store-grade-drawer";
 import { gradeChipClass } from "@/domains/pricing/store-grade";
 import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/domains/pricing/store-price";
@@ -110,9 +111,8 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
     { key: "base", label: "기본 판매가", value: (r) => r.basePrice, align: "right", sortable: true, width: 110, render: (r) => `${r.basePrice.toLocaleString()}원` },
     { key: "store", label: "이 매장 가격", value: (r) => r.storePrice, align: "right", sortable: true, width: 120, render: (r) => r.source === "견적"
       ? <span title="견적서 수락으로 생긴 가격 — 거래처 상세에서 종료">{r.storePrice?.toLocaleString()}원</span>
-      : <input aria-label={`${r.name} 이 매장 가격`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" defaultValue={r.storePrice ?? ""} disabled={busy} inputMode="numeric" key={`${r.productId}-${r.storePrice}`} placeholder="기본가"
-          onBlur={(e) => commitPrice(r, e.currentTarget)}
-          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(r.storePrice ?? ""); e.currentTarget.blur(); } }} /> },
+      : <MoneyInput ariaLabel={`${r.name} 이 매장 가격`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" disabled={busy} key={`${r.productId}-${r.storePrice}`} placeholder="기본가" value={r.storePrice}
+          onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }} /> },
     { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", priority: 2, width: 100, render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{d.toLocaleString()}원</span>; } },
     { key: "source", label: "출처", value: (r) => r.source, priority: 2, width: 80, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
     { key: "period", label: "기간·예정", value: (r) => r.until ?? r.planned?.since ?? "", priority: 3, width: 220, sortable: false, render: (r) => r.source === "견적" ? "-" : <span className="flex items-center gap-1.5 text-xs">
