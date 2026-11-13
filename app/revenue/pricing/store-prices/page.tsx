@@ -19,6 +19,6 @@ export default async function StorePricesPage({ searchParams }: { searchParams?:
   if (!companyId || !isFeatureEnabled("PRICING", companyId) || (customer && (!canManagePriceSheets(customer) || !customerHasCapability(customer, "manage_sales")))) notFound();
   const preview = Boolean(admin && !customer);
   return <CustomerAppShell headerNav={<PricingTabs active="store-prices" previewCompanyId={preview ? companyId : undefined} showStorePrices />} active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="매장 가격" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="w-full space-y-4"><PricingStorePrices companyId={companyId} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
+    <main className="w-full space-y-4"><PricingStorePrices storeGradesEnabled={isFeatureEnabled("STORE_GRADES", companyId)} companyId={companyId} userKey={`${companyId}:${customer?.name || admin?.name || "admin"}`} /></main>
   </CustomerAppShell>;
 }

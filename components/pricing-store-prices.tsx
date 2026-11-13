@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { StoreGradeManager } from "./store-grade-manager";
+import { StoreGradeDrawer, type StoreGrade } from "./store-grade-drawer";
+import { gradeChipClass } from "@/domains/pricing/store-grade";
 import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/domains/pricing/store-price";
 
 // CC-30b: 매장 가격 — 왼쪽 매장 목록(검색·등급·"매장 가격 N개"), 오른쪽 이 매장의 상품별 가격표. "이 매장 가격" 칸을 고치면(Enter·칸 밖 클릭) 바로 저장, 비우면 끝내기.
@@ -10,13 +12,35 @@ type Grade = { id: string; name: string };
 type Row = { productId: string; name: string; category: string; basePrice: number; storePrice: number | null; since: string | null; until: string | null; planned: { price: number; since: string } | null; source: StorePriceSource };
 const badge: Record<StorePriceSource, string> = { 기본: "bg-slate-100 text-slate-600", 매장: "bg-indigo-100 text-indigo-800", 견적: "border border-indigo-400 text-indigo-800" };
 
-export function PricingStorePrices({ companyId, userKey }: { companyId: string; userKey: string }) {
+export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = false }: { companyId: string; userKey: string; storeGradesEnabled?: boolean }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [q, setQ] = useState("");
   const [grades, setGrades] = useState<Grade[]>([]);
   const [store, setStore] = useState<Store | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [onlyStore, setOnlyStore] = useState(false);
+  // CC-32c: 매장 등급(스위치 STORE_GRADES 켠 회사만). 카탈로그(위 grade/gradeId)와 별개.
+  const [storeGrades, setStoreGrades] = useState<StoreGrade[]>([]);
+  const [gradeOf, setGradeOf] = useState<Record<string, string>>({});
+  const [gradeFilter, setGradeFilter] = useState("");
+  useEffect(() => {
+    if (!storeGradesEnabled) return;
+    void fetch(`/api/store-grades?${new URLSearchParams({ companyId })}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((b: { grades: StoreGrade[]; assignments: Record<string, string> } | null) => { if (b) { setStoreGrades(b.grades); setGradeOf(b.assignments); } }).catch(() => undefined);
+  }, [storeGradesEnabled, companyId]);
+  const gradeById = useMemo(() => new Map(storeGrades.map((g) => [g.id, g])), [storeGrades]);
+  const shownStores = useMemo(() => (gradeFilter ? stores.filter((s) => (gradeFilter === "none" ? !gradeOf[s.id] : gradeOf[s.id] === gradeFilter)) : stores), [stores, gradeFilter, gradeOf]);
+  async function assignGrade(gradeId: string) {
+    if (!store) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await fetch("/api/store-grades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, action: "assign", customerIds: [store.id], gradeId: gradeId || null }) });
+      const body = await response.json().catch(() => ({})) as { message?: string; grades?: StoreGrade[]; assignments?: Record<string, string> };
+      if (!response.ok) throw new Error(body.message || "매장 등급을 바꾸지 못했습니다.");
+      setStoreGrades(body.grades ?? []); setGradeOf(body.assignments ?? {});
+      setMessage(`${store.name}: 매장 등급을 ${gradeId ? gradeById.get(gradeId)?.name ?? "" : "없음"}(으)로 바꿨습니다.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "매장 등급을 바꾸지 못했습니다."); }
+    finally { setBusy(false); }
+  }
   const [periodProductId, setPeriodProductId] = useState<string | null>(null);
   const [plannedFrom, setPlannedFrom] = useState("");
   const [plannedPrice, setPlannedPrice] = useState("");
@@ -102,15 +126,18 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
       <input aria-label="매장 찾기" className="h-9 w-48 rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setQ(e.target.value)} placeholder="매장 찾기" value={q} />
       <select aria-label="매장 선택" className="h-9 min-w-0 max-w-full flex-1 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold sm:max-w-md" onChange={(e) => { setStore(stores.find((x) => x.id === e.target.value) ?? null); setMessage(""); setError(""); }} value={store?.id ?? ""}>
         <option value="">{stores.length ? "매장을 고르세요" : "매장이 없습니다"}</option>
-        {stores.map((s) => <option key={s.id} value={s.id}>{s.name}{s.grade ? ` · ${s.grade}` : ""}{s.priceCount ? ` · 매장 가격 ${s.priceCount}` : ""}</option>)}
+        {shownStores.map((s) => <option key={s.id} value={s.id}>{s.name}{gradeOf[s.id] && gradeById.get(gradeOf[s.id]) ? ` [${gradeById.get(gradeOf[s.id])!.name}]` : ""}{s.grade ? ` · ${s.grade}` : ""}{s.priceCount ? ` · 매장 가격 ${s.priceCount}` : ""}</option>)}
       </select>
+      {storeGradesEnabled ? <select aria-label="매장 등급 필터" className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm" onChange={(e) => setGradeFilter(e.target.value)} value={gradeFilter}><option value="">매장 등급 전체</option>{storeGrades.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.storeCount})</option>)}<option value="none">등급 없음</option></select> : null}
       <StoreGradeManager companyId={companyId} onChanged={() => void loadStores()} />
+      {storeGradesEnabled ? <StoreGradeDrawer companyId={companyId} grades={storeGrades} onChanged={(next) => { setStoreGrades(next.grades); setGradeOf(next.assignments); }} /> : null}
     </div>
     <div className="min-w-0 space-y-2">
       {error ? <p className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
       {message ? <p className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900" role="status">{message}</p> : null}
       {store ? <>
-        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-black">{store.name}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-base font-black">{store.name}{storeGradesEnabled && gradeOf[store.id] && gradeById.get(gradeOf[store.id]) ? <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${gradeChipClass[gradeById.get(gradeOf[store.id])!.color]}`}>{gradeById.get(gradeOf[store.id])!.name}</span> : null}</h2>
+          {storeGradesEnabled ? <label className="flex items-center gap-1 text-xs font-bold text-slate-600">매장 등급<select aria-label="이 매장 등급" className="h-8 rounded border border-slate-300 px-1.5 text-sm" disabled={busy} onChange={(e) => void assignGrade(e.target.value)} value={gradeOf[store.id] ?? ""}><option value="">없음</option>{storeGrades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : null}
           {grades.length ? <label className="flex items-center gap-1 text-xs font-bold text-slate-600">카탈로그<select aria-label="이 매장 카탈로그" className="h-8 rounded border border-slate-300 px-1.5 text-sm" disabled={busy} onChange={(e) => void changeGrade(e.target.value)} value={store.gradeId ?? ""}><option value="">기본</option>{grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : null}
           <button aria-pressed={onlyStore} className={`min-h-[32px] rounded-full border px-3 text-xs font-bold ${onlyStore ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} onClick={() => setOnlyStore(!onlyStore)} type="button">이 매장만 다른 가격</button></div>
         <div className="hidden lg:block"><CommonDataTable columns={columns} emptyMessage="표시할 상품이 없습니다. 가격 관리에서 판매가를 먼저 정해 주세요." filename={`${store.name}-매장가격.csv`} rowKey={(r) => r.productId} rows={visible} settingsKey={`store-prices:${userKey}`} /></div>
