@@ -51,6 +51,8 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const wanted = query.get("new");
+    // CC-35-2: 견적서·단가표의 "행사·임박 상품 등록"이 ?add=1로 열면 등록 서랍을 바로 연다.
+    if (manager && query.get("add") === "1") { setPresetProduct(""); setDrawer({ promo: null }); return; }
     if (manager && (wanted === "행사" || wanted === "임박")) { setKind(wanted); setPresetProduct(query.get("productId") || ""); setDrawer({ promo: null }); }
   }, [manager]);
 
