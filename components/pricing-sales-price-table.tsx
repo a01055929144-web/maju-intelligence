@@ -31,8 +31,6 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const [bulkMargin, setBulkMargin] = useState("");
   const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
-    { key: "select", label: "선택", value: (i) => (selected.has(i.id) ? "선택" : ""), sortable: false, width: 56, render: (i) =>
-      <input aria-label={`${i.name} 선택`} checked={selected.has(i.id)} className="h-4 w-4" disabled={busy} onChange={(e) => setSelected((prev) => { const next = new Set(prev); if (e.target.checked) next.add(i.id); else next.delete(i.id); return next; })} type="checkbox" /> },
     { key: "name", label: "상품", value: (i) => i.name, sortable: true, searchable: true, weight: 3, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
     { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
     { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, priority: 2, width: 96, render: (i) => `${i.cost.toLocaleString()}원` },
@@ -101,7 +99,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
           <button aria-pressed={chip === id} className={`min-h-[32px] rounded-full border px-3 text-xs font-bold ${chip === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} key={id} onClick={() => setChip(chip === id ? null : id)} type="button">{label} {n}</button>)}
       </div>
       {loss ? <p className="text-sm font-bold text-rose-700">손해 {loss}개 — 이익이 0원 이하인 상품입니다.</p> : null}
-      <CommonDataTable categoryKey={(i) => { const parts = categoryParts(i.category || ""); return { major: parts[0], minor: parts[1] }; }} columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price-v2" />
+      <CommonDataTable selection={{ selected, onChange: setSelected }} categoryKey={(i) => { const parts = categoryParts(i.category || ""); return { major: parts[0], minor: parts[1] }; }} columns={columns} emptyMessage="해당 상품이 없습니다. 매입가를 먼저 올려 주세요." filename="판매가.csv" rowKey={(i) => i.id} rows={rows} settingsKey="pricing-sales-price-v2" />
     </div>
   </div>;
 }
