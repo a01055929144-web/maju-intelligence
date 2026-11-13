@@ -95,6 +95,8 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   const [folder, setFolder] = useState("");
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState(promo?.productId || preset);
+  // 고른 상품 이름을 기억한다: 고른 뒤 폴더·검색어를 바꾸면 목록에서 사라져 이름이 빈 값으로 저장되던 문제.
+  const [pickedName, setPickedName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [more, setMore] = useState(initialAudience === "except");
@@ -142,7 +144,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
       await documentRequest(companyId, "save-promotion", {
         id: savedId, expected: promo?.revision || 0,
         content: {
-          productId, name: promo?.name || product?.name || "", displayName: String(form.get("displayName") || ""),
+          productId, name: promo?.name || product?.name || pickedName, displayName: String(form.get("displayName") || ""),
           startsOn: String(form.get("startsOn")), endsOn: String(form.get("endsOn")),
           cost: Number(form.get("cost")), margin: Number(form.get("margin")), stock: num("stock"), perStoreLimit: num("perStoreLimit"),
           allowSheet: form.get("allowSheet") === "on", badge: kind, taxType: promo?.taxType || "taxable",
@@ -181,7 +183,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         </select>
       </label> : null}
       <label className="block text-sm font-bold">상품
-        <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => setProductId(e.target.value)} required value={productId}>
+        <select className={`${field} mt-1`} disabled={Boolean(promo)} onChange={(e) => { setProductId(e.target.value); setPickedName(e.target.selectedOptions[0]?.text ?? ""); }} required value={productId}>
           <option value="">상품 선택</option>
           {productId && !options.some((c) => c.id === productId) ? <option value={productId}>{promo?.name || "선택한 상품"}</option> : null}
           {options.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
