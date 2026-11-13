@@ -110,3 +110,11 @@ export function dragBoundary(pcts: readonly number[], index: number, deltaPct: n
 
 /** 번호 열 값: 걸러진·정렬된 순서의 1부터, 쪽 번호·쪽 크기 반영("전체"는 쪽 0). */
 export const rowNumber = (page: number, pageSize: number, indexInPage: number) => (pageSize === PAGE_SIZE_ALL ? 0 : (page - 1) * pageSize) + indexInPage + 1;
+
+/** 서버 일괄 API가 1회 100개로 제한되어 있어 일괄 동작은 100개씩 나눠 보낸다. */
+export const BULK_BATCH_SIZE = 100;
+export function chunk<T>(items: readonly T[], size = BULK_BATCH_SIZE): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}

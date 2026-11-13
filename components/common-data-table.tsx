@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
-import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, normalizeColumnState, PAGE_SIZE_ALL, pctsFromPx, pickPageSize, redistributePct, rowNumber, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
+import { autoHiddenKeys, BULK_BATCH_SIZE, chunk, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, normalizeColumnState, PAGE_SIZE_ALL, pctsFromPx, pickPageSize, redistributePct, rowNumber, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
 
 const ROW_HEIGHT = 40;
 const COMPACT_ROW_HEIGHT = 32;
@@ -72,7 +72,7 @@ export function CommonDataTable<Row>({
   /** CC-38: 2열 번호(걸러진·정렬된 순서, 기본 켜짐). */
   numbered?: boolean;
   /** 선택한 줄에 대한 화면별 동작(일괄 도구 띠 버튼). 내부 선택일 때만 보인다. */
-  bulkActions?: Array<{ label: string; onClick: (selectedKeys: string[]) => void }>;
+  bulkActions?: Array<{ label: string; onClick?: (selectedKeys: string[]) => void; /** 서버로 보내는 동작: 선택 줄을 100개씩 나눠 차례로 부른다(서버 일괄 API가 1회 100개 제한). 던지면 그 묶음이 실패 줄로 표시된다. */ run?: (batchKeys: string[]) => Promise<void> }>;
   /** 화면 id와 사용자 id를 합친 값. 예: products:user-123 */
   settingsKey: string;
 }) {
@@ -84,6 +84,8 @@ export function CommonDataTable<Row>({
   const [pageSize, setPageSize] = useState<number>(pageSizes[0]);
   const [compact, setCompact] = useState(false);
   const [innerSelected, setInnerSelected] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<{ label: string; done: number; total: number; running: boolean } | null>(null);
+  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set());
   const internalSelection = !selectionProp && selectable;
   const selection = selectionProp ?? (selectable ? { selected: innerSelected as ReadonlySet<string>, onChange: setInnerSelected } : undefined);
   const leadCount = (selection ? 1 : 0) + (numbered ? 1 : 0);
@@ -270,6 +272,16 @@ export function CommonDataTable<Row>({
     const [item] = next.splice(from, 1); next.splice(to, 0, item); save(next);
   }
 
+  async function runInBatches(label: string, keys: string[], run: (batchKeys: string[]) => Promise<void>) {
+    setFailedKeys(new Set()); setProgress({ label, done: 0, total: keys.length, running: true });
+    const failed = new Set<string>(); let done = 0;
+    for (const batch of chunk(keys, BULK_BATCH_SIZE)) {
+      try { await run(batch); } catch { batch.forEach((key) => failed.add(key)); }
+      done += batch.length; setProgress({ label, done, total: keys.length, running: true });
+    }
+    setFailedKeys(failed); setProgress({ label, done, total: keys.length, running: false });
+  }
+
   function downloadCsv(onlySelected = false) {
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const numberOf = new Map(sortedRows.map((row, index) => [rowKey(row), index + 1]));
@@ -314,7 +326,8 @@ export function CommonDataTable<Row>({
       <b>선택 {selection.selected.size.toLocaleString("ko-KR")}개<span className="ml-1 text-xs font-normal text-slate-600">(걸러진 {sortedRows.length.toLocaleString("ko-KR")}줄 중)</span></b>
       <button className="maju-button-secondary h-8 text-xs" onClick={() => downloadCsv(true)} type="button"><Download className="h-3.5 w-3.5" /> 엑셀 내려받기</button>
       <button className="maju-button-secondary h-8 text-xs" onClick={() => window.print()} type="button"><Printer className="h-3.5 w-3.5" /> 인쇄</button>
-      {(bulkActions ?? []).map((action) => <button className="maju-button-secondary h-8 text-xs" key={action.label} onClick={() => action.onClick(Array.from(selection.selected))} type="button">{action.label}</button>)}
+      {(bulkActions ?? []).map((action) => <button className="maju-button-secondary h-8 text-xs" disabled={progress?.running} key={action.label} onClick={() => { const keys = Array.from(selection.selected); if (action.run) void runInBatches(action.label, keys, action.run); else action.onClick?.(keys); }} type="button">{action.label}</button>)}
+      {progress ? <span aria-live="polite" className={`text-xs font-bold ${!progress.running && failedKeys.size ? "text-rose-700" : "text-slate-700"}`} role="status">{progress.label}: {progress.total.toLocaleString("ko-KR")}개 중 {progress.done.toLocaleString("ko-KR")}개 {progress.running ? "진행 중" : "완료"}{!progress.running && failedKeys.size ? ` · 실패 ${failedKeys.size.toLocaleString("ko-KR")}개(빨간 줄)` : ""}</span> : null}
       <button className="ml-auto text-xs font-bold text-slate-600 underline" onClick={() => selection.onChange(new Set())} type="button">선택 해제</button>
     </div> : null}
     {mobile ? null : <div className={scrolls ? "overflow-x-auto" : ""} ref={wrapRef}>
@@ -323,7 +336,7 @@ export function CommonDataTable<Row>({
         <thead className="sticky top-[var(--maju-table-sticky-top,0px)] z-20 bg-slate-50 shadow-[0_1px_0_#cbd5e1]"><tr>{selection ? <th className="sticky left-0 z-20 border-b border-slate-300 bg-slate-50 px-2 py-3"><input aria-label={`걸러진 ${sortedRows.length.toLocaleString("ko-KR")}줄 전체 선택`} checked={sortedRows.length > 0 && sortedRows.every((row) => selection.selected.has(rowKey(row)))} onChange={(event) => { const next = new Set(selection.selected); sortedRows.forEach((row) => event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row))); selection.onChange(next); }} type="checkbox" /></th> : null}{numbered ? <th className="sticky z-20 border-b border-slate-300 bg-slate-50 px-2 py-3 text-right text-xs font-black text-slate-500" style={{ left: selection ? LEAD_SELECT_PX : 0 }}>번호</th> : null}{displayColumns.map((item, index) => <th className={`border-b border-slate-300 px-3 py-3 text-xs font-black text-slate-600 ${item.column.align === "right" ? "text-right" : item.column.align === "center" ? "text-center" : "text-left"} ${item.pinned ? "sticky z-20 bg-slate-50" : "relative"}`} data-col={item.key} key={item.key} onClick={() => item.column.sortable !== false && toggleSort(item.key)} style={item.pinned ? { left: lead + displayColumns.slice(0, index).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined}><button disabled={item.column.sortable === false} type="button">{item.column.label}{item.column.sortable === false ? "" : sort?.key === item.key ? sort.direction === "asc" ? " ↑" : " ↓" : " ↕"}</button>{index < displayColumns.length - 1 ? <span aria-label={`${item.column.label} 열 너비 조절`} aria-orientation="vertical" className="common-data-table-tools absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none after:absolute after:right-0 after:top-1/4 after:h-1/2 after:w-px after:bg-slate-300 hover:bg-teal-100 hover:after:bg-teal-600 focus:bg-teal-200 focus:outline-none" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => fitColumn(event, item.key)} onKeyDown={(event) => resizeByKey(event, item.key)} onPointerDown={(event) => startResize(event, item.key)} role="separator" tabIndex={0} /> : null}</th>)}</tr></thead>
         <tbody>{virtual && windowRange.start > 0 ? <tr aria-hidden="true" style={{ height: windowRange.start * rowHeight }}><td colSpan={displayColumns.length + leadCount} /></tr> : null}{renderRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
-          return [groupRow, <tr className={`${compact ? "h-8" : "h-10"} odd:bg-white even:bg-slate-50/60`} key={rowKey(row)}>{selection ? <td className="sticky left-0 z-10 border-b border-slate-200 bg-inherit px-2"><input aria-label="줄 선택" checked={selection.selected.has(rowKey(row))} onChange={(event) => { const next = new Set(selection.selected); event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row)); selection.onChange(next); }} type="checkbox" /></td> : null}{numbered ? <td className="sticky z-10 border-b border-slate-200 bg-inherit px-2 text-right text-xs tabular-nums text-slate-400" style={{ left: selection ? LEAD_SELECT_PX : 0 }}>{rowNumber(currentPage, pageSize, rowOffset + rowIndex).toLocaleString("ko-KR")}</td> : null}{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 ${virtual || compact ? "py-1" : "py-2.5"} ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} data-col={item.key} key={item.key} style={item.pinned ? { left: lead + displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined} title={typeof item.column.value(row) === "string" ? String(item.column.value(row)) : undefined}><div className={virtual ? "max-h-8 overflow-hidden" : "line-clamp-2 break-words"}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowOffset + rowIndex) : item.column.value(row) ?? "-"}</div></td>)}</tr>];
+          return [groupRow, <tr className={`${compact ? "h-8" : "h-10"} ${failedKeys.has(rowKey(row)) ? "bg-rose-100" : "odd:bg-white even:bg-slate-50/60"}`} key={rowKey(row)}>{selection ? <td className="sticky left-0 z-10 border-b border-slate-200 bg-inherit px-2"><input aria-label="줄 선택" checked={selection.selected.has(rowKey(row))} onChange={(event) => { const next = new Set(selection.selected); event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row)); selection.onChange(next); }} type="checkbox" /></td> : null}{numbered ? <td className="sticky z-10 border-b border-slate-200 bg-inherit px-2 text-right text-xs tabular-nums text-slate-400" style={{ left: selection ? LEAD_SELECT_PX : 0 }}>{rowNumber(currentPage, pageSize, rowOffset + rowIndex).toLocaleString("ko-KR")}</td> : null}{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 ${virtual || compact ? "py-1" : "py-2.5"} ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""}`} data-col={item.key} key={item.key} style={item.pinned ? { left: lead + displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined} title={typeof item.column.value(row) === "string" ? String(item.column.value(row)) : undefined}><div className={virtual ? "max-h-8 overflow-hidden" : "line-clamp-2 break-words"}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowOffset + rowIndex) : item.column.value(row) ?? "-"}</div></td>)}</tr>];
         })}{virtual && windowRange.end < pageRows.length ? <tr aria-hidden="true" style={{ height: (pageRows.length - windowRange.end) * rowHeight }}><td colSpan={displayColumns.length + leadCount} /></tr> : null}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length + leadCount} role={error ? "alert" : undefined}>{stateMessage}</td></tr> : null}</tbody>
         {totals.some((value) => value !== null) ? <tfoot><tr className="font-black">{leadCount ? <td className="border-t-4 border-double border-slate-900 px-3 py-3" colSpan={leadCount}>합계</td> : null}<td className="border-t-4 border-double border-slate-900 px-3 py-3">{leadCount ? "" : "합계"}</td>{displayColumns.slice(1).map((item, index) => <td className="border-t-4 border-double border-slate-900 px-3 py-3 text-right" key={item.key}>{totals[index + 1]?.toLocaleString("ko-KR") ?? ""}</td>)}</tr></tfoot> : null}
       </table>

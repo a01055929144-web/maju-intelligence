@@ -90,3 +90,13 @@ describe("CC-38 column widths and row numbers", () => {
     expect(redistributePct([])).toEqual([]);
   });
 });
+
+import { BULK_BATCH_SIZE, chunk } from "../lib/common-data-table";
+describe("bulk batches", () => {
+  it("splits 230 keys into 100/100/30", () => {
+    const sizes = chunk(Array.from({ length: 230 }, (_, i) => i)).map((batch) => batch.length);
+    expect(sizes).toEqual([100, 100, 30]);
+    expect(BULK_BATCH_SIZE).toBe(100);
+    expect(chunk([])).toEqual([]);
+  });
+});
