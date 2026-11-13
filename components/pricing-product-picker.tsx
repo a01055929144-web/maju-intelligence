@@ -47,6 +47,8 @@ export function PricingProductPicker({
   const [page, setPage] = useState(1);
   const [prices, setPrices] = useState<Record<string, CatalogChoice>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // CC-35: 행사·임박 탭도 상품 탭처럼 체크 → "선택 N개 담기".
+  const [pickedPromos, setPickedPromos] = useState<Set<string>>(new Set());
   // CC-26: 분류 폴더(상품관리와 같은 순서)로 거르고, 폴더를 통째로 담는다. 폴더 순서를 못 읽으면 이름순으로 계속 보여 준다.
   const [folder, setFolder] = useState("");
   const [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
@@ -199,6 +201,7 @@ export function PricingProductPicker({
         <div className="min-h-0 flex-1 space-y-2 overflow-auto p-2">
           {promotions.length ? promotions.map((p) => (
             <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs" key={p.id}>
+              {added.has(`promo:${p.id}`) ? null : <input aria-label={`${p.displayName} 선택`} checked={pickedPromos.has(p.id)} className="h-4 w-4" onChange={(e) => setPickedPromos((prev) => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} type="checkbox" />}
               <span className="rounded bg-amber-200 px-1 font-bold text-amber-900">{p.badge}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-bold">{p.displayName}</span>
@@ -207,6 +210,7 @@ export function PricingProductPicker({
               {added.has(`promo:${p.id}`) ? <span className="font-bold text-slate-500">담김</span> : <button className="rounded bg-amber-600 px-2 py-1 font-bold text-white" disabled={busy} onClick={() => onAddPromotion(p)} type="button">담기</button>}
             </div>
           )) : <p className="p-3 text-center text-xs text-slate-500">진행 중인 행사·임박 상품이 없습니다.</p>}
+          {pickedPromos.size ? <button className="w-full rounded-lg bg-amber-600 py-2 text-xs font-bold text-white" disabled={busy} onClick={() => { promotions.filter((p) => pickedPromos.has(p.id) && !added.has(`promo:${p.id}`)).forEach(onAddPromotion); setPickedPromos(new Set()); }} type="button">선택 {pickedPromos.size}개 담기</button> : null}
           <div className="flex gap-1.5">
             <button className="flex-1 rounded-lg border border-dashed border-amber-400 py-2 text-xs font-bold text-amber-900" onClick={onOpenLibrary} type="button">+ 행사·임박 상품 등록 (새 탭)</button>
             <button className="rounded-lg border border-slate-300 px-2 text-xs font-bold" disabled={busy} onClick={onRefreshPromotions} type="button">새로고침</button>
