@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 import { useCallback, useEffect, useState } from "react";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/document";
@@ -113,11 +114,10 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
                 return <tr className={l.error ? "bg-rose-50" : ""} key={l.id}>
                   <td className="px-3 py-1.5"><span className="font-semibold">{l.displayName}</span>{l.error ? <span className="block text-xs font-bold text-rose-700" role="alert">{l.error}</span> : null}</td>
                   <td className="px-2 text-right tabular-nums">{l.regular.toLocaleString("ko-KR")}원</td>
-                  <td className="px-2 text-right"><input aria-label={`${l.displayName} ${kind === "임박" ? "처분가" : "행사가"}`} className={`${input} w-28`} inputMode="numeric" key={`p-${l.id}-${l.price}`} defaultValue={l.price}
-                    onBlur={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v !== l.price) patch(l.id, { price: Math.max(0, Math.round(v)) }); }} /></td>
+                  <td className="px-2 text-right"><MoneyInput ariaLabel={`${l.displayName} ${kind === "임박" ? "처분가" : "행사가"}`} className={`${input} w-28`} onCommit={(v) => patch(l.id, { price: v ?? 0 })} value={l.price} /></td>
                   <td className="px-2 text-right"><input aria-label={`${l.displayName} 할인 %`} className={`${input} w-20`} inputMode="decimal" key={`d-${l.id}-${l.price}`} defaultValue={discountFromPrice(l.regular, l.price) ?? ""}
                     onBlur={(e) => { const v = Number(e.currentTarget.value); if (e.currentTarget.value.trim() !== "" && Number.isFinite(v)) patch(l.id, { price: priceFromDiscount(l.regular, v) }); }} /></td>
-                  {showCost ? <td className="px-2 text-right"><input aria-label={`${l.displayName} 행사 매입가`} className={`${input} w-24`} inputMode="numeric" key={`c-${l.id}-${l.cost}`} defaultValue={l.cost} onBlur={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v >= 0 && v !== l.cost) patch(l.id, { cost: Math.round(v) }); }} /></td> : null}
+                  {showCost ? <td className="px-2 text-right"><MoneyInput ariaLabel={`${l.displayName} 행사 매입가`} className={`${input} w-24`} onCommit={(v) => patch(l.id, { cost: v ?? 0 })} value={l.cost} /></td> : null}
                   <td className={`px-2 text-right tabular-nums ${profit !== null && profit <= 0 ? "font-bold text-rose-700" : ""}`}>{profit === null ? "-" : `${profit.toLocaleString("ko-KR")}원`}</td>
                   <td className="px-2 text-right"><input aria-label={`${l.displayName} 재고`} className={`${input} w-20`} inputMode="numeric" onChange={(e) => patch(l.id, { stock: e.target.value })} placeholder="제한 없음" value={l.stock} /></td>
                   <td className="px-2"><button aria-label={`${l.displayName} 빼기`} className="min-h-[36px] px-2 text-xs font-bold text-rose-700" onClick={() => setLines(lines.filter((x) => x.id !== l.id))} type="button">✕</button></td>

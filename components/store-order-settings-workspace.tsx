@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
@@ -54,8 +55,7 @@ function PolicyFields({ value, onChange, inherit = false }: {
         onChange={(event) => onChange({ ...value, cutoff_time: event.target.value || null })} />
     </label>
     <label className="text-[11px] font-black text-slate-600">최소 주문금액 (원)
-      <input className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="number" min="0" value={value.minimum_amount ?? ""}
-        onChange={(event) => onChange({ ...value, minimum_amount: numberOrNull(event.target.value) })} />
+      <MoneyInput ariaLabel="최소 주문금액 (원)" className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" onCommit={(next) => onChange({ ...value, minimum_amount: next })} value={value.minimum_amount ?? null} />
     </label>
     <label className="text-[11px] font-black text-slate-600">최소 주문 미달 시
       <select className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={value.minimum_policy ?? ""}
@@ -66,8 +66,7 @@ function PolicyFields({ value, onChange, inherit = false }: {
       </select>
     </label>
     <label className="text-[11px] font-black text-slate-600">배송비 (원)
-      <input className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" type="number" min="0" value={value.delivery_fee ?? ""}
-        onChange={(event) => onChange({ ...value, delivery_fee: numberOrNull(event.target.value) })} />
+      <MoneyInput ariaLabel="배송비 (원)" className="mt-1 w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" onCommit={(next) => onChange({ ...value, delivery_fee: next })} value={value.delivery_fee ?? null} />
     </label>
   </div>;
 }

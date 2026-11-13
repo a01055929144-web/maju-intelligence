@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
@@ -159,7 +160,7 @@ function EditablePricingDocPaper({
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <input aria-label={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} inputMode="numeric" onChange={(e) => { const value = Number(e.target.value.replace(/[^0-9]/g, "")); if (Number.isSafeInteger(value)) updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line).toLocaleString()} />
+                      <MoneyInput ariaLabel={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} onCommit={(next) => { const value = next ?? 0; updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line)} />
                       {editable && line.priceSource ? <span className="block px-1 text-right text-xs text-slate-500 print:hidden" data-price-source={line.priceSource}>{SOURCE_LABEL[line.priceSource]}</span> : null}
                       {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>
