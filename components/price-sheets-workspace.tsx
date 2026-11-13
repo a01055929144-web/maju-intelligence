@@ -13,6 +13,7 @@ import { PricingMarginGroups } from "./pricing-margin-groups";
 import { PricingSalesPriceTable } from "./pricing-sales-price-table";
 import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
 import { buildMarginTree } from "@/domains/pricing/margin-tree";
+import { splitHidden } from "@/domains/pricing/price-health";
 import { toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 export { marginSource } from "./pricing-margin-group-options";
 
@@ -117,7 +118,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
       {(showDefault || zeroMargin) && sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{sample.cost.toLocaleString()}원</strong> → 판매가 <strong className="text-teal-800">{sample.price.toLocaleString()}원</strong> (이익 {(sample.price - sample.cost).toLocaleString()}원)</p> : null}
     </section>
 
-    <PricingSalesPriceTable busy={busy} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(allItems ?? state.items, state, folderOrder)} />
+    <PricingSalesPriceTable busy={busy} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(splitHidden(allItems ?? state.items).visible, state, folderOrder)} />
     {allItems === null ? <p className="text-xs text-slate-500">전체 상품을 읽지 못해 이 페이지({state.items.length}개)만 보여 줍니다.</p> : null}
     <details className="rounded-xl border border-slate-200 bg-white p-3" data-testid="margin-advanced">
       <summary className="cursor-pointer text-sm font-bold">고급: 마진 그룹 직접 관리</summary>
