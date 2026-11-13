@@ -59,6 +59,8 @@ function EditablePricingDocPaper({
   }
   function dropLine(target: number) {
     if (draggedLine.current === null) return;
+    // CC-35: 행사 칸 줄은 행사끼리, 일반 줄은 일반끼리만 순서가 바뀐다(다른 칸에 놓으면 무시).
+    if (Boolean(content.lines[draggedLine.current]?.promotionId) !== Boolean(content.lines[target]?.promotionId)) { draggedLine.current = null; return; }
     const next = [...content.lines];
     next.splice(target, 0, next.splice(draggedLine.current, 1)[0]);
     draggedLine.current = null;
@@ -99,9 +101,9 @@ function EditablePricingDocPaper({
           {display.promoLayout === "table" ? (
             <table className="w-full table-fixed text-sm"><tbody>
               {promos.map(({ index, line }) => (
-                <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`}>
-                  <td className="py-1 [overflow-wrap:anywhere]"><span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
-                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
+                <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
+                  <td className="py-1 [overflow-wrap:anywhere]">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원{editable ? <a className="block text-[11px] font-normal text-teal-700 underline print:hidden" href="/revenue/pricing/promotions" rel="noopener" target="_blank">행사 화면에서 수정</a> : null}{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -110,8 +112,8 @@ function EditablePricingDocPaper({
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {promos.map(({ index, line }) => (
-                <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`}>
-                  <p className="text-sm font-bold"><span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
+                <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
+                  <p className="text-sm font-bold">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
                   <p className="text-xs text-slate-600">{line.spec} {line.unit}{line.endsOn ? ` · ${line.endsOn}까지` : ""}</p>
                   <p className="font-black text-orange-700">{visiblePrice(line).toLocaleString()}원</p>
                   {display.showTaxType ? <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</p> : null}
