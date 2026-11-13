@@ -13,6 +13,7 @@ import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/p
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
 import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
 import { storeOrderStatusLabel } from "../domains/order/store-order-status";
+import { fetchCatalogPage, SourceToggle, StorefrontCatalogPanel, type CatalogPage } from "./storefront-catalog-panel";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
@@ -74,6 +75,16 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
   const [productView, setProductView] = useState<"all" | "favorites" | "hidden" | "complete">("all");
   const [category, setCategory] = useState("전체");
   const [orderView, setOrderView] = useState<"grid" | "table">("grid");
+  // CC-36a: "받은 단가표 | 전체 상품"(전체 상품이 열려 있는 매장만). 마지막에 쓴 쪽을 기억한다.
+  const [catalog, setCatalog] = useState<CatalogPage | null>(null);
+  const [source, setSourceState] = useState<"doc" | "all">("doc");
+  useEffect(() => {
+    if (!token) return;
+    void fetchCatalogPage(token, 1, "").then(setCatalog);
+    try { if (localStorage.getItem("maju:store:source") === "all") setSourceState("all"); } catch { /* 저장소 없음 */ }
+  }, [token]);
+  const setSource = (next: "doc" | "all") => { setSourceState(next); try { localStorage.setItem("maju:store:source", next); } catch { /* 저장소 없음 */ } };
+  const showCatalog = Boolean(catalog) && source === "all";
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [ascending, setAscending] = useState(true);
   const [priceChangesOnly, setPriceChangesOnly] = useState(false);
@@ -270,7 +281,12 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
       <p className="text-sm text-slate-600">주문은 후결제로 접수됩니다. 시세 품목은 출고 전 단가가 확정됩니다.</p>
       <p className="text-sm">배송지: {store.deliveryAddress || "등록된 주소가 없습니다. 거래처 담당자에게 확인해 주세요."}</p>
     </section>}
-    {tab === "order" && <section className="space-y-4 p-4 md:p-6">
+    {tab === "order" && showCatalog && catalog && <section className="space-y-4 p-4 md:p-6">
+      <SourceToggle onChange={setSource} source={source} />
+      <StorefrontCatalogPanel initial={catalog} token={token} />
+    </section>}
+    {tab === "order" && !showCatalog && <section className="space-y-4 p-4 md:p-6">
+      {catalog ? <SourceToggle onChange={setSource} source={source} /> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">

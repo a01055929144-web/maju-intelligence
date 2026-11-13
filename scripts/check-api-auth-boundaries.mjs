@@ -32,7 +32,8 @@ const publicRoutes = new Map([
   ["store/members/accept/route.ts", "default-OFF same-origin one-time member invite token; stores proof only in a signed HttpOnly cookie before Kakao OAuth"],
   ["store/profile/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST creates only the caller's own profile; GET lists only the caller's own profiles"],
   ["store/connect/route.ts", "default-OFF STORE_DIRECT_SIGNUP_ENABLED; signed Kakao store session cookie; same-origin POST; DB-backed failure throttle; connects only the caller's own owner profile and reveals nothing about which distributor a code belongs to"],
-  ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"]
+  ["storefront/route.ts", "feature-gated store link; signed bearer token maps to exactly one customer and published version"],
+  ["storefront/catalog/route.ts", "default-OFF STORE_CATALOG_LINK read-only product list; same signed store link token resolves exactly one company and customer, same-origin POST, prices only from margin_template_price_v1, last dispatch price from this store only"]
 ]);
 
 const sessionGuardPatterns = [
