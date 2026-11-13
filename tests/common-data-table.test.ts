@@ -100,3 +100,16 @@ describe("bulk batches", () => {
     expect(chunk([])).toEqual([]);
   });
 });
+
+import { shortenCategoryPath } from "../lib/common-data-table";
+describe("shortenCategoryPath", () => {
+  it("keeps the last two categories and shortens the front", () => {
+    expect(shortenCategoryPath("공산품 > 양념·조미료 > 향신료")).toBe("… > 양념·조미료 > 향신료");
+    expect(shortenCategoryPath("a > b > c > d", 1)).toBe("… > d");
+  });
+  it("leaves short paths and empty values alone", () => {
+    expect(shortenCategoryPath("채소 > 잎채소")).toBe("채소 > 잎채소");
+    expect(shortenCategoryPath("채소")).toBe("채소");
+    expect(shortenCategoryPath("")).toBe("");
+  });
+});

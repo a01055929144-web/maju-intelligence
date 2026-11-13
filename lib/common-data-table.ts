@@ -111,6 +111,12 @@ export function dragBoundary(pcts: readonly number[], index: number, deltaPct: n
 /** 번호 열 값: 걸러진·정렬된 순서의 1부터, 쪽 번호·쪽 크기 반영("전체"는 쪽 0). */
 export const rowNumber = (page: number, pageSize: number, indexInPage: number) => (pageSize === PAGE_SIZE_ALL ? 0 : (page - 1) * pageSize) + indexInPage + 1;
 
+/** CC-41: 긴 분류 경로 "공산품 > 양념·조미료 > 향신료"를 한 줄로: 앞쪽(대분류)을 줄이고 마지막 `keep`개 분류는 남긴다(`… > 조미료 > 향신료`). */
+export function shortenCategoryPath(path: string, keep = 2): string {
+  const parts = path.split(">").map((part) => part.trim()).filter(Boolean);
+  return parts.length <= keep ? parts.join(" > ") : `… > ${parts.slice(-keep).join(" > ")}`;
+}
+
 /** 서버 일괄 API가 1회 100개로 제한되어 있어 일괄 동작은 100개씩 나눠 보낸다. */
 export const BULK_BATCH_SIZE = 100;
 export function chunk<T>(items: readonly T[], size = BULK_BATCH_SIZE): T[][] {
