@@ -2,7 +2,7 @@
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
-import { averageDeltaPercent, templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
+import { averageDeltaPercent, previewTemplate, suggestTemplateName, templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
 
 // CC-19b: 카탈로그(가격 묶음) 선택·만들기·비교. 스위치(MARGIN_TEMPLATES)를 켠 회사에만 보인다.
 type Template = { id: string; name: string; storeCount?: number; margin: number; rounding: number; categories: { category: string; margin: number }[] };
@@ -55,6 +55,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const shown = useMemo(() => (byStores ? [...templates].sort((a, b) => (b.storeCount ?? 0) - (a.storeCount ?? 0)) : templates), [templates, byStores]);
   const avg = useMemo(() => new Map(templates.map((tp) => [tp.id, averageDeltaPercent(asTemplate(tp), state.items)])), [templates, state.items]);
   const avgLabel = (id: string) => { const v = avg.get(id); return v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v}%`; };
+  const preview = useMemo(() => (draft ? previewTemplate({ margin: draft.margin, rounding: draft.rounding, categories: draft.categories, items: [] }, state.items) : { changed: 0, average: null }), [draft, state.items]);
   const compare = useMemo(() => state.items.slice(0, 20).map((item: PriceItem) => ({ item, prices: templates.map((t) => templatePrice(asTemplate(t), { id: item.id, category: item.category, cost: item.cost }).price) })), [state.items, templates]);
 
   return <section aria-label="카탈로그" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -92,8 +93,9 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
       </div>
       <div className="space-y-1" aria-label="분류별 마진">
         <p className="text-sm font-bold">분류별 마진 {draft.categories.length}개</p>
+        <p aria-live="polite" className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700" role="status">미리보기: 기본 판매가와 달라지는 품목 {preview.changed.toLocaleString("ko-KR")}개{preview.average === null ? "" : ` · 평균 ${preview.average > 0 ? "+" : ""}${preview.average}%`}{!draft.name.trim() && suggestTemplateName(draft.categories) ? <> · <button className="font-bold text-teal-800 underline" onClick={() => setDraft({ ...draft, name: suggestTemplateName(draft.categories) })} type="button">이름 제안 &quot;{suggestTemplateName(draft.categories)}&quot; 쓰기</button></> : null}</p>
         {draft.categories.map((c, index) => <div className="flex items-center gap-2" key={c.category}>
-          <span className="min-w-0 flex-1 break-words text-sm">{c.category}</span>
+          <span className="min-w-0 flex-1 break-words text-sm">{c.category}<span className="ml-2 text-xs text-slate-500">기본 {state.defaultMargin}% → {c.margin - state.defaultMargin > 0 ? "+" : ""}{Math.round((c.margin - state.defaultMargin) * 100) / 100}%p</span></span>
           <input aria-label={`${c.category} 마진`} className={`${field} w-24 text-right`} max="1000" min="0" onChange={(e) => setDraft({ ...draft, categories: draft.categories.map((x, i) => (i === index ? { ...x, margin: Number(e.target.value) } : x)) })} step="0.01" type="number" value={c.margin} />%
           <button aria-label={`${c.category} 빼기`} className="min-h-[44px] px-2 text-sm font-bold text-rose-700" onClick={() => setDraft({ ...draft, categories: draft.categories.filter((_, i) => i !== index) })} type="button">빼기</button>
         </div>)}
