@@ -20,7 +20,7 @@ export default async function OrderSettingsPage({ searchParams }: {
   const companyId = resolvePageCompanyId(customer, admin, (await searchParams)?.companyId);
   if (!companyId || !(isFeatureEnabled("PRICING", companyId) && isFeatureEnabled("STORE_ORDERING", companyId)) ||
       (customer && !canManagePriceSheets(customer))) notFound();
-  return <main className="mx-auto max-w-6xl p-4">
+  return <main className="w-full p-4">
     <StoreOrderSettingsWorkspace companyId={companyId} />
   </main>;
 }

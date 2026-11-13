@@ -25,7 +25,7 @@ export default async function ProductSuppliersPage({ searchParams }: { searchPar
 
   return (
     <CustomerAppShell active="suppliers" companyName={customerSession?.companyName || "선택 고객사"} mode={isAdminPreview ? "admin-preview" : "customer"} previewCompanyId={isAdminPreview ? companyId : undefined} subtitle="매입처별 상품, 확정 원가, 원가 이력과 업로드 이력을 한 흐름에서 확인합니다." title="매입처 관리" userName={customerSession?.name || "관리자"} workspaceRole={customerSession?.workspaceRole}>
-      <section className="mx-auto max-w-[1560px] space-y-4 px-4 py-4">
+      <section className="w-full space-y-4 px-4 py-4">
         <ProductSupplierWorkspace companyId={isAdminPreview ? companyId : ""} data={data} loadError={loadError} />
       </section>
     </CustomerAppShell>

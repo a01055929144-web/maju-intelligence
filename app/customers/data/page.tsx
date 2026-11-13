@@ -189,7 +189,7 @@ export default function CustomerDataManagementPage() {
       title="등록 이력 조회"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
-      <div className="mx-auto max-w-[1560px] space-y-4">
+      <div className="w-full space-y-4">
         <DashboardConsistencyCheck companyId={isAdminPreview ? adminCompanyId : undefined} />
 
         <section className="maju-section-card overflow-hidden">

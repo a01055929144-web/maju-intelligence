@@ -45,7 +45,7 @@ export default async function DocumentsPage({
   if (!entry) notFound();
   return (
     <CustomerAppShell active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="견적서·단가표" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <main className="mx-auto max-w-[1600px] p-4">
+    <main className="w-full p-4">
       <Suspense fallback={null}>
         <PricingDocumentsWorkspace
           key={`${companyId}:${entry.leadContext?.id || ""}:${entry.initialStartKind || ""}`}
