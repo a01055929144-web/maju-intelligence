@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { BULK_BATCH_SIZE, chunk } from "../lib/common-data-table";
+import { summarizeCatalogChange } from "../lib/pricing/catalog-link-plan";
 
 // CC-32b: 매장 연결 표 — 공용 표 v3(전체/일부 선택·검색)로 매장을 고르고 카탈로그를 한꺼번에 연결한다.
 // 선택한 매장은 100곳씩 나눠 보낸다(서버 1회 100곳 제한). 매장 등급 필터는 스위치(STORE_GRADES)를 켠 회사에서만 값이 있다.
@@ -13,6 +15,8 @@ export function CatalogStoreLinkTable({ companyId, templates, userKey }: { compa
   const [target, setTarget] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<string[] | null>(null); // 확인 전 선택 매장
+  const [applying, setApplying] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -36,13 +40,26 @@ export function CatalogStoreLinkTable({ companyId, templates, userKey }: { compa
     ...(grades.length ? [{ key: "grade", label: "매장 등급", value: (s: Store) => (s.gradeId ? gradeName.get(s.gradeId) ?? "" : "없음"), sortable: true, width: 120 }] : []),
   ], [templateName, gradeName, grades.length]);
 
-  // 선택한 매장을 고른 카탈로그로 연결(100곳씩). 던지면 그 묶음의 줄이 실패로 표시된다.
+  // 선택한 매장을 고른 카탈로그로 연결(100곳씩).
   const link = useCallback(async (batch: string[]) => {
     const response = await fetch("/api/margin-templates/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerIds: batch, templateId: target || null }) });
     if (!response.ok) { const body = await response.json().catch(() => ({})) as { message?: string }; throw new Error(body.message || "연결하지 못했습니다."); }
     setStores((current) => current.map((s) => (batch.includes(s.id) ? { ...s, templateId: target || null } : s)));
-    setMessage("연결했습니다. 다음 주문부터 이 카탈로그 가격이 적용되고, 이미 보낸 문서는 그대로입니다(매장 개별 가격이 있으면 그쪽이 우선).");
   }, [companyId, target]);
+
+  // CC-32d: 바로 적용하지 않고 확인창을 거친다 — 어디서 몇 곳이 바뀌는지 보여 주고, 확인하면 100곳씩 나눠 보낸다.
+  const plan = useMemo(() => (pending ? summarizeCatalogChange(stores, pending, target || null, (id) => (id ? templateName.get(id) ?? "(삭제된 카탈로그)" : "기본")) : null), [pending, stores, target, templateName]);
+  const targetName = target ? templateName.get(target) ?? "" : "기본";
+  async function apply() {
+    if (!plan) return;
+    setApplying(true); setError(""); setMessage("");
+    let done = 0; let failed = 0;
+    for (const batch of chunk(plan.changing, BULK_BATCH_SIZE)) {
+      try { await link(batch); done += batch.length; } catch (e) { failed += batch.length; setError(e instanceof Error ? e.message : "연결하지 못했습니다."); }
+    }
+    setApplying(false); setPending(null);
+    setMessage(failed ? `${done}곳을 '${targetName}'(으)로 바꿨고 ${failed}곳은 바뀌지 않았습니다. 다시 선택해 시도해 주세요.` : `${done}곳을 '${targetName}'(으)로 바꿨습니다.`);
+  }
 
   return <section aria-label="매장 연결" className="space-y-2 border-t pt-3">
     <div className="flex flex-wrap items-center gap-2">
@@ -54,6 +71,12 @@ export function CatalogStoreLinkTable({ companyId, templates, userKey }: { compa
     </div>
     {error ? <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
     {message ? <p className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900" role="status">{message}</p> : null}
-    <CommonDataTable bulkActions={[{ label: "선택한 매장 연결", run: link }]} columns={columns} emptyMessage="표시할 매장이 없습니다." facets={grades.length ? [{ key: "grade", label: "매장 등급", value: (s) => (s.gradeId ? gradeName.get(s.gradeId) : "없음") }] : undefined} filename="매장-카탈로그.csv" rowKey={(s) => s.id} rows={stores} settingsKey={`catalog-store-link:${userKey}`} />
+    {plan ? <div aria-label="카탈로그 바꾸기 확인" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm" role="dialog">
+      <p className="font-black">{plan.total.toLocaleString("ko-KR")}곳 중 {plan.changing.length.toLocaleString("ko-KR")}곳의 카탈로그를 {`'${targetName}'`}(으)로 바꿉니다{plan.unchanged ? ` (${plan.unchanged.toLocaleString("ko-KR")}곳은 이미 같음)` : ""}</p>
+      {plan.from.length ? <p className="text-xs text-slate-700">바뀌기 전: {plan.from.map((item) => `${item.name} ${item.count}곳`).join(" · ")}</p> : null}
+      <ul className="list-disc pl-5 text-xs text-slate-700"><li>다음 주문부터 이 카탈로그 가격이 적용됩니다.</li><li>이미 보낸 단가표 문서는 그 시점 가격으로 그대로입니다.</li><li>매장 개별 가격이 있는 품목은 그 가격이 우선합니다.</li></ul>
+      <div className="flex gap-2"><button className="maju-button-primary h-9 px-4 text-sm" disabled={applying || !plan.changing.length} onClick={() => void apply()} type="button">{applying ? "바꾸는 중…" : "바꾸기"}</button><button className="maju-button-secondary h-9 px-4 text-sm" disabled={applying} onClick={() => setPending(null)} type="button">취소</button></div>
+    </div> : null}
+    <CommonDataTable bulkActions={[{ label: "선택한 매장 연결", onClick: (keys) => { setError(""); setMessage(""); setPending(keys); } }]} columns={columns} emptyMessage="표시할 매장이 없습니다." facets={grades.length ? [{ key: "grade", label: "매장 등급", value: (s) => (s.gradeId ? gradeName.get(s.gradeId) : "없음") }] : undefined} filename="매장-카탈로그.csv" rowKey={(s) => s.id} rows={stores} settingsKey={`catalog-store-link:${userKey}`} />
   </section>;
 }
