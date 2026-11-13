@@ -86,7 +86,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
     </div>
     {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p> : null}
     <CommonDataTable columns={columns} emptyMessage={`${status === "all" ? "" : "해당 상태의 "}${kind} 상품이 없습니다.`} error={error || null} filename={`${kind}.csv`} loading={loading} phoneCards rowKey={(x) => x.id} rows={visible} settingsKey={`promotions-${kind}:${userKey}`} />
-    {basketOpen ? <PricingPromotionBasket companyId={companyId} kind={kind} onClose={() => setBasketOpen(false)} onSaved={(text) => { setBasketOpen(false); setMessage(text); void load(); }} /> : null}
+    {basketOpen ? <PricingPromotionBasket audienceEnabled={audienceEnabled} companyId={companyId} kind={kind} onClose={() => setBasketOpen(false)} onSaved={(text) => { setBasketOpen(false); setMessage(text); void load(); }} /> : null}
     {drawer ? <PromotionDrawer audienceEnabled={audienceEnabled} companyId={companyId} initialAudience={drawer.promo ? audiences[drawer.promo.id]?.audience ?? "all" : "all"} kind={kind} onClose={() => setDrawer(null)} onSaved={(text) => { setDrawer(null); setMessage(text); void load(); }} preset={presetProduct} promo={drawer.promo} /> : null}
   </div>;
 }
