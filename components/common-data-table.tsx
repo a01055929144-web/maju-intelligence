@@ -259,7 +259,6 @@ export function CommonDataTable<Row>({
   }, [virtual, pageRows.length, rowHeight]);
   const renderRows = virtual ? pageRows.slice(windowRange.start, windowRange.end) : pageRows;
   const rowOffset = virtual ? windowRange.start : 0;
-  const pageIds = pageRows.map(rowKey);
 
   function toggleSort(key: string) {
     setSort((current) => current?.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
