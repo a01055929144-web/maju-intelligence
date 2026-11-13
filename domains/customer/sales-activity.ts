@@ -36,3 +36,19 @@ export type SalesHistoryRow = { id: string; kind: SalesHistoryKind; date: string
 export function mergeSalesHistory(...groups: SalesHistoryRow[][]): SalesHistoryRow[] {
   return groups.flat().map((row, index) => ({ row, index })).sort((a, b) => b.row.date.localeCompare(a.row.date) || a.index - b.index).map((x) => x.row);
 }
+
+export type CustomerSalesSummary = { priceCount: number; lastDate: string; monthSales: number };
+type Dated = { customerId: string; date: string; amount: number };
+
+/** 매출처 목록 열: 매장 가격 수 · 최근 거래일 · 이번 달 매출(`month`=YYYY-MM). 매출 전표(확정)+매장 주문(취소 제외)을 탭과 같은 기준으로 합친다. */
+export function summarizeCustomerSales(sales: Dated[], agreementCustomerIds: string[], month: string): Record<string, CustomerSalesSummary> {
+  const out: Record<string, CustomerSalesSummary> = {};
+  const row = (id: string) => (out[id] ||= { priceCount: 0, lastDate: "", monthSales: 0 });
+  for (const id of agreementCustomerIds) row(id).priceCount += 1;
+  for (const s of sales) {
+    const r = row(s.customerId);
+    if (s.date > r.lastDate) r.lastDate = s.date;
+    if (s.date.startsWith(month)) r.monthSales += s.amount;
+  }
+  return out;
+}

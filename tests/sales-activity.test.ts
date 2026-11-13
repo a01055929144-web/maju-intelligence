@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateSalesProducts, mergeSalesHistory } from "../domains/customer/sales-activity";
+import { aggregateSalesProducts, mergeSalesHistory, summarizeCustomerSales } from "../domains/customer/sales-activity";
 
 describe("sales-activity", () => {
   it("aggregates by product: latest price, summed quantity, last date, current price + source", () => {
@@ -20,5 +20,19 @@ describe("sales-activity", () => {
     expect(aggregateSalesProducts([{ key: "x", name: "무", unit: "개", quantity: 1, unitPrice: 5, date: "2026-11-01" }], new Map())[0]).toMatchObject({ currentPrice: null, source: null });
     const h = (id: string, date: string) => ({ id, kind: "sale" as const, date, label: id, amount: 1, status: "확정" });
     expect(mergeSalesHistory([h("a", "2026-11-01")], [h("b", "2026-11-05"), h("c", "2026-11-01")]).map((r) => r.id)).toEqual(["b", "a", "c"]);
+  });
+  it("summarizes list columns: price count, last date, this-month sales", () => {
+    const out = summarizeCustomerSales(
+      [
+        { customerId: "c1", date: "2026-11-02", amount: 1000 },
+        { customerId: "c1", date: "2026-10-30", amount: 500 },
+        { customerId: "c2", date: "2026-11-09", amount: 700 },
+      ],
+      ["c1", "c1", "c3"],
+      "2026-11",
+    );
+    expect(out.c1).toEqual({ priceCount: 2, lastDate: "2026-11-02", monthSales: 1000 });
+    expect(out.c2).toEqual({ priceCount: 0, lastDate: "2026-11-09", monthSales: 700 });
+    expect(out.c3).toEqual({ priceCount: 1, lastDate: "", monthSales: 0 });
   });
 });

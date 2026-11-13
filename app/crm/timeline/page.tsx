@@ -187,6 +187,12 @@ function syncSelectedCustomerUrl(customerId: string | undefined) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+const EXTRA_LIST_COLS = [
+  { key: "priceCount", label: "매장 가격", width: "52px" },
+  { key: "lastDate", label: "최근 거래", width: "76px" },
+  { key: "monthSales", label: "이번 달 매출", width: "84px" },
+] as const;
+
 export default function CrmTimelinePage() {
   const initialRenderStartedAt = useRef(typeof performance === "undefined" ? 0 : performance.now());
   useEffect(() => {
@@ -212,6 +218,28 @@ export default function CrmTimelinePage() {
   const [customerPage, setCustomerPage] = useState(1);
   const [customerPageSize, setCustomerPageSize] = useState<ListPageSize>(30);
   const [storeOwnerActivationEnabled, setStoreOwnerActivationEnabled] = useState(false);
+  // CC-25: 목록 추가 열(매장 가격 수·최근 거래일·이번 달 매출). 열 편집으로 숨길 수 있고 브라우저에 기억한다.
+  const [salesSummary, setSalesSummary] = useState<Record<string, { priceCount: number; lastDate: string; monthSales: number }>>({});
+  const [hiddenExtraCols, setHiddenExtraCols] = useState<string[]>([]);
+  const [colEditorOpen, setColEditorOpen] = useState(false);
+  useEffect(() => {
+    try { setHiddenExtraCols(JSON.parse(window.localStorage.getItem("maju:customer-list-cols") || "[]")); } catch { /* 저장소를 못 쓰면 기본(모두 표시) */ }
+  }, []);
+  useEffect(() => {
+    let live = true;
+    fetchWithTimeout(withCompanyQuery("/api/customers/sales-summary"), { cache: "no-store" }, 15000)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => { if (live && payload?.summary) setSalesSummary(payload.summary); })
+      .catch(() => { /* 요약이 없으면 열은 '-' */ });
+    return () => { live = false; };
+  }, []);
+  const toggleExtraCol = (key: string) => setHiddenExtraCols((current) => {
+    const next = current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+    try { window.localStorage.setItem("maju:customer-list-cols", JSON.stringify(next)); } catch { /* 저장 실패는 이번 화면에만 적용 */ }
+    return next;
+  });
+  const extraCols = EXTRA_LIST_COLS.filter((col) => !hiddenExtraCols.includes(col.key));
+  const listGridTemplate = ["20px", "minmax(0,1fr)", "48px", ...extraCols.map((col) => col.width), "88px"].join(" ");
 
   useEffect(() => {
     if (isAdminPreview || !companyMemberId || !["owner", "manager"].includes(workspaceRole)) {
@@ -1516,7 +1544,18 @@ export default function CrmTimelinePage() {
                   <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">
                     {customerPageStart.toLocaleString()}-{customerPageEnd.toLocaleString()} / {filteredCustomers.length.toLocaleString()}곳
                   </span>
+                  <button aria-expanded={colEditorOpen} className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50" onClick={() => setColEditorOpen((open) => !open)} type="button">열 편집</button>
                 </div>
+                {colEditorOpen ? (
+                  <div className="flex flex-wrap gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    {EXTRA_LIST_COLS.map((col) => (
+                      <label className="flex items-center gap-1 text-xs font-semibold text-slate-700" key={col.key}>
+                        <input checked={!hiddenExtraCols.includes(col.key)} onChange={() => toggleExtraCol(col.key)} type="checkbox" />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-1">
                   <button
                     className="min-h-9 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1561,7 +1600,7 @@ export default function CrmTimelinePage() {
               </div>
             ) : null}
             {filteredCustomers.length ? (
-              <div className="grid grid-cols-[20px_minmax(0,1fr)_48px_88px] items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500">
+              <div className="grid items-center gap-2 border-b border-slate-200/80 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-500" style={{ gridTemplateColumns: listGridTemplate }}>
                 <input
                   aria-label="현재 페이지 전체 선택"
                   checked={pagedCustomers.some(({ customer }) => Boolean(customer.id)) && pagedCustomers.every(({ customer }) => !customer.id || bulkSelectedIds.has(customer.id))}
@@ -1579,6 +1618,7 @@ export default function CrmTimelinePage() {
                 />
                 <span>상호명</span>
                 <span className="text-center">등급</span>
+                {extraCols.map((col) => <span className="text-right" key={col.key}>{col.label}</span>)}
                 <span className="text-right">상태</span>
               </div>
             ) : null}
@@ -1589,9 +1629,10 @@ export default function CrmTimelinePage() {
                 return (
                   <div
                     key={`${customer.customerName}-${customer.address}`}
-                    className={`grid grid-cols-[20px_minmax(0,1fr)_44px_88px] items-center gap-2 px-3 py-2 transition ${
+                    className={`grid items-center gap-2 px-3 py-2 transition ${
                       selected ? "bg-slate-50" : "bg-white hover:bg-slate-50"
                     }`}
+                    style={{ gridTemplateColumns: listGridTemplate }}
                   >
                     {customer.id ? (
                       <input
@@ -1616,6 +1657,11 @@ export default function CrmTimelinePage() {
                       <span className="block truncate text-xs font-medium text-slate-500">{customer.region}</span>
                     </button>
                     <Badge className={`justify-self-center px-2 py-0.5 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
+                    {extraCols.map((col) => {
+                      const sum = customer.id ? salesSummary[customer.id] : undefined;
+                      const text = col.key === "priceCount" ? String(sum?.priceCount ?? 0) : col.key === "lastDate" ? sum?.lastDate?.slice(2) || "-" : `${(sum?.monthSales ?? 0).toLocaleString("ko-KR")}원`;
+                      return <span className="truncate text-right text-xs font-medium text-slate-600" key={col.key}>{text}</span>;
+                    })}
                     <Badge className={`justify-self-end px-2 py-0.5 text-xs ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                       {issues.length ? issues[0] : "준비됨"}
                     </Badge>
