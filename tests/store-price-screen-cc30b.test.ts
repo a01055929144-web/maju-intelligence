@@ -65,7 +65,7 @@ describe("store price screen contract", () => {
   });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
-    expect(screen).toContain("이 매장 등급");
+    expect(screen).toContain("이 매장 카탈로그");
     expect(api).toContain("grades: templates");
     expect(api).toContain("gradeId:");
   });
