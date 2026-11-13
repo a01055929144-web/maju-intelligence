@@ -234,8 +234,6 @@ export function ProductCatalogAdmin({
     return sideOpen.has(parent) || (Boolean(sideFilter) && isUnder(sideFilter, parent));
   });
   const columns = useMemo<CommonTableColumn<ProductCatalogAdminItem>[]>(() => [
-    ...(canManageCategories ? [{ key: "pick", label: "선택", width: 52, sortable: false, value: (i: ProductCatalogAdminItem) => (picked.has(i.id) ? "선택" : ""), render: (i: ProductCatalogAdminItem) =>
-      <input aria-label={`${i.name} 선택`} checked={picked.has(i.id)} className="h-4 w-4" onChange={(e) => setPicked((prev) => { const next = new Set(prev); if (e.target.checked) next.add(i.id); else next.delete(i.id); return next; })} type="checkbox" /> }] : []),
     ...(canManageCategories ? [{ key: "dragHandle", label: "이동", width: 52, sortable: false, value: () => "", render: (i: ProductCatalogAdminItem) =>
       <span aria-label={`${i.name} 폴더로 끌어 옮기기`} className="cursor-grab select-none px-2 text-slate-400" draggable onDragEnd={() => setDragProduct(null)} onDragStart={(event) => { setDragProduct(i); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", i.id); }} role="img" title="폴더로 끌어 옮기기">⋮⋮</span> }] : []),
     { key: "code", priority: 3, label: "ERP 코드", width: 90, value: (i) => i.productCode || "-" },
@@ -257,7 +255,7 @@ export function ProductCatalogAdmin({
     { key: "promoNow", priority: 2, label: "행사 상태", width: 120, value: (i) => (i.promotion ? `${i.promotion.badge} ~${i.promotion.endsOn}` : ""), render: (i) => (i.promotion ? <a className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i.promotion.badge === "임박" ? "bg-orange-100 text-orange-800" : "bg-blue-100 text-blue-800"}`} href={`/revenue/pricing/promotions?productId=${i.id}`} title={`${i.promotion.badge}가 ${money(i.promotion.price)} · ${i.promotion.startsOn} ~ ${i.promotion.endsOn}`}>{i.promotion.badge} ~{i.promotion.endsOn.slice(5).replace("-", "/")}</a> : <span className="text-slate-400">-</span>) },
     { key: "promoPrice", label: "행사가", align: "right", defaultHidden: true, width: 90, value: (i) => i.promotion?.price, render: (i) => (i.promotion ? money(i.promotion.price) : "-") },
     { key: "promo", label: "행사·임박", defaultHidden: true, sortable: false, width: 120, value: () => "", render: (i) => <span className="flex gap-2 text-sm font-bold text-teal-800 underline"><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("행사")}&productId=${i.id}`}>행사 걸기</a><a href={`/revenue/pricing/promotions?new=${encodeURIComponent("임박")}&productId=${i.id}`}>임박 등록</a></span> },
-  ], [canManageCategories, picked]);
+  ], [canManageCategories]);
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="maju-section-card self-start overflow-hidden lg:sticky lg:top-4">
@@ -363,7 +361,7 @@ export function ProductCatalogAdmin({
           </p>
         ) : null}
         {!loading ? (
-          <CommonDataTable columns={columns} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
+          <CommonDataTable columns={columns} selection={canManageCategories ? { selected: picked, onChange: setPicked } : undefined} selectable={canManageCategories} emptyMessage="조건에 맞는 상품이 없습니다." filename="상품관리.csv" rowKey={(item) => item.id} rows={shown} settingsKey={settingsKey} />
         ) : null}
       </section>
       {editing ? (
