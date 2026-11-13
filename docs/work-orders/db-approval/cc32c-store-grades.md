@@ -17,13 +17,15 @@
 | 매장 연결 | `normalized_customers.store_grade_id uuid null` + 복합 FK `(company_id, store_grade_id)` → 같은 회사 등급만, 삭제 제한(NO ACTION: 쓰는 매장이 있으면 지울 수 없음, 보관만) |
 | 행사 대상 | `pricing_promotion_targets.store_grade_id` 추가 + 복합 FK(등급 삭제 시 대상 행도 삭제) + 체크 `num_nonnulls(customer_id, template_id, store_grade_id) = 1` + `(promotion_id, store_grade_id)` 유일 |
 | 노출 판정 | `promotion_applies_to`에 매장 등급 일치 조건 추가(매장 직접 · 카탈로그 · 매장 등급 중 하나라도 맞으면 hit, only/except 의미 그대로) |
+| 행사 대상 저장 RPC | `save_promotion_audience_v1`: kind `store_grade` 허용(같은 회사 + 보관 안 한 등급만, 아니면 `Audience target outside company`), insert·distinct에 `store_grade_id` 포함. 나머지 본문은 운영과 동일(2026-11-13 읽기 확인). down은 원래 본문 복원 |
+| updated_at | 운영에 있는 `set_row_updated_at()` 트리거 재사용(컨트롤타워 권장 반영) |
 | 건드리지 않음 | `grade_override`(A/B/C 매출 등급), `margin_templates`(카탈로그), 기존 행사 대상 행 |
 
 ## down
 등급을 쓰는 매장이나 행사 대상이 있으면 `store_grade_in_use`로 **거부**(데이터 삭제 없음). 없을 때만 함수·제약·열·테이블을 원래대로 되돌린다.
 
 ## PG17 검증 항목(CI)
-등급 대상 행사 only/except 판정 · 기존 매장 직접 지정 동작 유지 · 대상 두 종류 동시 지정 거부 · 같은 회사 이름 대소문자 무시 유일 · 다른 회사 등급 FK 거부 · 쓰는 등급 삭제 거부 · anon/authenticated 권한 없음 · 보관한 이름 재사용 · down 거부(사용 중)/성공(비운 뒤)과 옛 동작 복원.
+등급 대상 저장 RPC(성공·다른 회사 등급 거부·보관 등급 거부) · updated_at 트리거 · 등급 대상 행사 only/except 판정 · 기존 매장 직접 지정 동작 유지 · 대상 두 종류 동시 지정 거부 · 같은 회사 이름 대소문자 무시 유일 · 다른 회사 등급 FK 거부 · 쓰는 등급 삭제 거부 · anon/authenticated 권한 없음 · 보관한 이름 재사용 · down 거부(사용 중)/성공(비운 뒤)과 옛 동작 복원.
 
 ## 적용 후 따라올 코드(승인 뒤 별도 PR)
 등급 관리 서랍(이름·색·순서·보관) · 매장 가격 탭 등급 칩/필터 · 행사 대상 "매장 등급" 고르기 · `GET/POST` 서버 API(service_role 경유). 기본 OFF.
