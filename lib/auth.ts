@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { chooseScope, parseSite } from "./auth-site";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { after, NextRequest } from "next/server";
 import { getActiveCustomerMembership, getAppUserAccountState, getAppUserLoginCredential, getAuthCredentials, getCustomerLoginCredentials, getCustomerWorkspaces, getManagedAdminAccountCount, updateAdminPasswordHash, updateCustomerPasswordHash, updateCustomerUserLastLogin, type CustomerAssignmentScope } from "./store";
@@ -318,7 +319,14 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
     };
   }
 
-  if (customerSession) {
+  const queryCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
+  const choice = chooseScope({ site: parseSite(request.headers.get("x-maju-site")), hasAdmin: Boolean(adminSession), hasCustomer: Boolean(customerSession), requestedCompanyId: bodyCompanyId || queryCompanyId, customerCompanyId: customerSession?.companyId });
+  if (choice === "ambiguous") {
+    // 두 사이트 로그인이 함께 있는데 어느 화면의 요청인지 알 수 없다 — 다른 회사로 조용히 처리하지 않고 거절한다("새로고침" 안내).
+    return { adminSession, companyId: undefined, customerSession: null, ok: false as const, reason: "ambiguous_site" as const, role: "anonymous" as const };
+  }
+
+  if (customerSession && choice === "customer") {
     scheduleCustomerSessionObservation(customerSession);
     return {
       adminSession,
@@ -329,7 +337,6 @@ export async function getRequestAuthScope(request: NextRequest, bodyCompanyId?: 
     };
   }
 
-  const queryCompanyId = request.nextUrl.searchParams.get("companyId") || undefined;
   const adminCompanyId = bodyCompanyId || queryCompanyId;
 
   if (!adminCompanyId) {

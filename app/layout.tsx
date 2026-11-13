@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+import { SiteFetchHeader } from "@/components/site-fetch-header";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://maju-intelligence.vercel.app";
 
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body className={majuSans.variable}>{children}</body>
+      <body className={majuSans.variable}><SiteFetchHeader />{children}</body>
     </html>
   );
 }
