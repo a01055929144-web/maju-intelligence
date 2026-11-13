@@ -33,3 +33,13 @@ export function averageDeltaPercent(template: MarginTemplate, products: Readonly
   const deltas = products.filter((p) => p.price > 0).map((p) => (templatePrice(template, p).price / p.price - 1) * 100);
   return deltas.length ? Math.round((deltas.reduce((sum, v) => sum + v, 0) / deltas.length) * 10) / 10 : null;
 }
+
+/** 기본 판매가와 달라지는 품목 수와 평균 변화율 — 새 카탈로그 미리보기용. */
+export function previewTemplate(template: MarginTemplate, products: ReadonlyArray<{ id: string; category: string; cost: number; price: number }>) {
+  return { changed: products.filter((p) => templatePrice(template, p).price !== p.price).length, average: averageDeltaPercent(template, products) };
+}
+
+/** 바꾼 분류로 만든 이름 제안: "공산품18 · 채소20"(분류 끝 이름 + 마진, 앞 3개까지). 바꾼 분류가 없으면 빈 문자열. */
+export function suggestTemplateName(categories: ReadonlyArray<{ category: string; margin: number }>): string {
+  return categories.slice(0, 3).map((c) => `${c.category.split(">").pop()?.trim() ?? ""}${c.margin}`).join(" · ");
+}
