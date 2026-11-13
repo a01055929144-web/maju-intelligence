@@ -61,3 +61,32 @@ describe("common data table contract", () => {
     ]);
   });
 });
+
+import { COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, pctsFromPx, redistributePct, rowNumber } from "../lib/common-data-table";
+describe("CC-38 column widths and row numbers", () => {
+  const sum = (values: number[]) => Math.round(values.reduce((a, b) => a + b, 0) * 100) / 100;
+  it("row numbers follow page and page size", () => {
+    expect(rowNumber(1, 100, 0)).toBe(1);
+    expect(rowNumber(2, 100, 0)).toBe(101);
+    expect(rowNumber(1, 0, 4)).toBe(5);
+  });
+  it("converts px to percentages that sum to 100", () => {
+    expect(sum(pctsFromPx([100, 200, 300]))).toBe(100);
+    expect(pctsFromPx([100, 100])).toEqual([50, 50]);
+  });
+  it("dragging a boundary keeps the total at 100 and respects the minimum", () => {
+    const moved = dragBoundary([40, 30, 30], 0, 10, 5);
+    expect(moved).toEqual([50, 20, 30]);
+    expect(sum(moved)).toBe(100);
+    expect(dragBoundary([40, 30, 30], 0, 999, 5)).toEqual([65, 5, 30]); // 오른쪽 열은 최소에서 멈춤
+    expect(dragBoundary([40, 30, 30], 0, -999, 5)).toEqual([5, 65, 30]);
+    expect(dragBoundary([40, 30, 30], 2, 10, 5)).toEqual([40, 30, 30]); // 마지막 열은 오른쪽 이웃이 없음
+    expect(COMMON_COLUMN_DRAG_MIN_PX).toBe(48);
+  });
+  it("redistributes after a column is hidden or added", () => {
+    expect(sum(redistributePct([50, 30]))).toBe(100);
+    expect(redistributePct([60, 20, 20]).map(Math.round)).toEqual([60, 20, 20]);
+    expect(sum(redistributePct([50, undefined, 25]))).toBe(100);
+    expect(redistributePct([])).toEqual([]);
+  });
+});

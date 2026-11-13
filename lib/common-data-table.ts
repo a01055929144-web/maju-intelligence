@@ -1,4 +1,4 @@
-export type CommonColumnState = { key: string; hidden: boolean; pinned: boolean; width?: number };
+export type CommonColumnState = { key: string; hidden: boolean; pinned: boolean; width?: number; pct?: number };
 
 /** 보기 개수 "전체"를 뜻하는 값. */
 export const PAGE_SIZE_ALL = 0;
@@ -25,8 +25,10 @@ export function normalizeColumnState(columns: Array<{ key: string; defaultHidden
     .filter((item) => known.has(item.key))
     // 저장값이 깨졌거나(문자·NaN) 범위 밖이면 너비는 버리고 열 기본 너비를 쓴다.
     .map((item) => {
-      const { width, ...rest } = item;
-      return typeof width === "number" && Number.isFinite(width) ? { ...rest, width: clampColumnWidth(width) } : rest;
+      const { width, pct, ...rest } = item;
+      const next: CommonColumnState = typeof width === "number" && Number.isFinite(width) ? { ...rest, width: clampColumnWidth(width) } : rest;
+      // CC-38: 너비는 비율(%)로 저장. 깨진 값은 버린다.
+      return typeof pct === "number" && Number.isFinite(pct) && pct > 0 && pct <= 100 ? { ...next, pct } : next;
     });
   for (const column of columns) if (!state.some((item) => item.key === column.key)) state.push({ key: column.key, hidden: Boolean(column.defaultHidden), pinned: false });
   return state;
@@ -75,3 +77,36 @@ export function countByKey(keys: Array<string | null | undefined>, order: readon
   const rank = (k: string) => { const i = order.indexOf(k); return i < 0 ? order.length : i; };
   return Array.from(counts, ([key, count]) => ({ key, count })).sort((a, b) => rank(a.key) - rank(b.key) || b.count - a.count || a.key.localeCompare(b.key, "ko"));
 }
+
+/** CC-38: 열 너비 끌기 최소 폭(px). */
+export const COMMON_COLUMN_DRAG_MIN_PX = 48;
+
+/** 보이는 열들의 px 너비를 합 100인 비율(%)로 바꾼다(소수 2자리, 마지막 열이 나머지를 받아 합을 100으로 맞춤). */
+export function pctsFromPx(widths: readonly number[]) {
+  const total = widths.reduce((sum, w) => sum + Math.max(1, w), 0);
+  const pcts = widths.map((w) => Math.round((Math.max(1, w) / total) * 10000) / 100);
+  if (pcts.length) pcts[pcts.length - 1] = Math.round((100 - pcts.slice(0, -1).reduce((s, v) => s + v, 0)) * 100) / 100;
+  return pcts;
+}
+
+/** 저장된 비율이 있는 열은 그 비율을 유지하고, 없는 열은 평균 몫을 받은 뒤 합이 100이 되게 다시 나눈다(열 숨김·표시 뒤 재분배). */
+export function redistributePct(saved: ReadonlyArray<number | undefined>) {
+  if (!saved.length) return [];
+  const known = saved.filter((v): v is number => typeof v === "number" && v > 0);
+  const fill = known.length ? known.reduce((s, v) => s + v, 0) / known.length : 100 / saved.length;
+  return pctsFromPx(saved.map((v) => (typeof v === "number" && v > 0 ? v : fill)));
+}
+
+/** 경계 index(왼쪽 열)를 deltaPct만큼 옮긴다: 왼쪽 열이 늘면 오른쪽 열이 그만큼 줄어 합은 그대로. 양쪽 모두 minPct 아래로 못 내려간다. */
+export function dragBoundary(pcts: readonly number[], index: number, deltaPct: number, minPct: number) {
+  if (index < 0 || index >= pcts.length - 1) return [...pcts];
+  const pair = pcts[index] + pcts[index + 1];
+  const left = Math.min(pair - minPct, Math.max(minPct, pcts[index] + deltaPct));
+  const next = [...pcts];
+  next[index] = Math.round(left * 100) / 100;
+  next[index + 1] = Math.round((pair - next[index]) * 100) / 100;
+  return next;
+}
+
+/** 번호 열 값: 걸러진·정렬된 순서의 1부터, 쪽 번호·쪽 크기 반영("전체"는 쪽 0). */
+export const rowNumber = (page: number, pageSize: number, indexInPage: number) => (pageSize === PAGE_SIZE_ALL ? 0 : (page - 1) * pageSize) + indexInPage + 1;

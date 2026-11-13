@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
-import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, normalizeColumnState, PAGE_SIZE_ALL, pickPageSize, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
+import { autoHiddenKeys, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, normalizeColumnState, PAGE_SIZE_ALL, pctsFromPx, pickPageSize, redistributePct, rowNumber, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
 
 const ROW_HEIGHT = 40;
 const COMPACT_ROW_HEIGHT = 32;
+const LEAD_SELECT_PX = 40;
+const LEAD_NUMBER_PX = 48;
 
 export type CommonTableColumn<Row> = {
   key: string;
@@ -39,7 +41,10 @@ export function CommonDataTable<Row>({
   categoryKey,
   facets,
   majorOrder,
-  selection,
+  selection: selectionProp,
+  selectable = true,
+  numbered = true,
+  bulkActions,
   settingsKey,
 }: {
   columns: CommonTableColumn<Row>[];
@@ -62,6 +67,12 @@ export function CommonDataTable<Row>({
   facets?: Array<{ key: string; label: string; value: (row: Row) => string | null | undefined }>;
   /** 줄 선택(체크 열 + 머리 전체 선택). 없으면 체크 열 없음. */
   selection?: { selected: ReadonlySet<string>; onChange: (next: Set<string>) => void };
+  /** CC-38: 1열 선택 상자(기본 켜짐). selection을 주면 그것을 쓰고, 없으면 표가 내부 상태로 선택하며 일괄 도구 띠를 보여 준다. 읽기 전용 표 등 꼭 필요할 때만 끈다. */
+  selectable?: boolean;
+  /** CC-38: 2열 번호(걸러진·정렬된 순서, 기본 켜짐). */
+  numbered?: boolean;
+  /** 선택한 줄에 대한 화면별 동작(일괄 도구 띠 버튼). 내부 선택일 때만 보인다. */
+  bulkActions?: Array<{ label: string; onClick: (selectedKeys: string[]) => void }>;
   /** 화면 id와 사용자 id를 합친 값. 예: products:user-123 */
   settingsKey: string;
 }) {
@@ -72,6 +83,11 @@ export function CommonDataTable<Row>({
   const pageSizes = COMMON_TABLE_PAGE_SIZES[pageSizeMode];
   const [pageSize, setPageSize] = useState<number>(pageSizes[0]);
   const [compact, setCompact] = useState(false);
+  const [innerSelected, setInnerSelected] = useState<Set<string>>(new Set());
+  const internalSelection = !selectionProp && selectable;
+  const selection = selectionProp ?? (selectable ? { selected: innerSelected as ReadonlySet<string>, onChange: setInnerSelected } : undefined);
+  const leadCount = (selection ? 1 : 0) + (numbered ? 1 : 0);
+  const lead = (selection ? LEAD_SELECT_PX : 0) + (numbered ? LEAD_NUMBER_PX : 0);
   const rowHeight = compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
   const [availableWidth, setAvailableWidth] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -124,28 +140,70 @@ export function CommonDataTable<Row>({
     persist(next);
   }
 
-  /** 머리글 오른쪽 끝을 끌어 너비를 바꾼다. 끄는 동안은 화면만, 놓을 때 저장. */
+  /** 지금 보이는 열의 비율(%). 저장된 비율이 없으면 실제 화면 너비로 계산한다. */
+  function currentPcts(headers?: HTMLElement | null) {
+    if (pcts) return pcts;
+    const widths = headers ? Array.from(headers.querySelectorAll<HTMLElement>("th[data-col]")).map((th) => th.getBoundingClientRect().width) : displayColumns.map(needOf);
+    return pctsFromPx(widths);
+  }
+  /** 이 열의 오른쪽 경계를 옮긴다: 오른쪽 열이 그만큼 줄어 표 전체 폭은 그대로(좌우 스크롤 없음). */
+  function applyPcts(next: number[]) {
+    const byKey = new Map(displayColumns.map((item, index) => [item.key, next[index]]));
+    return columnState.map((item) => (byKey.has(item.key) ? { ...item, pct: byKey.get(item.key), width: undefined } : item)).map(({ width, ...rest }) => (width === undefined ? rest : { ...rest, width }));
+  }
   function startResize(event: React.PointerEvent<HTMLElement>, key: string) {
     event.preventDefault(); event.stopPropagation();
+    const index = displayColumns.findIndex((item) => item.key === key);
+    const head = event.currentTarget.closest("tr");
+    const tableWidth = Math.max(1, (head?.getBoundingClientRect().width ?? 1) - lead);
+    const startPcts = currentPcts(head);
     const startX = event.clientX;
-    const startWidth = event.currentTarget.parentElement?.getBoundingClientRect().width ?? 160;
+    const minPct = (COMMON_COLUMN_DRAG_MIN_PX / tableWidth) * 100;
     let latest = columnState;
-    const onMove = (move: PointerEvent) => { latest = setColumnWidth(columnState, key, startWidth + move.clientX - startX); setColumnState(latest); };
+    const onMove = (move: PointerEvent) => { latest = applyPcts(dragBoundary(startPcts, index, ((move.clientX - startX) / tableWidth) * 100, minPct)); setColumnState(latest); };
     const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); persist(latest); };
     window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
   }
 
-  function resizeByKey(event: React.KeyboardEvent<HTMLElement>, key: string, current: number) {
+  function resizeByKey(event: React.KeyboardEvent<HTMLElement>, key: string) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault(); event.stopPropagation();
-    save(setColumnWidth(columnState, key, current + (event.key === "ArrowRight" ? 16 : -16)));
+    const index = displayColumns.findIndex((item) => item.key === key);
+    const head = event.currentTarget.closest("tr");
+    const tableWidth = Math.max(1, (head?.getBoundingClientRect().width ?? 1) - lead);
+    save(applyPcts(dragBoundary(currentPcts(head), index, ((event.key === "ArrowRight" ? 16 : -16) / tableWidth) * 100, (COMMON_COLUMN_DRAG_MIN_PX / tableWidth) * 100)));
   }
 
+  /** 더블클릭: 그 열 내용에 맞춘다(넘치는 만큼 오른쪽 열과 나눔). */
+  function fitColumn(event: React.MouseEvent<HTMLElement>, key: string) {
+    event.stopPropagation();
+    const index = displayColumns.findIndex((item) => item.key === key);
+    const table = event.currentTarget.closest("table");
+    const head = event.currentTarget.closest("tr");
+    if (!table || !head) return;
+    const tableWidth = Math.max(1, head.getBoundingClientRect().width - lead);
+    const cells = Array.from(table.querySelectorAll<HTMLElement>(`td[data-col="${CSS.escape(key)}"] > div, th[data-col="${CSS.escape(key)}"] > button`));
+    const wanted = Math.max(COMMON_COLUMN_DRAG_MIN_PX, ...cells.map((cell) => cell.scrollWidth + 28));
+    const pcts0 = currentPcts(head);
+    save(applyPcts(dragBoundary(pcts0, index, (wanted / tableWidth) * 100 - pcts0[index], (COMMON_COLUMN_DRAG_MIN_PX / tableWidth) * 100)));
+  }
+
+  // v2에서 px로 저장한 너비는 처음 열 때 비율로 바꿔 이어 쓴다(맞춰 둔 값이 사라지지 않게).
+  useEffect(() => {
+    if (!availableWidth) return;
+    const shown = columnState.filter((item) => !item.hidden && columns.some((column) => column.key === item.key));
+    if (!shown.some((item) => item.width !== undefined) || shown.some((item) => item.pct !== undefined)) return;
+    const next = pctsFromPx(shown.map((item) => item.width ?? columns.find((column) => column.key === item.key)?.width ?? 120));
+    const byKey = new Map(shown.map((item, index) => [item.key, next[index]]));
+    save(columnState.map(({ width, ...item }) => (byKey.has(item.key) ? { ...item, pct: byKey.get(item.key) } : width === undefined ? item : { ...item, width })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableWidth, columnState, columns]);
   const orderedColumns = columnState.map((state) => ({ ...state, column: columns.find((column) => column.key === state.key)! })).filter((item) => item.column && !item.hidden);
   const needOf = (item: (typeof orderedColumns)[number]) => item.width ?? item.column.width ?? (item.column.align === "right" ? 96 : 120);
   // 폭이 모자라면 priority 큰(덜 중요한) 열부터 자동 숨김. 사용자가 열을 직접 넓혔으면(너비 저장) 그대로 두고 좌우 스크롤.
-  const userWidened = orderedColumns.some((item) => item.width !== undefined);
-  const autoHidden = userWidened || !availableWidth ? [] : autoHiddenKeys(orderedColumns.map((item) => ({ key: item.key, need: needOf(item), priority: item.column.priority })), availableWidth - (selection ? 40 : 0));
+  const customPct = orderedColumns.some((item) => item.pct !== undefined);
+  const userWidened = customPct;
+  const autoHidden = userWidened || !availableWidth ? [] : autoHiddenKeys(orderedColumns.map((item) => ({ key: item.key, need: needOf(item), priority: item.column.priority })), availableWidth - lead);
   const visibleColumns = orderedColumns.filter((item) => !autoHidden.includes(item.key));
   const displayColumns = [...visibleColumns.filter((item) => item.pinned), ...visibleColumns.filter((item) => !item.pinned)];
   const searchColumns = useMemo(() => columns.filter((column) => column.searchable), [columns]);
@@ -160,7 +218,9 @@ export function CommonDataTable<Row>({
   // 열을 더 숨길 수 없는데도 모자라면 표 상자 안에서만 좌우로 민다(쪽 전체가 넘치지 않게). 아니면 상자 너비에 비례해 줄인다.
   const totalNeed = visibleColumns.reduce((sum, item) => sum + needOf(item), 0);
   const weightedNeed = visibleColumns.reduce((sum, item) => sum + needOf(item) * (item.column.weight ?? 1), 0);
-  const scrolls = userWidened || (availableWidth > 0 && totalNeed + (selection ? 40 : 0) > availableWidth);
+  // 너비를 끌어 바꿔도 좌우 스크롤은 생기지 않는다(옆 열과 나눔). 열이 너무 많아 최소폭 합이 화면보다 클 때만 표 상자 안에서 민다.
+  const scrolls = availableWidth > 0 && (customPct ? displayColumns.length * COMMON_COLUMN_DRAG_MIN_PX + lead > availableWidth : totalNeed + lead > availableWidth);
+  const pcts = customPct ? redistributePct(displayColumns.map((item) => item.pct)) : null;
   const sortedRows = useMemo(() => {
     if (!sort) return filtered;
     const column = columns.find((item) => item.key === sort.key);
