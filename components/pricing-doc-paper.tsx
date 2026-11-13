@@ -9,7 +9,7 @@ import { FOLDER_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
-const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "등급가", base: "기본가", edited: "문서에서 고침" };
+const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "카탈로그가", base: "기본가", edited: "문서에서 고침" };
 
 export function PricingDocPaper(props: { output: DocumentOutput } | React.ComponentProps<typeof EditablePricingDocPaper>) {
   if ("output" in props) return <article className="pricing-online mx-auto max-w-[860px] rounded border bg-white p-4"><PageContent data={props.output} page={1} pages={1} /></article>;

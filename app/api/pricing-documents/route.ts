@@ -8,6 +8,7 @@ import { pricingDocuments } from "../../../application/pricing/documents";
 import { pricingDocumentsRepository } from "../../../lib/pricing/documents-repository";
 import { documentArchiveEnabled } from "../../../lib/pricing/document-archive";
 import { DocumentSendError } from "../../../domains/pricing/document-send";
+import { PricingInputError } from "../../../domains/pricing/document";
 import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
 import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
 export const dynamic = "force-dynamic";
@@ -131,13 +132,15 @@ async function handle(request: NextRequest, write: boolean) {
         status: error instanceof DocumentSendError ? error.status : 503, ...(databaseCode ? { databaseCode } : {}) });
     }
     if (error instanceof DocumentSendError) return NextResponse.json({ message: error.message }, { status: error.status });
+    // 입력 오류는 고칠 수 있게 원래 메시지 그대로(400). 409는 아래 충돌에만 쓴다.
+    if (error instanceof PricingInputError) return NextResponse.json({ message: error.message }, { status: 400 });
     if (sharingAction) return NextResponse.json({ message: "공유 요청을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503, headers: { "Cache-Control": "private, no-store" } });
     if (recordSend) return NextResponse.json({ message: "전달 기록을 확인하지 못했습니다. 같은 요청으로 다시 시도해 주세요." }, { status: 503 });
     console.error("Pricing P1 request failed", error);
     return NextResponse.json(
       {
         message: write
-          ? "저장하지 못했습니다. 입력값과 최신 버전을 확인하고 다시 시도해 주세요."
+          ? "저장하지 못했습니다. 다른 화면에서 바뀌었을 수 있어요. 새로고침한 뒤 다시 시도해 주세요."
           : "문서를 불러오지 못했습니다. 다시 시도해 주세요.",
       },
       {

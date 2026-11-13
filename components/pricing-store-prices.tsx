@@ -57,12 +57,12 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
     try {
       const response = await fetch("/api/margin-templates/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, customerId: store.id, templateId: gradeId || null }) });
       const body = await response.json().catch(() => ({})) as { message?: string };
-      if (!response.ok) throw new Error(body.message || "등급을 바꾸지 못했습니다.");
+      if (!response.ok) throw new Error(body.message || "카탈로그를 바꾸지 못했습니다.");
       const name = grades.find((g) => g.id === gradeId)?.name ?? null;
       setStore({ ...store, gradeId: gradeId || null, grade: name });
-      setMessage(`${store.name}: 등급을 ${name ?? "기본"}(으)로 바꿨습니다.`);
+      setMessage(`${store.name}: 카탈로그를 ${name ?? "기본"}(으)로 바꿨습니다.`);
       await loadStores();
-    } catch (e) { setError(e instanceof Error ? e.message : "등급을 바꾸지 못했습니다."); }
+    } catch (e) { setError(e instanceof Error ? e.message : "카탈로그를 바꾸지 못했습니다."); }
     finally { setBusy(false); }
   }
 
@@ -112,7 +112,7 @@ export function PricingStorePrices({ companyId, userKey }: { companyId: string; 
       {store ? <>
         <button className="flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold lg:hidden" onClick={() => setStore(null)} type="button"><span className="truncate">매장: {store.name}</span><span className="text-xs text-teal-700">바꾸기 ▾</span></button>
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="hidden text-base font-black lg:block">{store.name}</h2>
-          {grades.length ? <label className="flex items-center gap-1 text-xs font-bold text-slate-600">등급<select aria-label="이 매장 등급" className="h-8 rounded border border-slate-300 px-1.5 text-sm" disabled={busy} onChange={(e) => void changeGrade(e.target.value)} value={store.gradeId ?? ""}><option value="">기본</option>{grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : null}
+          {grades.length ? <label className="flex items-center gap-1 text-xs font-bold text-slate-600">카탈로그<select aria-label="이 매장 카탈로그" className="h-8 rounded border border-slate-300 px-1.5 text-sm" disabled={busy} onChange={(e) => void changeGrade(e.target.value)} value={store.gradeId ?? ""}><option value="">기본</option>{grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : null}
           <button aria-pressed={onlyStore} className={`min-h-[32px] rounded-full border px-3 text-xs font-bold ${onlyStore ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} onClick={() => setOnlyStore(!onlyStore)} type="button">이 매장만 다른 가격</button></div>
         <div className="hidden lg:block"><CommonDataTable columns={columns} emptyMessage="표시할 상품이 없습니다. 가격 관리에서 판매가를 먼저 정해 주세요." filename={`${store.name}-매장가격.csv`} rowKey={(r) => r.productId} rows={visible} settingsKey={`store-prices:${userKey}`} /></div>
         <ul className="space-y-2 lg:hidden">{visible.map((r) => <li className="rounded-xl border border-slate-200 bg-white p-3" key={r.productId}>
