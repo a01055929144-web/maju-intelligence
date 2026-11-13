@@ -564,7 +564,7 @@ export function PricingDocumentsWorkspace({
   </aside> : null;
   if (view === "list" && tab === "documents") return <div className="space-y-3">
     {leadNotice}
-    {/* 11/4: 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게). CC-35: 묶음·템플릿 기능은 없앴다. */}
+    {/* 11/4: 인쇄 기본값은 목록 위 버튼으로(편집 화면을 단순하게).  CC-35: 품목 묶음 기능은 없앴다. */}
     <div className="flex flex-wrap justify-end gap-2">
       <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => { setTab("profile"); setView("editor"); }} type="button">인쇄 기본값</button>
     </div>
