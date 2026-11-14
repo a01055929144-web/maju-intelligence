@@ -29,7 +29,7 @@ export function MoneyInput({ value, onCommit, allowNegative = false, className =
     if (text.trim() !== "" && next === null) { setText(original); return; } // 해석할 수 없는 글은 되돌린다
     onCommit(next);
   }
-  return <span className="inline-flex items-center gap-1">
+  return <span className={`inline-flex items-center gap-1${className.includes("w-full") ? " w-full" : ""}`}>
     <input aria-label={ariaLabel} className={className} disabled={disabled} inputMode="numeric" onBlur={commit} onChange={onChange} placeholder={placeholder} ref={ref} type="text" value={text}
       onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { cancelled.current = true; setText(original); event.currentTarget.blur(); } }} />
     {suffix ? <span className="text-xs text-slate-500">{suffix}</span> : null}

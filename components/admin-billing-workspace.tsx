@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
@@ -251,13 +252,11 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
                   <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{row.cardNumberMasked || "미등록"}</td>
                   <td className="border-b border-slate-100 px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <input
+                      <MoneyInput
+                        ariaLabel={`${row.companyName} 월 이용료`}
                         className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right text-sm font-bold text-slate-900 focus:border-teal-400 focus:outline-none"
-                        inputMode="numeric"
-                        onChange={(event) => setDrafts((current) => ({ ...current, [row.companyId]: event.target.value }))}
-                        placeholder={String(row.planAmountWon)}
-                        type="number"
-                        value={drafts[row.companyId] ?? row.planAmountWon}
+                        onCommit={(next) => setDrafts((current) => ({ ...current, [row.companyId]: next === null ? "" : String(next) }))}
+                        value={draftAmount(drafts, row)}
                       />
                       <span className="text-xs text-slate-400">원</span>
                       <button
@@ -298,11 +297,12 @@ function BillingMetric({ active, label, onClick, tone = "default", value }: { ac
   return <button aria-pressed={active} className={`rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass} ${active ? "ring-2 ring-teal-600 ring-offset-2" : ""}`} onClick={onClick} type="button"><p className="text-xs font-bold text-slate-500">{label} · 눌러서 보기</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}<span className="ml-1 text-sm text-slate-500">곳</span></p></button>;
 }
 
+const draftAmount = (drafts: Record<string, string>, row: AdminSubscriptionRow) => { const d = drafts[row.companyId]; return d === undefined ? row.planAmountWon : d === "" ? null : Number(d); };
 function BillingMobileCard({ drafts, onSave, row, saved, saving, setDrafts }: { drafts: Record<string, string>; onSave: (companyId: string) => void; row: AdminSubscriptionRow; saved: boolean; saving: boolean; setDrafts: Dispatch<SetStateAction<Record<string, string>>> }) {
   return <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-black text-slate-950">{row.companyName}</p><p className="mt-1 text-xs font-semibold text-slate-500">{row.cardNumberMasked || "등록된 카드 없음"}</p></div><Badge className={statusTone[row.status]}>{statusLabels[row.status]}</Badge></div>
     <div className="mt-4 grid grid-cols-2 gap-2 text-sm"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">다음 청구일</p><p className="mt-1 font-black">{row.nextBillingDate || "미정"}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">최근 결제</p><p className="mt-1 font-black">{row.lastPaymentStatus === "succeeded" ? "성공" : row.lastPaymentStatus ? "실패" : "내역 없음"}</p></div></div>
-    <label className="mt-4 block text-xs font-bold text-slate-500">월 이용료</label><div className="mt-1 flex gap-2"><input className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-right font-bold outline-none focus:border-teal-500" inputMode="numeric" min={0} onChange={(event) => setDrafts((current) => ({ ...current, [row.companyId]: event.target.value }))} type="number" value={drafts[row.companyId] ?? row.planAmountWon} /><button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:opacity-60" disabled={saving} onClick={() => onSave(row.companyId)} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}저장</button></div>
+    <label className="mt-4 block text-xs font-bold text-slate-500">월 이용료</label><div className="mt-1 flex gap-2"><MoneyInput ariaLabel={`${row.companyName} 월 이용료`} className="h-11 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-right font-bold outline-none focus:border-teal-500" onCommit={(next) => setDrafts((current) => ({ ...current, [row.companyId]: next === null ? "" : String(next) }))} value={draftAmount(drafts, row)} /><button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:opacity-60" disabled={saving} onClick={() => onSave(row.companyId)} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}저장</button></div>
     {saved ? <p aria-live="polite" className="mt-2 text-xs font-bold text-emerald-700">월 이용료 저장 완료</p> : drafts[row.companyId] !== undefined ? <p className="mt-2 text-xs font-bold text-amber-700">저장하지 않은 변경이 있습니다.</p> : null}
   </article>;
 }

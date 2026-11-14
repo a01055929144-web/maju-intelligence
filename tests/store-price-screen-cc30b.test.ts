@@ -61,7 +61,7 @@ describe("store price screen contract", () => {
     expect(screen).toContain('aria-label="매장 선택"');
     expect(screen).not.toContain("lg:grid-cols-[260px");
     expect(screen).toContain("space-y-2 lg:hidden");
-    expect(screen).toContain("commitPrice(r, e.currentTarget)");
+    expect(screen).toContain("onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }}");
   });
   it("the grade select changes the store's grade through the margin-template assign API and the list exposes the grades", () => {
     expect(screen).toContain("/api/margin-templates/customers");
