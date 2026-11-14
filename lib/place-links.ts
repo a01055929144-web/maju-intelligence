@@ -341,27 +341,32 @@ export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPla
   return emptyKakaoPlaceResult(inspectedDocuments);
 }
 
-async function resolveNaverPlaceUrl(query: string): Promise<string> {
-  const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
-  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
-  if (!clientId || !clientSecret || clientId === "replace-with-naver-client-id" || !query.trim()) return "";
+export type NaverLocalSearch = { result: "linked" | "not_found" | "error"; status: number; link: string; configured: boolean };
+
+// NAVER API HUB(네이버 클라우드) 지역 검색 — 개발자센터 openapi.naver.com 은 2027-06-30 종료. 키는 데이터랩과 같은 NCP_DATALAB_* 를 쓴다.
+export async function searchNaverLocal(query: string): Promise<NaverLocalSearch> {
+  const clientId = (process.env.NCP_DATALAB_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.NCP_DATALAB_CLIENT_SECRET || "").trim();
+  if (!clientId || !clientSecret || !query.trim()) return { result: "error", status: 0, link: "", configured: Boolean(clientId && clientSecret) };
 
   try {
-    const response = await fetch(`https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=1`, {
-      headers: {
-        "X-Naver-Client-Id": clientId,
-        "X-Naver-Client-Secret": clientSecret
-      },
+    const response = await fetch(`https://naverapihub.apigw.ntruss.com/search/v1/local?query=${encodeURIComponent(query)}&display=1`, {
+      headers: { "X-NCP-APIGW-API-KEY-ID": clientId, "X-NCP-APIGW-API-KEY": clientSecret },
       cache: "no-store"
     });
-
-    if (!response.ok) return "";
+    if (!response.ok) return { result: "error", status: response.status, link: "", configured: true };
     const payload = (await response.json()) as { items?: Array<{ link?: string }> };
-    const link = payload.items?.[0]?.link?.trim();
-    // 네이버 지역검색 API의 link 필드는 지도 상세 페이지가 아니라 업체 자체 홈페이지인 경우가 대부분입니다.
-    // map.naver.com 도메인으로 확인될 때만 신뢰하고, 그 외에는 빈 값을 돌려줘 map.naver.com/p/search 딥링크로 대체합니다.
-    return link && /^https:\/\/(m\.|pcmap\.|new\.)?map\.naver\.com\//.test(link) ? link : "";
+    const link = payload.items?.[0]?.link?.trim() ?? "";
+    if (!payload.items?.length) return { result: "not_found", status: response.status, link: "", configured: true };
+    // link 필드는 지도 상세가 아니라 업체 홈페이지인 경우가 대부분 — map.naver.com 일 때만 신뢰하고 아니면 검색 딥링크로 대체.
+    return /^https:\/\/(m\.|pcmap\.|new\.)?map\.naver\.com\//.test(link)
+      ? { result: "linked", status: response.status, link, configured: true }
+      : { result: "not_found", status: response.status, link: "", configured: true };
   } catch {
-    return "";
+    return { result: "error", status: 0, link: "", configured: true };
   }
+}
+
+async function resolveNaverPlaceUrl(query: string): Promise<string> {
+  return (await searchNaverLocal(query)).link;
 }
