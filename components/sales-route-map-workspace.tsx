@@ -82,6 +82,7 @@ import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-st
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
+import { isClosedLead } from "@/lib/leads";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
@@ -703,6 +704,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // "활성/숨김" 필터로 전환해서 볼 수 있게 합니다(2026-08-24 피드백: "숨김처리하게되면 별도의
   // 필터값이 있으면 좋을 것 같아 ... 추후에 숨김처리한 거래처도 거래할 수도 있으니깐").
   const [showDismissedLeadsOnMap, setShowDismissedLeadsOnMap] = useState(false);
+  const [showClosedLeadsOnMap, setShowClosedLeadsOnMap] = useState(false); // CC-46-4: 폐업 리드는 기본 제외
   // 네이버 부동산의 지역 드릴다운을 참고해, 검색창 아래에 시군구 → 동 단위로 리드를 좁혀볼 수 있는
   // 칩 목록을 둡니다(2026-08-24 피드백: "시군구, 동 구분하여 리드 구분을 하게끔 만들것"). 동은
   // 시군구를 먼저 골라야 그 안의 동만 추려서 보여줍니다.
@@ -1381,6 +1383,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (!leadRadiusOpen || !leadRadiusResult) return [];
     return leadRadiusResult.leads
       .filter((lead) => mapLeadTypeFilter === "all" || getPermitLeadType(lead) === mapLeadTypeFilter)
+      .filter((lead) => showClosedLeadsOnMap || !isClosedLead(lead))
       .filter((lead) => lead.address)
       .map((lead) => ({
         address: lead.address!,
@@ -1399,12 +1402,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         x: 0,
         y: 0
       }));
-  }, [leadRadiusOpen, leadRadiusResult, mapLeadTypeFilter]);
+  }, [leadRadiusOpen, leadRadiusResult, mapLeadTypeFilter, showClosedLeadsOnMap]);
   // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
   // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
   const statusScopedLeadsForMap = useMemo(
-    () => allLeadsForMap.filter((lead) => (showDismissedLeadsOnMap ? lead.status === "제외" : lead.status !== "제외")),
-    [allLeadsForMap, showDismissedLeadsOnMap]
+    () => allLeadsForMap.filter((lead) => (showDismissedLeadsOnMap ? lead.status === "제외" : lead.status !== "제외") && (showClosedLeadsOnMap || !isClosedLead(lead))),
+    [allLeadsForMap, showDismissedLeadsOnMap, showClosedLeadsOnMap]
   );
   // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — 활성/숨김 범위 기준이라
   // 토글을 바꾸면 옵션 목록도 그 범위에 맞게 갱신됩니다.
@@ -3041,6 +3044,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
                     숨김 리드 보기
+                  </label>
+                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
+                    <input checked={showClosedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowClosedLeadsOnMap(event.target.checked)} type="checkbox" />
+                    폐업 리드 포함
                   </label>
                   {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
                     <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
