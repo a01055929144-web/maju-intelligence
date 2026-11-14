@@ -6,7 +6,8 @@
 --  ② 재시도 주기: 개업(없으면 인허가·생성) +30·+60·+90일에 1회씩, 그 뒤 월 1회(마지막 시도 30일 후), 최대 6회.
 --     이전: 14일→28일→60일 간격. 새 가게는 카카오맵 등록이 늦어 일찍 재시도해도 소용없음(46-2⓪ 3절).
 --     +30·60·90일 시도는 직전 시도와 최소 7일 간격(늦게 들어온 리드가 매일 밤 재시도되는 것 방지).
---     시도 횟수 = source='cron' 의 external_info_enrichment 이벤트 수(결과 코드와 무관 — 결과 코드 도입 전 이벤트도 포함).
+--     시도 횟수 = source='cron' 의 external_info_enrichment 이벤트 수. result_code='error'(API 오류) 이벤트는 횟수에서 뺀다 — 오류는 6회 한도를 쓰지 않고 다시 대상이 된다. result_code가 없는 옛 이벤트는 센다.
+--     (last_attempted_at 은 error 포함 — 횟수 1 이상이면 직전 시도와의 간격 규칙이 오류 직후 재시도를 막는다.)
 -- 그대로 둔 것: 제외 상태 제외 · 인허가/개업일 180일 이내(여기서 중단 — 180일 밖의 밀린 리드는 46-2 ④ 일괄 보강 스크립트가 따로 다룸) · 오래 시도 안 한 순 정렬.
 -- 6회 시나리오: 첫 시도 → +30 → +60 → +90 → +120 → +150일(이후 180일 규칙으로 종료).
 
@@ -29,7 +30,7 @@ as $$
   ) as lead_base
   left join lateral (
     select
-      count(*)::integer as attempt_count,
+      count(*) filter (where coalesce(event.metadata ->> 'result_code', '') <> 'error')::integer as attempt_count,
       max(event.attempted_at) as last_attempted_at
     from public.lead_enrichment_events as event
     where event.company_id = p_company_id

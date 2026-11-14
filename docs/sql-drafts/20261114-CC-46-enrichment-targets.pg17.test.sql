@@ -56,7 +56,7 @@ end $$;
 -- 재시도 주기(+30·60·90일 → 월 1회 → 최대 6회): 카카오 링크 없는 리드를 개업일·시도 횟수·마지막 시도로 만들어 확인
 do $$
 declare c uuid := gen_random_uuid(); ids uuid[];
-  l_due30 uuid; l_gap uuid; l_early uuid; l_due60 uuid; l_m_due uuid; l_m_wait uuid; l_max uuid; l_halt uuid; l_hugi uuid;
+  l_due30 uuid; l_gap uuid; l_early uuid; l_due60 uuid; l_m_due uuid; l_m_wait uuid; l_max uuid; l_halt uuid; l_hugi uuid; l_err uuid; l_mix uuid;
 begin
   insert into business_permit_leads(company_id, phone, address, kakao_place_url, industry_primary, open_date) values (c,'010','주소',null,'한식', current_date - 35) returning id into l_due30;
   insert into business_permit_leads(company_id, phone, address, kakao_place_url, industry_primary, open_date) values (c,'010','주소',null,'한식', current_date - 35) returning id into l_gap;
@@ -80,10 +80,18 @@ begin
   -- l_max: 6회 채움(마지막 40일 전) → 최대 횟수 → 제외 / l_halt: 개업 190일 → 180일 규칙으로 중단 → 제외 / l_hugi: 시도 없음 → 바로 대상
   insert into lead_enrichment_events(company_id, lead_id, source, attempted_at, metadata) select c, l_max, 'cron', now() - interval '40 days' - g * interval '5 days', '{"event_type":"external_info_enrichment"}' from generate_series(0, 5) g;
 
+  -- l_err: error 6건(모두 40일 전~)이어도 횟수에 안 세어 다시 대상(개업 100일, 횟수 0 → 바로 대상)
+  insert into business_permit_leads(company_id, phone, address, kakao_place_url, industry_primary, open_date) values (c,'010','주소',null,'한식', current_date - 100) returning id into l_err;
+  insert into lead_enrichment_events(company_id, lead_id, source, attempted_at, metadata) select c, l_err, 'cron', now() - interval '40 days' - g * interval '5 days', '{"event_type":"external_info_enrichment","result_code":"error"}' from generate_series(0, 5) g;
+  -- l_mix: error 5건 + 옛 이벤트(result_code 없음) 6건 = 센 횟수 6 → 최대 횟수라 제외(옛 이벤트는 그대로 센다)
+  insert into business_permit_leads(company_id, phone, address, kakao_place_url, industry_primary, open_date) values (c,'010','주소',null,'한식', current_date - 100) returning id into l_mix;
+  insert into lead_enrichment_events(company_id, lead_id, source, attempted_at, metadata) select c, l_mix, 'cron', now() - interval '40 days' - g * interval '5 days', '{"event_type":"external_info_enrichment"}' from generate_series(0, 5) g;
+  insert into lead_enrichment_events(company_id, lead_id, source, attempted_at, metadata) select c, l_mix, 'cron', now() - interval '20 days' - g * interval '1 day', '{"event_type":"external_info_enrichment","result_code":"error"}' from generate_series(0, 4) g;
+
   select array_agg(lead_id) into ids from public.list_leads_due_for_enrichment(c, 100);
-  if not (l_due30 = any(ids) and l_due60 = any(ids) and l_m_due = any(ids) and l_hugi = any(ids)) then raise exception 'due leads missing: %', ids; end if;
-  if l_gap = any(ids) or l_early = any(ids) or l_m_wait = any(ids) or l_max = any(ids) or l_halt = any(ids) then raise exception 'not-due leads present: %', ids; end if;
-  if array_length(ids, 1) <> 4 then raise exception 'cadence should pick exactly 4, got %', array_length(ids, 1); end if;
+  if not (l_due30 = any(ids) and l_due60 = any(ids) and l_m_due = any(ids) and l_hugi = any(ids) and l_err = any(ids)) then raise exception 'due leads missing: %', ids; end if;
+  if l_gap = any(ids) or l_early = any(ids) or l_m_wait = any(ids) or l_max = any(ids) or l_halt = any(ids) or l_mix = any(ids) then raise exception 'not-due leads present: %', ids; end if;
+  if array_length(ids, 1) <> 5 then raise exception 'cadence should pick exactly 5, got %', array_length(ids, 1); end if;
 end $$;
 
 -- down 왕복
