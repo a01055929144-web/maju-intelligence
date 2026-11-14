@@ -1,4 +1,5 @@
 "use client";
+import { formatMoneyInput } from "@/domains/shared/money";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -621,7 +622,7 @@ export function MobileDeliveryProofPanel({
               <select aria-label="발생 단계" className="mobile-input min-h-11 rounded-lg border px-2 text-sm" onChange={(event) => setOccurrenceStage(event.target.value as DeliveryOccurrenceStage | "")} value={occurrenceStage}><option value="">발생 단계</option>{DELIVERY_OCCURRENCE_STAGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
               <select aria-label="조치" className="mobile-input min-h-11 rounded-lg border px-2 text-sm" onChange={(event) => setDeliveryAction(event.target.value as DeliveryAction | "")} value={deliveryAction}><option value="">조치 선택</option>{DELIVERY_ACTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
             </div>
-            {deliveryAction === "deduction" ? <input aria-label="차감 금액" className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" inputMode="numeric" onChange={(event) => setActionAmount(event.target.value.replace(/[^0-9]/g, ""))} placeholder="차감 금액" value={actionAmount} /> : null}
+            {deliveryAction === "deduction" ? <input aria-label="차감 금액" className="mobile-input mt-2 min-h-11 w-full rounded-lg border px-3 text-sm" inputMode="numeric" onChange={(event) => setActionAmount(event.target.value.replace(/[^0-9]/g, ""))} placeholder="차감 금액" value={formatMoneyInput(actionAmount)} /> : null}
             <div aria-label="처리 상태" className="mt-2 grid grid-cols-3 gap-2">{DELIVERY_EVENT_STATUSES.map((item) => <button aria-pressed={eventStatus === item.value} className={`min-h-10 rounded-lg border text-xs font-bold ${eventStatus === item.value ? "mobile-primary-action" : "mobile-secondary-action"}`} key={item.value} onClick={() => setEventStatus(item.value)} type="button">{item.label}</button>)}</div>
           </details> : null}
 
