@@ -41,3 +41,21 @@ it("내부 결과만 있고 미등록 결과가 없으면 안내 문구를 아�
   expect(texts).toContain("합성 거래처");
   expect(texts).toContain("카카오 검색 결과가 없습니다.");
 });
+
+it("줄 번호(지도 번호 핀)와 `결과 전체 보기` 버튼을 보여 준다", () => {
+  const html = renderToStaticMarkup(createElement(MapSearchResultsPanel, {
+    ...base,
+    customers: [{ id: "c1", name: "합성 거래처", address: "합성 주소", chip: "거래처", pin: 1 }],
+    unregistered: [{ id: "u1", name: "합성 미등록", address: "합성 주소 2", chip: "카카오 미등록", pin: 2 }],
+    onFitAll: noop,
+  }));
+  expect(html).toContain('aria-label="지도 번호 1"');
+  expect(html).toContain('aria-label="지도 번호 2"');
+  expect(html).toContain("결과 전체 보기");
+});
+
+it("onFitAll이 없거나 결과가 0건이면 `결과 전체 보기`를 숨긴다", () => {
+  expect(textsOf({ onFitAll: noop })).not.toContain("결과 전체 보기");
+  const row = { id: "c1", name: "합성 거래처", address: "합성 주소", chip: "거래처", pin: 1 };
+  expect(textsOf({ customers: [row] })).not.toContain("결과 전체 보기");
+});
