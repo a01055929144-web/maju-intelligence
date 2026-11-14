@@ -75,6 +75,7 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { RowNumber } from "@/components/ui/row-number";
 import { SearchInput } from "@/components/ui/search-input";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
@@ -5996,7 +5997,7 @@ function StoreManagementPanel({
         ) : null}
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {stores.length ? (
-            stores.map((store) => (
+            stores.map((store, storeIndex) => (
               <div
                 className={`flex items-stretch border-b border-slate-100 transition hover:bg-slate-50 ${
                   store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_4px_0_0_#0f766e] ring-1 ring-inset ring-teal-200" : ""
@@ -6009,6 +6010,7 @@ function StoreManagementPanel({
                 {/* 대표 요청(10-29): 거래처 줄은 2줄 — 1줄 상호·등급·상태, 2줄 주소·거리·시간·매출 */}
                 <button className="min-w-0 flex-1 px-3 py-2 text-left" onClick={() => onSelectStore(store.id)} title={store.address || store.region} type="button">
                   <div className="flex items-center gap-1.5">
+                    <RowNumber className="w-6 shrink-0" value={storeIndex + 1} />
                     <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
                     <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                     <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
@@ -6256,7 +6258,7 @@ function LeadListPanel({
         </div>
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 space-y-1.5 overflow-auto p-2 xl:max-h-none">
           {sortedLeads.length ? (
-            sortedLeads.map((lead) => {
+            sortedLeads.map((lead, leadIndex) => {
               const confidence = getLeadConfidence(lead);
               const openDate = getPermitLeadOpenDate(lead);
               const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
@@ -6289,6 +6291,7 @@ function LeadListPanel({
                     <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${leadType === "new" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>
                       {leadType === "new" ? "신규" : "영업"}
                     </span>
+                    <RowNumber className="w-6 shrink-0" value={leadIndex + 1} />
                     <button className="min-w-0 flex-1 truncate text-left text-sm font-bold text-slate-950" onClick={() => onSelectLead(lead.id)} title={[lead.businessName, lead.address].filter(Boolean).join(" · ")} type="button">
                       {lead.businessName}
                     </button>
