@@ -43,7 +43,7 @@ test.fixme("R1: 필터를 바꿔도 지도 위치·확대가 유지된다 (42a�
 test("closed leads are hidden on the map unless asked for", async ({ page }) => {
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   const body = { leads: [lead("30000000-0000-4000-8000-000000000001", "영업 가게 1"), lead("30000000-0000-4000-8000-000000000002", "영업 가게 2"), closedLead("30000000-0000-4000-8000-000000000003", "폐업 가게")], salesRegionsConfigured: true };
-  await page.route(//api/leads/permits?/, (route) => route.fulfill({ json: body }));
+  await page.route(/\/api\/leads\/permits\?/, (route) => route.fulfill({ json: body }));
   await page.goto("/map");
   await expect(salesCount(page)).toHaveText(/영업 2/);
   await page.getByRole("button", { name: "필터 더보기" }).click();
