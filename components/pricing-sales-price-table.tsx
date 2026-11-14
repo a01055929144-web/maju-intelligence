@@ -7,6 +7,7 @@ import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/m
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { marginSource } from "./pricing-margin-group-options";
 import { isLoss, isLowProfit, splitHidden } from "@/domains/pricing/price-health";
+import { MoneyInput } from "./money-input";
 
 // CC-30a: 판매가 탭의 표 하나. 마진 칸·판매가 칸을 눌러 바로 고친다(저장 = 즉시 판매가 반영은 부모의 run이 한다).
 // 출처 배지는 4종 중 이 화면에서 나오는 둘: `마진`(기본·분류·상품 — 작은 글씨로 어느 것인지) · `고정`. (`매장`·`행사`는 해당 탭에서.)
@@ -38,7 +39,7 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
   const rows = chip === "changed" ? changedItems : chip === "fixed" ? fixedItems : chip === "loss" ? lossItems : chip === "low" ? lowItems : chip === "hidden" ? hiddenItems : inScope;
   const columns: CommonTableColumn<PriceItem>[] = [
     { key: "name", label: "상품", value: (i) => i.name, sortable: true, searchable: true, weight: 3, render: (i) => <span className="font-semibold">{i.name}{!i.active ? <span className="text-xs text-slate-400"> (비활성)</span> : null}</span> },
-    { key: "category", label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
+    { key: "category", path: true, label: "분류", value: (i) => i.category || "미분류", sortable: true, searchable: true, priority: 3 },
     { key: "cost", label: "매입가", value: (i) => i.cost, align: "right", sortable: true, priority: 2, width: 96, render: (i) => `${i.cost.toLocaleString()}원` },
     { key: "margin", label: "마진", value: (i) => marginSource(i, state).margin, align: "right", sortable: true, width: 104, render: (i) => {
       const s = marginSource(i, state);
@@ -54,17 +55,13 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
         placeholder={s.margin !== null ? String(s.margin) : "-"} /> ;
     } },
     { key: "price", label: "판매가", value: (i) => i.price, align: "right", sortable: true, width: 120, render: (i) => (
-      <input aria-label={`${i.name} 판매가`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" defaultValue={i.price} disabled={busy || chip === "hidden"} inputMode="numeric" key={`p-${i.id}-${i.price}-${i.directPrice}`}
-        onBlur={(e) => {
-          const raw = e.currentTarget.value.trim();
-          if (raw === String(i.price)) return;
-          const price = Number(raw);
-          if (raw === "" || !Number.isFinite(price) || price < 0) { e.currentTarget.value = String(i.price); return; }
+      <MoneyInput ariaLabel={`${i.name} 판매가`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" disabled={busy || chip === "hidden"} key={`p-${i.id}-${i.price}-${i.directPrice}`} value={i.price}
+        onCommit={(price) => {
+          if (price === null || price < 0) return; // 비우거나 음수면 원래 값 유지
           // 판매가를 직접 넣으면 마진이 아니라 고정 가격이 된다 — 매입가가 바뀌어도 안 따라가니 한 번 확인.
-          if (!window.confirm(`${i.name}: 이 상품은 매입가가 바뀌어도 ${price.toLocaleString()}원으로 고정됩니다.\n마진으로 계산하려면 취소하고 마진 칸에 넣으세요.`)) { e.currentTarget.value = String(i.price); return; }
+          if (!window.confirm(`${i.name}: 이 상품은 매입가가 바뀌어도 ${price.toLocaleString()}원으로 고정됩니다.\n마진으로 계산하려면 취소하고 마진 칸에 넣으세요.`)) return;
           void run([{ action: "direct", productId: i.id, price }], `${i.name} 판매가를 ${price.toLocaleString()}원으로 고정했습니다.`);
-        }}
-        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(i.price); e.currentTarget.blur(); } }} />
+        }} />
     ) },
     { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, priority: 2, width: 100, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
     { key: "source", label: "출처", value: (i) => { const s = source(i, state); return `${s.badge} ${s.detail}`; }, priority: 3, width: 180, render: (i) => {

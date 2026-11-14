@@ -1,0 +1,56 @@
+# CC-45 지도 파일 Ponytail 재점검 + 안전망 + 나눠서 분리 (2026-11-13 20:59 대표)
+
+> 컨트롤타워 설계 · 담당 Claude Code(ponytail-review). Owner `route`(지도·코스) · Related `lead`·`customer`·`delivery`. DB 없음. 기존 D-6(지도 분리)을 이걸로 대체.
+
+## 왜 지금
+
+| 파일 | 줄 | 상태(11/13 main) |
+| --- | --- | --- |
+| `components/sales-route-map-workspace.tsx` | **11,468** | `useState` 258 · `useEffect` 36 · `useMemo` 59 · `fetch` 31 · 함수 129 — 한 파일이 지도·리드·거래처·코스·차량·검색·등록을 다 함 |
+| `components/kakao-address-map.tsx` | 1,766 | 마커 바뀌면 지도 재생성·화면 맞춤(CC-42a 버그 원인) |
+| `components/today-course-view.tsx` | 1,312 | |
+| **지도 e2e** | **0개** | 화면 자동 시험이 없음 → 고칠 때마다 다른 곳이 깨져도 모름 |
+
+이번 달에만 19번 고쳐졌고, CC-42a·42b가 또 이 파일을 고침 → 고치기 전에 점검·안전망부터.
+
+## 순서 (한 PR = 한 단계, 동작 변화 없음이 원칙)
+
+### 45-1 Ponytail 점검 보고 (코드 변경 없음)
+
+ponytail-review로 세 파일을 읽고 `docs/qa/map-ponytail-audit-2026-11-13.md`에:
+1. **버그·위험**: 상태 동기화(필터·선택·포커스가 서로 덮어씀), 효과(useEffect) 의존성 누락·과다로 생기는 재생성/깜빡임, 오래된 응답이 새 결과를 덮는 경쟁(fetch 순서), 회사 범위(다른 회사 데이터 섞임 가능성), 카카오 지오코딩 반복 호출·한도.
+2. **죽은 코드·중복**: 안 쓰는 상태·함수·옛 시안 주석 블록, 같은 계산 여러 곳(마커 만들기·리드 유형 판정·거리 계산).
+3. **UI 안의 업무 규칙**: 리드 유형·등급·거리·코스 순서 계산이 화면에 있는 것 → `domains/route`·`domains/lead`로 옮길 목록.
+4. **분리 지도**: 아래 45-3 단위로 어떤 상태·함수가 어디로 가는지 표(줄 범위 포함).
+5. 심각도(P0~P3)·고칠 순서·예상 크기.
+
+→ 컨트롤타워 검토 후 45-3 순서 확정.
+
+### 45-2 지도 e2e 안전망 (분리 전에 반드시)
+
+`tests/e2e/map-*.spec.ts`(1440·390, 카카오 지도는 가짜 SDK로):
+- 첫 진입 마커(거래처·리드·출발지) · 신규/영업/거래처 탭 전환 · 필터(지역·업종·인허가·단계) · 검색 → 결과 · 마커 선택 → 미리보기 · 거래처로 등록(1곳·여러 곳) · 리드 상세 열기 · 코스/차량 보기 전환 · 화면 위치 유지(42a 규칙).
+- 지금 동작 그대로를 기록하는 시험(고치기 전 기준선).
+
+### 45-3 나눠서 분리 (한 번에 한 덩어리)
+
+| 순서 | 새 위치 | 옮길 것 |
+| --- | --- | --- |
+| a | `components/map/map-search-results-panel.tsx` | 검색·결과 목록·일괄 등록 (**CC-42b를 여기서 구현**) |
+| b | `components/map/map-filters-bar.tsx` + `domains/lead/map-filters.ts` | 필터 칩·프리셋·URL 동기화, 필터 판정 규칙 |
+| c | `components/map/map-side-panel.tsx` | 신규·영업·거래처 탭 목록·미리보기 |
+| d | `components/map/map-markers.ts` + `domains/route/markers.ts` | 마커 만들기·등급/유형 색·번호 핀 |
+| e | `components/map/vehicle-layer.tsx` | 실시간 차량·차량별 보기 |
+| f | `components/map/route-planner.tsx` + `domains/route/*` | 코스·거리 계산·길찾기 |
+| g | `hooks/use-map-data.ts` | fetch 31곳 → 한 곳(취소·순서 보장) |
+
+- 각 단계: 동작 변화 없음 · 45-2 e2e 그대로 통과 · 줄 수 감소 기록. 목표: `sales-route-map-workspace.tsx` **2,000줄 이하**(조립만).
+- `kakao-address-map.tsx`: 42a 수정(재생성 금지·마커 레이어만 교체)을 이 구조 위에서.
+
+## CC-42와 순서
+
+**45-1 → 45-2 → 42a(작은 수정) → 45-3a(=42b) → 45-3b~g**. 42b는 분리된 새 부품에서 구현해 큰 파일을 또 키우지 않음.
+
+## Done
+
+- 45-1 보고서 PR(코드 0줄 변경) · 45-2 e2e 초록 · 45-3 각 PR: e2e 그대로 초록, 줄 수 표, Ponytail 본문 첫 줄.

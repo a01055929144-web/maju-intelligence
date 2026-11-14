@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Plus, Trash2 } from "lucide-react";
@@ -71,7 +72,7 @@ export function AdminPlanSettingsWorkspace() {
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <PlanInput label="요금제 코드" onChange={(value) => updatePlan(index, "code", value)} placeholder="예: 대표 승인 코드" value={plan.code} />
                 <PlanInput label="요금제 이름" onChange={(value) => updatePlan(index, "name", value)} placeholder="대표 승인 후 입력" value={plan.name} />
-                <PlanInput label="월 금액 (원)" min="0" onChange={(value) => updatePlan(index, "monthlyAmountWon", value)} placeholder="대표 승인 후 입력" type="number" value={plan.monthlyAmountWon} />
+                <label><span className="mb-2 block text-xs font-black text-slate-600">월 금액 (원)</span><MoneyInput ariaLabel="월 금액 (원)" className="h-11 w-48 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" onCommit={(next) => updatePlan(index, "monthlyAmountWon", next === null ? "" : String(next))} placeholder="대표 승인 후 입력" value={plan.monthlyAmountWon === "" ? null : Number(plan.monthlyAmountWon)} /></label>
                 <PlanInput label="월 신규 리드 상한" min="0" onChange={(value) => updatePlan(index, "monthlyLeadLimit", value)} placeholder="대표 승인 후 입력" type="number" value={plan.monthlyLeadLimit} />
                 <PlanInput label="직원 상한" min="0" onChange={(value) => updatePlan(index, "staffLimit", value)} placeholder="대표 승인 후 입력" type="number" value={plan.staffLimit} />
                 <PlanInput label="체험 기간 (일)" min="0" onChange={(value) => updatePlan(index, "trialDays", value)} placeholder="대표 승인 후 입력" type="number" value={plan.trialDays} />

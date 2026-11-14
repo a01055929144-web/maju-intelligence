@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { StoreGradeManager } from "./store-grade-manager";
+import { MoneyInput } from "./money-input";
 import { StoreGradeDrawer, type StoreGrade } from "./store-grade-drawer";
 import { gradeChipClass } from "@/domains/pricing/store-grade";
 import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/domains/pricing/store-price";
@@ -93,12 +94,6 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
     finally { setBusy(false); }
   }
 
-  function commitPrice(r: Row, el: HTMLInputElement) {
-    const next = parseStorePriceInput(el.value);
-    if (next === undefined) { el.value = String(r.storePrice ?? ""); setError("가격은 0 이상의 숫자(원)로 입력하거나 비워 주세요."); return; }
-    if (next === r.storePrice) return;
-    void save(r, next);
-  }
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 
   const periodRow = rows.find((r) => r.productId === periodProductId) ?? null;
@@ -106,13 +101,12 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
   const visible = useMemo(() => (onlyStore ? rows.filter((r) => r.storePrice !== null) : rows), [rows, onlyStore]);
   const columns: CommonTableColumn<Row>[] = [
     { key: "name", label: "상품", value: (r) => r.name, sortable: true, searchable: true, weight: 3, render: (r) => <span className="font-semibold">{r.name}</span> },
-    { key: "category", label: "분류", value: (r) => r.category || "미분류", sortable: true, searchable: true, priority: 3 },
+    { key: "category", path: true, label: "분류", value: (r) => r.category || "미분류", sortable: true, searchable: true, priority: 3 },
     { key: "base", label: "기본 판매가", value: (r) => r.basePrice, align: "right", sortable: true, width: 110, render: (r) => `${r.basePrice.toLocaleString()}원` },
     { key: "store", label: "이 매장 가격", value: (r) => r.storePrice, align: "right", sortable: true, width: 120, render: (r) => r.source === "견적"
       ? <span title="견적서 수락으로 생긴 가격 — 거래처 상세에서 종료">{r.storePrice?.toLocaleString()}원</span>
-      : <input aria-label={`${r.name} 이 매장 가격`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" defaultValue={r.storePrice ?? ""} disabled={busy} inputMode="numeric" key={`${r.productId}-${r.storePrice}`} placeholder="기본가"
-          onBlur={(e) => commitPrice(r, e.currentTarget)}
-          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = String(r.storePrice ?? ""); e.currentTarget.blur(); } }} /> },
+      : <MoneyInput ariaLabel={`${r.name} 이 매장 가격`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" disabled={busy} key={`${r.productId}-${r.storePrice}`} placeholder="기본가" value={r.storePrice}
+          onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }} /> },
     { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", priority: 2, width: 100, render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{d.toLocaleString()}원</span>; } },
     { key: "source", label: "출처", value: (r) => r.source, priority: 2, width: 80, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
     { key: "period", label: "기간·예정", value: (r) => r.until ?? r.planned?.since ?? "", priority: 3, width: 220, sortable: false, render: (r) => r.source === "견적" ? "-" : <span className="flex items-center gap-1.5 text-xs">
@@ -145,7 +139,7 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
           <div className="flex items-start justify-between gap-2"><span className="font-bold">{r.name}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span></div>
           <p className="text-xs text-slate-500">{r.category || "미분류"} · 기본 {r.basePrice.toLocaleString()}원{r.storePrice !== null ? ` · 차이 ${(r.storePrice - r.basePrice).toLocaleString()}원` : ""}</p>
           {r.source === "견적" ? <p className="mt-2 text-sm font-bold">{r.storePrice?.toLocaleString()}원 <span className="text-xs font-normal text-slate-500">견적 가격 — 거래처 상세에서 종료</span></p>
-            : <div className="mt-2 flex flex-wrap items-center gap-2"><label className="text-xs font-bold text-slate-600">이 매장 가격<input aria-label={`${r.name} 이 매장 가격`} className="ml-1 h-11 w-28 rounded border border-slate-300 px-2 text-right text-base font-bold" defaultValue={r.storePrice ?? ""} disabled={busy} inputMode="numeric" key={`m-${r.productId}-${r.storePrice}`} onBlur={(e) => commitPrice(r, e.currentTarget)} placeholder="기본가" /></label>
+            : <div className="mt-2 flex flex-wrap items-center gap-2"><label className="text-xs font-bold text-slate-600">이 매장 가격<MoneyInput ariaLabel={`${r.name} 이 매장 가격`} className="ml-1 h-11 w-28 rounded border border-slate-300 px-2 text-right text-base font-bold" disabled={busy} key={`m-${r.productId}-${r.storePrice}`} onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }} placeholder="기본가" value={r.storePrice} /></label>
               {r.storePrice !== null ? <label className="text-xs font-bold text-slate-600">끝나는 날<input aria-label={`${r.name} 끝나는 날`} className="ml-1 h-11 rounded border border-slate-300 px-1 text-sm" defaultValue={r.until ?? ""} disabled={busy} key={`mu-${r.productId}-${r.until}`} min={today} onChange={(e) => { if (e.currentTarget.value !== (r.until ?? "")) void save(r, r.storePrice, e.currentTarget.value || null); }} type="date" /></label> : null}</div>}
           {r.planned ? <p className="mt-1 text-xs text-slate-600">{r.planned.since}부터 <b>{r.planned.price.toLocaleString()}원</b> 예정</p> : null}
         </li>)}
@@ -157,7 +151,7 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
           ? <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm">{periodRow.planned.since}부터 <b>{periodRow.planned.price.toLocaleString()}원</b> 예정 <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(periodRow, null, null, periodRow.planned!.since)} type="button">취소</button></p>
           : <div className="space-y-2"><p className="text-sm font-bold">예정 가격</p>
             <input aria-label={`${periodRow.name} 예정 시작일`} className="block h-9 w-full rounded border border-slate-300 px-2 text-sm" min={new Date(Date.now() + 9 * 3600000 + 86400000).toISOString().slice(0, 10)} onChange={(e) => setPlannedFrom(e.target.value)} type="date" value={plannedFrom} />
-            <input aria-label={`${periodRow.name} 예정가`} className="block h-9 w-full rounded border border-slate-300 px-2 text-right text-sm" inputMode="numeric" onChange={(e) => setPlannedPrice(e.target.value)} placeholder="예정가(원)" value={plannedPrice} />
+            <MoneyInput ariaLabel={`${periodRow.name} 예정가`} className="block h-9 w-full rounded border border-slate-300 px-2 text-right text-sm" onCommit={(next) => setPlannedPrice(next === null ? "" : String(next))} placeholder="예정가(원)" value={plannedPrice === "" ? null : Number(plannedPrice)} />
             <button className="maju-button h-9 text-sm" disabled={busy} onClick={() => { const next = parseStorePriceInput(plannedPrice); if (next === undefined || next === null || !plannedFrom) { setError("예정 가격은 시작일과 0 이상의 숫자(원)를 함께 입력해 주세요."); return; } void save(periodRow, next, null, plannedFrom).then(() => setPeriodRow(null)); }} type="button">예정 가격 저장</button></div>}
       </div> : null}
       </> : <p className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm font-bold text-slate-500">위에서 매장을 고르세요.</p>}
