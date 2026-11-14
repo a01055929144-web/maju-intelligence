@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
+import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
 
 export type KakaoMapMarker = {
   readonly address: string;
@@ -107,7 +108,8 @@ type KakaoAddressMapProps = {
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly onCenterChange?: (point: { lat: number; lng: number }) => void;
   /** 주소를 좌표로 바꾸지 못한 거래처(tone="customer") 수. 마커를 그릴 때마다 한 번 알린다. */
-  readonly onCustomerGeocodeFailed?: (count: number) => void;
+  /** 두 번째 값: 좌표를 못 찾은 거래처 id(안내에서 "주소 확인"으로 바로 열 때). */
+  readonly onCustomerGeocodeFailed?: (count: number, unplacedIds: string[]) => void;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
@@ -238,6 +240,10 @@ type KakaoMapsApi = {
   services: {
     Geocoder: new () => {
       addressSearch: (address: string, callback: (result: KakaoGeocodeResult[], status: string) => void) => void;
+    };
+    /** libraries=services에 포함. 주소로 못 찾은 거래처를 상호로 한 번 더 찾을 때만 쓴다. */
+    Places?: new () => {
+      keywordSearch: (keyword: string, callback: (result: Array<{ x: string; y: string; address_name?: string; road_address_name?: string }>, status: string) => void, options?: { size?: number }) => void;
     };
     Status: { OK: string };
   };
@@ -633,6 +639,7 @@ export function KakaoAddressMap({
         };
 
         let unplacedCustomerCount = 0;
+        const unplacedCustomerIds: string[] = [];
         await mapWithConcurrency(staticMarkers, 5, async (marker) => {
             // 2026-09-07 피드백("실시간 라이브 차량의 마커가 안보여") 대응: 아래 지오코딩 경로는
             // marker.address를 실제 도로명 주소로 간주해 카카오 지오코더에 넘깁니다. 라이브 차량은
@@ -680,14 +687,22 @@ export function KakaoAddressMap({
                 geocodeMemoryCache.set(marker.address, fallbackPoint);
                 placeMarkerAtPosition(marker, fallbackPoint.lat, fallbackPoint.lng);
               } else if (!ignore && marker.tone === "customer") {
-                unplacedCustomerCount += 1;
+                // 거래처만: 근사 주소(부번·층 떼기) → 상호+시군구 장소 검색으로 한 번 더 찾는다(11/14 명물길 50-4).
+                const approxPoint = await findCustomerFallbackPoint(kakao, geocoder, marker, kakaoGeocodeTimeoutMs);
+                if (approxPoint && !ignore) {
+                  geocodeMemoryCache.set(marker.address, approxPoint);
+                  placeMarkerAtPosition(marker, approxPoint.lat, approxPoint.lng);
+                } else if (!ignore) {
+                  unplacedCustomerCount += 1;
+                  if (marker.id) unplacedCustomerIds.push(marker.id);
+                }
               }
             }
           });
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
         // 주소를 좌표로 못 바꾼 거래처 수(M1 안내용). 주소가 아예 없는 거래처는 이 수에 들지 않는다(주소 보완 필요 쪽).
-        if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount);
+        if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount, unplacedCustomerIds);
 
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
@@ -1524,6 +1539,40 @@ async function mapWithConcurrency<T>(items: readonly T[], concurrency: number, w
     }
   };
   await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, () => run()));
+}
+
+type KakaoGeocoderInstance = InstanceType<KakaoMapsApi["services"]["Geocoder"]>;
+
+// 주소 검색(JS·REST)이 둘 다 실패한 거래처의 마지막 시도: ① 근사 주소(도로명+본번) ② 상호+시군구 장소 검색(같은 시군구만).
+async function findCustomerFallbackPoint(kakao: KakaoSdk, geocoder: KakaoGeocoderInstance, marker: KakaoMapMarker, timeoutMs: number) {
+  const approx = approximateRoadAddress(marker.address);
+  if (approx) {
+    const point = await withTimeout(
+      new Promise<{ lat: number; lng: number } | null>((resolve) => {
+        geocoder.addressSearch(approx, (result, status) => {
+          resolve(status === kakao.maps.services.Status.OK && result[0] ? { lat: Number(result[0].y), lng: Number(result[0].x) } : null);
+        });
+      }),
+      timeoutMs,
+      "Kakao approximate address search timed out"
+    ).catch(() => null);
+    if (point && Number.isFinite(point.lat) && Number.isFinite(point.lng)) return point;
+  }
+  const Places = kakao.maps.services.Places;
+  if (!Places || !marker.name.trim()) return null;
+  const places = new Places();
+  return withTimeout(
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      places.keywordSearch(placeKeywordForAddress(marker.name, marker.address), (result, status) => {
+        const hit = status === kakao.maps.services.Status.OK
+          ? result.find((item) => isSameDistrict(marker.address, item.road_address_name || item.address_name || ""))
+          : undefined;
+        resolve(hit ? { lat: Number(hit.y), lng: Number(hit.x) } : null);
+      }, { size: 5 });
+    }),
+    timeoutMs,
+    "Kakao place keyword search timed out"
+  ).catch(() => null);
 }
 
 async function fetchAddressCoordinate(address: string) {
