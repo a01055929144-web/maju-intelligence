@@ -1,7 +1,7 @@
 // CC-46-5 소상공인 상가(상권)정보 ↔ 리드 매칭 규칙(지시서 docs/dispatch/2026-11-14-semas-store-info.md 2절).
 // 비어 있거나 '기타'인 업종, 없는 좌표만 채운다(인허가 값 덮어쓰기 금지). 폐업 리드는 호출하는 쪽에서 뺀다(isClosedLead).
 // 상호 비교는 카카오 보강과 같은 정규화·점수(kakaoNameVariants·placeNameScore)를 쓴다.
-import { kakaoNameVariants, placeNameScore } from "../../lib/place-links";
+import { kakaoNameVariants, placeNameScore } from "./place-name";
 
 export type SemasStore = {
   readonly id: string;
