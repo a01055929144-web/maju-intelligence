@@ -8,7 +8,7 @@ import NextLink from "next/link";
 type Draft = { id: string; content: { title: string }; revision: number };
 type Version = { id: string; version: number; content: { title: string }; publishedAt: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
-type Link = { id: string; customerName: string; documentTitle: string; documentVersion: number | null;
+type Link = { id: string; kind?: "document" | "catalog"; customerName: string; documentTitle: string; documentVersion: number | null;
   url: string; issuedAt: string; expiresAt: string; revokedAt: string | null;
   canOrder: boolean; viewCount: number; lastViewedAt: string | null;
   orderCount: number; interest: string };
@@ -17,6 +17,8 @@ type Event = { id: string; event_type: string; occurred_at: string;
 
 export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   const [documents, setDocuments] = useState<Draft[]>([]);
+  const [kind, setKind] = useState<"document" | "catalog">("document");
+  const [catalogEnabled, setCatalogEnabled] = useState(false);
   const [documentId, setDocumentId] = useState("");
   const [versions, setVersions] = useState<Version[]>([]);
   const [versionId, setVersionId] = useState("");
@@ -38,9 +40,9 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   const loadLinks = useCallback(async () => {
     setLinksLoaded(false);
     const response = await fetch(`/api/pricing-store-links?${base}&page=${page}`, { cache: "no-store" });
-    const result = await response.json() as { items?: Link[]; hasMore?: boolean; message?: string };
+    const result = await response.json() as { items?: Link[]; hasMore?: boolean; catalogEnabled?: boolean; message?: string };
     if (!response.ok) throw new Error(result.message || "링크를 불러오지 못했습니다.");
-    setLinks(result.items ?? []); setHasMore(result.hasMore === true);
+    setLinks(result.items ?? []); setHasMore(result.hasMore === true); setCatalogEnabled(result.catalogEnabled === true);
     setLinksLoaded(true);
   }, [base, page]);
   useEffect(() => { void loadLinks().catch((error) => setMessage(String(error))); }, [loadLinks]);
@@ -81,6 +83,8 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     } catch (error) { setMessage(error instanceof Error ? error.message : "거래처를 찾지 못했습니다."); }
     finally { setBusy(false); }
   }
+  const issueReady = kind === "catalog" || Boolean(versionId);
+  const issueBody = kind === "catalog" ? { kind } : { documentVersionId: versionId };
   async function action(payload: Record<string, unknown>) {
     setBusy(true); setMessage("");
     try {
@@ -106,8 +110,8 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     finally { setBusy(false); }
   }
   async function issueCompanyLinks() {
-    if (!versionId || busy || !window.confirm(
-      "회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 문서 링크는 재사용합니다. 계속할까요?",
+    if (!issueReady || busy || !window.confirm(
+      `회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 ${kind === "catalog" ? "전체 상품" : "문서"} 링크는 재사용합니다. 계속할까요?`,
     )) return;
     setBusy(true); setMessage(""); setCreatedUrl("");
     let afterId: string | null = null;
@@ -128,7 +132,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         const response = await fetch("/api/pricing-store-links", { method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companyId, action: "create-batch",
-            customerIds: items.map((item) => item.id), documentVersionId: versionId }) });
+            customerIds: items.map((item) => item.id), ...issueBody }) });
         const result = await response.json() as { links?: { customerId: string; url: string;
           created: boolean }[]; message?: string };
         if (!response.ok) throw new Error(result.message || "링크를 발급하지 못했습니다.");
@@ -173,7 +177,8 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
   // CC-13: 매장별 링크 표도 공용 표(열 편집·너비·정렬·엑셀). 동작 버튼은 그대로.
   const linkColumns: CommonTableColumn<Link>[] = [
     { key: "customer", label: "매장", value: (link) => link.customerName, sortable: true, render: (link) => <button className="underline" onClick={() => void showDetail(link.id)} type="button">{link.customerName}</button> },
-    { key: "document", label: "문서", value: (link) => `${link.documentTitle} v${link.documentVersion ?? ""}`, sortable: true },
+    { key: "kind", label: "종류", value: (link) => link.kind === "catalog" ? "전체 상품" : "문서", sortable: true },
+    { key: "document", label: "문서", value: (link) => link.kind === "catalog" ? "-" : `${link.documentTitle} v${link.documentVersion ?? ""}`, sortable: true },
     { key: "issued", label: "발행", value: (link) => link.issuedAt, sortable: true, render: (link) => new Date(link.issuedAt).toLocaleDateString("ko-KR") },
     { key: "activity", label: "열람·주문", value: (link) => link.viewCount, sortable: true, render: (link) => `열람 ${link.viewCount}회 · 주문 ${link.orderCount}건` },
     { key: "status", label: "관심·상태", value: (link) => `${link.interest} · ${link.revokedAt ? "회수" : link.canOrder ? "주문 가능" : "주문 중지"}`, sortable: true },
@@ -199,13 +204,16 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         <Button className="ml-2 min-h-[44px]" variant="outline" disabled={busy} onClick={() => { setBusy(true); setMessage(""); void checkSettings().catch(error => setMessage(error instanceof Error ? error.message : "설정을 다시 확인해 주세요.")).finally(() => setBusy(false)); }}>주문 설정 다시 확인</Button>
         {settingsNotice && <p role="status">{settingsNotice}</p>}
       </div>
-      <label className="block text-sm">문서 선택<select className="mt-1 w-full rounded border p-2" value={documentId}
+      {catalogEnabled && <fieldset className="flex flex-wrap gap-4 text-sm"><legend className="font-medium">링크 종류</legend>
+        <label className="flex min-h-11 items-center gap-2"><input type="radio" name="link-kind" checked={kind === "document"} onChange={() => setKind("document")} />문서 링크 (단가표·견적서)</label>
+        <label className="flex min-h-11 items-center gap-2"><input type="radio" name="link-kind" checked={kind === "catalog"} onChange={() => setKind("catalog")} />전체 상품 링크 (문서 없이 유효기간 1년)</label></fieldset>}
+      {kind === "document" && <><label className="block text-sm">문서 선택<select className="mt-1 w-full rounded border p-2" value={documentId}
         onChange={(event) => { setDocumentId(event.target.value); setVersionId(""); }}>
         <option value="">문서 선택</option>{documents.map((item) => <option key={item.id} value={item.id}>{item.content.title}</option>)}
       </select></label>
       <label className="block text-sm">발행 버전<select className="mt-1 w-full rounded border p-2" value={versionId}
         onChange={(event) => setVersionId(event.target.value)}><option value="">발행 버전 선택</option>
-        {versions.map((item) => <option key={item.id} value={item.id}>{item.content.title} · v{item.version}</option>)}</select></label>
+        {versions.map((item) => <option key={item.id} value={item.id}>{item.content.title} · v{item.version}</option>)}</select></label></>}
       <div className="flex gap-2"><input aria-label="거래처 검색" disabled={busy} className="min-w-0 flex-1 rounded border p-2" value={customerQuery}
         onChange={(event) => { setCustomerQuery(event.target.value); setCustomerId(""); setSelectedCustomerIds([]); setCustomers([]); setCustomersSearched(false); }} placeholder="매장 이름 검색" />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void searchCustomers()}>검색</Button></div>
@@ -217,8 +225,8 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
-      <Button disabled={busy || !versionId || !customers.some(customer => customer.id === customerId)} className="min-h-[44px]"
-        onClick={() => void action({ action: "create", customerId, documentVersionId: versionId })}>링크 만들고 복사</Button>
+      <Button disabled={busy || !issueReady || !customers.some(customer => customer.id === customerId)} className="min-h-[44px]"
+        onClick={() => void action({ action: "create", customerId, ...issueBody })}>링크 만들고 복사</Button>
       {customers.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
         <label className="flex min-h-11 items-center gap-2 font-semibold"><input type="checkbox"
           checked={selectedCustomerIds.length === customers.length}
@@ -229,14 +237,13 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
             checked={selectedCustomerIds.includes(item.id)} onChange={(event) => setSelectedCustomerIds((old) =>
               event.target.checked ? [...old, item.id] : old.filter((id) => id !== item.id))} />
             {item.customer_name}</label>)}</div>
-        <button disabled={busy || !versionId || selectedCustomerIds.length === 0}
+        <button disabled={busy || !issueReady || selectedCustomerIds.length === 0}
           className="min-h-11 rounded bg-slate-900 px-4 text-white disabled:opacity-50"
-          onClick={() => void action({ action: "create-batch", customerIds: selectedCustomerIds,
-            documentVersionId: versionId })}>선택한 {selectedCustomerIds.length}곳 링크 일괄 발급</button>
+          onClick={() => void action({ action: "create-batch", customerIds: selectedCustomerIds, ...issueBody })}>선택한 {selectedCustomerIds.length}곳 링크 일괄 발급</button>
         <p className="text-slate-600">한 번에 최대 30곳의 검색 결과를 발급합니다. 각 링크는 해당 매장에만 전달해 주세요.</p>
       </div>}
       <div className="rounded border p-3 text-sm">
-        <button disabled={busy || !versionId} className="min-h-11 rounded border px-4 disabled:opacity-50"
+        <button disabled={busy || !issueReady} className="min-h-11 rounded border px-4 disabled:opacity-50"
           onClick={() => void issueCompanyLinks()}>회사 전체 매장 링크 발급</button>
         <p className="mt-2 text-slate-600">50곳씩 처리합니다. 중간에 끊겨 다시 눌러도 활성 링크를 재사용하며 자동 발송은 하지 않습니다.</p>
       </div>
