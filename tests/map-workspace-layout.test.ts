@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+// M4a: 오른쪽 목록 패널은 components/map/map-side-panel.tsx(정렬 옵션은 lead-list-sort.ts)로 옮겼다.
+const sidePanelSource = readFileSync("components/map/map-side-panel.tsx", "utf8");
+const leadListSortSource = readFileSync("components/map/lead-list-sort.ts", "utf8");
 // M3b: 필터 상태·저장 필터 호출은 훅 파일로 옮겨졌다(화면 문구는 지도 파일에 그대로).
 const filterPopoverSource = readFileSync("components/map/map-filter-popover.tsx", "utf8");
 const filterHookSource = readFileSync("components/map/use-map-filters.ts", "utf8");
@@ -58,11 +61,11 @@ describe("PC map workspace layout", () => {
   });
 
   it("keeps lead card controls fixed-width and exposes guarded bulk stage changes", () => {
-    expect(workspaceSource).toContain('aria-label={`${lead.businessName} 선택`}');
-    expect(workspaceSource).toContain("max-w-[96px] shrink-0");
-    expect(workspaceSource).toContain('aria-label="바꿀 단계"');
-    expect(workspaceSource).toContain("runMapLeadStageBulk(");
-    expect(workspaceSource).toContain("setSelectedLeadIds(new Set(failed.map");
+    expect(sidePanelSource).toContain('aria-label={`${lead.businessName} 선택`}');
+    expect(sidePanelSource).toContain("max-w-[96px] shrink-0");
+    expect(sidePanelSource).toContain('aria-label="바꿀 단계"');
+    expect(sidePanelSource).toContain("runMapLeadStageBulk(");
+    expect(sidePanelSource).toContain("setSelectedLeadIds(new Set(failed.map");
     expect(workspaceSource).toContain('body: JSON.stringify({ actionType: "status", memo, result: status })');
   });
 
@@ -106,10 +109,10 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     for (const label of ["휴대폰", "인스타", "톡톡", "이메일", "팩스", "매장전화"]) {
       expect(mapLeadChannelsSource).toContain(`title="${label}"`);
     }
-    expect(workspaceSource).toContain("<MapLeadChannelIcons lead={lead} />");
-    expect(workspaceSource).toContain('title="네이버 지도"');
-    expect(workspaceSource).toContain('title="카카오맵"');
-    expect(workspaceSource).toContain('title="구글 지도"');
+    expect(sidePanelSource).toContain("<MapLeadChannelIcons lead={lead} />");
+    expect(sidePanelSource).toContain('title="네이버 지도"');
+    expect(sidePanelSource).toContain('title="카카오맵"');
+    expect(sidePanelSource).toContain('title="구글 지도"');
   });
 
   it("opens customer detail on the core dashboard and preserves phone and email actions", () => {
@@ -183,10 +186,10 @@ describe("시안 ⑫ 필터 줄 · 격자", () => {
 
 describe("10-29 목록 정리", () => {
   it("puts list tabs above the select-all bar and offers sort options", () => {
-    const leadPanel = workspaceSource.slice(workspaceSource.indexOf("function LeadListPanel("));
+    const leadPanel = sidePanelSource.slice(sidePanelSource.indexOf("function LeadListPanel("));
     expect(leadPanel.indexOf("{tabs}")).toBeLessThan(leadPanel.indexOf('aria-label="정렬 기준"'));
-    expect(workspaceSource).toContain('{ label: "상호명", value: "name" }');
-    expect(workspaceSource).toContain('{ label: "인허가일", value: "openDate" }');
-    expect(workspaceSource).toContain("openDateBadge");
+    expect(leadListSortSource).toContain('{ label: "상호명", value: "name" }');
+    expect(leadListSortSource).toContain('{ label: "인허가일", value: "openDate" }');
+    expect(sidePanelSource).toContain("openDateBadge");
   });
 });
