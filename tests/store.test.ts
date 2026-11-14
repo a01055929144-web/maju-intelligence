@@ -252,6 +252,20 @@ describe("filterCustomersByAssignment", () => {
 describe("buildLeadEnrichmentEventOutcome", () => {
   const emptySources = { googleReviews: false, keywordVolume: false, placeLinks: false };
 
+  const kakao = (over: Record<string, unknown>) => ({ documentCount: 1, matched: false, matchDistanceM: null, phoneFound: false, queryVariant: "none", ...over });
+  const code = (over: Record<string, unknown>, contact: { afterPhone?: string } = {}) =>
+    buildLeadEnrichmentEventOutcome({ ...contact, persisted: true, skippedFields: [], sources: emptySources, kakaoMatch: kakao(over) }).metadata;
+
+  it("46-2⓪ 결과 코드 6종 중 filled·linked·already_complete·not_found·rejected 기록", () => {
+    expect(code({ matched: true, queryVariant: "region" }, { afterPhone: "02-000-0000" }).result_code).toBe("filled");
+    expect(code({ matched: true, queryVariant: "region" }).result_code).toBe("linked");
+    expect(code({ matched: true, queryVariant: "existing" }).result_code).toBe("already_complete");
+    expect(code({ resultCode: "not_found" }).result_code).toBe("not_found");
+    expect(code({ resultCode: "error" }).result_code).toBe("error");
+    const rejected = code({ resultCode: "rejected", rejectReason: "distance_exceeded", nameScore: 0.8, matchDistanceM: 1500 });
+    expect(rejected).toMatchObject({ result_code: "rejected", reject_reason: "distance_exceeded", name_score: 0.8, kakao_match_distance_m: 1500 });
+  });
+
   it("marks a cron retry successful only when a previously missing contact field is filled", () => {
     const outcome = buildLeadEnrichmentEventOutcome({
       afterAddress: "서울 강남구 테헤란로 1",

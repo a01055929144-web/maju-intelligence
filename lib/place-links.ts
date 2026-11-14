@@ -6,7 +6,13 @@ export type PlaceLinkInput = {
   rejectedKakaoPlaceIds?: string[];
 };
 
-export type KakaoQueryVariant = "existing" | "name_only" | "region" | "region_detail" | "none";
+export type KakaoQueryVariant =
+  | "existing" | "name_only" | "region" | "region_detail" | "none"
+  | "paren_stripped" | "corp_stripped" | "branch_stripped" | "no_space";
+
+/** 46-2⓪ 결과 코드. 성공 = filled + linked + already_complete. filled/already_complete는 저장 단계(store)에서 정한다. */
+export type EnrichmentResultCode = "filled" | "linked" | "already_complete" | "not_found" | "rejected" | "error";
+export type KakaoRejectReason = "distance_exceeded" | "name_mismatch" | "address_mismatch" | "previously_rejected";
 
 export type PlaceLinks = {
   googleMapUrl: string;
@@ -26,6 +32,10 @@ export type PlaceLinks = {
   kakaoMatchedAddress: string;
   kakaoMatchedName: string;
   kakaoPlaceId: string;
+  kakaoResultCode: EnrichmentResultCode;
+  kakaoRejectReason: KakaoRejectReason | null;
+  kakaoRejectedDistanceM: number | null;
+  kakaoNameScore: number | null;
   naverMatched: boolean;
 };
 
@@ -118,6 +128,10 @@ export async function resolvePlaceLinks(input: PlaceLinkInput, existing: Existin
     kakaoMatchedAddress: kakaoResult.matchedAddress,
     kakaoMatchedName: kakaoResult.matchedName,
     kakaoPlaceId: kakaoResult.placeId,
+    kakaoResultCode: kakaoResult.resultCode,
+    kakaoRejectReason: kakaoResult.rejectReason,
+    kakaoRejectedDistanceM: kakaoResult.rejectedDistanceM,
+    kakaoNameScore: kakaoResult.nameScore,
     naverMatched: Boolean(resolvedNaverPlaceUrl)
   };
 }
@@ -164,6 +178,11 @@ export type KakaoPlaceResult = {
   matchedName: string;
   placeId: string;
   queryVariant: KakaoQueryVariant;
+  resultCode: EnrichmentResultCode;
+  /** rejected일 때만: 상호 점수가 가장 높았던 후보를 버린 이유·거리·상호 점수 */
+  rejectReason: KakaoRejectReason | null;
+  rejectedDistanceM: number | null;
+  nameScore: number | null;
 };
 
 type KakaoKeywordDocument = {
@@ -190,7 +209,11 @@ const emptyKakaoPlaceResult = (documentCount = 0): KakaoPlaceResult => ({
   placeId: "",
   phone: "",
   placeUrl: "",
-  queryVariant: "none"
+  queryVariant: "none",
+  resultCode: "not_found",
+  rejectReason: null,
+  rejectedDistanceM: null,
+  nameScore: null
 });
 
 function existingKakaoPlaceResult(placeUrl: string): KakaoPlaceResult {
@@ -222,9 +245,30 @@ export function buildKakaoPlaceSearchQueries(input: PlaceLinkInput): Array<{ que
   const candidates = [
     region ? { query: `${name} ${region}`, variant: "region" as const } : null,
     detail ? { query: `${name} ${detail}`, variant: "region_detail" as const } : null,
-    { query: name, variant: "name_only" as const }
+    { query: name, variant: "name_only" as const },
+    ...kakaoNameVariants(name).map(({ name: variantName, variant }) => ({ query: region ? `${variantName} ${region}` : variantName, variant }))
   ].filter((item): item is { query: string; variant: Exclude<KakaoQueryVariant, "existing" | "none"> } => Boolean(item));
   return candidates.filter((item, index) => candidates.findIndex((candidate) => candidate.query === item.query) === index);
+}
+
+/** 46-2⓪ 상호 정리 검색어: 괄호 안 지우기 → 법인 표기 지우기 → 끝 '점'/지점명 떼기 → 띄어쓰기 없애기. 원래 상호와 같아지는 변형은 뺀다. */
+export function kakaoNameVariants(name: string): Array<{ name: string; variant: "paren_stripped" | "corp_stripped" | "branch_stripped" | "no_space" }> {
+  const clean = (v: string) => v.replace(/\s+/g, " ").trim();
+  const paren = clean(name.replace(/[(（][^)）]*[)）]/g, " "));
+  const corp = clean(name.replace(/[(（]\s*[주유사]\s*[)）]|㈜|주식회사|유한회사/g, " "));
+  const branch = clean(corp.replace(/\s+\S*점$/, "").replace(/(?<=[가-힣A-Za-z0-9]{2})점$/, ""));
+  const out = [
+    { name: paren, variant: "paren_stripped" as const },
+    { name: corp, variant: "corp_stripped" as const },
+    { name: branch, variant: "branch_stripped" as const },
+    { name: clean(name).replace(/\s+/g, ""), variant: "no_space" as const }
+  ];
+  const seen = new Set([clean(name)]);
+  return out.filter((item) => {
+    if (item.name.length < 2 || seen.has(item.name)) return false;
+    seen.add(item.name);
+    return true;
+  });
 }
 
 function extractKoreanAddressSearchParts(address: string) {
@@ -242,27 +286,52 @@ function extractKoreanAddressSearchParts(address: string) {
   return { detail, region, sigungu };
 }
 
-export function isKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeywordDocument) {
+function kakaoCandidateRejectReason(input: PlaceLinkInput, document: KakaoKeywordDocument): KakaoRejectReason | null {
   const expectedName = normalizePlaceName(input.customerName);
   const candidateName = normalizePlaceName(document.place_name || "");
-  if (!expectedName || !candidateName || (!expectedName.includes(candidateName) && !candidateName.includes(expectedName))) return false;
+  if (!expectedName || !candidateName || (!expectedName.includes(candidateName) && !candidateName.includes(expectedName))) return "name_mismatch";
 
   const expectedDistrict = extractKoreanAddressSearchParts(input.address || "").sigungu;
   const candidateAddress = document.road_address_name || document.address_name || "";
   const candidateDistrict = extractKoreanAddressSearchParts(candidateAddress).sigungu;
-  if (expectedDistrict && candidateDistrict !== expectedDistrict) return false;
+  if (expectedDistrict && candidateDistrict !== expectedDistrict) return "address_mismatch";
 
   const distanceM = kakaoCandidateDistanceM(input, document);
-  return distanceM == null || distanceM <= 1000;
+  return distanceM == null || distanceM <= 1000 ? null : "distance_exceeded";
+}
+
+export function isKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeywordDocument) {
+  return kakaoCandidateRejectReason(input, document) === null;
+}
+
+function allowedRejectReason(input: PlaceLinkInput, document: KakaoKeywordDocument): KakaoRejectReason | null {
+  const rejectedPlaceIds = new Set((input.rejectedKakaoPlaceIds || []).map((value) => value.trim()).filter(Boolean));
+  return rejectedPlaceIds.has(document.id?.trim() || "") ? "previously_rejected" : kakaoCandidateRejectReason(input, document);
 }
 
 export function isAllowedKakaoPlaceCandidate(input: PlaceLinkInput, document: KakaoKeywordDocument) {
-  const rejectedPlaceIds = new Set((input.rejectedKakaoPlaceIds || []).map((value) => value.trim()).filter(Boolean));
-  return !rejectedPlaceIds.has(document.id?.trim() || "") && isKakaoPlaceCandidate(input, document);
+  return allowedRejectReason(input, document) === null;
+}
+
+/** 상호 비슷한 정도(글자 2개 묶음 Dice, 0~1). 버린 후보 기록용 — 판정에는 쓰지 않는다. */
+export function placeNameScore(a: string, b: string) {
+  const x = normalizePlaceName(a);
+  const y = normalizePlaceName(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const grams = (v: string) => Array.from({ length: Math.max(v.length - 1, 1) }, (_, i) => v.slice(i, i + 2));
+  const gx = grams(x);
+  const gy = grams(y);
+  let hit = 0;
+  for (const g of gx) {
+    const at = gy.indexOf(g);
+    if (at >= 0) { hit += 1; gy.splice(at, 1); }
+  }
+  return Math.round((2 * hit / (gx.length + grams(y).length)) * 100) / 100;
 }
 
 function normalizePlaceName(value: string) {
-  return value.toLowerCase().replace(/<[^>]*>/g, "").replace(/&[a-z0-9#]+;/g, "").replace(/\(주\)|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
+  return value.toLowerCase().replace(/<[^>]*>/g, "").replace(/&[a-z0-9#]+;/g, "").replace(/\(주\)|㈜|\(유\)|\(사\)|주식회사|유한회사/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }
 
 function normalizeComparableAddress(value: string) {
@@ -296,11 +365,13 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 }
 
 export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPlaceResult> {
-  const empty = emptyKakaoPlaceResult();
+  const empty: KakaoPlaceResult = { ...emptyKakaoPlaceResult(), resultCode: "error" };
   const restKey = process.env.KAKAO_REST_KEY;
   if (!restKey || restKey === "replace-with-kakao-rest-api-key") return empty;
 
   let inspectedDocuments = 0;
+  let okResponses = 0;
+  let bestReject: { reason: KakaoRejectReason; score: number; distanceM: number | null } | null = null;
   for (const attempt of buildKakaoPlaceSearchQueries(input)) {
     try {
       const response = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(attempt.query)}&size=10`, {
@@ -311,11 +382,19 @@ export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPla
       });
 
       if (!response.ok) continue;
+      okResponses += 1;
       const payload = (await response.json()) as { documents?: KakaoKeywordDocument[] };
       const documents = payload.documents || [];
       inspectedDocuments += documents.length;
       const place = documents.find((document) => isAllowedKakaoPlaceCandidate(input, document));
-      if (!place) continue;
+      if (!place) {
+        for (const document of documents) {
+          const reason = allowedRejectReason(input, document);
+          const score = placeNameScore(input.customerName, document.place_name || "");
+          if (reason && (!bestReject || score > bestReject.score)) bestReject = { reason, score, distanceM: kakaoCandidateDistanceM(input, document) };
+        }
+        continue;
+      }
 
       const placeUrl = place.place_url || (place.id ? `https://place.map.kakao.com/${place.id}` : "");
       const industry = place.category_name?.split(">").map((part) => part.trim()).filter(Boolean).pop() || "";
@@ -332,13 +411,20 @@ export async function resolveKakaoPlace(input: PlaceLinkInput): Promise<KakaoPla
         matchedAddress: place.road_address_name?.trim() || place.address_name?.trim() || "",
         matchedName: place.place_name?.trim() || "",
         placeId: place.id?.trim() || "",
-        queryVariant: attempt.variant
+        queryVariant: attempt.variant,
+        resultCode: "linked",
+        rejectReason: null,
+        rejectedDistanceM: null,
+        nameScore: placeNameScore(input.customerName, place.place_name || "")
       };
     } catch {
       continue;
     }
   }
-  return emptyKakaoPlaceResult(inspectedDocuments);
+  if (!okResponses) return empty;
+  const base = emptyKakaoPlaceResult(inspectedDocuments);
+  const reject = bestReject as { reason: KakaoRejectReason; score: number; distanceM: number | null } | null;
+  return reject ? { ...base, resultCode: "rejected", rejectReason: reject.reason, rejectedDistanceM: reject.distanceM, nameScore: reject.score } : base;
 }
 
 async function resolveNaverPlaceUrl(query: string): Promise<string> {
