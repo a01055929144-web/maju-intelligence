@@ -44,9 +44,13 @@ for (const width of [1440, 390]) test(`지도 검색 결과 패널: 검색·묶�
 
   // 단건: 거래처로 등록 → 등록 창이 열린다(패널은 그대로)
   await panel.getByRole("button", { name: "거래처로 등록" }).first().click();
-  await expect(page.getByText("합성 미등록 식당 1").first()).toBeVisible();
+  // 빠른 등록 창은 상호를 입력칸 값으로 보여 준다(글자로 찾으면 숨은 미리보기 카드를 잡는다)
+  const drawer = page.getByRole("complementary").filter({ hasText: "지도 검색 · 빠른 등록" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByLabel("상호명 (필수)")).toHaveValue("합성 미등록 식당 1");
   await expect(panel).toBeVisible();
-  await page.getByRole("button", { name: "닫기", exact: true }).click();
+  await drawer.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(drawer).toHaveCount(0);
   await expect(panel).toBeVisible();
 
   // 일괄: 둘 다 선택 → 등록
