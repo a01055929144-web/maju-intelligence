@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { LinkifiedText } from "@/components/linkified-text";
 import { CustomerContractPrices } from "@/components/customer-contract-prices";
-import { InlineLoading } from "@/components/inline-loading";
+import { LoadingState } from "@/components/ui/state";
 import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
@@ -64,7 +64,7 @@ import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPrice
 
 const LoadingPositionGallery = dynamic(
   () => import("@/components/loading-position-gallery").then((module) => module.LoadingPositionGallery),
-  { loading: () => <InlineLoading label="하차지 사진을 불러오는 중입니다." /> }
+  { loading: () => <LoadingState label="하차지 사진을 불러오는 중입니다." /> }
 );
 export {
   clamp,
@@ -1533,7 +1533,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
       ) : null}
 
       {isLoading ? (
-        <InlineLoading label="담당자 목록을 불러오는 중입니다..." />
+        <LoadingState label="담당자 목록을 불러오는 중입니다..." />
       ) : contacts.length ? (
         <div className="space-y-2">
           {contacts.map((contact) => (

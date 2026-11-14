@@ -1,6 +1,7 @@
 "use client";
 
 import { RowNumber } from "@/components/ui/row-number";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { SearchInput } from "@/components/ui/search-input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
@@ -51,6 +52,7 @@ export function CommonDataTable<Row>({
   numbered = true,
   bulkActions,
   settingsKey,
+  onRetry,
 }: {
   columns: CommonTableColumn<Row>[];
   emptyMessage?: string;
@@ -58,6 +60,8 @@ export function CommonDataTable<Row>({
   error?: string | null;
   filename?: string;
   loading?: boolean;
+  /** 오류 칸의 "다시 시도" 버튼. 안 주면 버튼 없이 오류 문구만. */
+  onRetry?: () => void;
   groupBy?: (row: Row) => { key: string; label: string } | null;
   pageSizeMode?: keyof typeof COMMON_TABLE_PAGE_SIZES;
   /** 휴대폰(≤640px)에서 표 대신 카드로 보여준다. 기본 꺼짐(기존 화면 유지), 화면별로 켠다. */
@@ -418,7 +422,7 @@ export function CommonDataTable<Row>({
     if (cursor) startEdit(here); // 글자 입력 = 그 칸 편집 시작(덮어쓰기) — 글자는 새 초점 칸에 들어간다
   }
 
-  const stateMessage = error ?? (loading ? "불러오는 중…" : emptyMessage);
+  const stateView = error ? <ErrorState bare message={error} onRetry={onRetry} /> : loading ? <LoadingState bare label="불러오는 중…" /> : <EmptyState bare message={emptyMessage} />;
   let lastGroup = "";
   const totals = displayColumns.map((item) => item.column.total ? sortedRows.reduce((sum, row) => sum + Number(item.column.value(row) || 0), 0) : null);
 
@@ -464,7 +468,7 @@ export function CommonDataTable<Row>({
         <tbody>{virtual && windowRange.start > 0 ? <tr aria-hidden="true" style={{ height: windowRange.start * rowHeight }}><td colSpan={displayColumns.length + leadCount} /></tr> : null}{renderRows.flatMap((row, rowIndex) => {
           const group = groupBy?.(row); const groupRow = group && group.key !== lastGroup ? <tr className="common-data-table-group" key={`group:${group.key}`}><td className="border-y-[2.5px] border-slate-700 bg-slate-100 px-3 py-2 font-black" colSpan={displayColumns.length}>■ {group.label}</td></tr> : null; if (group) lastGroup = group.key;
           return [groupRow, <tr aria-rowindex={pageBase + rowOffset + rowIndex + 2} className={`${compact ? "h-8" : "h-10"} ${failedKeys.has(rowKey(row)) ? "bg-rose-100" : "odd:bg-white even:bg-slate-50/60"}`} key={rowKey(row)}>{selection ? <td className="sticky left-0 z-10 border-b border-slate-200 bg-inherit px-2"><input aria-label="줄 선택" checked={selection.selected.has(rowKey(row))} onChange={(event) => { const next = new Set(selection.selected); event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row)); selection.onChange(next); }} type="checkbox" /></td> : null}{numbered ? <td className="sticky z-10 border-b border-slate-200 bg-inherit px-2 text-right" style={{ left: selection ? LEAD_SELECT_PX : 0 }}><RowNumber value={rowNumber(currentPage, pageSize, rowOffset + rowIndex)} /></td> : null}{displayColumns.map((item, columnIndex) => <td className={`border-b border-slate-200 px-3 ${virtual || compact ? "py-1" : "py-2.5"} ${item.column.align === "right" ? "text-right tabular-nums" : item.column.align === "center" ? "text-center" : ""} ${item.pinned ? "sticky z-10 bg-inherit" : ""} ${cursor?.row === rowOffset + rowIndex && cursor.col === columnIndex ? "ring-2 ring-inset ring-teal-700" : ""}`} aria-colindex={columnIndex + leadCount + 1} aria-current={cursor?.row === rowOffset + rowIndex && cursor.col === columnIndex ? "true" : undefined} data-cell={`${rowOffset + rowIndex}:${columnIndex}`} data-col={item.key} key={item.key} style={item.pinned ? { left: lead + displayColumns.slice(0, columnIndex).filter((value) => value.pinned).reduce((sum, value) => sum + (value.width ?? value.column.width ?? 160), 0) } : undefined} title={typeof item.column.value(row) === "string" ? String(item.column.value(row)) : undefined}><div className={item.column.path ? "truncate" : virtual ? "max-h-8 overflow-hidden" : "line-clamp-2 break-words"} title={item.column.path ? String(item.column.value(row) ?? "") : undefined}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowOffset + rowIndex) : item.column.path ? shortenCategoryPath(String(item.column.value(row) ?? "")) || "-" : item.column.value(row) ?? "-"}</div></td>)}</tr>];
-        })}{virtual && windowRange.end < pageRows.length ? <tr aria-hidden="true" style={{ height: (pageRows.length - windowRange.end) * rowHeight }}><td colSpan={displayColumns.length + leadCount} /></tr> : null}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length + leadCount} role={error ? "alert" : undefined}>{stateMessage}</td></tr> : null}</tbody>
+        })}{virtual && windowRange.end < pageRows.length ? <tr aria-hidden="true" style={{ height: (pageRows.length - windowRange.end) * rowHeight }}><td colSpan={displayColumns.length + leadCount} /></tr> : null}{!pageRows.length ? <tr><td className="px-4 py-12 text-center font-bold text-slate-500" colSpan={displayColumns.length + leadCount}>{stateView}</td></tr> : null}</tbody>
         {totals.some((value) => value !== null) ? <tfoot><tr className="font-black">{leadCount ? <td className="border-t-4 border-double border-slate-900 px-3 py-3" colSpan={leadCount}>합계</td> : null}<td className="border-t-4 border-double border-slate-900 px-3 py-3">{leadCount ? "" : "합계"}</td>{displayColumns.slice(1).map((item, index) => <td className="border-t-4 border-double border-slate-900 px-3 py-3 text-right" key={item.key}>{totals[index + 1]?.toLocaleString("ko-KR") ?? ""}</td>)}</tr></tfoot> : null}
       </table>
     </div>}
@@ -474,7 +478,7 @@ export function CommonDataTable<Row>({
         {selection ? <input aria-label="줄 선택" checked={selection.selected.has(rowKey(row))} onChange={(event) => { const next = new Set(selection.selected); event.target.checked ? next.add(rowKey(row)) : next.delete(rowKey(row)); selection.onChange(next); }} type="checkbox" /> : null}
         {displayColumns.map((item) => <div className="flex justify-between gap-3" key={item.key}><span className="shrink-0 text-xs font-bold text-slate-500">{item.column.label}</span><span className={`min-w-0 text-right ${item.column.align === "right" ? "tabular-nums" : ""}`}>{item.column.render ? item.column.render(row, (pageSize === PAGE_SIZE_ALL ? 0 : (currentPage - 1) * pageSize) + rowIndex) : item.column.value(row) ?? "-"}</span></div>)}
       </li>)}
-      {!pageRows.length ? <li className="px-4 py-10 text-center text-sm font-bold text-slate-500" role={error ? "alert" : undefined}>{stateMessage}</li> : null}
+      {!pageRows.length ? <li className="px-4 py-10 text-center text-sm font-bold text-slate-500">{stateView}</li> : null}
     </ul> : null}
     <div className="common-data-table-tools flex items-center justify-between border-t border-slate-200 p-3 text-xs font-bold text-slate-500"><span>{sortedRows.length ? (pageSize === PAGE_SIZE_ALL ? `전체 ${sortedRows.length}` : `${(currentPage - 1) * pageSize + 1}-${Math.min(currentPage * pageSize, sortedRows.length)} / ${sortedRows.length}`) : "0건"}{selection && sortedRows.length > pageRows.length ? <button className="ml-3 font-bold text-teal-700 underline" onClick={() => selection.onChange(new Set(sortedRows.map(rowKey)))} type="button">필터된 {sortedRows.length.toLocaleString("ko-KR")}개 모두 선택</button> : null}</span><div className="flex items-center gap-2"><button disabled={currentPage <= 1} onClick={() => setPage((value) => value - 1)} type="button">이전</button><span>{currentPage} / {totalPages}</span><button disabled={currentPage >= totalPages} onClick={() => setPage((value) => value + 1)} type="button">다음</button></div></div>
     {helpOpen ? <div aria-label="표 단축키" className="common-data-table-tools fixed bottom-4 right-4 z-50 w-80 rounded-lg border border-slate-300 bg-white p-4 text-xs shadow-xl" role="dialog">

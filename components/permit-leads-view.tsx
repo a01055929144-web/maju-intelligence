@@ -55,7 +55,7 @@ import {
   isStoreDeliveryProofHistoryEnabled,
 } from "@/lib/feature-modules";
 import { readLocalJson } from "@/lib/route-map-utils";
-import { InlineLoading } from "@/components/inline-loading";
+import { LoadingState } from "@/components/ui/state";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesAreaSelector } from "@/components/sales-area-selector";
@@ -1748,7 +1748,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             {keywordSweepBusy ? "탐색 중" : "영업리드 추가 탐색"}
           </button>
         </div>
-        {keywordSweepBusy ? <InlineLoading className="mt-2 !justify-start !border-0 !bg-blue-50 !px-3 !py-2 !text-blue-700" label="기준점별 매장을 검색하고 중복 거래처를 제외하는 중입니다..." /> : null}
+        {keywordSweepBusy ? <LoadingState className="mt-2 !justify-start !border-0 !bg-blue-50 !px-3 !py-2 !text-blue-700" label="기준점별 매장을 검색하고 중복 거래처를 제외하는 중입니다..." /> : null}
         {!kakaoKeywordSearchConfigured && sourceStatus ? (
           <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">KAKAO_REST_KEY가 설정되지 않아 영업리드 확장 탐색을 쓸 수 없습니다.</p>
         ) : null}
@@ -1836,7 +1836,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 </button>
               </div>
             </div>
-            {recommendBusy ? <InlineLoading className="!justify-start !border-0 !bg-teal-50 !px-3 !py-2 !text-teal-700" label="거래처 거리와 업종 적합도를 계산해 추천 순위를 갱신하는 중입니다..." /> : null}
+            {recommendBusy ? <LoadingState className="!justify-start !border-0 !bg-teal-50 !px-3 !py-2 !text-teal-700" label="거래처 거리와 업종 적합도를 계산해 추천 순위를 갱신하는 중입니다..." /> : null}
             {recommendMessage ? <p className="text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {leadSourceCards.map((source) => (
@@ -2121,13 +2121,13 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </button>
           </div>
         </div>
-        {refreshingLeads && loadState === "ready" ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-slate-50 !px-3 !py-2" label="최신 리드와 영업 상태를 불러오는 중입니다..." /> : null}
+        {refreshingLeads && loadState === "ready" ? <LoadingState className="mx-3 mt-2 !justify-start !border-0 !bg-slate-50 !px-3 !py-2" label="최신 리드와 영업 상태를 불러오는 중입니다..." /> : null}
         {leadQualityMode === "keyword" && !keywordVolumeConfigured ? (
           <p className="mx-3 mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
             네이버 검색량 API가 아직 연결되지 않아 검색량순 정렬을 쓸 수 없습니다. 관리자에게 문의하세요.
           </p>
         ) : null}
-        {leadQualityMode === "keyword" && keywordVolumeLoading ? <InlineLoading className="mx-3 mt-2 !justify-start !border-0 !bg-emerald-50 !px-3 !py-2 !text-emerald-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
+        {leadQualityMode === "keyword" && keywordVolumeLoading ? <LoadingState className="mx-3 mt-2 !justify-start !border-0 !bg-emerald-50 !px-3 !py-2 !text-emerald-700" label="검색량과 리뷰 신호를 확인해 영업리드 추천 순서를 계산하는 중입니다..." /> : null}
         {!salesRegionsConfigured ? (
           <div className="mx-3 mt-2 space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
             <div>
@@ -2258,7 +2258,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
 
         <div className="p-3">
           {loadState === "loading" ? (
-            <InlineLoading className="min-h-28 justify-center border-dashed bg-white" label="신규 리드와 영업 현황을 불러오는 중입니다..." />
+            <LoadingState className="min-h-28 justify-center border-dashed bg-white" label="신규 리드와 영업 현황을 불러오는 중입니다..." />
           ) : loadState === "error" ? (
             <div className="rounded-md border border-dashed border-rose-200 bg-rose-50 p-6 text-center">
               <p className="text-sm font-bold text-rose-700">신규 리드를 불러오지 못했습니다.</p>
@@ -2427,7 +2427,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                   </p>
                 ) : null}
                 {isSalesLeadPage && bulkActionBusy ? (
-                  <InlineLoading
+                  <LoadingState
                     className="!justify-start !rounded-none !border-x-0 !border-b-0 !bg-blue-50 !px-3 !py-2 !text-blue-700"
                     label={bulkActionBusy === "quote" ? "선택한 리드에 견적 요청을 기록하는 중입니다..." : bulkActionBusy === "quoteFollowUp" ? "견적 후속 일정을 기록하는 중입니다..." : "선택한 리드의 영업 이력을 저장하는 중입니다..."}
                   />
