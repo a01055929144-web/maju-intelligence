@@ -1,8 +1,8 @@
 // 시안 ⑫ 필터 칩은 여러 개를 고를 수 있습니다. 기존 저장 필터(문자열 1개)와 호환되도록
 // 상태는 그대로 문자열로 두고 "|"로 이어 붙입니다 — 값이 하나면 예전과 완전히 같은 문자열입니다.
-export function splitMultiFilter(value: string) {
-  return value ? value.split("|").map((item) => item.trim()).filter(Boolean) : [];
-}
+import { splitMultiFilter } from "../domains/lead/map-filters";
+
+export { splitMultiFilter };
 
 export function toggleMultiFilter(value: string, item: string) {
   const current = splitMultiFilter(value);
