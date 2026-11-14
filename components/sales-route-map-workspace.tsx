@@ -76,6 +76,8 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
+import { MapSearchResultsPanel, type SearchResultRow } from "@/components/map/map-search-results-panel";
+import { useBusinessSearch, type ExternalBusinessResult } from "@/components/map/use-business-search";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
@@ -199,14 +201,6 @@ export type PermitLeadEnrichResponse = {
     keywordVolume?: boolean;
     placeLinks?: boolean;
   };
-};
-type ExternalBusinessResult = {
-  address: string;
-  industry: string;
-  kakaoPlaceUrl: string;
-  name: string;
-  phone: string;
-  roadAddress: string;
 };
 
 // 검색으로 찾은 미등록 매장은 아직 거래처 id가 없으므로, 지도 마커/클릭 매칭에 쓸 안정적인
@@ -486,10 +480,31 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [query, setQuery] = useState("");
   // 검색창은 원래 등록된 거래처 안에서만 찾았습니다. 아직 거래처로 등록하지 않은 주변 매장도
   // 같이 보여주고 그 자리에서 바로 등록으로 넘어갈 수 있도록, 카카오 매장 검색 결과를 함께 붙입니다.
-  const [externalResults, setExternalResults] = useState<ExternalBusinessResult[]>([]);
-  const [isSearchingExternal, setIsSearchingExternal] = useState(false);
-  const [externalSearchMessage, setExternalSearchMessage] = useState("");
+  const { results: externalResults, message: externalSearchMessage, loading: isSearchingExternal } = useBusinessSearch(query);
+  // 검색창 포커스(최근 검색어 표시용)와 "검색 결과" 탭 열림. 탭은 오른쪽 패널의 기존 탭 상태를 건드리지 않고 위에 덮어 보여 주므로 닫으면 원래 패널 그대로다.
   const [showExternalResults, setShowExternalResults] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchTabOpen = searchOpen && query.trim().length >= 2;
+  const [recentQueries, setRecentQueries] = useState<string[]>([]);
+  useEffect(() => {
+    try { const saved = JSON.parse(localStorage.getItem("maju:map:recent-queries") || "[]"); if (Array.isArray(saved)) setRecentQueries(saved.filter((item): item is string => typeof item === "string").slice(0, 5)); } catch { /* 저장소 없음 */ }
+  }, []);
+  function rememberQuery(value: string) {
+    const keyword = value.trim();
+    if (keyword.length < 2) return;
+    setRecentQueries((old) => {
+      const next = [keyword, ...old.filter((item) => item !== keyword)].slice(0, 5);
+      try { localStorage.setItem("maju:map:recent-queries", JSON.stringify(next)); } catch { /* 저장소 없음 */ }
+      return next;
+    });
+  }
+  function closeSearch() { setQuery(""); setSearchOpen(false); }
+  useEffect(() => {
+    if (!searchTabOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") closeSearch(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchTabOpen]);
   // 지도 검색에서 고른 미등록 매장의 빠른 등록 대상입니다.
   const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
   // 검색 결과 일괄 등록 선택 상태입니다.
@@ -1137,7 +1152,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (keyword.length < 2) return [];
     return allStores
       .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(store.phone, keyword))
-      .slice(0, 8);
+      .slice(0, 30);
   }, [allStores, query]);
   // 신규 리드도 같은 검색창에서 함께 찾을 수 있게 합니다(2026-08-24 피드백). 이미 "제외" 처리한 리드는
   // 다른 신규 리드 목록들과 마찬가지로 기본 검색 결과에서는 뺍니다.
@@ -1147,38 +1162,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     return allLeadsForMap
       .filter((lead) => lead.status !== "제외")
       .filter((lead) => `${lead.businessName} ${lead.address || ""} ${lead.industryPrimary || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(lead.phone, keyword))
-      .slice(0, 8);
+      .slice(0, 30);
   }, [allLeadsForMap, query]);
   // 검색어가 바뀌면 이전 검색 결과에 대한 체크 선택은 의미가 없으므로 함께 초기화합니다.
   useEffect(() => {
     setSelectedResultIds(new Set());
     setBulkRegisterMessage("");
-  }, [query]);
-  useEffect(() => {
-    const keyword = query.trim();
-    if (keyword.length < 2) {
-      setExternalResults([]);
-      setExternalSearchMessage("");
-      setIsSearchingExternal(false);
-      return;
-    }
-
-    let cancelled = false;
-    setIsSearchingExternal(true);
-    const timer = setTimeout(async () => {
-      const response = await fetch(`/api/business-search?query=${encodeURIComponent(keyword)}`, { cache: "no-store" }).catch(() => null);
-      if (cancelled) return;
-      const payload = response?.ok ? await response.json().catch(() => null) : null;
-      const results = Array.isArray(payload?.results) ? payload.results : [];
-      setExternalResults(results);
-      setExternalSearchMessage(results.length ? "" : payload?.message || "");
-      setIsSearchingExternal(false);
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
   }, [query]);
   const gradeBaseStores = useMemo(
     () =>
@@ -1649,7 +1638,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapLeftPanelVisible = (mapPanelMode === "split" || mapPanelMode === "driver") && !leftCollapsed;
   const mapLeftPanelMini = (mapPanelMode === "split" || mapPanelMode === "driver") && leftCollapsed;
   const mapRightPanelVisible =
-    (mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead") && !rightCollapsed;
+    searchTabOpen || ((mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead") && !rightCollapsed);
   const mapLeftInsetClass = mapLeftPanelMini ? "lg:left-14" : !mapLeftPanelVisible ? "lg:left-0" : mapPanelMode === "split" ? "lg:left-[250px]" : "lg:left-[320px] xl:left-[360px]";
   const mapRightInsetClass = mapRightPanelVisible ? "lg:right-[340px]" : "lg:right-0";
   // 레이어 바·조건 요약은 지도 칸(패널 사이) 안에 있으므로 패널 폭과 무관하게 지도 칸 기준 왼쪽 12px입니다.
@@ -2305,6 +2294,31 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (succeeded) router.refresh();
   }
 
+  const searchResultsPanel = (
+    <MapSearchResultsPanel
+      bulkBusy={isBulkRegistering}
+      bulkMessage={bulkRegisterMessage}
+      customers={registeredMatches.map((store): SearchResultRow => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: store.relationshipStatus || "거래처" }))}
+      loading={isSearchingExternal}
+      message={externalSearchMessage}
+      newLeads={leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead): SearchResultRow => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" }))}
+      onClose={closeSearch}
+      onOpenCustomer={(id) => { rememberQuery(query); setPreviewLeadId(""); setSelectedId(""); setPreviewStoreId(id); }}
+      onOpenLead={(id) => { rememberQuery(query); setPreviewStoreId(""); setSelectedId(""); setPreviewLeadId(id); setMapLeadsVisible(true); }}
+      onRegister={(id) => {
+        const target = unregisteredResults.find((result) => externalResultId(result) === id);
+        if (target) { rememberQuery(query); setPreviewStoreId(""); setPreviewLeadId(""); setQuickRegisterTarget(target); }
+      }}
+      onRegisterSelected={registerSelectedResults}
+      onToggle={toggleResultSelection}
+      onToggleAll={toggleSelectAllResults}
+      query={query}
+      salesLeads={leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead): SearchResultRow => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" }))}
+      selectedIds={selectedResultIds}
+      unregistered={unregisteredResults.map((result): SearchResultRow => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))}
+    />
+  );
+
   return (
     <div
       className={`maju-section-card flex min-h-[680px] flex-col text-slate-900 ${
@@ -2634,153 +2648,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             <input
               className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
               onBlur={() => setShowExternalResults(false)}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setSearchOpen(event.target.value.trim().length >= 2); }}
               onFocus={() => setShowExternalResults(true)}
+              onKeyDown={(event) => { if (event.key === "Enter") rememberQuery(query); }}
               placeholder="상호·주소·전화"
               value={query}
             />
-            {showExternalResults && query.trim().length >= 2 ? (
-              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-96 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
-                {registeredMatches.length ? (
-                  <div className="border-b border-slate-100">
-                    <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
-                      등록된 거래처 {registeredMatches.length.toLocaleString()}곳
-                    </p>
-                    {registeredMatches.map((store) => (
-                      <button
-                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
-                        key={store.id}
-                        onClick={() => {
-                          setPreviewLeadId("");
-                          setSelectedId("");
-                          setPreviewStoreId(store.id || "");
-                          setRightPanelTab("stores");
-                          setMapPanelMode("customer");
-                          setShowExternalResults(false);
-                        }}
-                        onMouseDown={(event) => event.preventDefault()}
-                        type="button"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-950">{store.name}</p>
-                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{store.address || store.region}</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700">지도에서 보기</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {leadMatches.length ? (
-                  <div className="border-b border-slate-100">
-                    <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
-                      신규 리드 {leadMatches.length.toLocaleString()}건
-                    </p>
-                    {leadMatches.map((lead) => (
-                      <button
-                        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-teal-50"
-                        key={lead.id}
-                        onClick={() => {
-                          setPreviewStoreId("");
-                          setSelectedId("");
-                          setPreviewLeadId(lead.id);
-                          // 검색 결과에서 리드를 고르면 해당 마커와 우측 리드 목록도 같은 대상을
-                          // 가리키도록 전체 리드 레이어를 함께 켭니다. 이미 켜져 있으면 변화가 없습니다.
-                          setMapLeadsVisible(true);
-                          setRightPanelTab("leads");
-                          setMapPanelMode(getPermitLeadType(lead) === "new" ? "newLead" : "salesLead");
-                          setShowExternalResults(false);
-                        }}
-                        onMouseDown={(event) => event.preventDefault()}
-                        type="button"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-950">{lead.businessName}</p>
-                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lead.address || "주소 확인 필요"}</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">리드 카드 보기</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5">
-                  <p className="text-xs font-semibold text-slate-500">미등록 매장 · 카카오맵 검색</p>
-                  {unregisteredResults.length ? (
-                    <label className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-500">
-                      <input
-                        checked={selectedResultIds.size > 0 && selectedResultIds.size === unregisteredResults.length}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
-                        onChange={toggleSelectAllResults}
-                        onMouseDown={(event) => event.preventDefault()}
-                        type="checkbox"
-                      />
-                      전체 선택
-                    </label>
-                  ) : null}
-                </div>
-                {isSearchingExternal ? (
-                  <p className="px-3 py-2 text-xs font-bold text-slate-400">검색 중...</p>
-                ) : unregisteredResults.length ? (
-                  unregisteredResults.map((result) => {
-                    const resultId = externalResultId(result);
-                    const isSelected = selectedResultIds.has(resultId);
-                    return (
-                      <div
-                        className={`flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-teal-50 ${
-                          isSelected ? "bg-teal-50" : ""
-                        }`}
-                        key={resultId}
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <input
-                            checked={isSelected}
-                            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-teal-600 focus:ring-teal-400"
-                            onChange={() => toggleResultSelection(resultId)}
-                            onMouseDown={(event) => event.preventDefault()}
-                            type="checkbox"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-950">{result.name}</p>
-                            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
-                              {result.roadAddress || result.address || "주소 정보 없음"}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          className="maju-button-secondary h-8 shrink-0 px-2.5 text-xs"
-                          onClick={() => {
-                            setPreviewStoreId("");
-                            setPreviewLeadId("");
-                            setQuickRegisterTarget(result);
-                            setShowExternalResults(false);
-                          }}
-                          onMouseDown={(event) => event.preventDefault()}
-                          type="button"
-                        >
-                          거래처로 등록
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="px-3 py-2 text-xs font-bold text-slate-400">{externalSearchMessage || "새로 찾은 미등록 매장이 없습니다."}</p>
-                )}
-                {selectedResultIds.size > 0 ? (
-                  <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-3 py-2">
-                    <p className="text-xs font-bold text-slate-500">{selectedResultIds.size}곳 선택됨</p>
-                    <button
-                      className="maju-button-primary flex h-8 shrink-0 items-center gap-1.5 px-3 text-xs disabled:opacity-60"
-                      disabled={isBulkRegistering}
-                      onClick={registerSelectedResults}
-                      onMouseDown={(event) => event.preventDefault()}
-                      type="button"
-                    >
-                      {isBulkRegistering ? "등록 중" : `선택 ${selectedResultIds.size}곳 일괄 등록`}
-                    </button>
-                  </div>
-                ) : null}
-                {bulkRegisterMessage ? (
-                  <p className="border-t border-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{bulkRegisterMessage}</p>
-                ) : null}
+            {showExternalResults && query.trim().length < 2 && recentQueries.length ? (
+              <div aria-label="최근 검색어" className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+                <p className="border-b border-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">최근 검색어</p>
+                {recentQueries.map((item) => (
+                  <button className="block w-full truncate border-b border-slate-100 px-3 py-2 text-left text-sm font-semibold text-slate-900 last:border-b-0 hover:bg-teal-50" key={item} onClick={() => { setQuery(item); setSearchOpen(true); }} onMouseDown={(event) => event.preventDefault()} type="button">{item}</button>
+                ))}
               </div>
             ) : null}
           </label>
@@ -3748,7 +3627,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:max-h-none lg:flex-col lg:bg-white ${
-              mapPanelMode === "split"
+              searchTabOpen
+                ? "flex lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200"
+                : mapPanelMode === "split"
                 ? `hidden lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200 ${rightCollapsed ? "" : "lg:flex"}`
                 : mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
                   ? "flex lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200"
@@ -3756,7 +3637,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             }`}
           >
             <div className="min-h-0 flex-1 overflow-hidden">
-            {activeRightPanelTab === "leads" ? (
+            {searchTabOpen ? searchResultsPanel : activeRightPanelTab === "leads" ? (
               <LeadListPanel
                 collapsed={rightCollapsed}
                 leads={leadsForRightPanel}
