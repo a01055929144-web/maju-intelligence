@@ -14,6 +14,7 @@ import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirma
 import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
 import { storeOrderStatusLabel } from "../domains/order/store-order-status";
 import { fetchCatalogPage, SourceToggle, StorefrontCatalogPanel, type CatalogPage } from "./storefront-catalog-panel";
+import type { CatalogLine } from "@/domains/pricing/storefront-catalog";
 
 type Product = { key: string; productId: string; promotionId: string | null;
   name: string; category: string; brand: string; spec: string; unit: string;
@@ -22,7 +23,7 @@ type Product = { key: string; productId: string; promotionId: string | null;
   priceIncludesTax: boolean; isMarketPrice: boolean; remaining: number | null;
   maximumQuantity: number | null;
   recentDispatchPrice: number | null; recentDispatchDate: string | null };
-type Store = { title: string; companyName: string; customerName: string;
+type Store = { source?: "document" | "catalog"; title: string; companyName: string; customerName: string;
   deliveryAddress: string | null; version: number; validUntil: string;
   priceAvailable: boolean; canOrder: boolean; nextDeliveryDate: string | null;
   selectedDeliveryDate: string;
@@ -77,14 +78,45 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
   const [orderView, setOrderView] = useState<"grid" | "table">("grid");
   // CC-36a: "받은 단가표 | 전체 상품"(전체 상품이 열려 있는 매장만). 마지막에 쓴 쪽을 기억한다.
   const [catalog, setCatalog] = useState<CatalogPage | null>(null);
+  // CC-36c-2b: 전체 상품 링크는 문서가 없어 품목을 /api/storefront/catalog 에서 받아 기존 주문 탭에 그대로 올린다.
+  // 검색하면 목록이 바뀌므로, 담은 품목이 사라지지 않게 본 적 있는 품목은 모두 기억한다(catalogAll).
+  const [catalogAll, setCatalogAll] = useState<Record<string, CatalogLine>>({});
+  const [shownIds, setShownIds] = useState<string[]>([]);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const catalogSeq = useRef(0);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function applyCatalog(result: CatalogPage, append: boolean) {
+    setCatalog(result);
+    setCatalogAll((old) => { const next = { ...old }; for (const line of result.lines) next[line.productId] = line; return next; });
+    setShownIds((old) => append ? [...old, ...result.lines.map((line) => line.productId)] : result.lines.map((line) => line.productId));
+  }
+  function searchCatalog(value: string) {
+    setCatalogQuery(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const sequence = ++catalogSeq.current;
+    searchTimer.current = setTimeout(() => {
+      void fetchCatalogPage(token, 1, value).then((result) => {
+        if (sequence !== catalogSeq.current) return;
+        if (result) applyCatalog(result, false); else setMessage("전체 상품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      });
+    }, 300);
+  }
+  async function moreCatalog() {
+    if (!catalog) return;
+    const sequence = ++catalogSeq.current;
+    const result = await fetchCatalogPage(token, catalog.page + 1, catalogQuery);
+    if (sequence !== catalogSeq.current) return;
+    if (result) applyCatalog(result, true); else setMessage("전체 상품을 더 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
   const [source, setSourceState] = useState<"doc" | "all">("doc");
   useEffect(() => {
     if (!token) return;
-    void fetchCatalogPage(token, 1, "").then(setCatalog);
+    void fetchCatalogPage(token, 1, "").then((page) => { if (page) applyCatalog(page, false); });
     try { if (localStorage.getItem("maju:store:source") === "all") setSourceState("all"); } catch { /* 저장소 없음 */ }
   }, [token]);
   const setSource = (next: "doc" | "all") => { setSourceState(next); try { localStorage.setItem("maju:store:source", next); } catch { /* 저장소 없음 */ } };
-  const showCatalog = Boolean(catalog) && source === "all";
+  const catalogMode = data?.store.source === "catalog";
+  const showCatalog = !catalogMode && Boolean(catalog) && source === "all";
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [ascending, setAscending] = useState(true);
   const [priceChangesOnly, setPriceChangesOnly] = useState(false);
@@ -129,7 +161,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
     }
   }, [endpoint, token]);
   useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
-  const store = data?.store;
+  const baseStore = data?.store;
+  const store = baseStore && catalogMode ? { ...baseStore, lines: Object.values(catalogAll).flatMap((line): Product[] =>
+    // 가격이 없는 일반 품목은 주문할 수 없으니 올리지 않는다(시세 품목은 가격 미정으로 주문 가능).
+    line.isMarket || line.price !== null ? [{ key: `${line.productId}:`, productId: line.productId, promotionId: null, name: line.name,
+      category: line.category, brand: line.brand, spec: line.spec, unit: line.unit, badge: "", taxType: line.taxType,
+      unitPrice: line.isMarket ? null : line.price, priceIncludesTax: false, isMarketPrice: line.isMarket, remaining: null,
+      maximumQuantity: null, recentDispatchPrice: line.lastDispatch?.price ?? null, recentDispatchDate: line.lastDispatch?.date ?? null }] : []) } : baseStore;
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
@@ -143,7 +181,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
     const matchesView = productView === "complete" ? true : productView === "hidden" ? preference?.isHidden === true :
       productView === "favorites" ? preference?.isFavorite === true && !preference.isHidden :
         !preference?.isHidden || (cart[line.key] ?? 0) > 0;
-    return matchesView && (category === "전체" || (line.category || "미분류") === category) &&
+    return matchesView && (!catalogMode || shownIds.includes(line.productId)) && (category === "전체" || (line.category || "미분류") === category) &&
       (!priceChangesOnly || line.salesPriceDirection === "up" || line.salesPriceDirection === "down");
   }) ?? []).sort((a, b) => {
     if (sortBy === "price" && (a.unitPrice === null || b.unitPrice === null)) {
@@ -286,7 +324,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
       <StorefrontCatalogPanel initial={catalog} token={token} />
     </section>}
     {tab === "order" && !showCatalog && <section className="space-y-4 p-4 md:p-6">
-      {catalog ? <SourceToggle onChange={setSource} source={source} /> : null}
+      {catalog && !catalogMode ? <SourceToggle onChange={setSource} source={source} /> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
@@ -302,19 +340,20 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
             if (day) void load(day).catch(() => undefined);
             else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
       <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
-      <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
+      {catalogMode ? <input aria-label="상품 검색" className="h-11 w-full rounded border px-3 text-sm" onChange={(event) => searchCatalog(event.target.value)}
+        placeholder="상품 이름 검색" type="search" value={catalogQuery} /> : <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
         {(["all", "favorites", "hidden"] as const).map((view) =>
           <button key={view} aria-pressed={productView === view} className="min-h-[44px] rounded border px-3"
             onClick={() => setProductView(view)}>{view === "all" ? "전체" : view === "favorites" ? "즐겨찾기" : "숨긴 품목"}</button>)}
-      </div>
+      </div>}
       <div role="group" aria-label="품목 대분류" className="flex gap-2 overflow-x-auto pb-1 text-sm">
         {["전체", ...categories].map((item) => <button key={item} aria-pressed={category === item}
           className={`min-h-[44px] shrink-0 rounded border px-3 ${category === item ? "border-blue-700 text-blue-700" : ""}`}
           onClick={() => setCategory(item)}>{item}</button>)}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <button aria-pressed={priceChangesOnly} className="min-h-[44px] rounded border px-3"
-          onClick={() => setPriceChangesOnly((value) => !value)}>판매가 변동만</button>
+        {!catalogMode && <button aria-pressed={priceChangesOnly} className="min-h-[44px] rounded border px-3"
+          onClick={() => setPriceChangesOnly((value) => !value)}>판매가 변동만</button>}
         <label>정렬 <select aria-label="정렬" disabled={busy || !pricesVisible} className="min-h-[44px] rounded border px-2" value={sortBy}
           onChange={(event) => setSortBy(event.target.value as "name" | "price")}>
           <option value="name">상품명</option><option value="price">판매가</option>
@@ -340,20 +379,21 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
           {pricesVisible && line.recentDispatchPrice !== null && line.recentDispatchDate &&
             <> 최근 출고 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)} (참고)</>}
         </p>}
-        <div className="mt-2 flex gap-2 text-xs md:mt-0">
+        {!catalogMode && <div className="mt-2 flex gap-2 text-xs md:mt-0">
           <button disabled={busy} aria-pressed={preferences.get(line.productId)?.isFavorite === true}
             className="min-h-[44px] rounded border px-3" onClick={() => void changePreference(line.productId, "isFavorite")}>
             {preferences.get(line.productId)?.isFavorite ? "즐겨찾기 해제" : "즐겨찾기"}</button>
           <button disabled={busy} className="min-h-[44px] rounded border px-3"
             onClick={() => void changePreference(line.productId, "isHidden")}>
             {preferences.get(line.productId)?.isHidden ? "다시 표시" : "품목 숨기기"}</button>
-        </div>
+        </div>}
         <div className="mt-3 flex items-center justify-end gap-2 md:mt-0">
           <button disabled={busy} aria-label={`${line.name} 수량 줄이기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, -1)}>−</button>
           <span aria-label={`${line.name} 수량`} className="min-w-8 text-center">{cart[line.key] || 0}</span>
           <button disabled={busy} aria-label={`${line.name} 수량 늘리기`} className="min-h-[44px] min-w-[44px] rounded border" onClick={() => changeQuantity(line, 1)}>＋</button>
         </div>
       </li>)}</ul>
+      {catalogMode && catalog?.hasMore && <button className="min-h-[44px] w-full rounded border text-sm font-bold" disabled={busy} onClick={() => void moreCatalog()} type="button">상품 더 보기</button>}
       <label className="block text-sm">요청 사항<textarea disabled={busy} className="mt-1 w-full rounded border p-2" maxLength={500}
         value={memo} onChange={(event) => { setMemo(event.target.value); retryKey.current = null; }} /></label>
       {pricesVisible && summary && <div className="rounded bg-slate-50 p-3 text-sm">

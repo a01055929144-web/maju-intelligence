@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 // 가격은 서버 함수 margin_template_price_v1 결과만 쓴다(여기서 계산하지 않음). 스위치 STORE_CATALOG_LINK 기본 OFF.
 const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 const PAGE = 50;
-type Product = { id: string; canonical_name: string | null; purchase_product_name: string | null; sales_product_name: string | null; category: string | null; brand_name: string | null; sales_spec: string | null; sales_unit: string | null; order_pricing_mode: string | null; purchase_price_date: string | null };
+type Product = { id: string; canonical_name: string | null; purchase_product_name: string | null; sales_product_name: string | null; category: string | null; brand_name: string | null; sales_spec: string | null; sales_unit: string | null; order_pricing_mode: string | null; purchase_price_date: string | null; tax_type: string | null };
 type Recent = { product_id: string; unit_price: number; document_date: string };
 
 const unavailable = () => NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404, headers });
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (!store || !isFeatureEnabled("STORE_CATALOG_LINK", store.companyId)) return unavailable();
     const company = store.companyId, customer = store.customerId, today = koreaDay();
     const filter = `company_id=eq.${company}&is_active=is.true${q ? `&or=(${["canonical_name", "sales_product_name", "purchase_product_name"].map((column) => `${column}.ilike.*${encodeURIComponent(q)}*`).join(",")})` : ""}`;
-    const products = await supabaseRequest<Product[]>(`product_catalog?select=id,canonical_name,purchase_product_name,sales_product_name,category,brand_name,sales_spec,sales_unit,order_pricing_mode,purchase_price_date&${filter}&order=category,canonical_name&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
+    const products = await supabaseRequest<Product[]>(`product_catalog?select=id,canonical_name,purchase_product_name,sales_product_name,category,brand_name,sales_spec,sales_unit,order_pricing_mode,purchase_price_date,tax_type&${filter}&order=category,canonical_name&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
     const hasMore = products.length > PAGE;
     const shown = products.slice(0, PAGE);
     const marketIds = shown.filter((p) => p.order_pricing_mode === "market").map((p) => p.id);
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       const price = await priceOf(p.id);
       const last = recentBy.get(p.id);
       return {
-        productId: p.id, name: (p.sales_product_name || p.canonical_name || p.purchase_product_name || "").trim(), category: (p.category ?? "").split(">")[0].trim() || "미분류", brand: p.brand_name ?? "", spec: p.sales_spec ?? "", unit: p.sales_unit ?? "", isMarket,
+        productId: p.id, name: (p.sales_product_name || p.canonical_name || p.purchase_product_name || "").trim(), category: (p.category ?? "").split(">")[0].trim() || "미분류", brand: p.brand_name ?? "", spec: p.sales_spec ?? "", unit: p.sales_unit ?? "", isMarket, taxType: p.tax_type === "exempt" ? "exempt" as const : "taxable" as const,
         price: isMarket ? null : price,
         todayBasePrice: isMarket ? todayBaseOnly(p.purchase_price_date, today, price) : null,
         lastDispatch: isMarket && last ? { price: last.unit_price, date: last.document_date } : null,
