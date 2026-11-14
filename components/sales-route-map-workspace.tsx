@@ -77,6 +77,7 @@ import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
+import { MapFilterPopover } from "@/components/map/map-filter-popover";
 import { useMapFilters, type MapFilterPopKey } from "@/components/map/use-map-filters";
 import { MapSearchResultsPanel, type SearchResultRow } from "@/components/map/map-search-results-panel";
 import { useBusinessSearch, type ExternalBusinessResult } from "@/components/map/use-business-search";
@@ -128,7 +129,7 @@ import type { RouteOrderFields, RouteOrderLinkStatus } from "@/application/route
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
-import { formatStoreAreaPyeong, isStoreAreaInRange, type StoreAreaRange } from "@/domains/lead/store-area";
+import { formatStoreAreaPyeong, isStoreAreaInRange, STORE_AREA_RANGE_OPTIONS, type StoreAreaRange } from "@/domains/lead/store-area";
 import {
   QUOTE_MARGIN_PRESETS,
   calculateQuoteLine,
@@ -187,14 +188,6 @@ type GradeFilter = "all" | RevenueGrade;
 type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 
 const LEAD_STORE_AREA_FEATURE_ENABLED = process.env.NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED === "true";
-const STORE_AREA_RANGE_OPTIONS: Array<{ label: string; value: StoreAreaRange }> = [
-  { label: "10평 이하", value: "lte10" },
-  { label: "20평 이하", value: "lte20" },
-  { label: "30평 이하", value: "lte30" },
-  { label: "30평 이상", value: "gte30" },
-  { label: "10~100평", value: "10to100" }
-];
-
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
@@ -434,14 +427,6 @@ const originMarkerId = "origin-hub";
 export const tmapWaypointLimit = 15;
 // v2(10-27 시안 ⑫): 기본 = 3분할(왼쪽 담당자·차량 / 지도 / 오른쪽 신규·영업·거래처 목록). v1 저장값은 무시합니다.
 const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2";
-const MAP_FILTER_POP_TITLES: Record<MapFilterPopKey, string> = {
-  date: "인허가일",
-  industry: "업종",
-  more: "더보기",
-  region: "영업 지역",
-  size: "매장 규모 (평 · 구간)",
-  stage: "단계"
-};
 // "반경 리드"에서 지도를 클릭하면 항상 이 값으로 시작합니다(네이버 지도 반경 도구 참고, 2026-08-20).
 const DEFAULT_LEAD_SEARCH_RADIUS_KM = 0.5;
 export const QUOTE_DRAFT_UPDATED_EVENT = "maju:quote-draft-updated";
@@ -2641,284 +2626,67 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             </button>
           </div>
           {mapFilterPop ? (
-            <div
-              aria-label={MAP_FILTER_POP_TITLES[mapFilterPop]}
-              className="absolute z-40 w-[300px] max-w-[calc(100vw-1rem)] rounded-xl border border-slate-200 bg-white p-3 text-[13px] text-slate-800 shadow-[0_8px_24px_rgba(15,23,42,.18)]"
-              ref={mapFilterPopRef}
-              role="dialog"
-              style={{ left: mapFilterPopLeft, top: mapFilterPopTop }}
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <b className="text-[13px] font-black text-slate-950">{MAP_FILTER_POP_TITLES[mapFilterPop]}</b>
-                {mapFilterPop === "region" || mapFilterPop === "industry" || mapFilterPop === "stage" ? (
-                  <button
-                    className="ml-auto h-7 rounded-md px-2 text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-40"
-                    disabled={!(mapFilterPop === "region" ? mapLeadRegionSigungu : mapFilterPop === "industry" ? mapLeadIndustryFilter : mapLeadStageFilter)}
-                    onClick={() => {
-                      if (mapFilterPop === "region") {
-                        setMapLeadRegionSigungu("");
-                        setMapLeadRegionDong("");
-                      } else if (mapFilterPop === "industry") setMapLeadIndustryFilter("");
-                      else setMapLeadStageFilter("");
-                    }}
-                    type="button"
-                  >
-                    전체 해제
-                  </button>
-                ) : null}
-                <button
-                  aria-label="닫기"
-                  className={`grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 ${mapFilterPop === "region" || mapFilterPop === "industry" || mapFilterPop === "stage" ? "" : "ml-auto"}`}
-                  onClick={() => setMapFilterPop("")}
-                  type="button"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {mapFilterPop === "region" ? (
-                <div className="max-h-[300px] overflow-auto">
-                  {mapRegionFilterGroups.map((group) => (
-                    <div key={group.title}>
-                      <div className="mt-1 flex items-center border-b border-slate-100 py-1">
-                        <b className="text-xs font-black text-slate-800">{group.title}</b>
-                        <span className="ml-auto text-[11px] text-slate-500">{group.helper}</span>
-                      </div>
-                      {group.items.length ? (
-                        group.items.map(([sigungu, count]) => (
-                          <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]" key={`${group.title}-${sigungu}`}>
-                            <input
-                              checked={splitMultiFilter(mapLeadRegionSigungu).includes(sigungu)}
-                              className="h-4 w-4 rounded border-slate-300 text-teal-700"
-                              onChange={() => {
-                                setMapLeadRegionSigungu((current) => toggleMultiFilter(current, sigungu));
-                                setMapLeadRegionDong("");
-                              }}
-                              type="checkbox"
-                            />
-                            <span className="min-w-0 flex-1 truncate">{sigungu}</span>
-                            <span className="text-xs text-slate-500 tabular-nums">{count.toLocaleString()}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <p className="py-2 text-xs text-slate-400">{group.empty}</p>
-                      )}
-                    </div>
-                  ))}
-                  {/* 11/3 현장 피드백: 지역 설정이 좌측 하단 설정 메뉴에만 있는 줄 알았다 → 주색 버튼으로 눈에 띄게. 이 화면에서 바로 열리고 닫으면 그대로 복귀. */}
-                  <button
-                    className="maju-button-primary mt-2 h-9 w-full justify-center text-xs"
-                    onClick={() => {
-                      setMapFilterPop("");
-                      setMobileSalesAreaOpen(true);
-                    }}
-                    type="button"
-                  >
-                    영업 지역 설정
-                  </button>
-                </div>
-              ) : null}
-
-              {mapFilterPop === "industry" ? (
-                <div className="max-h-[300px] overflow-auto">
-                  {mapLeadIndustryOptions.length ? (
-                    mapLeadIndustryOptions.map(([industry, count]) => (
-                      <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]" key={industry}>
-                        <input
-                          checked={splitMultiFilter(mapLeadIndustryFilter).includes(industry)}
-                          className="h-4 w-4 rounded border-slate-300 text-teal-700"
-                          onChange={() => setMapLeadIndustryFilter((current) => toggleMultiFilter(current, industry))}
-                          type="checkbox"
-                        />
-                        <span className="min-w-0 flex-1 truncate">{industry}</span>
-                        <span className="text-xs text-slate-500 tabular-nums">{count.toLocaleString()}</span>
-                      </label>
-                    ))
-                  ) : (
-                    <p className="py-2 text-xs text-slate-400">{allLeadsLoadState === "loading" ? "리드를 불러오는 중입니다." : "표시할 업종이 없습니다."}</p>
-                  )}
-                </div>
-              ) : null}
-
-              {mapFilterPop === "size" ? (
-                <div>
-                  <div className="mb-2.5 flex flex-wrap gap-1.5">
-                    {STORE_AREA_RANGE_OPTIONS.map((option) => (
-                      <button
-                        aria-pressed={mapLeadAreaRange === option.value}
-                        className={`h-8 rounded-full border px-3 text-[13px] ${
-                          LEAD_STORE_AREA_FEATURE_ENABLED
-                            ? mapLeadAreaRange === option.value
-                              ? "border-teal-700 bg-teal-700 font-bold text-white"
-                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                            : "border-slate-200 bg-slate-50 text-slate-400"
-                        }`}
-                        disabled={!LEAD_STORE_AREA_FEATURE_ENABLED}
-                        key={option.value}
-                        onClick={() => setMapLeadAreaRange((current) => current === option.value ? "" : option.value)}
-                        type="button"
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="rounded-md bg-slate-50 px-2.5 py-2 text-xs leading-5 text-slate-600">
-                    {LEAD_STORE_AREA_FEATURE_ENABLED
-                      ? "공공 인허가 소재지 면적(㎡)을 평으로 환산한 구간입니다. 면적 미확인 리드는 구간 필터에서 제외됩니다."
-                      : "매장 면적(평) 정보를 아직 수집하지 않아 이 필터는 준비 중입니다. 인허가 면적이 쌓이면 평 구간으로 거를 수 있습니다. (1평 = 3.3058㎡)"}
-                  </p>
-                </div>
-              ) : null}
-
-              {mapFilterPop === "date" ? (
-                <div className="space-y-2">
-                  <div className="flex overflow-hidden rounded-lg border border-slate-300">
-                    {[
-                      ["", "전체"],
-                      ["7", "7일"],
-                      ["30", "30일"],
-                      ["90", "90일"]
-                    ].map(([days, label]) => (
-                      <button
-                        aria-pressed={mapOpenDatePreset === days}
-                        className={`h-[34px] flex-1 text-xs transition ${mapOpenDatePreset === days ? "bg-teal-700 font-bold text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-                        key={label}
-                        onClick={() => applyMapOpenDatePreset(days ? Number(days) : 0)}
-                        type="button"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] font-black text-slate-500">기간 직접</p>
-                  <div className="flex items-center gap-1.5">
-                    <input aria-label="인허가일 시작" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateStartDraft(event.target.value)} type="date" value={mapLeadOpenDateStartDraft} />
-                    <span className="text-xs text-slate-400">~</span>
-                    <input aria-label="인허가일 끝" className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-xs" onChange={(event) => setMapLeadOpenDateEndDraft(event.target.value)} type="date" value={mapLeadOpenDateEndDraft} />
-                  </div>
-                  <button
-                    className="h-8 w-full rounded-md border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                    disabled={mapLeadOpenDateStartDraft === mapLeadOpenDateStart && mapLeadOpenDateEndDraft === mapLeadOpenDateEnd}
-                    onClick={() => {
-                      setMapLeadOpenDateStart(mapLeadOpenDateStartDraft);
-                      setMapLeadOpenDateEnd(mapLeadOpenDateEndDraft);
-                    }}
-                    type="button"
-                  >
-                    이 기간으로 조회
-                  </button>
-                </div>
-              ) : null}
-
-              {mapFilterPop === "stage" ? (
-                <div className="max-h-[300px] overflow-auto">
-                  {LEAD_STAGE_OPTIONS.map((option) => (
-                    <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]" key={option.value}>
-                      <input
-                        checked={splitMultiFilter(mapLeadStageFilter).includes(option.value)}
-                        className="h-4 w-4 rounded border-slate-300 text-teal-700"
-                        onChange={() => setMapLeadStageFilter((current) => toggleMultiFilter(current, option.value))}
-                        type="checkbox"
-                      />
-                      <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                      <span className="text-xs text-slate-500 tabular-nums">{(mapLeadStageCounts.get(option.value) || 0).toLocaleString()}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : null}
-
-              {mapFilterPop === "more" ? (
-                <div className="space-y-1">
-                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
-                    <input checked={excludeClosedStores} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setExcludeClosedStores((value) => !value)} type="checkbox" />
-                    이탈 거래처 제외
-                  </label>
-                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
-                    <input checked={showTerminatedStores} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowTerminatedStores((value) => !value)} type="checkbox" />
-                    거래 종료 거래처 보기
-                  </label>
-                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
-                    <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
-                    숨김 리드 보기
-                  </label>
-                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
-                    <input checked={showClosedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowClosedLeadsOnMap(event.target.checked)} type="checkbox" />
-                    폐업 리드 포함
-                  </label>
-                  {mapSalesRegionsConfigured === true && mapTargetType === "restaurant" ? (
-                    <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
-                      <input checked={showOutsideSalesAreaOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={(event) => setShowOutsideSalesAreaOnMap(event.target.checked)} type="checkbox" />
-                      영업 지역 밖도 보기
-                    </label>
-                  ) : null}
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <select
-                      aria-label="거래처 등급"
-                      className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 text-xs"
-                      onChange={(event) => setGradeFilter(event.target.value as GradeFilter)}
-                      value={gradeFilter}
-                    >
-                      {gradeFilters.map((filter) => (
-                        <option key={filter.value} value={filter.value}>
-                          {filter.label} {filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value]}곳
-                        </option>
-                      ))}
-                    </select>
-                    <button className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" onClick={focusOrigin} title="물류 출발지로 지도 이동" type="button">
-                      출발지 보기
-                    </button>
-                  </div>
-                  <div className="mt-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500">저장한 필터</div>
-                  {mapFilterPresetEnabled ? (
-                    mapFilterPresets.length ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {mapFilterPresets.map((preset) => (
-                          <span className={`inline-flex items-center rounded-full text-xs ${selectedMapFilterPresetId === preset.id ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"}`} key={preset.id}>
-                            <button className="px-2.5 py-1" onClick={() => applyMapFilterPreset(preset.id)} type="button">{preset.name}</button>
-                            {selectedMapFilterPresetId === preset.id ? (
-                              <button
-                                aria-label={`${preset.name} 삭제`}
-                                className="grid h-6 w-6 place-items-center rounded-full hover:bg-teal-800 disabled:opacity-40"
-                                disabled={mapFilterPresetBusy}
-                                onClick={() => void removeSelectedMapFilterPreset()}
-                                type="button"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            ) : null}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">아직 저장한 필터가 없습니다.</p>
-                    )
-                  ) : (
-                    <p className="text-xs text-slate-400">필터 저장 기능이 꺼져 있습니다.</p>
-                  )}
-                  <p className="pt-1 text-[11px] text-slate-500">
-                    {sourceReady
-                      ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}`
-                      : "거래처 등록 필요"}
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="mt-3 flex gap-1.5">
-                {mapFilterPresetEnabled ? (
-                  <button
-                    className="h-9 flex-1 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                    disabled={mapFilterPresetBusy}
-                    onClick={() => void saveCurrentMapFilterPreset()}
-                    type="button"
-                  >
-                    이 조건 저장
-                  </button>
-                ) : null}
-                <button className="h-9 flex-1 rounded-lg bg-teal-700 text-[13px] font-bold text-white hover:bg-teal-800" onClick={() => setMapFilterPop("")} type="button">
-                  적용
-                </button>
-              </div>
-            </div>
+            <MapFilterPopover
+              date={{
+                applied: { end: mapLeadOpenDateEnd, start: mapLeadOpenDateStart },
+                draft: { end: mapLeadOpenDateEndDraft, start: mapLeadOpenDateStartDraft },
+                onApply: () => {
+                  setMapLeadOpenDateStart(mapLeadOpenDateStartDraft);
+                  setMapLeadOpenDateEnd(mapLeadOpenDateEndDraft);
+                },
+                onPreset: applyMapOpenDatePreset,
+                preset: mapOpenDatePreset,
+                setEndDraft: setMapLeadOpenDateEndDraft,
+                setStartDraft: setMapLeadOpenDateStartDraft
+              }}
+              industry={{ loading: allLeadsLoadState === "loading", options: mapLeadIndustryOptions, setValue: setMapLeadIndustryFilter, value: mapLeadIndustryFilter }}
+              left={mapFilterPopLeft}
+              more={{
+                excludeClosedStores,
+                gradeFilter,
+                gradeOptions: gradeFilters.map((filter) => ({ count: filter.value === "all" ? gradeBaseStores.length : gradeCounts[filter.value], label: filter.label, value: filter.value })),
+                onFocusOrigin: focusOrigin,
+                setExcludeClosedStores,
+                setGrade: (value) => setGradeFilter(value as GradeFilter),
+                setShowClosed: setShowClosedLeadsOnMap,
+                setShowDismissed: setShowDismissedLeadsOnMap,
+                setShowOutsideSalesArea: setShowOutsideSalesAreaOnMap,
+                setShowTerminatedStores,
+                showClosed: showClosedLeadsOnMap,
+                showDismissed: showDismissedLeadsOnMap,
+                showOutsideSalesArea: showOutsideSalesAreaOnMap,
+                showOutsideSalesAreaChoice: mapSalesRegionsConfigured === true && mapTargetType === "restaurant",
+                showTerminatedStores,
+                summary: sourceReady
+                  ? `거래처 ${visibleMapLayerCounts.customers} · 신규 ${visibleMapLayerCounts.newLeads} · 영업 ${visibleMapLayerCounts.salesLeads} · 차량 ${visibleMapLayerCounts.activeVehicles}`
+                  : "거래처 등록 필요"
+              }}
+              onClose={() => setMapFilterPop("")}
+              openKey={mapFilterPop}
+              popRef={mapFilterPopRef}
+              presets={{
+                busy: mapFilterPresetBusy,
+                enabled: mapFilterPresetEnabled,
+                list: mapFilterPresets,
+                onApply: applyMapFilterPreset,
+                onRemove: () => void removeSelectedMapFilterPreset(),
+                onSave: () => void saveCurrentMapFilterPreset(),
+                selectedId: selectedMapFilterPresetId
+              }}
+              region={{
+                groups: mapRegionFilterGroups,
+                onOpenSalesArea: () => {
+                  setMapFilterPop("");
+                  setMobileSalesAreaOpen(true);
+                },
+                setDong: setMapLeadRegionDong,
+                setSigungu: setMapLeadRegionSigungu,
+                sigungu: mapLeadRegionSigungu
+              }}
+              size={{ enabled: LEAD_STORE_AREA_FEATURE_ENABLED, setValue: setMapLeadAreaRange, value: mapLeadAreaRange }}
+              stage={{ counts: mapLeadStageCounts, setValue: setMapLeadStageFilter, value: mapLeadStageFilter }}
+              top={mapFilterPopTop}
+            />
           ) : null}
         </div>
         {statsExpanded ? (

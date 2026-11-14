@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
 // M3b: 필터 상태·저장 필터 호출은 훅 파일로 옮겨졌다(화면 문구는 지도 파일에 그대로).
+const filterPopoverSource = readFileSync("components/map/map-filter-popover.tsx", "utf8");
 const filterHookSource = readFileSync("components/map/use-map-filters.ts", "utf8");
 const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
 const sidebarSource = readFileSync("components/app-sidebar.tsx", "utf8");
@@ -32,8 +33,8 @@ describe("PC map workspace layout", () => {
 
   it("wires saved filter restore controls while the server flag remains authoritative", () => {
     expect(filterHookSource).toContain('fetch("/api/map/filter-presets"');
-    expect(workspaceSource).toContain("이 조건 저장");
-    expect(workspaceSource).toContain("저장한 필터");
+    expect(filterPopoverSource).toContain("이 조건 저장");
+    expect(filterPopoverSource).toContain("저장한 필터");
     expect(workspaceSource).toContain("applyMapFilterPreset");
     expect(workspaceSource).toContain("removeSelectedMapFilterPreset");
   });

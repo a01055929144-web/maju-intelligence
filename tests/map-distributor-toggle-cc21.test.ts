@@ -10,7 +10,8 @@ describe("map distributor toggle (CC-21)", () => {
   });
   it("the toggle is in the top bar, not only inside the filter popover", () => {
     expect(map.match(/aria-label="영업 대상"/g)?.length).toBe(1);
-    expect(map.indexOf('aria-label="영업 대상"')).toBeLessThan(map.indexOf('mapFilterPop === "stage"'));
+    // M3c: 팝오버 내용은 map-filter-popover.tsx로 옮겨졌다 — 상단 바의 토글이 팝오버 호출보다 앞에 있는지로 같은 뜻을 확인한다.
+    expect(map.indexOf('aria-label="영업 대상"')).toBeLessThan(map.indexOf("<MapFilterPopover"));
   });
 });
 
