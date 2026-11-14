@@ -31,7 +31,7 @@ test("price table works like a spreadsheet from the keyboard", async ({ page }) 
   await cell(0).click({ position: { x: 2, y: 2 } });
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
-  await expect(cell(2)).toHaveAttribute("aria-selected", "true");
+  await expect(cell(2)).toHaveAttribute("aria-current", "true");
   expect(items.map((item) => item.price)).toEqual([6000, 6100, 6200, 6300, 6400, 6500]); // ↑↓는 금액 값을 바꾸지 않는다
 
   // Enter = 편집 → 7000 → Enter = 저장 + 아래 칸 편집으로
@@ -47,7 +47,7 @@ test("price table works like a spreadsheet from the keyboard", async ({ page }) 
   await page.keyboard.type("9999");
   await page.keyboard.press("Escape");
   await expect(price(4)).toHaveValue("6,300");
-  await expect(cell(3)).toHaveAttribute("aria-selected", "true");
+  await expect(cell(3)).toHaveAttribute("aria-current", "true");
   expect(posts).toHaveLength(1);
 
   // Space·Shift+↓ = 3줄 선택, Ctrl+C = 탭 구분 복사
