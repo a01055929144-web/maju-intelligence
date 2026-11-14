@@ -9,5 +9,7 @@ export function customerMarkerLabel(marker: CustomerMarkerLabelInput): { badge: 
   const shop = marker.displayName ?? marker.name;
   if (marker.label === "?") return { badge: "미", title: `미배정 · ${shop}` };
   if (marker.markerColor && /^\d+$/.test(marker.label)) return { badge: marker.label, title: `${marker.label}호차 · ${shop}` };
-  return { badge: marker.label, title: shop };
+  // 등급 빈 거래처는 배지 "-", title은 상호만.
+  if (!marker.label.trim()) return { badge: "-", title: shop };
+  return { badge: marker.label, title: `${marker.label}등급 · ${shop}` };
 }
