@@ -68,7 +68,7 @@ export function MapSearchResultsPanel(props: Props) {
       {unregistered.length ? group("unregistered", "카카오 미등록 매장", unregistered, "거래처로 등록", props.onRegister, true) : null}
       {props.loading ? <p className="px-3 py-2 text-xs font-bold text-slate-400">미등록 매장 검색 중...</p> : null}
       {!props.loading && !total ? <p className="px-3 py-4 text-sm font-bold text-slate-500">{props.message || "검색 결과가 없습니다."}</p> : null}
-      {!props.loading && total && !unregistered.length && props.message ? <p className="px-3 py-2 text-xs font-bold text-slate-400">{props.message}</p> : null}
+      {!props.loading && total > 0 && !unregistered.length && props.message ? <p className="px-3 py-2 text-xs font-bold text-slate-400">{props.message}</p> : null}
     </div>
     {selectedIds.size > 0 ? <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2">
       <p className="text-xs font-bold text-slate-500">{selectedIds.size}곳 선택됨</p>
