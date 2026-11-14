@@ -103,6 +103,12 @@ export function isPermitLeadInOpenDateFilter(
   return true;
 }
 
+export const PERMIT_LEAD_TYPE_OPTIONS: Array<{ label: string; value: "all" | PermitLeadType }> = [
+  { label: "전체", value: "all" },
+  { label: "신규리드", value: "new" },
+  { label: "영업리드", value: "sales" }
+];
+
 export type MapFilterLead = LeadDateFields & {
   readonly status?: string | null;
   readonly permitStatus?: string | null;
