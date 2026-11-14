@@ -8,6 +8,7 @@ import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
 import { loadGeocodeCache, saveGeocodeCache, type GeocodePoint } from "@/components/map/geocode-cache";
 import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
+import { customerMarkerLabel, isCompactCustomerLevel } from "@/components/map/customer-marker-label";
 import { APPROXIMATE_LOCATION_TITLE } from "@/domains/route/map-customer-notice";
 
 export type KakaoMapMarker = {
@@ -38,6 +39,10 @@ export type KakaoMapMarker = {
   // 가독성이 좋을 것 같네") — tone: "lead" 마커에만 의미가 있습니다.
   readonly nearAnchor?: boolean;
   readonly name: string;
+  /** 지도 화면의 거래처 마커만 true: 원 대신 `[배지] 상호` 알약(축소 시 배지만). 코스 화면 등은 주지 않아 숫자 원 그대로. */
+  readonly showName?: boolean;
+  /** 알약에 찍을 상호(차량 보기에서 name은 `배송차 · 상호`라 title 용). */
+  readonly displayName?: string;
   readonly tone: "customer" | "lead" | "origin" | "unregistered" | "vehicle";
   readonly x: number;
   readonly y: number;
@@ -336,6 +341,8 @@ export function KakaoAddressMap({
   // 지도를 확대(level 낮음)했을 때는 화면에 보이는 개수가 자연히 줄어드니 이름표를 다시 보여주도록
   // 절충). CustomOverlay.setContent()로 좌표 재지오코딩 없이 내용만 바꿔 가볍게 유지합니다.
   const leadOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: KakaoCustomOverlay }>>([]);
+  // 거래처 알약 ↔ 배지 전환용(줌 때 setContent만 하므로 재지오코딩 없음). approx = #770 위치 추정.
+  const customerOverlayEntriesRef = useRef<Array<{ element: HTMLElement; marker: KakaoMapMarker; overlay: KakaoCustomOverlay; approx: boolean }>>([]);
   // marker.id -> 현재 화면에 붙어 있는 마커 DOM(button) 엘리먼트. 선택된 거래처/리드가 지도에서도
   // 눈에 띄도록(2026-08-30 피드백: "선택한 거래처 지도에서도 하이라이트 되면 좋을듯") focusedMarkerId가
   // 바뀔 때 이 엘리먼트에 직접 outline/scale을 입혔다 지웠다 합니다 — 재지오코딩 없이 가벼운 DOM 조작만.
@@ -564,6 +571,7 @@ export function KakaoAddressMap({
         raisedZIdsRef.current = new Set();
         highlightedElementRef.current = null;
         leadOverlayEntriesRef.current = [];
+        customerOverlayEntriesRef.current = [];
         let focusedPosition: KakaoLatLng | null = null;
         let found = 0;
         let primaryFound = 0;
@@ -582,6 +590,7 @@ export function KakaoAddressMap({
         const leadMarkerCount = staticMarkers.filter((marker) => marker.tone === "lead").length;
         const computeCompactLeadMarkers = (level: number) => leadMarkerCount > 800 || level >= 7;
         let compactLeadMarkers = computeCompactLeadMarkers(map.getLevel());
+        let compactCustomerMarkers = isCompactCustomerLevel(map.getLevel());
 
         const attachLeadOverlayEntry = (overlay: KakaoCustomOverlay, marker: KakaoMapMarker, element: HTMLElement) => {
           leadOverlayEntriesRef.current.push({ element, marker, overlay });
@@ -595,7 +604,7 @@ export function KakaoAddressMap({
         const approximateCustomerIds: string[] = [];
         const placeMarkerAtPosition = (marker: KakaoMapMarker, lat: number, lng: number, approx = false) => {
           const position = new kakao.maps.LatLng(lat, lng);
-          const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers);
+          const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers, compactCustomerMarkers);
           if (approx && marker.tone === "customer") {
             applyApproxBadge(overlayContent);
             if (marker.id) approximateCustomerIds.push(marker.id);
@@ -610,6 +619,7 @@ export function KakaoAddressMap({
           });
           layerOverlaysRef.current.push(overlay);
           if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
+          if (marker.tone === "customer" && marker.showName) customerOverlayEntriesRef.current.push({ approx, element: overlayContent, marker, overlay });
 
           bounds.extend(position);
           found += 1;
@@ -697,6 +707,31 @@ export function KakaoAddressMap({
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
         const onZoomChanged = () => {
+          const nextCustomerCompact = isCompactCustomerLevel(map.getLevel());
+          if (nextCustomerCompact !== compactCustomerMarkers) {
+            compactCustomerMarkers = nextCustomerCompact;
+            customerOverlayEntriesRef.current = customerOverlayEntriesRef.current.map((entry) => {
+              const nextElement = createMarkerOverlay(entry.marker, false, nextCustomerCompact);
+              nextElement.addEventListener("click", () => onMarkerClickRef.current?.(entry.marker));
+              if (entry.approx) applyApproxBadge(nextElement);
+              entry.overlay.setContent(nextElement);
+              if (entry.marker.id) {
+                markerElementsRef.current.set(entry.marker.id, nextElement);
+                applyPinBadge(nextElement, pinNumbersRef.current?.get(entry.marker.id));
+              }
+              // 새 요소로 바뀌어도 선택·호버 강조는 그대로 이어 준다.
+              if (highlightedElementRef.current === entry.element) {
+                const old = entry.element.style;
+                Object.assign(nextElement.style, { outline: old.outline, outlineOffset: old.outlineOffset, transform: old.transform, zIndex: old.zIndex });
+                highlightedElementRef.current = nextElement;
+              }
+              if (hoveredElementRef.current === entry.element) {
+                setHoverStyle(nextElement, true, false);
+                hoveredElementRef.current = nextElement;
+              }
+              return { ...entry, element: nextElement };
+            });
+          }
           const nextCompact = computeCompactLeadMarkers(map.getLevel());
           if (nextCompact === compactLeadMarkers) return;
           compactLeadMarkers = nextCompact;
@@ -1707,7 +1742,7 @@ function setHoverStyle(element: HTMLElement, hovered: boolean, keepFocusZIndex: 
   element.style.zIndex = hovered ? "40" : keepFocusZIndex ? "30" : "";
 }
 
-function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
+function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false, compactCustomer = false) {
   const toneClass = marker.tone === "origin"
       ? "background:#111827;color:#ffffff;"
       : marker.markerColor
@@ -1774,6 +1809,26 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {
         <span class="${pulseClass}" style="width:28px;height:28px;border-radius:999px;background:${chipColor};color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;">
           ${marker.vehicleIcon === "person" ? "🧍" : "🚚"}
         </span>
+      </button>
+    `);
+  }
+
+  // CC-47-2b 거래처 상호명 알약: [배지(등급/차량번호/미)] 상호. 축소(level ≥ 7)면 배지만 원으로.
+  if (marker.tone === "customer" && marker.showName) {
+    const { badge, title } = customerMarkerLabel(marker);
+    const badgeHtml = escapeHtml(badge);
+    const titleHtml = `${escapeHtml(title)}${completedTitleSuffix}`;
+    if (compactCustomer) {
+      return htmlToElement(`
+        <button type="button" title="${titleHtml}" style="cursor:pointer;position:relative;${toneClass}width:26px;height:26px;border:2px solid #ffffff;border-radius:999px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:900;padding:0;">
+          ${badgeHtml}${completedBadge}
+        </button>
+      `);
+    }
+    return htmlToElement(`
+      <button type="button" title="${titleHtml}" style="cursor:pointer;position:relative;${toneClass}max-width:160px;border:2px solid #ffffff;border-radius:999px;padding:2px 9px 2px 2px;display:inline-flex;align-items:center;gap:5px;box-shadow:0 6px 14px rgba(15,23,42,.22);font-size:11px;font-weight:800;white-space:nowrap;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 3px;border-radius:999px;background:rgba(255,255,255,.3);font-size:10px;font-weight:900;flex-shrink:0;">${badgeHtml}</span>
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(marker.displayName ?? marker.name)}</span>${completedBadge}
       </button>
     `);
   }
