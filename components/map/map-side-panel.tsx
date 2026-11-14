@@ -35,7 +35,7 @@ import {
   formatMinutes,
   gradeBadgeClass,
 } from "@/lib/route-map-utils";
-import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/sales-route-map-workspace";
+import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
 
 export function StoreManagementPanel({

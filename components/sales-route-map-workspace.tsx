@@ -121,7 +121,7 @@ import type {
   StaffVehicleLocation
 } from "@/lib/store";
 import type { VehicleFuelType, VehicleMaster, VehicleOperationalStatus } from "@/domains/delivery/vehicle-master";
-import type { RouteOrderFields, RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
+import type { RouteOrderLinkStatus } from "@/application/route/today-route-order-projection";
 import { getTmsServiceDateKey } from "@/domains/delivery/service-date";
 import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { leadDocumentEntryHref, type LeadDocumentEntryAccess } from "@/domains/lead/document-entry";
@@ -157,11 +157,14 @@ import {
   saveLocalJson,
   type RevenueGrade
 } from "@/lib/route-map-utils";
+import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
+// 옛 경로 다시 내보내기(다른 화면이 워크스페이스에서 가져오던 이름).
+export { getLeadConfidence, permitGradeToneClassName };
+export type { StoreRow };
 export { sortLeadList } from "@/components/map/lead-list-sort";
 // M4a: 오른쪽 목록 패널은 열 때만 내려받는다(분리 파일 components/map/map-side-panel.tsx).
 const StoreManagementPanel = dynamic(() => import("@/components/map/map-side-panel").then((m) => m.StoreManagementPanel));
 const LeadListPanel = dynamic(() => import("@/components/map/map-side-panel").then((m) => m.LeadListPanel));
-
 
 const CustomerAttachmentUploadPanel = dynamic(
   () => import("@/components/customer-attachment-upload-panel").then((module) => module.CustomerAttachmentUploadPanel),
@@ -188,7 +191,6 @@ export {
 type GradeFilter = "all" | RevenueGrade;
 type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";
 
-export const LEAD_STORE_AREA_FEATURE_ENABLED = process.env.NEXT_PUBLIC_LEAD_STORE_AREA_ENABLED === "true";
 type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
@@ -245,28 +247,6 @@ async function registerExternalBusinessResult(result: ExternalBusinessResult): P
   if (!customerId) throw new Error(`${result.name}은(는) 저장됐지만 ID를 확인하지 못했습니다.`);
   return { id: customerId, name: result.name };
 }
-
-export type StoreRow = RoutePlanStop & RouteOrderFields & {
-  accountCopyStatus: "missing" | "received";
-  bankAccount: string;
-  birthDate: string;
-  businessCertificateStatus: "missing" | "received";
-  businessRegistrationNumber: string;
-  businessStatus: "active" | "closed" | "unknown";
-  deliveryArea?: string;
-  deliveryDriver?: string;
-  deliveryVehicleId?: string;
-  deliveryVehicleName?: string;
-  email: string;
-  grade: RevenueGrade;
-  industry: string;
-  markerX: number;
-  markerY: number;
-  memo: string;
-  openingDate: string;
-  phone: string;
-  representativeName: string;
-};
 
 type RoutePlanStoreDetails = RoutePlanStop & {
   businessNumber?: string;
@@ -5294,18 +5274,6 @@ export function StoreQuickCard({
   );
 }
 
-/**
- * 저장된 네이버·카카오·구글 링크가 있으면 그 링크로, 없으면 상호명+주소 검색 링크로 새 탭에서 엽니다.
- * 실제 리뷰·영업시간·메뉴는 각 플랫폼 페이지에서 확인합니다(공식 리뷰 API는 유료라 여기서는 연결만 제공).
- */
-// 예전 로직으로 저장된 네이버 링크는 "상호명+상세주소" 조합 검색이라 결과가 어긋나는 경우가 많았습니다.
-// 실제로 네이버 API가 확정 매칭한 링크(map.naver.com/p/search가 아닌 다른 경로)가 아니라면,
-// 저장된 값 대신 항상 최신 로직(상호명 단독 검색)으로 다시 계산해서 보여줍니다.
-export const isGenericNaverSearchLink = (url?: string) => {
-  const trimmed = url?.trim();
-  return !trimmed || /^https:\/\/map\.naver\.com\/p\/search\//.test(trimmed);
-};
-
 // 네이버·카카오맵·구글맵처럼 클릭 시 새 탭으로 열리는 링크형 아이콘과 영업시간·메뉴처럼
 // 클릭 동작 없이 마우스오버로만 내용을 보여주는 정보형 아이콘에 공통으로 쓰는 배지입니다.
 function IconBadge({
@@ -6555,7 +6523,6 @@ export function normalizeLeadSearchToken(value: string) {
   return value.toLowerCase().replace(/[@._\-\s]/g, "");
 }
 
-
 export function normalizeInstagramHandleValue(value: string | undefined) {
   const rawValue = (value || "").trim();
   if (!rawValue) return "";
@@ -6608,50 +6575,6 @@ export function permitLeadActionLabel(actionType: string) {
   if (actionType === "quote") return "견적 요청";
   if (actionType === "convert") return "거래처 전환";
   return actionType;
-}
-
-export function getLeadConfidence(lead: PermitLeadItem) {
-  const reasons: string[] = [];
-  let score = 45;
-  if (lead.isActive) {
-    score += 12;
-    reasons.push("사업자 상태 정상");
-  }
-  if (lead.phone) {
-    score += 12;
-    reasons.push("연락처 있음");
-  }
-  if (lead.address) {
-    score += 8;
-    reasons.push("주소 확인");
-  }
-  if (lead.grade === "A") {
-    score += 10;
-    reasons.push("A등급 리드");
-  } else if (lead.grade === "B") {
-    score += 6;
-    reasons.push("B등급 리드");
-  }
-  if (lead.leadPeriod === "today") {
-    score += 8;
-    reasons.push("오늘 신규");
-  } else if (lead.leadPeriod === "week") {
-    score += 5;
-    reasons.push("이번 주 신규");
-  }
-  if ((lead.keywordVolume || 0) > 0) {
-    score += 5;
-    reasons.push("검색량 데이터 있음");
-  }
-  if ((lead.reviewCount || 0) > 0) {
-    score += 4;
-    reasons.push(`리뷰 ${lead.reviewCount}건`);
-  }
-  if (lead.isDuplicate || lead.excludeReason) score -= 20;
-
-  const bounded = Math.max(0, Math.min(100, score));
-  const label = bounded >= 82 ? "높음" : bounded >= 68 ? "보통" : "확인 필요";
-  return { label, reasons: reasons.slice(0, 4), score: bounded };
 }
 
 export function buildOutboundItemNotes(industry?: string) {
@@ -7898,14 +7821,6 @@ export const PERMIT_LEAD_TYPE_DESCRIPTION: Record<PermitLeadType, string> = {
   sales: "개업일은 확인되지 않지만, 검색량·리뷰 등 활동 지표를 기준으로 영업 타겟팅하는 리드입니다."
 };
 
-export function permitGradeToneClassName(grade: PermitLeadItem["grade"], unscored?: boolean) {
-  if (grade === "A") return "bg-emerald-100 text-emerald-800";
-  if (grade === "B") return "bg-blue-100 text-blue-800";
-  if (grade === "C") return "bg-slate-100 text-slate-700";
-  if (unscored) return "bg-amber-50 text-amber-600";
-  return "bg-slate-50 text-slate-400";
-}
-
 function permitLeadCompanyId() {
   return typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("companyId") || "" : "";
 }
@@ -7915,7 +7830,6 @@ export function withPermitLeadCompanyQuery(path: string) {
   if (!companyId) return path;
   return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
 }
-
 
 export function formatLeadOpenDateFilterLabel(mode: LeadOpenDateFilterMode, year: string, month: string, startDate: string, endDate: string) {
   if (mode === "all") return "개시일 전체";
@@ -10352,18 +10266,6 @@ function getProviderLabel(provider?: RoutePlanStop["routeProvider"]) {
   if (provider === "tmap") return "티맵";
   if (provider === "estimated") return "티맵 계산 전";
   return "계산 전";
-}
-
-export function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
-  if (status === "active") return "정상";
-  if (status === "closed") return "폐업";
-  return "확인필요";
-}
-
-export function businessStatusClass(status: StoreRow["businessStatus"]) {
-  if (status === "active") return "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
-  if (status === "closed") return "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700";
-  return "rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700";
 }
 
 // 거래처 출입방법 종류(2026-08-24 피드백: "열쇠인지, 카드인지, 비밀번호인지, 어디 숨겨놓은 건지 등
