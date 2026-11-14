@@ -1,5 +1,6 @@
 "use client";
 
+import { kstToday } from "@/domains/shared/kst-date";
 import { Fragment, useEffect, useState } from "react";
 import { Clock, Copy, Loader2, Minus, Plus, Search, Send, Share2, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -901,7 +902,7 @@ export function StaffManagementPanel({
                   {invitePermissionRole === "temporary" ? (
                     <label className="grid gap-1 text-xs font-black text-slate-700">
                       근무 만료일 · 기본 30일
-                      <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" min={new Date().toISOString().slice(0, 10)} onChange={(event) => setInviteExpiresOn(event.target.value)} type="date" value={inviteExpiresOn} />
+                      <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" min={kstToday()} onChange={(event) => setInviteExpiresOn(event.target.value)} type="date" value={inviteExpiresOn} />
                     </label>
                   ) : null}
                 </div>
@@ -1041,7 +1042,7 @@ function StaffAccessEditor({
       ) : null}
       {permissionRole === "temporary" ? (
         <label className="grid gap-1 text-xs font-black text-slate-700">근무 만료일
-          <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" disabled={!canEdit} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setExpiresOn(event.target.value)} type="date" value={expiresOn} />
+          <input className="h-10 rounded-md border border-slate-200 px-2 text-sm" disabled={!canEdit} min={kstToday()} onChange={(event) => setExpiresOn(event.target.value)} type="date" value={expiresOn} />
         </label>
       ) : null}
       <Button className="h-10 w-fit bg-teal-700" disabled={!canEdit || saving} onClick={save} type="button">{saving ? "저장 중" : "권한·업무 저장"}</Button>

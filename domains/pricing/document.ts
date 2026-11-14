@@ -1,3 +1,4 @@
+import { kstToday } from "../shared/kst-date";
 import { calculatePrice } from "./price-rules";
 export type DocumentKind = "sheet" | "quote";
 export type PriceSource = "store" | "grade" | "base" | "edited";
@@ -133,7 +134,7 @@ export type Promotion = {
   taxType: "taxable" | "exempt";
 };
 export function koreaDay(now = new Date()) {
-  return new Date(now.getTime() + 32400000).toISOString().slice(0, 10);
+  return kstToday(now);
 }
 /** Refresh availability and stock while keeping the draft's selected prices. */
 export function withLivePromotions(

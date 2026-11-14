@@ -1,3 +1,4 @@
+import { kstToday } from "../shared/kst-date";
 export const catalogFields = [
   "productName",
   "spec",
@@ -305,7 +306,7 @@ export function buildCatalogPreview(
         buyerName: text(val(r, mapping, "buyerName")) || "미상",
         date:
           text(val(r, mapping, "date")) ||
-          new Date().toISOString().slice(0, 10),
+          kstToday(),
         quantity: num(val(r, mapping, "quantity")),
         rowKey: `${fp}:${i}:${text(val(r, mapping, "buyerCode"))}`,
         unitPrice: num(val(r, mapping, "salesPrice")) || 0,
@@ -436,7 +437,7 @@ export function buildSupplierProductWrite(
     company_id: companyId,
     cost_confirmed: product.costConfirmed,
     is_active: true,
-    last_seen_date: product.date || new Date().toISOString().slice(0, 10),
+    last_seen_date: product.date || kstToday(),
     latest_cost: product.cost,
     parsed_brand: product.brand || null,
     parsed_name: product.name,

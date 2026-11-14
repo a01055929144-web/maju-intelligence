@@ -1,5 +1,6 @@
 "use client";
 
+import { kstToday } from "@/domains/shared/kst-date";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -4270,7 +4271,7 @@ function revenueGrade(monthlyRevenue: number) {
 }
 
 function dateStamp() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return kstToday().replace(/-/g, "");
 }
 
 function getOcrProviderLabel(provider?: string) {

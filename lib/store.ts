@@ -1,3 +1,4 @@
+import { kstDateKey } from "../domains/shared/kst-date";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
@@ -4592,10 +4593,7 @@ function kstDayRangeIso(dateKey: string): { end: string; start: string } {
 }
 
 // UTC ISO 시각을 KST 기준 "YYYY-MM-DD" 날짜 키로 바꿉니다(달력에 날짜별 건수를 표시할 때 사용).
-function toKstDateKey(iso: string): string {
-  const shifted = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
-  return shifted.toISOString().slice(0, 10);
-}
+const toKstDateKey = (iso: string): string => kstDateKey(iso);
 
 // 달력에 날짜별 배송완료 건수를 배지로 보여주기 위한 요약입니다. from~to(둘 다 YYYY-MM-DD, KST
 // 기준, inclusive) 구간의 배송완료 메모(customer_notes, note_type=delivery) 건수를 날짜별로 셉니다.

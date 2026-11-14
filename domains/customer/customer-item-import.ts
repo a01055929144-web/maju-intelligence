@@ -1,3 +1,4 @@
+import { kstToday } from "../shared/kst-date";
 /** Historical actual sales prices; never a base price or fixed-price agreement. */
 export type CustomerItemImportRow = {
   customerId: string;
@@ -17,7 +18,7 @@ export function parseCustomerItemImport(input: unknown): CustomerItemImportRow[]
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const keys = ["customerId", "productId", "salesUnit", "lastPrice", "lastDate", "taxType", "priceIncludesTax"];
   const seen = new Set<string>();
-  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const today = kstToday();
   return input.map((row: unknown) => {
     if (!row || typeof row !== "object" || Array.isArray(row)) return fail();
     const value = row as Record<string, unknown>;

@@ -1,3 +1,4 @@
+import { kstToday } from "../domains/shared/kst-date";
 import { runLimited } from "./run-limited";
 import {
   buildSupplierProductWrite,
@@ -316,7 +317,7 @@ export async function saveProductCatalogImport(input: {
         company_id: input.companyId,
         supplier_product_id: id,
         import_id: importId,
-        price_date: p.date || new Date().toISOString().slice(0, 10),
+        price_date: p.date || kstToday(),
         purchase_price: p.cost,
         reference_sales_min: p.salesMin || null,
         reference_sales_median: p.salesMedian || null,
