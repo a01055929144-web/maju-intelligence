@@ -5,6 +5,7 @@ import { ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
+import { markerZIndex } from "@/components/map/marker-z-index";
 
 export type KakaoMapMarker = {
   readonly address: string;
@@ -602,7 +603,8 @@ export function KakaoAddressMap({
             content: overlayContent,
             map,
             position,
-            yAnchor: 1.75
+            yAnchor: 1.75,
+            zIndex: markerZIndex(marker.tone)
           });
           layerOverlaysRef.current.push(overlay);
           if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
@@ -987,7 +989,7 @@ export function KakaoAddressMap({
         const content = createMarkerOverlay(marker);
         content.addEventListener("click", () => onMarkerClickRef.current?.(marker));
         const position = new kakao.maps.LatLng(targetLat, targetLng);
-        const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.75 });
+        const overlay = new kakao.maps.CustomOverlay({ content, map, position, yAnchor: 1.75, zIndex: markerZIndex("vehicle") });
         vehicleOverlaysRef.current.set(marker.id, { contentSignature: vehicleMarkerContentSignature(marker), lat: targetLat, lng: targetLng, overlay });
         markerPositionsRef.current.set(marker.id, position);
         markerElementsRef.current.set(marker.id, content);
@@ -1310,7 +1312,8 @@ export function KakaoAddressMap({
           content: '<div title="내 위치" style="position:relative;width:22px;height:22px;border-radius:999px;background:rgba(37,99,235,.14);display:flex;align-items:center;justify-content:center;"><span style="width:12px;height:12px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 4px 12px rgba(37,99,235,.45);display:block;"></span></div>',
           map,
           position: current,
-          yAnchor: 0.5
+          yAnchor: 0.5,
+          zIndex: 10
         });
       },
       () => undefined,

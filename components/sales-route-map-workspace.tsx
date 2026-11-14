@@ -79,6 +79,7 @@ import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { MapSearchResultsPanel, type SearchResultRow } from "@/components/map/map-search-results-panel";
 import { useBusinessSearch, type ExternalBusinessResult } from "@/components/map/use-business-search";
 import { assignSearchPins } from "@/components/map/search-pins";
+import { isStoreVisibleByStatus } from "@/domains/customer/relationship-filter";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
@@ -635,6 +636,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // history도 정식 탭이므로 ?view=history를 누락하지 않습니다.
   const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
+  // 거래 종료(수동 표시) 거래처는 기본으로 목록·지도에서 숨긴다. 필터 "거래 종료 거래처 보기"로 다시 본다.
+  const [showTerminatedStores, setShowTerminatedStores] = useState(false);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(
@@ -1194,12 +1197,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             .toLowerCase()
             .includes(keyword);
         const matchesVehicle = vehicleFilterId === "all" || store.deliveryVehicleId === vehicleFilterId;
-        // "이탈 제외" 토글은 사업자 상태가 폐업인 곳뿐 아니라, 수동으로 "거래 종료"로 표시한
-        // 거래처도 함께 빼줍니다. 둘 다 더 이상 영업 대상이 아니라는 점은 같습니다.
-        const matchesStatus = !excludeClosedStores || (store.businessStatus !== "closed" && store.relationshipStatus !== "거래종료");
+        // 거래 종료는 기본 숨김("거래 종료 거래처 보기"로 표시), 사업자 폐업은 "이탈 제외"를 켰을 때만 뺀다.
+        const matchesStatus = isStoreVisibleByStatus(store, { excludeClosed: excludeClosedStores, showTerminated: showTerminatedStores });
         return matchesQuery && matchesVehicle && matchesStatus;
       }),
-    [allStores, excludeClosedStores, query, vehicleFilterId]
+    [allStores, excludeClosedStores, query, showTerminatedStores, vehicleFilterId]
   );
   const visibleStores = useMemo(
     () => gradeBaseStores.filter((store) => gradeFilter === "all" || store.grade === gradeFilter),
@@ -1731,7 +1733,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     query.trim() ? `검색: ${query.trim()}` : "",
     isVehicleFiltered ? `배송차: ${selectedVehicleLabel}` : "",
     gradeFilter !== "all" ? `등급: ${selectedGradeLabel}` : "",
-    excludeClosedStores ? "이탈 제외" : ""
+    excludeClosedStores ? "이탈 제외" : "",
+    showTerminatedStores ? "거래 종료 포함" : ""
   ].filter(Boolean);
   const dataRegistrationHref = useMemo(() => {
     if (typeof window === "undefined") return "/?type=customer-master";
@@ -2734,7 +2737,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               aria-expanded={mapFilterPop === "more"}
               aria-label="필터 더보기"
               className={`grid h-9 w-10 shrink-0 place-items-center rounded-lg border text-sm font-black transition ${
-                mapFilterPop === "more" || excludeClosedStores || gradeFilter !== "all" || showDismissedLeadsOnMap
+                mapFilterPop === "more" || excludeClosedStores || showTerminatedStores || gradeFilter !== "all" || showDismissedLeadsOnMap
                   ? "border-teal-700 bg-teal-50 text-teal-800"
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               }`}
@@ -2938,6 +2941,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                     <input checked={excludeClosedStores} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setExcludeClosedStores((value) => !value)} type="checkbox" />
                     이탈 거래처 제외
+                  </label>
+                  <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
+                    <input checked={showTerminatedStores} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowTerminatedStores((value) => !value)} type="checkbox" />
+                    거래 종료 거래처 보기
                   </label>
                   <label className="flex h-[34px] cursor-pointer items-center gap-2 text-[13px]">
                     <input checked={showDismissedLeadsOnMap} className="h-4 w-4 rounded border-slate-300 text-teal-700" onChange={() => setShowDismissedLeadsOnMap((value) => !value)} type="checkbox" />
@@ -9380,7 +9387,7 @@ function StoreDetail({
 
   const updateRelationshipStatus = async (nextStatus: string) => {
     if (nextStatus === draftRelationshipStatus) return;
-    if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 이후 대시보드·이탈 위험 알림·경로 계획에서 제외됩니다.`)) return;
+    if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 목록·지도·대시보드·이탈 위험 알림·경로 계획에서 빠집니다(필터 "거래 종료 거래처 보기"로 다시 볼 수 있음).`)) return;
 
     setIsSavingRelationshipStatus(true);
     setRelationshipStatusError("");
