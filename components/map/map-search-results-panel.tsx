@@ -29,6 +29,8 @@ type Props = {
   readonly onHover?: (id: string | null) => void;
   /** 지도를 결과 전체에 맞춘다. 없으면 버튼을 숨긴다. */
   readonly onFitAll?: () => void;
+  /** 상호명을 누르면 지도를 그 마커로 옮긴다(거래처·리드·미등록). */
+  readonly onFocusRow?: (group: "customers" | "leads" | "unregistered", id: string) => void;
 };
 
 export function MapSearchResultsPanel(props: Props) {
@@ -59,7 +61,12 @@ export function MapSearchResultsPanel(props: Props) {
           {row.pin ? <span aria-label={`지도 번호 ${row.pin}`} className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 px-1 text-[11px] font-black text-white">{row.pin}</span> : null}
           {selectable ? <input aria-label={`${row.name} 선택`} checked={selectedIds.has(row.id)} className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-teal-600" onChange={() => props.onToggle(row.id)} type="checkbox" /> : null}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-950">{row.name}</p>
+            {props.onFocusRow ? <button
+              className="block max-w-full truncate text-left text-sm font-semibold text-slate-950 underline-offset-2 hover:underline"
+              onClick={() => props.onFocusRow?.(key === "customers" ? "customers" : key === "unregistered" ? "unregistered" : "leads", row.id)}
+              title="지도에서 위치 보기"
+              type="button"
+            >{row.name}</button> : <p className="truncate text-sm font-semibold text-slate-950">{row.name}</p>}
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{[row.address || "주소 정보 없음", row.industry].filter(Boolean).join(" · ")}</p>
             <span className="mt-0.5 inline-block rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{row.chip}</span>
           </div>

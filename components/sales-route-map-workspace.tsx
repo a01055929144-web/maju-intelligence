@@ -711,6 +711,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 날짜 필터, 업종 필터가 있어야 좋을 것 같아"). 신규 리드 탭의 필터와는 별도 상태입니다 — 탭이
   // 다른 화면이라 상태를 공유하면 오히려 "왜 지도에서 리드가 안 보이지" 하는 혼란을 줄 수 있습니다.
   const [unplacedCustomerCount, setUnplacedCustomerCount] = useState(0);
+  // 주소를 좌표로 못 바꾼 거래처 id — 안내 "주소 확인"·검색 결과 "좌표 없음" 표시에 쓴다.
+  const [unplacedCustomerIds, setUnplacedCustomerIds] = useState<string[]>([]);
+  const handleCustomerGeocodeFailed = useCallback((count: number, ids: string[]) => {
+    setUnplacedCustomerCount(count);
+    setUnplacedCustomerIds((old) => (old.length === ids.length && old.every((id, index) => id === ids[index]) ? old : ids));
+  }, []);
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
   // 반영되도록 Draft/Applied 상태를 분리합니다(2026-08-24 피드백: "리드들의 날짜 기간을 설정하면
   // 조회 버튼이 필요해보여").
@@ -1100,12 +1106,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const searchRows = useMemo(
     () =>
       assignSearchPins<SearchResultRow>({
-        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: store.relationshipStatus || "거래처" })),
+        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: unplacedCustomerIds.includes(store.id) ? "좌표 없음 · 주소 확인" : store.relationshipStatus || "거래처" })),
         salesLeads: leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" })),
         newLeads: leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" })),
         unregistered: unregisteredResults.map((result) => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))
       }),
-    [registeredMatches, leadMatches, unregisteredResults]
+    [registeredMatches, leadMatches, unregisteredResults, unplacedCustomerIds]
   );
   const gradeBaseStores = useMemo(
     () =>
@@ -2225,6 +2231,25 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (succeeded) router.refresh();
   }
 
+  // 검색 결과 줄(상호명)·"지도에서 보기"·"상세": 지도를 그 마커로 옮긴다(11/14 대표: 눌러도 화면이 안 움직임).
+  // 좌표를 못 찾은 거래처는 옮길 곳이 없으니 상세를 열어 주소를 고치게 한다.
+  function focusSearchResult(group: "customers" | "leads" | "unregistered", id: string) {
+    rememberQuery(query);
+    setPreviewStoreId("");
+    setPreviewLeadId("");
+    setSelectedId("");
+    setMapFocusId("");
+    if (group === "customers") {
+      if (unplacedCustomerIds.includes(id)) setSelectedId(id);
+      else setPreviewStoreId(id);
+    } else if (group === "leads") {
+      setPreviewLeadId(id);
+      setMapLeadsVisible(true);
+    } else {
+      setMapFocusId(id);
+    }
+  }
+
   const searchResultsPanel = (
     <MapSearchResultsPanel
       bulkBusy={isBulkRegistering}
@@ -2236,8 +2261,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       onClose={closeSearch}
       onFitAll={() => setFitResultsRequest({ token: Date.now(), ids: Array.from(searchRows.pins.keys()) })}
       onHover={(id) => setHoveredResultId(id || "")}
-      onOpenCustomer={(id) => { rememberQuery(query); setPreviewLeadId(""); setSelectedId(""); setPreviewStoreId(id); }}
-      onOpenLead={(id) => { rememberQuery(query); setPreviewStoreId(""); setSelectedId(""); setPreviewLeadId(id); setMapLeadsVisible(true); }}
+      onOpenCustomer={(id) => focusSearchResult("customers", id)}
+      onFocusRow={focusSearchResult}
+      onOpenLead={(id) => focusSearchResult("leads", id)}
       onRegister={(id) => {
         const target = unregisteredResults.find((result) => externalResultId(result) === id);
         if (target) { rememberQuery(query); setPreviewStoreId(""); setPreviewLeadId(""); setQuickRegisterTarget(target); }
@@ -2881,11 +2907,15 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           } ${isFullscreen ? "h-full" : "h-[calc(100dvh-10rem)] min-h-[420px] max-h-[720px] lg:h-full lg:min-h-0 lg:max-h-none"}`}>
             {sourceReady ? (
               <>
-                <MapCustomerNotice customerCount={allStores.length} unplacedCount={unplacedCustomerCount} />
+                <MapCustomerNotice
+                  customerCount={allStores.length}
+                  onOpenUnplaced={unplacedCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(unplacedCustomerIds[0]); } : undefined}
+                  unplacedCount={unplacedCustomerCount}
+                />
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
-                    onCustomerGeocodeFailed={setUnplacedCustomerCount}
+                    onCustomerGeocodeFailed={handleCustomerGeocodeFailed}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     fitMarkersRequest={searchTabOpen ? fitResultsRequest ?? undefined : undefined}
                     hoveredMarkerId={searchTabOpen && hoveredResultId ? hoveredResultId : undefined}
