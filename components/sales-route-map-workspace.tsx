@@ -75,6 +75,7 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { SearchInput } from "@/components/ui/search-input";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
@@ -2607,17 +2608,18 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         ) : null}
         <div id="map-mobile-filters" className={`${activeView === "map" && !mobileMapControlsOpen ? "hidden" : "block"} space-y-1 lg:block`}>
         <div className="grid gap-1.5 lg:grid-cols-[minmax(180px,280px)_minmax(0,1fr)] lg:items-center xl:gap-2">
-          <label className="maju-search-field relative min-w-0 flex-1 lg:!h-9">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-full w-full border-0 bg-transparent pl-6 pr-0 text-sm font-bold text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0"
-              onBlur={() => setShowExternalResults(false)}
-              onChange={(event) => { setQuery(event.target.value); setSearchOpen(event.target.value.trim().length >= 2); }}
-              onFocus={() => setShowExternalResults(true)}
-              onKeyDown={(event) => { if (event.key === "Enter") rememberQuery(query); }}
-              placeholder="상호·주소·전화"
-              value={query}
-            />
+          <SearchInput
+            className="flex-1 lg:!h-9"
+            inputProps={{
+              onBlur: () => setShowExternalResults(false),
+              onFocus: () => setShowExternalResults(true),
+              onKeyDown: (event) => { if (event.key === "Enter") rememberQuery(query); }
+            }}
+            onChange={(value) => { setQuery(value); setSearchOpen(value.trim().length >= 2); }}
+            onClear={closeSearch}
+            placeholder="상호·주소·전화"
+            value={query}
+          >
             {showExternalResults && query.trim().length < 2 && recentQueries.length ? (
               <div aria-label="최근 검색어" className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
                 <p className="border-b border-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">최근 검색어</p>
@@ -2626,7 +2628,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 ))}
               </div>
             ) : null}
-          </label>
+          </SearchInput>
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="maju-toolbar-scroll flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto">
               <MapFilterChipsRow

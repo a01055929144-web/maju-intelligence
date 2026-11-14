@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchInput } from "@/components/ui/search-input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
 import { gridTsv, moveGridCell, nextEditableCell, rangeKeys, type GridCell, type GridMoveKey } from "@/lib/common-data-table";
@@ -422,7 +423,7 @@ export function CommonDataTable<Row>({
 
   return <div className="common-data-table relative">
     {searchColumns.length || categoryKey || facets?.length ? <div className="common-data-table-tools flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white p-3">
-      {searchColumns.length ? <input aria-label="표 검색" data-table-search="" className="h-9 w-56 rounded-md border border-slate-300 px-3 text-sm" onChange={(event) => setQueryInput(event.target.value)} placeholder={`검색 (${searchColumns.map((column) => column.label).join("·")})`} type="search" value={queryInput} /> : null}
+      {searchColumns.length ? <SearchInput aria-label="표 검색" className="w-56" inputProps={{ "data-table-search": "" }} onChange={setQueryInput} placeholder={`검색 (${searchColumns.map((column) => column.label).join("·")})`} size="sm" value={queryInput} /> : null}
       {categoryKey ? <div aria-label="대분류" className="flex flex-wrap gap-1.5" role="group">
         <button aria-pressed={!major} className={`min-h-8 rounded-full border px-3 text-xs font-bold ${!major ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 text-slate-700"}`} onClick={() => { setMajor(""); setMinor(""); setPage(1); }} type="button">전체 {rows.length.toLocaleString("ko-KR")}</button>
         {majorCounts.map((item) => <button aria-pressed={major === item.key} className={`min-h-8 rounded-full border px-3 text-xs font-bold ${major === item.key ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 text-slate-700"}`} key={item.key} onClick={() => { setMajor(item.key); setMinor(""); setPage(1); }} type="button">{item.key} {item.count.toLocaleString("ko-KR")}</button>)}
