@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 // CC-42b / M2a: 검색 결과가 떠 있는 목록이 아니라 오른쪽 패널(390은 지도 아래)에 묶음으로 나온다.
-// 검색 → 묶음 확인 → 등록(단건 열기·일괄) → Esc/×로 원래 패널 복귀. 번호 핀·마우스 올림 강조·결과 전체 보기는 M2b.
+// 검색 → 묶음 확인 → 등록(단건 열기·일괄) → Esc/×로 원래 패널 복귀.
+// M2b: 줄 번호(지도 번호 핀과 같은 번호) · `결과 전체 보기`. 지도 위 배지·강조·화면 맞춤은 카카오 SDK가 필요해 CI에서는 못 본다.
 const lead = (n: number, name: string, period: "old" | "new") => ({
   openDate: period === "new" ? new Date().toISOString().slice(0, 10) : "2020-01-01",
   id: `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`, businessName: name, isActive: true, address: `서울 중구 ${name}`, latitude: 37.56, longitude: 126.98,
@@ -37,6 +38,13 @@ for (const width of [1440, 390]) test(`지도 검색 결과 패널: 검색·묶�
   await expect(panel.getByRole("button", { name: /^신규 리드 1$/ })).toBeVisible();
   await expect(panel.getByRole("button", { name: /^카카오 미등록 매장 2$/ })).toBeVisible();
   expect(searches.at(-1)).toBe("합성");
+  // M2b 번호: 묶음 순서대로 영업 1 → 신규 2 → 미등록 3·4
+  await expect(panel.getByLabel("지도 번호 1")).toBeVisible();
+  await expect(panel.getByLabel("지도 번호 4")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "결과 전체 보기" })).toBeVisible();
+  await panel.getByRole("button", { name: "결과 전체 보기" }).click(); // 지도 없이 눌러도 패널은 그대로
+  if (width >= 1024) await panel.getByText("합성 영업 가게").hover(); // 마우스 올림도 패널을 깨지 않는다
+  await expect(panel).toBeVisible();
 
   // 묶음 접기
   await panel.getByRole("button", { name: /^신규 리드/ }).click();
