@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
 // M4a: 오른쪽 목록 패널은 components/map/map-side-panel.tsx(정렬 옵션은 lead-list-sort.ts)로 옮겼다.
 const sidePanelSource = readFileSync("components/map/map-side-panel.tsx", "utf8");
+// M4b: 거래처 상세·빠른 카드는 components/map/map-place-detail.tsx(순수 헬퍼는 map-place-helpers.ts)로 옮겼다.
+const placeDetailSource = readFileSync("components/map/map-place-detail.tsx", "utf8");
 const leadListSortSource = readFileSync("components/map/lead-list-sort.ts", "utf8");
 // M3b: 필터 상태·저장 필터 호출은 훅 파일로 옮겨졌다(화면 문구는 지도 파일에 그대로).
 const filterPopoverSource = readFileSync("components/map/map-filter-popover.tsx", "utf8");
@@ -93,7 +95,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     expect(mapDrawerSource).toContain('title="길안내"');
     expect(mapDrawerSource).toContain('title="단계"');
     expect(mapDrawerSource).toContain('title="새 창"');
-    expect(workspaceSource).toContain("<MapStoreDetailDrawer");
+    expect(placeDetailSource).toContain("<MapStoreDetailDrawer");
   });
 
   it("places current-location and zoom controls at the map bottom-right", () => {
@@ -116,7 +118,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   });
 
   it("opens customer detail on the core dashboard and preserves phone and email actions", () => {
-    expect(workspaceSource).toContain("/dashboard?routeMode=map&customer=");
+    expect(placeDetailSource).toContain("/dashboard?routeMode=map&customer=");
     expect(dashboardSource).toContain("initialCustomerId={params.customer}");
     expect(workspaceSource).toContain('const [selectedId, setSelectedId] = useState(initialCustomerId || "")');
     expect(workspaceSource).toContain("const selectedStore = allStores.find((store) => store.id === selectedId)");
@@ -132,11 +134,11 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   });
 
   it("formats customer contact fields for display while saving digits", () => {
-    expect(workspaceSource).toContain('import { formatPhoneNumber } from "@/lib/phone"');
-    expect(workspaceSource).toContain('연락처 · {formatPhoneNumber(draftPhone) || "미등록"}');
-    expect(workspaceSource).toContain('사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}');
-    expect(workspaceSource).toContain("phone: normalizePhoneNumber(draftPhone)");
-    expect(workspaceSource).toContain("businessRegistrationNumber: normalizeBusinessRegistrationNumber(draftBusinessNumber)");
+    expect(placeDetailSource).toContain('import { formatPhoneNumber } from "@/lib/phone"');
+    expect(placeDetailSource).toContain('연락처 · {formatPhoneNumber(draftPhone) || "미등록"}');
+    expect(placeDetailSource).toContain('사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}');
+    expect(placeDetailSource).toContain("phone: normalizePhoneNumber(draftPhone)");
+    expect(placeDetailSource).toContain("businessRegistrationNumber: normalizeBusinessRegistrationNumber(draftBusinessNumber)");
     expect(mapDrawerSource).toContain("formatPhoneNumber(phone)");
   });
 });

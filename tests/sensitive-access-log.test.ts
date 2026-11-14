@@ -77,7 +77,7 @@ describe("sensitive access log authorization", () => {
   it("does not serialize access-password plaintext into customer or route responses", async () => {
     const { readFile } = await import("node:fs/promises");
     const store = await readFile("lib/store.ts", "utf8");
-    const workspace = await readFile("components/sales-route-map-workspace.tsx", "utf8");
+    const workspace = await readFile("components/map/map-place-detail.tsx", "utf8"); // M4b: 거래처 상세가 옮겨 간 파일
     expect(store).toContain("hasAccessPassword: Boolean(row.access_password)");
     expect(store).not.toContain("accessPassword: row.access_password");
     expect(workspace).toContain("/sensitive/access-password/reveal");
