@@ -151,7 +151,7 @@ type KakaoMarker = {
 type KakaoMarkerImage = object;
 type KakaoSize = object;
 type KakaoPoint = object;
-type KakaoPolyline = object;
+type KakaoPolyline = { setMap: (map: KakaoMap | null) => void };
 type KakaoPolygon = {
   setMap: (map: KakaoMap | null) => void;
   setOptions: (options: { fillColor?: string; fillOpacity?: number; strokeColor?: string; strokeOpacity?: number; strokeWeight?: number }) => void;
@@ -217,6 +217,7 @@ type KakaoMapsApi = {
   }) => KakaoPolygon;
   Size: new (width: number, height: number) => KakaoSize;
   event: {
+    removeListener(target: object, eventName: string, handler: () => void): void;
     addListener(target: KakaoMap, eventName: "click", handler: (event: KakaoMapMouseEvent) => void): void;
     addListener(target: object, eventName: string, handler: (event: KakaoMapMouseEvent) => void): void;
     preventMap: () => void;
@@ -372,6 +373,12 @@ export function KakaoAddressMap({
   // 이전 지도 인스턴스에 붙어 있던 차량 오버레이는 그 인스턴스와 함께 사라지므로, 이 값이 바뀌면
   // 아래 차량 effect가 자기 상태를 비우고 새 지도 위에 차량 오버레이를 처음부터 다시 그립니다.
   const [mapBootId, setMapBootId] = useState(0);
+  // 마커·길 레이어를 새로 깔 때마다 늘어나는 카운터 — 강조·반경 effect가 새 마커 좌표 기준으로 다시 돈다.
+  const [layerId, setLayerId] = useState(0);
+  const layerOverlaysRef = useRef<KakaoCustomOverlay[]>([]);
+  const layerPolylinesRef = useRef<KakaoPolyline[]>([]);
+  const zoomHandlerRef = useRef<(() => void) | null>(null);
+  const fittedOnceRef = useRef(false);
   // 차량 effect가 "마지막으로 처리한" mapBootId를 기억해뒀다가, 이 값과 최신 mapBootId가 다르면
   // (지도가 그 사이에 다시 만들어졌으면) 이전 오버레이 참조를 비웁니다.
   const vehicleAnimBootIdRef = useRef(0);
@@ -424,6 +431,7 @@ export function KakaoAddressMap({
     async function bootMap() {
       mapViewportReadyRef.current = false;
       refitViewportRef.current = null;
+      fittedOnceRef.current = false;
       setStatus("loading");
       setFallbackReason("");
 
@@ -485,6 +493,45 @@ export function KakaoAddressMap({
           if (center) onCenterChangeRef.current?.({ lat: center.getLat(), lng: center.getLng() });
         });
 
+      } catch (error) {
+        if (!ignore) {
+          const message = error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.";
+          console.error(`[KakaoAddressMap] ${message}${getKakaoDomainHint()}`, error);
+          setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
+          setStatus("fallback");
+        }
+      }
+    }
+
+    bootMap();
+
+    return () => {
+      ignore = true;
+      mapViewportReadyRef.current = false;
+      refitViewportRef.current = null;
+    };
+    // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도를 다시 만들면 안 됩니다.
+    // 마커·길 선이 바뀌어도 지도는 다시 만들지 않고 아래 배치 effect가 레이어만 교체합니다(CC-42a).
+  }, [appKey, canUseKakao, salesAreaBoundary?.province]);
+
+  // 마커·길 선 배치: 지도가 준비된 뒤, 마커 구성(markersSignature)이나 길(routePath)이 바뀔 때마다 레이어만 교체한다.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const kakao = window.kakao;
+    if (status !== "ready" || !map || !kakao?.maps) return;
+    let ignore = false;
+
+    async function placeLayers(map: KakaoMap, kakao: KakaoSdk) {
+      try {
+        // 이전 배치(마커·길 선·줌 리스너)를 걷어내고 새로 깐다 — 지도 인스턴스와 보던 위치는 그대로(CC-42a, R1).
+        layerOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+        layerOverlaysRef.current = [];
+        layerPolylinesRef.current.forEach((line) => line.setMap(null));
+        layerPolylinesRef.current = [];
+        if (zoomHandlerRef.current) {
+          kakao.maps.event.removeListener(map, "zoom_changed", zoomHandlerRef.current);
+          zoomHandlerRef.current = null;
+        }
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
         boundsRef.current = bounds;
@@ -533,6 +580,7 @@ export function KakaoAddressMap({
             position,
             yAnchor: 1.75
           });
+          layerOverlaysRef.current.push(overlay);
           if (marker.tone === "lead") attachLeadOverlayEntry(overlay, marker, overlayContent);
 
           bounds.extend(position);
@@ -604,7 +652,7 @@ export function KakaoAddressMap({
 
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
-        kakao.maps.event.addListener(map, "zoom_changed", () => {
+        const onZoomChanged = () => {
           const nextCompact = computeCompactLeadMarkers(map.getLevel());
           if (nextCompact === compactLeadMarkers) return;
           compactLeadMarkers = nextCompact;
@@ -615,14 +663,16 @@ export function KakaoAddressMap({
             if (entry.marker.id) markerElementsRef.current.set(entry.marker.id, nextElement);
             return { ...entry, element: nextElement };
           });
-        });
+        };
 
         if (ignore) return;
+        kakao.maps.event.addListener(map, "zoom_changed", onZoomChanged);
+        zoomHandlerRef.current = onZoomChanged;
 
         if (shouldShowMarkerGeocodingFailure({
           found,
           hasRoadPath,
-          hasSalesAreaBoundary: Boolean(salesAreaBoundary),
+          hasSalesAreaBoundary: Boolean(salesAreaBoundaryRef.current),
           markers: staticMarkers
         })) {
           console.error(`[KakaoAddressMap] 카카오 주소 좌표 변환에 성공한 매장이 없습니다. 주소 형식 또는 Kakao JavaScript 도메인 등록을 확인하세요.${getKakaoDomainHint()}`);
@@ -632,7 +682,7 @@ export function KakaoAddressMap({
         }
 
         if (hasRoadPath) {
-          drawRoadRoutePolylines(kakao, map, roadPathSegments);
+          layerPolylinesRef.current = drawRoadRoutePolylines(kakao, map, roadPathSegments);
           roadPathSegments.flat().forEach((point) => bounds.extend(point));
         }
         const fitViewport = () => {
@@ -649,10 +699,16 @@ export function KakaoAddressMap({
           }
         };
         refitViewportRef.current = fitViewport;
+        setLayerId((value) => value + 1);
         window.setTimeout(() => {
           map.relayout?.();
           window.requestAnimationFrame(() => {
-            fitViewport();
+            // 화면 맞춤은 첫 배치 때만 — 이후 필터·마커 변경은 사용자가 보던 위치·확대를 그대로 둔다(R1).
+            // "전체 보기"(refitViewportRef)·검색 이동(focusedMarkerId)은 따로 맞춘다.
+            if (!fittedOnceRef.current && (found > 0 || hasRoadPath)) {
+              fitViewport();
+              fittedOnceRef.current = true;
+            }
             mapViewportReadyRef.current = true;
           });
         }, 120);
@@ -666,19 +722,13 @@ export function KakaoAddressMap({
       }
     }
 
-    bootMap();
+    void placeLayers(map, kakao);
 
     return () => {
       ignore = true;
-      mapViewportReadyRef.current = false;
-      refitViewportRef.current = null;
     };
-    // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도
-    // 전체를 재생성하고 모든 주소를 재지오코딩하면(과거 버그, 실제로 몇 초 이상 브라우저가
-    // 멈추는 현상을 유발) 안 되기 때문입니다. 포커스 이동은 아래의 가벼운 effect가 캐시된
-    // 좌표로만 처리하고, 클릭 콜백은 onMarkerClickRef로 최신 값을 유지합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appKey, canUseKakao, markersSignature, routePath, salesAreaBoundary?.province]);
+  }, [status, mapBootId, markersSignature, routePath]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -999,7 +1049,7 @@ export function KakaoAddressMap({
       focusedElement.style.zIndex = "30";
       highlightedElementRef.current = focusedElement;
     }
-  }, [focusedMarkerId, status]);
+  }, [focusedMarkerId, status, layerId]);
 
   useEffect(() => {
     radiusOnChangeRef.current = radiusOverlay?.onRadiusChange;
@@ -1105,7 +1155,7 @@ export function KakaoAddressMap({
       labelOverlay.setMap(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.centerPoint?.lat, radiusOverlay?.centerPoint?.lng, radiusOverlay?.radiusMeters, markersSignature]);
+  }, [status, radiusOverlay?.centerMarkerId, radiusOverlay?.centerPoint?.lat, radiusOverlay?.centerPoint?.lng, radiusOverlay?.radiusMeters, markersSignature, layerId]);
 
   // 카카오맵은 초기화 시점의 컨테이너 크기를 기준으로 캔버스를 그리기 때문에, 사이드 패널 접힘/펼침,
   // 팝업 표시, 반응형 브레이크포인트 전환처럼 지도 영역 자체의 높이·너비가 나중에 바뀌면 위쪽에 빈
@@ -1234,10 +1284,10 @@ function getKakaoDomainHint() {
   return "";
 }
 
-function drawRoadRoutePolylines(kakao: KakaoSdk, map: KakaoMap, roadPathSegments: KakaoLatLng[][]) {
-  roadPathSegments.forEach((roadPath) => {
-    if (roadPath.length < 2) return;
-    new kakao.maps.Polyline({
+function drawRoadRoutePolylines(kakao: KakaoSdk, map: KakaoMap, roadPathSegments: KakaoLatLng[][]): KakaoPolyline[] {
+  return roadPathSegments.flatMap((roadPath) => {
+    if (roadPath.length < 2) return [];
+    return [new kakao.maps.Polyline({
       endArrow: true,
       map,
       path: roadPath,
@@ -1245,7 +1295,7 @@ function drawRoadRoutePolylines(kakao: KakaoSdk, map: KakaoMap, roadPathSegments
       strokeOpacity: 0.9,
       strokeStyle: "solid",
       strokeWeight: 5
-    });
+    })];
   });
 }
 
