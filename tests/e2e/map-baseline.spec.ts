@@ -11,6 +11,7 @@ const lead = (id: string, name: string) => ({
   isTargetIndustry: true, isTemporaryOperation: false, isTemporaryOperationSuspected: false, isDuplicate: false, status: "신규", nextActionReasons: [], scoreTotal: 50, scoreBreakdown: {}, grade: "B", createdAt: now, updatedAt: now,
 });
 const leadsBody = (names: string[]) => ({ leads: names.map((n, i) => lead(`30000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, n)), salesRegionsConfigured: true });
+const closedLead = (id: string, name: string) => ({ ...lead(id, name), status: "폐업 확인 필요" });
 const salesCount = (page: Page) => page.getByRole("button", { name: /^영업 \d+/ });
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -36,4 +37,16 @@ test("R4: 관리자 미리보기에서 회사를 바꾸면 이전 회사 리드�
 
 test.fixme("R1: 필터를 바꿔도 지도 위치·확대가 유지된다 (42a에서 켠다)", () => {
   // CI에는 카카오 지도 SDK가 없어 지도가 만들어지지 않는다 — 42a에서 SDK 스텁(window.kakao)을 넣어 켠다.
+});
+
+// CC-46-4: 폐업 리드는 지도에서 기본 제외, "폐업 리드 포함"을 켜면 보인다.
+test("closed leads are hidden on the map unless asked for", async ({ page }) => {
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const body = { leads: [lead("30000000-0000-4000-8000-000000000001", "영업 가게 1"), lead("30000000-0000-4000-8000-000000000002", "영업 가게 2"), closedLead("30000000-0000-4000-8000-000000000003", "폐업 가게")], salesRegionsConfigured: true };
+  await page.route(/\/api\/leads\/permits\?/, (route) => route.fulfill({ json: body }));
+  await page.goto("/map");
+  await expect(salesCount(page)).toHaveText(/영업 2/);
+  await page.getByRole("button", { name: "필터 더보기" }).click();
+  await page.getByLabel("폐업 리드 포함").check();
+  await expect(salesCount(page)).toHaveText(/영업 3/);
 });

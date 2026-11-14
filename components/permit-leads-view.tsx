@@ -1,4 +1,5 @@
 "use client";
+import { isClosedLead } from "@/lib/leads";
 
 import { LeadChangeHistory } from "@/components/lead-change-history";
 import { DistributorKakaoDrawer } from "@/components/distributor-kakao-drawer";
@@ -646,7 +647,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     const keyword = tableSearch.trim().toLowerCase();
     const normalizedKeyword = normalizeLeadSearchToken(keyword);
     return leads
-      .filter((lead) => showClosedOrNonTarget || (lead.isActive && lead.isTargetIndustry && !/폐업|취소|말소/.test(lead.permitStatus || "")))
+      .filter((lead) => showClosedOrNonTarget || (lead.isActive && lead.isTargetIndustry && !isClosedLead(lead)))
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
@@ -2245,7 +2246,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 <label className="flex items-center gap-1.5"><input checked={showExistingCustomers} onChange={(event) => setShowExistingCustomers(event.target.checked)} type="checkbox" />기존 거래처</label>
                 <label className="flex items-center gap-1.5"><input checked={!excludeExcluded} onChange={(event) => setExcludeExcluded(!event.target.checked)} type="checkbox" />제외 처리한 리드</label>
                 <label className="flex items-center gap-1.5"><input checked={showTemporaryOperations} onChange={(event) => setShowTemporaryOperations(event.target.checked)} type="checkbox" />임시 영업</label>
-                <label className="flex items-center gap-1.5"><input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />폐업·대상 외 업종</label>
+                <label className="flex items-center gap-1.5"><input checked={showClosedOrNonTarget} onChange={(event) => setShowClosedOrNonTarget(event.target.checked)} type="checkbox" />폐업·대상 외 업종 보기</label>
               </div>
             </div>
           ) : null}
