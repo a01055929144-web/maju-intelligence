@@ -93,6 +93,14 @@ type KakaoAddressMapProps = {
   readonly controlsOffsetPx?: number;
   readonly fallbackReason?: string;
   readonly focusedMarkerId?: string;
+  /** M2b 검색 결과 번호 핀(marker.id → 번호). 마커를 다시 그리지 않고 이미 그린 마커에 배지만 붙인다. */
+  readonly pinNumbers?: ReadonlyMap<string, number>;
+  /** M2b 검색 결과 줄에 마우스를 올린 마커. 지도는 움직이지 않고 테두리만 강조한다. */
+  readonly hoveredMarkerId?: string;
+  /** M2b `결과 전체 보기`: token이 바뀔 때만 ids 마커들에 화면을 맞춘다(검색만으로는 화면이 안 튄다). */
+  readonly fitMarkersRequest?: { readonly token: number; readonly ids: readonly string[] };
+  /** M2b 검색 중(true)인 동안의 시작 위치·확대를 기억했다가 false가 되면(Esc/×) 그 위치로 돌아간다. */
+  readonly restoreViewWhenDone?: boolean;
   readonly leadSearch?: KakaoLeadSearchInteraction;
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
@@ -305,6 +313,10 @@ export function KakaoAddressMap({
   controlsOffsetClassName,
   controlsOffsetPx,
   focusedMarkerId,
+  pinNumbers,
+  hoveredMarkerId,
+  fitMarkersRequest,
+  restoreViewWhenDone,
   leadSearch,
   mapClassName = defaultMapClassName,
   markers,
@@ -338,6 +350,10 @@ export function KakaoAddressMap({
   // 방금까지 하이라이트해 둔 엘리먼트를 기억해뒀다가, focusedMarkerId가 바뀌면 그 엘리먼트에서만
   // 하이라이트 스타일을 지웁니다(전체를 순회할 필요 없이 O(1)).
   const highlightedElementRef = useRef<HTMLElement | null>(null);
+  // M2b: 번호 핀은 마커를 새로 그릴 때(배치·확대 축소로 리드 마커 교체)도 바로 붙도록 최신 값을 ref로 둔다.
+  const pinNumbersRef = useRef<ReadonlyMap<string, number> | undefined>(pinNumbers);
+  const hoveredElementRef = useRef<HTMLElement | null>(null);
+  const savedViewRef = useRef<{ center: KakaoLatLng; level: number } | null>(null);
   // onMarkerClick은 부모(sales-route-map-workspace.tsx)에서 매 렌더마다 새로 만들어지는 인라인
   // 함수일 수 있습니다. 이 값을 boot effect의 의존성 배열에 그대로 두면 부모가 리렌더될 때마다
   // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
@@ -600,6 +616,7 @@ export function KakaoAddressMap({
           if (marker.id) {
             markerPositionsRef.current.set(marker.id, position);
             markerElementsRef.current.set(marker.id, overlayContent);
+            applyPinBadge(overlayContent, pinNumbersRef.current?.get(marker.id));
           }
           if (focusedMarkerId && marker.id === focusedMarkerId) {
             focusedPosition = position;
@@ -673,7 +690,10 @@ export function KakaoAddressMap({
             const nextElement = createMarkerOverlay(entry.marker, compactLeadMarkers);
             nextElement.addEventListener("click", () => onMarkerClickRef.current?.(entry.marker));
             entry.overlay.setContent(nextElement);
-            if (entry.marker.id) markerElementsRef.current.set(entry.marker.id, nextElement);
+            if (entry.marker.id) {
+              markerElementsRef.current.set(entry.marker.id, nextElement);
+              applyPinBadge(nextElement, pinNumbersRef.current?.get(entry.marker.id));
+            }
             return { ...entry, element: nextElement };
           });
         };
@@ -1063,6 +1083,61 @@ export function KakaoAddressMap({
       highlightedElementRef.current = focusedElement;
     }
   }, [focusedMarkerId, status, layerId]);
+
+  // M2b 번호 핀: 번호가 바뀌면 이미 그린 마커 DOM에 배지만 붙였다 뗀다(지도·마커 재배치 없음).
+  useEffect(() => {
+    pinNumbersRef.current = pinNumbers;
+    if (status !== "ready") return;
+    markerElementsRef.current.forEach((element, id) => applyPinBadge(element, pinNumbersRef.current?.get(id)));
+  }, [pinNumbers, status, layerId]);
+
+  // M2b 마우스 올림 강조: 지도는 움직이지 않는다. 선택 강조(outline)와 겹치지 않게 box-shadow만 쓴다.
+  useEffect(() => {
+    if (hoveredElementRef.current) {
+      setHoverStyle(hoveredElementRef.current, false, hoveredElementRef.current === highlightedElementRef.current);
+      hoveredElementRef.current = null;
+    }
+    if (status !== "ready" || !hoveredMarkerId) return;
+    const element = markerElementsRef.current.get(hoveredMarkerId);
+    if (!element) return;
+    setHoverStyle(element, true, false);
+    hoveredElementRef.current = element;
+  }, [hoveredMarkerId, status, layerId]);
+
+  // M2b `결과 전체 보기`: 버튼을 눌렀을 때(token 변경)만 결과 마커들에 맞춘다.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const kakao = window.kakao;
+    if (status !== "ready" || !map || !kakao?.maps || !fitMarkersRequest) return;
+    const positions = fitMarkersRequest.ids
+      .map((id) => markerPositionsRef.current.get(id))
+      .filter((position): position is KakaoLatLng => Boolean(position));
+    if (!positions.length) return;
+    if (positions.length === 1) {
+      map.setCenter(positions[0]);
+      map.setLevel(5);
+      return;
+    }
+    const bounds = new kakao.maps.LatLngBounds();
+    positions.forEach((position) => bounds.extend(position));
+    map.setBounds(bounds, 60, 60, 60, 60);
+    // 요청 객체는 버튼을 누를 때만 새로 만들어지므로(token) 검색어 입력만으로는 화면이 움직이지 않는다.
+  }, [fitMarkersRequest, status]);
+
+  // M2b 이전 위치 복귀: 검색을 시작할 때 위치·확대를 기억했다가, 검색을 닫으면(Esc/×) 그대로 되돌린다.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (status !== "ready" || !map) return;
+    if (restoreViewWhenDone) {
+      if (!savedViewRef.current) savedViewRef.current = { center: map.getCenter(), level: map.getLevel() };
+      return;
+    }
+    const saved = savedViewRef.current;
+    if (!saved) return;
+    savedViewRef.current = null;
+    map.setLevel(saved.level);
+    map.setCenter(saved.center);
+  }, [restoreViewWhenDone, status]);
 
   useEffect(() => {
     radiusOnChangeRef.current = radiusOverlay?.onRadiusChange;
@@ -1527,6 +1602,28 @@ function vehicleMarkerContentSignature(marker: KakaoMapMarker) {
     name: marker.name,
     tone: marker.tone
   });
+}
+
+const PIN_BADGE_ATTR = "data-maju-search-pin";
+
+// M2b: 마커 왼쪽 위 번호 배지. pin이 없으면 떼기만 한다.
+function applyPinBadge(element: HTMLElement, pin: number | undefined) {
+  element.querySelector(`[${PIN_BADGE_ATTR}]`)?.remove();
+  if (!pin) return;
+  if (!element.style.position) element.style.position = "relative";
+  const badge = document.createElement("span");
+  badge.setAttribute(PIN_BADGE_ATTR, String(pin));
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = String(pin);
+  badge.style.cssText =
+    "position:absolute;top:-9px;left:-9px;min-width:20px;height:20px;padding:0 4px;border-radius:999px;background:#0f172a;color:#ffffff;border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;box-shadow:0 2px 6px rgba(15,23,42,.35);z-index:2;pointer-events:none;";
+  element.appendChild(badge);
+}
+
+// M2b: 마우스 올림 강조. 선택된(focused) 마커면 선택 강조의 z-index(30)는 남긴다.
+function setHoverStyle(element: HTMLElement, hovered: boolean, keepFocusZIndex: boolean) {
+  element.style.boxShadow = hovered ? "0 0 0 4px rgba(13,148,136,.6)" : "";
+  element.style.zIndex = hovered ? "40" : keepFocusZIndex ? "30" : "";
 }
 
 function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false) {

@@ -3,8 +3,9 @@ import { useState } from "react";
 import { X } from "lucide-react";
 
 // M2a: 지도 검색 결과를 검색창 아래 떠 있는 목록 대신 오른쪽 패널(휴대폰은 지도 아래)에 묶음으로 보여 준다.
-// 묶음 4개: 거래처 → 영업 리드 → 신규 리드 → 카카오 미등록 매장. 번호 핀·마우스 올림 강조·결과 전체 보기·아래에서 올라오는 목록은 M2b.
-export type SearchResultRow = { id: string; name: string; address: string; industry?: string; chip: string };
+// 묶음 4개: 거래처 → 영업 리드 → 신규 리드 → 카카오 미등록 매장.
+// M2b: 줄 번호 = 지도 번호 핀, 줄에 마우스를 올리면 그 마커 강조, `결과 전체 보기`만 화면을 결과에 맞춘다.
+export type SearchResultRow = { id: string; name: string; address: string; industry?: string; chip: string; pin?: number };
 
 type Props = {
   readonly query: string;
@@ -24,6 +25,10 @@ type Props = {
   readonly onToggle: (id: string) => void;
   readonly onToggleAll: () => void;
   readonly onRegisterSelected: () => void;
+  /** 줄에 마우스를 올리거나(포커스 포함) 벗어날 때. null = 강조 해제 */
+  readonly onHover?: (id: string | null) => void;
+  /** 지도를 결과 전체에 맞춘다. 없으면 버튼을 숨긴다. */
+  readonly onFitAll?: () => void;
 };
 
 export function MapSearchResultsPanel(props: Props) {
@@ -42,8 +47,16 @@ export function MapSearchResultsPanel(props: Props) {
           <input checked={selectedIds.size > 0 && selectedIds.size === rows.length} className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600" onChange={props.onToggleAll} type="checkbox" />전체 선택
         </label> : null}
       </div>
-      {collapsed.has(key) ? null : rows.map((row) => <div className={`flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 hover:bg-teal-50 ${selectedIds.has(row.id) ? "bg-teal-50" : ""}`} key={row.id}>
+      {collapsed.has(key) ? null : rows.map((row) => <div
+        className={`flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 hover:bg-teal-50 ${selectedIds.has(row.id) ? "bg-teal-50" : ""}`}
+        key={row.id}
+        onBlur={() => props.onHover?.(null)}
+        onFocus={() => props.onHover?.(row.id)}
+        onMouseEnter={() => props.onHover?.(row.id)}
+        onMouseLeave={() => props.onHover?.(null)}
+      >
         <div className="flex min-w-0 items-center gap-2">
+          {row.pin ? <span aria-label={`지도 번호 ${row.pin}`} className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 px-1 text-[11px] font-black text-white">{row.pin}</span> : null}
           {selectable ? <input aria-label={`${row.name} 선택`} checked={selectedIds.has(row.id)} className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-teal-600" onChange={() => props.onToggle(row.id)} type="checkbox" /> : null}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-950">{row.name}</p>
@@ -59,6 +72,7 @@ export function MapSearchResultsPanel(props: Props) {
   return <section aria-label="검색 결과" className="flex h-full min-h-0 flex-col bg-white">
     <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
       <h2 className="truncate text-sm font-black text-slate-900">검색 결과 {total.toLocaleString()} <span className="font-semibold text-slate-500">“{props.query.trim()}”</span></h2>
+      {props.onFitAll && total > 0 ? <button className="maju-button-secondary ml-auto h-8 shrink-0 px-2.5 text-xs" onClick={props.onFitAll} type="button">결과 전체 보기</button> : null}
       <button aria-label="검색 결과 닫기" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100" onClick={props.onClose} type="button"><X className="h-4 w-4" /></button>
     </header>
     <div className="min-h-0 flex-1 overflow-y-auto">

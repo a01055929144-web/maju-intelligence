@@ -78,6 +78,7 @@ import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map"
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { MapSearchResultsPanel, type SearchResultRow } from "@/components/map/map-search-results-panel";
 import { useBusinessSearch, type ExternalBusinessResult } from "@/components/map/use-business-search";
+import { assignSearchPins } from "@/components/map/search-pins";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
@@ -498,7 +499,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       return next;
     });
   }
-  function closeSearch() { setQuery(""); setSearchOpen(false); }
+  function closeSearch() { setQuery(""); setSearchOpen(false); setHoveredResultId(""); }
   useEffect(() => {
     if (!searchTabOpen) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") closeSearch(); };
@@ -509,6 +510,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [quickRegisterTarget, setQuickRegisterTarget] = useState<ExternalBusinessResult | null>(null);
   // 검색 결과 일괄 등록 선택 상태입니다.
   const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
+  // M2b: 검색 결과 줄 마우스 올림(지도 마커 강조)과 `결과 전체 보기` 요청.
+  const [hoveredResultId, setHoveredResultId] = useState("");
+  const [fitResultsRequest, setFitResultsRequest] = useState<{ token: number; ids: readonly string[] } | null>(null);
   const [isBulkRegistering, setIsBulkRegistering] = useState(false);
   const [bulkRegisterMessage, setBulkRegisterMessage] = useState("");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
@@ -1169,6 +1173,17 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     setSelectedResultIds(new Set());
     setBulkRegisterMessage("");
   }, [query]);
+  // M2b: 패널 줄 번호 = 지도 번호 핀(묶음 순서 거래처 → 영업 → 신규 → 미등록).
+  const searchRows = useMemo(
+    () =>
+      assignSearchPins<SearchResultRow>({
+        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: store.relationshipStatus || "거래처" })),
+        salesLeads: leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" })),
+        newLeads: leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" })),
+        unregistered: unregisteredResults.map((result) => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))
+      }),
+    [registeredMatches, leadMatches, unregisteredResults]
+  );
   const gradeBaseStores = useMemo(
     () =>
       allStores.filter((store) => {
@@ -2298,11 +2313,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     <MapSearchResultsPanel
       bulkBusy={isBulkRegistering}
       bulkMessage={bulkRegisterMessage}
-      customers={registeredMatches.map((store): SearchResultRow => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: store.relationshipStatus || "거래처" }))}
+      customers={searchRows.customers}
       loading={isSearchingExternal}
       message={externalSearchMessage}
-      newLeads={leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead): SearchResultRow => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" }))}
+      newLeads={searchRows.newLeads}
       onClose={closeSearch}
+      onFitAll={() => setFitResultsRequest({ token: Date.now(), ids: Array.from(searchRows.pins.keys()) })}
+      onHover={(id) => setHoveredResultId(id || "")}
       onOpenCustomer={(id) => { rememberQuery(query); setPreviewLeadId(""); setSelectedId(""); setPreviewStoreId(id); }}
       onOpenLead={(id) => { rememberQuery(query); setPreviewStoreId(""); setSelectedId(""); setPreviewLeadId(id); setMapLeadsVisible(true); }}
       onRegister={(id) => {
@@ -2313,9 +2330,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       onToggle={toggleResultSelection}
       onToggleAll={toggleSelectAllResults}
       query={query}
-      salesLeads={leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead): SearchResultRow => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" }))}
+      salesLeads={searchRows.salesLeads}
       selectedIds={selectedResultIds}
-      unregistered={unregisteredResults.map((result): SearchResultRow => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))}
+      unregistered={searchRows.unregistered}
     />
   );
 
@@ -3310,6 +3327,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
                     onCustomerGeocodeFailed={setUnplacedCustomerCount}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
+                    fitMarkersRequest={searchTabOpen ? fitResultsRequest ?? undefined : undefined}
+                    hoveredMarkerId={searchTabOpen && hoveredResultId ? hoveredResultId : undefined}
+                    pinNumbers={searchTabOpen ? searchRows.pins : undefined}
+                    restoreViewWhenDone={searchTabOpen}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 lg:min-h-0"
                     markers={mapDisplayMarkers}
                     onMarkerClick={(marker) => {
