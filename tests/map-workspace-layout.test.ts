@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workspaceSource = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
+// M3b: 필터 상태·저장 필터 호출은 훅 파일로 옮겨졌다(화면 문구는 지도 파일에 그대로).
+const filterHookSource = readFileSync("components/map/use-map-filters.ts", "utf8");
 const shellSource = readFileSync("components/customer-app-shell.tsx", "utf8");
 const sidebarSource = readFileSync("components/app-sidebar.tsx", "utf8");
 const deliveryProofSource = readFileSync("components/mobile-delivery-proof-panel.tsx", "utf8");
@@ -29,7 +31,7 @@ describe("PC map workspace layout", () => {
   });
 
   it("wires saved filter restore controls while the server flag remains authoritative", () => {
-    expect(workspaceSource).toContain('fetch("/api/map/filter-presets"');
+    expect(filterHookSource).toContain('fetch("/api/map/filter-presets"');
     expect(workspaceSource).toContain("이 조건 저장");
     expect(workspaceSource).toContain("저장한 필터");
     expect(workspaceSource).toContain("applyMapFilterPreset");
@@ -148,7 +150,7 @@ describe("시안 ⑫ 지도 기본 배치", () => {
 
   it("preselects the requested lead list on the shared map screen", () => {
     expect(dashboardSource).toContain('initialLeadType={params.type === "keyword" ? "sales" : "new"}');
-    expect(workspaceSource).toContain('useState<"all" | PermitLeadType>(initialLeadType)');
+    expect(filterHookSource).toContain('useState<"all" | PermitLeadType>(initialLeadType)');
   });
 });
 
