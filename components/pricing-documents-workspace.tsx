@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { decodeCsvText } from "@/lib/csv-text";
 import { Tabs } from "@/components/ui/tabs";
@@ -1028,24 +1029,15 @@ export function PricingDocumentsWorkspace({
                             </select>
                           </td>
                           <td className="p-2">
-                            <input
-                              disabled={!editable || !!l.promotionId}
-                              type="number"
-                              min="0"
-                              max="1000000000000"
-                              step="1"
-                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false)}
-                              aria-label={`품목 ${i + 1} 판매가`}
-                              onChange={(e) =>
-                                rows(
-                                  draft.content.lines.map((x, j) =>
-                                    j === i
-                                      ? { ...x, price: draft.content.display?.priceIncludesTax && x.taxType === "taxable" ? Math.round(Number(e.target.value) / 1.1) : Number(e.target.value) }
-                                      : x,
-                                  ),
-                                )
-                              }
+                            <MoneyInput
+                              ariaLabel={`품목 ${i + 1} 판매가`}
                               className={`${box} w-32`}
+                              disabled={!editable || !!l.promotionId}
+                              onCommit={(next) => {
+                                const shown = next ?? 0;
+                                rows(draft.content.lines.map((x, j) => (j === i ? { ...x, price: draft.content.display?.priceIncludesTax && x.taxType === "taxable" ? Math.round(shown / 1.1) : shown } : x)));
+                              }}
+                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false)}
                             />
                           </td>
                           <td className="p-2">

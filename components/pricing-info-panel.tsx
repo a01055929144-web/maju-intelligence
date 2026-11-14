@@ -1,4 +1,5 @@
 "use client";
+import { formatMoneyInput } from "@/domains/shared/money";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
@@ -199,7 +200,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     switch (candidate.editor) {
       case "phone": control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} inputMode="tel" onChange={(e) => set({ [field]: formatPhoneNumber(e.target.value) })} onKeyDown={onKey} placeholder={candidate.placeholder} value={String(draft[field] ?? "")} />; break;
       case "time": control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} onChange={(e) => set({ [field]: e.target.value })} onKeyDown={onKey} type="time" value={String(draft[field] ?? "")} />; break;
-      case "number": control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} inputMode="numeric" onChange={(e) => set({ [field]: e.target.value.replace(/[^0-9]/g, "") })} onKeyDown={onKey} placeholder="원" value={String(draft[field] ?? "")} />; break;
+      case "number": control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} inputMode="numeric" onChange={(e) => set({ [field]: e.target.value.replace(/[^0-9]/g, "") })} onKeyDown={onKey} placeholder="원" value={formatMoneyInput(String(draft[field] ?? ""))} />; break;
       case "cycle": control = <select aria-label={`${candidate.label} 선택`} autoFocus className={input} onChange={(e) => set({ [field]: e.target.value })} value={String(draft[field] || "협의")}>{PAYMENT_CYCLE_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select>; break;
       case "weekdays": {
         const list = (draft[field] as number[]) || [];

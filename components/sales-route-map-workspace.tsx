@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 
 import Link from "next/link";
 import { DEFAULT_LEAD_DM_TEMPLATE, LEAD_DM_TEMPLATES, filterDmItems, parseExcludedItems, renderLeadDm } from "@/domains/lead/dm-template";
@@ -8724,15 +8725,10 @@ function QuoteDrawer({
                         value={row.qty}
                       />
                     </td>
-                    <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowPurchasePrice(row.id, Number(event.target.value) || 0)} type="number" value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-xs text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
+                    <td className="px-2 py-1.5"><MoneyInput ariaLabel="매입가" className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onCommit={(next) => updateRowPurchasePrice(row.id, next ?? 0)} value={row.purchasePrice} />{row.catalogProductId ? <p className="mt-1 max-w-32 truncate text-xs text-slate-400" title={(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원`).join(" · ")}>{(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length ? `유통사 원가 ${(catalog.find(item=>item.id===row.catalogProductId)?.costOptions||[]).length}개 비교` : "확정 원가 없음"}</p>:null}</td>
                     <td className="px-2 py-1.5"><input className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold" onChange={(event) => updateRowMargin(row.id, Number(event.target.value) || 0)} type="number" value={row.marginRate} /></td>
                     <td className="px-2 py-1.5">
-                      <input
-                        className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300"
-                        onChange={(event) => updateRow(row.id, { unitPrice: Number(event.target.value) || 0 })}
-                        type="number"
-                        value={row.unitPrice}
-                      />
+                      <MoneyInput ariaLabel="판매단가" className="h-7 w-full rounded border border-slate-200 px-1.5 text-right text-xs font-bold outline-none focus:border-teal-300" onCommit={(next) => updateRow(row.id, { unitPrice: next ?? 0 })} value={row.unitPrice} />
                     </td>
                     <td className="px-2 py-1.5 text-right font-black text-slate-700">{calculateQuoteLine(row).expectedProfit.toLocaleString()}원</td>
                     <td className="px-2 py-1.5 text-center">
