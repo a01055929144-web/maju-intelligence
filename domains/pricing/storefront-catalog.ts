@@ -7,6 +7,8 @@ export type CatalogLine = {
   spec: string;
   unit: string;
   isMarket: boolean;
+  /** 과세 구분(주문 금액 미리보기용). 실제 금액은 주문 때 서버가 다시 계산한다. */
+  taxType: "taxable" | "exempt";
   /** 일반 품목: 이 매장의 카탈로그 가격(서버 함수 결과). 시세 품목은 항상 null(가격 미정). */
   price: number | null;
   /** 시세 품목: 오늘 날짜 매입가가 있을 때만 그 매장 카탈로그 가격. 없으면 null(표시 안 함). */
