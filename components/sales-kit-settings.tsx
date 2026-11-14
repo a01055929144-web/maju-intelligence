@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Notice } from "@/components/ui/notice";
 import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
 import {
   SALES_KIT_FIELD_LABEL,
@@ -179,7 +180,7 @@ export function SalesKitSettingsPanel() {
           저장
         </button>
       ) : null}
-      {notice ? <p className={`mt-2 text-xs font-bold ${notice.ok ? "text-teal-700" : "text-rose-700"}`}>{notice.text}</p> : null}
+      {notice ? <Notice className="mt-2" kind={notice.ok ? "success" : "error"}>{notice.text}</Notice> : null}
     </section>
   );
 }

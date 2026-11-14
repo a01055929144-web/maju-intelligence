@@ -18,6 +18,8 @@ const mapControlsSource = readFileSync("components/map-corner-controls.tsx", "ut
 const mapDrawerSource = readFileSync("components/map-store-detail-drawer.tsx", "utf8");
 const mapLeadChannelsSource = readFileSync("components/map-lead-channel-icons.tsx", "utf8");
 const mapVehicleConnectionToastSource = readFileSync("components/map-vehicle-connection-toast.tsx", "utf8");
+// 47-6: 접속 토스트는 공통 Toast(components/ui/notice.tsx) 위에 얹혀 있다 — 읽어 주는 속성은 거기서 확인.
+const noticeSource = readFileSync("components/ui/notice.tsx", "utf8");
 
 describe("PC map workspace layout", () => {
   it("uses the finalized C3 labels without a duplicate map title", () => {
@@ -73,9 +75,11 @@ describe("PC map workspace layout", () => {
 
   it("announces a newly connected vehicle without moving TMS state into the toast", () => {
     expect(workspaceSource).toContain("<MapVehicleConnectionToast driverLabel={justConnectedVehicle.label} />");
-    expect(mapVehicleConnectionToastSource).toContain('role="status"');
-    expect(mapVehicleConnectionToastSource).toContain('aria-live="polite"');
-    expect(mapVehicleConnectionToastSource).toContain('aria-atomic="true"');
+    expect(mapVehicleConnectionToastSource).toContain('<Toast');
+    expect(mapVehicleConnectionToastSource).toContain('kind="success"');
+    expect(noticeSource).toContain('"status"');
+    expect(noticeSource).toContain('"polite"');
+    expect(noticeSource).toContain('aria-atomic="true"');
     expect(mapVehicleConnectionToastSource).not.toContain("fetch(");
     expect(mapVehicleConnectionToastSource).not.toContain("useState(");
   });
