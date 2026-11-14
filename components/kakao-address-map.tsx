@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
+import { loadGeocodeCache, saveGeocodeCache, type GeocodePoint } from "@/components/map/geocode-cache";
 import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
 import { APPROXIMATE_LOCATION_TITLE } from "@/domains/route/map-customer-notice";
 
@@ -286,37 +287,18 @@ type SalesAreaBoundaryCollection = { features: SalesAreaBoundaryFeature[]; type:
 // 늘어날수록) 이게 가장 큰 병목이었습니다. 주소의 좌표는 사실상 바뀌지 않으므로, 한 번 조회한
 // 결과는 메모리(같은 탭에서 재사용)와 localStorage(새로고침·재방문에도 유지)에 남겨두고, 다음부터는
 // API를 다시 호출하지 않고 캐시에서 바로 꺼내 씁니다.
-const GEOCODE_CACHE_STORAGE_KEY = "maju:kakao-geocode-cache:v1";
-const GEOCODE_CACHE_MAX_ENTRIES = 3000;
-// approx: 주소로 못 찾아 근사 주소·상호 검색으로 놓은 좌표(다음 로드에도 "위치 추정"으로 보이게 같이 저장).
-type GeocodePoint = { lat: number; lng: number; approx?: boolean };
 const geocodeMemoryCache = new Map<string, GeocodePoint>();
 let geocodeStorageLoaded = false;
 
 function loadGeocodeCacheFromStorage() {
   if (geocodeStorageLoaded || typeof window === "undefined") return;
   geocodeStorageLoaded = true;
-  try {
-    const raw = window.localStorage.getItem(GEOCODE_CACHE_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, GeocodePoint>;
-    Object.entries(parsed).forEach(([address, point]) => {
-      if (Number.isFinite(point?.lat) && Number.isFinite(point?.lng)) geocodeMemoryCache.set(address, point);
-    });
-  } catch {
-    // 캐시 파싱에 실패해도 치명적이지 않습니다 — 그냥 다시 지오코딩하면 됩니다.
-  }
+  loadGeocodeCache(geocodeMemoryCache, window.localStorage);
 }
 
 function saveGeocodeCacheToStorage() {
   if (typeof window === "undefined") return;
-  try {
-    // 캐시가 무한정 커지지 않도록 최근 항목 위주로만 저장합니다.
-    const entries = Array.from(geocodeMemoryCache.entries()).slice(-GEOCODE_CACHE_MAX_ENTRIES);
-    window.localStorage.setItem(GEOCODE_CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
-  } catch {
-    // localStorage 용량 초과 등은 무시합니다 — 캐시는 있으면 좋고 없어도 동작에는 지장 없습니다.
-  }
+  saveGeocodeCache(geocodeMemoryCache, window.localStorage);
 }
 
 export function KakaoAddressMap({
