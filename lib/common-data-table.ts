@@ -124,3 +124,52 @@ export function chunk<T>(items: readonly T[], size = BULK_BATCH_SIZE): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+// ---- CC-44a: 엑셀처럼 칸 이동 (좌표 계산만 — DOM은 components/common-data-table.tsx) ----
+export type GridCell = { row: number; col: number };
+export type GridMoveKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End" | "PageUp" | "PageDown";
+const clampIndex = (value: number, count: number) => Math.min(Math.max(0, count - 1), Math.max(0, value));
+
+/** 이동 키 → 새 칸. 끝에서는 멈춘다. PageUp/PageDown이 이미 끝 줄이면 overflow로 다음·이전 쪽을 알린다. */
+export function moveGridCell(cell: GridCell, key: GridMoveKey, size: { rows: number; cols: number }, options: { ctrl?: boolean; pageStep?: number } = {}): { cell: GridCell; overflow?: "next" | "prev" } {
+  if (size.rows <= 0 || size.cols <= 0) return { cell };
+  const row = clampIndex(cell.row, size.rows);
+  const col = clampIndex(cell.col, size.cols);
+  const step = Math.max(1, options.pageStep ?? 10);
+  switch (key) {
+    case "ArrowUp": return { cell: { row: clampIndex(row - 1, size.rows), col } };
+    case "ArrowDown": return { cell: { row: clampIndex(row + 1, size.rows), col } };
+    case "ArrowLeft": return { cell: { row, col: clampIndex(col - 1, size.cols) } };
+    case "ArrowRight": return { cell: { row, col: clampIndex(col + 1, size.cols) } };
+    case "Home": return { cell: options.ctrl ? { row: 0, col: 0 } : { row, col: 0 } };
+    case "End": return { cell: options.ctrl ? { row: size.rows - 1, col: size.cols - 1 } : { row, col: size.cols - 1 } };
+    case "PageDown": return row >= size.rows - 1 ? { cell: { row, col }, overflow: "next" } : { cell: { row: clampIndex(row + step, size.rows), col } };
+    case "PageUp": return row <= 0 ? { cell: { row, col }, overflow: "prev" } : { cell: { row: clampIndex(row - step, size.rows), col } };
+  }
+}
+
+/** 읽는 순서(왼→오, 위→아래)로 다음(또는 이전) 입력 가능 칸. 없으면 null. */
+export function nextEditableCell(cell: GridCell, backward: boolean, size: { rows: number; cols: number }, isEditable: (cell: GridCell) => boolean): GridCell | null {
+  const total = size.rows * size.cols;
+  const start = cell.row * size.cols + cell.col;
+  for (let offset = 1; offset < total; offset += 1) {
+    const index = backward ? start - offset : start + offset;
+    if (index < 0 || index >= total) return null;
+    const candidate = { row: Math.floor(index / size.cols), col: index % size.cols };
+    if (isEditable(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** 줄 범위 선택(Shift+↑↓·Shift+클릭): 기준 줄과 대상 줄 사이(양 끝 포함). */
+export function rangeKeys(keys: readonly string[], anchor: number, target: number): string[] {
+  if (!keys.length) return [];
+  const from = clampIndex(Math.min(anchor, target), keys.length);
+  const to = clampIndex(Math.max(anchor, target), keys.length);
+  return keys.slice(from, to + 1);
+}
+
+/** 엑셀에 붙일 수 있는 탭 구분 글. 칸 안의 탭·줄바꿈은 공백으로 바꾼다. */
+export function gridTsv(rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
+  return rows.map((row) => row.map((value) => String(value ?? "").replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
+}
