@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
           { status: 400 },
         );
       const rows = await supabaseRequest<LinkRow[]>(
-        `storefront_links?company_id=eq.${encodeURIComponent(company)}&id=eq.${detailId}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&limit=1`,
+        `storefront_links?company_id=eq.${encodeURIComponent(company)}&document_version_id=not.is.null&id=eq.${detailId}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&limit=1`,
       );
       if (
         !rows.length ||
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
     }
     const offset = (page - 1) * 50;
     const links = await supabaseRequest<LinkRow[]>(
-      `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
+      `storefront_links?company_id=eq.${encodeURIComponent(company)}&document_version_id=not.is.null&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
     );
     const allowedVersions = await accessibleVersions(
       company,
@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
     const managedLinks = await supabaseRequest<
       { document_version_id: string }[]
     >(
-      `storefront_links?company_id=eq.${company}&id=eq.${body.id}&select=document_version_id&limit=1`,
+      `storefront_links?company_id=eq.${company}&document_version_id=not.is.null&id=eq.${body.id}&select=document_version_id&limit=1`,
     );
     if (
       !managedLinks.length ||

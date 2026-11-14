@@ -26,6 +26,24 @@ async function readIssues(path: string): Promise<IssueRows> {
   return { ids: rows.map((row) => row.id), total };
 }
 
+/** 문서 버전이 없는 주문 중 전체 상품(catalog) 링크 주문은 정상 — 문서 링크 주문만 이상으로 센다. */
+async function readNullVersionDocumentOrders(company: string): Promise<IssueRows> {
+  const config = getSupabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  const headers = { apikey: config.serviceRoleKey, Authorization: `Bearer ${config.serviceRoleKey}` };
+  const read = async <T,>(path: string): Promise<T[]> => {
+    const response = await fetch(`${config.url}/rest/v1/${path}`, { headers, cache: "no-store" });
+    if (!response.ok) throw new Error(`Stage F queue read failed: ${response.status}`);
+    return (await response.json()) as T[];
+  };
+  const orders = await read<{ id: string; link_id: string }>(`store_orders?select=id,link_id&company_id=eq.${company}&document_version_id=is.null&customer_id=not.is.null&link_id=not.is.null&order=id&limit=1000`);
+  if (!orders.length) return { ids: [], total: 0 };
+  const linkIds = Array.from(new Set(orders.map((order) => order.link_id)));
+  const catalog = new Set((await read<{ id: string }>(`storefront_links?select=id&company_id=eq.${company}&source=eq.catalog&id=in.(${linkIds.map(encodeURIComponent).join(",")})`)).map((link) => link.id));
+  const broken = orders.filter((order) => !catalog.has(order.link_id));
+  return { ids: broken.slice(0, 20).map((order) => order.id), total: broken.length };
+}
+
 function ready(key: StageFQueueSource["key"], label: string, issues: IssueRows, message: string): StageFQueueSource {
   return { count: issues.total, ids: issues.ids.slice(0, 20), key, label, message, status: "ready" };
 }
@@ -47,7 +65,10 @@ export async function getStageFQueue(companyId: string): Promise<StageFQueueSour
     readIssues(`supplier_products?select=id,active_match:supplier_product_matches!supplier_product_matches_product_fk()&company_id=eq.${company}&is_active=eq.true&active_match.match_status=in.(auto,confirmed)&active_match=is.null`),
     readIssues(`supplier_products?select=id,active_match:supplier_product_matches!supplier_product_matches_product_fk!inner()&company_id=eq.${company}&is_active=eq.true&active_match.match_status=in.(auto,confirmed)&active_match.conversion_confirmed=eq.false`),
     readIssues(`storefront_links?select=id&company_id=eq.${company}&can_order=eq.true&or=(revoked_at.not.is.null,expires_at.lte.${now})`),
-    readIssues(`store_orders?select=id&company_id=eq.${company}&or=(customer_id.is.null,document_version_id.is.null,link_id.is.null)`)
+    Promise.all([
+      readIssues(`store_orders?select=id&company_id=eq.${company}&or=(customer_id.is.null,link_id.is.null)`),
+      readNullVersionDocumentOrders(company)
+    ]).then(([missing, nullVersion]) => combine(missing, nullVersion))
   ]);
 
   const uploadQueue = uploads.status === "fulfilled" ? ready("uploads", "적재 품질", uploads.value, "실패·저품질·중복·리포트 미생성 적재") : error("uploads", "적재 품질");

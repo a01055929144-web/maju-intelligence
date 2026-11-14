@@ -286,6 +286,7 @@ try {
         const predicate = (key, value) => {
           const col = identifier(table, key);
           if (value === "is.null") return `${col} is null`;
+          if (value === "not.is.null") return `${col} is not null`;
           const m = /^(eq|gt|gte|lte|in)\.(.*)$/.exec(value);
           if (!m) throw new Error("Unsupported filter");
           if (m[1] === "in")
