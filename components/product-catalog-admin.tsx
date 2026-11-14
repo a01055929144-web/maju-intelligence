@@ -1,4 +1,5 @@
 "use client";
+import { MoneyInput } from "@/components/money-input";
 import { useEffect, useMemo, useState } from "react";
 import { compareCategoryPath, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { categoryAncestors, categoryLevelOptions, isUnder, joinCategory, splitCategory, suggestCategory } from "@/domains/pricing/product-category";
@@ -717,24 +718,23 @@ function Editor({
           </Field>
           <h3 className="mt-2 border-b pb-2 text-sm font-black text-slate-800 sm:col-span-2 lg:col-span-4">가격</h3>
           <Field label="매입가 *">
-            <input className="maju-input w-full" min="0" required type="number" value={d.purchasePrice} onChange={(e) => { const purchasePrice = Number(e.target.value) || 0; setD((current) => ({ ...current, purchasePrice, salesPrice: marginRate === "" ? current.salesPrice : Math.round(purchasePrice * (1 + Number(marginRate) / 100)) })); }} />
+            <MoneyInput ariaLabel="매입가" className="maju-input w-full" value={d.purchasePrice} onCommit={(next) => { const purchasePrice = next ?? 0; setD((current) => ({ ...current, purchasePrice, salesPrice: marginRate === "" ? current.salesPrice : Math.round(purchasePrice * (1 + Number(marginRate) / 100)) })); }} />
           </Field>
           <Field label="기본 마진 (%)">
             <input className="maju-input w-full" min="-100" step="0.1" type="number" value={marginRate} onChange={(e) => { const value = e.target.value; setMarginRate(value); if (value !== "") put("salesPrice", Math.round(d.purchasePrice * (1 + Number(value) / 100))); }} />
           </Field>
           <Field label="판매가">
-            <input
+            <MoneyInput
+              ariaLabel="판매가"
               className="maju-input w-full"
-              min="0"
-              type="number"
-              value={d.salesPrice ?? ""}
-              onChange={(e) =>
+              onCommit={(next) =>
                 setD((current) => {
-                  const salesPrice = e.target.value ? Number(e.target.value) : undefined;
+                  const salesPrice = next ?? undefined;
                   if (salesPrice != null && current.purchasePrice) setMarginRate(String(Math.round(((salesPrice / current.purchasePrice) - 1) * 1000) / 10));
                   return { ...current, salesPrice };
                 })
               }
+              value={d.salesPrice ?? null}
             />
           </Field>
           <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">

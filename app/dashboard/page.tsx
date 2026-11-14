@@ -166,6 +166,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     >
       <section className="mx-auto flex w-full max-w-[1760px] flex-col xl:h-full xl:min-h-0">
         <SalesRouteMapWorkspace
+          key={companyId || "customer"}
           churnRiskCompanyId={isAdminPreview ? companyId : undefined}
           churnRiskCustomers={visibleChurnRiskCustomers}
           companyName={customerSession?.companyName || company.name}
