@@ -5,7 +5,7 @@ import { ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
-import { markerZIndex } from "@/components/map/marker-z-index";
+import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
 
 export type KakaoMapMarker = {
   readonly address: string;
@@ -144,6 +144,7 @@ type KakaoMap = {
 
 type KakaoCustomOverlay = {
   setContent: (content: HTMLElement) => void;
+  setZIndex: (zIndex: number) => void;
   setMap: (map: KakaoMap | null) => void;
   setPosition: (position: KakaoLatLng) => void;
 };
@@ -348,6 +349,9 @@ export function KakaoAddressMap({
   // 눈에 띄도록(2026-08-30 피드백: "선택한 거래처 지도에서도 하이라이트 되면 좋을듯") focusedMarkerId가
   // 바뀔 때 이 엘리먼트에 직접 outline/scale을 입혔다 지웠다 합니다 — 재지오코딩 없이 가벼운 DOM 조작만.
   const markerElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  // id → 오버레이(+종류). 선택·호버 마커를 오버레이째 위로 올리고 풀 때 종류별 기본 순서로 되돌린다.
+  const markerOverlaysRef = useRef<Map<string, { overlay: KakaoCustomOverlay; tone: KakaoMapMarker["tone"] }>>(new Map());
+  const raisedZIdsRef = useRef<Set<string>>(new Set());
   // 방금까지 하이라이트해 둔 엘리먼트를 기억해뒀다가, focusedMarkerId가 바뀌면 그 엘리먼트에서만
   // 하이라이트 스타일을 지웁니다(전체를 순회할 필요 없이 O(1)).
   const highlightedElementRef = useRef<HTMLElement | null>(null);
@@ -565,6 +569,8 @@ export function KakaoAddressMap({
         const primaryBounds = new kakao.maps.LatLngBounds();
         markerPositionsRef.current = new Map();
         markerElementsRef.current = new Map();
+        markerOverlaysRef.current = new Map();
+        raisedZIdsRef.current = new Set();
         highlightedElementRef.current = null;
         leadOverlayEntriesRef.current = [];
         let focusedPosition: KakaoLatLng | null = null;
@@ -618,6 +624,7 @@ export function KakaoAddressMap({
           if (marker.id) {
             markerPositionsRef.current.set(marker.id, position);
             markerElementsRef.current.set(marker.id, overlayContent);
+            markerOverlaysRef.current.set(marker.id, { overlay, tone: marker.tone });
             applyPinBadge(overlayContent, pinNumbersRef.current?.get(marker.id));
           }
           if (focusedMarkerId && marker.id === focusedMarkerId) {
@@ -1085,6 +1092,20 @@ export function KakaoAddressMap({
       highlightedElementRef.current = focusedElement;
     }
   }, [focusedMarkerId, status, layerId]);
+
+  // 선택·호버 마커를 오버레이째 위로(같은 자리 거래처·리드가 겹쳐도 보이게). 풀면 종류별 기본 순서로 되돌린다.
+  // 확대·축소로 리드 마커 내용이 바뀌어도 오버레이는 그대로(setContent)라 순서가 유지된다.
+  useEffect(() => {
+    if (status !== "ready") return;
+    const want = new Set([focusedMarkerId, hoveredMarkerId].filter((id): id is string => Boolean(id)));
+    const setRaised = (id: string, raised: boolean) => {
+      const entry = markerOverlaysRef.current.get(id);
+      if (entry) entry.overlay.setZIndex(overlayZIndex(entry.tone ?? "lead", raised));
+    };
+    raisedZIdsRef.current.forEach((id) => { if (!want.has(id)) setRaised(id, false); });
+    want.forEach((id) => setRaised(id, true));
+    raisedZIdsRef.current = want;
+  }, [focusedMarkerId, hoveredMarkerId, status, layerId]);
 
   // M2b 번호 핀: 번호가 바뀌면 이미 그린 마커 DOM에 배지만 붙였다 뗀다(지도·마커 재배치 없음).
   useEffect(() => {
