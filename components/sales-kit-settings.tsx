@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
 import {
   SALES_KIT_FIELD_LABEL,
@@ -13,6 +14,7 @@ import {
 
 /** 11/4: 회사 정보 › 영업 정보 — DM 문구 아래 붙일 단가표·명함·브로슈어·카탈로그·주문 링크·연락처. */
 export function SalesKitSettingsPanel() {
+  const { confirm, confirmDialog } = useConfirm();
   const [kit, setKit] = useState<SalesKitSettings | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [fallbackPhone, setFallbackPhone] = useState("");
@@ -49,7 +51,8 @@ export function SalesKitSettingsPanel() {
   }
 
   async function remove(code: string) {
-    if (!window.confirm("이 자료를 삭제할까요? 이미 보낸 링크도 열리지 않습니다.")) return;
+    const name = kit?.materials.find((item) => item.code === code)?.name;
+    if (!(await confirm({ body: `${name ? `"${name}" ` : "이 "}자료를 삭제합니다. 이미 보낸 링크도 열리지 않습니다.`, confirmLabel: "삭제" }))) return;
     setBusy(code);
     const response = await fetch(`/api/sales-kit/file?code=${encodeURIComponent(code)}`, { method: "DELETE" }).catch(() => null);
     const payload = (await response?.json().catch(() => null)) as { kit?: SalesKitSettings; message?: string } | null;
@@ -81,6 +84,7 @@ export function SalesKitSettingsPanel() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4" aria-labelledby="sales-kit-title">
+      {confirmDialog}
       <h2 className="text-base font-black text-slate-950" id="sales-kit-title">영업 자료</h2>
       <p className="mt-1 text-xs font-semibold text-slate-500">리드에게 보내는 문구 아래에 짧은 링크로 붙습니다. 링크를 연 사람은 파일을 바로 볼 수 있습니다.</p>
 
