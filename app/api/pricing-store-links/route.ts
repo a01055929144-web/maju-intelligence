@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 type LinkRow = {
   id: string;
   customer_id: string;
-  document_version_id: string;
+  document_version_id: string | null; // null = 전체 상품 링크(CC-36c)
   token_nonce: string;
   issued_at: string;
   expires_at: string;
@@ -145,11 +145,12 @@ export async function GET(request: NextRequest) {
       );
       if (
         !rows.length ||
-        !(
-          await accessibleVersions(company, actor, [
-            rows[0].document_version_id,
-          ])
-        ).size
+        (rows[0].document_version_id !== null &&
+          !(
+            await accessibleVersions(company, actor, [
+              rows[0].document_version_id,
+            ])
+          ).size)
       )
         return NextResponse.json(
           { message: "링크를 찾지 못했습니다." },
@@ -192,22 +193,20 @@ export async function GET(request: NextRequest) {
     }
     const offset = (page - 1) * 50;
     const links = await supabaseRequest<LinkRow[]>(
-      `storefront_links?company_id=eq.${encodeURIComponent(company)}&document_version_id=not.is.null&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
+      `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
     );
-    const allowedVersions = await accessibleVersions(
-      company,
-      actor,
-      Array.from(new Set(links.map((l) => l.document_version_id))),
+    const documentVersionIds = Array.from(
+      new Set(links.flatMap((l) => (l.document_version_id ? [l.document_version_id] : []))),
     );
+    const allowedVersions = await accessibleVersions(company, actor, documentVersionIds);
+    // 전체 상품 링크(문서 없음)는 문서 권한 검사 대상이 아니다 — 이 화면에 들어올 수 있는 사람이면 본다.
     const visibleLinks = links.filter((l) =>
-      allowedVersions.has(l.document_version_id),
+      l.document_version_id === null || allowedVersions.has(l.document_version_id),
     );
     const customerIds = Array.from(
       new Set(links.map((link) => link.customer_id)),
     );
-    const versionIds = Array.from(
-      new Set(links.map((link) => link.document_version_id)),
-    );
+    const versionIds = documentVersionIds;
     const [customers, versions, metrics] = await Promise.all([
       customerIds.length
         ? supabaseRequest<{ id: string; customer_name: string }[]>(
@@ -244,7 +243,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         items: visibleLinks.map((link) => {
-          const version = versionInfo.get(link.document_version_id);
+          const version = link.document_version_id ? versionInfo.get(link.document_version_id) : undefined;
           const metric = metricByLink.get(link.id);
           return {
             id: link.id,
@@ -252,7 +251,8 @@ export async function GET(request: NextRequest) {
             customerName: customerNames.get(link.customer_id) ?? "거래처",
             documentVersionId: link.document_version_id,
             documentId: version?.document_id ?? null,
-            documentTitle: version?.content.title ?? "문서",
+            kind: link.document_version_id === null ? "catalog" : "document",
+            documentTitle: link.document_version_id === null ? "전체 상품" : version?.content.title ?? "문서",
             documentVersion: version?.version ?? null,
             url: `${storePublicBase()}/store#${issueStoreLinkToken(link.id, link.token_nonce).token}`,
             issuedAt: link.issued_at,
@@ -275,6 +275,7 @@ export async function GET(request: NextRequest) {
           };
         }),
         hasMore: links.length === 50,
+        catalogEnabled: isFeatureEnabled("STORE_CATALOG_LINK", company),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -326,27 +327,33 @@ export async function POST(request: NextRequest) {
       const publicBase = storePublicBase();
       const customerIds =
         body.action === "create" ? [body.customerId] : body.customerIds;
+      const catalog = body.kind === "catalog";
+      if (catalog && !isFeatureEnabled("STORE_CATALOG_LINK", company))
+        throw new Error("전체 상품 링크를 사용할 수 없는 회사입니다.");
       if (
         !Array.isArray(customerIds) ||
         customerIds.length < 1 ||
         customerIds.length > 100 ||
         !customerIds.every(isId) ||
         new Set(customerIds).size !== customerIds.length ||
-        !isId(body.documentVersionId)
+        (!catalog && !isId(body.documentVersionId))
       )
-        throw new Error("거래처와 발행 문서를 선택해 주세요.");
+        throw new Error(catalog ? "거래처를 선택해 주세요." : "거래처와 발행 문서를 선택해 주세요.");
       const [customer, version] = await Promise.all([
         supabaseRequest<{ id: string }[]>(
           `normalized_customers?company_id=eq.${encodeURIComponent(company)}&id=in.(${customerIds.join(",")})&select=id&limit=100`,
         ),
-        supabaseRequest<{ id: string }[]>(
-          `pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.documentVersionId}&select=id&limit=1`,
-        ),
+        catalog
+          ? Promise.resolve([])
+          : supabaseRequest<{ id: string }[]>(
+              `pricing_document_versions?company_id=eq.${encodeURIComponent(company)}&id=eq.${body.documentVersionId}&select=id&limit=1`,
+            ),
       ]);
-      if (customer.length !== customerIds.length || !version.length)
+      if (customer.length !== customerIds.length || (!catalog && !version.length))
         throw new Error("같은 회사의 거래처와 발행 문서를 선택해 주세요.");
       if (
-        !(await accessibleVersions(company, actor, [body.documentVersionId]))
+        !catalog &&
+        !(await accessibleVersions(company, actor, [body.documentVersionId as string]))
           .size
       )
         throw new Error("이 문서를 발급할 권한이 없습니다.");
@@ -365,9 +372,14 @@ export async function POST(request: NextRequest) {
           issued_token_hash: string;
           was_created: boolean;
         }[]
-      >("rpc/issue_storefront_links", {
+      >(catalog ? "rpc/issue_catalog_storefront_links_v1" : "rpc/issue_storefront_links", {
         method: "POST",
-        body: JSON.stringify({
+        body: JSON.stringify(catalog ? {
+          p_company: company,
+          p_links: generated.map((item) => ({ customerId: item.customerId, id: item.id, nonce: item.nonce, hash: item.hash })),
+          p_expires_at: expires,
+          p_actor_user_id: isId(actorUserId) ? actorUserId : null,
+        } : {
           p_company: company,
           p_document_version: body.documentVersionId,
           p_links: generated.map((item) => ({
@@ -403,17 +415,18 @@ export async function POST(request: NextRequest) {
     }
     if (!isId(body.id)) throw new Error("링크를 확인해 주세요.");
     const managedLinks = await supabaseRequest<
-      { document_version_id: string }[]
+      { document_version_id: string | null }[]
     >(
-      `storefront_links?company_id=eq.${company}&document_version_id=not.is.null&id=eq.${body.id}&select=document_version_id&limit=1`,
+      `storefront_links?company_id=eq.${company}&id=eq.${body.id}&select=document_version_id&limit=1`,
     );
     if (
       !managedLinks.length ||
-      !(
-        await accessibleVersions(company, actor, [
-          managedLinks[0].document_version_id,
-        ])
-      ).size
+      (managedLinks[0].document_version_id !== null &&
+        !(
+          await accessibleVersions(company, actor, [
+            managedLinks[0].document_version_id,
+          ])
+        ).size)
     )
       throw new Error("링크를 찾지 못했습니다.");
     if (body.action === "mark-sent") {
