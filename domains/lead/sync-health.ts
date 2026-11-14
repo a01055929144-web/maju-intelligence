@@ -1,10 +1,4 @@
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-function kstDateKey(value: string | Date) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
-}
+import { kstDateKey } from "../shared/kst-date";
 
 export function isConsecutiveDailyZeroFetch(input: {
   currentStartedAt: string;

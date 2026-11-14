@@ -1,5 +1,6 @@
 "use client";
 
+import { kstToday } from "@/domains/shared/kst-date";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
@@ -24,7 +25,7 @@ function readDismissedIds(companyId?: string): string[] {
     const raw = window.localStorage.getItem(getDismissalStorageKey(companyId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { date?: string; ids?: string[] };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = kstToday();
     if (parsed.date !== today || !Array.isArray(parsed.ids)) return [];
     return parsed.ids;
   } catch {
@@ -35,7 +36,7 @@ function readDismissedIds(companyId?: string): string[] {
 function writeDismissedIds(companyId: string | undefined, ids: string[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(getDismissalStorageKey(companyId), JSON.stringify({ date: new Date().toISOString().slice(0, 10), ids }));
+    window.localStorage.setItem(getDismissalStorageKey(companyId), JSON.stringify({ date: kstToday(), ids }));
   } catch {
     // localStorage unavailable — dismissal simply won't persist across navigation
   }

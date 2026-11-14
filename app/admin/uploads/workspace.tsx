@@ -1,5 +1,6 @@
 "use client";
 
+import { kstToday } from "@/domains/shared/kst-date";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Download, ExternalLink, LoaderCircle, Search } from "lucide-react";
@@ -104,7 +105,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `maju_upload_history_${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `maju_upload_history_${kstToday()}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   }

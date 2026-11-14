@@ -1,4 +1,5 @@
 "use client";
+import { kstToday } from "@/domains/shared/kst-date";
 import { isClosedLead } from "@/lib/leads";
 
 import { LeadChangeHistory } from "@/components/lead-change-history";
@@ -654,7 +655,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
       .filter((lead) => !regionFilter || getLeadSigunguLabel(lead.address) === regionFilter)
       .filter((lead) => !sizeFilter || getLeadSizeBucket(lead.storeAreaSqm) === sizeFilter)
-      .filter((lead) => !reminderOnly || Boolean(lead.followUpAt && lead.followUpAt.slice(0, 10) <= new Date().toISOString().slice(0, 10)))
+      .filter((lead) => !reminderOnly || Boolean(lead.followUpAt && lead.followUpAt.slice(0, 10) <= kstToday()))
       .filter((lead) => !hasPhoneOnly || isMobilePhoneNumber(lead.phone))
       .filter((lead) => !hasInstagramOnly || Boolean(getLeadInstagramHandle(lead)))
       .filter((lead) => !hasTalktalkOnly || Boolean(getSafeNaverTalktalkUrl(lead.naverTalktalkUrl)))
@@ -1034,7 +1035,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `maju-selected-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `maju-selected-leads-${kstToday()}.csv`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
