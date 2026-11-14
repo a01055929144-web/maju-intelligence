@@ -58,6 +58,7 @@ import {
   gradeBadgeClass,
   type RevenueGrade
 } from "@/lib/route-map-utils";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, type StoreRow } from "@/components/map/map-row-helpers";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
@@ -885,9 +886,11 @@ export function StoreDetail({
     }
   };
   const toggleRelationshipStatus = () => void updateRelationshipStatus(draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료");
+  const { confirm, confirmDialog } = useConfirm();
 
   return (
     <MapStoreDetailDrawer onClose={onClose}>
+      {confirmDialog}
         <header className="maju-card-header border-b px-4 py-4">
           {/* 2026-08-28 피드백 대응(모바일에서 "거래처 상세" 제목이 세로로 한 글자씩 깨져 보임):
               오른쪽 버튼 3개(거래 종료로 표시·히스토리 열기·변경 저장)가 shrink-0라 절대 안 줄어들고,
@@ -1262,7 +1265,7 @@ export function StoreDetail({
                   <button
                     className="mt-2 h-9 w-full rounded-md border border-rose-200 bg-white text-sm font-black text-rose-600 transition hover:bg-rose-50"
                     onClick={() => {
-                      if (window.confirm("이 거래처의 메모 히스토리를 모두 삭제할까요?")) onClearHistory(store.id);
+                      void confirm({ body: `"${store.name}"의 메모 히스토리를 모두 삭제합니다. 되돌릴 수 없습니다.`, confirmLabel: "전체 삭제" }).then((ok) => { if (ok) onClearHistory(store.id); });
                     }}
                     type="button"
                   >
@@ -1387,6 +1390,7 @@ export function StoreDetail({
 const CONTACT_ROLE_PRESETS = ["대표", "실장", "부장", "매니저", "담당자"];
 
 function CustomerContactsSection({ customerId }: { readonly customerId: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [contacts, setContacts] = useState<CustomerContactItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -1499,7 +1503,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
   };
 
   const removeContact = async (contactId: string) => {
-    if (!window.confirm("이 연락처를 삭제할까요?")) return;
+    if (!(await confirm({ body: "이 연락처를 삭제합니다. 되돌릴 수 없습니다.", confirmLabel: "삭제" }))) return;
     setRowBusyId(contactId);
     try {
       const response = await fetchWithTimeout(withPermitLeadCompanyQuery(`/api/customers/${encodeURIComponent(customerId)}/contacts/${encodeURIComponent(contactId)}`), { method: "DELETE" }, 10000);
@@ -1515,6 +1519,7 @@ function CustomerContactsSection({ customerId }: { readonly customerId: string }
 
   return (
     <div className="mt-4 space-y-3">
+      {confirmDialog}
       <p className="maju-filter-box border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">
         대표 연락처 외에 실장·부장·매니저 등 이 거래처의 추가 담당자를 등록해두면 방문·주문 확인 시 참고할 수 있습니다.
       </p>

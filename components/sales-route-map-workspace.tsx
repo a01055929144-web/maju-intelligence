@@ -66,6 +66,7 @@ import { ChurnRiskAlert } from "@/components/churn-risk-alert";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
@@ -3600,54 +3601,6 @@ function QuickRegisterDrawer({
         />
       ) : null}
     </>
-  );
-}
-
-// 2026-08-24 재피드백("배송담당자 삭제가 잘 안되는 것 같아. 확인이 필요해")에 대응해 만든 공용 확인
-// 모달입니다. 기존에는 window.confirm()을 썼는데, 이건 페이지에서 확인창이 짧은 시간 안에 여러 번
-// 뜨면 브라우저가 "이 페이지에서 대화상자를 추가로 표시하지 않음" 체크박스를 자동으로 붙이고, 사용자가
-// 이걸 한 번이라도 체크하면 그 뒤로는 confirm()이 화면에 아무것도 안 띄우고 조용히 false만 반환합니다
-// — 즉 삭제 버튼을 눌러도 아무 반응이 없는 것처럼 보일 수 있습니다. 화면 안에서 직접 그리는 모달로
-// 바꾸면 이 문제 자체가 사라집니다.
-function ConfirmDialog({
-  cancelLabel = "취소",
-  confirmLabel = "확인",
-  message,
-  onCancel,
-  onConfirm,
-  title,
-  tone = "destructive"
-}: {
-  readonly cancelLabel?: string;
-  readonly confirmLabel?: string;
-  readonly message: string;
-  readonly onCancel: () => void;
-  readonly onConfirm: () => void;
-  readonly title?: string;
-  /** 2026-08-31 UX 감사 대응: 되돌릴 수 없는 파괴적 액션(삭제·병합)만 빨간 버튼(rose)을 쓰고,
-   * 단순 확인(예: 중복 이름이어도 계속 등록)은 브랜드색(teal)을 쓰도록 구분합니다 — 이전에는
-   * 모든 확인 버튼이 빨간색이라, 파괴적이지 않은 작업에도 위험 신호를 줬습니다. */
-  readonly tone?: "destructive" | "default";
-}) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4" onClick={onCancel}>
-      <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        {title ? <p className="text-sm font-black text-slate-950">{title}</p> : null}
-        <p className={`whitespace-pre-line text-sm font-bold leading-6 text-slate-700 ${title ? "mt-2" : ""}`}>{message}</p>
-        <div className="mt-4 flex justify-end gap-2">
-          <button className="maju-button-secondary h-9 px-4 text-xs" onClick={onCancel} type="button">
-            {cancelLabel}
-          </button>
-          <button
-            className={`maju-button-primary h-9 px-4 text-xs ${tone === "destructive" ? "bg-rose-600 hover:bg-rose-700" : ""}`}
-            onClick={onConfirm}
-            type="button"
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
