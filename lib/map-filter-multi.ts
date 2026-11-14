@@ -2,12 +2,7 @@
 // 상태는 그대로 문자열로 두고 "|"로 이어 붙입니다 — 값이 하나면 예전과 완전히 같은 문자열입니다.
 import { splitMultiFilter } from "../domains/lead/map-filters";
 
-export { splitMultiFilter };
-
-export function toggleMultiFilter(value: string, item: string) {
-  const current = splitMultiFilter(value);
-  return (current.includes(item) ? current.filter((entry) => entry !== item) : [...current, item]).join("|");
-}
+export { splitMultiFilter, toggleMultiFilter } from "../domains/lead/map-filters";
 
 export function summarizeMultiFilter(value: string, fallback: string, labelOf: (item: string) => string = (item) => item) {
   const items = splitMultiFilter(value);

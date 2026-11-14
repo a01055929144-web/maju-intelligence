@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterMapLeads, getPermitLeadType, parseLeadRegion, scopeLeadsByStatus, type MapFilterLead } from "../domains/lead/map-filters";
+import { filterMapLeads, getPermitLeadType, parseLeadRegion, scopeLeadsByStatus, toggleMultiFilter, type MapFilterLead } from "../domains/lead/map-filters";
 import { isClosedLead } from "../lib/leads";
 import { splitMultiFilter } from "../lib/map-filter-multi";
 import { matchesMapLeadType } from "../lib/map-layer-selection";
@@ -37,6 +37,11 @@ describe("옛 경로 다시 내보내기·작은 규칙", () => {
     expect(isClosedLead({ status: "폐업 확인 필요" })).toBe(true);
     expect(splitMultiFilter("한식| 카페")).toEqual(["한식", "카페"]);
     expect(matchesMapLeadType("sales", "new", true)).toBe(true);
+  });
+  it("여러 개 고르기는 | 로 이어 붙이고 다시 누르면 뺀다", () => {
+    expect(toggleMultiFilter("", "한식")).toBe("한식");
+    expect(toggleMultiFilter("한식", "카페")).toBe("한식|카페");
+    expect(toggleMultiFilter("한식|카페", "한식")).toBe("카페");
   });
   it("개업일 없으면 영업, 지역 파싱", () => {
     expect(getPermitLeadType({})).toBe("sales");

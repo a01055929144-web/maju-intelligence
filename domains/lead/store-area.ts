@@ -75,3 +75,11 @@ export function isStoreAreaInRange(squareMeters: number | null | undefined, rang
   const bounds = getStoreAreaSqmFilterBounds(range);
   return (bounds.min === undefined || area >= bounds.min) && (bounds.max === undefined || area <= bounds.max);
 }
+
+export const STORE_AREA_RANGE_OPTIONS: Array<{ label: string; value: StoreAreaRange }> = [
+  { label: "10평 이하", value: "lte10" },
+  { label: "20평 이하", value: "lte20" },
+  { label: "30평 이하", value: "lte30" },
+  { label: "30평 이상", value: "gte30" },
+  { label: "10~100평", value: "10to100" }
+];
