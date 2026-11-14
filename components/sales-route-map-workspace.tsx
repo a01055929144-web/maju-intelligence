@@ -88,6 +88,16 @@ import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { isClosedLead } from "@/lib/leads";
+import {
+  filterMapLeads,
+  getPermitLeadOpenDate,
+  getPermitLeadType,
+  isPermitLeadInOpenDateFilter,
+  parseLeadRegion,
+  scopeLeadsByStatus,
+  type LeadOpenDateFilterMode,
+  type PermitLeadType
+} from "@/domains/lead/map-filters";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { operationalMarkerPersonIcon } from "@/lib/route-map-markers";
 import { getStaffMapPollIntervalMs, STAFF_LOCATION_FRESHNESS_MINUTES } from "@/lib/staff-location";
@@ -187,7 +197,6 @@ type MarkerViewMode = "grade" | "vehicle";
 type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
 export type PermitLeadActionKind = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
 export type BulkLeadActionBusy = PermitLeadActionKind | "quoteFollowUp" | "";
-export type LeadOpenDateFilterMode = "all" | "year" | "month" | "custom" | "missing";
 export type PermitLeadActionResult = { action?: PermitLeadActionItem; message?: string; ok: boolean; status?: string };
 export type PermitLeadActionIntent = "call" | "dm" | "followup" | "info" | "";
 export const LIST_PAGE_SIZE_OPTIONS = [10, 30, 50, 100] as const;
@@ -1414,7 +1423,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
   // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
   const statusScopedLeadsForMap = useMemo(
-    () => allLeadsForMap.filter((lead) => (showDismissedLeadsOnMap ? lead.status === "제외" : lead.status !== "제외") && (showClosedLeadsOnMap || !isClosedLead(lead))),
+    () => scopeLeadsByStatus(allLeadsForMap, { showClosed: showClosedLeadsOnMap, showDismissed: showDismissedLeadsOnMap }),
     [allLeadsForMap, showDismissedLeadsOnMap, showClosedLeadsOnMap]
   );
   // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — 활성/숨김 범위 기준이라
@@ -1554,25 +1563,22 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [mapFilterPop]);
-  const filteredAllLeadsForMap = useMemo(() => {
-    if ((mapLeadTypeFilter === "all" || mapTargetType === "distributor") && !mapLeadIndustryFilter && !mapLeadStageFilter && !mapLeadAreaRange && !mapLeadReminderOnly && !mapLeadOpenDateStart && !mapLeadOpenDateEnd && !mapLeadRegionSigungu) return statusScopedLeadsForMap;
-    return statusScopedLeadsForMap.filter((lead) => {
-      if (!matchesMapLeadType(getPermitLeadType(lead), mapLeadTypeFilter, mapTargetType === "distributor")) return false;
-      if (mapLeadIndustryFilter && !splitMultiFilter(mapLeadIndustryFilter).includes(lead.industryPrimary || "미분류")) return false;
-      if (mapLeadStageFilter && !splitMultiFilter(mapLeadStageFilter).includes(toLeadStageValue(lead.status))) return false;
-      if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange && !isStoreAreaInRange(lead.storeAreaSqm, mapLeadAreaRange)) return false;
-      if (mapLeadReminderOnly && !getMapLeadReminderLabel(lead)) return false;
-      if (mapLeadOpenDateStart || mapLeadOpenDateEnd) {
-        if (!isPermitLeadInOpenDateFilter(lead, "custom", "", "", mapLeadOpenDateStart, mapLeadOpenDateEnd)) return false;
-      }
-      if (mapLeadRegionSigungu) {
-        const region = parseLeadRegion(lead.address);
-        if (!splitMultiFilter(mapLeadRegionSigungu).includes(region.sigungu)) return false;
-        if (mapLeadRegionDong && region.dong !== mapLeadRegionDong) return false;
-      }
-      return true;
-    });
-  }, [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]);
+  const filteredAllLeadsForMap = useMemo(
+    () => filterMapLeads(statusScopedLeadsForMap, {
+      areaRange: LEAD_STORE_AREA_FEATURE_ENABLED ? mapLeadAreaRange : "",
+      distributorTarget: mapTargetType === "distributor",
+      hasReminder: (lead) => Boolean(getMapLeadReminderLabel(lead)),
+      industry: mapLeadIndustryFilter,
+      openDateEnd: mapLeadOpenDateEnd,
+      openDateStart: mapLeadOpenDateStart,
+      regionDong: mapLeadRegionDong,
+      regionSigungu: mapLeadRegionSigungu,
+      reminderOnly: mapLeadReminderOnly,
+      stage: mapLeadStageFilter,
+      typeFilter: mapLeadTypeFilter
+    }),
+    [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]
+  );
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
   const allLeadsMapMarkers: KakaoMapMarker[] = useMemo(() => {
@@ -7478,46 +7484,6 @@ export function normalizeLeadSearchToken(value: string) {
   return value.toLowerCase().replace(/[@._\-\s]/g, "");
 }
 
-const SIDO_PREFIX_PATTERN =
-  /^(서울특별시|서울|부산광역시|부산|대구광역시|대구|인천광역시|인천|광주광역시|광주|대전광역시|대전|울산광역시|울산|세종특별자치시|세종|경기도|경기|강원특별자치도|강원도|강원|충청북도|충북|충청남도|충남|전북특별자치도|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주특별자치도|제주)\s*/;
-
-// 2026-09-12 버그 수정("지역 시군구 필터가 값이 제대로 안들어 간 경우가 있어"): 세종특별자치시는
-// 우리나라에서 유일하게 시/도 바로 아래에 시/군/구 단위 없이 읍/면/동으로 바로 이어지는 광역
-// 행정구역입니다. 아래 SIDO_PREFIX_PATTERN으로 "세종특별자치시"/"세종"을 떼어내고 나면 그다음
-// 토큰은 "조치원읍"·"한누리대로" 같은 읍/면/동/도로명이라 (시|군|구)로 끝나는 패턴에 안 걸려
-// sigungu가 항상 빈 문자열이 되고, 그 결과 세종 리드는 "지역" 드롭다운에 아예 나타나지 않고
-// 다른 지역을 고르면 목록에서도 조용히 사라집니다. 더 나쁘게는, 주소가 축약형 "세종시 ..."로
-// 시작하면 SIDO_PREFIX_PATTERN이 "세종"만 떼어내(원본에 "세종특별자치시"가 아니라 "세종시"라고만
-// 적혀 있어 전체 일치가 안 됨) 그 뒤에 남는 "시" 한 글자가 (시|군|구)로 끝나는 토큰으로 오인식되어
-// sigungu="시"라는 의미 없는 값이 들어갑니다. 세종은 시/군/구 단위가 없다는 점 자체가 다른
-// 광역단체와 다르므로, 별도 분기로 광역단체 이름 자체를 시군구값으로 취급합니다.
-const SEJONG_PREFIX_PATTERN = /^세종(특별자치시|시)?(\s|$)/;
-
-/** 도로명주소 문자열에서 시군구/동을 뽑아 지도 리드를 지역별로 묶는 데 씁니다(2026-08-24 피드백:
- * "시군구, 동 구분하여 리드 구분을 하게끔 만들것" — 네이버 부동산의 지역 드릴다운 참고). 정확한
- * 행정구역 API 없이 문자열 패턴만으로 추출하는 근사치라, 시/군/구가 겹치는 드문 표기(고양시
- * 일산동구 등)는 시 단위까지만 잡힐 수 있습니다 — 그 정도 오차는 지도 위 대략적인 지역 구분
- * 용도로는 괜찮다고 판단했습니다. */
-function parseLeadRegion(address?: string): { dong: string; sigungu: string } {
-  const trimmed = (address || "").trim();
-  if (!trimmed) return { dong: "", sigungu: "" };
-
-  // 동/읍/면/가 명은 도로명주소 맨 끝 괄호 안에 병기되는 경우가 많습니다:
-  // "... 88 1층 (성수동1가)", "... 102동 205호 (마장동, 라봄 성동)".
-  const parenMatch = trimmed.match(/\(([^()]*)\)\s*$/);
-  const dongRaw = parenMatch?.[1]?.split(",")[0]?.trim() || "";
-  const dong = /(동|리|가)\d*$/.test(dongRaw) ? dongRaw : "";
-
-  if (SEJONG_PREFIX_PATTERN.test(trimmed)) {
-    return { dong, sigungu: "세종특별자치시" };
-  }
-
-  const withoutSido = trimmed.replace(SIDO_PREFIX_PATTERN, "").trim();
-  const firstToken = withoutSido.split(/\s+/)[0] || "";
-  const sigungu = /(시|군|구)$/.test(firstToken) ? firstToken : "";
-
-  return { dong, sigungu };
-}
 
 export function normalizeInstagramHandleValue(value: string | undefined) {
   const rawValue = (value || "").trim();
@@ -8849,24 +8815,9 @@ export function isPermitLeadUnscored(lead: Pick<PermitLeadItem, "reviewCount" | 
   return lead.reviewCount == null && lead.rating == null && lead.keywordVolume == null;
 }
 
-// 2026-09-07 피드백("신규리드와 영업리드는 구분하면 좋을 것 같다는 생각이 들어") 대응입니다.
-// 이 회사의 리드 개념(앞선 피드백 정리) - 신규리드: 개업일자(최신 일자)가 확인되면 신생
-// 사업자로 봄. 영업리드: 개업일은 몰라도 검색량이 많으면 매출이 높을 거래처로 보고 영업
-// 타겟팅함. ingest 시점에 next_action_reasons에 문구로만 박혀 있던 것(리드가 언제 적재됐는지에
-// 따라 최신화가 안 될 수 있음)과 달리, 여기서는 매번 openDate/permitDate 원본값으로 직접
-// 재계산합니다 — 그래서 예전에 잘못 적재된 리드도(위 ingestPermitLeadRows의 isNewLead 계산
-// 버그 수정 전에 들어온 리드 포함) 화면에서는 항상 정확하게 분류됩니다.
-const NEW_LEAD_TYPE_MAX_AGE_DAYS = 90;
-export type PermitLeadType = "new" | "sales";
-export function getPermitLeadType(lead: Pick<PermitLeadItem, "openDate" | "permitDate">): PermitLeadType {
-  const dateText = lead.openDate || lead.permitDate;
-  if (!dateText) return "sales";
-  const date = new Date(dateText);
-  if (Number.isNaN(date.getTime())) return "sales";
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - NEW_LEAD_TYPE_MAX_AGE_DAYS);
-  return date >= cutoff ? "new" : "sales";
-}
+// 이 이름들은 9개 파일이 지도 파일에서 가져간다 — 옛 경로에서 다시 내보낸다(M3a: 순수 계산은 domains/lead/map-filters.ts).
+export { getPermitLeadOpenDate, getPermitLeadType, isPermitLeadInOpenDateFilter };
+export type { LeadOpenDateFilterMode, PermitLeadType };
 export const PERMIT_LEAD_TYPE_OPTIONS: Array<{ label: string; value: "all" | PermitLeadType }> = [
   { label: "전체", value: "all" },
   { label: "신규리드", value: "new" },
@@ -8899,31 +8850,6 @@ export function withPermitLeadCompanyQuery(path: string) {
   return `${path}${path.includes("?") ? "&" : "?"}companyId=${encodeURIComponent(companyId)}`;
 }
 
-export function getPermitLeadOpenDate(lead: Pick<PermitLeadItem, "openDate" | "permitDate">) {
-  const value = lead.openDate || lead.permitDate || "";
-  const match = value.match(/\d{4}-\d{2}-\d{2}/);
-  return match?.[0] || "";
-}
-
-export function isPermitLeadInOpenDateFilter(
-  lead: Pick<PermitLeadItem, "openDate" | "permitDate">,
-  mode: LeadOpenDateFilterMode,
-  year: string,
-  month: string,
-  startDate: string,
-  endDate: string
-) {
-  if (mode === "all") return true;
-  const openDate = getPermitLeadOpenDate(lead);
-  if (mode === "missing") return !openDate;
-  if (!openDate) return false;
-  if (mode === "year") return Boolean(year) && openDate.startsWith(`${year}-`);
-  if (mode === "month") return Boolean(month) && openDate.startsWith(month);
-  if (!startDate && !endDate) return true;
-  if (startDate && openDate < startDate) return false;
-  if (endDate && openDate > endDate) return false;
-  return true;
-}
 
 export function formatLeadOpenDateFilterLabel(mode: LeadOpenDateFilterMode, year: string, month: string, startDate: string, endDate: string) {
   if (mode === "all") return "개시일 전체";
