@@ -12,7 +12,8 @@ const lead = (id: string, name: string) => ({
 });
 const leadsBody = (names: string[]) => ({ leads: names.map((n, i) => lead(`30000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, n)), salesRegionsConfigured: true });
 const closedLead = (id: string, name: string) => ({ ...lead(id, name), status: "폐업 확인 필요" });
-const salesCount = (page: Page) => page.getByRole("button", { name: /^영업 \d+/ });
+// 리드 유형 필터의 "영업 N" 버튼. 지도 레이어 칩("영업 0", title="영업 리드 레이어 …")도 같은 이름이라 title 없는 버튼만 잡는다.
+const salesCount = (page: Page) => page.getByRole("button", { name: /^영업 \d+/ }).and(page.locator("button:not([title])"));
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
