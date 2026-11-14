@@ -19,7 +19,7 @@ export function LoadingState({ bare, className = "", description, label = "ë¶ˆëŸ
     );
   }
   return (
-    <p aria-live="polite" className={`${box(bare)} flex items-center justify-center gap-2 p-3 text-sm font-bold text-slate-400 ${className}`} role="status">
+    <p aria-live="polite" className={`${box(bare)} flex items-center justify-center gap-2 p-3 text-sm font-bold text-slate-500 ${className}`} role="status">
       <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin" />
       {label}
     </p>
@@ -44,7 +44,7 @@ export function ErrorState({ bare, className = "", description, message, onRetry
       <p className="text-sm font-black text-rose-700">{message}</p>
       {description ? <p className="mt-2 text-xs font-bold leading-5 text-slate-500">{description}</p> : null}
       {onRetry ? (
-        <button className="maju-button-secondary mt-3 h-8" onClick={onRetry} type="button">
+        <button className="maju-button-secondary mt-3 h-8 max-sm:min-h-11" onClick={onRetry} type="button">
           <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
           {retryLabel}
         </button>

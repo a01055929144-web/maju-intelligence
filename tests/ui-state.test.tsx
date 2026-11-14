@@ -47,3 +47,10 @@ it("공통 표: 로딩·오류·빈 칸이 상태 부품으로 나오고 기존 
   expect(table({ emptyMessage: "가짜 목록이 비었습니다." })).toContain("가짜 목록이 비었습니다.");
   expect(table({})).toContain("표시할 항목이 없습니다.");
 });
+
+it("접근성 class: 한 줄 로딩 글자는 AA 대비(slate-500), '다시 시도'는 휴대폰 44px", () => {
+  const loading = html(<LoadingState label="가짜 로딩" />);
+  expect(loading).toContain("text-slate-500");
+  expect(loading).not.toContain("text-slate-400");
+  expect(html(<ErrorState message="가짜 오류" onRetry={() => undefined} />)).toContain("max-sm:min-h-11");
+});
