@@ -8,7 +8,7 @@ const company = '00000000-0000-4000-8000-000000000001';
 const other = '00000000-0000-4000-8000-000000000002';
 const supplier = '30000000-0000-4000-8000-000000000001';
 const uuid = (prefix,n) => `${prefix}0000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-const testDate = process.env.STAGE_A_TEST_DATE || new Date().toISOString().slice(0,10);
+const testDate = process.env.STAGE_A_TEST_DATE || new Date(Date.now() + 9 * 3600_000).toISOString().slice(0,10);
 const priorDate = new Date(Date.parse(testDate+'T00:00:00Z')-172800000).toISOString().slice(0,10);
 assert(process.env.STAGE_A_OWNER_PASSWORD && process.env.STAGE_A_ADMIN_PASSWORD);
 const db = new Client(); await db.connect();
