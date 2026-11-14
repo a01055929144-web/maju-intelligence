@@ -68,7 +68,9 @@
 ### 7-2. 위험 발견 — 네이버 검색 API 종료 일정
 
 - 지금 코드 `lib/place-links.ts` 350줄이 `openapi.naver.com/v1/search/local`(개발자센터 키) 사용.
-- 개발자센터 검색 API는 **2027-06-30 유예 종료** → 그 전에 NAVER API HUB(네이버 클라우드, 지금은 한시 무료·월 77.5만 건, 이후 유료 예정)로 옮겨야 네이버 장소 링크가 계속 붙음. 대표가 네이버 클라우드 가입·키 발급 필요(대표 작업, 키 이름만 owner-change-later.md).
+- 개발자센터 검색 API는 **2027-06-30 유예 종료** → 그 전에 NAVER API HUB(네이버 클라우드, 지금은 한시 무료·월 77.5만 건, 이후 유료 예정)로 옮겨야 네이버 장소 링크가 계속 붙음. 대표 키 발급은 **이미 완료**(Vercel `NCP_DATALAB_CLIENT_ID/SECRET`, preview·production, 데이터랩 검색어 트렌드에 사용 중).
+- **11/14 12:0x 발견:** 운영 Vercel에 `NAVER_SEARCH_CLIENT_ID/SECRET`이 **없음** → `resolveNaverPlaceUrl`이 운영에서 한 번도 호출되지 않고 늘 빈 값(네이버 링크는 검색 딥링크만). 네이버 연결률 7.5%·1.7%의 원인 중 하나.
+- 할 일(CC-46-2b): 네이버 지역 검색을 API HUB 주소(`naverapihub.apigw.ntruss.com/search/v1/…`, 헤더 `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY`)로 옮기고 키는 NCP 키 사용. 대표 확인: 네이버 클라우드 콘솔에서 그 애플리케이션에 **검색 > 지역** API가 선택돼 있는지.
 
 ## 6. 순서 (CC-46에 반영)
 
