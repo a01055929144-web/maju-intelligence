@@ -137,6 +137,18 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --command='create database e2_purchase_doc_test'
           PGDATABASE=e2_purchase_doc_test psql --set=ON_ERROR_STOP=1 --file=20261113-e2-purchase-document-cost.pg17.test.sql
 
+      - name: Verify CC-36b catalog order draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          psql --set=ON_ERROR_STOP=1 --command='create database cc36b_catalog_order_test'
+          PGDATABASE=cc36b_catalog_order_test psql --set=ON_ERROR_STOP=1 --file=20261113-CC-36b-catalog-order.pg17.test.sql
+
       - name: Verify CC-46 enrichment targets draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
