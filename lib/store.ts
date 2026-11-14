@@ -11756,6 +11756,15 @@ function scheduleIngestKakaoEnrichment(companyId: string, leadIds: string[], sou
  * - 네이버 검색량 API가 연결되어 있으면 keyword_volume을 저장합니다.
  * 어떤 API가 실패해도 나머지 값은 저장하고, DB 컬럼이 아직 없으면 실패 메시지만 돌려줍니다.
  */
+/** 카카오 카테고리로 보정해도 되는 업종: 비어 있거나 '미분류'·'기타'. */
+export function isIndustryUnsettled(industry: string | null | undefined) {
+  return !industry || industry === "미분류" || industry === "기타";
+}
+
+export function isLeadGoogleEnrichmentEnabled() {
+  return process.env.LEAD_ENRICH_GOOGLE === "true";
+}
+
 async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId: string): Promise<PermitLeadExternalEnrichmentAttemptResult> {
   const emptySources = { googleReviews: false, keywordVolume: false, placeLinks: false };
   if (!isProductionStoreConfigured()) {
@@ -11802,7 +11811,7 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     payload.google_place_url = placeLinks.googleMapUrl || row.google_place_url;
     const canApplyKakaoPhone = shouldAutoApplyKakaoPhone(placeLinks.kakaoQueryVariant);
     if (!row.phone && placeLinks.enrichedPhone && canApplyKakaoPhone) payload.phone = placeLinks.enrichedPhone;
-    if ((!row.industry_primary || row.industry_primary === "미분류") && placeLinks.enrichedIndustry) payload.industry_primary = placeLinks.enrichedIndustry;
+    if (isIndustryUnsettled(row.industry_primary) && placeLinks.enrichedIndustry && placeLinks.enrichedIndustry !== "미분류") payload.industry_primary = placeLinks.enrichedIndustry;
     // 주소 미확인 리드 보강(2026-08-24 피드백: "영업리드들의 정보들이 비어져있는게 많네") — 인허가
     // 원본 데이터에 주소가 없을 때만 카카오 로컬 검색 결과의 도로명/지번 주소로 채웁니다.
     if (!row.address && placeLinks.enrichedAddress) {
@@ -11813,7 +11822,10 @@ async function performPermitLeadExternalInfoEnrichment(companyId: string, leadId
     sources.placeLinks = placeLinks.kakaoMatched || placeLinks.naverMatched;
   }
 
-  const googleReviews = await syncGoogleReviewsForCustomer({ customerName: row.business_name, address: row.address || undefined }).catch(() => null);
+  // CC-46-2: 구글 Places는 유료라 기본 OFF — LEAD_ENRICH_GOOGLE=true일 때만 부른다.
+  const googleReviews = isLeadGoogleEnrichmentEnabled()
+    ? await syncGoogleReviewsForCustomer({ customerName: row.business_name, address: row.address || undefined }).catch(() => null)
+    : null;
   if (googleReviews) {
     payload.review_count = googleReviews.userRatingsTotal ?? googleReviews.reviewCount;
     payload.rating = googleReviews.rating;
@@ -12072,8 +12084,10 @@ export type LeadContactInfoBackfillResult = {
   processed: number;
 };
 
-const LEAD_CONTACT_BACKFILL_BATCH_SIZE = 30;
+const LEAD_CONTACT_BACKFILL_BATCH_SIZE = 150;
 const LEAD_CONTACT_BACKFILL_CONCURRENCY = 5;
+// 크론 maxDuration 60초 — 새 묶음은 이 시간 전까지만 시작한다(남은 곳은 다음 날).
+const LEAD_CONTACT_BACKFILL_TIME_BUDGET_MS = 40_000;
 
 /**
  * 연락처/주소가 비어있는 리드를 찾아 enrichPermitLeadExternalInfo()로 한 건씩 보강합니다(2026-08-24
@@ -12105,7 +12119,7 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
     if (!isMissingLeadEnrichmentEventStoreError(error)) throw error;
     // 마이그레이션 적용 전/롤백 중에는 기존 후보 조회로 폴백해 보강 자체가 중단되지 않게 합니다.
     rows = await supabaseRequest<Array<{ id: string }>>(
-      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&${salesAreaPostgrestFilter(salesAreas)}&status=neq.제외&or=(phone.is.null,address.is.null)&order=created_at.asc&limit=${limit}`
+      `business_permit_leads?select=id&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&${salesAreaPostgrestFilter(salesAreas)}&status=neq.제외&or=(phone.is.null,address.is.null,kakao_place_url.is.null,industry_primary.eq.기타,industry_primary.eq.미분류)&order=created_at.asc&limit=${limit}`
     ).catch(() => []);
   }
 
@@ -12113,13 +12127,18 @@ export async function enrichLeadsMissingContactInfo(companyId: string, limit = L
 
   // 2026-08-26 효율화: 리드를 한 건씩 순차로 보강하던 것을 findNearbyPermitLeads와 동일한
   // mapWithConcurrency 패턴으로 묶어 동시에 처리합니다(카카오 로컬 검색 호출 자체는 그대로 유지).
-  const outcomes = await mapWithConcurrency(rows, LEAD_CONTACT_BACKFILL_CONCURRENCY, (row) =>
-    enrichPermitLeadExternalInfo(companyId, row.id, { source: "cron" }).catch(() => null)
-  );
+  const startedAt = Date.now();
+  const outcomes: Array<Awaited<ReturnType<typeof enrichPermitLeadExternalInfo>> | null> = [];
+  for (let offset = 0; offset < rows.length && Date.now() - startedAt < LEAD_CONTACT_BACKFILL_TIME_BUDGET_MS; offset += LEAD_CONTACT_BACKFILL_CONCURRENCY * 4) {
+    const chunk = rows.slice(offset, offset + LEAD_CONTACT_BACKFILL_CONCURRENCY * 4);
+    outcomes.push(...(await mapWithConcurrency(chunk, LEAD_CONTACT_BACKFILL_CONCURRENCY, (row) =>
+      enrichPermitLeadExternalInfo(companyId, row.id, { source: "cron" }).catch(() => null)
+    )));
+  }
   const phoneFilled = outcomes.filter((result) => result?.lead?.phone).length;
   const addressFilled = outcomes.filter((result) => result?.lead?.address).length;
 
-  return { addressFilled, phoneFilled, processed: rows.length };
+  return { addressFilled, phoneFilled, processed: outcomes.length };
 }
 
 export type LeadContactInfoBackfillDailyResult = {
