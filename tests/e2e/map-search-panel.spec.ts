@@ -43,7 +43,7 @@ for (const width of [1440, 390]) test(`지도 검색 결과 패널: 검색·묶�
   await expect(panel.getByLabel("지도 번호 4")).toBeVisible();
   await expect(panel.getByRole("button", { name: "결과 전체 보기" })).toBeVisible();
   await panel.getByRole("button", { name: "결과 전체 보기" }).click(); // 지도 없이 눌러도 패널은 그대로
-  if (width >= 1024) await panel.getByText("합성 영업 가게").hover(); // 마우스 올림도 패널을 깨지 않는다
+  if (width >= 1024) await panel.getByText("합성 영업 가게", { exact: true }).hover(); // 마우스 올림도 패널을 깨지 않는다
   await expect(panel).toBeVisible();
 
   // 묶음 접기
