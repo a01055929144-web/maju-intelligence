@@ -50,7 +50,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
       supabaseRequest<Array<{ customer_name: string }>>(
         `normalized_customers?company_id=eq.${company}&id=eq.${customer}&select=customer_name&limit=1`),
       supabaseRequest<StoreLink[]>(
-        `storefront_links?company_id=eq.${company}&customer_id=eq.${customer}&source=eq.document&revoked_at=is.null` +
+        `storefront_links?company_id=eq.${company}&customer_id=eq.${customer}&document_version_id=not.is.null&revoked_at=is.null` +
         `&expires_at=gt.${encodeURIComponent(new Date().toISOString())}` +
         `&select=id,token_nonce,token_hash,document_version_id,expires_at,can_order&order=issued_at.desc&limit=20`),
     ]);

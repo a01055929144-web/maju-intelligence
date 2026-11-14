@@ -20,10 +20,11 @@ it.runIf(process.env.ADMIN_STAGE_F_POSTGREST === "isolated")("runs all six bound
   });
 
   const queue = await getStageFQueue("00000000-0000-4000-8000-0000000000a1");
-  expect(urls).toHaveLength(6);
+  // 원천 없는 주문 큐는 2단계: 이상 주문 집계(limit=20) + 문서 버전 없는 주문 조회(limit=1000). 픽스처엔 해당 주문이 없어 catalog 링크 조회는 생략된다.
+  expect(urls).toHaveLength(7);
   for (const url of urls) {
     expect(url).toContain("company_id=eq.00000000-0000-4000-8000-0000000000a1");
-    expect(url).toContain("limit=20");
+    expect(url).toMatch(/limit=(20|1000)/);
   }
   expect(queue.map(({ count, ids, key, status }) => ({ count, ids: ids.length, key, status }))).toEqual([
     { count: 25, ids: 20, key: "uploads", status: "ready" },
