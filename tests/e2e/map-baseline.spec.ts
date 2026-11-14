@@ -50,3 +50,7 @@ test("closed leads are hidden on the map unless asked for", async ({ page }) => 
   await page.getByLabel("폐업 리드 포함").check();
   await expect(salesCount(page)).toHaveText(/영업 3/);
 });
+
+// CC-42a-2(M1): 거래처 1곳일 때 지도 위 안내는 거래처 원장이 있어야(sourceReady) 지도가 열려 CI 고정 데이터로는 못 본다 — 0곳은 기존 "거래처 원장 필요" 화면.
+// 안내 문구 규칙은 단위 테스트 tests/map-customer-notice.test.ts, 화면은 배포 뒤 컨트롤타워가 운영(제이에스리테일 1곳)에서 확인.
+test.fixme("거래처가 1곳이면 지도 위에 거래처 올리기 안내가 보인다 (거래처 원장 고정 데이터가 생기면 켠다)", () => {});
