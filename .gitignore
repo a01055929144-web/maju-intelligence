@@ -32,3 +32,6 @@ Thumbs.db
 # typescript
 *.tsbuildinfo
 tsconfig.check.json
+
+# Playwright 결과물
+test-results/

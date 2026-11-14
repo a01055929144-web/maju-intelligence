@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { CommonDataTable, type CommonTableColumn } from "../components/common-data-table";
-import { RowNumber } from "../components/ui/row-number";
+import { RowNumber, rowNumberWidthClass } from "../components/ui/row-number";
 
 type Row = { id: string; name: string };
 const columns: CommonTableColumn<Row>[] = [{ key: "name", label: "상호", searchable: true, value: (row) => row.name }];
@@ -33,4 +33,10 @@ it("공통 표 검색칸: 공통 SearchInput(검색 입력·aria-label·단축�
 
 it("검색 가능한 열이 없으면 검색칸이 없다", () => {
   expect(render({ columns: [{ ...columns[0], searchable: false }] })).not.toContain("표 검색");
+});
+
+it("순번 칸 폭은 목록 전체 개수 기준: 99↓ w-5 · 999↓ w-6 · 그 이상 w-8(1,000번대도 안 넘침)", () => {
+  expect([1, 99].map(rowNumberWidthClass)).toEqual(["w-5", "w-5"]);
+  expect([100, 999].map(rowNumberWidthClass)).toEqual(["w-6", "w-6"]);
+  expect([1000, 3023].map(rowNumberWidthClass)).toEqual(["w-8", "w-8"]);
 });

@@ -75,7 +75,7 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
-import { RowNumber } from "@/components/ui/row-number";
+import { RowNumber, rowNumberWidthClass } from "@/components/ui/row-number";
 import { SearchInput } from "@/components/ui/search-input";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
@@ -6010,7 +6010,7 @@ function StoreManagementPanel({
                 {/* 대표 요청(10-29): 거래처 줄은 2줄 — 1줄 상호·등급·상태, 2줄 주소·거리·시간·매출 */}
                 <button className="min-w-0 flex-1 px-3 py-2 text-left" onClick={() => onSelectStore(store.id)} title={store.address || store.region} type="button">
                   <div className="flex items-center gap-1.5">
-                    <RowNumber className="w-6 shrink-0" value={storeIndex + 1} />
+                    <RowNumber className={`${rowNumberWidthClass(stores.length)} shrink-0`} value={storeIndex + 1} />
                     <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
                     <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
                     <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
@@ -6291,7 +6291,7 @@ function LeadListPanel({
                     <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${leadType === "new" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>
                       {leadType === "new" ? "신규" : "영업"}
                     </span>
-                    <RowNumber className="w-6 shrink-0" value={leadIndex + 1} />
+                    <RowNumber className={`${rowNumberWidthClass(sortedLeads.length)} shrink-0`} value={leadIndex + 1} />
                     <button className="min-w-0 flex-1 truncate text-left text-sm font-bold text-slate-950" onClick={() => onSelectLead(lead.id)} title={[lead.businessName, lead.address].filter(Boolean).join(" · ")} type="button">
                       {lead.businessName}
                     </button>
