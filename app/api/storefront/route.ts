@@ -366,6 +366,10 @@ export async function PUT(request: NextRequest) {
     // Caller address, territory IDs and snapshots never grant eligibility.
     const eligibility=storeAddressVerificationEnabled(store.companyId)?await getStoreDeliveryEligibility(store.companyId,store.customerId):null;
     if(eligibility&&!eligibility.eligible)return NextResponse.json({message:deliveryEligibilityMessage(eligibility.reason)},{status:422,headers:{"Cache-Control":"no-store"}});
+    const catalog = store.source === "catalog";
+    // 전체 상품 주문에는 배송지 스냅샷 경로가 아직 없다 — 켜진 회사는 조용히 빠뜨리지 않고 거부한다.
+    if (catalog && storeOrderDeliverySnapshotEnabled(store.companyId))
+      return NextResponse.json({ message: "이 매장은 전체 상품 주문을 아직 사용할 수 없습니다. 받은 단가표로 주문해 주세요." }, { status: 409 });
     const payload = {
           p_token_hash: verified.hash,
           ...(member ? {
@@ -389,7 +393,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(placed, { headers: { "Cache-Control": "no-store" } });
     }
     const result = await supabaseRequest<Record<string, unknown>>(
-      memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order",
+      catalog
+        ? (memberOrdering ? "rpc/place_store_catalog_member_order_v1" : "rpc/place_store_catalog_order_v1")
+        : (memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order"),
       { method: "POST", body: JSON.stringify(payload) });
     return NextResponse.json(
       { result },
