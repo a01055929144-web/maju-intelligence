@@ -63,7 +63,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ChurnRiskAlert } from "@/components/churn-risk-alert";
-import { InlineLoading } from "@/components/inline-loading";
+import { LoadingState } from "@/components/ui/state";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -162,7 +162,7 @@ const LeadListPanel = dynamic(() => import("@/components/map/map-side-panel").th
 
 const CustomerAttachmentUploadPanel = dynamic(
   () => import("@/components/customer-attachment-upload-panel").then((module) => module.CustomerAttachmentUploadPanel),
-  { loading: () => <InlineLoading label="첨부 기능을 준비하는 중입니다." /> }
+  { loading: () => <LoadingState label="첨부 기능을 준비하는 중입니다." /> }
 );
 type GradeFilter = "all" | RevenueGrade;
 type MapPanelMode = "split" | "driver" | "customer" | "newLead" | "salesLead" | "map";

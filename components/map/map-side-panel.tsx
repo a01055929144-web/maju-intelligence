@@ -13,11 +13,11 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Radar,
-  RefreshCw,
   Store,
   ArrowLeft,
 } from "lucide-react";
 import { RowNumber, rowNumberWidthClass } from "@/components/ui/row-number";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import {
   getPermitLeadOpenDate,
@@ -193,18 +193,13 @@ export function StoreManagementPanel({
               </div>
             ))
           ) : (
-            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
-              <div>
-                <p className="text-sm font-black text-slate-700">{sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}</p>
-                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">
-                  {sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
-                </p>
-                {!sourceReady ? (
-                <Link className="maju-button-primary mt-3 h-8" href={dataRegistrationHref}>
-                  거래처 등록하기
-                </Link>
-                ) : null}
-              </div>
+            <div className="grid h-full min-h-[180px] place-items-center px-4">
+              <EmptyState
+                action={!sourceReady ? <Link className="maju-button-primary h-8" href={dataRegistrationHref}>거래처 등록하기</Link> : undefined}
+                bare
+                description={sourceReady ? "등급 필터나 검색어를 조정해 주세요." : "거래처를 먼저 등록하면 담당자별 거래처 목록이 표시됩니다."}
+                message={sourceReady ? "조건에 맞는 거래처가 없습니다." : "등록된 운영 거래처가 없습니다."}
+              />
             </div>
           )}
         </div>
@@ -484,30 +479,16 @@ export function LeadListPanel({
               );
             })
           ) : loadState === "loading" || loadState === "idle" ? (
-            <div aria-live="polite" className="grid h-full min-h-[180px] place-items-center px-4 text-center">
-              <div>
-                <RefreshCw aria-hidden="true" className="mx-auto h-5 w-5 animate-spin text-teal-700" />
-                <p className="mt-3 text-sm font-black text-slate-700">리드를 불러오는 중입니다.</p>
-                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">지도와 목록을 같은 기준으로 준비하고 있습니다.</p>
-              </div>
+            <div className="grid h-full min-h-[180px] place-items-center px-4">
+              <LoadingState bare description="지도와 목록을 같은 기준으로 준비하고 있습니다." label="리드를 불러오는 중입니다." />
             </div>
           ) : loadState === "error" ? (
-            <div role="alert" className="grid h-full min-h-[180px] place-items-center px-4 text-center">
-              <div>
-                <p className="text-sm font-black text-rose-700">리드를 불러오지 못했습니다.</p>
-                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p>
-                <button className="maju-button-secondary mt-3 h-8" onClick={onRetry} type="button">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  다시 시도
-                </button>
-              </div>
+            <div className="grid h-full min-h-[180px] place-items-center px-4">
+              <ErrorState bare description="네트워크 상태를 확인한 뒤 다시 시도해 주세요." message="리드를 불러오지 못했습니다." onRetry={onRetry} />
             </div>
           ) : (
-            <div className="grid h-full min-h-[180px] place-items-center px-4 text-center">
-              <div>
-                <p className="text-sm font-black text-slate-700">조건에 맞는 리드가 없습니다.</p>
-                <p className="mt-2 text-xs font-bold leading-5 text-slate-500">업종, 지역, 개시일 필터를 조정해 주세요.</p>
-              </div>
+            <div className="grid h-full min-h-[180px] place-items-center px-4">
+              <EmptyState bare description="업종, 지역, 개시일 필터를 조정해 주세요." message="조건에 맞는 리드가 없습니다." />
             </div>
           )}
         </div>
