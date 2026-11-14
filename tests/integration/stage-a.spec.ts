@@ -3,9 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from 'xlsx';
 import { buildCatalogPreview } from '../../domains/product/catalog-import';
+import { kstToday } from '../../domains/shared/kst-date';
 
 const company = '00000000-0000-4000-8000-000000000001';
-const date = process.env.STAGE_A_TEST_DATE || new Date().toISOString().slice(0,10);
+// 앱은 날짜 없는 줄을 한국 '오늘'(kstToday)로 저장한다(#780) → 시험도 같은 기준. UTC로 구하면 한국 00~09시에 하루 어긋나 매입 이력 합계가 어긋난다.
+const date = process.env.STAGE_A_TEST_DATE || kstToday();
 const priorDate = new Date(Date.parse(date+'T00:00:00Z')-172800000).toISOString().slice(0,10);
 const units = ['EA','BOX','봉','병'];
 type Product = { catalog_code: string; code: string; id: string; cost: string; date: string | null; purchase_unit: string; sales_unit: string | null; price: string };

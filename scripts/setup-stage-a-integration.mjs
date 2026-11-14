@@ -62,6 +62,7 @@ try {
     process.stdout.write(`::add-mask::${value}\n`);
     appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
   }
-  appendFileSync(process.env.GITHUB_ENV, `STAGE_A_TEST_DATE=${new Date().toISOString().slice(0,10)}\n`);
+  // 한국 '오늘'(앱이 날짜 없는 줄을 kstToday로 저장 — #780). UTC로 구하면 한국 00~09시에 하루 어긋난다. shortcut: mjs라 TS 함수를 못 불러 +9h를 직접 계산, kst-date를 JS로도 쓰게 되면 교체.
+  appendFileSync(process.env.GITHUB_ENV, `STAGE_A_TEST_DATE=${new Date(Date.now() + 9 * 3600_000).toISOString().slice(0,10)}\n`);
   console.log(JSON.stringify({ pgMajor: 17, canonicalContractsLoaded: true, operatingDatabase: false }));
 } finally { await db.end(); }
