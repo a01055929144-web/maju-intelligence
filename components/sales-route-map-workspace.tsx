@@ -75,6 +75,7 @@ import { CustomerContractPrices } from "@/components/customer-contract-prices";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
+import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
@@ -689,6 +690,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [mapLeadAreaRange, setMapLeadAreaRange] = useState<StoreAreaRange | "">("");
   const [mapLeadReminderOnly, setMapLeadReminderOnly] = useState(false);
   const [mapLeadTypeFilter, setMapLeadTypeFilter] = useState<"all" | PermitLeadType>(initialLeadType);
+  const [unplacedCustomerCount, setUnplacedCustomerCount] = useState(0);
   const [mapLeadOpenDateStart, setMapLeadOpenDateStart] = useState("");
   const [mapLeadOpenDateEnd, setMapLeadOpenDateEnd] = useState("");
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
@@ -3423,9 +3425,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           } ${isFullscreen ? "h-full" : "h-[calc(100dvh-10rem)] min-h-[420px] max-h-[720px] lg:h-full lg:min-h-0 lg:max-h-none"}`}>
             {sourceReady ? (
               <>
+                <MapCustomerNotice customerCount={allStores.length} unplacedCount={unplacedCustomerCount} />
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
+                    onCustomerGeocodeFailed={setUnplacedCustomerCount}
                     focusedMarkerId={previewStoreId || selectedId || previewLeadId || mapFocusId || undefined}
                     mapClassName="h-full min-h-[420px] rounded-none border-0 lg:min-h-0"
                     markers={mapDisplayMarkers}

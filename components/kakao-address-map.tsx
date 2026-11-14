@@ -97,6 +97,8 @@ type KakaoAddressMapProps = {
   readonly mapClassName?: string;
   readonly markers: ReadonlyArray<KakaoMapMarker>;
   readonly onCenterChange?: (point: { lat: number; lng: number }) => void;
+  /** 주소를 좌표로 바꾸지 못한 거래처(tone="customer") 수. 마커를 그릴 때마다 한 번 알린다. */
+  readonly onCustomerGeocodeFailed?: (count: number) => void;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
@@ -307,6 +309,7 @@ export function KakaoAddressMap({
   mapClassName = defaultMapClassName,
   markers,
   onCenterChange,
+  onCustomerGeocodeFailed,
   onMarkerClick,
   radiusOverlay,
   routePath = emptyRoutePath,
@@ -340,6 +343,7 @@ export function KakaoAddressMap({
   // (마커 클릭과 무관하게) 지도가 통째로 재생성됩니다. ref로 최신 콜백만 따로 추적해 boot effect가
   // 이 값 변화에 반응하지 않도록 분리합니다.
   const onMarkerClickRef = useRef(onMarkerClick);
+  const onCustomerGeocodeFailedRef = useRef(onCustomerGeocodeFailed);
   const radiusCircleRef = useRef<KakaoCircle | null>(null);
   const radiusHandleMarkerRef = useRef<KakaoMarker | null>(null);
   const radiusLabelOverlayRef = useRef<KakaoCustomOverlay | null>(null);
@@ -407,6 +411,10 @@ export function KakaoAddressMap({
   useEffect(() => {
     onMarkerClickRef.current = onMarkerClick;
   }, [onMarkerClick]);
+
+  useEffect(() => {
+    onCustomerGeocodeFailedRef.current = onCustomerGeocodeFailed;
+  }, [onCustomerGeocodeFailed]);
 
   useEffect(() => {
     leadSearchRef.current = leadSearch;
@@ -598,6 +606,7 @@ export function KakaoAddressMap({
           }
         };
 
+        let unplacedCustomerCount = 0;
         await mapWithConcurrency(staticMarkers, 5, async (marker) => {
             // 2026-09-07 피드백("실시간 라이브 차량의 마커가 안보여") 대응: 아래 지오코딩 경로는
             // marker.address를 실제 도로명 주소로 간주해 카카오 지오코더에 넘깁니다. 라이브 차량은
@@ -644,11 +653,15 @@ export function KakaoAddressMap({
               if (fallbackPoint && !ignore) {
                 geocodeMemoryCache.set(marker.address, fallbackPoint);
                 placeMarkerAtPosition(marker, fallbackPoint.lat, fallbackPoint.lng);
+              } else if (!ignore && marker.tone === "customer") {
+                unplacedCustomerCount += 1;
               }
             }
           });
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
+        // 주소를 좌표로 못 바꾼 거래처 수(M1 안내용). 주소가 아예 없는 거래처는 이 수에 들지 않는다(주소 보완 필요 쪽).
+        if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount);
 
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
