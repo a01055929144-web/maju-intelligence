@@ -76,6 +76,7 @@ import { InfoTooltip } from "@/components/info-tooltip";
 import { InlineLoading } from "@/components/inline-loading";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
+import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
 import { MapFilterPopover } from "@/components/map/map-filter-popover";
 import { useMapFilters, type MapFilterPopKey } from "@/components/map/use-map-filters";
@@ -713,9 +714,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [unplacedCustomerCount, setUnplacedCustomerCount] = useState(0);
   // 주소를 좌표로 못 바꾼 거래처 id — 안내 "주소 확인"·검색 결과 "좌표 없음" 표시에 쓴다.
   const [unplacedCustomerIds, setUnplacedCustomerIds] = useState<string[]>([]);
-  const handleCustomerGeocodeFailed = useCallback((count: number, ids: string[]) => {
+  // 근사 위치(근처로 표시)로 놓은 거래처 id — 안내·검색 결과 칩·상세에 "위치 추정"을 보여 준다.
+  const [approximateCustomerIds, setApproximateCustomerIds] = useState<string[]>([]);
+  const handleCustomerGeocodeFailed = useCallback((count: number, ids: string[], approximateIds: string[]) => {
     setUnplacedCustomerCount(count);
-    setUnplacedCustomerIds((old) => (old.length === ids.length && old.every((id, index) => id === ids[index]) ? old : ids));
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
+    setUnplacedCustomerIds((old) => (same(old, ids) ? old : ids));
+    setApproximateCustomerIds((old) => (same(old, approximateIds) ? old : approximateIds));
   }, []);
   // 날짜 입력칸은 입력할 때마다 바로 필터링하지 않고, "조회" 버튼을 눌러야 실제 필터(Applied)에
   // 반영되도록 Draft/Applied 상태를 분리합니다(2026-08-24 피드백: "리드들의 날짜 기간을 설정하면
@@ -1106,12 +1111,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const searchRows = useMemo(
     () =>
       assignSearchPins<SearchResultRow>({
-        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: unplacedCustomerIds.includes(store.id) ? "좌표 없음 · 주소 확인" : store.relationshipStatus || "거래처" })),
+        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: customerLocationChip(customerLocationState(store.id, unplacedCustomerIds, approximateCustomerIds), store.relationshipStatus || "거래처") })),
         salesLeads: leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" })),
         newLeads: leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" })),
         unregistered: unregisteredResults.map((result) => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))
       }),
-    [registeredMatches, leadMatches, unregisteredResults, unplacedCustomerIds]
+    [registeredMatches, leadMatches, unregisteredResults, unplacedCustomerIds, approximateCustomerIds]
   );
   const gradeBaseStores = useMemo(
     () =>
@@ -2908,7 +2913,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             {sourceReady ? (
               <>
                 <MapCustomerNotice
+                  approximateCount={approximateCustomerIds.length}
                   customerCount={allStores.length}
+                  onOpenApproximate={approximateCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(approximateCustomerIds[0]); } : undefined}
                   onOpenUnplaced={unplacedCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(unplacedCustomerIds[0]); } : undefined}
                   unplacedCount={unplacedCustomerCount}
                 />
@@ -3432,6 +3439,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       {selectedStore ? (
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
+          locationNote={customerLocationNote(customerLocationState(selectedStore.id, unplacedCustomerIds, approximateCustomerIds))}
           driverOptions={deliveryDefaults.drivers}
           fuelPrices={fuelPrices}
           history={storeHistories[selectedStore.id] || []}
@@ -8682,6 +8690,7 @@ export function getRouteStopAddress(store: StoreRow) {
 
 function StoreDetail({
   attachments,
+  locationNote,
   driverOptions,
   fuelPrices,
   history,
@@ -8710,6 +8719,8 @@ function StoreDetail({
   readonly onUpdateRelationshipStatus: (storeId: string, status: string, note?: string) => Promise<{ persisted: boolean } | void>;
   readonly onUpdateStore: (storeId: string, edit: StoreEdit) => Promise<{ persisted: boolean } | void>;
   readonly onWriteHistory: (storeId: string, memo: string) => void;
+  /** 위치 상태 안내(좌표 없음·위치 추정). 정확한 위치면 빈 문자열. */
+  readonly locationNote?: string;
   readonly store: StoreRow;
   readonly vehicleOptions: string[];
 }) {
@@ -8926,6 +8937,7 @@ function StoreDetail({
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
+              {locationNote ? <p className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-900" role="status">{locationNote}</p> : null}
               <p className="mt-1 text-sm font-bold text-slate-600">
                 연락처 · {formatPhoneNumber(draftPhone) || "미등록"} · 사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}
               </p>

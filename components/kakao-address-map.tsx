@@ -7,6 +7,7 @@ import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
 import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
+import { APPROXIMATE_LOCATION_TITLE } from "@/domains/route/map-customer-notice";
 
 export type KakaoMapMarker = {
   readonly address: string;
@@ -109,7 +110,7 @@ type KakaoAddressMapProps = {
   readonly onCenterChange?: (point: { lat: number; lng: number }) => void;
   /** 주소를 좌표로 바꾸지 못한 거래처(tone="customer") 수. 마커를 그릴 때마다 한 번 알린다. */
   /** 두 번째 값: 좌표를 못 찾은 거래처 id(안내에서 "주소 확인"으로 바로 열 때). */
-  readonly onCustomerGeocodeFailed?: (count: number, unplacedIds: string[]) => void;
+  readonly onCustomerGeocodeFailed?: (count: number, unplacedIds: string[], approximateIds: string[]) => void;
   readonly onMarkerClick?: (marker: KakaoMapMarker) => void;
   readonly radiusOverlay?: KakaoRadiusOverlay;
   readonly routePath?: ReadonlyArray<KakaoRoutePoint>;
@@ -287,7 +288,9 @@ type SalesAreaBoundaryCollection = { features: SalesAreaBoundaryFeature[]; type:
 // API를 다시 호출하지 않고 캐시에서 바로 꺼내 씁니다.
 const GEOCODE_CACHE_STORAGE_KEY = "maju:kakao-geocode-cache:v1";
 const GEOCODE_CACHE_MAX_ENTRIES = 3000;
-const geocodeMemoryCache = new Map<string, { lat: number; lng: number }>();
+// approx: 주소로 못 찾아 근사 주소·상호 검색으로 놓은 좌표(다음 로드에도 "위치 추정"으로 보이게 같이 저장).
+type GeocodePoint = { lat: number; lng: number; approx?: boolean };
+const geocodeMemoryCache = new Map<string, GeocodePoint>();
 let geocodeStorageLoaded = false;
 
 function loadGeocodeCacheFromStorage() {
@@ -296,7 +299,7 @@ function loadGeocodeCacheFromStorage() {
   try {
     const raw = window.localStorage.getItem(GEOCODE_CACHE_STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, { lat: number; lng: number }>;
+    const parsed = JSON.parse(raw) as Record<string, GeocodePoint>;
     Object.entries(parsed).forEach(([address, point]) => {
       if (Number.isFinite(point?.lat) && Number.isFinite(point?.lng)) geocodeMemoryCache.set(address, point);
     });
@@ -607,9 +610,14 @@ export function KakaoAddressMap({
         loadGeocodeCacheFromStorage();
         let geocodeCacheMissCount = 0;
 
-        const placeMarkerAtPosition = (marker: KakaoMapMarker, lat: number, lng: number) => {
+        const approximateCustomerIds: string[] = [];
+        const placeMarkerAtPosition = (marker: KakaoMapMarker, lat: number, lng: number, approx = false) => {
           const position = new kakao.maps.LatLng(lat, lng);
           const overlayContent = createMarkerOverlay(marker, marker.tone === "lead" && compactLeadMarkers);
+          if (approx && marker.tone === "customer") {
+            applyApproxBadge(overlayContent);
+            if (marker.id) approximateCustomerIds.push(marker.id);
+          }
           overlayContent.addEventListener("click", () => onMarkerClickRef.current?.(marker));
           const overlay = new kakao.maps.CustomOverlay({
             content: overlayContent,
@@ -653,7 +661,7 @@ export function KakaoAddressMap({
 
             const cachedPoint = geocodeMemoryCache.get(marker.address);
             if (cachedPoint) {
-              if (!ignore) placeMarkerAtPosition(marker, cachedPoint.lat, cachedPoint.lng);
+              if (!ignore) placeMarkerAtPosition(marker, cachedPoint.lat, cachedPoint.lng, cachedPoint.approx === true);
               return;
             }
 
@@ -690,8 +698,8 @@ export function KakaoAddressMap({
                 // 거래처만: 근사 주소(부번·층 떼기) → 상호+시군구 장소 검색으로 한 번 더 찾는다(11/14 명물길 50-4).
                 const approxPoint = await findCustomerFallbackPoint(kakao, geocoder, marker, kakaoGeocodeTimeoutMs);
                 if (approxPoint && !ignore) {
-                  geocodeMemoryCache.set(marker.address, approxPoint);
-                  placeMarkerAtPosition(marker, approxPoint.lat, approxPoint.lng);
+                  geocodeMemoryCache.set(marker.address, { ...approxPoint, approx: true });
+                  placeMarkerAtPosition(marker, approxPoint.lat, approxPoint.lng, true);
                 } else if (!ignore) {
                   unplacedCustomerCount += 1;
                   if (marker.id) unplacedCustomerIds.push(marker.id);
@@ -702,7 +710,7 @@ export function KakaoAddressMap({
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
         // 주소를 좌표로 못 바꾼 거래처 수(M1 안내용). 주소가 아예 없는 거래처는 이 수에 들지 않는다(주소 보완 필요 쪽).
-        if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount, unplacedCustomerIds);
+        if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount, unplacedCustomerIds, approximateCustomerIds);
 
         // 확대/축소가 끝날 때마다(idle) 리드 마커만 다시 그립니다 — 좌표는 이미 지오코딩해 캐시된
         // CustomOverlay 그대로 두고 setContent()로 내용만 바꾸므로 재지오코딩 없이 가볍습니다.
@@ -1675,6 +1683,24 @@ function vehicleMarkerContentSignature(marker: KakaoMapMarker) {
     name: marker.name,
     tone: marker.tone
   });
+}
+
+const APPROX_BADGE_ATTR = "data-maju-approx-location";
+
+// 근사 위치로 놓은 거래처 마커 표시: 오른쪽 아래 "≈" 배지 + 점선 테두리. 정확한 위치로 오해하지 않게 한다.
+function applyApproxBadge(element: HTMLElement) {
+  if (element.querySelector(`[${APPROX_BADGE_ATTR}]`)) return;
+  if (!element.style.position) element.style.position = "relative";
+  element.title = APPROXIMATE_LOCATION_TITLE;
+  element.style.outline = "2px dashed #b45309";
+  element.style.outlineOffset = "1px";
+  const badge = document.createElement("span");
+  badge.setAttribute(APPROX_BADGE_ATTR, "");
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = "≈";
+  badge.style.cssText =
+    "position:absolute;bottom:-9px;right:-9px;min-width:18px;height:18px;border-radius:999px;background:#b45309;color:#ffffff;border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;line-height:1;pointer-events:none;";
+  element.appendChild(badge);
 }
 
 const PIN_BADGE_ATTR = "data-maju-search-pin";
