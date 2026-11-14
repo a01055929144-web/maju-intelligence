@@ -19,7 +19,7 @@ type Link = {
   id: string;
   company_id: string;
   customer_id: string;
-  document_version_id: string;
+  document_version_id: string | null; // null = 전체 상품 링크(CC-36c)
   expires_at: string;
   revoked_at: string | null;
   can_order: boolean;
@@ -92,6 +92,16 @@ function path(table: string, companyId: string, suffix = "") {
   return `${table}?company_id=eq.${encodeURIComponent(companyId)}${suffix}`;
 }
 
+/** 전체 상품 링크는 문서가 없다 — 화면 틀(제목·유효기간·가격 표시)만 같은 모양으로 채운다. 품목은 /api/storefront/catalog 가 준다. */
+async function readCatalogVersion(company: string, expiresAt: string): Promise<Version[]> {
+  const rows = await supabaseRequest<Array<{ name: string | null }>>(`companies?select=name&id=eq.${encodeURIComponent(company)}&limit=1`);
+  const content = {
+    kind: "price_sheet", title: "전체 상품", companyName: rows[0]?.name ?? "", contact: "", recipient: "", footer: "",
+    validUntil: kstDateTime(new Date(expiresAt)).date, theme: "blue", layout: "auto", showPrice: true, showBrand: true, showSpec: true, lines: [],
+  } as unknown as DocumentContent;
+  return [{ id: "", document_id: "", content, version: 0, published_at: expiresAt }];
+}
+
 export async function readStorefront(
   token: string,
   requestedDeliveryDate?: string,
@@ -99,7 +109,7 @@ export async function readStorefront(
   const decoded = verifyStoreLinkToken(token);
   if (!decoded) return null;
   const links = await supabaseRequest<Link[]>(
-    `storefront_links?id=eq.${encodeURIComponent(decoded.id)}&token_hash=eq.${decoded.hash}&document_version_id=not.is.null&select=id,company_id,customer_id,document_version_id,expires_at,revoked_at,can_order&limit=1`,
+    `storefront_links?id=eq.${encodeURIComponent(decoded.id)}&token_hash=eq.${decoded.hash}&select=id,company_id,customer_id,document_version_id,expires_at,revoked_at,can_order&limit=1`,
   );
   const link = links[0];
   if (
@@ -107,19 +117,24 @@ export async function readStorefront(
     !publicOwnerTestAccessAllowed(link.company_id) ||
     !isFeatureEnabled("PRICING", link.company_id) ||
     !isFeatureEnabled("STORE_ORDERING", link.company_id) ||
+    // 전체 상품 링크(문서 없음)는 스위치가 켜진 회사만 연다.
+    (link.document_version_id === null && !isFeatureEnabled("STORE_CATALOG_LINK", link.company_id)) ||
     link.revoked_at ||
     new Date(link.expires_at).getTime() <= Date.now()
   )
     return null;
   const company = link.company_id;
+  const isCatalog = link.document_version_id === null;
   const [versions, customers, settingsRows] = await Promise.all([
-    supabaseRequest<Version[]>(
-      path(
-        "pricing_document_versions",
-        company,
-        `&id=eq.${link.document_version_id}&select=id,document_id,content,version,published_at&limit=1`,
-      ),
-    ),
+    isCatalog
+      ? readCatalogVersion(company, link.expires_at)
+      : supabaseRequest<Version[]>(
+          path(
+            "pricing_document_versions",
+            company,
+            `&id=eq.${link.document_version_id}&select=id,document_id,content,version,published_at&limit=1`,
+          ),
+        ),
     supabaseRequest<Customer[]>(
       path(
         "normalized_customers",
@@ -302,6 +317,7 @@ export async function readStorefront(
   const priceIncludesTax = parseDisplay(version.content.display).priceIncludesTax;
   return {
     linkId: link.id,
+    source: isCatalog ? ("catalog" as const) : ("document" as const),
     companyId: company,
     customerId: customer.id,
     documentVersionId: version.id,

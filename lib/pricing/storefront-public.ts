@@ -7,6 +7,7 @@ type Storefront = NonNullable<Awaited<ReturnType<typeof readStorefront>>>;
 export function toPublicStorefront(store: Storefront) {
   const delivery=store.deliveryEligibility;
   return {
+    source: store.source,
     version: store.version,
     title: store.title,
     companyName: store.companyName,
