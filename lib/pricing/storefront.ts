@@ -99,7 +99,7 @@ export async function readStorefront(
   const decoded = verifyStoreLinkToken(token);
   if (!decoded) return null;
   const links = await supabaseRequest<Link[]>(
-    `storefront_links?id=eq.${encodeURIComponent(decoded.id)}&token_hash=eq.${decoded.hash}&select=id,company_id,customer_id,document_version_id,expires_at,revoked_at,can_order&limit=1`,
+    `storefront_links?id=eq.${encodeURIComponent(decoded.id)}&token_hash=eq.${decoded.hash}&&source=eq.document&select=id,company_id,customer_id,document_version_id,expires_at,revoked_at,can_order&limit=1`,
   );
   const link = links[0];
   if (
