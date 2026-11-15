@@ -146,6 +146,7 @@ export { buildOutboundItemNotes };
 const QuoteDrawer = dynamic(() => import("@/components/map/quote-drawer").then((m) => m.QuoteDrawer));
 export { localStoreKeys, QUOTE_DRAFT_UPDATED_EVENT, quoteDraftId, readQuoteDraft };
 export type { QuoteDraft, QuoteSubject };
+import { useLatestRequest } from "@/hooks/use-latest-request";
 // 옛 경로 다시 내보내기(다른 화면이 워크스페이스에서 가져오던 이름).
 export { getLeadConfidence, permitGradeToneClassName };
 export type { StoreRow };
@@ -558,6 +559,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [showAllLeadsOnMap, setShowAllLeadsOnMap] = useState(true);
   const [allLeadsForMap, setAllLeadsForMap] = useState<PermitLeadItem[]>([]);
   const [allLeadsLoadState, setAllLeadsLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // M9: 같은 종류 요청은 마지막 것만 살린다(옛 응답이 새 목록을 덮지 않게).
+  const beginAllLeadsRequest = useLatestRequest();
+  const beginRadiusRequest = useLatestRequest();
   const [mapSalesRegionsConfigured, setMapSalesRegionsConfigured] = useState<boolean | null>(null);
   // 시안 ⑫: 영업 지역 칩 팝오버를 "내 영업 지역 / 영업 필요 지역"으로 묶기 위한 지역 라벨.
   const [mapAssignedAreaLabels, setMapAssignedAreaLabels] = useState<string[]>([]);
@@ -742,8 +746,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
     setLeadRadiusSearching(true);
     setLeadRadiusResult(null);
+    const signal = beginRadiusRequest();
     try {
       const response = await fetch(withPermitLeadCompanyQuery("/api/leads/permits/nearby"), {
+        signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -754,6 +760,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         })
       });
       const payload = await response.json().catch(() => null);
+      if (signal.aborted) return; // 더 새 탐색이 시작됨 — 옛 응답은 버린다(M9)
       if (!response.ok) {
         setLeadRadiusError(payload?.message || "리드 탐색에 실패했습니다.");
         return;
@@ -761,9 +768,10 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       setLeadRadiusResult(payload);
       if (payload?.leads?.length) setRightPanelTab("leads");
     } catch {
+      if (signal.aborted) return;
       setLeadRadiusError("네트워크 오류로 리드 탐색을 완료하지 못했습니다.");
     } finally {
-      setLeadRadiusSearching(false);
+      if (!signal.aborted) setLeadRadiusSearching(false);
     }
   }
 
@@ -803,6 +811,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 씁니다.
   async function loadAllLeadsForMap() {
     setAllLeadsLoadState("loading");
+    const signal = beginAllLeadsRequest();
     try {
       // 숨김(제외) 리드도 함께 받아와서, "활성/숨김" 토글로 클라이언트에서 바로 전환할 수 있게
       // 합니다(2026-08-24 피드백: 숨김 처리한 거래처도 나중에 다시 볼 수 있어야 함).
@@ -810,8 +819,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       if (showOutsideSalesAreaOnMap) params.set("includeOutsideSalesArea", "true");
       if (mapTargetType === "distributor") params.set("targetType", "distributor");
       if (LEAD_STORE_AREA_FEATURE_ENABLED && mapLeadAreaRange) params.set("storeArea", mapLeadAreaRange);
-      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store" });
+      const response = await fetch(withPermitLeadCompanyQuery(`/api/leads/permits?${params.toString()}`), { cache: "no-store", signal });
       const payload = await response.json().catch(() => null);
+      if (signal.aborted) return; // 필터가 더 바뀌어 새 요청이 나감 — 옛 응답은 버린다(M9)
       if (!response.ok || !payload) {
         setAllLeadsLoadState("error");
         return;
@@ -821,7 +831,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       setMapSalesRegionsConfigured(payload.salesRegionsConfigured !== false);
       setAllLeadsLoadState("ready");
     } catch {
-      setAllLeadsLoadState("error");
+      if (!signal.aborted) setAllLeadsLoadState("error");
     }
   }
 
