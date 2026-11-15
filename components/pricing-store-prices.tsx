@@ -6,6 +6,8 @@ import { MoneyInput } from "./money-input";
 import { StoreGradeDrawer, type StoreGrade } from "./store-grade-drawer";
 import { gradeChipClass } from "@/domains/pricing/store-grade";
 import { parseStorePriceInput, priceDifference, type StorePriceSource } from "@/domains/pricing/store-price";
+import { formatWon } from "@/domains/shared/money";
+import { SearchInput } from "@/components/ui/search-input";
 
 // CC-30b: 매장 가격 — 왼쪽 매장 목록(검색·등급·"매장 가격 N개"), 오른쪽 이 매장의 상품별 가격표. "이 매장 가격" 칸을 고치면(Enter·칸 밖 클릭) 바로 저장, 비우면 끝내기.
 type Store = { id: string; name: string; grade: string | null; gradeId: string | null; priceCount: number };
@@ -73,7 +75,7 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
       const response = await fetch(`/api/customers/${store.id}/contract-prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ productId: row.productId, price, until, from }) });
       const body = await response.json().catch(() => ({})) as { message?: string };
       if (!response.ok) throw new Error(body.message || "저장하지 못했습니다.");
-      setMessage(price === null ? (from ? `${row.name}: 예정 가격을 취소했습니다.` : `${row.name}: 이 매장 가격을 끝냈습니다(기본 판매가로 돌아감).`) : from ? `${row.name}: ${from}부터 ${price.toLocaleString()}원으로 바뀝니다.` : `${row.name}: 이 매장 가격을 ${price.toLocaleString()}원으로 정했습니다.`);
+      setMessage(price === null ? (from ? `${row.name}: 예정 가격을 취소했습니다.` : `${row.name}: 이 매장 가격을 끝냈습니다(기본 판매가로 돌아감).`) : from ? `${row.name}: ${from}부터 ${formatWon(price)}으로 바뀝니다.` : `${row.name}: 이 매장 가격을 ${formatWon(price)}으로 정했습니다.`);
       await Promise.all([loadRows(store.id), loadStores()]);
     } catch (e) { setError(e instanceof Error ? e.message : "저장하지 못했습니다."); }
     finally { setBusy(false); }
@@ -102,22 +104,22 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
   const columns: CommonTableColumn<Row>[] = [
     { key: "name", label: "상품", value: (r) => r.name, sortable: true, searchable: true, weight: 3, render: (r) => <span className="font-semibold">{r.name}</span> },
     { key: "category", path: true, label: "분류", value: (r) => r.category || "미분류", sortable: true, searchable: true, priority: 3 },
-    { key: "base", label: "기본 판매가", value: (r) => r.basePrice, align: "right", sortable: true, width: 110, render: (r) => `${r.basePrice.toLocaleString()}원` },
+    { key: "base", label: "기본 판매가", value: (r) => r.basePrice, align: "right", sortable: true, width: 110, render: (r) => formatWon(r.basePrice) },
     { key: "store", label: "이 매장 가격", value: (r) => r.storePrice, align: "right", sortable: true, width: 120, render: (r) => r.source === "견적"
-      ? <span title="견적서 수락으로 생긴 가격 — 거래처 상세에서 종료">{r.storePrice?.toLocaleString()}원</span>
+      ? <span title="견적서 수락으로 생긴 가격 — 거래처 상세에서 종료">{formatWon(r.storePrice ?? 0)}</span>
       : <MoneyInput ariaLabel={`${r.name} 이 매장 가격`} className="h-8 w-24 rounded border border-slate-300 px-1.5 text-right text-sm font-bold" disabled={busy} key={`${r.productId}-${r.storePrice}`} placeholder="기본가" value={r.storePrice}
           onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }} /> },
-    { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", priority: 2, width: 100, render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{d.toLocaleString()}원</span>; } },
+    { key: "diff", label: "차이", value: (r) => priceDifference(r.basePrice, r.storePrice), align: "right", priority: 2, width: 100, render: (r) => { const d = priceDifference(r.basePrice, r.storePrice); return d === null ? "-" : <span className={d < 0 ? "text-rose-700" : ""}>{d > 0 ? "+" : ""}{formatWon(d)}</span>; } },
     { key: "source", label: "출처", value: (r) => r.source, priority: 2, width: 80, render: (r) => <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span> },
     { key: "period", label: "기간·예정", value: (r) => r.until ?? r.planned?.since ?? "", priority: 3, width: 220, sortable: false, render: (r) => r.source === "견적" ? "-" : <span className="flex items-center gap-1.5 text-xs">
       {r.storePrice !== null && r.until ? <span className="rounded bg-slate-100 px-1.5 py-0.5 font-bold text-slate-700">~{r.until.slice(5).replace("-", "/")}</span> : null}
-      {r.planned ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">{r.planned.since.slice(5).replace("-", "/")}부터 {r.planned.price.toLocaleString()}원</span> : null}
+      {r.planned ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-900">{r.planned.since.slice(5).replace("-", "/")}부터 {formatWon(r.planned.price)}</span> : null}
       <button aria-label={`${r.name} 기간·예정 가격`} className="h-7 rounded border border-slate-300 px-2 font-black text-slate-600" disabled={busy} onClick={() => setPeriodRow(r)} type="button">⋯</button></span> },
   ];
 
   return <div className="space-y-3">
     <div aria-label="매장" className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
-      <input aria-label="매장 찾기" className="h-9 w-48 rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setQ(e.target.value)} placeholder="매장 찾기" value={q} />
+      <SearchInput aria-label="매장 찾기" className="w-48" onChange={setQ} placeholder="매장 찾기" size="sm" value={q} />
       <select aria-label="매장 선택" className="h-9 min-w-0 max-w-full flex-1 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold sm:max-w-md" onChange={(e) => { setStore(stores.find((x) => x.id === e.target.value) ?? null); setMessage(""); setError(""); }} value={store?.id ?? ""}>
         <option value="">{stores.length ? "매장을 고르세요" : "매장이 없습니다"}</option>
         {shownStores.map((s) => <option key={s.id} value={s.id}>{s.name}{gradeOf[s.id] && gradeById.get(gradeOf[s.id]) ? ` [${gradeById.get(gradeOf[s.id])!.name}]` : ""}{s.grade ? ` · ${s.grade}` : ""}{s.priceCount ? ` · 매장 가격 ${s.priceCount}` : ""}</option>)}
@@ -137,18 +139,18 @@ export function PricingStorePrices({ companyId, userKey, storeGradesEnabled = fa
         <div className="hidden lg:block"><CommonDataTable columns={columns} emptyMessage="표시할 상품이 없습니다. 가격 관리에서 판매가를 먼저 정해 주세요." filename={`${store.name}-매장가격.csv`} rowKey={(r) => r.productId} rows={visible} settingsKey={`store-prices:${userKey}`} /></div>
         <ul className="space-y-2 lg:hidden">{visible.map((r) => <li className="rounded-xl border border-slate-200 bg-white p-3" key={r.productId}>
           <div className="flex items-start justify-between gap-2"><span className="font-bold">{r.name}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-bold ${badge[r.source]}`}>{r.source}</span></div>
-          <p className="text-xs text-slate-500">{r.category || "미분류"} · 기본 {r.basePrice.toLocaleString()}원{r.storePrice !== null ? ` · 차이 ${(r.storePrice - r.basePrice).toLocaleString()}원` : ""}</p>
-          {r.source === "견적" ? <p className="mt-2 text-sm font-bold">{r.storePrice?.toLocaleString()}원 <span className="text-xs font-normal text-slate-500">견적 가격 — 거래처 상세에서 종료</span></p>
+          <p className="text-xs text-slate-500">{r.category || "미분류"} · 기본 {formatWon(r.basePrice)}{r.storePrice !== null ? ` · 차이 ${formatWon(r.storePrice - r.basePrice)}` : ""}</p>
+          {r.source === "견적" ? <p className="mt-2 text-sm font-bold">{formatWon(r.storePrice ?? 0)} <span className="text-xs font-normal text-slate-500">견적 가격 — 거래처 상세에서 종료</span></p>
             : <div className="mt-2 flex flex-wrap items-center gap-2"><label className="text-xs font-bold text-slate-600">이 매장 가격<MoneyInput ariaLabel={`${r.name} 이 매장 가격`} className="ml-1 h-11 w-28 rounded border border-slate-300 px-2 text-right text-base font-bold" disabled={busy} key={`m-${r.productId}-${r.storePrice}`} onCommit={(next) => { if (next !== r.storePrice) void save(r, next); }} placeholder="기본가" value={r.storePrice} /></label>
               {r.storePrice !== null ? <label className="text-xs font-bold text-slate-600">끝나는 날<input aria-label={`${r.name} 끝나는 날`} className="ml-1 h-11 rounded border border-slate-300 px-1 text-sm" defaultValue={r.until ?? ""} disabled={busy} key={`mu-${r.productId}-${r.until}`} min={today} onChange={(e) => { if (e.currentTarget.value !== (r.until ?? "")) void save(r, r.storePrice, e.currentTarget.value || null); }} type="date" /></label> : null}</div>}
-          {r.planned ? <p className="mt-1 text-xs text-slate-600">{r.planned.since}부터 <b>{r.planned.price.toLocaleString()}원</b> 예정</p> : null}
+          {r.planned ? <p className="mt-1 text-xs text-slate-600">{r.planned.since}부터 <b>{formatWon(r.planned.price)}</b> 예정</p> : null}
         </li>)}
           {!visible.length ? <li className="p-6 text-center text-sm text-slate-500">표시할 상품이 없습니다. 가격 관리에서 판매가를 먼저 정해 주세요.</li> : null}</ul>
       {periodRow && store ? <div aria-label={`${periodRow.name} 기간·예정 가격`} className="fixed inset-y-0 right-0 z-50 w-full max-w-sm space-y-4 overflow-y-auto border-l border-slate-300 bg-white p-4 shadow-xl" role="dialog">
         <div className="flex items-start justify-between gap-2"><div><h3 className="text-base font-black">기간·예정 가격</h3><p className="text-xs text-slate-500">{store.name} · {periodRow.name}</p></div><button className="maju-button-secondary h-8 text-xs" onClick={() => setPeriodRow(null)} type="button">닫기</button></div>
         {periodRow.storePrice !== null ? <label className="block text-sm font-bold">끝나는 날<input aria-label={`${periodRow.name} 끝나는 날`} className="mt-1 block h-9 w-full rounded border border-slate-300 px-2" defaultValue={periodRow.until ?? ""} disabled={busy} key={`until-${periodRow.until}`} min={today} onChange={(e) => { if (e.currentTarget.value !== (periodRow.until ?? "")) void save(periodRow, periodRow.storePrice, e.currentTarget.value || null); }} type="date" /><span className="text-xs font-normal text-slate-500">시작일 {periodRow.since ?? "-"} · 비우면 계속 적용</span></label> : <p className="text-xs text-slate-500">이 매장 가격이 없어 끝나는 날은 정할 수 없습니다.</p>}
         {periodRow.planned
-          ? <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm">{periodRow.planned.since}부터 <b>{periodRow.planned.price.toLocaleString()}원</b> 예정 <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(periodRow, null, null, periodRow.planned!.since)} type="button">취소</button></p>
+          ? <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm">{periodRow.planned.since}부터 <b>{formatWon(periodRow.planned.price)}</b> 예정 <button className="ml-1 font-bold text-rose-700" disabled={busy} onClick={() => void save(periodRow, null, null, periodRow.planned!.since)} type="button">취소</button></p>
           : <div className="space-y-2"><p className="text-sm font-bold">예정 가격</p>
             <input aria-label={`${periodRow.name} 예정 시작일`} className="block h-9 w-full rounded border border-slate-300 px-2 text-sm" min={new Date(Date.now() + 9 * 3600000 + 86400000).toISOString().slice(0, 10)} onChange={(e) => setPlannedFrom(e.target.value)} type="date" value={plannedFrom} />
             <MoneyInput ariaLabel={`${periodRow.name} 예정가`} className="block h-9 w-full rounded border border-slate-300 px-2 text-right text-sm" onCommit={(next) => setPlannedPrice(next === null ? "" : String(next))} placeholder="예정가(원)" value={plannedPrice === "" ? null : Number(plannedPrice)} />
