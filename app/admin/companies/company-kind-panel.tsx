@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { CompanyKind } from "@/lib/store";
 
 export const KIND_LABEL: Record<CompanyKind, string> = { customer: "고객사", pilot: "파일럿", internal: "내부(본사)" };
@@ -10,8 +11,9 @@ export function CompanyKindPanel({ companyId, companyName, kind, onChanged }: { 
   const [next, setNext] = useState<CompanyKind>(kind);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
   async function save() {
-    if (next === kind || !window.confirm(`"${companyName}"의 구분을 ${KIND_LABEL[kind]} → ${KIND_LABEL[next]}(으)로 바꿀까요?\n${KIND_HELP[next]}\n변경 기록이 감사 로그에 남습니다.`)) return;
+    if (next === kind || !(await confirm({ title: "회사 구분 변경", body: `"${companyName}"의 구분을 ${KIND_LABEL[kind]} → ${KIND_LABEL[next]}(으)로 바꿀까요?\n${KIND_HELP[next]}\n변경 기록이 감사 로그에 남습니다.`, confirmLabel: "변경", tone: "default" }))) return;
     setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/admin/companies/kind", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, kind: next }) });
@@ -29,5 +31,6 @@ export function CompanyKindPanel({ companyId, companyName, kind, onChanged }: { 
     </label>
     <button className="min-h-[44px] rounded-md border border-slate-300 bg-white px-4 text-sm font-black disabled:opacity-50" disabled={busy || next === kind} onClick={() => void save()} type="button">구분 변경</button>
     <p className="min-w-[200px] flex-1 text-xs text-slate-600">{KIND_HELP[next]}{message ? <span className="ml-2 font-black text-teal-800" role="status">{message}</span> : null}</p>
+    {confirmDialog}
   </div>;
 }

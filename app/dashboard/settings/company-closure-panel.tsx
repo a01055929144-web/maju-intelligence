@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 /**
@@ -15,12 +16,15 @@ export function CompanyClosurePanel({ companyName }: { companyName: string }) {
   const [confirmText, setConfirmText] = useState("");
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
   const matches = confirmText.trim() === companyName.trim();
 
   async function closeCompany() {
-    const confirmed = window.confirm(
-      `정말 "${companyName}" 회사를 탈퇴 처리하시겠습니까?\n모든 직원의 로그인이 즉시 막히고, 활성 구독이 있으면 자동으로 해지됩니다.\n데이터는 삭제되지 않고 남지만, 다시 쓰려면 별도로 관리자에게 복구를 요청해야 합니다.`
-    );
+    const confirmed = await confirm({
+      title: "회사 탈퇴",
+      body: `정말 "${companyName}" 회사를 탈퇴 처리하시겠습니까?\n모든 직원의 로그인이 즉시 막히고, 활성 구독이 있으면 자동으로 해지됩니다.\n데이터는 삭제되지 않고 남지만, 다시 쓰려면 별도로 관리자에게 복구를 요청해야 합니다.`,
+      confirmLabel: "회사 탈퇴", tone: "danger"
+    });
     if (!confirmed) return;
 
     setClosing(true);
@@ -70,6 +74,7 @@ export function CompanyClosurePanel({ companyName }: { companyName: string }) {
         </Button>
         {error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-700">{error}</p> : null}
       </div>
+      {confirmDialog}
     </section>
   );
 }

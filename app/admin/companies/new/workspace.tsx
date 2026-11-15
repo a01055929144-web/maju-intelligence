@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ClipboardCopy, FileText, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileText, Save } from "lucide-react";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Button } from "@/components/ui/button";
 import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
@@ -153,7 +154,7 @@ export function CompanyOnboardingWorkspace({ accountCreationEnabled }: { account
       </div>
 
       {message ? <p aria-live="polite" className="rounded-lg border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700">{message}</p> : null}
-      {result ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="font-black text-emerald-950">고객 안내문</p><pre className="mt-2 whitespace-pre-wrap text-sm text-emerald-950">{안내문}</pre><Button className="mt-3" onClick={() => void navigator.clipboard.writeText(안내문)} type="button" variant="outline"><ClipboardCopy className="h-4 w-4" /> 안내문 복사</Button></div> : null}
+      {result ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="font-black text-emerald-950">고객 안내문</p><pre className="mt-2 whitespace-pre-wrap text-sm text-emerald-950">{안내문}</pre><CopyTextButton className="mt-3 min-h-11" label="안내문 복사" text={안내문} /></div> : null}
     </section>
   );
 
