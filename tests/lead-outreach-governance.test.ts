@@ -91,7 +91,8 @@ describe("lead outreach governance", () => {
     expect(route).toContain('actorKind: "legacy_owner"');
     expect(route).toContain('actorSubject: `legacy_owner:${scope.companyId}`');
     expect(route).toContain("acknowledgeSalesOutreachPolicy");
-    expect(panel).toContain('aria-modal="true"');
+    expect(panel).not.toContain('aria-modal="true"');
+    expect(panel).toContain("영업 연락 수칙을 확인해 주세요");
     expect(panel).toContain("확인하고 영업 시작");
   });
 

@@ -1,3 +1,5 @@
+import { formatKoreanPhoneNumber } from "./contact-channels";
+
 /**
  * 영업 자료 키트 (11/4 대표 요청).
  * DM·문자 문구 아래에 붙는 "단가표 · 명함 · 브로슈어 · 카탈로그 · 주문 링크 · 연락처"를 회사가 고르고,
@@ -104,7 +106,7 @@ export function buildSalesKitLines(settings: SalesKitSettings, input: { origin: 
     }
     if (field === "contact") {
       const phone = settings.contactPhone || input.fallbackPhone || "";
-      if (phone) lines.push({ field, label: SALES_KIT_FIELD_LABEL[field], text: `▶ 문의 ${[settings.contactLabel || input.companyName, phone].filter(Boolean).join(" ")}` });
+      if (phone) lines.push({ field, label: SALES_KIT_FIELD_LABEL[field], text: `▶ 문의 ${[settings.contactLabel || input.companyName, formatKoreanPhoneNumber(phone)].filter(Boolean).join(" ")}` });
       continue;
     }
     const material = pickMaterial(settings, field);
