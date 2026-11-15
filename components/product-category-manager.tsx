@@ -1,4 +1,5 @@
 "use client";
+import { SearchInput } from "@/components/ui/search-input";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -270,7 +271,7 @@ export function ProductCategoryManager({ busy, companyId, send, state, task }: {
           {filter && filter !== UNSORTED && splitCategory(filter).length > 1 ? <span className="text-xs text-teal-800">· {filter}</span> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input aria-label="분류 정리 상품 검색" className="h-9 min-w-[200px] flex-1 rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setSearch(e.target.value)} placeholder="상품명·규격·분류 검색" value={search} />
+          <SearchInput aria-label="분류 정리 상품 검색" className="min-w-[200px] flex-1" onChange={setSearch} placeholder="상품명·규격·분류 검색" size="sm" value={search} />
           <button className="h-9 rounded-md bg-amber-500 px-3 text-sm font-black text-white disabled:bg-slate-300" disabled={!suggestable.length} onClick={fillSuggestions} type="button">MAJU 추천 채우기 ({suggestable.length})</button>
           <button className="h-9 rounded-md bg-teal-700 px-3 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || !changed.length} onClick={() => void saveDraft()} type="button">확인하고 저장 ({changed.length})</button>
           {changed.length ? <button className="h-9 px-2 text-sm text-slate-500 underline" onClick={() => setDraft({})} type="button">되돌리기</button> : null}

@@ -3,7 +3,8 @@
 import { formatWon } from "@/domains/shared/money";
 import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, FileSpreadsheet, Save, Search } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, Save } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/product-suppliers";
@@ -89,16 +90,7 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
               onRetry={loadError ? () => window.location.reload() : undefined}
               title="매입처 목록"
             >
-              <label className="maju-search-field max-w-xl">
-                <Search className="h-4 w-4 text-slate-400" />
-                <input
-                  aria-label="매입처 검색"
-                  className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
-                  onChange={(event) => setSupplierQuery(event.target.value)}
-                  placeholder="매입처명 검색"
-                  value={supplierQuery}
-                />
-              </label>
+              <SearchInput aria-label="매입처 검색" className="max-w-xl" onChange={setSupplierQuery} placeholder="매입처명 검색" value={supplierQuery} />
             </ErpPartnerDirectoryToolbar>
             {visibleSuppliers.length ? (
               <div className="max-h-[680px] divide-y divide-slate-100 overflow-y-auto">
