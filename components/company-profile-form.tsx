@@ -1,6 +1,8 @@
 "use client";
 
 import { RegionPicker } from "@/components/region-picker";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { formatPhoneNumber } from "@/lib/phone";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MapPin, Plus, Trash2 } from "lucide-react";
@@ -194,7 +196,9 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
   }
 
   if (!data) {
-    return <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">{notice?.text || "회사 정보를 불러오는 중입니다."}</section>;
+    return notice?.tone === "error"
+      ? <ErrorState message="회사 정보를 불러오지 못했습니다." description={notice.text} />
+      : <LoadingState label="회사 정보를 불러오는 중입니다." />;
   }
 
   const editable = data.canEdit;
@@ -287,7 +291,7 @@ function AddressSearchInput({ onPick, placeholder, readOnly, value }: { onPick: 
   return (
     <div>
       <div className="mt-1 flex gap-1.5">
-        <input className="h-9 min-w-0 flex-1 rounded-md border border-slate-200 px-3 text-xs font-semibold disabled:bg-slate-50" disabled={readOnly} onChange={(event) => { onPick(null, event.target.value); setResults([]); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void run(); } }} placeholder={placeholder} value={value} />
+        <SearchInput aria-label={placeholder || "주소 검색"} className="flex-1" inputProps={{ disabled: readOnly, role: "textbox", onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); void run(); } } }} onChange={(next) => { onPick(null, next); setResults([]); }} placeholder={placeholder} size="sm" value={value} />
         {!readOnly ? <button className="maju-button-secondary h-9 shrink-0 px-3 text-xs" disabled={busy} onClick={() => void run()} type="button"><MapPin className="h-3.5 w-3.5" />{busy ? "검색 중" : "주소 검색"}</button> : null}
       </div>
       {message ? <p className="mt-1 text-[11px] font-semibold text-slate-500">{message}</p> : null}
@@ -585,7 +589,7 @@ function StoreInviteCodes({ companyId }: { companyId?: string }) {
         </div>
       </div> : null}
       {message ? <p className="text-xs font-semibold text-slate-700" role="status">{message}</p> : null}
-      {codes === null ? <p className="text-xs text-slate-500">불러오는 중…</p> : codes.length ? (
+      {codes === null ? <LoadingState bare label="초대코드를 불러오는 중입니다." /> : codes.length ? (
         <ul className="divide-y divide-slate-100 text-xs">
           {codes.map((code) => { const status = inviteCodeStatus(code); return (
             <li className="flex flex-wrap items-center gap-2 py-2" key={code.id}>
@@ -594,7 +598,7 @@ function StoreInviteCodes({ companyId }: { companyId?: string }) {
               {status === "active" ? <button className="ml-auto text-xs font-bold text-rose-700 underline" disabled={busy} onClick={() => void send({ action: "revoke", id: code.id })} type="button">회수</button> : null}
             </li>); })}
         </ul>
-      ) : <p className="text-xs text-slate-500">아직 발급한 초대코드가 없습니다.</p>}
+      ) : <EmptyState bare message="아직 발급한 초대코드가 없습니다." />}
     </section>
   );
 }
