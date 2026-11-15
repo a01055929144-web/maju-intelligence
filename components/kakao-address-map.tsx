@@ -1988,9 +1988,9 @@ function FallbackAddressMap({
                 marker.markerColor
                   ? ""
                   : marker.grade === "A"
-                  ? "bg-orange-700"
+                  ? "bg-rose-700"
                   : marker.grade === "B"
-                    ? "bg-blue-600"
+                    ? "bg-slate-800"
                     : marker.grade === "C"
                       ? "bg-slate-500"
                       : marker.tone === "origin"
@@ -2034,9 +2034,9 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
             <Badge
               className={
                 marker.grade === "A"
-                  ? "bg-orange-700 text-white"
+                  ? "bg-rose-700 text-white"
                   : marker.grade === "B"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-slate-800 text-white"
                     : marker.grade === "C"
                       ? "bg-slate-500 text-white"
                       : marker.tone === "origin"

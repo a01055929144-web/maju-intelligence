@@ -10,8 +10,8 @@ export const MAP_LAYER_COLORS = {
 
 export type MapLayerKey = keyof typeof MAP_LAYER_COLORS;
 
-/** 거래처 마커 등급 배지(등급 보기). 레이어 색(보라·청록·초록·파랑)과 겹치지 않게 A = 주황 계열(예전 보라는 신규 리드 색과 같았다). */
-export const MAP_GRADE_COLORS = { A: "#c2410c", B: "#2563eb", C: "#64748b" } as const;
+/** 거래처 마커 등급 배지(등급 보기). 레이어 색(파랑·보라·청록·초록·주황)과 겹치거나 같은 계열이 되지 않게: A = 진한 빨강, B = 진한 남색(무채색 가까움), C = 회색. */
+export const MAP_GRADE_COLORS = { A: "#be123c", B: "#1e293b", C: "#64748b" } as const;
 
 /** 리드 종류별 마커·배지 색. */
 export function leadLayerColor(type: "new" | "sales"): string {

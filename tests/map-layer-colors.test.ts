@@ -21,9 +21,24 @@ describe("지도 색 기준 한 곳 (48-1b)", () => {
     expect(listTabColor("sales")).toBe(MAP_LAYER_COLORS.salesLead);
     expect(listTabColor("customers")).toBe(MAP_LAYER_COLORS.customer);
   });
-  it("등급 A 배지는 신규·영업·차량·미등록 색과 겹치지 않는다(예전 A 보라 = 신규 색)", () => {
-    for (const key of ["newLead", "salesLead", "vehicle", "unregistered"] as const) expect(MAP_GRADE_COLORS.A).not.toBe(MAP_LAYER_COLORS[key]);
-    expect(MAP_GRADE_COLORS.A).not.toBe("#7c3aed");
+  it("등급 배지 색 3개가 레이어 색 5개와 하나도 같지 않고, 색이 뚜렷한(채도 높은) A는 색상각도 30° 이상 다르다", () => {
+    const layers = Object.values(MAP_LAYER_COLORS) as string[];
+    for (const grade of Object.values(MAP_GRADE_COLORS) as string[]) expect(layers).not.toContain(grade);
+    const hsl = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16); const [r, g, b] = [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      const h = d === 0 ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return { h: h * 60, s };
+    };
+    const hueGap = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+    for (const grade of Object.values(MAP_GRADE_COLORS) as string[]) {
+      const g = hsl(grade);
+      if (g.s < 0.45) continue; // 무채색에 가까운 B·C는 색상각 비교 대상이 아님
+      for (const layer of layers) expect(hueGap(g.h, hsl(layer).h)).toBeGreaterThanOrEqual(30);
+    }
+    expect(MAP_GRADE_COLORS.A).toBe("#be123c");
+    expect(MAP_GRADE_COLORS.B).toBe("#1e293b");
   });
   it("흰 글자 대비 4.5:1 이상(선택 탭·배지·등급 배지 글자는 흰색 — 차량·미등록은 글자 없는 점/이모지라 제외)", () => {
     for (const hex of [MAP_LAYER_COLORS.customer, MAP_LAYER_COLORS.newLead, MAP_LAYER_COLORS.salesLead, MAP_GRADE_COLORS.A, MAP_GRADE_COLORS.B, MAP_GRADE_COLORS.C]) expect(whiteContrast(hex)).toBeGreaterThanOrEqual(4.5);
