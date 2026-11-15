@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -41,7 +42,7 @@ type Response = { store: Store; orders: Order[]; preferences: Preference[];
   memberLogin?: StoreKakaoLogin;
   memberManagement?: { href: string } | { message: string };
   historyPage: number; historyHasMore: boolean; message?: string };
-const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+const won = formatWon;
 const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));

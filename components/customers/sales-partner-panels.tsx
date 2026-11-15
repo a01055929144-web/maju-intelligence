@@ -1,12 +1,13 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import { useEffect, useMemo, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import type { SalesHistoryRow, SalesProductRow } from "@/domains/customer/sales-activity";
 
 // CC-25: 매출처 "매출 상품"·"거래내역" 탭(읽기 전용). 매입처 탭(product-supplier-workspace)과 같은 공용 표.
 type Activity = { products: SalesProductRow[]; history: SalesHistoryRow[] };
-const money = (value: number | null | undefined) => (value == null ? "-" : `${Math.round(value).toLocaleString("ko-KR")}원`);
+const money = (value: number | null | undefined) => (value == null ? "-" : formatWon(Math.round(value)));
 const KIND_LABEL = { sale: "매출 전표", order: "매장 주문", receipt: "입금" } as const;
 const SOURCE_TONE = { 기본: "bg-slate-100 text-slate-600", 매장: "bg-teal-50 text-teal-700", 견적: "bg-amber-50 text-amber-700" } as const;
 

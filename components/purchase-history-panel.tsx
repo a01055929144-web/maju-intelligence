@@ -1,11 +1,12 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { summarizePurchaseHistory, type PurchaseHistoryRow } from "@/domains/pricing/purchase-receipt";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSort } from "@/lib/use-table-sort";
 
-const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+const money = formatWon;
 
 /** 11/4: 매일 올린 매입 엑셀의 품목별 단가 변동·수량을 한눈에 봅니다. */
 export function PurchaseHistoryPanel({ companyId, refreshKey }: { readonly companyId: string; readonly refreshKey: number }) {

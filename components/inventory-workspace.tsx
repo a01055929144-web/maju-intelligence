@@ -1,4 +1,5 @@
 "use client";
+import { formatWon } from "@/domains/shared/money";
 import { kstToday } from "@/domains/shared/kst-date";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Boxes, ClipboardCheck, Link2Off, RefreshCw, Scale } from "lucide-react";
@@ -6,7 +7,7 @@ import { AlertTriangle, Boxes, ClipboardCheck, Link2Off, RefreshCw, Scale } from
 type Item = { id: string; code?: string; name: string; baseUnit: string; onHand: number; inventoryValue: number; averageUnitCost: number | null; safetyStock: number; trackingEnabled: boolean };
 type Product = { id: string; code?: string; name: string; salesUnit?: string };
 type Conversion = { id: string; product_catalog_id: string; unit_name: string; base_quantity: number; is_base: boolean; is_confirmed: boolean };
-const money = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+const money = (n: number) => formatWon(Math.round(n));
 const today = () => kstToday();
 async function api<T>(url: string, init?: RequestInit): Promise<T> { const r = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } }); const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(b.message || "요청을 처리하지 못했습니다."); return b as T; }
 

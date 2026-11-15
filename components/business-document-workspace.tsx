@@ -1,4 +1,5 @@
 "use client";
+import { formatWon } from "@/domains/shared/money";
 import { kstToday } from "@/domains/shared/kst-date";
 import { MoneyInput } from "@/components/money-input";
 
@@ -13,7 +14,7 @@ type Line = { id?: string; productCatalogId?: string; supplierProductId?: string
 type Option = { id: string; name: string };
 type Options = { customers: Option[]; suppliers: Option[]; products: Array<{ id: string; product_code?: string; canonical_name?: string; purchase_product_name: string; specification_value?: string; specification_unit?: string; sales_unit?: string; tax_type?: ErpTaxType; default_sales_price?: number }>; supplierProducts: Array<{ id: string; supplier_id: string; raw_name: string; raw_spec?: string; raw_unit?: string; latest_cost?: number; parsed_tax_type?: ErpTaxType }> };
 const today = () => kstToday();
-const money = (v: number) => `${Math.round(v).toLocaleString("ko-KR")}원`;
+const money = (v: number) => formatWon(Math.round(v));
 const labels = { sale: "매출", purchase: "매입", sale_return: "매출 반품", purchase_return: "매입 반품" } as const;
 const statusLabels = { draft: "작성중", confirmed: "확정", cancelled: "취소" } as const;
 const emptyLine = (): Line => ({ productName: "", unit: "EA", taxType: "taxable", quantity: 1, unitPrice: 0 });

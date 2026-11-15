@@ -1,3 +1,4 @@
+import { formatWon } from "@/domains/shared/money";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, Clock3, Truck } from "lucide-react";
@@ -118,7 +119,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-black text-slate-950">놓치면 큰일 나는 것</h2><span className="text-xs font-semibold text-slate-500">현재 저장된 기록으로 확인 가능한 위험만 표시합니다.</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {INSIGHTS_DATA_FEATURES.deliveryIssues ? <RiskCard description="배송 이슈 기록의 운영 적용 확인 후 표시합니다." icon={AlertTriangle} label="반품·파손·CS" value="—" warning={false} /> : null}
-            <RiskCard description={insights.risks.churnCustomers.length ? `기존 이탈 판정 · 월 매출 ${formatWon(churnRevenue)} 영향` : "기존 거래 이탈 판정 기준을 넘은 거래처가 없습니다."} icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
+            <RiskCard description={insights.risks.churnCustomers.length ? `기존 이탈 판정 · 월 매출 ${formatWonRounded(churnRevenue)} 영향` : "기존 거래 이탈 판정 기준을 넘은 거래처가 없습니다."} icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
             <RiskCard available={INSIGHTS_DATA_FEATURES.itemProfitability} description="승인된 품목·주문 구조 적용 후 표시합니다." icon={Clock3} label="품목 이탈" value="—" warning={false} />
             <RiskCard available={INSIGHTS_DATA_FEATURES.receivables} description="미수 원장의 운영 적용 확인 후 표시합니다." icon={AlertTriangle} label="미수금" value="—" warning={false} />
             <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다. 계약 단가 만료는 추후 연결합니다." icon={AlertTriangle} label="견적 만료 임박" value={`${insights.risks.expiringQuotes.toLocaleString()}건`} warning={insights.risks.expiringQuotes > 0} />
@@ -147,7 +148,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
 
 function change(current: number, previous: number) { return previous ? Math.round((current - previous) / previous * 100) : current ? 100 : 0; }
 function signed(value: number) { return value > 0 ? `+${value}` : String(value); }
-function formatWon(value: number) { return `${Math.round(value).toLocaleString()}원`; }
+const formatWonRounded = (value: number) => formatWon(Math.round(value));
 
 function MetricCard({ change, label, suffix = "%", value }: { change: number; label: string; suffix?: string; value: string }) {
   const positive = change >= 0;

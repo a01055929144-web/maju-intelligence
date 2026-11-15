@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import { useCallback, useEffect, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { Button } from "./ui/button";
@@ -14,7 +15,7 @@ type Order = {
 
 type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
 const kst = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
-const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+const won = formatWon;
 
 export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: { canConfirm: boolean; companyId: string; preview?: boolean }) {
   const [status, setStatus] = useState("submitted");

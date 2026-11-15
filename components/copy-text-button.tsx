@@ -28,7 +28,7 @@ export function CopyTextButton({ className = "", label = "복사", text }: { cla
       type="button"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-teal-700" /> : <Copy className="h-3.5 w-3.5" />}
-      {copied ? "복사됨" : label}
+      {copied ? "복사했습니다" : label}
     </button>
   );
 }

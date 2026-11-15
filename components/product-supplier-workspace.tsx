@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { CheckCircle2, FileSpreadsheet, Save, Search } from "lucide-react";
@@ -7,7 +8,7 @@ import { CommonDataTable, type CommonTableColumn } from "@/components/common-dat
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/product-suppliers";
 
-const money = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
+const money = (value: number) => formatWon(Math.round(value));
 const date = (value?: string) => value ? new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "없음";
 const businessNumber = (value?: string) => {
   const digits = (value || "").replace(/[^0-9]/g, "").slice(0, 10);

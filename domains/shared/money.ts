@@ -28,5 +28,8 @@ export function caretAfterFormat(formatted: string, digitsBeforeCaret: number): 
   return formatted.length;
 }
 
+/** 표시용: 1234567 → "1,234,567". */
+export const formatNumber = (value: number) => value.toLocaleString("ko-KR");
+
 /** 표시용: 56760 → "56,760원". */
-export const formatWon = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+export const formatWon = (value: number) => `${formatNumber(value)}원`;

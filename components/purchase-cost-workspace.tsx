@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import Link from "next/link";
 import { decodeCsvText } from "@/lib/csv-text";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ type NewRow = CostImportRow & { purchaseDate?: string; rowId: string; quantity?:
 const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : ""].filter(Boolean);
 type LinkInput = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
 type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀" | "매입처"; source: string; reviewOnly?: boolean; fileNote?: string; link?: LinkInput; updateFields?: { name: string; spec: string; unit: string } };
-const money = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+const money = formatWon;
 
 type UndatedTarget = { productId: string; name: string; previous: number; cost: number; date: string };
 const undatedColumns: CommonTableColumn<UndatedTarget>[] = [

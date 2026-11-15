@@ -1,10 +1,11 @@
 "use client";
+import { formatWon } from "@/domains/shared/money";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lastDispatchLabel, type CatalogLine } from "@/domains/pricing/storefront-catalog";
 
 // CC-36a: 매장 주문 탭의 "전체 상품"(읽기 전용, 주문은 36c). 가격은 서버가 준 값만 보여 준다.
 export type CatalogPage = { lines: CatalogLine[]; page: number; hasMore: boolean; marketPriceNotice: string };
-const won = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+const won = formatWon;
 
 export async function fetchCatalogPage(token: string, page: number, q: string): Promise<CatalogPage | null> {
   try {
