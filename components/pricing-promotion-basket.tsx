@@ -103,7 +103,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
               <label className="flex items-center gap-1"><input checked={!onlyStores} name="basket-audience" onChange={() => setOnlyStores(false)} type="radio" />전체 매장</label>
               <label className="flex items-center gap-1"><input checked={onlyStores} name="basket-audience" onChange={() => setOnlyStores(true)} type="radio" />고른 매장만</label></div>
             {onlyStores ? <div className="space-y-1">
-              <SearchInput aria-label="대상 매장 찾기" className="w-full max-w-xs" onChange={setStoreQuery} placeholder="매장 이름 검색" size="sm" value={storeQuery} />
+              <SearchInput aria-label="대상 매장 찾기" className="w-full max-w-xs" inputProps={{ role: "textbox" }} onChange={setStoreQuery} placeholder="매장 이름 검색" size="sm" value={storeQuery} />
               {storeHits.filter((h) => !stores.some((s) => s.id === h.id)).length ? <div className="flex flex-wrap gap-1">{storeHits.filter((h) => !stores.some((s) => s.id === h.id)).map((h) => <button className="rounded-full border border-slate-300 px-2 py-1 text-xs font-bold" key={h.id} onClick={() => setStores([...stores, h])} type="button">+ {h.name}</button>)}</div> : null}
               <div className="flex flex-wrap gap-1">{stores.map((s) => <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-900" key={s.id}>{s.name}<button aria-label={`${s.name} 빼기`} onClick={() => setStores(stores.filter((x) => x.id !== s.id))} type="button">✕</button></span>)}{!stores.length ? <span className="text-xs text-slate-500">매장을 검색해 하나 이상 골라 주세요.</span> : null}</div>
             </div> : null}
