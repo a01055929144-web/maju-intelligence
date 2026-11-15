@@ -42,3 +42,17 @@ for (const width of [1440, 390]) test(`삭제 확인 창: 취소·Esc는 그대�
   expect(deleted).toEqual(["abc1234"]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
+
+// CC-47-6: 저장 결과 알림 — 삭제가 서버에서 실패하면 빨간 알림(role=alert)이 뜨고 항목은 남는다. 성공은 알림 없이 사라진다(위 시험).
+test("삭제 실패는 오류 알림으로 보이고 항목은 그대로", async ({ page }) => {
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const kit = { contactLabel: "", contactPhone: "", defaults: {}, fields: [], materials: [{ code: "abc1234", kind: "price_sheet", name: "가짜단가표.pdf", uploadedAt: "2026-11-14T00:00:00Z" }], orderCode: "", orderUrl: "" };
+  await page.route(/\/api\/sales-kit(\?|$)/, (route) => route.fulfill({ json: { canEdit: true, fallbackPhone: "", kit } }));
+  await page.route(/\/api\/sales-kit\/file\?code=/, (route) => route.fulfill({ json: { message: "가짜 서버 오류로 삭제하지 못했습니다." }, status: 500 }));
+  await page.goto("/dashboard/settings/sales");
+  await page.getByRole("button", { name: "가짜단가표.pdf 삭제" }).click();
+  await page.getByRole("dialog", { name: "확인" }).getByRole("button", { name: "삭제", exact: true }).click();
+  const alert = page.getByRole("alert").filter({ hasText: "가짜 서버 오류로 삭제하지 못했습니다." });
+  await expect(alert).toBeVisible();
+  await expect(page.getByRole("button", { name: "가짜단가표.pdf 삭제" })).toBeVisible();
+});

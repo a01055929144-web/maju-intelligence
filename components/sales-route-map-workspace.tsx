@@ -67,6 +67,7 @@ import { LoadingState } from "@/components/ui/state";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SearchInput } from "@/components/ui/search-input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { NOTICE_TOAST_MS } from "@/components/ui/notice";
 import { MapCustomerNotice } from "@/components/map/map-customer-notice";
 import { customerLocationChip, customerLocationNote, customerLocationState } from "@/domains/route/map-customer-notice";
 import { MapFilterChipsRow, MapLeadFilterStrip } from "@/components/map/map-filters-bar";
@@ -1072,7 +1073,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               const label = newlyConnected.driverName || newlyConnected.deliveryVehicle || "기사";
               setJustConnectedVehicle({ at: Date.now(), label });
               if (toastTimer) window.clearTimeout(toastTimer);
-              toastTimer = window.setTimeout(() => setJustConnectedVehicle(null), 6000);
+              toastTimer = window.setTimeout(() => setJustConnectedVehicle(null), NOTICE_TOAST_MS);
             }
           }
           knownVehicleIdsRef.current = activeIds;

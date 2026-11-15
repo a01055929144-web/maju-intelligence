@@ -1,4 +1,5 @@
 "use client";
+import { Notice } from "@/components/ui/notice";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/document";
@@ -84,7 +85,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
       {([["active", "진행 중"], ["upcoming", "예정"], ["ended", "끝남"], ["all", "전체"]] as const).map(([id, label]) =>
         <button aria-pressed={status === id} className={`min-h-[36px] rounded-full border px-3 text-sm font-bold ${status === id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={id} onClick={() => setStatus(id)} type="button">{label}{id === "all" ? ` ${ofKind.length}` : ` ${count(id)}`}</button>)}
     </div>
-    {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}</p> : null}
+    {message ? <Notice kind="success">{message}</Notice> : null}
     <CommonDataTable columns={columns} emptyMessage={`${status === "all" ? "" : "해당 상태의 "}${kind} 상품이 없습니다.`} error={error || null} filename={`${kind}.csv`} loading={loading} phoneCards rowKey={(x) => x.id} rows={visible} settingsKey={`promotions-${kind}:${userKey}`} />
     {basketOpen ? <PricingPromotionBasket audienceEnabled={audienceEnabled} companyId={companyId} kind={kind} onClose={() => setBasketOpen(false)} onSaved={(text) => { setBasketOpen(false); setMessage(text); void load(); }} /> : null}
     {drawer ? <PromotionDrawer audienceEnabled={audienceEnabled} companyId={companyId} initialAudience={drawer.promo ? audiences[drawer.promo.id]?.audience ?? "all" : "all"} kind={kind} onClose={() => setDrawer(null)} onSaved={(text) => { setDrawer(null); setMessage(text); void load(); }} preset={presetProduct} promo={drawer.promo} /> : null}
@@ -179,7 +180,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   return <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
     <form aria-label={`${kind} ${promo ? "수정" : "등록"}`} aria-modal="true" className="h-full w-full max-w-md space-y-3 overflow-y-auto bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void save(new FormData(e.currentTarget)); }} role="dialog">
       <h2 className="text-lg font-black">{kind} {promo ? "수정" : "등록"}</h2>
-      {error ? <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{error}</p> : null}
+      {error ? <Notice kind="error">{error}</Notice> : null}
       <label className="block text-sm font-bold">상품 검색
         <input aria-label="상품 검색" className={`${field} mt-1`} onChange={(e) => { setQuery(e.target.value); void search(e.target.value); }} placeholder="상품명·분류" />
       </label>
