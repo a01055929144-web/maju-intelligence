@@ -73,11 +73,11 @@ test("작성중 전표 삭제는 취소하면 유지되고 확인하면 가짜 A
   await page.getByRole("button", { name: "열기" }).click();
   const trigger = page.getByRole("button", { name: "작성중 삭제" });
   await trigger.click();
-  await page.getByRole("dialog", { name: "확인" }).getByRole("button", { name: "취소" }).click();
+  await page.getByRole("dialog", { name: "작성중 전표 삭제" }).getByRole("button", { name: "취소" }).click();
   expect(deleted).toBe(0);
   await expect(trigger).toBeVisible();
   await trigger.click();
-  await page.getByRole("dialog", { name: "확인" }).getByRole("button", { name: "삭제", exact: true }).click();
+  await page.getByRole("dialog", { name: "작성중 전표 삭제" }).getByRole("button", { name: "삭제", exact: true }).click();
   await expect(page.getByText("작성중 전표를 삭제했습니다.")).toBeVisible();
   expect(deleted).toBe(1);
 });
