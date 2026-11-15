@@ -1,3 +1,5 @@
+import { formatKoreanPhoneNumber } from "./contact-channels";
+
 /**
  * 영업 자료 키트 (11/4 대표 요청).
  * DM·문자 문구 아래에 붙는 "단가표 · 명함 · 브로슈어 · 카탈로그 · 주문 링크 · 연락처"를 회사가 고르고,
@@ -33,6 +35,8 @@ export type SalesKitSettings = {
   orderCode: string;
   contactPhone: string;
   contactLabel: string;
+  /** 이미 발행된 단가표 공개 링크 중 영업 문구에 기본으로 붙일 링크. */
+  priceSheetUrl: string;
 };
 
 export const DEFAULT_SALES_KIT: SalesKitSettings = {
@@ -42,7 +46,8 @@ export const DEFAULT_SALES_KIT: SalesKitSettings = {
   fields: ["price_sheet", "order_link", "contact"],
   materials: [],
   orderCode: "",
-  orderUrl: ""
+  orderUrl: "",
+  priceSheetUrl: ""
 };
 
 export const SALES_KIT_MAX_MATERIALS = 20;
@@ -67,7 +72,8 @@ export function parseSalesKit(raw: string | null | undefined): SalesKitSettings 
       fields: Array.isArray(value.fields) ? value.fields.filter((field): field is SalesKitField => (SALES_KIT_FIELDS as readonly string[]).includes(field)) : DEFAULT_SALES_KIT.fields,
       materials,
       orderCode: typeof value.orderCode === "string" && SHORT_CODE_PATTERN.test(value.orderCode) ? value.orderCode : "",
-      orderUrl: typeof value.orderUrl === "string" ? value.orderUrl.slice(0, 500) : ""
+      orderUrl: typeof value.orderUrl === "string" ? value.orderUrl.slice(0, 500) : "",
+      priceSheetUrl: typeof value.priceSheetUrl === "string" ? value.priceSheetUrl.slice(0, 2000) : ""
     };
   } catch {
     return { ...DEFAULT_SALES_KIT };
@@ -82,6 +88,19 @@ export function validateOrderUrl(url: string) {
     return parsed.protocol === "https:" ? "" : "주문 링크는 https:// 로 시작해야 합니다.";
   } catch {
     return "주문 링크 주소 형식이 올바르지 않습니다.";
+  }
+}
+
+export function validatePriceSheetUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" || (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))
+      ? ""
+      : "단가표 링크는 안전한 웹 주소여야 합니다.";
+  } catch {
+    return "단가표 링크 주소 형식이 올바르지 않습니다.";
   }
 }
 
@@ -104,7 +123,7 @@ export function buildSalesKitLines(settings: SalesKitSettings, input: { origin: 
     }
     if (field === "contact") {
       const phone = settings.contactPhone || input.fallbackPhone || "";
-      if (phone) lines.push({ field, label: SALES_KIT_FIELD_LABEL[field], text: `▶ 문의 ${[settings.contactLabel || input.companyName, phone].filter(Boolean).join(" ")}` });
+      if (phone) lines.push({ field, label: SALES_KIT_FIELD_LABEL[field], text: `▶ 문의 ${[settings.contactLabel || input.companyName, formatKoreanPhoneNumber(phone)].filter(Boolean).join(" ")}` });
       continue;
     }
     const material = pickMaterial(settings, field);

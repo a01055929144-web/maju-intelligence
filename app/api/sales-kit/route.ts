@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
-import { buildSalesKitLines, parseSalesKit, SALES_KIT_FIELDS, validateOrderUrl, type SalesKitSettings } from "@/domains/lead/sales-kit";
+import { buildSalesKitLines, parseSalesKit, SALES_KIT_FIELDS, validateOrderUrl, validatePriceSheetUrl, type SalesKitSettings } from "@/domains/lead/sales-kit";
 import { getSalesKit, getSalesKitContactFallback, saveSalesKit } from "@/lib/sales-kit-store";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,8 @@ export async function PUT(request: NextRequest) {
   if (scope.role !== "admin" && !scopeHasCapability(scope, "manage_company")) return NextResponse.json({ message: "영업 자료를 바꿀 권한이 없습니다." }, { status: 403 });
   const urlError = validateOrderUrl(body?.orderUrl || "");
   if (urlError) return NextResponse.json({ message: urlError }, { status: 400 });
+  const priceSheetUrlError = validatePriceSheetUrl(body?.priceSheetUrl || "");
+  if (priceSheetUrlError) return NextResponse.json({ message: priceSheetUrlError }, { status: 400 });
   const current = await getSalesKit(scope.companyId);
   const known = new Set(current.materials.map((item) => item.code));
   const incoming = parseSalesKit(JSON.stringify({ ...current, ...body }));
@@ -36,7 +38,8 @@ export async function PUT(request: NextRequest) {
       contactPhone: incoming.contactPhone.replace(/[^0-9-]/g, ""),
       defaults,
       fields: incoming.fields.filter((field) => (SALES_KIT_FIELDS as readonly string[]).includes(field)),
-      orderUrl: incoming.orderUrl.trim()
+      orderUrl: incoming.orderUrl.trim(),
+      priceSheetUrl: incoming.priceSheetUrl.trim()
     });
     return NextResponse.json({ ok: true, kit: saved });
   } catch {

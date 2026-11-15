@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { AlertTriangle, Download, EyeOff, Loader2, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
 import { SENSITIVE_ACCESS_ITEMS, SENSITIVE_ACCESS_WARNING_CODES, type SensitiveAccessLog } from "@/domains/organization/sensitive-access-log";
 
 const itemLabels = { access_password: "출입 비밀번호", owner_phone: "사장님 휴대폰", business_registration: "사업자등록증", export: "엑셀 내보내기", log_hidden: "기록 숨김" } as const;
@@ -78,7 +80,7 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
       ) : (
         <>
           <div className="grid gap-2 border-b border-slate-200 p-4 md:grid-cols-[minmax(220px,1fr)_180px_180px_auto_auto]">
-            <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><span className="sr-only">직원·매장·기기 검색</span><input className="h-10 w-full rounded-md border border-slate-200 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="직원·매장·기기 검색" value={query} /></label>
+            <SearchInput aria-label="직원·매장·기기 검색" onChange={setQuery} placeholder="직원·매장·기기 검색" value={query} />
             <select aria-label="민감정보 항목" className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setItem(event.target.value)} value={item}><option value="">모든 항목</option>{SENSITIVE_ACCESS_ITEMS.map((value) => <option key={value} value={value}>{itemLabels[value]}</option>)}</select>
             <select aria-label="주의 유형" className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setWarning(event.target.value)} value={warning}><option value="">모든 주의</option>{SENSITIVE_ACCESS_WARNING_CODES.map((value) => <option key={value} value={value}>{warningLabels[value]}</option>)}</select>
             <Button disabled={loading} onClick={loadRecords} type="button">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}조회</Button>
@@ -90,7 +92,7 @@ export function SensitiveAccessLogPanel({ enabled, initialRecords }: { enabled: 
             <table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b border-slate-200 text-xs text-slate-500"><th className="px-3 py-2">시각</th><th className="px-3 py-2">사용자</th><th className="px-3 py-2">매장</th><th className="px-3 py-2">항목</th><th className="px-3 py-2">기기·경로</th><th className="px-3 py-2">주의</th><th className="px-3 py-2">관리</th></tr></thead>
               <tbody>{records.map((record) => <tr className={`border-b border-slate-100 ${record.hiddenAt ? "opacity-50" : ""}`} key={record.id}><td className="px-3 py-3 font-medium">{new Date(record.accessedAt).toLocaleString("ko-KR")}</td><td className="px-3 py-3"><p className="font-bold text-slate-900">{record.actorName}</p><p className="text-xs text-slate-500">{record.actorRole}</p></td><td className="px-3 py-3">{record.storeName}</td><td className="px-3 py-3 font-bold">{itemLabels[record.item]}</td><td className="px-3 py-3"><p>{record.deviceLabel}</p><p className="text-xs text-slate-500">{record.pagePath}</p></td><td className="px-3 py-3">{record.warningCodes.length ? <span className="inline-flex items-center gap-1 text-amber-700"><AlertTriangle className="h-4 w-4" />{record.warningCodes.map((code) => warningLabels[code]).join(" · ")}</span> : "-"}</td><td className="px-3 py-3">{record.hiddenAt ? "숨김" : <button className="inline-flex items-center gap-1 font-bold text-slate-500 hover:text-slate-900" onClick={() => hideRecord(record.id)} type="button"><EyeOff className="h-4 w-4" />숨김</button>}</td></tr>)}</tbody>
             </table>
-            {!records.length ? <p className="py-10 text-center text-sm font-bold text-slate-500">조건에 맞는 열람 기록이 없습니다.</p> : null}
+            {!records.length ? <EmptyState bare className="py-10" message="조건에 맞는 열람 기록이 없습니다." description="검색어나 필터를 바꾸고 다시 조회해 주세요." /> : null}
           </div>
         </>
       )}

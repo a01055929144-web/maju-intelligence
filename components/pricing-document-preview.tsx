@@ -12,6 +12,7 @@ import {
 import { PricingDocumentOrderQr, type DocumentOrderQr } from "./pricing-document-order-qr";
 import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import { Button } from "./ui/button";
+import { formatWon } from "@/domains/shared/money";
 
 type OutputLine = DocumentOutput["lines"][number];
 
@@ -46,7 +47,7 @@ export function PageContent({
   const indexed = columns === 1 && !online;
   const perColumn = Math.ceil(regular.length / columns) || 0;
   const chunks = Array.from({ length: columns }, (_, i) => regular.slice(i * perColumn, (i + 1) * perColumn)).filter((chunk) => chunk.length);
-  const price = (l: OutputLine) => (l.price !== null ? `${l.price.toLocaleString()}원` : "—");
+  const price = (l: OutputLine) => (l.price !== null ? formatWon(l.price) : "—");
   return (
     <div
       className="pricing-output-content"

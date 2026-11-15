@@ -11,6 +11,12 @@ export const SALES_OUTREACH_RULES = [
   "수집한 정보는 영업 목적 외에는 사용하지 않습니다."
 ] as const;
 
+export type OutreachPolicyState = "loading" | "required" | "saving" | "acknowledged";
+
+export function isOutreachPolicyPromptVisible(state: OutreachPolicyState): boolean {
+  return state === "required" || state === "saving";
+}
+
 export type LeadSourceDisclosureInput = {
   businessName: string;
   collectedAt?: string;

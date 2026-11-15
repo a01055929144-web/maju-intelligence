@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSalesKitLines, composeDmWithKit, createShortCode, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl } from "../domains/lead/sales-kit";
+import { buildSalesKitLines, composeDmWithKit, createShortCode, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl, validatePriceSheetUrl } from "../domains/lead/sales-kit";
 
 describe("sales kit", () => {
   it("creates 7-character short codes", () => {
@@ -17,11 +17,11 @@ describe("sales kit", () => {
       orderCode: "ccccccc",
       orderUrl: "https://example.com/order"
     }));
-    const lines = buildSalesKitLines(kit, { companyName: "제이에스리테일", fallbackPhone: "010-1234-5678", origin: "https://maju.example/" });
+    const lines = buildSalesKitLines(kit, { companyName: "가짜유통", fallbackPhone: "01000000000", origin: "https://maju.example/" });
     expect(lines.map((line) => line.text)).toEqual([
       "▶ 단가표 https://maju.example/m/aaaaaaa",
       "▶ 주문하기 https://maju.example/m/ccccccc",
-      "▶ 문의 제이에스리테일 010-1234-5678"
+      "▶ 문의 가짜유통 010-0000-0000"
     ]);
     expect(composeDmWithKit("안녕하세요", lines, ["price_sheet"])).toBe("안녕하세요\n\n▶ 단가표 https://maju.example/m/aaaaaaa");
     expect(composeDmWithKit("안녕하세요 ", lines, [])).toBe("안녕하세요");
@@ -32,5 +32,7 @@ describe("sales kit", () => {
     expect(parseSalesKit(JSON.stringify({ materials: [{ code: "../x", kind: "price_sheet" }] })).materials).toEqual([]);
     expect(validateOrderUrl("http://example.com")).not.toBe("");
     expect(validateOrderUrl("https://example.com")).toBe("");
+    expect(validatePriceSheetUrl("javascript:alert(1)")).not.toBe("");
+    expect(validatePriceSheetUrl("https://example.com/pricing-document#fake")).toBe("");
   });
 });
