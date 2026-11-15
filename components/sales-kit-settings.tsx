@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Notice } from "@/components/ui/notice";
 import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
+import { digitsOnly, formatKoreanPhoneNumber } from "@/domains/lead/contact-channels";
 import {
   SALES_KIT_FIELD_LABEL,
   SALES_KIT_FIELDS,
@@ -29,7 +30,7 @@ export function SalesKitSettingsPanel() {
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { canEdit?: boolean; fallbackPhone?: string; kit?: SalesKitSettings } | null) => {
         if (!payload?.kit) return;
-        setKit(payload.kit);
+        setKit({ ...payload.kit, contactPhone: formatKoreanPhoneNumber(payload.kit.contactPhone) });
         setCanEdit(Boolean(payload.canEdit));
         setFallbackPhone(payload.fallbackPhone || "");
       })
@@ -65,10 +66,10 @@ export function SalesKitSettingsPanel() {
   async function save(next: SalesKitSettings) {
     setBusy("save");
     setNotice(null);
-    const response = await fetch("/api/sales-kit", { body: JSON.stringify(next), headers: { "Content-Type": "application/json" }, method: "PUT" }).catch(() => null);
+    const response = await fetch("/api/sales-kit", { body: JSON.stringify({ ...next, contactPhone: digitsOnly(next.contactPhone) }), headers: { "Content-Type": "application/json" }, method: "PUT" }).catch(() => null);
     const payload = (await response?.json().catch(() => null)) as { kit?: SalesKitSettings; message?: string } | null;
     if (response?.ok && payload?.kit) {
-      setKit(payload.kit);
+      setKit({ ...payload.kit, contactPhone: formatKoreanPhoneNumber(payload.kit.contactPhone) });
       setNotice({ ok: true, text: "저장했습니다. 리드 상세의 보낼 문구 아래에 바로 반영됩니다." });
     } else setNotice({ ok: false, text: payload?.message || "저장하지 못했습니다." });
     setBusy("");
@@ -151,7 +152,7 @@ export function SalesKitSettingsPanel() {
           </label>
           <label className="text-xs font-black text-slate-600">
             문의 연락처
-            <input className={`${input} mt-1`} disabled={!canEdit} inputMode="tel" onChange={(event) => setKit({ ...kit, contactPhone: event.target.value })} placeholder={fallbackPhone || "대표 휴대폰"} value={kit.contactPhone} />
+            <input className={`${input} mt-1`} disabled={!canEdit} inputMode="numeric" onChange={(event) => setKit({ ...kit, contactPhone: formatKoreanPhoneNumber(digitsOnly(event.target.value).slice(0, 11)) })} placeholder={formatKoreanPhoneNumber(fallbackPhone) || "대표 휴대폰"} value={kit.contactPhone} />
           </label>
         </div>
       </div>
