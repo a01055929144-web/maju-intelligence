@@ -1,4 +1,5 @@
 "use client";
+import { MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 import { useState } from "react";
 import { X } from "lucide-react";
 
@@ -33,6 +34,8 @@ type Props = {
   readonly onFocusRow?: (group: "customers" | "leads" | "unregistered", id: string) => void;
 };
 
+const GROUP_COLOR: Record<string, string> = { customers: MAP_LAYER_COLORS.customer, sales: MAP_LAYER_COLORS.salesLead, new: MAP_LAYER_COLORS.newLead, unregistered: MAP_LAYER_COLORS.unregistered };
+
 export function MapSearchResultsPanel(props: Props) {
   const { customers, salesLeads, newLeads, unregistered, selectedIds } = props;
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -43,7 +46,9 @@ export function MapSearchResultsPanel(props: Props) {
     <section aria-label={title} className="border-b border-slate-100">
       <div className="flex items-center justify-between gap-2 bg-slate-50 px-3 py-1.5">
         <button aria-expanded={!collapsed.has(key)} className="flex min-h-8 items-center gap-1 text-xs font-black text-slate-700" onClick={() => toggleGroup(key)} type="button">
-          <span aria-hidden>{collapsed.has(key) ? "▸" : "▾"}</span>{title} {rows.length.toLocaleString()}
+          <span aria-hidden>{collapsed.has(key) ? "▸" : "▾"}</span>
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: GROUP_COLOR[key] }} />
+          {title} {rows.length.toLocaleString()}
         </button>
         {selectable && rows.length ? <label className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-500">
           <input checked={selectedIds.size > 0 && selectedIds.size === rows.length} className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600" onChange={props.onToggleAll} type="checkbox" />전체 선택
