@@ -2,6 +2,7 @@
 
 import { RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   getImportRowChanges,
   restoreAllImportPreviewRows,
@@ -18,6 +19,7 @@ type ImportRowEditorProps = {
 };
 
 export function ImportRowEditor({ fields, initialRows, onRowsChange }: ImportRowEditorProps) {
+  const { confirm, confirmDialog } = useConfirm();
   const [rows, setRows] = useState(() => restoreAllImportPreviewRows(initialRows).map((row, index) => ({
     ...row,
     values: { ...initialRows[index].values },
@@ -43,13 +45,14 @@ export function ImportRowEditor({ fields, initialRows, onRowsChange }: ImportRow
     commit(restoreImportPreviewRow(rows, rowId));
   }
 
-  function restoreAll() {
-    if (changedCellCount === 0 || !window.confirm("수정한 값을 모두 원본으로 되돌릴까요?")) return;
+  async function restoreAll() {
+    if (changedCellCount === 0 || !(await confirm({ title: "수정값 되돌리기", body: "수정한 값을 모두 원본으로 되돌립니다.", confirmLabel: "되돌리기", tone: "danger" }))) return;
     commit(restoreAllImportPreviewRows(rows));
   }
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-labelledby="import-preview-title">
+      {confirmDialog}
       <div className="flex flex-col gap-4 border-b border-slate-200 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h2 id="import-preview-title" className="text-lg font-bold tracking-[-0.02em] text-slate-950">가져오기 값 확인</h2>

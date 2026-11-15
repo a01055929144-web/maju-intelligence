@@ -4,6 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
 import { UploadTemplateField } from "@/lib/sample-data";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -115,12 +117,7 @@ export function ExcelHeaderMappingPreview({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
-        <input
-          className="h-9 min-w-48 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          onChange={(event) => setCardQuery(event.target.value)}
-          placeholder="엑셀 컬럼명 검색..."
-          value={cardQuery}
-        />
+        <SearchInput aria-label="엑셀 컬럼명 검색" className="min-w-48 flex-1" onChange={setCardQuery} placeholder="엑셀 컬럼명 검색..." size="sm" value={cardQuery} />
         <div className="maju-filter-box grid grid-cols-3 gap-1.5 bg-slate-50 p-1">
           {[
             ["all", "전체"],
@@ -145,10 +142,7 @@ export function ExcelHeaderMappingPreview({
       </div>
       <div className="overflow-x-auto bg-slate-50/60 p-4">
         {!visibleHeaders.length ? (
-          <div className="maju-empty-state p-4">
-            <p className="text-sm font-black text-slate-800">조건에 맞는 컬럼이 없습니다.</p>
-            <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
-          </div>
+          <EmptyState description="검색어나 필터를 바꿔 다시 확인하세요." message="조건에 맞는 컬럼이 없습니다." />
         ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visibleHeaders.map((header) => {
@@ -354,12 +348,7 @@ function MappingWorkspaceModal({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <input
-                className="h-10 min-w-60 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={columnQuery}
-                onChange={(event) => setColumnQuery(event.target.value)}
-                placeholder="엑셀 컬럼명 검색..."
-              />
+              <SearchInput aria-label="엑셀 컬럼명 검색" className="min-w-60 flex-1" onChange={setColumnQuery} placeholder="엑셀 컬럼명 검색..." value={columnQuery} />
               <div className="maju-filter-box grid grid-cols-3 gap-1.5 bg-slate-50 p-1">
                 {[
                   ["all", "전체"],
@@ -429,12 +418,7 @@ function MappingWorkspaceModal({
               ) : null}
             </div>
             <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <input
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                value={fieldQuery}
-                onChange={(event) => setFieldQuery(event.target.value)}
-                placeholder="표준 필드 검색..."
-              />
+              <SearchInput aria-label="표준 필드 검색" className="w-full" onChange={setFieldQuery} placeholder="표준 필드 검색..." value={fieldQuery} />
               <div className="maju-filter-box grid grid-cols-4 gap-1.5 p-1">
                 {[
                   ["all", "전체"],
@@ -468,10 +452,7 @@ function MappingWorkspaceModal({
                   <FieldMappingGroup fields={filteredOptionalFields} fieldMap={fieldMap} headers={headers} title="선택 필드" tone="optional" onFieldMap={onFieldMap} />
                 </>
               ) : (
-                <div className="maju-empty-state p-4">
-                  <p className="text-sm font-black text-slate-800">조건에 맞는 표준 필드가 없습니다.</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">검색어나 필터를 바꿔 다시 확인하세요.</p>
-                </div>
+                <EmptyState description="검색어나 필터를 바꿔 다시 확인하세요." message="조건에 맞는 표준 필드가 없습니다." />
               )}
             </div>
           </aside>
