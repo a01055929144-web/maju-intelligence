@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, Loader2, MapPin, Plus, Printer, RefreshCw, Search } from "lucide-react";
+import { Building2, FileBadge2, FileSpreadsheet, ImageDown, ImageOff, Loader2, MapPin, Plus, Printer, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, LoadingState } from "@/components/ui/state";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SectionHeader } from "@/components/section-header";
@@ -542,19 +544,7 @@ export default function CrmSummaryPage() {
           {exportMessage ? <p className="no-print mx-3 -mt-1 mb-2 rounded-md bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">{exportMessage}</p> : null}
           <div className="no-print space-y-3 border-b border-slate-200/80 bg-slate-50/60 p-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <label className="maju-search-field w-full lg:max-w-md">
-                <Search className="h-4 w-4 text-slate-400" />
-                <input
-                  aria-label="거래처 검색"
-                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
-                  onChange={(event) => {
-                    setTableSearch(event.target.value);
-                    setTablePage(1);
-                  }}
-                  placeholder="상호명, 대표자, 연락처, 사업자번호 검색"
-                  value={tableSearch}
-                />
-              </label>
+              <SearchInput aria-label="거래처 검색" className="w-full lg:max-w-md" onChange={(value) => { setTableSearch(value); setTablePage(1); }} placeholder="상호명, 대표자, 연락처, 사업자번호 검색" value={tableSearch} />
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="사업자 상태 필터">
                 {(["all", "정상", "휴업", "폐업", "확인 필요"] as const).map((status) => (
                   <button
@@ -652,24 +642,7 @@ export default function CrmSummaryPage() {
               <span className="text-center">적재위치</span>
             </div>
           ) : (
-            <div className="m-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm font-bold text-slate-500">
-              <span className="flex items-center gap-1.5">
-                {customerSource === "loading" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
-                {customerSource === "loading" ? "거래처 원장을 불러오는 중입니다." : hasCustomers ? "검색·상태 조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}
-              </span>
-              {customerSource !== "loading" && hasCustomers ? (
-                <button
-                  className="maju-button-secondary no-print min-h-10 text-xs"
-                  onClick={() => {
-                    setTableSearch("");
-                    setStatusFilter("all");
-                  }}
-                  type="button"
-                >
-                  검색 조건 초기화
-                </button>
-              ) : null}
-            </div>
+            customerSource === "loading" ? <LoadingState className="m-3" label="거래처 원장을 불러오는 중입니다." /> : <EmptyState action={hasCustomers ? <button className="maju-button-secondary no-print min-h-11 text-xs" onClick={() => { setTableSearch(""); setStatusFilter("all"); }} type="button">검색 조건 초기화</button> : undefined} className="m-3" message={hasCustomers ? "검색·상태 조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."} />
           )}
           <div className="divide-y divide-slate-100 max-md:hidden print:block">
             {pagedRows.map((customer) => {

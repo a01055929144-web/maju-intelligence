@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, FileSpreadsheet, Loader2, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { DashboardConsistencyCheck } from "@/components/dashboard-consistency-check";
 import { SortableTh } from "@/components/sortable-th";
@@ -246,16 +248,7 @@ export default function CustomerDataManagementPage() {
           </div>
           <div className="border-b border-slate-200/80 bg-slate-50/70 px-3 py-2.5 sm:px-4">
             <div className="grid gap-2 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-center">
-              <label className="relative block w-full">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-                  placeholder="현재 페이지의 파일명·등록일 검색"
-                  type="search"
-                  value={query}
-                />
-              </label>
+              <SearchInput aria-label="업로드 이력 검색" onChange={(value) => { setQuery(value); setPage(1); }} placeholder="현재 페이지의 파일명·등록일 검색" size="sm" value={query} />
               <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5">
                 <div className="flex flex-nowrap gap-1.5" role="group" aria-label="등록 작업 상태 필터">
                 {([
@@ -291,46 +284,13 @@ export default function CustomerDataManagementPage() {
           </div>
           <div>
             {!uploadsLoaded ? (
-              <div className="flex min-h-40 flex-col items-center justify-center gap-3 p-6 text-center">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-slate-700">업로드 이력을 불러오는 중입니다</p>
-                  <p className="mt-1 text-xs text-slate-500">처리 결과를 확인하고 있으니 잠시만 기다려주세요.</p>
-                </div>
-              </div>
+              <LoadingState className="min-h-40" description="처리 결과를 확인하고 있으니 잠시만 기다려주세요." label="업로드 이력을 불러오는 중입니다" />
             ) : loadError ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <p className="text-sm font-bold text-rose-600">업로드 이력을 불러오지 못했습니다. 이 화면에서 바로 다시 확인할 수 있습니다.</p>
-                <button
-                  className="inline-flex h-9 items-center gap-1 rounded-md border border-rose-200 bg-white px-3 text-xs font-black text-rose-700 hover:bg-rose-50"
-                  onClick={() => setReloadToken((value) => value + 1)}
-                  type="button"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> 다시 시도
-                </button>
-              </div>
+              <ErrorState className="m-4" description="이 화면에서 바로 다시 확인할 수 있습니다." message="업로드 이력을 불러오지 못했습니다." onRetry={() => setReloadToken((value) => value + 1)} />
             ) : uploads.length === 0 ? (
-              <div className="flex min-h-48 flex-col items-center justify-center p-6 text-center">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                  <FileSpreadsheet className="h-5 w-5" />
-                </span>
-                <p className="mt-3 text-sm font-bold text-slate-800">아직 등록된 업로드 이력이 없습니다</p>
-                <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">거래처 데이터를 처음 등록하면 파일별 처리 결과와 중복 후보를 이곳에서 확인할 수 있습니다.</p>
-                <Link className="mt-4 inline-flex h-9 items-center rounded-md bg-teal-700 px-3 text-xs font-bold text-white transition hover:bg-teal-800" href={dataRegistrationHref}>
-                  데이터 등록하기
-                </Link>
-              </div>
+              <EmptyState action={<Link className="maju-button-primary min-h-11" href={dataRegistrationHref}>데이터 등록하기</Link>} className="m-4 min-h-48" description="거래처 데이터를 처음 등록하면 파일별 처리 결과와 중복 후보를 이곳에서 확인할 수 있습니다." message="아직 등록된 업로드 이력이 없습니다" />
             ) : filteredUploads.length === 0 ? (
-              <div className="flex min-h-40 flex-col items-center justify-center p-6 text-center">
-                <Search className="h-5 w-5 text-slate-400" />
-                <p className="mt-3 text-sm font-bold text-slate-800">조건과 일치하는 등록 작업이 없습니다</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">검색어나 상태 필터를 바꿔보세요.</p>
-                <button className="mt-3 h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700" onClick={resetFilters} type="button">
-                  검색·필터 초기화
-                </button>
-              </div>
+              <EmptyState action={<button className="maju-button-secondary min-h-11" onClick={resetFilters} type="button">검색·필터 초기화</button>} className="m-4 min-h-40" description="검색어나 상태 필터를 바꿔보세요." message="조건과 일치하는 등록 작업이 없습니다" />
             ) : (
               <>
               <div className="divide-y divide-slate-100 md:hidden">

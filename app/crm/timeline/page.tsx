@@ -17,6 +17,7 @@ import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
 import { isStoreVisibleByStatus, relationshipLabel } from "@/domains/customer/relationship-filter";
+import { formatWon } from "@/domains/shared/money";
 import { reportClientRenderTiming } from "@/lib/performance-timing";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -1656,7 +1657,7 @@ export default function CrmTimelinePage() {
                     <Badge className={`justify-self-center px-2 py-0.5 text-xs ${gradeClassName(customer.grade)}`}>{customer.grade}</Badge>
                     {extraCols.map((col) => {
                       const sum = customer.id ? salesSummary[customer.id] : undefined;
-                      const text = col.key === "priceCount" ? String(sum?.priceCount ?? 0) : col.key === "lastDate" ? sum?.lastDate?.slice(2) || "-" : `${(sum?.monthSales ?? 0).toLocaleString("ko-KR")}원`;
+                      const text = col.key === "priceCount" ? String(sum?.priceCount ?? 0) : col.key === "lastDate" ? sum?.lastDate?.slice(2) || "-" : formatWon(sum?.monthSales ?? 0);
                       return <span className="truncate text-right text-xs font-medium text-slate-600" key={col.key}>{text}</span>;
                     })}
                     <Badge className={`justify-self-end px-2 py-0.5 text-xs ${customer.relationshipStatus === "거래종료" ? "bg-slate-200 text-slate-700" : issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
