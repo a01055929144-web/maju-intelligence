@@ -7,6 +7,7 @@ import { basketLineError, discountFromPrice, marginFromPrice, priceFromDiscount,
 import { PricingProductPicker } from "./pricing-product-picker";
 import { SearchInput } from "./ui/search-input";
 import { ErrorState } from "./ui/state";
+import { formatWon } from "@/domains/shared/money";
 
 // CC-34-2: 견적서·단가표처럼 "고르고 담기". 왼쪽 상품 고르기(문서와 같은 부품) → 오른쪽 담은 품목 표 → 한 번에 등록.
 // 저장은 품목마다 행사 1건(기존 save-promotion 그대로). 실패한 줄만 남기고 이유를 보여 준다.
@@ -115,12 +116,12 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
                 const profit = l.cost > 0 ? l.price - l.cost : null;
                 return <tr className={l.error ? "bg-rose-50" : ""} key={l.id}>
                   <td className="px-3 py-1.5"><span className="font-semibold">{l.displayName}</span>{l.error ? <span className="block text-xs font-bold text-rose-700" role="alert">{l.error}</span> : null}</td>
-                  <td className="px-2 text-right tabular-nums">{l.regular.toLocaleString("ko-KR")}원</td>
+                  <td className="px-2 text-right tabular-nums">{formatWon(l.regular)}</td>
                   <td className="px-2 text-right"><MoneyInput ariaLabel={`${l.displayName} ${kind === "임박" ? "처분가" : "행사가"}`} className={`${input} w-28`} onCommit={(v) => patch(l.id, { price: v ?? 0 })} value={l.price} /></td>
                   <td className="px-2 text-right"><input aria-label={`${l.displayName} 할인 %`} className={`${input} w-20`} inputMode="decimal" key={`d-${l.id}-${l.price}`} defaultValue={discountFromPrice(l.regular, l.price) ?? ""}
                     onBlur={(e) => { const v = Number(e.currentTarget.value); if (e.currentTarget.value.trim() !== "" && Number.isFinite(v)) patch(l.id, { price: priceFromDiscount(l.regular, v) }); }} /></td>
                   {showCost ? <td className="px-2 text-right"><MoneyInput ariaLabel={`${l.displayName} 행사 매입가`} className={`${input} w-24`} onCommit={(v) => patch(l.id, { cost: v ?? 0 })} value={l.cost} /></td> : null}
-                  <td className={`px-2 text-right tabular-nums ${profit !== null && profit <= 0 ? "font-bold text-rose-700" : ""}`}>{profit === null ? "-" : `${profit.toLocaleString("ko-KR")}원`}</td>
+                  <td className={`px-2 text-right tabular-nums ${profit !== null && profit <= 0 ? "font-bold text-rose-700" : ""}`}>{profit === null ? "-" : formatWon(profit)}</td>
                   <td className="px-2 text-right"><input aria-label={`${l.displayName} 재고`} className={`${input} w-20`} inputMode="numeric" onChange={(e) => patch(l.id, { stock: e.target.value })} placeholder="제한 없음" value={l.stock} /></td>
                   <td className="px-2"><button aria-label={`${l.displayName} 빼기`} className="min-h-[36px] px-2 text-xs font-bold text-rose-700" onClick={() => setLines(lines.filter((x) => x.id !== l.id))} type="button">✕</button></td>
                 </tr>;
