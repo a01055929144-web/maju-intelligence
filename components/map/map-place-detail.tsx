@@ -61,6 +61,8 @@ import {
 } from "@/lib/route-map-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, relationshipChipClass, type StoreRow } from "@/components/map/map-row-helpers";
+import { AddressPicker } from "@/components/map/address-picker";
+import { joinSavedAddress } from "@/domains/customer/address-line";
 import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
@@ -722,6 +724,8 @@ export function StoreDetail({
   const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "order" | "ledger">("overview");
   const [draftAccountCopyStatus, setDraftAccountCopyStatus] = useState(store.accountCopyStatus);
   const [draftAddress, setDraftAddress] = useState(store.address || "");
+  // 상세 주소(층·호). 저장은 기본 주소 뒤에 붙여 address 한 칸으로(상세 칸 분리 저장은 lib/store.ts 변경 승인 후).
+  const [draftAddressDetail, setDraftAddressDetail] = useState("");
   const [draftBankAccount, setDraftBankAccount] = useState(store.bankAccount);
   const [draftBirthDate, setDraftBirthDate] = useState(store.birthDate);
   const [draftBusinessCertificateStatus, setDraftBusinessCertificateStatus] = useState(store.businessCertificateStatus);
@@ -778,7 +782,7 @@ export function StoreDetail({
     try {
       const result = await onUpdateStore(store.id, {
       accountCopyStatus: draftAccountCopyStatus,
-      address: draftAddress,
+      address: joinSavedAddress(draftAddress, draftAddressDetail),
       bankAccount: draftBankAccount,
       birthDate: draftBirthDate,
       businessCertificateStatus: draftBusinessCertificateStatus,
@@ -1020,7 +1024,11 @@ export function StoreDetail({
                   <EditRow label="이메일" onChange={setDraftEmail} value={draftEmail} />
                   <EditRow label="개업일" onChange={setDraftOpeningDate} type="date" value={draftOpeningDate} />
                   <EditRow label="생년월일" onChange={setDraftBirthDate} type="date" value={draftBirthDate} />
-                  <EditRow label="주소" onChange={setDraftAddress} value={draftAddress} />
+                  <div className="grid gap-1.5 text-sm sm:col-span-2 lg:col-span-3">
+                    <span className="font-black text-slate-700">주소 <span className="font-bold text-slate-500">· {draftAddress || "주소 미등록"}</span></span>
+                    <AddressPicker onPick={(picked) => setDraftAddress(picked.address)} value="" />
+                  </div>
+                  <EditRow label="상세 주소(층·호)" onChange={setDraftAddressDetail} value={draftAddressDetail} />
                   <EditRow label="업종" onChange={setDraftIndustry} value={draftIndustry} />
                   <EditRow label="영업시간" onChange={setDraftBusinessHours} value={draftBusinessHours} />
                   <EditRow label="주요 메뉴/취급 품목" onChange={setDraftMenuSummary} value={draftMenuSummary} />

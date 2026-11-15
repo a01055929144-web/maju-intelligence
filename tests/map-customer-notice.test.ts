@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { APPROXIMATE_LOCATION_TITLE, customerLocationChip, customerLocationNote, customerLocationState, mapCustomerNotices } from "../domains/route/map-customer-notice";
+import { customerLocationChip, customerLocationNote, customerLocationState, mapCustomerNotices } from "../domains/route/map-customer-notice";
 
 it("거래처 0~1곳이면 올리기 안내, 2곳 이상이면 없음", () => {
   expect(mapCustomerNotices(0, 0)).toEqual([{ text: "거래처가 0곳입니다", upload: true, unplaced: false, approximate: false }]);
@@ -28,7 +28,7 @@ it("검색 결과 칩·상세 문구는 상태별로, 정확하면 원래 칩과
   expect(customerLocationChip("unplaced", "거래중")).toBe("좌표 없음 · 주소 확인");
   expect(customerLocationChip("approximate", "거래중")).toBe("위치 추정 · 주소 확인");
   expect(customerLocationChip("exact", "거래중")).toBe("거래중");
-  expect(customerLocationNote("approximate")).toContain(APPROXIMATE_LOCATION_TITLE);
+  expect(customerLocationNote("approximate")).toBe("저장된 주소를 카카오가 정확히 찾지 못해 근처에 표시했습니다.");
   expect(customerLocationNote("unplaced")).toContain("좌표를 찾지 못했습니다");
   expect(customerLocationNote("exact")).toBe("");
 });

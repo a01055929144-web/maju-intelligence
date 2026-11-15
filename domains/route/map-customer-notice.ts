@@ -28,6 +28,6 @@ export function customerLocationChip(state: CustomerLocationState, fallback: str
 /** 거래처 상세에 붙일 안내 문구. 정확한 위치면 빈 문자열. */
 export function customerLocationNote(state: CustomerLocationState) {
   if (state === "unplaced") return "주소로 좌표를 찾지 못했습니다. 주소를 확인해 주세요.";
-  if (state === "approximate") return `${APPROXIMATE_LOCATION_TITLE}하고 있습니다. 주소를 확인해 주세요.`;
+  if (state === "approximate") return "저장된 주소를 카카오가 정확히 찾지 못해 근처에 표시했습니다.";
   return "";
 }
