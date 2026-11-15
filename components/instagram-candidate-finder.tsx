@@ -9,6 +9,8 @@ import { ClipboardPaste, ExternalLink, Loader2, Search, Sparkles } from "lucide-
 import type { InstagramCandidate } from "@/domains/lead/instagram-discovery";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { withPermitLeadCompanyQuery } from "@/components/sales-route-map-workspace";
+import { Notice } from "@/components/ui/notice";
+import { EmptyState } from "@/components/ui/state";
 
 type DiscoveryPayload = { ok: boolean; candidates?: InstagramCandidate[]; message?: string; documentCount?: number };
 
@@ -116,7 +118,9 @@ export function InstagramCandidateFinder({
         </ul>
       ) : null}
       {state === "done" && candidates.length ? <p className="mt-1.5 text-[11px] font-semibold text-slate-500">자동 후보는 틀릴 수 있어요. 프로필에서 상호·주소를 확인하고 저장하세요.</p> : null}
-      {message ? <p className={`mt-1.5 text-[11px] font-bold ${state === "error" ? "text-red-700" : "text-slate-600"}`}>{message}</p> : null}
+      {state === "done" && !candidates.length ? <EmptyState bare className="mt-2" message={message || "인스타 계정 후보가 없습니다."} /> : null}
+      {state === "error" && message ? <Notice className="mt-2 text-xs" kind="error" onRetry={() => void findCandidates()}>{message}</Notice> : null}
+      {state !== "error" && !(state === "done" && !candidates.length) && message ? <Notice className="mt-2 text-xs" kind="error">{message}</Notice> : null}
     </div>
   );
 }

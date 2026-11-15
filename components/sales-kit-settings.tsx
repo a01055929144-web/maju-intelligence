@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Notice } from "@/components/ui/notice";
-import { Check, Copy, Loader2, Trash2, Upload } from "lucide-react";
+import { CopyTextButton } from "@/components/copy-text-button";
+import { Check, Loader2, Trash2, Upload } from "lucide-react";
 import { digitsOnly, formatKoreanPhoneNumber } from "@/domains/lead/contact-channels";
 import {
   SALES_KIT_FIELD_LABEL,
@@ -23,7 +24,6 @@ export function SalesKitSettingsPanel() {
   const [kind, setKind] = useState<SalesMaterialKind>("price_sheet");
   const [busy, setBusy] = useState<"" | "upload" | "save" | string>("");
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
-  const [copied, setCopied] = useState("");
 
   useEffect(() => {
     void fetch("/api/sales-kit", { cache: "no-store" })
@@ -75,12 +75,6 @@ export function SalesKitSettingsPanel() {
     setBusy("");
   }
 
-  async function copyLink(code: string) {
-    await navigator.clipboard.writeText(`${window.location.origin}/m/${code}`).catch(() => null);
-    setCopied(code);
-    window.setTimeout(() => setCopied(""), 1500);
-  }
-
   if (!kit) return null;
   const input = "h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:bg-slate-50";
 
@@ -109,10 +103,7 @@ export function SalesKitSettingsPanel() {
                       />
                       <span className="min-w-0 truncate font-semibold text-slate-800">{item.name}</span>
                     </label>
-                    <button className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-600" onClick={() => void copyLink(item.code)} type="button">
-                      {copied === item.code ? <Check className="h-3.5 w-3.5 text-teal-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      /m/{item.code}
-                    </button>
+                    <CopyTextButton className="shrink-0" label={`/m/${item.code}`} text={`${globalThis.location?.origin || ""}/m/${item.code}`} />
                     {canEdit ? (
                       <button aria-label={`${item.name} 삭제`} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600" disabled={busy === item.code} onClick={() => void remove(item.code)} type="button">
                         {busy === item.code ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}

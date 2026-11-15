@@ -1,5 +1,8 @@
 "use client";
 import { useState } from "react";
+import { Notice } from "@/components/ui/notice";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, LoadingState } from "@/components/ui/state";
 
 // CC-23: 유통사 탭 "카카오에서 찾기" 서랍. 검색 결과는 보여 주기만 하고, 사람이 고르고 확인한 값만 저장한다(약관 보수 해석).
 type Candidate = { kakaoPlaceUrl: string; name: string; address: string; phone: string; categoryName: string; duplicate: { id?: string; reason: "place" | "phone" | "name_address" } | null };
@@ -17,6 +20,7 @@ export function DistributorKakaoDrawer({ buildUrl, onAdded, onClose }: { buildUr
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   async function search(nextPage: number, text = q) {
     if (text.trim().length < 2) { setError("검색어를 2글자 이상 입력하세요."); return; }
@@ -27,7 +31,7 @@ export function DistributorKakaoDrawer({ buildUrl, onAdded, onClose }: { buildUr
       if (!response.ok) throw new Error(body.message || "검색하지 못했습니다.");
       setResults((previous) => (nextPage === 1 ? body.results : [...previous, ...body.results]));
       setPage(nextPage);
-      if (!body.results.length && nextPage === 1) setMessage("검색 결과가 없습니다. 검색어나 지역을 바꿔 보세요.");
+      setHasSearched(true);
     } catch (e) { setError(e instanceof Error ? e.message : "검색하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -65,16 +69,18 @@ export function DistributorKakaoDrawer({ buildUrl, onAdded, onClose }: { buildUr
       <p className="text-xs text-slate-600">검색 결과는 저장하지 않습니다. 고른 업체의 상호·주소·번호(아래에서 확인·수정한 값)와 카카오 장소 링크만 리드로 저장하고, 좌표는 저장하지 않습니다. 연락은 1:1 개별 연락만 합니다.</p>
       <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void search(1); }}>
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-sm font-bold">검색어<input aria-label="검색어" className={`${field} mt-1`} maxLength={60} onChange={(e) => setQ(e.target.value)} placeholder="상호 또는 키워드" value={q} /></label>
-          <label className="text-sm font-bold">지역(선택)<input aria-label="지역" className={`${field} mt-1`} maxLength={30} onChange={(e) => setRegion(e.target.value)} placeholder="예: 서울 강남구" value={region} /></label>
+          <label className="text-sm font-bold">검색어<SearchInput aria-label="검색어" className="mt-1" inputProps={{ maxLength: 60, role: "textbox" }} onChange={setQ} placeholder="상호 또는 키워드" value={q} /></label>
+          <label className="text-sm font-bold">지역(선택)<SearchInput aria-label="지역" className="mt-1" inputProps={{ maxLength: 30, role: "textbox" }} onChange={setRegion} placeholder="예: 서울 강남구" value={region} /></label>
         </div>
         <div className="flex flex-wrap gap-1.5" aria-label="빠른 키워드">
           {CHIPS.map((chip) => <button className="min-h-[36px] rounded-full border border-slate-200 px-3 text-xs font-bold text-slate-700" key={chip} onClick={() => { setQ(chip); void search(1, chip); }} type="button">{chip}</button>)}
         </div>
         <button className="maju-button-primary min-h-[44px] px-4" disabled={busy} type="submit">검색</button>
       </form>
-      {error ? <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
-      {message ? <p className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900" role="status">{message}</p> : null}
+      {error ? <Notice kind="error" onRetry={() => void search(1)}>{error}</Notice> : null}
+      {message ? <Notice kind="success">{message}</Notice> : null}
+      {busy && !results.length ? <LoadingState bare label="유통사를 검색하는 중입니다." /> : null}
+      {!busy && !error && !message && !results.length ? <EmptyState bare message={hasSearched ? "검색 결과가 없습니다." : "검색 결과가 여기에 표시됩니다."} description={hasSearched ? "검색어나 지역을 바꿔 보세요." : "검색어와 지역을 입력하거나 빠른 키워드를 선택하세요."} /> : null}
       <ul aria-label="검색 결과" className="divide-y divide-slate-100 rounded-lg border border-slate-200">
         {results.map((c) => <li className="flex items-start gap-2 p-2" key={c.kakaoPlaceUrl}>
           <input aria-label={`${c.name} 선택`} checked={Boolean(picked[c.kakaoPlaceUrl])} className="mt-2 h-5 w-5" disabled={Boolean(c.duplicate) || busy} onChange={(e) => toggle(c, e.target.checked)} type="checkbox" />
