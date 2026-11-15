@@ -135,7 +135,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
         </select>
       </label>
       <div className="min-w-0 flex-1 text-sm font-semibold text-slate-700"><span>매장 이름</span>
-        <SearchInput aria-label="매장 이름 검색" className="mt-1 max-sm:!h-11" inputProps={{ maxLength: 50 }} onChange={setQuery} placeholder="두 글자 이상" value={query} />
+        <SearchInput aria-label="매장 이름 검색" className="mt-1 max-sm:!h-11" inputProps={{ maxLength: 50, role: "textbox" }} onChange={setQuery} placeholder="두 글자 이상" value={query} />
       </div>
       <Button className="min-h-11" type="submit" variant="outline">검색</Button>
     </form>
