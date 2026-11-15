@@ -56,3 +56,28 @@ test("삭제 실패는 오류 알림으로 보이고 항목은 그대로", async
   await expect(alert).toBeVisible();
   await expect(page.getByRole("button", { name: "가짜단가표.pdf 삭제" })).toBeVisible();
 });
+
+test("작성중 전표 삭제는 취소하면 유지되고 확인하면 가짜 API를 호출한다", async ({ page }) => {
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const draft = { id: "draft-synthetic", documentType: "sale", documentNumber: "SYN-001", documentDate: "2026-11-15", status: "draft", partnerName: "합성 거래처", totalAmount: 1000, taxAmount: 91, createdAt: "2026-11-15T00:00:00Z", lines: [{ id: "line-1", productName: "합성 품목", unit: "EA", taxType: "taxable", quantity: 1, unitPrice: 1000 }] };
+  let deleted = 0;
+  await page.route("**/api/business-documents**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "DELETE") { deleted += 1; return route.fulfill({ json: {} }); }
+    if (url.pathname.endsWith(`/${draft.id}`)) return route.fulfill({ json: { document: draft } });
+    if (url.searchParams.get("mode") === "options") return route.fulfill({ json: { customers: [], suppliers: [], products: [], supplierProducts: [] } });
+    return route.fulfill({ json: { items: deleted ? [] : [draft] } });
+  });
+  await page.goto("/operations/documents");
+  await page.getByRole("button", { name: "열기" }).click();
+  const trigger = page.getByRole("button", { name: "작성중 삭제" });
+  await trigger.click();
+  await page.getByRole("dialog", { name: "확인" }).getByRole("button", { name: "취소" }).click();
+  expect(deleted).toBe(0);
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await page.getByRole("dialog", { name: "확인" }).getByRole("button", { name: "삭제", exact: true }).click();
+  await expect(page.getByText("작성중 전표를 삭제했습니다.")).toBeVisible();
+  expect(deleted).toBe(1);
+});

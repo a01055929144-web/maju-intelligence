@@ -1,11 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EmptyState, LoadingState } from "@/components/ui/state";
 import { categoryHealth, type CategoryHealth } from "@/domains/pricing/product-category";
 import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
 
 // CC-27: "비슷한 분류 점검" — 예전 경로·체계에 없는 대분류·같은 소분류 이름·하위가 비어 있는 상품을 보여 주고,
 // 합칠 수 있는 것은 폴더 이동(합치기, CC-17 API)으로 바로 처리한다. 합친 뒤 판매가를 다시 계산한다.
 export function CategoryHealthCard({ companyId }: { companyId: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [health, setHealth] = useState<CategoryHealth | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -24,7 +27,7 @@ export function CategoryHealthCard({ companyId }: { companyId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   async function merge(from: string, to: string) {
-    if (!window.confirm(`"${from}" 폴더를 "${to}"(으)로 합칠까요?\n상품 분류와 마진 연결이 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n합친 뒤 판매가를 바로 다시 계산합니다.`)) return;
+    if (!(await confirm({ title: "분류 폴더 합치기", body: `"${from}" 폴더를 "${to}"(으)로 합칩니다.\n상품 분류와 마진 연결이 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n합친 뒤 판매가를 바로 다시 계산합니다.`, confirmLabel: "합치기", tone: "danger" }))) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await fetch("/api/price-sheets/move-category", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, from, to }) });
@@ -41,6 +44,7 @@ export function CategoryHealthCard({ companyId }: { companyId: string }) {
   const empty = health && !health.legacy.length && !health.unknownTop.length && !health.sameLeaf.length && !health.missingSub.length;
   const merge44 = "min-h-[44px] rounded-lg border border-teal-700 px-3 text-sm font-bold text-teal-800 disabled:opacity-50";
   return <section aria-label="비슷한 분류 점검" className="maju-section-card space-y-3 p-4" id="category-health">
+    {confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
         <h2 className="text-lg font-black">비슷한 분류 점검</h2>
@@ -50,8 +54,8 @@ export function CategoryHealthCard({ companyId }: { companyId: string }) {
     </div>
     {error ? <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
     {message ? <p className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900" role="status">{message}</p> : null}
-    {!health && !error ? <p className="text-sm text-slate-600" role="status">분류를 점검하는 중입니다.</p> : null}
-    {empty ? <p className="text-sm font-bold text-teal-800">점검할 항목이 없습니다. 분류가 표준 체계와 같습니다.</p> : null}
+    {!health && !error ? <LoadingState bare label="분류를 점검하는 중입니다." /> : null}
+    {empty ? <EmptyState bare message="점검할 항목이 없습니다. 분류가 표준 체계와 같습니다." /> : null}
     {health?.legacy.length ? <div className="space-y-1">
       <h3 className="text-sm font-black">예전 경로 → 표준 경로로 합치기</h3>
       {health.legacy.map((item) => <div className="flex flex-wrap items-center gap-2 rounded border border-slate-200 p-2" key={item.from}>

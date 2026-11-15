@@ -1,6 +1,7 @@
 "use client";
 
 import { RegionPicker } from "@/components/region-picker";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { formatPhoneNumber } from "@/lib/phone";
@@ -584,7 +585,7 @@ function StoreInviteCodes({ companyId }: { companyId?: string }) {
         <p className="text-xs font-semibold text-teal-800">새 코드는 지금 한 번만 보입니다. 복사해서 매장에 전달하세요.</p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <code className="text-lg font-black tracking-widest text-teal-900">{formatInviteCode(issued.code)}</code>
-          <button className="maju-button-secondary h-9 px-3 text-xs" onClick={() => void navigator.clipboard.writeText(formatInviteCode(issued.code)).then(() => setMessage("초대코드를 복사했습니다."), () => setMessage("복사하지 못했습니다. 코드를 직접 적어 주세요."))} type="button">복사</button>
+          <CopyTextButton className="h-9" label="복사" text={formatInviteCode(issued.code)} />
           <span className="text-xs text-slate-600">{issued.expiresAt.slice(0, 10)}까지</span>
         </div>
       </div> : null}

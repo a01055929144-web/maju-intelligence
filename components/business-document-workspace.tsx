@@ -2,6 +2,8 @@
 import { formatWon } from "@/domains/shared/money";
 import { kstToday } from "@/domains/shared/kst-date";
 import { MoneyInput } from "@/components/money-input";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/state";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, Printer, RotateCcw, Search, Trash2, WalletCards, X } from "lucide-react";
@@ -27,6 +29,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   const suffix = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const [tab, setTab] = useState<"documents" | "ledger">("documents");
   const [documents, setDocuments] = useState<Doc[]>([]);
@@ -58,7 +61,7 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
     } catch (e) { setMessage(e instanceof Error ? e.message : "처리하지 못했습니다."); } finally { setBusy(false); }
   };
   const removeDraft = async (doc: Doc) => {
-    if (doc.status !== "draft" || !window.confirm(`${doc.documentNumber} 작성중 전표를 삭제할까요?`)) return;
+    if (doc.status !== "draft" || !(await confirm({ title: "작성중 전표 삭제", body: `${doc.documentNumber} 작성중 전표를 삭제합니다. 되돌릴 수 없습니다.`, confirmLabel: "삭제", tone: "danger" }))) return;
     setBusy(true); setMessage("삭제 중입니다…");
     try {
       await api(`/api/business-documents/${doc.id}${suffix}`, { method: "DELETE" });
@@ -72,7 +75,7 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
     }
   };
 
-  return <div className="space-y-4">
+  return <div className="space-y-4">{confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
         <button className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "documents" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`} onClick={() => setTab("documents")}>전표</button>
@@ -91,7 +94,7 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
       </div>
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-4 py-3">거래일</th><th>전표번호</th><th>유형</th><th>거래처</th><th>상태</th><th className="text-right">합계</th><th className="px-4 text-right">작업</th></tr></thead><tbody className="divide-y divide-slate-100">{documents.map((doc) => <tr key={doc.id} className="hover:bg-slate-50"><td className="px-4 py-3">{doc.documentDate}</td><td className="font-medium">{doc.documentNumber}</td><td>{labels[doc.documentType]}</td><td>{doc.partnerName}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{statusLabels[doc.status]}</span></td><td className="text-right font-semibold">{money(doc.totalAmount)}</td><td className="px-4 text-right"><button className="text-sm font-semibold text-teal-700" onClick={() => void openDocument(doc)}>열기</button></td></tr>)}</tbody></table></div>
-        {!documents.length && <div className="p-12 text-center text-sm text-slate-500">조건에 맞는 전표가 없습니다.</div>}
+        {!documents.length && <EmptyState bare className="p-12" message="조건에 맞는 전표가 없습니다." />}
       </div>
     </> : <LedgerPanel companyId={companyId} options={options} />}
     {editor && <DocumentEditor busy={busy} companyId={companyId} doc={editor} options={options} onAct={act} onClose={() => setEditor(null)} onDelete={removeDraft} onSaved={async (doc) => { setEditor(doc); setMessage("전표를 저장했습니다."); await load(); }} />}
@@ -99,6 +102,7 @@ export function BusinessDocumentWorkspace({ companyId = "" }: { companyId?: stri
 }
 
 function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelete, onSaved }: { busy: boolean; companyId: string; doc: Doc; options: Options; onAct: (doc: Doc, action: "confirm" | "cancel" | "return") => Promise<void>; onClose: () => void; onDelete: (doc: Doc) => Promise<void>; onSaved: (doc: Doc) => Promise<void> }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [form, setForm] = useState({ ...doc, lines: doc.lines?.length ? doc.lines : [emptyLine()] });
   const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
@@ -123,7 +127,7 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
   const save = async () => {
     // CC-30 E1: 매출 전표에 단가 0원 줄이 있으면 저장 전에 한 번 물어본다(가격이 안 들어온 줄을 놓치지 않게).
     const zeroLines = isSale ? form.lines.filter((line) => line.productName.trim() && !(Number(line.unitPrice) > 0)).length : 0;
-    if (zeroLines && !window.confirm(`단가가 0원인 줄이 ${zeroLines}개 있습니다. 그대로 저장할까요?\n가격 관리에서 판매가를 먼저 확인해 보세요.`)) return;
+    if (zeroLines && !(await confirm({ title: "0원 품목 확인", body: `단가가 0원인 줄이 ${zeroLines}개 있습니다. 그대로 저장할까요?\n가격 관리에서 판매가를 먼저 확인해 보세요.`, confirmLabel: "그대로 저장" }))) return;
     setSaving(true); setError("");
     try {
       let reason = form.reason || "";
@@ -133,7 +137,7 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
         if (oldPartnerId !== nextPartnerId) {
           const from = doc.partnerName;
           const to = (isSale ? options.customers : options.suppliers).find((item) => item.id === nextPartnerId)?.name || "선택 거래처";
-          if (!window.confirm(`${from} → ${to}로 이동합니다. 원장 금액도 함께 옮겨집니다.`)) return;
+          if (!(await confirm({ title: "거래처 변경", body: `${from} → ${to}로 이동합니다. 원장 금액도 함께 옮겨집니다.`, confirmLabel: "이동" }))) return;
         }
         reason = window.prompt("수정 사유를 입력해 주세요. (선택)", reason) || "";
       }
@@ -150,14 +154,14 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
   const selectedTotal = form.lines.filter((line) => line.id && selectedLineIds.includes(line.id)).reduce((sum, line) => sum + calculateErpLine({ quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), taxType: line.taxType }).totalAmount, 0);
   const runLineAction = async (action: "move-lines" | "copy-lines") => {
     if (!selectedLineIds.length) return;
-    const copyAcross = action === "copy-lines" && window.confirm("확인을 누르면 반대 계열로 복사하고, 취소하면 같은 계열로 복사합니다.");
+    const copyAcross = action === "copy-lines" && await confirm({ title: "복사할 전표 계열", body: "반대 계열로 복사하시겠습니까? 취소하면 같은 계열로 복사합니다.", confirmLabel: "반대 계열로 복사", cancelLabel: "같은 계열로 복사" });
     const targetDocumentType: "sale" | "purchase" = copyAcross ? (isSale ? "purchase" : "sale") : (isSale ? "sale" : "purchase");
     const partnerList = targetDocumentType === "sale" ? options.customers : options.suppliers;
     const targetName = window.prompt(`${targetDocumentType === "sale" ? "매출처" : "매입처"} 이름을 입력해 주세요.`);
     if (!targetName) return;
     const matches = partnerList.filter((item) => item.name.trim() === targetName.trim());
     if (matches.length !== 1) return setError("거래처 이름을 정확히 입력해 주세요.");
-    if (copyAcross && !window.confirm("단가가 원전표 단가 그대로 복사됩니다. 매입가/판매가로 확인 후 확정하세요.")) return;
+    if (copyAcross && !(await confirm({ title: "복사 단가 확인", body: "단가가 원전표 단가 그대로 복사됩니다. 매입가/판매가로 확인 후 확정하세요.", confirmLabel: "확인 후 복사" }))) return;
     const reason = action === "move-lines" ? window.prompt("이동 사유를 입력해 주세요. (선택)") || "" : "";
     setSaving(true); setError("");
     try {
@@ -166,7 +170,7 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
       await onSaved(result.document);
     } catch (e) { setError(e instanceof Error ? e.message : "품목을 처리하지 못했습니다."); } finally { setSaving(false); }
   };
-  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40"><div className="flex h-full w-full max-w-5xl flex-col bg-white shadow-2xl">
+  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40">{confirmDialog}<div className="flex h-full w-full max-w-5xl flex-col bg-white shadow-2xl">
     <header className="flex items-center justify-between border-b px-5 py-4"><div><div className="text-xs font-semibold text-teal-700">{labels[form.documentType]}</div><h2 className="text-xl font-bold">{form.documentNumber}</h2></div><button aria-label="닫기" onClick={onClose}><X /></button></header>
     <div className="flex-1 space-y-5 overflow-y-auto p-5">
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -176,7 +180,7 @@ function DocumentEditor({ busy, companyId, doc, options, onAct, onClose, onDelet
       {selectedLineIds.length > 0 && <div className="sticky bottom-0 flex flex-wrap items-center gap-2 rounded-xl border border-teal-200 bg-white p-3 shadow-lg"><strong>선택 {selectedLineIds.length}건 · {money(selectedTotal)}</strong><button className="maju-button-secondary ml-auto" disabled={saving || form.documentType.includes("return")} onClick={() => void runLineAction("move-lines")}>선택 품목 이동</button><button className="maju-button-primary" disabled={saving} onClick={() => void runLineAction("copy-lines")}>선택 품목 복사</button></div>}
       <div className="ml-auto grid max-w-lg grid-cols-2 gap-2 rounded-xl bg-slate-50 p-4 text-sm"><span>과세 공급가</span><b className="text-right">{money(totals.taxableSupplyAmount)}</b><span>면세 공급가</span><b className="text-right">{money(totals.exemptSupplyAmount)}</b><span>부가세</span><b className="text-right">{money(totals.taxAmount)}</b><span className="text-base font-bold">합계</span><b className="text-right text-lg text-teal-800">{money(totals.totalAmount)}</b></div>
     </div>
-    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{isConfirmed && <><button className="maju-button-primary mr-auto" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "수정 저장"}</button><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy} onClick={() => void onAct(form, "return")}><RotateCcw className="h-4 w-4" /> 반품 작성</button>}<button className="maju-button-secondary text-red-600" disabled={busy} onClick={() => window.confirm("원장에서 금액이 빠집니다. 전표를 삭제할까요?") && void onAct(form, "cancel")}>삭제</button></>}{isDraft && <>{form.id && <button className="maju-button-secondary mr-auto text-red-600" disabled={busy || saving} onClick={() => void onDelete(form)}><Trash2 className="h-4 w-4" /> 작성중 삭제</button>}<button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
+    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{isConfirmed && <><button className="maju-button-primary mr-auto" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "수정 저장"}</button><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy} onClick={() => void onAct(form, "return")}><RotateCcw className="h-4 w-4" /> 반품 작성</button>}<button className="maju-button-secondary text-red-600" disabled={busy} onClick={async () => { if (await confirm({ title: "전표 삭제", body: "원장에서 금액이 빠집니다. 전표를 삭제할까요?", confirmLabel: "삭제", tone: "danger" })) await onAct(form, "cancel"); }}>삭제</button></>}{isDraft && <>{form.id && <button className="maju-button-secondary mr-auto text-red-600" disabled={busy || saving} onClick={() => void onDelete(form)}><Trash2 className="h-4 w-4" /> 작성중 삭제</button>}<button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
   </div></div>;
 }
 
