@@ -40,6 +40,7 @@ import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/co
 
 export function StoreManagementPanel({
   collapsed,
+  notice,
   dataRegistrationHref,
   distanceRecalcError,
   onEditStore,
@@ -55,6 +56,8 @@ export function StoreManagementPanel({
   title
 }: {
   readonly collapsed: boolean;
+  /** 목록 맨 위 한 줄 안내(거래처 수·위치 못 찾음·추정). 없으면 안 그림. */
+  readonly notice?: ReactNode;
   readonly dataRegistrationHref: string;
   readonly distanceRecalcError: string;
   readonly onEditStore: (storeId: string) => void;
@@ -157,6 +160,7 @@ export function StoreManagementPanel({
           </div>
         ) : null}
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
+          {notice}
           {stores.length ? (
             stores.map((store, storeIndex) => (
               <div
@@ -411,7 +415,7 @@ export function LeadListPanel({
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <input aria-label={`${lead.businessName} 선택`} checked={selectedLeadIds.has(lead.id)} className="h-[18px] w-[18px] shrink-0 rounded border-slate-300 text-teal-700" onChange={() => toggleLeadSelection(lead.id)} type="checkbox" />
-                    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${leadType === "new" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>
+                    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${leadType === "new" ? "bg-violet-100 text-violet-800" : "bg-teal-100 text-teal-800"}`}>
                       {leadType === "new" ? "신규" : "영업"}
                     </span>
                     <RowNumber className={`${rowNumberWidthClass(sortedLeads.length)} shrink-0`} value={leadIndex + 1} />

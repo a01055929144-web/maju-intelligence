@@ -1,5 +1,6 @@
 "use client";
 
+import { MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
@@ -929,7 +930,7 @@ export function StoreDetail({
             <div className="min-w-0">
               <p className="text-xs font-black text-blue-700">거래처 상세</p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                <span className="rounded-md bg-violet-700 px-2 py-1 text-[11px] font-black text-white">거래처</span>
+                <span className="rounded-md px-2 py-1 text-[11px] font-black text-white" style={{ backgroundColor: MAP_LAYER_COLORS.customer }}>거래처</span>
                 <h3 className="truncate text-2xl font-black text-slate-950">{draftName}</h3>
                 <span className={gradeBadgeClass(draftGrade)}>{draftGrade}</span>
                 <span className={businessStatusClass(draftBusinessStatus)}>{getBusinessStatusLabel(draftBusinessStatus)}</span>

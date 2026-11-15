@@ -1,5 +1,6 @@
 "use client";
 
+import { MAP_GRADE_COLORS, MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -1751,7 +1752,7 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false, compac
         ? gradeStyle(marker.grade)
         : marker.tone === "lead"
           ? "background:#059669;color:#ffffff;"
-          : "background:#2563eb;color:#ffffff;";
+          : `background:${MAP_LAYER_COLORS.customer};color:#ffffff;`;
   const label = escapeHtml(marker.label);
   const name = escapeHtml(marker.name);
   // 2026-09-07 피드백("배송이완료되면 완료가 표시되었으면 해") 대응: 오늘 배송완료 기록이 있는
@@ -1911,9 +1912,7 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function gradeStyle(grade: "A" | "B" | "C") {
-  if (grade === "A") return "background:#7c3aed;color:#ffffff;";
-  if (grade === "B") return "background:#2563eb;color:#ffffff;";
-  return "background:#64748b;color:#ffffff;";
+  return `background:${MAP_GRADE_COLORS[grade]};color:#ffffff;`;
 }
 
 function escapeHtml(value: string) {
@@ -1989,7 +1988,7 @@ function FallbackAddressMap({
                 marker.markerColor
                   ? ""
                   : marker.grade === "A"
-                  ? "bg-violet-700"
+                  ? "bg-orange-700"
                   : marker.grade === "B"
                     ? "bg-blue-600"
                     : marker.grade === "C"
@@ -2035,7 +2034,7 @@ function MarkerList({ markers }: { readonly markers: ReadonlyArray<KakaoMapMarke
             <Badge
               className={
                 marker.grade === "A"
-                  ? "bg-violet-700 text-white"
+                  ? "bg-orange-700 text-white"
                   : marker.grade === "B"
                     ? "bg-blue-600 text-white"
                     : marker.grade === "C"

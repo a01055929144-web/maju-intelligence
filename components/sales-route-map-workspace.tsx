@@ -1,4 +1,5 @@
 "use client";
+import { leadLayerColor, listTabColor, MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 import { MoneyInput } from "@/components/money-input";
 
 import Link from "next/link";
@@ -524,6 +525,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const [excludeClosedStores, setExcludeClosedStores] = useState(false);
   // 거래 종료(수동 표시) 거래처는 기본으로 목록·지도에서 숨긴다. 필터 "거래 종료 거래처 보기"로 다시 본다.
   const [showTerminatedStores, setShowTerminatedStores] = useState(false);
+  // 지도 레이어 바 "거래처": 꺼 두면 거래처 마커만 지도에서 숨긴다(목록·검색은 그대로).
+  const [customersLayerOn, setCustomersLayerOn] = useState(true);
   const [markerViewMode, setMarkerViewMode] = useState<MarkerViewMode>("grade");
   const [storeAttachments, setStoreAttachments] = useState<Record<string, StoreAttachment>>(() => readLocalJson(localStoreKeys.attachments, {}));
   const [storeEdits, setStoreEdits] = useState<Record<string, StoreEdit>>(
@@ -1225,7 +1228,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         id: lead.id,
         label: `${getPermitLeadType(lead) === "new" ? "신규" : "영업"} ${lead.distanceKm}km`,
         leadType: getPermitLeadType(lead),
-        markerColor: getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
+        markerColor: leadLayerColor(getPermitLeadType(lead) === "new" ? "new" : "sales"),
         name: lead.businessName,
         tone: "lead" as const,
         // 2026-09-07 피드백("신규 리드가 의정부쪽으로 모여져있어서") 대응: 저장된 위경도가 있으면
@@ -1406,7 +1409,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         label: mapTargetType === "distributor" ? "유통사" : getPermitLeadType(lead) === "new" ? "신규" : "영업",
         leadType: getPermitLeadType(lead),
         // 유통사는 색을 정하지 않아 등급별 색을 씁니다.
-        markerColor: mapTargetType === "distributor" ? undefined : getPermitLeadType(lead) === "new" ? "#7c3aed" : "#0f766e",
+        markerColor: mapTargetType === "distributor" ? undefined : leadLayerColor(getPermitLeadType(lead) === "new" ? "new" : "sales"),
         // 기거래처 근접 리드는 지도에서 청록 헤일로 + ★ 뱃지로 구분합니다(2026-08-24 피드백:
         // 앰버는 등급 마커 색과 섞여 탁해 보인다는 지적을 받아 청록으로 변경).
         nearAnchor: (lead.scoreBreakdown?.route_fit_score ?? 0) >= 11,
@@ -1448,8 +1451,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // 되돌아가지 않습니다. 빈 결과 자체가 현재 필터의 유효한 상태이므로 리드 패널에서 안내합니다.
   const activeRightPanelTab: "stores" | "leads" = rightPanelTab;
   const mapDisplayMarkers = useMemo(
-    () => [...markers, ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers, ...liveVehicleMarkers],
-    [markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleMarkers]
+    () => [...(customersLayerOn ? markers : markers.filter((marker) => marker.tone !== "customer")), ...unregisteredMapMarkers, ...leadRadiusMapMarkers, ...allLeadsMapMarkers, ...liveVehicleMarkers],
+    [customersLayerOn, markers, unregisteredMapMarkers, leadRadiusMapMarkers, allLeadsMapMarkers, liveVehicleMarkers]
   );
   const visibleMapLayerCounts = useMemo(() => {
     const leadMarkers = [...leadRadiusMapMarkers, ...allLeadsMapMarkers];
@@ -1490,6 +1493,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       }}
       leadsLoading={allLeadsLoadState === "loading" || allLeadsLoadState === "idle"}
       onSelect={(tab) => {
+        // 이미 선택된 탭을 다시 누르면 오른쪽 목록 패널을 접는다(패널의 접기 버튼과 같은 동작).
+        const activeTab = activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new";
+        if (tab === activeTab && !rightCollapsed) {
+          setMapPanelMode("map");
+          return;
+        }
         if (mapPanelMode !== "split") {
           setMapPanelMode(tab === "customers" ? "customer" : tab === "sales" ? "salesLead" : "newLead");
           return;
@@ -2808,13 +2817,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           } ${isFullscreen ? "h-full" : "h-[calc(100dvh-10rem)] min-h-[420px] max-h-[720px] lg:h-full lg:min-h-0 lg:max-h-none"}`}>
             {sourceReady ? (
               <>
-                <MapCustomerNotice
-                  approximateCount={approximateCustomerIds.length}
-                  customerCount={allStores.length}
-                  onOpenApproximate={approximateCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(approximateCustomerIds[0]); } : undefined}
-                  onOpenUnplaced={unplacedCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(unplacedCustomerIds[0]); } : undefined}
-                  unplacedCount={unplacedCustomerCount}
-                />
                 <div className="h-full min-h-0 [&>div]:h-full">
                   <KakaoAddressMap
                     controlsOffsetPx={mapHeaderHeightPx || undefined}
@@ -2896,7 +2898,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   className={mapOverlayLeftClass}
                   counts={visibleMapLayerCounts}
                   headerOffsetPx={mapHeaderHeightPx}
+                  customersOn={customersLayerOn}
                   markerViewMode={markerViewMode}
+                  onToggleCustomers={() => setCustomersLayerOn((on) => !on)}
                   onSelectLeadLayer={(type) => {
                     const next = nextLeadLayerSelection(showAllLeadsOnMap, mapLeadTypeFilter, type);
                     setMapLeadsVisible(next.visible);
@@ -3183,6 +3187,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               />
             ) : (
               <StoreManagementPanel
+                notice={sourceReady ? <MapCustomerNotice
+                  inline
+                  approximateCount={approximateCustomerIds.length}
+                  customerCount={allStores.length}
+                  onOpenApproximate={approximateCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(approximateCustomerIds[0]); } : undefined}
+                  onOpenUnplaced={unplacedCustomerIds.length ? () => { setPreviewStoreId(""); setPreviewLeadId(""); setSelectedId(unplacedCustomerIds[0]); } : undefined}
+                  unplacedCount={unplacedCustomerCount}
+                  /> : undefined}
                 collapsed={rightCollapsed}
                 dataRegistrationHref={dataRegistrationHref}
                 distanceRecalcError={distanceRecalcError}
@@ -3671,10 +3683,11 @@ function SplitListTabs({
         <button
           aria-current={active === tab.value ? "page" : undefined}
           className={`h-[30px] min-w-0 whitespace-nowrap rounded-lg px-3 text-[13px] transition ${
-            active === tab.value ? "bg-teal-700 font-bold text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            active === tab.value ? "font-bold text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
           }`}
           key={tab.value}
           onClick={() => onSelect(tab.value)}
+          style={active === tab.value ? { backgroundColor: listTabColor(tab.value) } : undefined}
           type="button"
         >
           <span className="whitespace-nowrap">{tab.label}</span>{" "}
@@ -4657,14 +4670,18 @@ export function FullRouteNavigateAction({
 function MapLayerControl({
   className,
   counts,
+  customersOn,
   headerOffsetPx,
   markerViewMode,
   onSelectLeadLayer,
   onSelectMarkerMode,
+  onToggleCustomers,
   showAllLeadsOnMap,
   typeFilter
 }: {
   readonly className: string;
+  readonly customersOn: boolean;
+  readonly onToggleCustomers: () => void;
   readonly counts: {
     activeVehicles: number;
     customers: number;
@@ -4693,20 +4710,20 @@ function MapLayerControl({
       className={`pointer-events-auto absolute left-3 z-10 hidden max-w-[calc(100%-1.5rem)] items-center gap-1 overflow-x-auto rounded-[10px] bg-white p-1 shadow-[0_2px_8px_rgba(15,23,42,.12)] lg:flex ${className}`}
       style={{ top: headerOffsetPx ? `${headerOffsetPx + 12}px` : "0.75rem" }}
     >
-      <span className={layerButtonClass(true)} title="거래처 레이어(항상 표시)">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-blue-600" />
+      <button aria-pressed={customersOn} className={layerButtonClass(customersOn)} onClick={onToggleCustomers} title="거래처 레이어 켜기 또는 끄기" type="button">
+        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />
         거래처 {counts.customers}
-      </span>
+      </button>
       <button aria-pressed={newOn} className={layerButtonClass(newOn)} onClick={() => onSelectLeadLayer("new")} title="신규 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-violet-600" />
+        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />
         신규 {counts.newLeads}
       </button>
       <button aria-pressed={salesOn} className={layerButtonClass(salesOn)} onClick={() => onSelectLeadLayer("sales")} title="영업 리드 레이어 켜기 또는 끄기" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-teal-700" />
+        <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />
         영업 {counts.salesLeads}
       </button>
       <button aria-pressed={vehicleOn} className={layerButtonClass(vehicleOn)} onClick={onSelectMarkerMode} title="거래처 마커를 차량별 또는 등급별로 표시" type="button">
-        <span aria-hidden="true" className="h-2 w-2 rounded-sm bg-emerald-600" />
+        <span aria-hidden="true" className="h-2 w-2 rounded-sm" style={{ backgroundColor: MAP_LAYER_COLORS.vehicle }} />
         차량 {counts.activeVehicles}
       </button>
     </div>
@@ -4733,12 +4750,12 @@ function MapLayerLegend({
         className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/90 bg-white/95 px-3 py-2 text-xs font-bold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,.16)] backdrop-blur sm:text-[11px] lg:max-w-[calc(100%-640px)] xl:max-w-[calc(100%-700px)]"
       >
         <span className="font-black text-slate-500">범례</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-2 ring-white" />거래처 {counts.customers}</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-white" style={{ backgroundColor: MAP_LAYER_COLORS.customer }} />거래처 {counts.customers}</span>
         {counts.newLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded bg-violet-600" />신규 리드 {counts.newLeads}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.newLead }} />신규 리드 {counts.newLeads}</span>
         ) : null}
         {counts.salesLeads > 0 ? (
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded bg-teal-700" />영업 리드 {counts.salesLeads}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-4 rounded" style={{ backgroundColor: MAP_LAYER_COLORS.salesLead }} />영업 리드 {counts.salesLeads}</span>
         ) : null}
         <span className="inline-flex items-center gap-1"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">🚚</span>실시간 {counts.activeVehicles}</span>
         {counts.staleVehicles ? <span className="inline-flex items-center gap-1 text-slate-500"><span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-xs text-white">🚚</span>지연 {counts.staleVehicles}</span> : null}
