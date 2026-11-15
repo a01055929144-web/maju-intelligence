@@ -1,6 +1,8 @@
 "use client";
 import { formatWon } from "@/domains/shared/money";
 import { MoneyInput } from "@/components/money-input";
+import { SearchInput } from "@/components/ui/search-input";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { compareCategoryPath, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { categoryAncestors, categoryLevelOptions, isUnder, joinCategory, splitCategory, suggestCategory } from "@/domains/pricing/product-category";
@@ -45,6 +47,7 @@ export function ProductCatalogAdmin({
   companyId?: string;
   settingsKey?: string;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [items, setItems] = useState<ProductCatalogAdminItem[]>([]),
     [search, setSearch] = useState({ code: "", name: "", spec: "", unit: "", barcode: "" }),
     [tax, setTax] = useState<"all" | ProductTaxType>("all"),
@@ -124,7 +127,7 @@ export function ProductCatalogAdmin({
     try {
       const count = await productAction({ action: "delete-products", apply: false }); // 먼저 숫자만 센다
       const deletable = count.deletable ?? 0, hideOnly = count.hideOnly ?? 0;
-      if (!window.confirm(`${deletable}개 완전 삭제 · ${hideOnly}개 숨김\n\n완전 삭제는 되돌릴 수 없습니다(매입가·마진·행사 연결도 함께 지워짐). 주문·문서·재고·계약 단가에 쓰인 상품은 지우지 않고 숨기며, 판매중지 필터에서 되살릴 수 있습니다. 이미 발행한 문서는 그대로입니다.\n\n진행할까요?`)) return;
+      if (!await confirm({ title: "선택한 상품 삭제", body: `${deletable}개 완전 삭제 · ${hideOnly}개 숨김\n\n완전 삭제는 되돌릴 수 없습니다(매입가·마진·행사 연결도 함께 지워짐). 주문·문서·재고·계약 단가에 쓰인 상품은 지우지 않고 숨기며, 판매중지 필터에서 되살릴 수 있습니다. 이미 발행한 문서는 그대로입니다.`, confirmLabel: "진행" })) return;
       const done = await productAction({ action: "delete-products", apply: true });
       setMoveMessage(`${done.deletable ?? 0}개 완전 삭제 · ${done.hideOnly ?? 0}개 숨김(문서·매입 기록에 쓰여 보관 — 가격·문서·주문 화면에서 안 보임)`);
       setPicked(new Set());
@@ -142,7 +145,7 @@ export function ProductCatalogAdmin({
   }
   async function moveFolder(from: string, target: string) {
     const to = `${target} > ${splitCategory(from).slice(-1)[0]}`;
-    if (!window.confirm(`"${from}" 폴더를 "${target}" 안으로 옮길까요?\n하위 폴더와 상품 분류가 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n옮긴 뒤 판매가를 바로 다시 계산합니다.`)) return;
+    if (!await confirm({ title: "폴더 옮기기", body: `"${from}" 폴더를 "${target}" 안으로 옮길까요?\n하위 폴더와 상품 분류가 함께 바뀌고, 같은 경로가 이미 있으면 대상 폴더의 마진 연결을 유지합니다.\n옮긴 뒤 판매가를 바로 다시 계산합니다.`, confirmLabel: "옮기기", tone: "default" })) return;
     setError(""); setMoveMessage("");
     try {
       const response = await fetch("/api/price-sheets/move-category", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, from, to }) });
@@ -319,7 +322,7 @@ export function ProductCatalogAdmin({
           </div>
         </div>
         <div className="grid gap-2 border-b p-4 sm:grid-cols-2 xl:grid-cols-5">
-          {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <input aria-label={`${label} 검색`} className="maju-input w-full" key={key} onChange={(e) => setSearch((value) => ({ ...value, [key]: e.target.value }))} placeholder={`${label} 검색`} value={search[key]} />)}
+          {([['code','ERP 코드'],['name','상품명'],['spec','규격'],['unit','단위'],['barcode','바코드']] as const).map(([key, label]) => <SearchInput aria-label={`${label} 검색`} className="w-full" key={key} onChange={(value) => setSearch((current) => ({ ...current, [key]: value }))} placeholder={`${label} 검색`} value={search[key]} />)}
         </div>
         <div className="flex flex-wrap gap-2 border-b p-4">
           {([['all','전체'],['recent','방금 추가'],['negative','역마진'],['no-price','판매가 없음'],['no-code','ERP 코드 없음'],['duplicate-code','ERP 코드 중복'],['no-photo','사진 없음'],['promo','행사 중'],['soon','임박'],['no-promo','행사 없음']] as Array<[View,string]>).map(([key, label]) => <button className={`rounded-full border px-3 py-1.5 text-xs font-bold ${view === key ? "border-teal-700 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`} key={key} onClick={() => setView(key)} type="button">{label}</button>)}
@@ -386,6 +389,7 @@ export function ProductCatalogAdmin({
         onClose={() => setReviewingCategories(false)}
         onUpdated={(updates) => setItems((current) => current.map((item) => updates[item.id] ? { ...item, category: updates[item.id] } : item))}
       /> : null}
+      {confirmDialog}
       </div>
     </div>
   );

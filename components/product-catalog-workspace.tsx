@@ -29,6 +29,8 @@ import type {
 } from "@/lib/product-catalog-import";
 import { defaultConversionReviewRatio } from "@/lib/product-conversion-review";
 import { runLimited } from "@/lib/run-limited";
+import { SearchInput } from "@/components/ui/search-input";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type Workspace = {
   catalogCount: number;
@@ -92,6 +94,7 @@ export function ProductCatalogWorkspace({
   initialTab?: Tab;
   tableSettingsKey?: string;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(false);
@@ -128,9 +131,12 @@ export function ProductCatalogWorkspace({
   async function createStandards() {
     if (!selected.length) return;
     if (
-      !window.confirm(
-        `선택한 ${selected.length}개를 표준 품목으로 생성하고 연결할까요?`,
-      )
+      !await confirm({
+        body: `선택한 ${selected.length}개를 표준 품목으로 생성하고 연결할까요?`,
+        confirmLabel: "생성하고 연결",
+        title: "표준 품목 생성",
+        tone: "default",
+      })
     ) return;
     setLoading(true);
     setMessage("");
@@ -328,10 +334,11 @@ export function ProductCatalogWorkspace({
           {tab === "supplier" ? (
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
               <label className="text-sm font-semibold" htmlFor="supplier-conversion-search">매입처 상품 검색</label>
-              <input
-                className="maju-input min-h-11 min-w-0 flex-1 sm:max-w-xs"
-                id="supplier-conversion-search"
-                onChange={(event) => setSupplierSearch(event.target.value)}
+              <SearchInput
+                aria-label="매입처 상품 검색"
+                className="min-h-11 min-w-0 flex-1 sm:max-w-xs"
+                inputProps={{ id: "supplier-conversion-search" }}
+                onChange={setSupplierSearch}
                 placeholder="상품명·매입처·코드"
                 value={supplierSearch}
               />
@@ -482,6 +489,7 @@ export function ProductCatalogWorkspace({
           }}
         />
       ) : null}
+      {confirmDialog}
     </div>
   );
 }
