@@ -25,6 +25,33 @@ export type SemasLead = {
   readonly industryPrimary?: string | null;
 };
 
+export type SemasRegion = {
+  readonly province: string;
+  readonly district: string;
+  readonly dong: string;
+};
+
+const PROVINCES: Record<string, string> = {
+  서울: "서울특별시", 부산: "부산광역시", 대구: "대구광역시", 인천: "인천광역시", 광주: "광주광역시",
+  대전: "대전광역시", 울산: "울산광역시", 세종: "세종특별자치시", 경기: "경기도", 강원: "강원특별자치도",
+  충북: "충청북도", 충남: "충청남도", 전북: "전북특별자치도", 전남: "전라남도", 경북: "경상북도", 경남: "경상남도", 제주: "제주특별자치도"
+};
+
+/** 주소에서 공식 행정경계 API를 찾는 데 필요한 이름만 뽑는다. */
+export function semasRegion(address?: string | null): SemasRegion | null {
+  const source = (address || "").trim();
+  const tokens = source.replace(/[(),]/g, " ").split(/\s+/).filter(Boolean);
+  if (tokens.length < 3) return null;
+  const province = PROVINCES[tokens[0]] || tokens[0];
+  const roadIndex = tokens.findIndex((token, index) => index > 0 && /(?:로|길)$/.test(token));
+  const beforeRoad = tokens.slice(1, roadIndex < 0 ? tokens.length : roadIndex);
+  const districtParts = beforeRoad.filter((token) => /(?:시|군|구)$/.test(token));
+  const parentheticalDong = source.match(/\(([^)]*(?:읍|면|동|가))(?:[,\s]|\))/)?.[1]?.trim();
+  const dong = parentheticalDong || tokens.find((token, index) => index > 0 && /(?:읍|면|동|가)$/.test(token)) || "";
+  const district = districtParts.join(" ");
+  return province && district && dong ? { province, district, dong } : null;
+}
+
 export type SemasRejectReason = "name_low" | "ambiguous" | "too_far" | "address_mismatch";
 export type SemasMatch = {
   readonly resultCode: "filled" | "already_complete" | "not_found" | "rejected";
