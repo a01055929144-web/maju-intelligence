@@ -4,6 +4,8 @@ import { formatMoneyInput } from "@/domains/shared/money";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send, X } from "lucide-react";
+import { Notice } from "@/components/ui/notice";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
 import { MessageTemplateManager } from "@/components/message-template-manager";
@@ -716,12 +718,12 @@ export function MobileDeliveryProofPanel({
       ) : null}
 
       {status === "error" ? (
-        <div aria-live="assertive" className="mt-2 rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-xs font-bold leading-5 text-rose-200">
-          <p>{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</p>
-          <p className="mt-1 text-rose-300">위 버튼을 다시 누르면 완료된 단계는 건너뛰고 실패한 단계만 재시도합니다.</p>
-        </div>
+        <Notice className="mt-2" kind="error">
+          <span className="block">{errorDetail || "저장에 실패했습니다. 로그인 상태와 첨부 저장 설정을 확인해주세요."}</span>
+          <span className="mt-1 block">위 버튼을 다시 누르면 완료된 단계는 건너뛰고 실패한 단계만 재시도합니다.</span>
+        </Notice>
       ) : null}
-      {status === "saved" ? <p className="mt-2 text-xs font-bold text-teal-700">원장 저장 완료</p> : null}
+      {status === "saved" ? <Notice className="mt-2" kind="success">원장 저장 완료</Notice> : null}
       {messageResult ? (
         <div
           aria-live="polite"
@@ -770,18 +772,12 @@ export function MobileDeliveryProofPanel({
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryProofAttachments.length}건</span>
         </div>
         {loadingProofs ? (
-          <p className="flex items-center gap-1.5 rounded-lg bg-white p-3 text-sm font-bold text-slate-500">
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            증빙자료를 불러오는 중입니다.
-          </p>
+          <LoadingState bare className="rounded-lg bg-white" label="증빙자료를 불러오는 중입니다." />
         ) : null}
         {loadProofsError ? (
-          <button className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 text-xs font-black text-rose-700" onClick={loadProofs} type="button">
-            <RefreshCw className="h-4 w-4" />
-            {loadProofsError}
-          </button>
+          <ErrorState bare message={loadProofsError} onRetry={loadProofs} />
         ) : null}
-        {!loadingProofs && !deliveryProofAttachments.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송완료 증빙이 없습니다.</p> : null}
+        {!loadingProofs && !deliveryProofAttachments.length ? <EmptyState bare className="rounded-lg bg-white p-3" message="아직 배송완료 증빙이 없습니다." /> : null}
         {deliveryProofAttachments.length ? (
           <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
             {deliveryProofAttachments.map((item) => (
@@ -811,7 +807,7 @@ export function MobileDeliveryProofPanel({
           <p className="text-xs font-black text-slate-500">최근 배송 메모</p>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-blue-700 ring-1 ring-inset ring-blue-100">{deliveryNotes.length}건</span>
         </div>
-        {!loadingProofs && !deliveryNotes.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">아직 배송 메모가 없습니다.</p> : null}
+        {!loadingProofs && !deliveryNotes.length ? <EmptyState bare className="rounded-lg bg-white p-3" message="아직 배송 메모가 없습니다." /> : null}
         {deliveryNotes.length ? (
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
             {deliveryNotes.map((item) => (
@@ -840,7 +836,7 @@ export function MobileDeliveryProofPanel({
           <p className="text-xs font-black text-slate-500">점주 알림 상태</p>
           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-black text-teal-700 ring-1 ring-inset ring-teal-100">{messageLogs.length}건</span>
         </div>
-        {!loadingProofs && !messageLogs.length ? <p className="rounded-lg bg-white p-3 text-sm font-bold text-slate-500">저장된 알림 기록이 없습니다.</p> : null}
+        {!loadingProofs && !messageLogs.length ? <EmptyState bare className="rounded-lg bg-white p-3" message="저장된 알림 기록이 없습니다." /> : null}
         {messageLogs.map((log) => (
           <div className="rounded-lg border border-slate-200 bg-white p-3" key={log.id}>
             <div className="flex items-start justify-between gap-3">

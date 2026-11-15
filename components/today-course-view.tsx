@@ -9,9 +9,12 @@ import {
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
-  Search
+  Plus
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
+import { Notice } from "@/components/ui/notice";
+import { formatWon } from "@/domains/shared/money";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -477,15 +480,7 @@ export function TodayCourseView({
                   </option>
                 ))}
               </select>
-              <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="maju-search-field h-10 w-full bg-slate-50 pl-9 pr-3"
-                  onChange={(event) => setRouteQuery(event.target.value)}
-                  placeholder="거래처명·주소·담당자 검색"
-                  value={routeQuery}
-                />
-              </label>
+              <SearchInput aria-label="거래처명·주소·담당자 검색" className="w-full max-sm:min-h-11" onChange={setRouteQuery} placeholder="거래처명·주소·담당자 검색" value={routeQuery} />
             </div>
             <div className="border-b border-slate-200/80 p-3">
               <div className="maju-panel bg-slate-50 p-3">
@@ -717,13 +712,9 @@ export function TodayCourseView({
                       {routeConfirmState.status === "saving" ? "저장 중" : sequencedRouteStores.length ? `최적화 코스 ${sequencedRouteStores.length}곳 확정` : "오늘 배송 없음으로 확정"}
                     </button>
                     {routeConfirmState.status === "saved" || routeConfirmState.status === "error" ? (
-                      <p
-                        className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${
-                          routeConfirmState.status === "error" ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
+                      <Notice className="mt-2" kind={routeConfirmState.status === "error" ? "error" : "success"}>
                         {routeConfirmState.message}
-                      </p>
+                      </Notice>
                     ) : null}
                   </div>
                 ) : null}
@@ -749,15 +740,7 @@ export function TodayCourseView({
                     {routeSequence ? "계산 결과 확인 · 코스 확정" : `루트 최적화 시작 · 대기 ${pendingRouteStoreCount}곳`}
                   </button>
                 ) : null}
-                <label className="relative block">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    className="maju-search-field h-10 w-full bg-slate-50 pl-9 pr-3"
-                    onChange={(event) => setRouteQuery(event.target.value)}
-                    placeholder="경유 거래처 검색..."
-                    value={routeQuery}
-                  />
-                </label>
+                <SearchInput aria-label="경유 거래처 검색" className="w-full max-sm:min-h-11" onChange={setRouteQuery} placeholder="경유 거래처 검색..." value={routeQuery} />
                 <div className="flex flex-wrap gap-2">
                   <button className="maju-button-primary h-8 disabled:cursor-not-allowed disabled:bg-slate-300" disabled={!isVehicleScoped} onClick={selectDefaultRouteStores} type="button">
                     기본 15곳 선택
@@ -907,10 +890,7 @@ export function TodayCourseView({
                     })}
                   </div>
                 ) : (
-                  <div className="maju-empty-state bg-white p-4">
-                    <p className="text-sm font-semibold text-slate-700">선택한 경유지가 없습니다.</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">아래 거래처 목록에서 추가 버튼을 누르세요.</p>
-                  </div>
+                  <EmptyState className="bg-white" message="선택한 경유지가 없습니다." description="아래 거래처 목록에서 추가 버튼을 누르세요." />
                 )}
                 {inactiveSelectedCount ? (
                   <div className="mt-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-500 ring-1 ring-inset ring-slate-200">
@@ -935,7 +915,7 @@ export function TodayCourseView({
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold text-slate-950">구간별 예상 유류비</p>
                       <span className="text-xs font-medium text-slate-500">
-                        {courseFuelPriceReady ? `${courseFuelType === "gasoline" ? "휘발유" : "경유"} ${courseFuelPricePerLiter.toLocaleString()}원/L 기준` : "유가 정보를 불러오는 중"}
+                        {courseFuelPriceReady ? `${courseFuelType === "gasoline" ? "휘발유" : "경유"} ${formatWon(courseFuelPricePerLiter)}/L 기준` : "유가 정보를 불러오는 중"}
                       </span>
                     </div>
                     <div className="space-y-1.5">
@@ -949,7 +929,7 @@ export function TodayCourseView({
                             </span>
                             <span className="shrink-0 text-xs font-bold text-slate-500">{leg.distanceKm.toLocaleString()}km</span>
                             <span className="shrink-0 text-xs font-semibold text-teal-700">
-                              {courseFuelPriceReady ? `${routeSequenceLegFuelCosts[index]?.toLocaleString() || 0}원` : "-"}
+                              {courseFuelPriceReady ? formatWon(routeSequenceLegFuelCosts[index] ?? 0) : "-"}
                             </span>
                           </div>
                         );
@@ -958,7 +938,7 @@ export function TodayCourseView({
                     <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
                       <span className="text-xs font-semibold text-slate-950">구간 합계</span>
                       <span className="text-xs font-semibold text-teal-700">
-                        {courseFuelPriceReady ? `${routeSequenceFuelCostWon.toLocaleString()}원` : "유가 정보를 불러오는 중"}
+                        {courseFuelPriceReady ? formatWon(routeSequenceFuelCostWon) : "유가 정보를 불러오는 중"}
                       </span>
                     </div>
                   </div>
@@ -1031,12 +1011,7 @@ export function TodayCourseView({
                   );
                     })
                   ) : (
-                    <div className="maju-empty-state bg-white p-4">
-                      <p className="text-sm font-semibold text-slate-700">{isVehicleScoped ? "조건에 맞는 거래처가 없습니다." : "배송차를 먼저 선택하세요."}</p>
-                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">
-                        {isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."}
-                      </p>
-                    </div>
+                    <EmptyState className="bg-white" message={isVehicleScoped ? "조건에 맞는 거래처가 없습니다." : "배송차를 먼저 선택하세요."} description={isVehicleScoped ? "검색어를 조정하거나 다른 배송차를 선택하세요." : "왼쪽 배송차 목록에서 1호차, 2호차처럼 실제 차량을 선택하면 경유지를 고를 수 있습니다."} />
                   )}
                 </div>
               </div>
@@ -1221,7 +1196,7 @@ function DeliveryProofPanel({
         {isSaving ? "사진·메모 전송 중" : saveFailed ? "사진·메모 다시 전송" : "배송완료 저장"}
       </button>
       {saveMessage ? (
-        <p aria-live="polite" className={`mt-2 rounded-md px-2 py-1.5 text-xs font-bold leading-5 ${saveFailed ? "bg-destructive/10 text-destructive" : "text-slate-700"}`}>{saveMessage}</p>
+        <Notice className="mt-2" kind={saveFailed ? "error" : "success"}>{saveMessage}</Notice>
       ) : null}
       {proofs.length ? (
         <div className="mt-3 space-y-2">

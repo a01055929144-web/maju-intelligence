@@ -1,5 +1,6 @@
 "use client";
 
+import { Notice, type NoticeKind } from "@/components/ui/notice";
 import { useState } from "react";
 import { Camera, CheckCircle2, Copy, MapPinned, Phone } from "lucide-react";
 
@@ -15,15 +16,15 @@ export function MobileRouteActionPanel({
   durationMinutes?: number;
   phone?: string;
 }) {
-  const [copyMessage, setCopyMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState<{ kind: NoticeKind; text: string } | null>(null);
   const mapUrl = `https://map.kakao.com/link/search/${encodeURIComponent(address || customerName)}`;
 
   async function copyAddress() {
     try {
       await navigator.clipboard.writeText(address || customerName);
-      setCopyMessage("주소를 복사했습니다.");
+      setCopyMessage({ kind: "success", text: "주소를 복사했습니다." });
     } catch {
-      setCopyMessage("복사 권한을 받을 수 없습니다.");
+      setCopyMessage({ kind: "error", text: "복사 권한을 받을 수 없습니다." });
     }
   }
 
@@ -69,7 +70,7 @@ export function MobileRouteActionPanel({
           배송 완료
         </a>
       </div>
-      {copyMessage ? <p className="mobile-accent mt-2 text-xs font-bold">{copyMessage}</p> : null}
+      {copyMessage ? <Notice className="mt-2" kind={copyMessage.kind}>{copyMessage.text}</Notice> : null}
     </section>
   );
 }

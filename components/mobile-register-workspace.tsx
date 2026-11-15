@@ -12,9 +12,11 @@ import {
   Phone,
   Plus,
   Save,
-  Search,
   Store
 } from "lucide-react";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { Notice } from "@/components/ui/notice";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
@@ -200,21 +202,19 @@ export function MobileRegisterWorkspace() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
-          <Search className="h-4 w-4 shrink-0 text-slate-400" />
-          <input
-            className="h-11 w-full bg-transparent text-sm font-bold outline-none placeholder:text-slate-400"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="매장명·지역 검색 (예: 성수동 카페)"
-            value={query}
-          />
-        </label>
+        <SearchInput
+          aria-label="매장명·지역 검색"
+          className="min-h-11 w-full"
+          onChange={setQuery}
+          placeholder="매장명·지역 검색 (예: 성수동 카페)"
+          value={query}
+        />
 
         {query.trim().length >= 2 ? (
           <div className="mt-3 space-y-2">
-            {isSearching ? <p className="text-xs font-bold text-slate-400">검색 중...</p> : null}
-            {!isSearching && searchMessage ? <p className="text-xs font-bold text-rose-600">{searchMessage}</p> : null}
-            {!isSearching && !searchMessage && !results.length ? <p className="text-xs font-bold text-slate-400">결과 없음</p> : null}
+            {isSearching ? <LoadingState bare label="검색 중..." /> : null}
+            {!isSearching && searchMessage ? <ErrorState bare message={searchMessage} /> : null}
+            {!isSearching && !searchMessage && !results.length ? <EmptyState bare message="결과 없음" /> : null}
             {results.map((result) => (
               <button
                 className="flex min-h-[72px] w-full items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-200 hover:bg-teal-50"
@@ -286,7 +286,7 @@ function MobileRegisterForm({
           <FormField icon={Store} label="업종" onChange={(value) => onChange({ ...draft, industry: value })} placeholder="예: 한식, 카페" value={draft.industry} />
         </div>
 
-        {saveError ? <p className="mt-3 text-xs font-bold text-rose-600">{saveError}</p> : null}
+        {saveError ? <Notice className="mt-3" kind="error">{saveError}</Notice> : null}
 
         {duplicateMatches ? (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -514,13 +514,10 @@ function AttachmentSlotUploader({
       </label>
 
       {saveState === "saved" ? (
-        <p className="mt-2 flex items-center gap-1 text-xs font-bold text-teal-700">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          업로드되었습니다.
-        </p>
+        <Notice className="mt-2" kind="success">업로드되었습니다.</Notice>
       ) : null}
-      {saveState === "error" ? <p className="mt-2 text-xs font-bold text-rose-600">{errorMessage}</p> : null}
-      {loadState === "loading" && !existingItems.length ? <p className="mt-3 text-xs font-bold text-slate-400">기존 자료를 불러오는 중...</p> : null}
+      {saveState === "error" ? <Notice className="mt-2" kind="error">{errorMessage}</Notice> : null}
+      {loadState === "loading" && !existingItems.length ? <LoadingState bare className="mt-3" label="기존 자료를 불러오는 중..." /> : null}
 
       {existingItems.length ? (
         <div className="mt-3 grid gap-2">
