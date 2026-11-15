@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
+import { planMarkers } from "@/domains/route/markers";
 import { loadGeocodeCache, saveGeocodeCache, type GeocodePoint } from "@/components/map/geocode-cache";
 import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
 import { customerMarkerLabel, isCompactCustomerLevel } from "@/components/map/customer-marker-label";
@@ -140,16 +141,18 @@ type KakaoLatLng = {
 
 type KakaoLatLngBounds = {
   extend: (position: KakaoLatLng) => void;
+  getNorthEast?: () => KakaoLatLng;
   getSouthWest: () => KakaoLatLng;
 };
 
 type KakaoMap = {
+  getBounds?: () => KakaoLatLngBounds;
   getCenter: () => KakaoLatLng;
   getLevel: () => number;
   relayout?: () => void;
   setBounds: (bounds: KakaoLatLngBounds, ...padding: number[]) => void;
   setCenter: (position: KakaoLatLng) => void;
-  setLevel: (level: number) => void;
+  setLevel: (level: number, options?: { anchor?: KakaoLatLng; animate?: boolean }) => void;
 };
 
 type KakaoCustomOverlay = {
@@ -402,6 +405,9 @@ export function KakaoAddressMap({
   const layerOverlaysRef = useRef<KakaoCustomOverlay[]>([]);
   const layerPolylinesRef = useRef<KakaoPolyline[]>([]);
   const zoomHandlerRef = useRef<(() => void) | null>(null);
+  // M5 리드 묶음: idle 때 다시 계산하는 함수·그 리스너·지금 떠 있는 묶음 풍선. placeLayers가 매번 걷어낸다.
+  const clusterApplyRef = useRef<(() => void) | null>(null);
+  const clusterOverlaysRef = useRef<KakaoCustomOverlay[]>([]);
   const fittedOnceRef = useRef(false);
   // 차량 effect가 "마지막으로 처리한" mapBootId를 기억해뒀다가, 이 값과 최신 mapBootId가 다르면
   // (지도가 그 사이에 다시 만들어졌으면) 이전 오버레이 참조를 비웁니다.
@@ -554,6 +560,12 @@ export function KakaoAddressMap({
         // 이전 배치(마커·길 선·줌 리스너)를 걷어내고 새로 깐다 — 지도 인스턴스와 보던 위치는 그대로(CC-42a, R1).
         layerOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
         layerOverlaysRef.current = [];
+        clusterOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+        clusterOverlaysRef.current = [];
+        if (clusterApplyRef.current) {
+          kakao.maps.event.removeListener(map, "idle", clusterApplyRef.current);
+          clusterApplyRef.current = null;
+        }
         layerPolylinesRef.current.forEach((line) => line.setMap(null));
         layerPolylinesRef.current = [];
         if (zoomHandlerRef.current) {
@@ -748,9 +760,36 @@ export function KakaoAddressMap({
           });
         };
 
+        // M5: 리드가 많으면 멀리서는 칸별 묶음 풍선 하나로, 화면 밖 리드는 그리지 않는다. 거래처는 그대로. 선택·강조한 리드는 항상 낱개.
+        const applyLeadClusters = () => {
+          const view = map.getBounds?.();
+          const sw = view?.getSouthWest();
+          const ne = view?.getNorthEast?.();
+          if (!sw || !ne) return;
+          const points = leadOverlayEntriesRef.current.flatMap((entry) => {
+            const position = entry.marker.id ? markerPositionsRef.current.get(entry.marker.id) : undefined;
+            return entry.marker.id && position ? [{ id: entry.marker.id, lat: position.getLat(), lng: position.getLng() }] : [];
+          });
+          const plan = planMarkers(points, map.getLevel(), { east: ne.getLng(), north: ne.getLat(), south: sw.getLat(), west: sw.getLng() }, raisedZIdsRef.current);
+          clusterOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+          clusterOverlaysRef.current = [];
+          leadOverlayEntriesRef.current.forEach((entry) => {
+            if (entry.marker.id) entry.overlay.setMap(plan.single.has(entry.marker.id) ? map : null);
+          });
+          plan.clusters.forEach((cluster) => {
+            const position = new kakao.maps.LatLng(cluster.lat, cluster.lng);
+            const bubble = createClusterElement(cluster.ids.length);
+            bubble.addEventListener("click", () => map.setLevel(Math.max(1, map.getLevel() - 2), { anchor: position }));
+            clusterOverlaysRef.current.push(new kakao.maps.CustomOverlay({ content: bubble, map, position, yAnchor: 0.5, zIndex: markerZIndex("lead") }));
+          });
+        };
+
         if (ignore) return;
         kakao.maps.event.addListener(map, "zoom_changed", onZoomChanged);
         zoomHandlerRef.current = onZoomChanged;
+        kakao.maps.event.addListener(map, "idle", applyLeadClusters);
+        clusterApplyRef.current = applyLeadClusters;
+        applyLeadClusters();
 
         if (shouldShowMarkerGeocodingFailure({
           found,
@@ -1146,6 +1185,7 @@ export function KakaoAddressMap({
     raisedZIdsRef.current.forEach((id) => { if (!want.has(id)) setRaised(id, false); });
     want.forEach((id) => setRaised(id, true));
     raisedZIdsRef.current = want;
+    clusterApplyRef.current?.(); // 선택·호버한 리드가 묶음 안에 있었다면 낱개로 꺼낸다.
   }, [focusedMarkerId, hoveredMarkerId, status, layerId]);
 
   // M2b 번호 핀: 번호가 바뀌면 이미 그린 마커 DOM에 배지만 붙였다 뗀다(지도·마커 재배치 없음).
@@ -1891,6 +1931,20 @@ function createMarkerOverlay(marker: KakaoMapMarker, compactLead = false, compac
       ${label} · ${name}${completedBadge}
     </button>
   `);
+}
+
+/** 묶음 풍선: 안의 리드 수. 누르면 두 단계 확대(호출하는 쪽에서 click 연결). */
+function createClusterElement(count: number) {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.textContent = count > 999 ? "999+" : String(count);
+  element.title = `리드 ${count.toLocaleString()}곳 · 누르면 확대`;
+  element.setAttribute("aria-label", `리드 ${count.toLocaleString()}곳 묶음, 누르면 확대`);
+  Object.assign(element.style, {
+    alignItems: "center", background: "#334155", border: "2px solid #fff", borderRadius: "9999px", boxShadow: "0 2px 6px rgba(15,23,42,.35)",
+    color: "#fff", cursor: "pointer", display: "flex", font: "800 12px sans-serif", height: "34px", justifyContent: "center", minWidth: "34px", padding: "0 6px"
+  });
+  return element;
 }
 
 function htmlToElement(html: string) {
