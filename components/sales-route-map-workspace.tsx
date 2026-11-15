@@ -42,8 +42,8 @@ import {
   MessageCircle,
   MessageSquareText,
   Navigation,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Phone,
   Plus,
   Radar,
@@ -1473,13 +1473,14 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const selectedVehicle = deliveryVehicles.find((vehicle) => vehicle.id === vehicleFilterId);
   const isVehicleFiltered = vehicleFilterId !== "all";
   const selectedVehicleLabel = selectedVehicle ? selectedVehicle.name : "전체 거래처";
-  // 시안 ⑫ 격자: 왼쪽(담당자 250px) · 지도 · 오른쪽(목록 340px)이 겹치지 않고 붙어 있습니다.
+  // 시안 ⑫ 격자: 왼쪽(목록 340px) · 지도 · 오른쪽(담당자 250px)이 겹치지 않고 붙어 있습니다.
   const mapLeftPanelVisible = (mapPanelMode === "split" || mapPanelMode === "driver") && !leftCollapsed;
   const mapLeftPanelMini = (mapPanelMode === "split" || mapPanelMode === "driver") && leftCollapsed;
   const mapRightPanelVisible =
     searchTabOpen || ((mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead") && !rightCollapsed);
-  const mapLeftInsetClass = mapLeftPanelMini ? "lg:left-14" : !mapLeftPanelVisible ? "lg:left-0" : mapPanelMode === "split" ? "lg:left-[250px]" : "lg:left-[320px] xl:left-[360px]";
-  const mapRightInsetClass = mapRightPanelVisible ? "lg:right-[340px]" : "lg:right-0";
+  // 11/15 대표: PC에서는 왼쪽 = 거래처·신규·영업 목록(340px), 오른쪽 = 담당자·차량. 모바일은 위에서 아래 순서 그대로.
+  const mapLeftInsetClass = mapRightPanelVisible ? "lg:left-[340px]" : "lg:left-0";
+  const mapRightInsetClass = mapLeftPanelMini ? "lg:right-14" : !mapLeftPanelVisible ? "lg:right-0" : mapPanelMode === "split" ? "lg:right-[250px]" : "lg:right-[320px] xl:right-[360px]";
   // 레이어 바·조건 요약은 지도 칸(패널 사이) 안에 있으므로 패널 폭과 무관하게 지도 칸 기준 왼쪽 12px입니다.
   const mapOverlayLeftClass = "lg:left-3";
   // 시안 ⑫ 오른쪽 목록 탭(신규 · 영업 · 거래처). 3분할이든 지도+목록이든 같은 탭을 씁니다.
@@ -3070,7 +3071,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             className={`max-h-[55vh] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:max-h-none lg:flex-col lg:bg-white ${
               mapPanelMode !== "driver" && mapPanelMode !== "split"
                 ? "hidden"
-                : `flex lg:bottom-0 lg:left-0 lg:top-0 lg:border-0 lg:border-r lg:border-slate-200 ${
+                : `flex lg:bottom-0 lg:right-0 lg:top-0 lg:border-0 lg:border-l lg:border-slate-200 ${
                     leftCollapsed ? "lg:w-14" : mapPanelMode === "split" ? "lg:w-[250px]" : "lg:w-[320px] xl:w-[360px]"
                   }`
             }`}
@@ -3147,11 +3148,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:max-h-none lg:flex-col lg:bg-white ${
               searchTabOpen
-                ? "flex lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200"
+                ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200"
                 : mapPanelMode === "split"
-                ? `hidden lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200 ${rightCollapsed ? "" : "lg:flex"}`
+                ? `hidden lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200 ${rightCollapsed ? "" : "lg:flex"}`
                 : mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
-                  ? "flex lg:bottom-0 lg:right-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-l lg:border-slate-200"
+                  ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200"
                   : "hidden"
             }`}
           >
@@ -3849,7 +3850,7 @@ function DeliveryAssignmentPanel({
           title="펼치기"
           type="button"
         >
-          <PanelLeftOpen className="h-3.5 w-3.5" />
+          <PanelRightOpen className="h-3.5 w-3.5" />
         </button>
         {/* 시안 ⑫: 접힌 왼쪽 칸은 담당자·차량을 44px 아이콘 버튼으로 세로로 보여줍니다. */}
         {[{ id: "all", label: "전체", short: "전체" }, ...vehicles.filter((vehicle) => !vehicle.isUnassigned).map((vehicle) => ({ id: vehicle.id, label: `${vehicle.name} · ${vehicle.driver}`, short: vehicle.name.replace(/호차$/, "") }))].map((item) => (
@@ -3889,7 +3890,7 @@ function DeliveryAssignmentPanel({
           title="접기"
           type="button"
         >
-          <PanelLeftClose className="h-3.5 w-3.5" />
+          <PanelRightClose className="h-3.5 w-3.5" />
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-bold text-slate-950">담당자 · 차량</p>

@@ -9,8 +9,8 @@ import {
   Clock,
   Loader2,
   Navigation,
-  PanelRightClose,
-  PanelRightOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radar,
   Store,
   ArrowLeft,
@@ -86,14 +86,14 @@ export function StoreManagementPanel({
   }, [selectedStoreId]);
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-r border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="거래처 목록 패널 펼치기"
           className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelRightOpen className="h-3.5 w-3.5" />
+          <PanelLeftOpen className="h-3.5 w-3.5" />
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Store className="h-4 w-4 text-slate-500" />
@@ -106,7 +106,7 @@ export function StoreManagementPanel({
   }
 
   return (
-    <aside className="h-full min-h-0 border-l border-slate-200/80 bg-white">
+    <aside className="h-full min-h-0 border-r border-slate-200/80 bg-white">
       <div className="flex h-full min-h-0 flex-col">
         {tabs ? (
           <>
@@ -139,7 +139,7 @@ export function StoreManagementPanel({
               onClick={onToggleCollapsed}
               type="button"
             >
-              <PanelRightClose className="h-4 w-4" />
+              <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
         )}
@@ -290,14 +290,14 @@ export function LeadListPanel({
   };
   if (collapsed) {
     return (
-      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-l border-slate-200/80 bg-white px-1.5 py-2">
+      <aside className="flex min-h-0 items-center justify-center gap-1.5 border-r border-slate-200/80 bg-white px-1.5 py-2">
         <button
           aria-label="리드 목록 패널 펼치기"
           className="maju-button-secondary h-8 w-8 shrink-0 px-0"
           onClick={onToggleCollapsed}
           type="button"
         >
-          <PanelRightOpen className="h-3.5 w-3.5" />
+          <PanelLeftOpen className="h-3.5 w-3.5" />
         </button>
         <span className="relative inline-flex shrink-0" title={title}>
           <Radar className="h-4 w-4 text-teal-700" />
@@ -324,7 +324,7 @@ export function LeadListPanel({
               onClick={onToggleCollapsed}
               type="button"
             >
-              <PanelRightClose className="h-4 w-4" />
+              <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
         )}
