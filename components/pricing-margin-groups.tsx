@@ -4,7 +4,6 @@ import type { MarginGroup, PriceItem, PriceState } from "../domains/pricing/pric
 import type { PricingCommand, PricingBulkCommand } from "../application/pricing/manage-price-sheets";
 import { filterMarginCategories, marginCategoryOptions, marginGroupSummary } from "./pricing-margin-group-options";
 import { Button } from "./ui/button";
-import { useConfirm } from "./ui/confirm-dialog";
 import { SearchInput } from "./ui/search-input";
 import { ErrorState, LoadingState } from "./ui/state";
 
@@ -14,7 +13,6 @@ type Props = { companyId: string; state: PriceState; busy: boolean; send: (comma
 const input = "min-h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-3 text-sm";
 
 export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMessage, onError }: Props) {
-  const { confirm, confirmDialog } = useConfirm();
   const [items, setItems] = useState<PriceItem[] | null>(null), [loading, setLoading] = useState(false), [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0), [id, setId] = useState(""), [name, setName] = useState(""), [margin, setMargin] = useState("12"), [rounding, setRounding] = useState("10");
   const [selected, setSelected] = useState<string[]>([]), [query, setQuery] = useState(""), [levels, setLevels] = useState(["", "", ""]);
@@ -97,7 +95,9 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
     if (!trimmed || margin === "" || !Number.isFinite(rate) || rate < 0 || rate > 1000 || Math.abs(rate * 100 - Math.round(rate * 100)) > 1e-8) { onError("이름과 0~1000% 마진율(소수 둘째 자리까지)을 확인해 주세요."); return; }
     if (selected.some(category => !options.some(option => option.path === category))) { onError("선택한 분류가 변경됐습니다. 목록을 다시 확인하고 선택해 주세요."); return; }
     const moved = selected.filter(category => state.categories.some(link => link.category === category && link.groupId !== id));
-    if (moved.length && !(await confirm({ title: "마진 그룹 연결 변경", body: `${moved.length}개 분류의 기존 그룹 연결을 이 그룹으로 바꿀까요? 상품의 분류 자체는 바뀌지 않습니다.`, confirmLabel: "연결 변경", tone: "default" }))) return;
+    // Existing document-recalculation flows accept this browser dialog before the save request.
+    // Keep this one confirmation native until that interaction contract can migrate with its owner.
+    if (moved.length && !window.confirm(`${moved.length}개 분류의 기존 그룹 연결을 이 그룹으로 바꿀까요? 상품의 분류 자체는 바뀌지 않습니다.`)) return;
     onBusy(true); onError(""); onMessage(""); setSteps(["저장 중", "대기", "대기"]);
     let stage = 0, completed = 0, target = id;
     try {
@@ -130,7 +130,6 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
   }
 
   return <section aria-label="마진 그룹 만들기·수정" className="min-w-0 space-y-4 text-sm">
-    {confirmDialog}
     <div className="space-y-2"><div><h3 className="font-bold">마진 그룹 선택</h3><p className="text-slate-600">기존 그룹을 고쳐 쓰거나 새 그룹을 만드세요.</p></div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <Button className="h-auto min-h-24 flex-col items-start justify-center whitespace-normal px-3 py-3 text-left" disabled={busy || Boolean(uncertain)} onClick={() => selectGroup()} variant={!id ? "accent" : "outline"} type="button">
