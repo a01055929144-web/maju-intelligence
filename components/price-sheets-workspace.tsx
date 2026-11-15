@@ -15,6 +15,9 @@ import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
 import { buildMarginTree } from "@/domains/pricing/margin-tree";
 import { splitHidden } from "@/domains/pricing/price-health";
 import { toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
+import { formatWon } from "@/domains/shared/money";
+import { Notice } from "./ui/notice";
+import { ErrorState, LoadingState } from "./ui/state";
 export { marginSource } from "./pricing-margin-group-options";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
@@ -84,13 +87,13 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     try { return { cost: 10000, price: calculatePrice(10000, margin, rounding) }; } catch { return null; }
   }, [defaultMargin, defaultRounding]);
 
-  if (!state) return <div className="space-y-3">{error ? <p className="text-red-700" role="alert">{error}</p> : <p role="status">불러오는 중…</p>}</div>;
+  if (!state) return <div className="space-y-3">{error ? <ErrorState message={error} /> : <LoadingState label="불러오는 중…" />}</div>;
 
   const zeroMargin = state.defaultMargin === 0;
   return <div className="space-y-4" aria-busy={busy}>
-    {error && <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-    {message && <p role="status" className="flex flex-wrap items-center gap-2 rounded border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900">{message}
-      {undoable && state.lastBatch && !state.restored ? <button className="rounded border border-teal-700 px-2 py-1 text-xs font-bold" disabled={busy} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">되돌리기</button> : null}</p>}
+    {error && <ErrorState message={error} />}
+    {message && <Notice kind="success">{message}
+      {undoable && state.lastBatch && !state.restored ? <button className="rounded border border-teal-700 px-2 py-1 text-xs font-bold" disabled={busy} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">되돌리기</button> : null}</Notice>}
 
     {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
     {state.pendingCount > 0 || (state.lastBatch && !state.restored) ? <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -115,7 +118,7 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
         <div className="flex flex-wrap gap-1.5">{[5, 10, 15, 20, 25, 30].map((n) => <button className={`rounded-full px-3 py-1.5 text-sm font-bold ${Number(defaultMargin) === n ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={n} onClick={() => setDefaultMargin(String(n))} type="button">{n}%</button>)}</div>
         <button className="h-10 rounded-md bg-teal-700 px-4 text-sm font-black text-white disabled:bg-slate-300" disabled={busy || defaultMargin === ""} type="submit">저장하고 판매가 반영</button>
       </form> : null}
-      {(showDefault || zeroMargin) && sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{sample.cost.toLocaleString()}원</strong> → 판매가 <strong className="text-teal-800">{sample.price.toLocaleString()}원</strong> (이익 {(sample.price - sample.cost).toLocaleString()}원)</p> : null}
+      {(showDefault || zeroMargin) && sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{formatWon(sample.cost)}</strong> → 판매가 <strong className="text-teal-800">{formatWon(sample.price)}</strong> (이익 {formatWon(sample.price - sample.cost)})</p> : null}
     </section>
 
     <PricingSalesPriceTable busy={busy} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(splitHidden(allItems ?? state.items).visible, state, folderOrder)} />

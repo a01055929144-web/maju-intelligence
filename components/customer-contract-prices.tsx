@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SalesQuoteAcceptButton } from "@/components/sales-quote-accept-button";
 import type { CustomerContractPrice, PendingAcceptedQuote } from "@/lib/store";
+import { formatWon } from "@/domains/shared/money";
 
 export function CustomerContractPrices({ customerId }: { customerId: string }) {
   const [items, setItems] = useState<CustomerContractPrice[]>([]);
@@ -80,7 +81,7 @@ export function CustomerContractPrices({ customerId }: { customerId: string }) {
               <tr className="border-b border-slate-100" key={item.id}>
                 <td className="py-3 font-semibold">{item.productCode || "코드 미정"} · {item.productName}</td>
                 <td>{item.salesUnit}</td>
-                <td className="text-right font-bold">{item.unitPrice.toLocaleString()}원</td>
+                <td className="text-right font-bold">{formatWon(item.unitPrice)}</td>
                 <td>{item.taxType === "taxable" ? "과세" : "면세"}</td>
                 <td>{item.effectiveFrom} ~ {item.effectiveUntil || "현재"}</td>
                 <td>{item.sourceQuoteId ? "견적" : "수동"}</td>

@@ -2,6 +2,8 @@
 import { formatWon } from "@/domains/shared/money";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lastDispatchLabel, type CatalogLine } from "@/domains/pricing/storefront-catalog";
+import { SearchInput } from "@/components/ui/search-input";
+import { ErrorState } from "@/components/ui/state";
 
 // CC-36a: 매장 주문 탭의 "전체 상품"(읽기 전용, 주문은 36c). 가격은 서버가 준 값만 보여 준다.
 export type CatalogPage = { lines: CatalogLine[]; page: number; hasMore: boolean; marketPriceNotice: string };
@@ -54,14 +56,14 @@ export function StorefrontCatalogPanel({ token, initial }: { token: string; init
 
   return <section aria-label="전체 상품" className="space-y-3">
     <div className="flex flex-wrap items-center gap-2">
-      <input aria-label="상품 검색" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm" onChange={(e) => setQ(e.target.value)} placeholder="상품 이름 검색" type="search" value={q} />
+      <SearchInput aria-label="상품 검색" className="min-w-0 flex-1" onChange={setQ} placeholder="상품 이름 검색" value={q} />
       <div aria-label="보기" className="inline-flex overflow-hidden rounded-lg border border-slate-300 text-sm font-bold" role="group">{(["cards", "table"] as const).map((v) => <button aria-pressed={view === v} className={`min-h-[44px] px-3 ${view === v ? "bg-slate-800 text-white" : "bg-white text-slate-600"}`} key={v} onClick={() => setView(v)} type="button">{v === "cards" ? "카드" : "표"}</button>)}</div>
     </div>
     {categories.length > 1 ? <div aria-label="분류" className="flex flex-wrap gap-1.5" role="group">
       <button aria-pressed={category === ""} className={`min-h-9 rounded-full border px-3 text-xs font-bold ${category === "" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 text-slate-700"}`} onClick={() => setCategory("")} type="button">전체</button>
       {categories.map((c) => <button aria-pressed={category === c} className={`min-h-9 rounded-full border px-3 text-xs font-bold ${category === c ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 text-slate-700"}`} key={c} onClick={() => setCategory(c)} type="button">{c}</button>)}
     </div> : null}
-    {error ? <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
+    {error ? <ErrorState message={error} /> : null}
     <p className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600" role="status">전체 상품 주문은 준비 중입니다. 지금은 가격만 확인할 수 있습니다.</p>
     <ul className={view === "table" ? "grid gap-1" : "grid gap-2 md:grid-cols-2 xl:grid-cols-3"}>{shown.map((line) => <li className={`rounded-lg border border-slate-200 bg-white p-3 ${view === "table" ? "md:grid md:grid-cols-[minmax(0,1fr)_260px] md:items-center md:gap-3" : ""}`} key={line.productId}>
       <div className="min-w-0"><p className="truncate font-semibold">{line.name}</p><p className="truncate text-xs text-slate-500">{[line.brand, line.spec, line.unit].filter(Boolean).join(" · ")}</p></div>
