@@ -1,5 +1,7 @@
 "use client";
-import { formatMoneyInput } from "@/domains/shared/money";
+import { formatMoneyInput, formatWon } from "@/domains/shared/money";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Notice } from "@/components/ui/notice";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
@@ -25,7 +27,7 @@ export function buildInfoCandidates(profile: Profile): Candidate[] {
   const v = profile.values || {};
   const days = Array.isArray(v.delivery_weekdays) ? (v.delivery_weekdays as number[]).filter((d) => d >= 0 && d <= 6).sort().map((d) => WEEKDAYS[d]).join("·") : "";
   const cutoff = text(v.next_day_cutoff_time).slice(0, 5);
-  const minimum = typeof v.first_order_minimum_won === "number" && v.first_order_minimum_won > 0 ? `${v.first_order_minimum_won.toLocaleString()}원` : "";
+  const minimum = typeof v.first_order_minimum_won === "number" && v.first_order_minimum_won > 0 ? formatWon(v.first_order_minimum_won) : "";
   const account = [text(v.settlement_bank), text(v.settlement_account_number), text(v.settlement_account_holder)].filter(Boolean).join(" ");
   const methods = Array.isArray(v.payment_methods) ? (v.payment_methods as string[]).join("·") : "";
   const address = [text(v.business_address), text(v.business_address_detail)].filter(Boolean).join(" ") || text(profile.company?.originAddress);
@@ -68,6 +70,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   readonly editable: boolean;
   readonly onContent: (content: DocumentContent) => void;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editing, setEditing] = useState<{ key: string; draft: Record<string, unknown> } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -102,7 +105,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     const current = latest.current;
     const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
     if (!productIds.length) { onContent({ ...current, ...(templateId ? { marginTemplateId: templateId } : { marginTemplateId: undefined }) }); return; }
-    if (!window.confirm("일반 품목의 가격을 선택한 가격 기준으로 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?")) return;
+    if (!(await confirm({ title: "가격 다시 계산", body: "일반 품목의 가격을 선택한 가격 기준으로 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?", confirmLabel: "다시 계산", tone: "default" }))) return;
     setBasisBusy(true); setMessage("");
     try {
       const response = await fetch("/api/margin-templates/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId, templateId: templateId || null, productIds: productIds.slice(0, 300) }) });
@@ -132,7 +135,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
     setStoreFound([]); setStoreQuery("");
     if (!customer) { onContent({ ...current, customerId: undefined }); setMessage("받는 매장 연결을 풀었습니다. 가격은 그대로 둡니다."); return; }
     const productIds = Array.from(new Set(current.lines.filter((line) => !line.promotionId).map((line) => line.productId)));
-    if (productIds.length && !window.confirm(`"${customer.name}" 가격으로 일반 품목 가격을 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?`)) return;
+    if (productIds.length && !(await confirm({ title: "매장 가격 적용", body: `"${customer.name}" 가격으로 일반 품목 가격을 다시 계산합니다. 직접 고친 가격도 바뀝니다. 계속할까요?`, confirmLabel: "가격 적용", tone: "default" }))) return;
     setBasisBusy(true); setMessage("");
     try {
       let prices: Record<string, number> = {}, sources: Record<string, PriceSource> = {}, gradeId: string | null = null;
@@ -321,11 +324,12 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
 
   return (
     <aside aria-label="보여줄 정보" className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 xl:sticky xl:top-24">
+      {confirmDialog}
       <div>
         <h2 className="text-sm font-black text-slate-900">보여줄 정보</h2>
         <p className="mt-0.5 text-xs text-slate-500">끌어서 위쪽·아래쪽과 순서를 바꾸세요. 문서에서 고친 값은 이 문서에만 쓰이고 회사 정보는 바뀌지 않습니다.</p>
       </div>
-      {message ? <p className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700" role="status">{message}</p> : null}
+      {message ? <Notice className="text-xs" kind="success">{message}</Notice> : null}
       {zone("header", "위쪽 — 회사명 아래")}
       {zone("footer", "아래쪽 — 주문·배송·결제")}
       {editable ? <button className="w-full rounded-lg border border-dashed border-slate-300 py-1.5 text-xs font-bold text-slate-700" onClick={addCustom} type="button">+ 기타 정보 추가</button> : null}

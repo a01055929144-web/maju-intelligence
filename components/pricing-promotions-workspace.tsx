@@ -11,6 +11,9 @@ import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 import { buildFolderTree, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
 import { audienceLabel, type Audience, type AudienceSummary, type AudienceTarget } from "@/domains/pricing/promotion-audience";
+import { formatWon } from "@/domains/shared/money";
+import { useConfirm } from "./ui/confirm-dialog";
+import { SearchInput } from "./ui/search-input";
 
 // CC-20: 행사·임박 독립 화면. 데이터·명령은 기존 pricing_promotions API(documentRequest) 그대로, DB 변경 없음.
 type Kind = "행사" | "임박";
@@ -66,8 +69,8 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
 
   const columns: CommonTableColumn<Promotion>[] = [
     { key: "name", label: "상품", value: (x) => x.displayName || x.name, sortable: true },
-    { key: "regular", label: "정상가", value: (x) => regularPrice(x), align: "right", render: (x) => { const r = regularPrice(x); return r === null ? "-" : `${r.toLocaleString()}원`; } },
-    { key: "price", label: kind === "임박" ? "처분가" : "행사가", value: (x) => x.price, align: "right", sortable: true, render: (x) => `${x.price.toLocaleString()}원` },
+    { key: "regular", label: "정상가", value: (x) => regularPrice(x), align: "right", render: (x) => { const r = regularPrice(x); return r === null ? "-" : formatWon(r); } },
+    { key: "price", label: kind === "임박" ? "처분가" : "행사가", value: (x) => x.price, align: "right", sortable: true, render: (x) => formatWon(x.price) },
     { key: "discount", label: "할인율", value: (x) => discountPercent(x), align: "right", sortable: true, render: (x) => { const d = discountPercent(x); return d === null ? "-" : `${d}%`; } },
     { key: "period", label: dateLabel, value: (x) => (kind === "임박" ? x.endsOn : `${x.startsOn} ~ ${x.endsOn}`), sortable: true },
     { key: "stock", label: "남은 수량", value: (x) => x.stock ?? "제한 없음", align: "right" },
@@ -93,6 +96,7 @@ export function PricingPromotionsWorkspace({ companyId, manager, userKey, audien
 }
 
 function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, onClose, onSaved, preset, promo }: { audienceEnabled: boolean; companyId: string; initialAudience: Audience; kind: Kind; onClose: () => void; onSaved: (text: string) => void; preset: string; promo: Promotion | null }) {
+  const { confirm, confirmDialog } = useConfirm();
   const today = koreaDay();
   const [choices, setChoices] = useState<CatalogChoice[]>([]);
   // CC-26: 상품 고르기에 분류 폴더 필터(상품관리와 같은 폴더·순서). 폴더 목록을 못 읽으면 폴더 칸만 숨기고 검색은 그대로 쓴다.
@@ -113,6 +117,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   const [gradeIds, setGradeIds] = useState<string[]>([]);
   const [grades, setGrades] = useState<Array<{ id: string; name: string }>>([]);
   const [found, setFound] = useState<Array<{ id: string; name: string }>>([]);
+  const [storeQuery, setStoreQuery] = useState("");
   const audienceCall = async (query: Record<string, string>) => {
     const res = await fetch(`/api/promotion-audience?${new URLSearchParams({ companyId, ...query })}`, { cache: "no-store" });
     const data = await res.json().catch(() => ({})) as { message?: string; templates?: Array<{ id: string; name: string }>; grades?: Array<{ id: string; name: string }>; customers?: Array<{ id: string; name: string }>; selected?: { customers: Array<{ id: string; name: string }>; templateIds: string[]; gradeIds?: string[] } | null };
@@ -126,7 +131,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
       if (data.selected) { setCustomers(data.selected.customers); setTemplateIds(data.selected.templateIds); setGradeIds(data.selected.gradeIds ?? []); }
     }).catch((e) => setError(e instanceof Error ? e.message : "노출 대상을 불러오지 못했습니다."));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const searchStores = async (q: string) => { if (!q.trim()) return setFound([]); try { setFound((await audienceCall({ q })).customers ?? []); } catch (e) { setError(e instanceof Error ? e.message : "매장을 찾지 못했습니다."); } };
+  const searchStores = async (q: string) => { setStoreQuery(q); if (!q.trim()) return setFound([]); try { setFound((await audienceCall({ q })).customers ?? []); } catch (e) { setError(e instanceof Error ? e.message : "매장을 찾지 못했습니다."); } };
   const search = async (q: string) => {
     try { setChoices((await documentRequest<{ items: CatalogChoice[] }>(companyId, "catalog", { search: q })).result.items); }
     catch (e) { setError(e instanceof Error ? e.message : "상품을 찾지 못했습니다."); }
@@ -170,7 +175,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
     finally { setBusy(false); }
   }
   async function remove() {
-    if (!promo || !window.confirm(`이 ${kind}을 삭제할까요? 이미 발행한 문서는 그대로입니다.`)) return;
+    if (!promo || !(await confirm({ title: `${kind} 삭제`, body: `이 ${kind}을 삭제합니다. 이미 발행한 문서는 그대로입니다.`, confirmLabel: "삭제", tone: "danger" }))) return;
     setBusy(true); setError("");
     try { await documentRequest(companyId, "delete-promotion", { id: promo.id, expected: promo.revision }, true); onSaved(`${kind}을 삭제했습니다.`); }
     catch (e) { setError(e instanceof Error ? e.message : "삭제하지 못했습니다."); }
@@ -178,6 +183,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   }
 
   return <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+    {confirmDialog}
     <form aria-label={`${kind} ${promo ? "수정" : "등록"}`} aria-modal="true" className="h-full w-full max-w-md space-y-3 overflow-y-auto bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void save(new FormData(e.currentTarget)); }} role="dialog">
       <h2 className="text-lg font-black">{kind} {promo ? "수정" : "등록"}</h2>
       {error ? <Notice kind="error">{error}</Notice> : null}
@@ -210,7 +216,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         <label className="flex items-center gap-2 text-sm"><input checked={aud !== "all"} name="audience" onChange={() => setAud("only")} type="radio" />특정 매장만</label>
         {aud !== "all" ? <div className="space-y-2">
           {more ? <label className="flex items-center gap-2 text-sm"><input checked={aud === "except"} onChange={(e) => setAud(e.target.checked ? "except" : "only")} type="checkbox" />고른 대상은 제외하고 나머지에 노출</label> : null}
-          <input aria-label="매장 찾기" className={field} onChange={(e) => void searchStores(e.target.value)} placeholder="매장 이름 검색" />
+          <SearchInput aria-label="매장 찾기" onChange={(value) => void searchStores(value)} placeholder="매장 이름 검색" value={storeQuery} />
           {found.length ? <ul className="max-h-32 divide-y overflow-y-auto rounded border text-sm">{found.map((c) => <li key={c.id}><button className="min-h-[36px] w-full px-2 text-left hover:bg-slate-50 disabled:text-slate-400" disabled={customers.some((x) => x.id === c.id)} onClick={() => setCustomers([...customers, c])} type="button">{c.name}</button></li>)}</ul> : null}
           <div className="flex flex-wrap gap-1.5">{customers.map((c) => <button aria-label={`${c.name} 빼기`} className="min-h-[32px] rounded-full border border-teal-700 px-2 text-xs font-bold text-teal-800" key={c.id} onClick={() => setCustomers(customers.filter((x) => x.id !== c.id))} type="button">{c.name} ✕</button>)}</div>
           {more && templates.length ? <div aria-label="카탈로그" className="flex flex-wrap gap-1.5" role="group">{templates.map((t) => <button aria-pressed={templateIds.includes(t.id)} className={`min-h-[32px] rounded-full border px-2 text-xs font-bold ${templateIds.includes(t.id) ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300"}`} key={t.id} onClick={() => setTemplateIds(templateIds.includes(t.id) ? templateIds.filter((x) => x !== t.id) : [...templateIds, t.id])} type="button">카탈로그 {t.name}</button>)}</div> : null}

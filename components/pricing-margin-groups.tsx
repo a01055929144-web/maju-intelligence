@@ -4,6 +4,8 @@ import type { MarginGroup, PriceItem, PriceState } from "../domains/pricing/pric
 import type { PricingCommand, PricingBulkCommand } from "../application/pricing/manage-price-sheets";
 import { filterMarginCategories, marginCategoryOptions, marginGroupSummary } from "./pricing-margin-group-options";
 import { Button } from "./ui/button";
+import { SearchInput } from "./ui/search-input";
+import { ErrorState, LoadingState } from "./ui/state";
 
 type Checkpoint = { id?: string; name: string; categories: string[] };
 type Props = { companyId: string; state: PriceState; busy: boolean; send: (command?: PricingCommand | PricingBulkCommand) => Promise<PriceState>;
@@ -93,6 +95,8 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
     if (!trimmed || margin === "" || !Number.isFinite(rate) || rate < 0 || rate > 1000 || Math.abs(rate * 100 - Math.round(rate * 100)) > 1e-8) { onError("이름과 0~1000% 마진율(소수 둘째 자리까지)을 확인해 주세요."); return; }
     if (selected.some(category => !options.some(option => option.path === category))) { onError("선택한 분류가 변경됐습니다. 목록을 다시 확인하고 선택해 주세요."); return; }
     const moved = selected.filter(category => state.categories.some(link => link.category === category && link.groupId !== id));
+    // Existing document-recalculation flows accept this browser dialog before the save request.
+    // Keep this one confirmation native until that interaction contract can migrate with its owner.
     if (moved.length && !window.confirm(`${moved.length}개 분류의 기존 그룹 연결을 이 그룹으로 바꿀까요? 상품의 분류 자체는 바뀌지 않습니다.`)) return;
     onBusy(true); onError(""); onMessage(""); setSteps(["저장 중", "대기", "대기"]);
     let stage = 0, completed = 0, target = id;
@@ -148,13 +152,13 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
           <label>마진율 (%)<input aria-label="그룹 마진율" className={input} type="number" min="0" max="1000" step="0.01" required value={margin} onChange={event => setMargin(event.target.value)} /></label>
           <label>끝자리 올림<select aria-label="그룹 끝자리 올림" className={input} value={rounding} onChange={event => setRounding(event.target.value)}>{[1, 10, 100].map(value => <option key={value} value={value}>{value}원</option>)}</select></label></div>
         <p className="text-slate-600">분류 연결은 전체 경로가 같은 상품에만 적용합니다. 상품 분류를 바꾸거나 상품을 이동하지 않습니다.</p>
-        <label className="block">분류 검색<input aria-label="마진 적용 분류 검색" className={input} placeholder="대·중·소 분류 이름 검색" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <label className="block">분류 검색<SearchInput aria-label="마진 적용 분류 검색" className="mt-1" inputProps={{ role: "textbox" }} placeholder="대·중·소 분류 이름 검색" value={query} onChange={setQuery} /></label>
         <div className="grid gap-2 sm:grid-cols-3">{["대분류", "중분류", "소분류"].map((label, index) => {
           const choices = Array.from(new Set(options.filter(option => levels.slice(0, index).every((value, level) => !value || option.parts[level] === value)).map(option => option.parts[index]).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko"));
           return <label key={label}>{label}<select aria-label={`마진 ${label} 필터`} className={input} value={levels[index]} onChange={event => setLevels(previous => previous.map((value, level) => level === index ? event.target.value : level > index ? "" : value))}><option value="">전체</option>{choices.map(value => <option key={value}>{value}</option>)}</select></label>;
         })}</div>
-        {loading ? <p role="status">전체 상품의 분류와 적용 수를 확인하는 중입니다.</p> : null}
-        {loadError ? <p role="alert">{loadError}</p> : null}
+        {loading ? <LoadingState bare label="전체 상품의 분류와 적용 수를 확인하는 중입니다." /> : null}
+        {loadError ? <ErrorState bare message={loadError} onRetry={() => setReload(value => value + 1)} /> : null}
         <Button disabled={busy || loading} type="button" variant="outline" onClick={() => setReload(value => value + 1)}>분류·상품 수 다시 조회</Button>
         {items && !loading && !loadError ? <div className="max-h-72 overflow-y-auto rounded border" aria-label="실제 상품 분류 선택">{visible.length ? visible.map(option => <label key={option.path} className="flex min-h-11 items-center gap-2 border-b p-2 last:border-0">
           <input aria-label={`마진 분류 ${option.path}`} type="checkbox" disabled={!option.selectable} checked={selected.includes(option.path)} onChange={event => setSelected(previous => event.target.checked ? [...previous, option.path] : previous.filter(path => path !== option.path))} />
