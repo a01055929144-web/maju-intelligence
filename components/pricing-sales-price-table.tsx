@@ -18,9 +18,10 @@ const source = (item: PriceItem, state: PriceState) => {
   return { badge: "마진", detail, tone: "bg-emerald-100 text-emerald-800", title: `${detail}${s.margin !== null ? ` ${s.margin}%` : ""} → ${item.price.toLocaleString()}원` };
 };
 
-export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, busy, run, folderTools }: {
+export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, busy, run, folderTools, catalog }: {
   items: PriceItem[]; state: PriceState; tree: MarginTreeNode[]; folder: string | null; onFolder: (path: string | null) => void;
   busy: boolean; run: (commands: Array<PricingCommand | PricingBulkCommand>, done: string, apply?: boolean) => Promise<void>; folderTools: React.ReactNode;
+  catalog?: { prices: ReadonlyMap<string, number> } | null;
 }) {
   const [chip, setChip] = useState<"changed" | "fixed" | "loss" | "low" | "hidden" | null>(null);
   // CC-40: 숨긴(비활성) 상품은 기본 목록·개수·손해 경고·일괄 대상에서 뺀다. `숨긴 상품 N` 칩에서만 본다.
@@ -63,6 +64,10 @@ export function PricingSalesPriceTable({ items, state, tree, folder, onFolder, b
           void run([{ action: "direct", productId: i.id, price }], `${i.name} 판매가를 ${price.toLocaleString()}원으로 고정했습니다.`);
         }} />
     ) },
+    ...(catalog ? [
+      { key: "catalog-price", label: "이 카탈로그 판매가", value: (i: PriceItem) => catalog.prices.get(i.id) ?? 0, align: "right" as const, sortable: true, width: 148, render: (i: PriceItem) => `${(catalog.prices.get(i.id) ?? 0).toLocaleString()}원` },
+      { key: "catalog-delta", label: "차이(%)", value: (i: PriceItem) => i.price > 0 ? ((catalog.prices.get(i.id) ?? 0) / i.price - 1) * 100 : null, align: "right" as const, sortable: true, width: 96, render: (i: PriceItem) => { const price = catalog.prices.get(i.id); if (price === undefined || i.price <= 0) return "-"; const delta = Math.round(((price / i.price) - 1) * 1000) / 10; return `${delta > 0 ? "+" : ""}${delta}%`; } },
+    ] : []),
     { key: "profit", label: "이익", value: (i) => i.price - i.cost, align: "right", sortable: true, priority: 2, width: 100, render: (i) => <span className={i.price - i.cost <= 0 ? "font-bold text-rose-700" : ""}>{(i.price - i.cost).toLocaleString()}원</span> },
     { key: "source", label: "출처", value: (i) => { const s = source(i, state); return `${s.badge} ${s.detail}`; }, priority: 3, width: 180, render: (i) => {
       const s = source(i, state);
