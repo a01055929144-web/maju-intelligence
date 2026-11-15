@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function SalesQuoteAcceptButton({
   mode = "accept",
@@ -13,13 +14,14 @@ export function SalesQuoteAcceptButton({
   quoteId: string;
 }) {
   const router = useRouter();
+  const { confirm, confirmDialog } = useConfirm();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const accept = async () => {
     const confirmation = mode === "apply"
       ? "수락된 견적의 계약 단가를 다시 반영할까요?"
       : "이 견적을 수락 처리하고 연결된 표준 품목을 거래처 계약 단가로 반영할까요?";
-    if (!window.confirm(confirmation)) return;
+    if (!(await confirm({ title: mode === "apply" ? "계약 단가 다시 반영" : "견적 수락", body: confirmation, confirmLabel: mode === "apply" ? "다시 반영" : "수락", tone: "default" }))) return;
     setPending(true);
     setMessage("");
     try {
@@ -35,5 +37,5 @@ export function SalesQuoteAcceptButton({
       setPending(false);
     }
   };
-  return <span className="inline-flex flex-col items-end gap-1"><button className="maju-button-primary min-h-9 justify-center" disabled={pending} onClick={accept} type="button">{pending ? "처리 중" : mode === "apply" ? "계약 단가 반영" : "수락 처리"}</button>{message ? <span aria-live="polite" className="max-w-52 text-right text-[11px] font-semibold text-slate-500">{message}</span> : null}</span>;
+  return <span className="inline-flex flex-col items-end gap-1">{confirmDialog}<button className="maju-button-primary min-h-9 justify-center" disabled={pending} onClick={accept} type="button">{pending ? "처리 중" : mode === "apply" ? "계약 단가 반영" : "수락 처리"}</button>{message ? <span aria-live="polite" className="max-w-52 text-right text-[11px] font-semibold text-slate-500">{message}</span> : null}</span>;
 }

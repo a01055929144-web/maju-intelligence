@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cleanCategory, splitCategory } from "@/domains/pricing/product-category";
+import { SearchInput } from "@/components/ui/search-input";
 
 /** 긴 브라우저 기본 드롭다운 대신 표 안에서 열리는 짧은 분류 검색 목록. */
 export function ProductCategoryPicker({ label, value, options, onChange }: {
@@ -28,7 +29,7 @@ export function ProductCategoryPicker({ label, value, options, onChange }: {
       <span className="min-w-0 truncate">{value ? value.replace(/ > /g, " › ") : "분류 선택"}</span><span aria-hidden="true">⌄</span>
     </button>
     {open ? <div className="mt-1 rounded-lg border border-slate-200 bg-white p-2 text-slate-900 shadow-sm">
-      <input aria-label={`${label} 검색어`} autoFocus className="maju-input h-9 w-full" onChange={(event) => setQuery(event.target.value)} placeholder="분류 이름 검색" value={query} />
+      <SearchInput aria-label={`${label} 검색어`} inputProps={{ autoFocus: true, role: "textbox" }} onChange={setQuery} placeholder="분류 이름 검색" size="sm" value={query} />
       {!normalized && parent ? <div className="mt-2 flex items-center justify-between gap-2 text-xs"><button className="text-teal-700 underline" onClick={() => setParent(splitCategory(parent).slice(0, -1).join(" > "))} type="button">← 이전 단계</button><span className="truncate text-slate-600">{parent.replace(/ > /g, " › ")}</span></div> : null}
       <div className="mt-1 max-h-48 overflow-y-auto">
         {choices.map((path) => <button className="flex min-h-11 w-full items-center justify-between gap-2 rounded px-2 text-left hover:bg-teal-50" key={path} onClick={() => enter(path)} title={path} type="button"><span className="min-w-0 truncate">{normalized ? path.replace(/ > /g, " › ") : splitCategory(path).at(-1)}</span>{hasChildren(path) ? <span aria-hidden="true">›</span> : null}</button>)}

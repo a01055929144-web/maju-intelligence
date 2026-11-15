@@ -5,6 +5,8 @@ import { documentRequest } from "@/lib/pricing/document-client";
 import { koreaDay, type CatalogChoice, type Promotion } from "@/domains/pricing/document";
 import { basketLineError, discountFromPrice, marginFromPrice, priceFromDiscount, quickRange, type BasketBadge } from "@/domains/pricing/promotion-basket";
 import { PricingProductPicker } from "./pricing-product-picker";
+import { SearchInput } from "./ui/search-input";
+import { ErrorState } from "./ui/state";
 
 // CC-34-2: 견적서·단가표처럼 "고르고 담기". 왼쪽 상품 고르기(문서와 같은 부품) → 오른쪽 담은 품목 표 → 한 번에 등록.
 // 저장은 품목마다 행사 1건(기존 save-promotion 그대로). 실패한 줄만 남기고 이유를 보여 준다.
@@ -85,7 +87,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
   return <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
     <section aria-label={`${kind} 상품 담기`} aria-modal="true" className="h-full w-full max-w-[1200px] space-y-3 overflow-y-auto bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()} role="dialog">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-black">{kind} 상품 담기</h2><button className="min-h-[44px] rounded-lg border px-4" onClick={onClose} type="button">닫기</button></div>
-      {error ? <p className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
+      {error ? <ErrorState message={error} /> : null}
       <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3">
         <label className="text-sm font-bold">시작<input className={`${input} ml-1 text-left`} min={today} onChange={(e) => setRange({ ...range, startsOn: e.target.value })} type="date" value={range.startsOn} /></label>
         <label className="text-sm font-bold">{dateLabel}<input className={`${input} ml-1 text-left`} min={range.startsOn} onChange={(e) => setRange({ ...range, endsOn: e.target.value })} type="date" value={range.endsOn} /></label>
@@ -101,7 +103,7 @@ export function PricingPromotionBasket({ audienceEnabled = false, companyId, kin
               <label className="flex items-center gap-1"><input checked={!onlyStores} name="basket-audience" onChange={() => setOnlyStores(false)} type="radio" />전체 매장</label>
               <label className="flex items-center gap-1"><input checked={onlyStores} name="basket-audience" onChange={() => setOnlyStores(true)} type="radio" />고른 매장만</label></div>
             {onlyStores ? <div className="space-y-1">
-              <input aria-label="대상 매장 찾기" className="h-9 w-full max-w-xs rounded-md border border-slate-300 px-2 text-sm" onChange={(e) => setStoreQuery(e.target.value)} placeholder="매장 이름 검색" value={storeQuery} />
+              <SearchInput aria-label="대상 매장 찾기" className="w-full max-w-xs" inputProps={{ role: "textbox" }} onChange={setStoreQuery} placeholder="매장 이름 검색" size="sm" value={storeQuery} />
               {storeHits.filter((h) => !stores.some((s) => s.id === h.id)).length ? <div className="flex flex-wrap gap-1">{storeHits.filter((h) => !stores.some((s) => s.id === h.id)).map((h) => <button className="rounded-full border border-slate-300 px-2 py-1 text-xs font-bold" key={h.id} onClick={() => setStores([...stores, h])} type="button">+ {h.name}</button>)}</div> : null}
               <div className="flex flex-wrap gap-1">{stores.map((s) => <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-1 text-xs font-bold text-teal-900" key={s.id}>{s.name}<button aria-label={`${s.name} 빼기`} onClick={() => setStores(stores.filter((x) => x.id !== s.id))} type="button">✕</button></span>)}{!stores.length ? <span className="text-xs text-slate-500">매장을 검색해 하나 이상 골라 주세요.</span> : null}</div>
             </div> : null}

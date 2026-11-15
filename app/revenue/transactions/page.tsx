@@ -8,6 +8,7 @@ import { SalesTransactionTable } from "@/components/sales-transaction-table";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { getSalesTransactions, type SalesTransactionSummary } from "@/lib/store";
+import { formatWon } from "@/domains/shared/money";
 
 export const dynamic = "force-dynamic";
 
@@ -170,7 +171,7 @@ export default async function RevenueTransactionsPage({
             </Badge>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4">
-            <Metric icon={Banknote} label="총 매출금액" value={`${Math.round(sales.totalAmount).toLocaleString()}원`} />
+            <Metric icon={Banknote} label="총 매출금액" value={formatWon(Math.round(sales.totalAmount))} />
             <Metric icon={ReceiptText} label="거래 행 수" value={`${sales.transactionCount.toLocaleString()}건`} />
             <Metric icon={Store} label="거래처 수" value={`${sales.customerCount.toLocaleString()}곳`} />
             <Metric icon={FileSpreadsheet} label="최근 매출일" value={sales.latestSalesDate || "-"} />
@@ -215,7 +216,7 @@ export default async function RevenueTransactionsPage({
                   <h2 className="text-lg font-black text-slate-950">거래처별 매출</h2>
                   <p className="mt-1 text-sm font-semibold text-muted-foreground">매출 기여도가 높은 거래처 순서입니다.</p>
                 </div>
-                <MiniStat label="평균 거래액" value={`${Math.round(sales.averageOrderAmount).toLocaleString()}원`} />
+                <MiniStat label="평균 거래액" value={formatWon(Math.round(sales.averageOrderAmount))} />
               </div>
             </div>
             <div className="divide-y divide-slate-100">
@@ -229,7 +230,7 @@ export default async function RevenueTransactionsPage({
                     label={customer.customerName}
                     meta={`${customer.transactionCount.toLocaleString()}건 · 최근 ${customer.latestSalesDate || "-"}`}
                     share={customer.share}
-                    value={`${Math.round(customer.totalAmount).toLocaleString()}원`}
+                    value={formatWon(Math.round(customer.totalAmount))}
                   />
                 ))
               ) : (
@@ -254,7 +255,7 @@ export default async function RevenueTransactionsPage({
                       label={product.productName}
                       meta={`${product.transactionCount.toLocaleString()}건`}
                       share={product.share}
-                      value={`${Math.round(product.totalAmount).toLocaleString()}원`}
+                      value={formatWon(Math.round(product.totalAmount))}
                     />
                   ))
                 ) : (
@@ -301,7 +302,7 @@ function RevenueDataBasisPanel({
     { label: "거래처 연결", value: `${customerCount.toLocaleString()}곳`, helper: "거래처 원장 매칭 기준" },
     { label: "품목 기준", value: `${productCount.toLocaleString()}개`, helper: "품목 이탈 분석 기준" },
     { label: "최근 매출일", value: latestSalesDate, helper: "기간 분석 기준" },
-    { label: "누적 매출", value: `${Math.round(totalAmount).toLocaleString()}원`, helper: "등급·리포트 기준" }
+    { label: "누적 매출", value: formatWon(Math.round(totalAmount)), helper: "등급·리포트 기준" }
   ];
 
   return (
