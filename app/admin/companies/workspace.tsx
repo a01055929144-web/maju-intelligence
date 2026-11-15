@@ -2,10 +2,14 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, RefreshCw, Save, Search, Send, Smartphone, Trash2, UploadCloud, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, Check, CheckCircle2, ClipboardList, Copy, Eye, EyeOff, FileSpreadsheet, KeyRound, LayoutDashboard, MapPin, Plus, ReceiptText, RefreshCw, Save, Send, Smartphone, Trash2, UploadCloud, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
 import { SortableTh } from "@/components/sortable-th";
+import { formatNumber } from "@/domains/shared/money";
 import { formatPhoneNumber } from "@/lib/phone";
 import { CompanyKindPanel } from "./company-kind-panel";
 import type { CompanyKind, DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
@@ -89,6 +93,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
   const [diagnostic, setDiagnostic] = useState<CompanyDiagnosticResult | null>(null);
   const [diagnosticError, setDiagnosticError] = useState("");
   const [diagnosing, setDiagnosing] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   const filteredCompanies = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -192,16 +197,14 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
           return `• ${company.name} · ${company.ownerName || "대표자 미등록"} · ${area} · 끝 ${lastFour}`;
         })
         .join("\n");
-      if (!window.confirm(`같은 상호명의 고객사가 이미 있습니다. 사업자등록번호가 다른 회사인지 확인해주세요.\n\n${existingSummary}\n\n계속 저장할까요?`)) return;
+      if (!(await confirm({ title: "동일 상호 확인", body: `같은 상호명의 고객사가 이미 있습니다. 사업자등록번호가 다른 회사인지 확인해주세요.\n\n${existingSummary}\n\n계속 저장할까요?`, confirmLabel: "계속 저장", tone: "default" }))) return;
     }
 
     const currentStatus = selectedCompany?.status || formBaseline.status || "active";
     const nextStatus = form.status || "active";
     if (form.id && currentStatus !== nextStatus && (nextStatus === "paused" || nextStatus === "closed")) {
       const nextStatusLabel = nextStatus === "closed" ? "탈퇴(폐쇄)" : "중지";
-      const confirmed = window.confirm(
-        `"${form.name}"의 운영상태를 "${nextStatusLabel}"로 변경하시겠습니까?\n저장 즉시 이 회사의 고객사·직원 로그인이 차단됩니다. 데이터는 삭제되지 않으며 운영상태를 다시 "운영"으로 저장하면 복구할 수 있습니다.`
-      );
+      const confirmed = await confirm({ title: "운영상태 변경", body: `"${form.name}"의 운영상태를 "${nextStatusLabel}"로 변경하시겠습니까?\n저장 즉시 이 회사의 고객사·직원 로그인이 차단됩니다. 데이터는 삭제되지 않으며 운영상태를 다시 "운영"으로 저장하면 복구할 수 있습니다.`, confirmLabel: "상태 변경", tone: "danger" });
       if (!confirmed) return;
     }
 
@@ -378,11 +381,10 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
 
   async function deleteStaffInvitationEntry(invitation: StaffInvitation) {
     if (!selectedCompany) return;
-    const confirmed = window.confirm(
-      invitation.status === "accepted"
+    const body = invitation.status === "accepted"
         ? `${invitation.employeeName || "이 직원"}의 초대 기록을 삭제하시겠습니까? 이미 가입된 직원이라 접속 권한도 함께 비활성화됩니다.`
-        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`
-    );
+        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`;
+    const confirmed = await confirm({ title: "직원 초대 삭제", body, confirmLabel: "삭제", tone: "danger" });
     if (!confirmed) return;
 
     setUpdatingStaffId(invitation.id);
@@ -427,9 +429,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
     if (!selectedCompany) return;
     if (deleteConfirmName.trim() !== selectedCompany.name.trim()) return;
 
-    const confirmed = window.confirm(
-      `정말 "${selectedCompany.name}"을(를) 완전히 삭제하시겠습니까?\n이 회사의 거래처, 매출, 업로드 이력, 직원 초대/계정, 구독 정보가 전부 영구 삭제되며 되돌릴 수 없습니다.`
-    );
+    const confirmed = await confirm({ title: "고객사 완전 삭제", body: `정말 "${selectedCompany.name}"을(를) 완전히 삭제하시겠습니까?\n이 회사의 거래처, 매출, 업로드 이력, 직원 초대/계정, 구독 정보가 전부 영구 삭제되며 되돌릴 수 없습니다.`, confirmLabel: "완전 삭제", tone: "danger" });
     if (!confirmed) return;
 
     setDeleting(true);
@@ -505,10 +505,10 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         </section>
       )}
       <div className="grid gap-3 md:grid-cols-4">
-        <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${activeCompanies.toLocaleString()}곳`} helper={`전체 ${companies.length.toLocaleString()}곳`} />
-        <AdminSummaryCard icon={Users} label="총 거래처" value={`${totalCustomers.toLocaleString()}곳`} helper="회사별 분리 저장" />
-        <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${totalSalesRows.toLocaleString()}건`} helper="거래원장 누적" />
-        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${totalUploads.toLocaleString()}회`} helper={source === "supabase" ? "저장 연결" : "저장 확인 필요"} />
+        <AdminSummaryCard icon={Building2} label="운영 고객사" value={`${formatNumber(activeCompanies)}곳`} helper={`전체 ${formatNumber(companies.length)}곳`} />
+        <AdminSummaryCard icon={Users} label="총 거래처" value={`${formatNumber(totalCustomers)}곳`} helper="회사별 분리 저장" />
+        <AdminSummaryCard icon={ReceiptText} label="매출 거래행" value={`${formatNumber(totalSalesRows)}건`} helper="거래원장 누적" />
+        <AdminSummaryCard icon={UploadCloud} label="업로드 이력" value={`${formatNumber(totalUploads)}회`} helper={source === "supabase" ? "저장 연결" : "저장 확인 필요"} />
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white">
@@ -576,18 +576,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             </Badge>
           </div>
           <div className="mt-4 flex gap-2">
-            <label className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                className="h-10 w-full rounded-md border border-input bg-white pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="회사명, 이메일 검색"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setCompanyPage(1);
-                }}
-              />
-            </label>
+            <SearchInput aria-label="회사 검색" className="flex-1" inputProps={{ role: "textbox" }} placeholder="회사명, 이메일 검색" value={query} onChange={(value) => { setQuery(value); setCompanyPage(1); }} />
             <Button type="button" onClick={startNewCompany}>
               <Plus className="h-4 w-4" />
               신규
@@ -621,7 +610,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
               </select>
             </label>
             <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-muted-foreground">
-              {companyPageStart.toLocaleString()}-{companyPageEnd.toLocaleString()} / {filteredCompanies.length.toLocaleString()}곳
+              {formatNumber(companyPageStart)}-{formatNumber(companyPageEnd)} / {formatNumber(filteredCompanies.length)}곳
             </span>
             <button
               className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -632,7 +621,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
               이전
             </button>
             <span className="text-xs font-black text-muted-foreground">
-              {currentCompanyPage.toLocaleString()} / {companyTotalPages.toLocaleString()}
+              {formatNumber(currentCompanyPage)} / {formatNumber(companyTotalPages)}
             </span>
             <button
               className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -706,10 +695,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             </div>
           ))}
           {!filteredCompanies.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
-              <p className="text-sm font-black text-slate-800">조건에 맞는 고객사가 없습니다.</p>
-              <p className="mt-1 text-xs font-bold leading-5 text-muted-foreground">검색어 또는 운영 필터를 바꾸거나 신규 고객사를 등록하세요.</p>
-            </div>
+            <EmptyState message="조건에 맞는 고객사가 없습니다." description="검색어 또는 운영 필터를 바꾸거나 신규 고객사를 등록하세요." />
           ) : null}
         </div>
       </aside>
@@ -982,9 +968,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
                     </div>
                   ))}
                   {!(selectedCompany.staffInvitations || []).length ? (
-                    <div className="rounded-md border border-dashed border-slate-200 bg-white p-4 text-sm font-bold leading-6 text-muted-foreground">
-                      아직 생성된 직원 초대가 없습니다. 배송기사 또는 영업직원을 먼저 초대하세요.
-                    </div>
+                    <EmptyState message="아직 생성된 직원 초대가 없습니다." description="배송기사 또는 영업직원을 먼저 초대하세요." />
                   ) : null}
                 </div>
               </section>
@@ -993,9 +977,9 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
 
           {selectedCompany ? (
             <div className="grid gap-3 md:grid-cols-4">
-              <DataMetric icon={Users} label="거래처" value={`${selectedCompany.customerCount.toLocaleString()}곳`} />
-              <DataMetric icon={ReceiptText} label="매출 거래" value={`${selectedCompany.salesTransactionCount.toLocaleString()}건`} />
-              <DataMetric icon={UploadCloud} label="업로드" value={`${selectedCompany.uploadCount.toLocaleString()}회`} />
+              <DataMetric icon={Users} label="거래처" value={`${formatNumber(selectedCompany.customerCount)}곳`} />
+              <DataMetric icon={ReceiptText} label="매출 거래" value={`${formatNumber(selectedCompany.salesTransactionCount)}건`} />
+              <DataMetric icon={UploadCloud} label="업로드" value={`${formatNumber(selectedCompany.uploadCount)}회`} />
               <DataMetric icon={FileSpreadsheet} label="마지막 업로드" value={selectedCompany.lastUploadAt || "-"} compact />
             </div>
           ) : null}
@@ -1190,6 +1174,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
         </form>
       </section>
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -1214,12 +1199,12 @@ function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
       ok: Boolean(company.businessRegistrationNumber)
     },
     {
-      description: company.salesAreaCount > 0 ? `직접 선택한 유효 영업 지역 ${company.salesAreaCount.toLocaleString()}곳이 설정되어 있습니다.` : "리드 수집 기준 영업 지역을 직접 선택해주세요.",
+      description: company.salesAreaCount > 0 ? `직접 선택한 유효 영업 지역 ${formatNumber(company.salesAreaCount)}곳이 설정되어 있습니다.` : "리드 수집 기준 영업 지역을 직접 선택해주세요.",
       label: "영업 지역",
       ok: company.salesAreaCount > 0
     },
     {
-      description: company.staffInvitationCount ? `직원 초대·가입 ${company.staffInvitationCount.toLocaleString()}건이 있습니다.` : "직원 초대 또는 가입이 필요합니다.",
+      description: company.staffInvitationCount ? `직원 초대·가입 ${formatNumber(company.staffInvitationCount)}건이 있습니다.` : "직원 초대 또는 가입이 필요합니다.",
       label: "직원 초대",
       ok: Boolean(company.staffInvitationCount)
     },
@@ -1229,7 +1214,7 @@ function getCompanyReadiness(company: ManagedCompanyAccount): CompanyReadiness {
       ok: Boolean(company.originAddress && company.vehicleCount > 0)
     },
     {
-      description: company.leadCount > 0 ? `첫 리드 ${company.leadCount.toLocaleString()}건이 수집되었습니다.` : "영업 지역 설정 후 첫 리드 수집을 기다려주세요.",
+      description: company.leadCount > 0 ? `첫 리드 ${formatNumber(company.leadCount)}건이 수집되었습니다.` : "영업 지역 설정 후 첫 리드 수집을 기다려주세요.",
       label: "첫 리드 수집",
       ok: company.leadCount > 0
     },
@@ -1305,7 +1290,7 @@ function CompanyFilterButton({
       onClick={onClick}
     >
       <span>{label}</span>
-      <span className={`rounded-full px-2 py-0.5 ${active ? "bg-white/20" : "bg-white text-slate-600"}`}>{count.toLocaleString()}</span>
+      <span className={`rounded-full px-2 py-0.5 ${active ? "bg-white/20" : "bg-white text-slate-600"}`}>{formatNumber(count)}</span>
     </button>
   );
 }
@@ -1435,7 +1420,7 @@ function CompanyDiagnosticPanel({ diagnostic, error, loading, onRun }: {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DiagnosticMetric label="일관성 점수" value={`${diagnostic.summary.consistencyScore}%`} />
             <DiagnosticMetric label="통과 항목" value={`${diagnostic.summary.passedChecks}/${diagnostic.summary.totalChecks}`} />
-            <DiagnosticMetric label="원장 / 대시보드" value={`${diagnostic.summary.masterCustomers.toLocaleString()} / ${diagnostic.summary.dashboardCustomers.toLocaleString()}곳`} />
+            <DiagnosticMetric label="원장 / 대시보드" value={`${formatNumber(diagnostic.summary.masterCustomers)} / ${formatNumber(diagnostic.summary.dashboardCustomers)}곳`} />
             <DiagnosticMetric label="매출 매칭률" value={`${diagnostic.summary.salesMatchRate}%`} />
           </div>
 
@@ -1465,7 +1450,7 @@ function CompanyDiagnosticPanel({ diagnostic, error, loading, onRun }: {
               ))}
             </div>
             <p className="mt-3 text-[11px] font-semibold text-muted-foreground">
-              {new Date(diagnostic.checkedAt).toLocaleString("ko-KR")} · {diagnostic.latencyMs.toLocaleString()}ms · {diagnostic.source === "supabase" ? "실서버 원장" : "원장 미연결"}
+              {new Date(diagnostic.checkedAt).toLocaleString("ko-KR")} · {formatNumber(diagnostic.latencyMs)}ms · {diagnostic.source === "supabase" ? "실서버 원장" : "원장 미연결"}
             </p>
           </div>
         </div>
@@ -1542,17 +1527,15 @@ function RecentCompanyUploadsTable({ uploads }: { readonly uploads: UploadHistor
                   {upload.status === "completed" ? "완료" : upload.status === "failed" ? "실패" : "진행중"}
                 </span>
               </td>
-              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.rows.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{formatNumber(upload.rows)}</td>
               <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.qualityScore}%</td>
-              <td className="border-b border-slate-100 px-4 py-3 text-right">{upload.duplicateCount.toLocaleString()}</td>
+              <td className="border-b border-slate-100 px-4 py-3 text-right">{formatNumber(upload.duplicateCount)}</td>
               <td className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{upload.createdAt}</td>
             </tr>
           ))}
           {!uploads.length ? (
             <tr>
-              <td className="px-4 py-8 text-center text-sm font-bold text-slate-500" colSpan={7}>
-                아직 업로드 이력이 없습니다. 거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다.
-              </td>
+              <td className="px-4 py-6" colSpan={7}><EmptyState bare message="아직 업로드 이력이 없습니다." description="거래처 마스터 또는 매출 거래내역을 업로드하면 이곳에 표시됩니다." /></td>
             </tr>
           ) : null}
         </tbody>
