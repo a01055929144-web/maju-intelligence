@@ -40,6 +40,27 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`pricing catalog tabs preserve the selected view at ${width}px`, async ({ browser }, testInfo) => {
+    const context = await authenticatedContext(browser, "customer", width, 844);
+    try {
+      const page = await context.newPage();
+      const priceState = { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50, lastBatch: null, restored: false };
+      await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: priceState }));
+      const response = await page.goto("/revenue/pricing/catalog", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.getByRole("tab", { name: "판매가" })).toHaveAttribute("aria-selected", "true");
+      await page.getByRole("tab", { name: /마진 그룹/ }).click();
+      await expect(page).toHaveURL(/view=groups/);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.getByRole("tab", { name: /마진 그룹/ })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("heading", { name: "마진 그룹 선택" })).toBeVisible();
+      expect(await collectLayoutProblems(page)).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath(`pricing-catalog-tabs-${width}.png`), fullPage: false });
+    } finally { await context.close(); }
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`pricing sheets can start a document and import a catalog item at ${width}px`, async ({ browser }, testInfo) => {
     const context = await authenticatedContext(browser, "customer", width, 844);
     try {

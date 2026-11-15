@@ -1,6 +1,7 @@
 "use client";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { calculatePrice } from "@/domains/pricing/price-rules";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
@@ -11,6 +12,8 @@ import { PricingFolderMargin } from "./pricing-folder-margin";
 import { PricingSheetFromPrices } from "./pricing-sheet-from-prices";
 import { PricingMarginGroups } from "./pricing-margin-groups";
 import { PricingSalesPriceTable } from "./pricing-sales-price-table";
+import { PricingCatalogStores } from "./pricing-catalog-stores";
+import { pricingCatalogViewFrom, pricingCatalogViews } from "./pricing-catalog-view";
 import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
 import { buildMarginTree } from "@/domains/pricing/margin-tree";
 import { splitHidden } from "@/domains/pricing/price-health";
@@ -18,6 +21,7 @@ import { toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree
 import { formatWon } from "@/domains/shared/money";
 import { Notice } from "./ui/notice";
 import { ErrorState, LoadingState } from "./ui/state";
+import { Tabs } from "./ui/tabs";
 export { marginSource } from "./pricing-margin-group-options";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
@@ -29,6 +33,16 @@ const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
  * ③ 다른 마진을 줄 상품만 표에서 골라 한 번에 바꿉니다(개별 마진 · 직접 단가).
  */
 export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { companyId: string; marginTemplates?: boolean }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const view = pricingCatalogViewFrom(searchParams.get("view"), marginTemplates);
+  const tabItems = pricingCatalogViews(marginTemplates).map((id) => ({ id, label: id === "prices" ? "판매가" : id === "catalogs" ? "카탈로그" : id === "stores" ? "매장 연결" : "마진 그룹 · 고급" }));
+  const selectView = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", pricingCatalogViewFrom(next, marginTemplates));
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
   const [state, setState] = useState<PriceState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -95,7 +109,11 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
     {message && <Notice kind="success">{message}
       {undoable && state.lastBatch && !state.restored ? <button className="rounded border border-teal-700 px-2 py-1 text-xs font-bold" disabled={busy} onClick={() => { if (state.lastBatch) void run([{ action: "restore", batchId: state.lastBatch }], "직전 반영을 되돌렸습니다.", false); }} type="button">되돌리기</button> : null}</Notice>}
 
-    {marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
+    <Tabs ariaLabel="가격 관리 보기" className="flex-nowrap" items={tabItems} onChange={selectView} value={view} variant="chip" />
+
+    {view === "catalogs" && marginTemplates ? <PricingMarginTemplates companyId={companyId} state={state} /> : null}
+    {view === "stores" && marginTemplates ? <PricingCatalogStores companyId={companyId} /> : null}
+    {view === "prices" ? <>
     {state.pendingCount > 0 || (state.lastBatch && !state.restored) ? <div className="flex flex-wrap items-center gap-2 text-sm">
       <span>판매가에 아직 반영 안 된 변경 {state.pendingCount}개</span>
       <button className={box} disabled={busy || !state.pendingCount} onClick={() => void run([{ action: "recalculate" }], "판매가에 반영했습니다.", false)} type="button">지금 반영</button>
@@ -123,9 +141,9 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
 
     <PricingSalesPriceTable busy={busy} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(splitHidden(allItems ?? state.items).visible, state, folderOrder)} />
     {allItems === null ? <p className="text-xs text-slate-500">전체 상품을 읽지 못해 이 페이지({state.items.length}개)만 보여 줍니다.</p> : null}
-    <details className="rounded-xl border border-slate-200 bg-white p-3" data-testid="margin-advanced">
-      <summary className="cursor-pointer text-sm font-bold">고급: 마진 그룹 직접 관리</summary>
-      <div className="mt-3"><PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} /></div>
-    </details>
+    </> : null}
+    {view === "groups" ? <section aria-label="마진 그룹 직접 관리" className="rounded-xl border border-slate-200 bg-white p-3" data-testid="margin-advanced">
+      <PricingMarginGroups companyId={companyId} state={state} busy={busy} send={send} onBusy={setBusy} onMessage={setMessage} onError={setError} />
+    </section> : null}
   </div>;
 }
