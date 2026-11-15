@@ -4,6 +4,10 @@ import { CatalogStoreLinkTable } from "./catalog-store-link-table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { averageDeltaPercent, previewTemplate, suggestTemplateName, templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
+import { useConfirm } from "./ui/confirm-dialog";
+import { Notice } from "./ui/notice";
+import { ErrorState } from "./ui/state";
+import { formatWon } from "@/domains/shared/money";
 
 // CC-19b: 카탈로그(가격 묶음) 선택·만들기·비교. 스위치(MARGIN_TEMPLATES)를 켠 회사에만 보인다.
 type Template = { id: string; name: string; storeCount?: number; margin: number; rounding: number; categories: { category: string; margin: number }[] };
@@ -11,6 +15,7 @@ const field = "h-10 rounded-md border border-slate-300 bg-white px-2 text-sm";
 const asTemplate = (t: Template): MarginTemplate => ({ margin: t.margin, rounding: t.rounding, categories: t.categories, items: [] });
 
 export function PricingMarginTemplates({ companyId, state }: { companyId: string; state: PriceState }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selected, setSelected] = useState<string>(""); // "" = 기본(회사 마진 규칙 그대로), "new" = 만드는 중
   const [draft, setDraft] = useState<Template | null>(null);
@@ -52,7 +57,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     finally { setBusy(false); }
   }
   async function archive() {
-    if (!current || !window.confirm(`"${current.name}" 카탈로그를 보관할까요? 이 카탈로그를 쓰는 매장가 있으면 보관되지 않습니다.`)) return;
+    if (!current || !(await confirm({ title: "카탈로그 보관", body: `"${current.name}" 카탈로그를 보관할까요? 이 카탈로그를 쓰는 매장가 있으면 보관되지 않습니다.`, confirmLabel: "보관", tone: "default" }))) return;
     setBusy(true); setError(""); setMessage("");
     try { const result = await call({ action: "archive", id: current.id }); setTemplates(result.templates); setSelected(""); setMessage("카탈로그를 보관했습니다."); }
     catch (e) { setError(e instanceof Error ? e.message : "보관하지 못했습니다."); }
@@ -67,6 +72,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
   const compare = useMemo(() => state.items.slice(0, 20).map((item: PriceItem) => ({ item, prices: templates.map((t) => templatePrice(asTemplate(t), { id: item.id, category: item.category, cost: item.cost }).price) })), [state.items, templates]);
 
   return <section aria-label="카탈로그" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    {confirmDialog}
     <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
       <div aria-label="보기" className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group">{(["cards", "table"] as const).map((v) => <button aria-pressed={view === v} className={`h-8 px-3 ${view === v ? "bg-slate-800 text-white" : "bg-white text-slate-600"}`} key={v} onClick={() => setView(v)} type="button">{v === "cards" ? "카드" : "표"}</button>)}</div>
       <button aria-pressed={byStores} className={`h-8 rounded-md border px-3 ${byStores ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-slate-600"}`} onClick={() => setByStores(!byStores)} type="button">매장 많은 순</button>
@@ -93,8 +99,8 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
         <button className="h-9 px-2 text-sm text-slate-600" onClick={() => { setAdding(false); setNewName(""); }} type="button">취소</button>
       </form> : <button className="min-h-[44px] rounded-full border border-dashed border-teal-700 px-4 text-sm font-bold text-teal-800" onClick={() => setAdding(true)} type="button">+ 새 카탈로그</button>}
     </div>
-    {error ? <p role="alert" className="rounded border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{error}</p> : null}
-    {message ? <p role="status" className="rounded border border-teal-300 bg-teal-50 p-2 text-sm text-teal-900">{message}</p> : null}
+    {error ? <ErrorState message={error} /> : null}
+    {message ? <Notice kind="success">{message}</Notice> : null}
     {selected === "" ? <p className="flex items-center gap-1 text-sm font-bold text-slate-700">기본 카탈로그 <InfoTooltip size="sm" text="기본은 지금 쓰는 회사 마진 규칙(아래 탭)입니다. 도매·VIP처럼 매장마다 다른 마진이 필요하면 새 카탈로그를 만드세요. 카탈로그에 없는 값은 그 카탈로그의 기본 마진으로 계산합니다." /></p> : null}
     {draft ? <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void save(); }}>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -123,7 +129,7 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
     {templates.length ? <div className="overflow-x-auto" aria-label="카탈로그 판매가 비교">
       <p className="mb-1 text-sm font-bold">카탈로그 비교(불러온 상품 앞 20개)</p>
       <table className="min-w-[480px] text-sm"><thead><tr><th className="border bg-slate-50 p-2 text-left">상품</th><th className="border bg-slate-50 p-2 text-right">기본</th>{templates.map((t) => <th className="border bg-slate-50 p-2 text-right" key={t.id}>{t.name}</th>)}</tr></thead>
-        <tbody>{compare.map(({ item, prices }) => <tr key={item.id}><td className="border p-2">{item.name}</td><td className="border p-2 text-right">{item.price.toLocaleString()}원</td>{prices.map((price, i) => <td className="border p-2 text-right" key={templates[i].id}>{price.toLocaleString()}원</td>)}</tr>)}</tbody></table>
+        <tbody>{compare.map(({ item, prices }) => <tr key={item.id}><td className="border p-2">{item.name}</td><td className="border p-2 text-right">{formatWon(item.price)}</td>{prices.map((price, i) => <td className="border p-2 text-right" key={templates[i].id}>{formatWon(price)}</td>)}</tr>)}</tbody></table>
     </div> : null}
     {templates.length ? <CatalogStoreLinkTable companyId={companyId} templates={templates} userKey={companyId} /> : null}
   </section>;

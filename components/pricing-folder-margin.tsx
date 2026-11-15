@@ -4,6 +4,7 @@ import type { PriceState } from "@/domains/pricing/price-rules";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
 import { rawPathsInFolder } from "@/domains/pricing/margin-tree";
 import { fetchAllPriceItems } from "@/lib/pricing/fetch-all-price-items";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // CC-18: 폴더에 마진 한 번에. "하위 분류까지 같이 적용"(기본 켬)은 기존 분류 연결(category 명령)을 하위 경로마다 반복한다.
 // 폴더 전용 마진 그룹("폴더 <경로>")을 만들거나 다시 쓰고, 그 분류들을 연결한 뒤 판매가를 다시 계산한다.
@@ -12,6 +13,7 @@ export function PricingFolderMargin({ companyId, folder, state, busy, send, onBu
   send: (command?: PricingCommand | PricingBulkCommand) => Promise<PriceState>;
   onBusy: (value: boolean) => void; onMessage: (value: string) => void; onError: (value: string) => void;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [margin, setMargin] = useState("");
   const [withChildren, setWithChildren] = useState(true);
   async function apply() {
@@ -28,7 +30,7 @@ export function PricingFolderMargin({ companyId, folder, state, busy, send, onBu
         const group = state.groups.find((g) => g.id === state.categories.find((link) => link.category === path)?.groupId);
         return group && group.id !== own?.id && group.margin !== rate;
       });
-      if (conflicts.length && !window.confirm(`${conflicts.length}개 분류에 이미 다른 마진이 연결돼 있습니다. ${rate}%로 덮어쓸까요?\n(상품 개별 마진·직접 단가가 있는 상품은 그대로입니다.)`)) return;
+      if (conflicts.length && !(await confirm({ title: "기존 마진 덮어쓰기", body: `${conflicts.length}개 분류에 이미 다른 마진이 연결돼 있습니다. ${rate}%로 덮어쓸까요?\n(상품 개별 마진·직접 단가가 있는 상품은 그대로입니다.)`, confirmLabel: "덮어쓰기", tone: "default" }))) return;
       const before = new Set(state.groups.map((g) => g.id));
       let latest = await send({ action: "group", ...(own ? { id: own.id } : {}), name, margin: rate, rounding: state.defaultRounding });
       const groupId = own?.id ?? latest.groups.find((g) => !before.has(g.id) && g.name === name)?.id;
@@ -43,6 +45,7 @@ export function PricingFolderMargin({ companyId, folder, state, busy, send, onBu
     finally { onBusy(false); }
   }
   return <form aria-label="폴더 마진 적용" className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2" onSubmit={(e) => { e.preventDefault(); void apply(); }}>
+    {confirmDialog}
     <label className="text-sm font-bold">폴더 마진(%)
       <input aria-label="폴더 마진율" className="mt-1 block h-10 w-28 rounded-md border border-slate-300 bg-white px-2 text-right text-sm font-normal" inputMode="decimal" onChange={(e) => setMargin(e.target.value)} placeholder="예: 15" value={margin} />
     </label>
