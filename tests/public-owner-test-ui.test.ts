@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import * as React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
+import { SearchInput } from "../components/ui/search-input";
 import { publicOwnerTestModeRequested } from "../lib/store/public-owner-test-mode";
 
 // Reuse the repository's TSX test adapter; Vitest preserves JSX in application files.
@@ -12,6 +13,7 @@ const dependencies: Record<string, unknown> = {
   react: React, "react/jsx-runtime": jsxRuntime,
   "./ui/button": { Button: "button" },
   "./ui/card": { Card: "div", CardContent: "div", CardHeader: "div", CardTitle: "h2" },
+  "./ui/search-input": { SearchInput },
   "@/lib/store/public-owner-test-mode": { publicOwnerTestModeRequested },
 };
 function loadComponent(file: string) {
@@ -46,4 +48,5 @@ it("shows the test banner only when explicitly requested and leaves ordinary sig
   expect(renderToStaticMarkup(createElement(PublicStoreTestBanner))).toContain("시험 전용");
   const ordinary = renderToStaticMarkup(createElement(StoreOwnerActivationPanel, { enabled: true, profileStep: true }));
   expect(ordinary).toContain("사업자등록번호"); expect(ordinary).not.toContain("시험 전용 매장");
+  expect(ordinary).toContain('type="search"'); expect(ordinary).toContain("도로명 또는 지번 검색");
 });
