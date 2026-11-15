@@ -20,6 +20,24 @@ type Candidate = { customerId: string; name: string; address: string | null; rea
 const kst = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const won = formatWon;
 
+export async function confirmExistingCustomerLink({
+  confirm,
+  customerName,
+  link,
+}: {
+  confirm: (options: { body: string; confirmLabel: string; title: string }) => Promise<boolean>;
+  customerName: string;
+  link: () => Promise<void>;
+}) {
+  if (!await confirm({
+    body: `'${customerName}' 거래처에 연결합니다. 접수된 주문이 해당 거래처로 옮겨지며 되돌릴 수 없습니다.`,
+    confirmLabel: "연결",
+    title: "기존 거래처에 연결",
+  })) return false;
+  await link();
+  return true;
+}
+
 export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: { canConfirm: boolean; companyId: string; preview?: boolean }) {
   const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
@@ -76,12 +94,11 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     setBusyId(""); await load();
   }
   async function linkCustomer(order: Order, customer: Candidate) {
-    if (!await confirmAction({
-      body: `'${customer.name}' 거래처에 연결합니다. 접수된 주문이 해당 거래처로 옮겨지며 되돌릴 수 없습니다.`,
-      confirmLabel: "연결",
-      title: "기존 거래처에 연결"
-    })) return;
-    await decide(order, "link_customer", customer.customerId);
+    await confirmExistingCustomerLink({
+      confirm: confirmAction,
+      customerName: customer.name,
+      link: () => decide(order, "link_customer", customer.customerId),
+    });
   }
 
   const columns: CommonTableColumn<Order>[] = [

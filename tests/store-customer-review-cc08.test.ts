@@ -23,11 +23,23 @@ describe("store customer review (CC-08)", () => {
     expect(api).toContain('"link_customer"');
     expect(api).toContain("store_customer_review_required");
   });
-  it("the inbox swaps 확인 for 거래처 확인 on unconfirmed stores and asks before linking", () => {
+  it("the inbox swaps 확인 for 거래처 확인 on unconfirmed stores", () => {
     const ui = readFileSync("components/order-inbox-workspace.tsx", "utf8");
     expect(ui).toContain("row.storeAccountId && canConfirmStoreOrder");
-    expect(ui).toContain("window.confirm");
     expect(ui).toContain("새 거래처로 확인");
+  });
+  it("only links an existing customer after the user confirms", async () => {
+    const { confirmExistingCustomerLink } = await import("../components/order-inbox-workspace");
+    const link = vi.fn(async () => undefined);
+    const cancel = vi.fn(async () => false);
+
+    await expect(confirmExistingCustomerLink({ confirm: cancel, customerName: "합성", link })).resolves.toBe(false);
+    expect(cancel).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining("합성"), confirmLabel: "연결" }));
+    expect(link).not.toHaveBeenCalled();
+
+    const approve = vi.fn(async () => true);
+    await expect(confirmExistingCustomerLink({ confirm: approve, customerName: "합성", link })).resolves.toBe(true);
+    expect(link).toHaveBeenCalledOnce();
   });
 });
 
