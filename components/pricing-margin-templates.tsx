@@ -1,6 +1,5 @@
 "use client";
 import { InfoTooltip } from "@/components/info-tooltip";
-import { CatalogStoreLinkTable } from "./catalog-store-link-table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { averageDeltaPercent, previewTemplate, suggestTemplateName, templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
@@ -131,7 +130,6 @@ export function PricingMarginTemplates({ companyId, state }: { companyId: string
       <table className="min-w-[480px] text-sm"><thead><tr><th className="border bg-slate-50 p-2 text-left">상품</th><th className="border bg-slate-50 p-2 text-right">기본</th>{templates.map((t) => <th className="border bg-slate-50 p-2 text-right" key={t.id}>{t.name}</th>)}</tr></thead>
         <tbody>{compare.map(({ item, prices }) => <tr key={item.id}><td className="border p-2">{item.name}</td><td className="border p-2 text-right">{formatWon(item.price)}</td>{prices.map((price, i) => <td className="border p-2 text-right" key={templates[i].id}>{formatWon(price)}</td>)}</tr>)}</tbody></table>
     </div> : null}
-    {templates.length ? <CatalogStoreLinkTable companyId={companyId} templates={templates} userKey={companyId} /> : null}
   </section>;
 }
 

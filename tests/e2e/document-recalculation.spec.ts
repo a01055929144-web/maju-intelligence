@@ -82,8 +82,12 @@ for (const width of [1440, 390]) for (const failure of ["category-and-recalculat
   page.on("dialog", dialog => dialog.accept());
   await page.goto("/revenue/pricing/margins");
   await expect(page.getByRole("region", { name: "회사 기본 마진", exact: true })).toBeVisible();
-  // CC-30a: 마진 그룹 직접 관리는 판매가 화면 아래 "고급" 접힘 안에 있다(탭 4개는 없어짐).
-  const openAdvanced = () => page.locator('details[data-testid="margin-advanced"]').evaluate((el) => { (el as HTMLDetailsElement).open = true; });
+  // CX-32: 마진 그룹 직접 관리는 가격 카탈로그의 고급 탭에서 연다.
+  const openAdvanced = async () => {
+    const tab = page.getByRole("tab", { name: /마진 그룹/ });
+    if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+  };
   await openAdvanced();
   const panel = page.getByRole("region", { name: "마진 그룹 만들기·수정", exact: true });
   await expect(panel.getByRole("button", { name: "합성 기존 그룹 · 12% · 10원 올림", exact: true })).toBeVisible();
