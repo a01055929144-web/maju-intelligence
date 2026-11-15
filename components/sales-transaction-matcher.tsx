@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Loader2, Search } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Notice } from "@/components/ui/notice";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { formatNumber, formatWon } from "@/domains/shared/money";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 type UnmatchedGroup = {
@@ -111,13 +115,11 @@ export function SalesTransactionMatcher({
           <p className="maju-section-title">거래처 미매칭 수동 연결</p>
           <p className="mt-1 text-xs font-bold leading-5 text-amber-900">실제 거래처를 선택하면 같은 이름으로 들어온 거래를 한 번에 연결합니다.</p>
         </div>
-        <Badge className="bg-amber-100 text-amber-800">{unmatchedGroups.length.toLocaleString()}건 미매칭</Badge>
+        <Badge className="bg-amber-100 text-amber-800">{formatNumber(unmatchedGroups.length)}건 미매칭</Badge>
       </div>
 
       {message ? (
-        <div aria-live="polite" className={`px-4 py-3 text-sm font-bold ${message.tone === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`} role="status">
-          {message.text}
-        </div>
+        <Notice className="mx-4 mt-4" kind={message.tone === "ok" ? "success" : "error"}>{message.text}</Notice>
       ) : null}
 
       <div className="divide-y divide-slate-100">
@@ -127,7 +129,7 @@ export function SalesTransactionMatcher({
               <div className="min-w-0">
                 <p className="truncate text-sm font-black text-slate-950">{group.customerName}</p>
                 <p className="mt-1 text-xs font-bold text-slate-500">
-                  {group.transactionCount.toLocaleString()}건 · {Math.round(group.totalAmount).toLocaleString()}원 · 최근 {group.latestSalesDate || "-"}
+                  {formatNumber(group.transactionCount)}건 · {formatWon(Math.round(group.totalAmount))} · 최근 {group.latestSalesDate || "-"}
                 </p>
               </div>
               <button
@@ -146,24 +148,12 @@ export function SalesTransactionMatcher({
 
             {openKey === group.customerKey ? (
               <div className="maju-filter-box mt-3 bg-slate-50/60 p-3" role="region" aria-label={`${group.customerName} 거래처 연결`}>
-                <div className="maju-search-field">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <input
-                    autoFocus
-                    className="h-full w-full bg-transparent text-xs font-bold text-slate-800 outline-none"
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="거래처명 또는 주소로 검색"
-                    value={query}
-                  />
-                </div>
+                <SearchInput inputProps={{ autoFocus: true, role: "textbox" }} onChange={setQuery} placeholder="거래처명 또는 주소로 검색" size="sm" value={query} />
                 <div className="mt-2 max-h-52 space-y-1 overflow-auto">
                   {loadingCustomers ? (
-                    <p className="flex items-center gap-1.5 px-2 py-3 text-xs font-bold text-slate-400">
-                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-                      거래처 목록을 불러오는 중입니다.
-                    </p>
+                    <LoadingState bare label="거래처 목록을 불러오는 중입니다." />
                   ) : customerLoadError ? (
-                    <p className="rounded-md bg-rose-50 px-3 py-3 text-xs font-bold text-rose-700" role="alert">{customerLoadError}</p>
+                    <ErrorState bare message={customerLoadError} />
                   ) : filteredCustomers.length ? (
                     filteredCustomers.map((customer) => (
                       <button
@@ -181,7 +171,7 @@ export function SalesTransactionMatcher({
                       </button>
                     ))
                   ) : (
-                    <p className="px-2 py-3 text-xs font-bold text-slate-500">일치하는 거래처가 없습니다. 상호 일부나 주소로 다시 검색하세요.</p>
+                    <EmptyState bare description="상호 일부나 주소로 다시 검색하세요." message="일치하는 거래처가 없습니다." />
                   )}
                 </div>
               </div>

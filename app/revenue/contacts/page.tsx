@@ -6,6 +6,7 @@ import { CustomerAppShell } from "@/components/customer-app-shell";
 import { SalesWorkspaceNav } from "@/components/sales-workspace-nav";
 import { VoidContactButton } from "@/components/void-contact-button";
 import { getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
+import { formatNumber } from "@/domains/shared/money";
 import { areHoldModulesEnabled } from "@/lib/feature-modules";
 import { listSalesContactLedger, type SalesContactLedgerItem } from "@/lib/store";
 
@@ -109,7 +110,7 @@ export default async function SalesContactsPage({
           <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="maju-section-title">모바일 컨택 전체 흐름</p>
-              <p className="mt-1 text-sm text-slate-500">리마인드 {reminderCount.toLocaleString()}건 · 만료 일정은 붉은색으로 우선 표시합니다.</p>
+              <p className="mt-1 text-sm text-slate-500">리마인드 {formatNumber(reminderCount)}건 · 만료 일정은 붉은색으로 우선 표시합니다.</p>
             </div>
             <Link className="maju-button-secondary min-h-10" href={scoped("/mobile/sales")}><Smartphone className="h-4 w-4" />모바일 영업</Link>
           </div>
@@ -176,7 +177,7 @@ function ContactRow({ companyId, customerLedgerHref, item, today }: { companyId?
 
 function SummaryCard({ icon: Icon, label, tone, value }: { icon: typeof History; label: string; tone: "amber" | "blue" | "rose" | "teal" | "violet"; value: number }) {
   const tones = { amber: "bg-amber-50 text-amber-800", blue: "bg-blue-50 text-blue-700", rose: "bg-rose-50 text-rose-700", teal: "bg-teal-50 text-teal-800", violet: "bg-violet-50 text-violet-700" };
-  return <div className="maju-section-card flex items-center gap-3 p-4"><span className={`grid h-11 w-11 place-items-center rounded-xl ${tones[tone]}`}><Icon className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-0.5 text-2xl font-black text-slate-950">{value.toLocaleString()}건</p></div></div>;
+  return <div className="maju-section-card flex items-center gap-3 p-4"><span className={`grid h-11 w-11 place-items-center rounded-xl ${tones[tone]}`}><Icon className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-0.5 text-2xl font-black text-slate-950">{formatNumber(value)}건</p></div></div>;
 }
 
 function SalesStage({ customerLedgerHref, item }: { customerLedgerHref: string; item: SalesContactLedgerItem }) {

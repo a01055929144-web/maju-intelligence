@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, Search, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/ui/search-input";
+import { formatNumber } from "@/domains/shared/money";
 import { SortableTh } from "@/components/sortable-th";
 import type { RevenuePipeline } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
@@ -76,20 +78,11 @@ export function PipelineCandidatesTable({ initialResultFilter = "", items, weigh
           <h2 className="text-lg font-semibold text-slate-950">후보 목록</h2>
           <p className="mt-1 text-sm text-slate-500">견적·관심 거래처 우선순위</p>
         </div>
-        <Badge className="bg-teal-700 text-white">가중 {weightedRevenue.toLocaleString()}만원</Badge>
+        <Badge className="bg-teal-700 text-white">가중 {formatNumber(weightedRevenue)}만원</Badge>
       </div>
       <div className="border-b border-slate-200/80 bg-slate-50/70 p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label className="relative min-w-0 flex-1 sm:max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="거래처 후보·지역·상태·메모 검색"
-            type="search"
-            value={query}
-          />
-        </label>
+        <SearchInput className="min-w-0 flex-1 sm:max-w-xl" onChange={setQuery} placeholder="거래처 후보·지역·상태·메모 검색" value={query} />
         <label className="sr-only" htmlFor="pipeline-result-filter">영업 상태</label>
         <select
           className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -105,19 +98,19 @@ export function PipelineCandidatesTable({ initialResultFilter = "", items, weigh
             <X className="h-4 w-4" /> 초기화
           </button>
         ) : null}
-        <p aria-live="polite" className="shrink-0 text-xs font-semibold text-slate-500">{filteredItems.length.toLocaleString()} / {items.length.toLocaleString()}건</p>
+        <p aria-live="polite" className="shrink-0 text-xs font-semibold text-slate-500">{formatNumber(filteredItems.length)} / {formatNumber(items.length)}건</p>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="영업 상태 빠른 필터">
           <button className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${resultFilter === "all" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setResultFilter("all")} type="button">
-            전체 {items.length.toLocaleString()}
+            전체 {formatNumber(items.length)}
           </button>
           {Object.entries(resultLabels).map(([value, label]) => (
             <button className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${resultFilter === value ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} key={value} onClick={() => setResultFilter(value)} type="button">
-              {label} {(resultCounts[value] || 0).toLocaleString()}
+              {label} {formatNumber(resultCounts[value] || 0)}
             </button>
           ))}
           <button className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${resultFilter === "unresolved" ? "border-teal-700 bg-teal-700 text-white" : "border-slate-200 bg-white text-slate-600"}`} onClick={() => setResultFilter("unresolved")} type="button">
-            보류·실패 {unresolvedCount.toLocaleString()}
+            보류·실패 {formatNumber(unresolvedCount)}
           </button>
         </div>
       </div>
@@ -161,7 +154,7 @@ export function PipelineCandidatesTable({ initialResultFilter = "", items, weigh
                   </div>
                 </td>
                 <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black">{Math.round(item.probability * 100)}%</td>
-                <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black text-teal-700">{item.weightedRevenue.toLocaleString()}만원</td>
+                <td className="border-b border-slate-100 px-4 py-3 text-right text-lg font-black text-teal-700">{formatNumber(item.weightedRevenue)}만원</td>
                 <td className="whitespace-nowrap border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-700">
                   <span className="inline-flex items-center gap-1.5">{nextActionLabels[item.result] || "상태 확인"}<ArrowRight className="h-3.5 w-3.5 text-slate-400" /></span>
                 </td>
