@@ -153,7 +153,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
           <label>마진율 (%)<input aria-label="그룹 마진율" className={input} type="number" min="0" max="1000" step="0.01" required value={margin} onChange={event => setMargin(event.target.value)} /></label>
           <label>끝자리 올림<select aria-label="그룹 끝자리 올림" className={input} value={rounding} onChange={event => setRounding(event.target.value)}>{[1, 10, 100].map(value => <option key={value} value={value}>{value}원</option>)}</select></label></div>
         <p className="text-slate-600">분류 연결은 전체 경로가 같은 상품에만 적용합니다. 상품 분류를 바꾸거나 상품을 이동하지 않습니다.</p>
-        <label className="block">분류 검색<SearchInput aria-label="마진 적용 분류 검색" className="mt-1" placeholder="대·중·소 분류 이름 검색" value={query} onChange={setQuery} /></label>
+        <label className="block">분류 검색<SearchInput aria-label="마진 적용 분류 검색" className="mt-1" inputProps={{ role: "textbox" }} placeholder="대·중·소 분류 이름 검색" value={query} onChange={setQuery} /></label>
         <div className="grid gap-2 sm:grid-cols-3">{["대분류", "중분류", "소분류"].map((label, index) => {
           const choices = Array.from(new Set(options.filter(option => levels.slice(0, index).every((value, level) => !value || option.parts[level] === value)).map(option => option.parts[index]).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko"));
           return <label key={label}>{label}<select aria-label={`마진 ${label} 필터`} className={input} value={levels[index]} onChange={event => setLevels(previous => previous.map((value, level) => level === index ? event.target.value : level > index ? "" : value))}><option value="">전체</option>{choices.map(value => <option key={value}>{value}</option>)}</select></label>;
