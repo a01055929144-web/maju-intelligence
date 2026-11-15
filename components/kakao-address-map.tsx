@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapCornerControls } from "@/components/map-corner-controls";
 import { shouldShowMarkerGeocodingFailure } from "@/lib/map-empty-state";
 import { markerZIndex, overlayZIndex } from "@/components/map/marker-z-index";
+import { haversineMeters } from "@/domains/route/distance";
 import { planMarkers } from "@/domains/route/markers";
 import { loadGeocodeCache, saveGeocodeCache, type GeocodePoint } from "@/components/map/geocode-cache";
 import { approximateRoadAddress, isSameDistrict, placeKeywordForAddress } from "@/components/map/address-variants";
@@ -1493,16 +1494,6 @@ function drawRoadRoutePolylines(kakao: KakaoSdk, map: KakaoMap, roadPathSegments
 }
 
 const EARTH_RADIUS_METERS = 6371000;
-
-// 두 좌표 사이 직선거리(m) — 반경 손잡이를 드래그한 위치가 중심에서 얼마나 떨어졌는지 계산합니다.
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // 중심 좌표에서 특정 방위각(도, 0=북쪽·90=동쪽)으로 distanceMeters만큼 떨어진 좌표를 계산합니다 —
 // 반경 원의 가장자리에 드래그 손잡이를 배치하는 데 씁니다.
