@@ -3,8 +3,11 @@ import { MoneyInput } from "@/components/money-input";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Search, Save, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Save } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
+import { formatNumber } from "@/domains/shared/money";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSort } from "@/lib/use-table-sort";
 
@@ -172,21 +175,16 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
             <p className="maju-section-title">고객사별 구독 현황</p>
             <p className="mt-1 maju-muted-label">월 이용료 설정 · 자동결제 상태</p>
           </div>
-          <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{rows.length.toLocaleString()}개 고객사</Badge>
+          <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{formatNumber(rows.length)}개 고객사</Badge>
         </div>
 
         <div className="grid gap-3 border-b border-slate-200 bg-slate-50/60 p-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-center">
-          <label className="flex h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
-            <Search className="h-4 w-4 text-slate-400" />
-            <span className="sr-only">고객사 또는 카드번호 검색</span>
-            <input className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="고객사, 카드번호, 결제 상태 검색..." value={query} />
-            {query ? <button aria-label="검색어 지우기" className="-mr-3 grid h-11 w-11 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => { setQuery(""); setPage(1); }} type="button"><X className="h-4 w-4" /></button> : null}
-          </label>
+          <SearchInput aria-label="고객사 또는 카드번호 검색" inputProps={{ role: "textbox" }} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="고객사, 카드번호, 결제 상태 검색..." value={query} />
           <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-teal-500" onChange={(event) => { setStatusFilter(event.target.value as StatusFilter); setPage(1); }} value={statusFilter}>
             <option value="all">전체 결제 상태</option>
             {(Object.keys(statusLabels) as AdminSubscriptionRow["status"][]).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
           </select>
-          <div className="text-sm font-bold text-slate-500">검색 결과 <strong className="text-slate-950">{filteredRows.length.toLocaleString()}개</strong></div>
+          <div className="text-sm font-bold text-slate-500">검색 결과 <strong className="text-slate-950">{formatNumber(filteredRows.length)}개</strong></div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-500">
@@ -196,19 +194,16 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
               {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}개</option>)}
             </select>
           </label>
-          <span>{pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {sortedRows.length.toLocaleString()}개</span>
+          <span>{formatNumber(pageStart)}-{formatNumber(pageEnd)} / {formatNumber(sortedRows.length)}개</span>
           <button className="maju-button-secondary !h-9" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} type="button">이전</button>
-          <span>{currentPage.toLocaleString()} / {totalPages.toLocaleString()}</span>
+          <span>{formatNumber(currentPage)} / {formatNumber(totalPages)}</span>
           <button className="maju-button-secondary !h-9" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} type="button">다음</button>
         </div>
 
         <div className="grid gap-3 p-4 lg:hidden">
           {pagedRows.map((row) => <BillingMobileCard drafts={drafts} key={row.id} row={row} saved={savedCompanyId === row.companyId} saving={savingCompanyId === row.companyId} setDrafts={setDrafts} onSave={savePlanAmount} />)}
           {!sortedRows.length ? (
-            <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
-              <p className="font-black text-slate-800">{rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "아직 결제 관리 대상 고객사가 없습니다."}</p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{rows.length ? "검색어 또는 결제 상태를 변경해보세요." : "고객사를 먼저 등록하면 이곳에 표시됩니다."}</p>
-            </div>
+            <EmptyState message={rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "아직 결제 관리 대상 고객사가 없습니다."} description={rows.length ? "검색어 또는 결제 상태를 변경해보세요." : "고객사를 먼저 등록하면 이곳에 표시됩니다."} />
           ) : null}
         </div>
 
@@ -279,9 +274,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
               ))}
               {!sortedRows.length ? (
                 <tr>
-                  <td className="px-4 py-12 text-center text-sm font-bold text-slate-500" colSpan={6}>
-                    {rows.length ? "검색 조건에 맞는 고객사가 없습니다. 검색어 또는 결제 상태를 변경해보세요." : "등록된 고객사가 없습니다."}
-                  </td>
+                  <td className="px-4 py-6" colSpan={6}><EmptyState bare message={rows.length ? "검색 조건에 맞는 고객사가 없습니다." : "등록된 고객사가 없습니다."} description={rows.length ? "검색어 또는 결제 상태를 변경해보세요." : undefined} /></td>
                 </tr>
               ) : null}
             </tbody>
@@ -294,7 +287,7 @@ export function AdminBillingWorkspace({ initialSubscriptions, loadError = "" }: 
 
 function BillingMetric({ active, label, onClick, tone = "default", value }: { active: boolean; label: string; onClick: () => void; tone?: "danger" | "default" | "success" | "warning"; value: number }) {
   const toneClass = tone === "success" ? "border-emerald-200 bg-emerald-50" : tone === "warning" ? "border-amber-200 bg-amber-50" : tone === "danger" ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-white";
-  return <button aria-pressed={active} className={`rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass} ${active ? "ring-2 ring-teal-600 ring-offset-2" : ""}`} onClick={onClick} type="button"><p className="text-xs font-bold text-slate-500">{label} · 눌러서 보기</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}<span className="ml-1 text-sm text-slate-500">곳</span></p></button>;
+  return <button aria-pressed={active} className={`rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass} ${active ? "ring-2 ring-teal-600 ring-offset-2" : ""}`} onClick={onClick} type="button"><p className="text-xs font-bold text-slate-500">{label} · 눌러서 보기</p><p className="mt-1 text-2xl font-black text-slate-950">{formatNumber(value)}<span className="ml-1 text-sm text-slate-500">곳</span></p></button>;
 }
 
 const draftAmount = (drafts: Record<string, string>, row: AdminSubscriptionRow) => { const d = drafts[row.companyId]; return d === undefined ? row.planAmountWon : d === "" ? null : Number(d); };

@@ -3,11 +3,14 @@
 import { kstToday } from "@/domains/shared/kst-date";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, LoaderCircle, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
+import { formatNumber } from "@/domains/shared/money";
 import { UploadHistoryItem } from "@/lib/store";
 
 const statusCopy = {
@@ -117,7 +120,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
           <div className="flex items-start gap-3">
             <LoaderCircle className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-sky-700" />
             <div>
-              <p className="font-black">데이터 처리 중 · {runningUploads.length.toLocaleString()}건</p>
+              <p className="font-black">데이터 처리 중 · {formatNumber(runningUploads.length)}건</p>
               <p className="mt-1 text-sm font-semibold leading-6 text-sky-800">
                 파일을 저장하고 분석 결과를 만드는 중입니다. 완료되면 상태와 품질 점수가 이 목록에 반영됩니다.
               </p>
@@ -132,7 +135,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-1 h-5 w-5 shrink-0 text-amber-800" />
               <div>
-                <p className="font-black text-amber-950">보완이 필요한 업로드 {issueUploads.length.toLocaleString()}건</p>
+                <p className="font-black text-amber-950">보완이 필요한 업로드 {formatNumber(issueUploads.length)}건</p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-amber-800">
                   실패, 품질 80% 미만, 중복 후보, 리포트 미생성 건을 먼저 확인하세요.
                 </p>
@@ -156,7 +159,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
                 }}
               >
                 <p className="text-xs font-black text-amber-700">{reason.label}</p>
-                <p className="mt-1 text-xl font-black text-amber-950">{reason.count.toLocaleString()}건</p>
+                <p className="mt-1 text-xl font-black text-amber-950">{formatNumber(reason.count)}건</p>
                 <p className="mt-1 text-xs font-bold leading-5 text-amber-800">{reason.description}</p>
               </button>
             ))}
@@ -175,18 +178,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       )}
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,260px)_auto_auto] xl:items-center">
-        <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-white px-3">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            className="h-full min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground"
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder="파일명, 고객사, 날짜 검색..."
-            value={query}
-          />
-        </label>
+        <SearchInput aria-label="업로드 이력 검색" inputProps={{ role: "textbox" }} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="파일명, 고객사, 날짜 검색..." value={query} />
         <label className="block">
           <span className="sr-only">고객사 필터</span>
           <select
@@ -232,7 +224,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
       <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-muted-foreground">검색 결과</span>
-          <span className="font-black">{filteredUploads.length.toLocaleString()}건</span>
+          <span className="font-black">{formatNumber(filteredUploads.length)}건</span>
           {issueReason !== "all" ? (
             <button className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900" onClick={() => setIssueReason("all")} type="button">
               {issueReasons.find((reason) => reason.key === issueReason)?.label} ×
@@ -256,7 +248,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             </select>
           </label>
           <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-muted-foreground">
-            {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredUploads.length.toLocaleString()}건
+            {formatNumber(pageStart)}-{formatNumber(pageEnd)} / {formatNumber(filteredUploads.length)}건
           </span>
           <button
             className="min-h-11 rounded-md border border-border bg-white px-3 py-2 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
@@ -267,7 +259,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
             이전
           </button>
           <span className="text-xs font-black text-muted-foreground">
-            {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+            {formatNumber(currentPage)} / {formatNumber(totalPages)}
           </span>
           <button
             className="min-h-11 rounded-md border border-border bg-white px-3 py-2 text-xs font-black text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
@@ -281,10 +273,10 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         <div className="text-left text-xs font-bold text-muted-foreground sm:text-right">
           {activeCompany ? (
             <span>
-              {activeCompany.name} · 보완 {activeCompany.issues.toLocaleString()}건 / 전체 {activeCompany.total.toLocaleString()}건
+              {activeCompany.name} · 보완 {formatNumber(activeCompany.issues)}건 / 전체 {formatNumber(activeCompany.total)}건
             </span>
           ) : (
-            <span>고객사 {companyOptions.length.toLocaleString()}곳</span>
+            <span>고객사 {formatNumber(companyOptions.length)}곳</span>
           )}
         </div>
       </div>
@@ -317,12 +309,11 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
         </div>
         </>
       ) : (
-        <div className="rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
-          <p className="font-black">조건에 맞는 업로드 이력이 없습니다.</p>
-          <p className="mt-2 text-sm text-muted-foreground">검색어 또는 상태 필터를 조정해보세요.</p>
-          {(query || status !== "all" || companyId !== "all" || issueReason !== "all") ? (
+        <EmptyState
+          message="조건에 맞는 업로드 이력이 없습니다."
+          description="검색어 또는 상태 필터를 조정해보세요."
+          action={(query || status !== "all" || companyId !== "all" || issueReason !== "all") ? (
             <Button
-              className="mt-4"
               onClick={() => {
                 setQuery("");
                 setStatus("all");
@@ -336,7 +327,7 @@ export function AdminUploadsWorkspace({ uploads }: { uploads: UploadHistoryItem[
               검색 조건 초기화
             </Button>
           ) : null}
-        </div>
+        />
       )}
     </div>
   );
@@ -356,9 +347,9 @@ function UploadMobileCard({ upload }: { upload: UploadHistoryItem }) {
         <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        <MobileMetric label="처리 행" value={upload.rows.toLocaleString()} />
+        <MobileMetric label="처리 행" value={formatNumber(upload.rows)} />
         <MobileMetric label="품질" value={`${upload.qualityScore}%`} />
-        <MobileMetric label="중복" value={`${upload.duplicateCount.toLocaleString()}건`} />
+        <MobileMetric label="중복" value={`${formatNumber(upload.duplicateCount)}건`} />
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {(reasons.length ? reasons : ["정상 반영"]).map((reason) => (
@@ -419,13 +410,13 @@ function UploadRow({ upload }: { upload: UploadHistoryItem }) {
           <ExternalLink className="h-3 w-3" />
         </Link>
       </div>
-      <p className="text-right font-black">{upload.rows.toLocaleString()}</p>
+      <p className="text-right font-black">{formatNumber(upload.rows)}</p>
       <Badge className={statusClass(upload.status)}>{statusCopy[upload.status]}</Badge>
       <div className="text-right">
         <p className="font-black">{upload.qualityScore}%</p>
         <Progress className="mt-1 h-1.5" value={upload.qualityScore} />
       </div>
-      <p className="text-right font-black">{upload.duplicateCount.toLocaleString()}건</p>
+      <p className="text-right font-black">{formatNumber(upload.duplicateCount)}건</p>
       <div className="flex flex-wrap gap-1.5">
         {reasons.length ? (
           reasons.map((reason) => (

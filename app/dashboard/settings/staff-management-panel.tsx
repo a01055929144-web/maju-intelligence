@@ -2,10 +2,14 @@
 
 import { kstToday } from "@/domains/shared/kst-date";
 import { Fragment, useEffect, useState } from "react";
-import { Clock, Copy, Loader2, Minus, Plus, Search, Send, Share2, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { Clock, Copy, Loader2, Minus, Plus, Send, Share2, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState } from "@/components/ui/state";
 import { DriverSelectField } from "@/components/driver-select-field";
+import { formatNumber } from "@/domains/shared/money";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatPhoneNumber } from "@/lib/phone";
 import { shareToKakao } from "@/lib/kakao-share";
@@ -109,6 +113,7 @@ export function StaffManagementPanel({
   const [pageSize, setPageSize] = useState<ListPageSize>(30);
   const [searchQuery, setSearchQuery] = useState("");
   const [listFilter, setListFilter] = useState<StaffListFilter>("all");
+  const { confirm, confirmDialog } = useConfirm();
   // 11/3: 표 헤더를 눌러 오름차순·내림차순 정렬(공통 표 형식).
   const [sort, setSort] = useState<{ key: StaffSortKey; direction: "asc" | "desc" }>({ direction: "asc", key: "name" });
   const toggleSort = (key: StaffSortKey) => setSort((current) => ({ direction: current.key === key && current.direction === "asc" ? "desc" : "asc", key }));
@@ -296,13 +301,12 @@ export function StaffManagementPanel({
   }
 
   async function deleteStaff(invitation: StaffInvitation) {
-    const confirmed = window.confirm(
-      invitation.membershipOnly
+    const body = invitation.membershipOnly
         ? `${invitation.employeeName || "이 계정"}의 회사 연결을 해제하시겠습니까? 이 회사로 더 이상 로그인할 수 없습니다(카카오 포함).`
         : invitation.status === "accepted"
         ? `${invitation.employeeName || "이 직원"}을(를) 삭제하시겠습니까? 이미 가입된 직원이라 로그인 권한도 함께 비활성화됩니다.`
-        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`
-    );
+        : `${invitation.employeeName || "이 초대"}를 목록에서 완전히 삭제하시겠습니까? 되돌릴 수 없습니다.`;
+    const confirmed = await confirm({ title: invitation.membershipOnly ? "회사 연결 해제" : "직원 삭제", body, confirmLabel: invitation.membershipOnly ? "연결 해제" : "삭제", tone: "danger" });
     if (!confirmed) return;
 
     setSavingId(invitation.id);
@@ -375,7 +379,7 @@ export function StaffManagementPanel({
   }
 
   async function removeJobTitle(jobTitle: CompanyJobTitle) {
-    const confirmed = window.confirm(`"${jobTitle.label}" 담당 업무 항목을 삭제하시겠습니까? 이미 이 값으로 지정된 직원의 표시는 그대로 남습니다.`);
+    const confirmed = await confirm({ title: "담당 업무 삭제", body: `"${jobTitle.label}" 담당 업무 항목을 삭제하시겠습니까? 이미 이 값으로 지정된 직원의 표시는 그대로 남습니다.`, confirmLabel: "삭제", tone: "danger" });
     if (!confirmed) return;
 
     setRemovingJobTitleId(jobTitle.id);
@@ -445,11 +449,11 @@ export function StaffManagementPanel({
           {needsAttentionCount > 0 ? (
             <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="status">
               <div>
-                <p className="text-sm font-black text-amber-950">직원 {needsAttentionCount.toLocaleString()}명의 연결 확인이 필요합니다.</p>
+                <p className="text-sm font-black text-amber-950">직원 {formatNumber(needsAttentionCount)}명의 연결 확인이 필요합니다.</p>
                 <p className="mt-1 text-xs font-bold leading-5 text-amber-800">
-                  {acceptedWithoutIdentityCount > 0 ? `고유 ID 미연결 ${acceptedWithoutIdentityCount.toLocaleString()}명` : ""}
+                  {acceptedWithoutIdentityCount > 0 ? `고유 ID 미연결 ${formatNumber(acceptedWithoutIdentityCount)}명` : ""}
                   {acceptedWithoutIdentityCount > 0 && unmatchedAcceptedCount > 0 ? " · " : ""}
-                  {unmatchedAcceptedCount > 0 ? `거래처 매칭 없음 ${unmatchedAcceptedCount.toLocaleString()}명` : ""}
+                  {unmatchedAcceptedCount > 0 ? `거래처 매칭 없음 ${formatNumber(unmatchedAcceptedCount)}명` : ""}
                   {" · 목록에서 담당자 또는 차량을 연결하세요."}
                 </p>
               </div>
@@ -474,32 +478,7 @@ export function StaffManagementPanel({
 
           {invitations.length ? (
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
-              <label className="relative block">
-                <span className="sr-only">직원 검색</span>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-9 text-sm font-semibold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="이름, 연락처, 카카오/소셜 ID, 담당자·차량 검색"
-                  value={searchQuery}
-                />
-                {searchQuery ? (
-                  <button
-                    aria-label="검색어 지우기"
-                    className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setPage(1);
-                    }}
-                    type="button"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </label>
+              <SearchInput aria-label="직원 검색" inputProps={{ role: "textbox" }} onChange={(value) => { setSearchQuery(value); setPage(1); }} onClear={() => { setSearchQuery(""); setPage(1); }} placeholder="이름, 연락처, 카카오/소셜 ID, 담당자·차량 검색" value={searchQuery} />
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   aria-label="직원 연결 상태 필터"
@@ -533,7 +512,7 @@ export function StaffManagementPanel({
                 </select>
               </label>
               <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-500">
-                {pageStart.toLocaleString()}-{pageEnd.toLocaleString()} / {filteredInvitations.length.toLocaleString()}명
+                {formatNumber(pageStart)}-{formatNumber(pageEnd)} / {formatNumber(filteredInvitations.length)}명
               </span>
               <button
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -544,7 +523,7 @@ export function StaffManagementPanel({
                 이전
               </button>
               <span className="text-xs font-black text-slate-400">
-                {currentPage.toLocaleString()} / {totalPages.toLocaleString()}
+                {formatNumber(currentPage)} / {formatNumber(totalPages)}
               </span>
               <button
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-black text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -781,9 +760,7 @@ export function StaffManagementPanel({
             </div>
           ) : null}
           {invitations.length && !filteredInvitations.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
-              <p className="text-sm font-black text-slate-700">조건에 맞는 직원이 없습니다.</p>
-              <button
+            <EmptyState message="조건에 맞는 직원이 없습니다." action={<button
                 className="mt-2 text-xs font-bold text-teal-700 hover:text-teal-900"
                 onClick={() => {
                   setSearchQuery("");
@@ -793,13 +770,10 @@ export function StaffManagementPanel({
                 type="button"
               >
                 검색·필터 초기화
-              </button>
-            </div>
+              </button>} />
           ) : null}
           {!invitations.length ? (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm font-bold leading-6 text-slate-500">
-              아직 등록된 직원이 없습니다. 오른쪽에서 이름을 입력해 초대 링크를 만드세요.
-            </div>
+            <EmptyState message="아직 등록된 직원이 없습니다." description="오른쪽에서 이름을 입력해 초대 링크를 만드세요." />
           ) : null}
         </div>
 
@@ -965,6 +939,7 @@ export function StaffManagementPanel({
             </p>
           ) : null}
         </aside>
+        {confirmDialog}
       </div>
     </section>
   );
