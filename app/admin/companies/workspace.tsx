@@ -490,7 +490,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             {selectedCompany ? (
               <button className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-amber-900 px-4 text-sm font-black text-white hover:bg-amber-950" onClick={() => void copyCompanyId(selectedCompany.id)} type="button">
                 {copiedCompanyId === selectedCompany.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copiedCompanyId === selectedCompany.id ? "회사 ID 복사됨" : `${selectedCompany.name} ID 복사`}
+                {copiedCompanyId === selectedCompany.id ? "회사 ID를 복사했습니다" : `${selectedCompany.name} ID 복사`}
               </button>
             ) : null}
           </div>

@@ -74,24 +74,7 @@ export function formatBusinessNumberInput(value: string) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 }
 
-// 휴대폰(010 등, 3-4-4)과 서울/지역 번호(02는 2자리, 그 외는 3자리 지역번호)를
-// 입력 자릿수에 맞춰 실시간으로 하이픈을 붙여줍니다.
-export function formatPhoneNumberInput(value: string) {
-  const digits = value.replace(/[^0-9]/g, "").slice(0, 11);
-  if (!digits) return "";
-
-  if (digits.startsWith("02")) {
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 5) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-    if (digits.length <= 9) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6, 10)}`;
-  }
-
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
-}
+export { formatPhoneNumberInput } from "@/lib/phone";
 
 export function isValidBusinessRegistrationNumber(value: string) {
   const digits = normalizeBusinessRegistrationNumber(value);

@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWon } from "@/domains/shared/money";
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
@@ -52,7 +53,7 @@ const labels: Record<CatalogField, string> = {
   vat: "부가세",
 };
 const money = (value?: number) =>
-  value == null ? "-" : `${value.toLocaleString("ko-KR")}원`;
+  value == null ? "-" : formatWon(value);
 const canConfirmConversion = (item: SupplierProductAdminItem) =>
   !!item.matchedCatalogId && !item.conversionConfirmed &&
   (item.matchStatus === "auto" || item.matchStatus === "confirmed");

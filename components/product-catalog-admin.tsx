@@ -1,4 +1,5 @@
 "use client";
+import { formatWon } from "@/domains/shared/money";
 import { MoneyInput } from "@/components/money-input";
 import { useEffect, useMemo, useState } from "react";
 import { compareCategoryPath, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
@@ -27,7 +28,7 @@ const blank: ProductCatalogAdminItem = {
   barcodes: [],
 };
 const money = (v?: number) =>
-  v == null ? "-" : `${Math.round(v).toLocaleString("ko-KR")}원`;
+  v == null ? "-" : formatWon(Math.round(v));
 const margin = productCatalogMargin;
 type View = "all" | "recent" | "negative" | "no-price" | "no-code" | "duplicate-code" | "no-photo" | "promo" | "soon" | "no-promo";
 type SideTab = "category" | "supplier" | "maju-category";

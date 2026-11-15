@@ -53,7 +53,7 @@ export function PublicQuoteActions({ quote }: { quote: PublicSalesQuote }) {
         <Share2 className="h-4 w-4" /> 카카오·문자 공유
       </button>
       <button className="maju-button-secondary min-h-11 justify-center" onClick={() => void copyLink()} type="button">
-        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? "복사됨" : "링크 복사"}
+        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? "복사했습니다" : "링크 복사"}
       </button>
       <button className="maju-button-secondary min-h-11 justify-center" onClick={downloadCsv} type="button">
         <Download className="h-4 w-4" /> 엑셀용 CSV

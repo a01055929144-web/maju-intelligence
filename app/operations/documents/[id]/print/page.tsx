@@ -1,3 +1,4 @@
+import { formatWon } from "@/domains/shared/money";
 import { redirect } from "next/navigation";
 import { PrintPageButton } from "@/components/print-page-button";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
@@ -5,7 +6,7 @@ import { getBusinessDocument } from "@/lib/business-documents";
 import { getCompanySettings } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-const money = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
+const money = (value: number) => formatWon(Math.round(value));
 const businessNumber = (value?: string) => {
   const digits = (value || "").replace(/\D/g, "");
   return digits.length === 10 ? `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}` : value || "미등록";
