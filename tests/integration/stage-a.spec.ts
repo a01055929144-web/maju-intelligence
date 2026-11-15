@@ -160,7 +160,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       await page.getByRole('navigation',{name:'매입가 보기',exact:true}).getByRole('button',{name:'전체',exact:true}).click();
       for (const i of [0,12,13,14,744]) {
         const label=name(i,scenario.existing);
-        await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
+        await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill(saved.items.find(item=>item.code===code(i))!.catalog_code);
         const row=page.getByRole('textbox',{name:`${label} 품목명`,exact:true}).locator('xpath=ancestor::tr[1]');
         const cost=restored?(i<scenario.existing?100:0):(i<scenario.held?(i<scenario.existing?100:0):chosenCost(i,scenario.existing));
         await expect(row.getByRole('cell',{name:`${cost}원`,exact:true}).first()).toBeVisible();
@@ -170,7 +170,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
         expect(dateColumn).toBeGreaterThanOrEqual(0);
         await expect(row.getByRole('cell').nth(dateColumn)).toHaveText(effectiveDate || '-');
       }
-      await page.getByRole('textbox',{name:'품목 검색',exact:true}).fill('');
+      await page.getByRole('searchbox',{name:'품목 검색',exact:true}).fill('');
     };
     await checkVisibleCosts(false);
     await page.screenshot({path:info.outputPath('real-stage-a-saved.png')});
