@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
+import { formatWon } from "@/domains/shared/money";
+import { useConfirm } from "./ui/confirm-dialog";
+import { SearchInput } from "./ui/search-input";
+import { EmptyState } from "./ui/state";
 import NextLink from "next/link";
 
 type Draft = { id: string; content: { title: string }; revision: number };
@@ -16,6 +20,7 @@ type Event = { id: string; event_type: string; occurred_at: string;
   device_class: string | null; actor_name: string | null };
 
 export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [documents, setDocuments] = useState<Draft[]>([]);
   const [kind, setKind] = useState<"document" | "catalog">("document");
   const [catalogEnabled, setCatalogEnabled] = useState(false);
@@ -67,7 +72,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     const result = await response.json() as { settings?: { cutoff_time: string | null; minimum_amount: number | null } | null; message?: string };
     if (!response.ok) throw new Error(result.message || "주문 설정을 확인하지 못했습니다. 다시 시도해 주세요.");
     const minimum = result.settings?.minimum_amount;
-    const minimumText = typeof minimum === "number" && Number.isSafeInteger(minimum) && minimum >= 0 ? `${minimum.toLocaleString()}원` : "확인 필요";
+    const minimumText = typeof minimum === "number" && Number.isSafeInteger(minimum) && minimum >= 0 ? formatWon(minimum) : "확인 필요";
     setSettingsNotice(result.settings
       ? `저장된 주문 설정 확인 · 마감 ${result.settings.cutoff_time || "확인 필요"} · 최소 ${minimumText}. 실제 배송일과 금액은 매장별 권역·거래처 설정으로 다시 확인합니다.`
       : "저장된 회사 주문 설정이 없습니다. 기존 기본값을 사용하며, 배송 권역·요일은 주문 설정 화면에서 확인해 주세요.");
@@ -110,9 +115,11 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     finally { setBusy(false); }
   }
   async function issueCompanyLinks() {
-    if (!issueReady || busy || !window.confirm(
-      `회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 ${kind === "catalog" ? "전체 상품" : "문서"} 링크는 재사용합니다. 계속할까요?`,
-    )) return;
+    if (!issueReady || busy || !await confirm({
+      body: `회사 전체 거래처에 매장별 링크를 발급합니다. 이미 활성화된 같은 ${kind === "catalog" ? "전체 상품" : "문서"} 링크는 재사용합니다.`,
+      confirmLabel: "전체 발급",
+      title: "회사 전체 매장 링크 발급"
+    })) return;
     setBusy(true); setMessage(""); setCreatedUrl("");
     let afterId: string | null = null;
     let processed = 0;
@@ -214,14 +221,10 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       <label className="block text-sm">발행 버전<select className="mt-1 w-full rounded border p-2" value={versionId}
         onChange={(event) => setVersionId(event.target.value)}><option value="">발행 버전 선택</option>
         {versions.map((item) => <option key={item.id} value={item.id}>{item.content.title} · v{item.version}</option>)}</select></label></>}
-      <div className="flex gap-2"><input aria-label="거래처 검색" disabled={busy} className="min-w-0 flex-1 rounded border p-2" value={customerQuery}
-        onChange={(event) => { setCustomerQuery(event.target.value); setCustomerId(""); setSelectedCustomerIds([]); setCustomers([]); setCustomersSearched(false); }} placeholder="매장 이름 검색" />
+      <div className="flex gap-2"><SearchInput aria-label="거래처 검색" className="min-w-0 flex-1 max-sm:!h-11" inputProps={{ disabled: busy }} value={customerQuery}
+        onChange={(value) => { setCustomerQuery(value); setCustomerId(""); setSelectedCustomerIds([]); setCustomers([]); setCustomersSearched(false); }} placeholder="매장 이름 검색" />
         <Button variant="outline" className="min-h-[44px]" disabled={busy} onClick={() => void searchCustomers()}>검색</Button></div>
-      {customersSearched && !customers.length && <div role="status" className="text-sm text-slate-600">
-        <p>검색된 거래처가 없습니다. 검색어를 바꾸거나 거래처 등록 상태를 확인한 뒤 다시 검색해 주세요.</p>
-        <NextLink href="/" className="inline-flex min-h-[44px] items-center underline">거래처 등록 화면 열기</NextLink>
-        <p>기존 화면의 ‘매장 및 거래처 등록 → 엑셀 대량’을 이용할 수 있습니다.</p>
-      </div>}
+      {customersSearched && !customers.length && <EmptyState message="검색된 거래처가 없습니다." description="검색어를 바꾸거나 거래처 등록 상태를 확인한 뒤 다시 검색해 주세요." action={<NextLink href="/" className="inline-flex min-h-[44px] items-center underline">거래처 등록 화면 열기</NextLink>} />}
       <select aria-label="링크를 받을 매장" className="w-full rounded border p-2" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">매장 선택</option>
         {customers.map((item) => <option key={item.id} value={item.id}>{item.customer_name}</option>)}</select>
@@ -259,5 +262,6 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
         {new Date(event.occurred_at).toLocaleString("ko-KR")} · {event.event_type} · {event.actor_name || event.device_class || ""}</li>)}</ul>
       <button className="mt-2 rounded border px-3 py-2" onClick={() => setDetail(null)}>닫기</button>
     </section>}
+    {confirmDialog}
   </div>;
 }

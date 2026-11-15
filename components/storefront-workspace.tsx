@@ -10,6 +10,8 @@ import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { SearchInput } from "./ui/search-input";
+import { EmptyState } from "./ui/state";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
 import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
@@ -341,8 +343,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
             if (day) void load(day).catch(() => undefined);
             else { ++loadSequence.current; setLoading(false); setLoadError("배송일을 선택해 주세요."); } }} /></label>
       <p className="text-sm text-slate-600">배송 권역·가능 요일·휴일·마감은 주문 제출 직전에 서버에서 다시 확인합니다.</p>
-      {catalogMode ? <input aria-label="상품 검색" className="h-11 w-full rounded border px-3 text-sm" onChange={(event) => searchCatalog(event.target.value)}
-        placeholder="상품 이름 검색" type="search" value={catalogQuery} /> : <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
+      {catalogMode ? <SearchInput aria-label="상품 검색" className="w-full max-sm:!h-11" onChange={searchCatalog}
+        placeholder="상품 이름 검색" value={catalogQuery} /> : <div role="group" aria-label="품목 보기" className="flex gap-2 text-sm">
         {(["all", "favorites", "hidden"] as const).map((view) =>
           <button key={view} aria-pressed={productView === view} className="min-h-[44px] rounded border px-3"
             onClick={() => setProductView(view)}>{view === "all" ? "전체" : view === "favorites" ? "즐겨찾기" : "숨긴 품목"}</button>)}
@@ -366,7 +368,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
           <button aria-pressed={orderView === "table"} className="min-h-[44px] rounded border px-3" onClick={() => setOrderView("table")}>표형</button>
         </div>
       </div>
-      {visibleProducts.length === 0 && <p className="rounded border p-3 text-sm">해당 조건의 품목이 없습니다. 분류나 필터를 바꿔 주세요.</p>}
+      {visibleProducts.length === 0 && <EmptyState message="해당 조건의 품목이 없습니다." description="분류나 필터를 바꿔 주세요." />}
       {orderView === "table" && <div className="hidden grid-cols-[minmax(0,1fr)_200px_150px] gap-3 bg-slate-50 p-3 text-sm text-slate-600 md:grid"><span>품목 · 규격 · 판매가</span><span>품목 설정</span><span>수량</span></div>}
       <ul className={orderView === "table" ? "grid gap-2" : "grid gap-2 md:grid-cols-2 xl:grid-cols-3"}>{visibleProducts.map((line) => <li key={line.key} className={`rounded border p-3 ${orderView === "table" ? "md:grid md:grid-cols-[minmax(0,1fr)_200px_150px] md:items-center md:gap-3" : ""}`}>
         <div className="flex justify-between gap-2"><div><strong>{line.name}</strong>

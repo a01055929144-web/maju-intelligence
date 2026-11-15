@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
+import { SearchInput } from "./ui/search-input";
 
 type AddressResult = { address: string; buildingName: string };
 
@@ -62,7 +63,7 @@ export function StoreProfileForm() {
     <div className="space-y-2">
       <label className="block text-sm font-semibold" htmlFor="store-address-query">매장 주소</label>
       <div className="flex gap-2">
-        <input className={`${field} font-normal`} id="store-address-query" onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void searchAddress(); } }} placeholder="도로명·건물명으로 검색" value={query} />
+        <SearchInput className="min-w-0 flex-1 max-sm:!h-11" inputProps={{ id: "store-address-query", onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); void searchAddress(); } } }} onChange={setQuery} placeholder="도로명·건물명으로 검색" value={query} />
         <Button className="min-h-[44px] shrink-0" onClick={() => void searchAddress()} type="button" variant="outline">검색</Button>
       </div>
       {results.length ? <ul aria-label="주소 검색 결과" className="max-h-56 divide-y overflow-auto rounded-lg border">
