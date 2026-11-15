@@ -31,6 +31,7 @@ import {
   SALES_OUTREACH_RULES
 } from "@/domains/lead/outreach-governance";
 import { composeDmWithKit, type SalesKitField, type SalesKitLine, type SalesKitSettings } from "@/domains/lead/sales-kit";
+import { buildOutreachChannelText, OUTREACH_TEXT_CHANNEL_LABEL, OUTREACH_TEXT_CHANNELS, type OutreachTextChannel } from "@/domains/lead/outreach-channel-text";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { PermitLeadItem } from "@/lib/store";
 import { LEAD_DM_TEMPLATES } from "@/domains/lead/dm-template";
@@ -106,6 +107,11 @@ export function LeadContactChannelsPanel({
   const [contactSaving, setContactSaving] = useState(false);
   const [contactDraft, setContactDraft] = useState({ label: "", phone: "" });
   const [sentChannels, setSentChannels] = useState<LeadContactChannel[]>([]);
+  const [priceSheetLinks, setPriceSheetLinks] = useState<Array<{ id: string; title: string; url: string; publishedAt: string }>>([]);
+  const [selectedPriceSheetUrl, setSelectedPriceSheetUrl] = useState("");
+  const [savingPriceSheetDefault, setSavingPriceSheetDefault] = useState(false);
+  const [recordingTextChannel, setRecordingTextChannel] = useState<OutreachTextChannel | null>(null);
+  const [sentTextChannels, setSentTextChannels] = useState<OutreachTextChannel[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -122,6 +128,24 @@ export function LeadContactChannelsPanel({
       .catch(() => null);
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchWithTimeout(withPermitLeadCompanyQuery("/api/sales-kit/price-sheet-links"), { cache: "no-store" }, 12000)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { links?: Array<{ id: string; title: string; url: string; publishedAt: string }> } | null;
+        if (!active || !response.ok) return;
+        const links = payload?.links || [];
+        setPriceSheetLinks(links);
+        setSelectedPriceSheetUrl((current) => current || links[0]?.url || "");
+      })
+      .catch(() => null);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (salesKit?.priceSheetUrl && priceSheetLinks.some((link) => link.url === salesKit.priceSheetUrl)) setSelectedPriceSheetUrl(salesKit.priceSheetUrl);
+  }, [priceSheetLinks, salesKit?.priceSheetUrl]);
 
   useEffect(() => {
     let active = true;
@@ -169,6 +193,7 @@ export function LeadContactChannelsPanel({
     setEditing(null);
     setNotice(null);
     setSentChannels([]);
+    setSentTextChannels([]);
     // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
@@ -255,7 +280,11 @@ export function LeadContactChannelsPanel({
     [lead.email, lead.fax, lead.instagramUrl, lead.naverTalktalkUrl, lead.phone]
   );
 
-  const outgoing = composeDmWithKit(message, kitLines, kitSelected);
+  const effectiveKitLines = selectedPriceSheetUrl
+    ? [...kitLines.filter((line) => line.field !== "price_sheet"), { field: "price_sheet" as const, label: "단가표", text: `▶ 단가표 ${selectedPriceSheetUrl}` }]
+    : kitLines;
+  const effectiveKitSelected = selectedPriceSheetUrl && !kitSelected.includes("price_sheet") ? [...kitSelected, "price_sheet" as const] : kitSelected;
+  const outgoing = composeDmWithKit(message, effectiveKitLines, effectiveKitSelected);
   const channelRows = ([
     { channel: "sms", value: mobile || "", url: mobile ? buildSmsUrl(mobile, outgoing) : "" },
     { channel: "instagram", value: instagramHandle ? `@${instagramHandle}` : "", url: instagramHandle ? buildInstagramDmUrl(instagramHandle) : "" },
@@ -294,6 +323,42 @@ export function LeadContactChannelsPanel({
       setNotice(saved.ok ? { tone: "ok", text: `${LEAD_CONTACT_CHANNEL_LABELS[channel]} 보낸 기록을 남겼습니다.` } : { tone: "error", text: saved.message || "기록하지 못했습니다." });
     } finally {
       setRecording(null);
+    }
+  }
+
+  async function recordTextSent(channel: OutreachTextChannel) {
+    if (!requireAcknowledgedPolicy()) return;
+    const actionType: PermitLeadActionKind = channel === "sms" ? "sms" : channel === "talktalk" ? "talktalk" : "dm";
+    const formatted = buildOutreachChannelText(channel, outgoing, selectedPriceSheetUrl || undefined).text;
+    setRecordingTextChannel(channel);
+    setNotice(null);
+    try {
+      const saved = await onAction(lead, actionType, `${OUTREACH_TEXT_CHANNEL_LABEL[channel]} 전달`, formatted.slice(0, 500));
+      if (saved.ok) setSentTextChannels((current) => current.includes(channel) ? current : [...current, channel]);
+      setNotice(saved.ok ? { tone: "ok", text: `${OUTREACH_TEXT_CHANNEL_LABEL[channel]} 보낸 기록을 남겼습니다.` } : { tone: "error", text: saved.message || "기록하지 못했습니다." });
+    } finally {
+      setRecordingTextChannel(null);
+    }
+  }
+
+  async function savePriceSheetDefault() {
+    if (!salesKit || !selectedPriceSheetUrl) return;
+    setSavingPriceSheetDefault(true);
+    setNotice(null);
+    try {
+      const response = await fetchWithTimeout(withPermitLeadCompanyQuery("/api/sales-kit"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...salesKit, priceSheetUrl: selectedPriceSheetUrl })
+      }, 12000);
+      const payload = (await response.json().catch(() => null)) as { kit?: SalesKitSettings; message?: string } | null;
+      if (!response.ok || !payload?.kit) throw new Error(payload?.message || "기본 단가표를 저장하지 못했습니다.");
+      setSalesKit(payload.kit);
+      setNotice({ tone: "ok", text: "이 단가표를 영업정보의 기본값으로 저장했습니다." });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "기본 단가표를 저장하지 못했습니다." });
+    } finally {
+      setSavingPriceSheetDefault(false);
     }
   }
 
@@ -512,15 +577,38 @@ export function LeadContactChannelsPanel({
           value={message}
         />
       </label>
+      <div className="mt-2 rounded-lg border border-teal-200 bg-teal-50 p-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 text-xs font-black text-slate-700">
+            발행한 단가표
+            <select
+              aria-label="발행한 단가표"
+              className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold"
+              onChange={(event) => setSelectedPriceSheetUrl(event.target.value)}
+              value={selectedPriceSheetUrl}
+            >
+              {priceSheetLinks.length ? priceSheetLinks.map((link) => (
+                <option key={link.id} value={link.url}>{link.title} · {new Date(link.publishedAt).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}</option>
+              )) : <option value="">발행한 공개 단가표가 없습니다</option>}
+            </select>
+          </label>
+          {canEditSalesKit ? (
+            <button className="maju-button-secondary min-h-11 px-3 text-xs" disabled={!selectedPriceSheetUrl || savingPriceSheetDefault} onClick={() => void savePriceSheetDefault()} type="button">
+              {savingPriceSheetDefault ? "저장 중" : "기본으로 저장"}
+            </button>
+          ) : null}
+        </div>
+        {selectedPriceSheetUrl ? <p className="mt-1 truncate text-[11px] font-semibold text-teal-800">▶ 단가표 {selectedPriceSheetUrl}</p> : null}
+      </div>
       <div className="mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2">
-        {kitLines.length ? (
+        {effectiveKitLines.length ? (
           <ul className="space-y-1">
-            {kitLines.map((line) => (
+            {effectiveKitLines.map((line) => (
               <li key={line.field}>
                 <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-slate-700">
                   <label className="flex min-w-0 flex-1 items-center gap-2">
                     <input
-                      checked={kitSelected.includes(line.field)}
+                      checked={effectiveKitSelected.includes(line.field)}
                       onChange={(event) => setKitSelected((current) => (event.target.checked ? [...current, line.field] : current.filter((item) => item !== line.field)))}
                       type="checkbox"
                     />
@@ -545,6 +633,31 @@ export function LeadContactChannelsPanel({
             단가표·주문 링크·연락처를 문구 아래에 붙이려면 <a className="font-black text-teal-700 underline-offset-2 hover:underline" href="/dashboard/settings/sales">회사 정보 › 영업 정보</a>에서 설정하세요.
           </p>
         )}
+      </div>
+
+      <div aria-label="채널별 문구" className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {OUTREACH_TEXT_CHANNELS.map((channel) => {
+          const formatted = buildOutreachChannelText(channel, outgoing, selectedPriceSheetUrl || undefined);
+          return (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2" key={channel}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-black text-slate-800">{OUTREACH_TEXT_CHANNEL_LABEL[channel]}</span>
+                {channel === "sms" ? <span className={`text-[10px] font-black ${formatted.longSms ? "text-amber-700" : "text-slate-500"}`}>{formatted.longSms ? "장문 문자" : `${formatted.bytes} bytes`}</span> : null}
+              </div>
+              <div className="mt-1 flex gap-1.5">
+                <button className="maju-button-secondary min-h-11 flex-1 px-2 text-xs" onClick={() => void copyMessage(formatted.text)} type="button"><Copy className="h-3.5 w-3.5" />복사</button>
+                <button
+                  className={`maju-button-secondary min-h-11 flex-1 px-2 text-xs ${sentTextChannels.includes(channel) ? "border-teal-600 bg-teal-600 text-white" : ""}`}
+                  disabled={Boolean(recordingTextChannel)}
+                  onClick={() => void recordTextSent(channel)}
+                  type="button"
+                >
+                  {recordingTextChannel === channel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}보냈음
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div aria-label="영업 채널 표" className="mt-2 divide-y divide-slate-200 border-y border-slate-200">

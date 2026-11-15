@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSalesKitLines, composeDmWithKit, createShortCode, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl } from "../domains/lead/sales-kit";
+import { buildSalesKitLines, composeDmWithKit, createShortCode, parseSalesKit, SHORT_CODE_PATTERN, validateOrderUrl, validatePriceSheetUrl } from "../domains/lead/sales-kit";
 
 describe("sales kit", () => {
   it("creates 7-character short codes", () => {
@@ -32,5 +32,7 @@ describe("sales kit", () => {
     expect(parseSalesKit(JSON.stringify({ materials: [{ code: "../x", kind: "price_sheet" }] })).materials).toEqual([]);
     expect(validateOrderUrl("http://example.com")).not.toBe("");
     expect(validateOrderUrl("https://example.com")).toBe("");
+    expect(validatePriceSheetUrl("javascript:alert(1)")).not.toBe("");
+    expect(validatePriceSheetUrl("https://example.com/pricing-document#fake")).toBe("");
   });
 });

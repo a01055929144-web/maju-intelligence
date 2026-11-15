@@ -38,9 +38,15 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   await page.route(/\/api\/sales-kpi/, (route) => route.fulfill({ json: {} }));
   await page.route(/\/api\/sales-kit(?:\?|$)/, (route) => route.fulfill({ json: {
     canEdit: true,
-    kit: { contactLabel: "가짜유통", contactPhone: "01000000000", defaults: {}, fields: ["contact"], materials: [], orderCode: "", orderUrl: "" },
+    kit: { contactLabel: "가짜유통", contactPhone: "01000000000", defaults: {}, fields: ["contact"], materials: [], orderCode: "", orderUrl: "", priceSheetUrl: "" },
     lines: [{ field: "contact", label: "문의", text: "▶ 문의 가짜유통 010-0000-0000" }]
   } }));
+  await page.route(/\/api\/sales-kit\/price-sheet-links/, (route) => route.fulfill({ json: { links: [{
+    id: "60000000-0000-4000-8000-000000000014",
+    title: "가짜 11월 단가표",
+    publishedAt: now,
+    url: "https://example.test/pricing-document#fake-token"
+  }] } }));
   await page.route(/\/api\/leads\/outreach-policy/, async (route) => {
     if (route.request().method() === "POST") return route.fulfill({ json: { acknowledged: true } });
     await new Promise<void>((resolve) => { acknowledge = resolve; });
@@ -59,6 +65,11 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   expect((await channelTable.boundingBox())!.y).toBeGreaterThan((await messageBox.boundingBox())!.y);
   await panel.getByRole("button", { name: "수칙 보기·확인" }).click();
   await panel.getByRole("button", { name: "확인하고 영업 시작" }).click();
+  await expect(panel.getByRole("combobox", { name: "발행한 단가표" })).toHaveValue("https://example.test/pricing-document#fake-token");
+  for (const channel of ["문자", "카톡", "인스타 DM", "네이버 톡톡", "카페 댓글", "쪽지"]) {
+    await expect(panel.locator('[aria-label="채널별 문구"]').getByText(channel, { exact: true })).toBeVisible();
+  }
   await panel.getByRole("button", { name: "문구 복사", exact: true }).first().click();
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 문의 가짜유통 010-0000-0000");
+  await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 단가표 https://example.test/pricing-document#fake-token");
 });
