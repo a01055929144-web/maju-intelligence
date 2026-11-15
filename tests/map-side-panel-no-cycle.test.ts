@@ -8,6 +8,8 @@ it.each([
   "components/map/lead-list-sort.ts",
   "components/map/map-place-detail.tsx",
   "components/map/map-place-helpers.ts",
+  "components/map/vehicle-layer.tsx",
+  "components/map/vehicle-helpers.tsx",
 ])("%s는 sales-route-map-workspace를 import하지 않는다", (file) => {
   expect(readFileSync(file, "utf8")).not.toMatch(/from\s+["'][^"']*sales-route-map-workspace["']/);
 });
