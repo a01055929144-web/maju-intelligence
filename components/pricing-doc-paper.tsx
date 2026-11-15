@@ -8,6 +8,7 @@ import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/documen
 import type { DocumentOutput } from "@/domains/pricing/document";
 import { FOLDER_DRAG, PROMO_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
+import { formatWon } from "@/domains/shared/money";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
 const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "카탈로그가", base: "기본가", edited: "문서에서 고침" };
@@ -111,7 +112,7 @@ function EditablePricingDocPaper({
               {promos.map(({ index, line }) => (
                 <tr className="border-b border-amber-200" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
                   <td className="py-1 [overflow-wrap:anywhere]">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs font-bold">{line.badge || "행사"}</span>{line.displayName}<span className="block text-xs font-normal text-slate-600">{[line.spec, line.unit].filter(Boolean).join(" · ")}</span></td>
-                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{visiblePrice(line).toLocaleString()}원{editable ? <a className="block text-[11px] font-normal text-teal-700 underline print:hidden" href="/revenue/pricing/promotions" rel="noopener" target="_blank">행사 화면에서 수정</a> : null}{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
+                  <td className="border-l border-amber-200 px-2 py-1 text-right font-bold [overflow-wrap:anywhere]">{formatWon(visiblePrice(line))}{editable ? <a className="block text-[11px] font-normal text-teal-700 underline print:hidden" href="/revenue/pricing/promotions" rel="noopener" target="_blank">행사 화면에서 수정</a> : null}{display.showTaxType ? <span className="block text-xs font-normal text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}</td>
                   <td className="py-1 text-right text-xs text-slate-600">{line.endsOn ? `${line.endsOn}까지` : ""}</td>
                   <td className="w-8 py-1 text-right">{editable ? <button aria-label={`${line.displayName} 빼기`} className="text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td>
                 </tr>
@@ -123,7 +124,7 @@ function EditablePricingDocPaper({
                 <div className="relative rounded-md bg-white p-2" key={`${line.productId}:${line.promotionId}`} onDragOver={(event) => { if (draggedLine.current !== null) event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); dropLine(index); }}>
                   <p className="text-sm font-bold">{editable ? <span aria-hidden="true" className="shrink-0 cursor-grab px-1 text-amber-700" draggable onDragEnd={() => { draggedLine.current = null; }} onDragStart={() => { draggedLine.current = index; }} title="끌어서 행사 순서 변경">⠿</span> : null}<span className="mr-1 rounded bg-amber-200 px-1 text-xs">{line.badge || "행사"}</span>{line.displayName}</p>
                   <p className="text-xs text-slate-600">{line.spec} {line.unit}{line.endsOn ? ` · ${line.endsOn}까지` : ""}</p>
-                  <p className="font-black text-orange-700">{visiblePrice(line).toLocaleString()}원</p>
+                  <p className="font-black text-orange-700">{formatWon(visiblePrice(line))}</p>
                   {display.showTaxType ? <p className="text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</p> : null}
                   {editable ? <button aria-label={`${line.displayName} 빼기`} className="absolute right-1.5 top-1.5 text-slate-400 hover:text-rose-600" onClick={() => removeLine(index)} type="button"><Trash2 className="h-3.5 w-3.5" /></button> : null}
                 </div>
@@ -254,7 +255,7 @@ function QuickAdd({ added, onAdd, onSearch }: {
               <button className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${index === active ? "bg-teal-50" : ""} ${added.has(item.id) ? "text-slate-400" : ""}`} onClick={() => pick(item)} onMouseEnter={() => setActive(index)} type="button">
                 <span className="min-w-0 flex-1 truncate font-semibold">{item.displayName || item.name}</span>
                 <span className="text-xs text-slate-500">{item.spec} {item.unit}</span>
-                <span className="w-20 text-right font-bold">{item.price.toLocaleString()}원</span>
+                <span className="w-20 text-right font-bold">{formatWon(item.price)}</span>
                 {added.has(item.id) ? <span className="text-xs">담김</span> : null}
               </button>
             </li>

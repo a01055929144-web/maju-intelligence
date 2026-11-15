@@ -6,6 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { koreaDay, type CatalogChoice, type DocumentDraft, type DocumentKind } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
+import { useConfirm } from "./ui/confirm-dialog";
+import { Notice } from "./ui/notice";
+import { SearchInput } from "./ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "./ui/state";
 
 type SheetRow = DocumentDraft & { published: boolean; stale: boolean; status: string };
 type Props = {
@@ -19,6 +23,7 @@ const day = (value: string) => value.slice(0, 10);
 const addDays = (value: string, days: number) => koreaDay(new Date(new Date(`${value}T12:00:00+09:00`).getTime() + days * 86400000));
 
 export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, onCopy }: Props) {
+  const { confirm, confirmDialog } = useConfirm();
   const today = koreaDay();
   const [showArchived, setShowArchived] = useState(false);
   const [archiveAvailable, setArchiveAvailable] = useState(false);
@@ -139,7 +144,12 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
     setMessage(`${done}개 문서의 초안 유효기간을 7일 늘렸습니다. 공개하려면 버전을 확정해 주세요.`);
   }
   async function archiveSelected() {
-    if (!selectedRows.length || !window.confirm(showArchived ? "선택한 문서를 복원할까요?" : "선택한 문서를 보관할까요? 발행본·공유 링크·주문 내역은 유지되며 기존 링크의 주문도 계속됩니다. 링크를 중단하려면 링크 관리에서 별도로 회수해 주세요.")) return;
+    if (!selectedRows.length || !(await confirm({
+      title: showArchived ? "선택 문서 복원" : "선택 문서 보관",
+      body: showArchived ? "선택한 문서를 복원할까요?" : "선택한 문서를 보관할까요? 발행본·공유 링크·주문 내역은 유지되며 기존 링크의 주문도 계속됩니다. 링크를 중단하려면 링크 관리에서 별도로 회수해 주세요.",
+      confirmLabel: showArchived ? "복원" : "보관",
+      tone: "default",
+    }))) return;
     let done = 0;
     for (const document of selectedRows) {
       try {
@@ -174,14 +184,15 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
     { key: "links", label: "매장 링크(곳·주문·열람)", value: () => "–" },
   ], [onOpen, selected]);
   return <div className="space-y-4" aria-busy={busy}>
+    {confirmDialog}
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-semibold">견적서·단가표</h1><p className="text-sm text-slate-600">작성한 문서를 고르고 편집하거나 새로 만드세요.</p></div><div className="flex flex-wrap gap-2"><Link className="maju-button-secondary" href="/dashboard/settings/company?tab=order">주문 설정</Link><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("restore"))} type="button">직전 변동분 복구</button><button className="maju-button-secondary" disabled={!manager || busy} onClick={() => void run(() => priceCommand("recalculate"))} type="button">변동분 일괄 계산</button><button className="maju-button-primary" onClick={() => onCreate("quote")} type="button">+ 견적서</button>{manager ? <button className="maju-button-primary" onClick={() => onCreate("sheet")} type="button">+ 단가표</button> : null}</div></header>
     {archiveAvailable ? <div className="flex flex-wrap items-center gap-2"><Button disabled={busy || loading} aria-pressed={!showArchived} onClick={() => { setShowArchived(false); setSelected([]); }} type="button">사용 중 문서</Button><Button disabled={busy || loading} aria-pressed={showArchived} onClick={() => { setShowArchived(true); setSelected([]); }} type="button">문서 보관함</Button><Button disabled={busy || loading || !selected.length} onClick={() => void run(archiveSelected)} type="button">{showArchived ? "선택 문서 복원" : "선택 문서 보관"}</Button><p className="text-sm">보관은 목록 정리입니다. 발행본·링크·주문은 삭제되지 않습니다.</p></div> : null}
-    {error ? <p role="alert" className="rounded bg-red-50 p-3 text-red-800">{error} <button className="underline" onClick={() => void load().catch(cause => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))} type="button">다시 시도</button></p> : null}
-    {message ? <p role="status" className="rounded bg-teal-50 p-3">{message}</p> : null}
+    {error ? <ErrorState message={error} onRetry={() => void load().catch(cause => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))} /> : null}
+    {message ? <Notice kind="success">{message}</Notice> : null}
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{[["게시 중", rows.filter((row) => row.status === "게시 중").length], ["다시 계산 필요", `${rows.filter((row) => row.stale).length}건 · ${rows.filter((row) => row.stale).reduce((n, row) => n + (row.recalculation?.changedProductCount || 0), 0)}개 품목`], ["이번 주 링크 주문", "–"], ["만료 7일 이내", rows.filter((row) => row.content.validUntil >= today && row.content.validUntil <= addDays(today, 7)).length]].map(([label, value]) => <div className="maju-section-card p-3" key={label}><p className="text-sm text-slate-600">{label}</p><strong>{value}</strong></div>)}</div>
-    <div className="flex flex-wrap gap-2">{["전체", "단가표", "견적서", "행사", "임박"].map((item) => <button aria-pressed={kind === item} className={kind === item ? "maju-button-primary" : "maju-button-secondary"} key={item} onClick={() => setKind(item)} type="button">{item}</button>)}<select aria-label="문서 상태" className="maju-input" value={status} onChange={(event) => setStatus(event.target.value)}>{["전체", "작성중", "게시 중", "다시 계산 필요", "만료"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="공개 범위" className="maju-input" value={scope} onChange={(event) => setScope(event.target.value)}>{["전체", "회사 공용", "작성자 전용"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="날짜 기준" className="maju-input" value={dateBasis} onChange={(event) => setDateBasis(event.target.value)}><option>작성일</option><option>유효기간</option></select><select aria-label="날짜 범위" className="maju-input" value={dateRange} onChange={(event) => setDateRange(event.target.value)}>{["전체", "오늘", "7일", "30일", "이번 달", "기간 지정"].map((item) => <option key={item}>{item}</option>)}</select>{dateRange === "기간 지정" ? <><input aria-label="시작일" className="maju-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /><input aria-label="종료일" className="maju-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></> : null}<input aria-label="이름·매장 검색" className="maju-input" placeholder="이름·매장 검색" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+    <div className="flex flex-wrap gap-2">{["전체", "단가표", "견적서", "행사", "임박"].map((item) => <button aria-pressed={kind === item} className={kind === item ? "maju-button-primary" : "maju-button-secondary"} key={item} onClick={() => setKind(item)} type="button">{item}</button>)}<select aria-label="문서 상태" className="maju-input" value={status} onChange={(event) => setStatus(event.target.value)}>{["전체", "작성중", "게시 중", "다시 계산 필요", "만료"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="공개 범위" className="maju-input" value={scope} onChange={(event) => setScope(event.target.value)}>{["전체", "회사 공용", "작성자 전용"].map((item) => <option key={item}>{item}</option>)}</select><select aria-label="날짜 기준" className="maju-input" value={dateBasis} onChange={(event) => setDateBasis(event.target.value)}><option>작성일</option><option>유효기간</option></select><select aria-label="날짜 범위" className="maju-input" value={dateRange} onChange={(event) => setDateRange(event.target.value)}>{["전체", "오늘", "7일", "30일", "이번 달", "기간 지정"].map((item) => <option key={item}>{item}</option>)}</select>{dateRange === "기간 지정" ? <><input aria-label="시작일" className="maju-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /><input aria-label="종료일" className="maju-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></> : null}<SearchInput aria-label="이름·매장 검색" className="w-full sm:w-64" placeholder="이름·매장 검색" value={search} onChange={setSearch} /></div>
     <div className="flex flex-wrap items-center gap-2"><span>선택 {selected.length}건</span><button className="maju-button-secondary" disabled={!selected.length || busy} onClick={() => void run(exportSelected)} type="button">엑셀 내보내기</button><button className="maju-button-secondary" disabled={showArchived || !selected.length || busy} onClick={() => void run(recalculateDocuments)} type="button">다시 계산</button><button className="maju-button-secondary" disabled={showArchived || !selected.length || busy} onClick={() => void run(extend)} type="button">기간 연장</button><button className="maju-button-secondary" disabled={selected.length !== 1} onClick={() => onCopy(selectedRows[0])} type="button">복사</button></div>
-    {loading ? <p role="status" className="maju-section-card p-6">문서를 불러오는 중입니다.</p> : documents.length ? <CommonDataTable selectable={false} columns={columns} phoneCards rows={visible} rowKey={(row) => row.id} settingsKey={`pricing-documents:${companyId}`} emptyMessage="조건에 맞는 문서가 없습니다. 필터를 바꾸거나 새 문서를 작성해 주세요." /> : <div className="maju-section-card p-6">아직 문서가 없습니다. <button className="text-teal-700 underline" onClick={() => onCreate(manager ? "sheet" : "quote")} type="button">{manager ? "+ 단가표" : "+ 견적서"}</button>부터 작성해 보세요.</div>}
+    {loading ? <LoadingState label="문서를 불러오는 중입니다." /> : documents.length ? <CommonDataTable selectable={false} columns={columns} phoneCards rows={visible} rowKey={(row) => row.id} settingsKey={`pricing-documents:${companyId}`} emptyMessage="조건에 맞는 문서가 없습니다. 필터를 바꾸거나 새 문서를 작성해 주세요." /> : <EmptyState action={<button className="maju-button-primary" onClick={() => onCreate(manager ? "sheet" : "quote")} type="button">{manager ? "+ 단가표" : "+ 견적서"}</button>} message="아직 문서가 없습니다." description="첫 문서를 작성해 보세요." />}
     <p className="text-sm text-slate-600">작성일은 현재 마지막 수정일을 기준으로 표시합니다. 평균 마진·할인율·주문 집계는 이 문서 원장에 값이 없어 –로 표시합니다.</p>
   </div>;
 }
