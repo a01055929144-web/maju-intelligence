@@ -10,6 +10,7 @@ import { SalesQuoteAcceptButton } from "@/components/sales-quote-accept-button";
 import { customerHasCapability, getAdminSession, getCustomerSession, resolvePageCompanyId } from "@/lib/auth";
 import { isQuotePricingPending } from "@/lib/quote-pricing-retry";
 import { getRevenuePipeline, listSalesQuotes, type RevenuePipeline, type SalesQuoteListItem } from "@/lib/store";
+import { formatNumber, formatWon } from "@/domains/shared/money";
 
 const emptyPipeline: RevenuePipeline = {
   conversionRate: 0,
@@ -122,11 +123,11 @@ export default async function RevenuePipelinePage({ searchParams }: { searchPara
               <p className="maju-section-title">기회 현황</p>
               <p className="mt-1 maju-muted-label">방문 기록 · 견적 요청</p>
             </div>
-            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{pipeline.items.length.toLocaleString()}건 관리</Badge>
+            <Badge className="bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{formatNumber(pipeline.items.length)}건 관리</Badge>
           </div>
           <div className="grid md:grid-cols-4">
-            <Metric icon={Banknote} label="예상 총매출" value={`${pipeline.expectedRevenue.toLocaleString()}만원`} />
-            <Metric icon={CircleDollarSign} label="가중 매출" value={`${pipeline.weightedRevenue.toLocaleString()}만원`} />
+            <Metric icon={Banknote} label="예상 총매출" value={`${formatNumber(pipeline.expectedRevenue)}만원`} />
+            <Metric icon={CircleDollarSign} label="가중 매출" value={`${formatNumber(pipeline.weightedRevenue)}만원`} />
             <Metric icon={TrendingUp} label="견적 대기" value={`${pipeline.quoteRequests}건`} />
             <Metric icon={Percent} label="예상 전환율" value={`${pipeline.conversionRate}%`} />
           </div>
@@ -235,7 +236,7 @@ function SalesQuoteLedger({
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
           <Badge className="bg-blue-50 text-blue-700">공유 중 {activeCount}건</Badge>
           <Badge className="bg-amber-50 text-amber-800">만료 {expiredCount}건</Badge>
-          <Badge className="bg-teal-50 text-teal-800">총 {totalSales.toLocaleString()}원</Badge>
+          <Badge className="bg-teal-50 text-teal-800">총 {formatWon(totalSales)}</Badge>
         </div>
       </div>
       <form className="grid gap-3 border-b border-slate-200/80 bg-slate-50/70 p-4 md:grid-cols-[minmax(240px,1fr)_180px_180px_auto] md:items-end" method="get">
@@ -282,7 +283,7 @@ function SalesQuoteLedger({
       </form>
       {hasFilters ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 text-sm">
-          <p className="font-semibold text-slate-600">전체 {totalCount.toLocaleString()}건 중 <span className="text-teal-700">{quotes.length.toLocaleString()}건</span></p>
+          <p className="font-semibold text-slate-600">전체 {formatNumber(totalCount)}건 중 <span className="text-teal-700">{formatNumber(quotes.length)}건</span></p>
           <p className="text-xs font-medium text-slate-500">검색 조건은 주소에 저장되어 다시 열어도 유지됩니다.</p>
         </div>
       ) : null}
@@ -315,7 +316,7 @@ function SalesQuoteLedger({
                       <p className="mt-1 truncate text-xs text-slate-500">{quote.title}</p>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-slate-600">{quote.createdByName || "담당자 미기록"}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-950">{quote.totalSales.toLocaleString()}원</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-950">{formatWon(quote.totalSales)}</td>
                     <td className="px-4 py-3 text-sm font-medium text-slate-600">{formatKoreanDate(quote.validUntil)}</td>
                     <td className="px-4 py-3"><Badge className={status.className}>{status.label}</Badge></td>
                     <td className="px-4 py-3 text-right">
@@ -417,10 +418,10 @@ function PipelineBasisPanel({
   weightedRevenue: number;
 }) {
   const items = [
-    { label: "방문", value: `${itemCount.toLocaleString()}건`, helper: "기록 기준" },
-    { label: "견적", value: `${quoteRequests.toLocaleString()}건`, helper: "후속 대상" },
-    { label: "예상", value: `${expectedRevenue.toLocaleString()}만원`, helper: "후보 합계" },
-    { label: "가중", value: `${weightedRevenue.toLocaleString()}만원`, helper: "확률 반영" },
+    { label: "방문", value: `${formatNumber(itemCount)}건`, helper: "기록 기준" },
+    { label: "견적", value: `${formatNumber(quoteRequests)}건`, helper: "후속 대상" },
+    { label: "예상", value: `${formatNumber(expectedRevenue)}만원`, helper: "후보 합계" },
+    { label: "가중", value: `${formatNumber(weightedRevenue)}만원`, helper: "확률 반영" },
     { label: "전환", value: `${conversionRate}%`, helper: "상태 기준" }
   ];
   const withCompanyQuery = (href: string) => (companyId ? `${href}?companyId=${encodeURIComponent(companyId)}` : href);

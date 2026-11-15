@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, X } from "lucide-react";
 import { KakaoAddressMap, type KakaoSalesAreaStat } from "@/components/kakao-address-map";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { formatNumber } from "@/domains/shared/money";
 import { isSalesAreaCovered, KOREAN_ADMINISTRATIVE_AREAS, KOREAN_GENERAL_GU_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
 type Region = { areaKind?: "assigned" | "expansion_candidate"; id: string; label: string };
@@ -44,6 +46,8 @@ export function SalesAreaSelector({
   readonly onChanged?: () => void;
   readonly onSnapshot?: (snapshot: SalesAreaSelectorSnapshot) => void;
 }) {
+  // 기존 window.confirm 계약은 공용 확인창으로 대체하되, 선택 전 확인 절차는 유지한다.
+  const { confirm, confirmDialog } = useConfirm();
   const [snapshot, setSnapshot] = useState(EMPTY_STATE);
   const [province, setProvince] = useState("서울특별시");
   const [busy, setBusy] = useState(false);
@@ -112,7 +116,7 @@ export function SalesAreaSelector({
       await load();
       onChanged?.();
       setMessage(areaKind === "assigned"
-        ? `저장했습니다. 기존 ${administrativeArea} 리드 ${(payload?.existingLeadCount || 0).toLocaleString()}건을 바로 표시하고, 내일 아침부터 새 매장이 들어옵니다.`
+        ? `저장했습니다. 기존 ${administrativeArea} 리드 ${formatNumber(payload?.existingLeadCount || 0)}건을 바로 표시하고, 내일 아침부터 새 매장이 들어옵니다.`
         : `${administrativeArea}을 영업 필요 지역으로 저장했습니다. 수동 탐색에만 사용하며 매일 자동 수집에는 포함하지 않습니다.`);
       return true;
     } catch {
@@ -151,10 +155,12 @@ export function SalesAreaSelector({
           .filter((item) => item.administrativeArea.split(" ").length === 2)
           .reduce((sum, item) => sum + item.recentLeadCount, 0);
         const daily = Math.round(recent / 30);
-        const accepted = window.confirm(
-          `${administrativeArea} 전체를 선택하면 최근 30일 신규 약 ${recent.toLocaleString()}건, 하루 평균 약 ${daily.toLocaleString()}건이 들어옵니다. `
-          + "현재 자동 작업 상한 기준 카카오 호출은 키워드 탐색 24회와 연락처 보강 30회, 하루 최대 약 54회입니다. 계속할까요?"
-        );
+        const accepted = await confirm({
+          title: "시·도 전체 영업 지역 추가",
+          body: `${administrativeArea} 전체를 선택하면 최근 30일 신규 약 ${formatNumber(recent)}건, 하루 평균 약 ${formatNumber(daily)}건이 들어옵니다. 현재 자동 작업 상한 기준 카카오 호출은 키워드 탐색 24회와 연락처 보강 30회, 하루 최대 약 54회입니다.`,
+          confirmLabel: "전체 지역 추가",
+          tone: "default"
+        });
         if (!accepted) return;
       }
       const saved = await addArea(administrativeArea);
@@ -318,7 +324,7 @@ export function SalesAreaSelector({
             {snapshot.recommendations.map((item) => (
               <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-bold text-slate-700 hover:border-teal-300 hover:bg-teal-50 disabled:opacity-50" disabled={!snapshot.canManage || busy || snapshot.salesAreaState.effectiveAreas.includes(item.administrativeArea)} key={item.administrativeArea} onClick={() => void addArea(item.administrativeArea)} type="button">
                 <span className="block text-slate-950">{item.administrativeArea}</span>
-                <span className="mt-0.5 block text-[11px] text-slate-500">거래처 {item.customerCount.toLocaleString()}곳 · 최근 30일 신규 리드 {item.recentLeadCount.toLocaleString()}건</span>
+                <span className="mt-0.5 block text-[11px] text-slate-500">거래처 {formatNumber(item.customerCount)}곳 · 최근 30일 신규 리드 {formatNumber(item.recentLeadCount)}건</span>
               </button>
             ))}
           </div>
@@ -377,6 +383,7 @@ export function SalesAreaSelector({
       {mapCenterPoint ? <button className="maju-button-secondary w-full justify-center" disabled={!snapshot.canManage || busy} onClick={() => void addMapCenter()} type="button"><MapPin className="h-4 w-4" />현재 지도 중심의 시·군·구 추가</button> : null}
       {!snapshot.canManage ? <p className="text-xs font-semibold text-slate-500">영업 지역은 회사 또는 거래처 관리 권한이 있는 사용자만 변경할 수 있습니다.</p> : null}
       {message ? <p className="text-xs font-bold text-slate-700">{message}</p> : null}
+      {confirmDialog}
     </div>
   );
 }
@@ -398,7 +405,7 @@ function SalesAreaCheckbox({
     <label className={`flex min-h-10 items-center gap-2 rounded-md px-2 py-1.5 ${disabled ? "opacity-60" : "cursor-pointer hover:bg-teal-50"}`}>
       <input checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
       <span className="min-w-0 flex-1 text-xs font-black text-slate-800">{label}</span>
-      <span className="text-right text-xs font-semibold tabular-nums text-slate-500 sm:shrink-0">신규 {(stat?.recentLeadCount || 0).toLocaleString()} · 거래처 {(stat?.customerCount || 0).toLocaleString()}</span>
+      <span className="text-right text-xs font-semibold tabular-nums text-slate-500 sm:shrink-0">신규 {formatNumber(stat?.recentLeadCount || 0)} · 거래처 {formatNumber(stat?.customerCount || 0)}</span>
     </label>
   );
 }

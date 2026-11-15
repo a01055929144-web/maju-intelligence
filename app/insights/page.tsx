@@ -1,4 +1,4 @@
-import { formatWon } from "@/domains/shared/money";
+import { formatNumber, formatWon } from "@/domains/shared/money";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, Clock3, Truck } from "lucide-react";
@@ -78,11 +78,11 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
         </header>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <MetricCard change={change(insights.current.leads, insights.previous.leads)} label="새 리드" value={`${insights.current.leads.toLocaleString()}곳`} />
-          <MetricCard change={change(insights.current.contacts, insights.previous.contacts)} label="연락 매장" value={`${insights.current.contacts.toLocaleString()}곳`} />
-          <MetricCard change={change(insights.current.quotes, insights.previous.quotes)} label="견적 전달" value={`${insights.current.quotes.toLocaleString()}건`} />
-          <MetricCard change={change(insights.current.contracts, insights.previous.contracts)} label="신규 계약" value={`${insights.current.contracts.toLocaleString()}곳`} />
-          <MetricCard change={change(insights.current.deliveries, insights.previous.deliveries)} label="배송 완료" value={`${insights.current.deliveries.toLocaleString()}건`} />
+          <MetricCard change={change(insights.current.leads, insights.previous.leads)} label="새 리드" value={`${formatNumber(insights.current.leads)}곳`} />
+          <MetricCard change={change(insights.current.contacts, insights.previous.contacts)} label="연락 매장" value={`${formatNumber(insights.current.contacts)}곳`} />
+          <MetricCard change={change(insights.current.quotes, insights.previous.quotes)} label="견적 전달" value={`${formatNumber(insights.current.quotes)}건`} />
+          <MetricCard change={change(insights.current.contracts, insights.previous.contracts)} label="신규 계약" value={`${formatNumber(insights.current.contracts)}곳`} />
+          <MetricCard change={change(insights.current.deliveries, insights.previous.deliveries)} label="배송 완료" value={`${formatNumber(insights.current.deliveries)}건`} />
           <MetricCard change={insights.current.shareRate - insights.previous.shareRate} label="배송 공유율" suffix="%p" value={`${insights.current.shareRate}%`} />
         </section>
 
@@ -119,10 +119,10 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-black text-slate-950">놓치면 큰일 나는 것</h2><span className="text-xs font-semibold text-slate-500">현재 저장된 기록으로 확인 가능한 위험만 표시합니다.</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {INSIGHTS_DATA_FEATURES.deliveryIssues ? <RiskCard description="배송 이슈 기록의 운영 적용 확인 후 표시합니다." icon={AlertTriangle} label="반품·파손·CS" value="—" warning={false} /> : null}
-            <RiskCard description={insights.risks.churnCustomers.length ? `기존 이탈 판정 · 월 매출 ${formatWonRounded(churnRevenue)} 영향` : "기존 거래 이탈 판정 기준을 넘은 거래처가 없습니다."} icon={Clock3} label="거래처 이탈 위험" value={`${insights.risks.churnCustomers.length.toLocaleString()}곳`} warning={insights.risks.churnCustomers.length > 0} />
+            <RiskCard description={insights.risks.churnCustomers.length ? `기존 이탈 판정 · 월 매출 ${formatWonRounded(churnRevenue)} 영향` : "기존 거래 이탈 판정 기준을 넘은 거래처가 없습니다."} icon={Clock3} label="거래처 이탈 위험" value={`${formatNumber(insights.risks.churnCustomers.length)}곳`} warning={insights.risks.churnCustomers.length > 0} />
             <RiskCard available={INSIGHTS_DATA_FEATURES.itemProfitability} description="승인된 품목·주문 구조 적용 후 표시합니다." icon={Clock3} label="품목 이탈" value="—" warning={false} />
             <RiskCard available={INSIGHTS_DATA_FEATURES.receivables} description="미수 원장의 운영 적용 확인 후 표시합니다." icon={AlertTriangle} label="미수금" value="—" warning={false} />
-            <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다. 계약 단가 만료는 추후 연결합니다." icon={AlertTriangle} label="견적 만료 임박" value={`${insights.risks.expiringQuotes.toLocaleString()}건`} warning={insights.risks.expiringQuotes > 0} />
+            <RiskCard description="고객에게 보낸 견적 중 7일 안에 유효기간이 끝나는 건입니다. 계약 단가 만료는 추후 연결합니다." icon={AlertTriangle} label="견적 만료 임박" value={`${formatNumber(insights.risks.expiringQuotes)}건`} warning={insights.risks.expiringQuotes > 0} />
           </div>
         </section>
 
@@ -130,7 +130,7 @@ export default async function InsightsPage({ searchParams }: { searchParams?: Pr
           <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3"><h2 className="text-base font-black text-slate-950">거래처 이탈 위험 · 주문이 끊김</h2><div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs font-bold sm:ml-auto"><button className="cursor-not-allowed bg-white px-3 py-2 text-slate-400" disabled type="button">품목 이탈</button><button className="bg-slate-800 px-3 py-2 text-white" type="button">거래처 이탈</button><button className="cursor-not-allowed bg-white px-3 py-2 text-slate-400" disabled type="button">안 시키는 품목</button></div></div>
             <div className="mt-2 flex items-center justify-between gap-3"><p className="text-xs font-semibold text-slate-500">기존 거래 이탈 계산 결과만 표시합니다.</p><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">상위 {Math.min(10, insights.risks.churnCustomers.length)}곳</span></div>
-            {insights.risks.churnCustomers.length ? <div className="mt-3 overflow-x-auto"><table className="min-w-[680px] w-full text-sm"><thead><tr className="border-b border-slate-200 text-left text-xs text-slate-500"><th className="p-2">거래처</th><th className="p-2">지역</th><th className="p-2 text-right">마지막 주문</th><th className="p-2 text-right">경과</th><th className="p-2 text-right">월 매출</th></tr></thead><tbody>{insights.risks.churnCustomers.slice(0, 10).map((customer) => <tr className="border-b border-slate-100 last:border-0" key={customer.customerId}><td className="p-2 font-bold text-slate-900">{customer.customerName}</td><td className="p-2 text-slate-600">{customer.region || "미지정"}</td><td className="p-2 text-right text-slate-600">{customer.lastOrderDate.slice(0, 10)}</td><td className="p-2 text-right font-bold text-rose-700">{customer.daysSinceLastOrder}일</td><td className="p-2 text-right text-slate-700">{customer.monthlyRevenue.toLocaleString()}원</td></tr>)}</tbody></table></div> : <p className="mt-3 rounded-xl bg-teal-50 px-4 py-8 text-center text-sm font-bold text-teal-800"><CheckCircle2 className="mx-auto mb-2 h-6 w-6" />현재 이탈 위험 거래처가 없습니다.</p>}
+            {insights.risks.churnCustomers.length ? <div className="mt-3 overflow-x-auto"><table className="min-w-[680px] w-full text-sm"><thead><tr className="border-b border-slate-200 text-left text-xs text-slate-500"><th className="p-2">거래처</th><th className="p-2">지역</th><th className="p-2 text-right">마지막 주문</th><th className="p-2 text-right">경과</th><th className="p-2 text-right">월 매출</th></tr></thead><tbody>{insights.risks.churnCustomers.slice(0, 10).map((customer) => <tr className="border-b border-slate-100 last:border-0" key={customer.customerId}><td className="p-2 font-bold text-slate-900">{customer.customerName}</td><td className="p-2 text-slate-600">{customer.region || "미지정"}</td><td className="p-2 text-right text-slate-600">{customer.lastOrderDate.slice(0, 10)}</td><td className="p-2 text-right font-bold text-rose-700">{customer.daysSinceLastOrder}일</td><td className="p-2 text-right text-slate-700">{formatWon(customer.monthlyRevenue)}</td></tr>)}</tbody></table></div> : <p className="mt-3 rounded-xl bg-teal-50 px-4 py-8 text-center text-sm font-bold text-teal-800"><CheckCircle2 className="mx-auto mb-2 h-6 w-6" />현재 이탈 위험 거래처가 없습니다.</p>}
           </article>
 
           <article className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 shadow-sm" data-feature-state={INSIGHTS_DATA_FEATURES.itemProfitability ? "on" : "off"}>
