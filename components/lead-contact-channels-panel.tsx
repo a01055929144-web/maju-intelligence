@@ -8,6 +8,9 @@
 
 import { type MouseEvent, useEffect, useMemo, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Dialog } from "@/components/ui/dialog";
+import { Notice } from "@/components/ui/notice";
 import {
   buildInstagramDmUrl,
   buildMailtoUrl,
@@ -70,6 +73,7 @@ export function LeadContactChannelsPanel({
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string) => Promise<PermitLeadActionResult>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
 }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [message, setMessage] = useState(() => buildLeadDmScript(lead));
   const [drafts, setDrafts] = useState<Record<EditableChannel, string>>({
     fax: lead.fax || "",
@@ -112,6 +116,8 @@ export function LeadContactChannelsPanel({
   const [savingPriceSheetDefault, setSavingPriceSheetDefault] = useState(false);
   const [recordingTextChannel, setRecordingTextChannel] = useState<OutreachTextChannel | null>(null);
   const [sentTextChannels, setSentTextChannels] = useState<OutreachTextChannel[]>([]);
+  const [releaseTarget, setReleaseTarget] = useState<{ channel: LeadContactChannel; dncId: string } | null>(null);
+  const [releaseReason, setReleaseReason] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -389,10 +395,12 @@ export function LeadContactChannelsPanel({
     }
   }
 
-  function confirmAfterHoursSms(event: MouseEvent<HTMLAnchorElement>) {
+  async function confirmAfterHoursSms(event: MouseEvent<HTMLAnchorElement>) {
     if (!requireAcknowledgedPolicy(event)) return;
     if (!requiresAfterHoursConfirmation()) return;
-    if (!window.confirm("현재는 문자 발송을 피해야 하는 시간(21:00~08:00)입니다. 그래도 문자 앱을 여시겠습니까?")) event.preventDefault();
+    event.preventDefault();
+    const href = event.currentTarget.href;
+    if (await confirm({ title: "문자 앱 열기", body: "현재는 문자 발송을 피해야 하는 시간(21:00~08:00)입니다. 그래도 문자 앱을 여시겠습니까?", confirmLabel: "문자 앱 열기", tone: "default" })) window.location.href = href;
   }
 
   async function saveContact() {
@@ -445,7 +453,7 @@ export function LeadContactChannelsPanel({
   }
 
   async function registerDoNotContact(channel: LeadContactChannel, value: string) {
-    if (!window.confirm(`${LEAD_CONTACT_CHANNEL_LABELS[channel]} 채널을 연락 거부로 등록하시겠습니까?`)) return;
+    if (!(await confirm({ title: "연락 거부 등록", body: `${LEAD_CONTACT_CHANNEL_LABELS[channel]} 채널을 연락 거부로 등록하시겠습니까?`, confirmLabel: "등록", tone: "default" }))) return;
     setSavingDnc(channel);
     setNotice(null);
     try {
@@ -465,20 +473,23 @@ export function LeadContactChannelsPanel({
     }
   }
 
-  async function releaseDoNotContact(entry: { channel: LeadContactChannel; dncId: string }) {
-    const releaseReason = window.prompt("연락 거부 해제 사유를 입력해 주세요.")?.trim();
-    if (!releaseReason) return;
+  async function releaseDoNotContact(entry: { channel: LeadContactChannel; dncId: string }, reason: string) {
+    // 기존 window.prompt("연락 거부 해제 사유를 입력해 주세요.") 계약은 공용 Dialog 입력으로 대체했다.
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) return;
     setSavingDnc(entry.channel);
     setNotice(null);
     try {
       const response = await fetchWithTimeout(
         withPermitLeadCompanyQuery(`/api/leads/permits/${lead.id}/do-not-contact`),
-        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dncId: entry.dncId, releaseReason }) },
+        { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dncId: entry.dncId, releaseReason: normalizedReason }) },
         12000
       );
       const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
       if (!response.ok || !payload?.ok) throw new Error(payload?.message || "연락 거부를 해제하지 못했습니다.");
       await refreshDoNotContacts();
+      setReleaseTarget(null);
+      setReleaseReason("");
       setNotice({ tone: "ok", text: "연락 거부를 해제했습니다." });
     } catch (error) {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : "연락 거부를 해제하지 못했습니다." });
@@ -675,7 +686,7 @@ export function LeadContactChannelsPanel({
             </div>
             <div className="flex flex-wrap gap-1.5 px-2">
               {url ? (
-                <a className="maju-button-secondary min-h-11 px-3 text-xs" href={url} onClick={channel === "sms" ? confirmAfterHoursSms : (event) => { requireAcknowledgedPolicy(event); }} rel={channel === "email" || channel === "sms" ? undefined : "noreferrer"} target={channel === "email" || channel === "sms" ? undefined : "_blank"}>
+        <a className="maju-button-secondary min-h-11 px-3 text-xs" href={url} onClick={channel === "sms" ? (event) => void confirmAfterHoursSms(event) : (event) => { requireAcknowledgedPolicy(event); }} rel={channel === "email" || channel === "sms" ? undefined : "noreferrer"} target={channel === "email" || channel === "sms" ? undefined : "_blank"}>
                   <ExternalLink className="h-3.5 w-3.5" />
                   열기
                 </a>
@@ -765,7 +776,10 @@ export function LeadContactChannelsPanel({
                 <button
                   className="maju-button-secondary min-h-9 px-2 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!dncState.enabled || dncState.loading || savingDnc === channel || Boolean(active && !dncState.canRelease)}
-                  onClick={() => active ? void releaseDoNotContact(active) : void registerDoNotContact(channel, value!)}
+                  onClick={() => {
+                    if (active) { setReleaseTarget(active); setReleaseReason(""); }
+                    else void registerDoNotContact(channel, value!);
+                  }}
                   type="button"
                 >
                   {savingDnc === channel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -776,7 +790,19 @@ export function LeadContactChannelsPanel({
           })}
         </div>
       </details>
-      {notice ? <p className={`mt-2 text-[11px] font-bold ${notice.tone === "ok" ? "text-teal-700" : "text-red-700"}`}>{notice.text}</p> : null}
+      {notice ? <Notice className="mt-2 text-xs" kind={notice.tone === "ok" ? "success" : "error"}>{notice.text}</Notice> : null}
+      {confirmDialog}
+      {releaseTarget ? (
+        <Dialog ariaLabel="연락 거부 해제" initialFocus="[data-release-reason]" onClose={() => setReleaseTarget(null)} size="sm" title="연락 거부 해제">
+          <label className="mt-2 block text-sm font-bold text-slate-700">해제 사유
+            <input className="maju-input mt-1 w-full" data-release-reason="" onChange={(event) => setReleaseReason(event.target.value)} placeholder="해제 사유를 입력해 주세요" value={releaseReason} />
+          </label>
+          <div className="mt-4 flex justify-end gap-2">
+            <button className="maju-button-secondary" onClick={() => setReleaseTarget(null)} type="button">취소</button>
+            <button className="maju-button-primary" disabled={!releaseReason.trim() || savingDnc === releaseTarget.channel} onClick={() => void releaseDoNotContact(releaseTarget, releaseReason)} type="button">해제</button>
+          </div>
+        </Dialog>
+      ) : null}
     </section>
   );
 }
