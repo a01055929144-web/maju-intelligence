@@ -4,6 +4,9 @@ import { formatWon } from "@/domains/shared/money";
 import { useCallback, useEffect, useState } from "react";
 import { CommonDataTable, type CommonTableColumn } from "./common-data-table";
 import { Button } from "./ui/button";
+import { useConfirm } from "./ui/confirm-dialog";
+import { SearchInput } from "./ui/search-input";
+import { ErrorState, LoadingState } from "./ui/state";
 import { STORE_ORDER_STATUSES, canConfirmStoreOrder, storeOrderStatusLabel } from "../domains/order/store-order-status";
 
 type Line = { name: string; spec: string; unit: string; quantity: number; total: number | null; marketPrice: boolean };
@@ -18,6 +21,7 @@ const kst = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "
 const won = formatWon;
 
 export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: { canConfirm: boolean; companyId: string; preview?: boolean }) {
+  const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
   const [query, setQuery] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -71,6 +75,14 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     catch (e) { setNotice(e instanceof Error ? e.message : "처리하지 못했습니다."); }
     setBusyId(""); await load();
   }
+  async function linkCustomer(order: Order, customer: Candidate) {
+    if (!await confirmAction({
+      body: `'${customer.name}' 거래처에 연결합니다. 접수된 주문이 해당 거래처로 옮겨지며 되돌릴 수 없습니다.`,
+      confirmLabel: "연결",
+      title: "기존 거래처에 연결"
+    })) return;
+    await decide(order, "link_customer", customer.customerId);
+  }
 
   const columns: CommonTableColumn<Order>[] = [
     { key: "submittedAt", label: "접수 시각", sortable: true, value: (row) => row.submittedAt, render: (row) => kst(row.submittedAt) },
@@ -105,9 +117,9 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
           <option value="all">전체</option>
         </select>
       </label>
-      <label className="min-w-0 flex-1 text-sm font-semibold text-slate-700">매장 이름
-        <input aria-label="매장 이름 검색" className="maju-input mt-1 block h-11 w-full" maxLength={50} onChange={(event) => setQuery(event.target.value)} placeholder="두 글자 이상" value={query} />
-      </label>
+      <div className="min-w-0 flex-1 text-sm font-semibold text-slate-700"><span>매장 이름</span>
+        <SearchInput aria-label="매장 이름 검색" className="mt-1 max-sm:!h-11" inputProps={{ maxLength: 50 }} onChange={setQuery} placeholder="두 글자 이상" value={query} />
+      </div>
       <Button className="min-h-11" type="submit" variant="outline">검색</Button>
     </form>
     {!canConfirm && <p className="text-sm text-slate-600">{preview ? "관리자 미리보기입니다. 확인 처리는 고객사 계정에서 합니다." : "주문 확인은 대표·관리자가 합니다. 이 계정은 보기만 할 수 있습니다."}</p>}
@@ -115,23 +127,21 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     {review ? <div aria-label="거래처 확인" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm" role="region">
       <p className="font-bold">{review.order.customerName} — 처음 거래하는 매장입니다. 같은 거래처가 이미 있는지 확인해 주세요.</p>
       <p className="text-slate-600">확인하기 전에는 이 매장 주문을 확인·배송 처리할 수 없습니다. 기존 거래처에 연결하면 접수된 주문도 그 거래처로 옮겨지고, 자동으로 만든 거래처는 중복으로 표시됩니다.</p>
-      {review.candidates === null ? <p>후보를 찾는 중…</p> : review.candidates.length ? <ul className="divide-y rounded border bg-white">
+      {review.candidates === null ? <LoadingState bare label="후보를 찾는 중입니다..." /> : review.candidates.length ? <ul className="divide-y rounded border bg-white">
         {review.candidates.map((c) => <li className="flex flex-wrap items-center justify-between gap-2 p-2" key={c.customerId}>
           <span><b>{c.name}</b> <span className="text-slate-500">{c.address || "주소 없음"} · {c.reason === "business_number" ? "사업자번호 일치" : "이름·주소 비슷함"}</span></span>
-          <Button disabled={busyId !== ""} onClick={() => { if (window.confirm(`'${c.name}' 거래처에 연결할까요? 되돌릴 수 없습니다.`)) void decide(review.order, "link_customer", c.customerId); }} size="sm" variant="outline">이 거래처에 연결</Button></li>)}
+          <Button disabled={busyId !== ""} onClick={() => void linkCustomer(review.order, c)} size="sm" variant="outline">이 거래처에 연결</Button></li>)}
       </ul> : <p className="text-slate-600">같은 거래처로 보이는 후보가 없습니다.</p>}
       <div className="flex gap-2"><Button disabled={busyId !== ""} onClick={() => void decide(review.order, "confirm_customer")} size="sm">새 거래처로 확인</Button>
         <Button onClick={() => setReview(null)} size="sm" variant="outline">닫기</Button></div>
     </div> : null}
-    {error ? <div className="rounded-xl border bg-white p-6 text-center">
-      <p className="text-slate-700">{error}</p>
-      <Button className="mt-3" onClick={() => void load()} variant="outline">다시 시도</Button>
-    </div> : orders === null ? <p className="text-slate-500">주문을 불러오는 중…</p> :
+    {error ? <ErrorState message={error} onRetry={() => void load()} /> : orders === null ? <LoadingState label="주문을 불러오는 중입니다..." /> :
       <CommonDataTable columns={columns} emptyMessage={storeName ? "검색한 매장의 주문이 없습니다." : status === "submitted" ? "아직 주문이 없습니다 — 링크 관리에서 주문 링크를 보내 보세요." : "이 상태의 주문이 없습니다."}
         filename="주문목록.csv" rowKey={(row) => row.id} rows={orders} settingsKey={`orders:${companyId}`} />}
     {(page > 1 || hasMore) && <div className="flex justify-center gap-2">
       <Button disabled={page === 1} onClick={() => setPage(page - 1)} variant="outline">이전</Button>
       <Button disabled={!hasMore} onClick={() => setPage(page + 1)} variant="outline">다음</Button>
     </div>}
+    {confirmDialog}
   </section>;
 }

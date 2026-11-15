@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { SearchInput } from "./ui/search-input";
 
 export type StoreKakaoLogin = { enabled: boolean; companyId?: string; storeAccountId?: string; errorCode?: string; message?: string };
 
@@ -141,7 +142,7 @@ export function StoreOwnerActivationPanel({ enabled, preopeningEnabled = false, 
               inputMode={key === "phone" || key === "businessRegistrationNumber" ? "numeric" : "text"}
               onChange={event => setProfile(current => ({ ...current, [key]: event.target.value }))} /></label>)}
         <div className="text-sm"><label htmlFor="store-address-search">매장 주소</label>
-          <div className="mt-1 flex gap-2"><input className="min-h-[44px] min-w-0 flex-1 rounded-md border px-3" id="store-address-search" value={profile.address} onChange={event => { setProfile(current => ({ ...current, address: event.target.value })); setAddressSelected(false); setAddressResults([]); setAddressSearchMessage(""); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void searchAddress(); } }} placeholder="도로명 또는 지번 검색" />
+          <div className="mt-1 flex gap-2"><SearchInput className="min-w-0 flex-1 max-sm:!h-11" inputProps={{ id: "store-address-search", onKeyDown: event => { if (event.key === "Enter") { event.preventDefault(); void searchAddress(); } } }} value={profile.address} onChange={value => { setProfile(current => ({ ...current, address: value })); setAddressSelected(false); setAddressResults([]); setAddressSearchMessage(""); }} placeholder="도로명 또는 지번 검색" />
             <Button className="min-h-[44px]" disabled={addressSearching} onClick={() => void searchAddress()} type="button">{addressSearching ? "검색 중" : "주소 검색"}</Button></div>
           {addressSearchMessage ? <p role="status">{addressSearchMessage}</p> : null}
           {addressResults.length ? <div className="max-h-48 overflow-y-auto rounded-md border">{addressResults.map((result, index) => <button className="block min-h-[44px] w-full border-b px-3 text-left" key={`${result.address}-${index}`} onClick={() => { setProfile(current => ({ ...current, address: result.address })); setAddressSelected(true); setAddressResults([]); setAddressSearchMessage("카카오 주소를 선택했습니다."); }} type="button">{result.address}{result.postalCode ? ` (${result.postalCode})` : ""}</button>)}</div> : null}

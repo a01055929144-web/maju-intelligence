@@ -3,6 +3,7 @@ import { MoneyInput } from "@/components/money-input";
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
+import { SearchInput } from "./ui/search-input";
 
 type Rule = {
   delivery_weekdays?: number[] | null;
@@ -183,8 +184,7 @@ export function StoreOrderSettingsWorkspace({ companyId }: { companyId: string }
             minimumPolicy: territoryRule.minimum_policy, deliveryFee: territoryRule.delivery_fee })}>권역 저장</button></>}
     </section>
     <section className="space-y-3 rounded-lg border border-slate-200 p-4"><h2 className="text-sm font-black text-slate-950">매장별 예외</h2>
-      <div className="flex gap-2"><input aria-label="거래처 이름 검색" className="min-w-0 flex-1 h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={customerQuery}
-        onChange={(event) => setCustomerQuery(event.target.value)} placeholder="거래처 이름 검색" />
+      <div className="flex gap-2"><SearchInput aria-label="거래처 이름 검색" className="min-w-0 flex-1" onChange={setCustomerQuery} placeholder="거래처 이름 검색" size="sm" value={customerQuery} />
         <button type="button" className="maju-button-secondary h-9 px-4 text-xs" onClick={() => void searchCustomers()}>검색</button></div>
       <select aria-label="거래처 선택" className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold" value={customerId}
         onChange={(event) => setCustomerId(event.target.value)}><option value="">거래처 선택</option>
