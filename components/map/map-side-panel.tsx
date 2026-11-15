@@ -7,7 +7,6 @@ import {
   ArrowDown,
   ArrowUp,
   Clock,
-  Edit3,
   Loader2,
   Navigation,
   PanelRightClose,
@@ -16,14 +15,13 @@ import {
   Store,
   ArrowLeft,
 } from "lucide-react";
-import { RowNumber, rowNumberWidthClass } from "@/components/ui/row-number";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
-import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
+import { MapLeadChannelIcons, resolvePlaceUrls } from "@/components/map-lead-channel-icons";
+import { MapListRow } from "@/components/map/map-list-row";
+import { LIST_CHUNK, visibleCount } from "@/domains/route/list-chunk";
 import {
   getPermitLeadOpenDate,
-  getPermitLeadType,
 } from "@/domains/lead/map-filters";
-import { buildPlaceSearchLinks } from "@/lib/place-links";
 import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-workflow";
 import type {
   PermitLeadItem,
@@ -35,7 +33,7 @@ import {
   formatMinutes,
   gradeBadgeClass,
 } from "@/lib/route-map-utils";
-import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, isGenericNaverSearchLink, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
+import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
 
 export function StoreManagementPanel({
@@ -79,6 +77,9 @@ export function StoreManagementPanel({
   // 밖에 있으면 화면에는 안 보여서 "우측 패널이 안 맞다"고 느껴집니다. 선택된 항목의 DOM을 ref로
   // 잡아두고 selectedStoreId가 바뀔 때마다 목록 스크롤을 그 항목으로 자동 이동시킵니다.
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // 목록 나눠 그리기: LIST_CHUNK줄씩, 선택한 줄까지는 항상 그린다.
+  const [storeLimit, setStoreLimit] = useState(LIST_CHUNK);
+  const storeShown = visibleCount(storeLimit, stores.length, stores.findIndex((store) => store.id === selectedStoreId));
   useEffect(() => {
     if (!selectedStoreId) return;
     itemRefs.current[selectedStoreId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -162,40 +163,34 @@ export function StoreManagementPanel({
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {notice}
           {stores.length ? (
-            stores.map((store, storeIndex) => (
-              <div
-                className={`flex items-stretch border-b border-slate-100 transition hover:bg-slate-50 ${
-                  store.id === selectedStoreId ? "bg-teal-50 shadow-[inset_4px_0_0_#0f766e] ring-1 ring-inset ring-teal-200" : ""
-                }`}
-                key={store.id}
-                ref={(el) => {
-                  itemRefs.current[store.id] = el;
-                }}
-              >
-                {/* 대표 요청(10-29): 거래처 줄은 2줄 — 1줄 상호·등급·상태, 2줄 주소·거리·시간·매출 */}
-                <button className="min-w-0 flex-1 px-3 py-2 text-left" onClick={() => onSelectStore(store.id)} title={store.address || store.region} type="button">
-                  <div className="flex items-center gap-1.5">
-                    <RowNumber className={`${rowNumberWidthClass(stores.length)} shrink-0`} value={storeIndex + 1} />
-                    <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-950">{store.name}</p>
-                    <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
-                    <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
-                  </div>
-                  <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">
-                    {store.address || store.region}
-                    <span className="text-slate-400"> · {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span>
-                  </p>
-                </button>
-                <button
-                  aria-label={`${store.name} 상세 편집`}
-                  className="my-auto mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-teal-700 hover:shadow-sm"
-                  onClick={() => onEditStore(store.id)}
-                  title="상세 편집"
-                  type="button"
-                >
-                  <Edit3 className="h-4 w-4" />
-                </button>
-              </div>
-            ))
+            <>
+              {stores.slice(0, storeShown).map((store, storeIndex) => (
+                <MapListRow
+                  badges={
+                    <>
+                      <span className={gradeBadgeClass(store.grade)}>{store.grade}</span>
+                      <span className={businessStatusClass(store.businessStatus)}>{getBusinessStatusLabel(store.businessStatus)}</span>
+                    </>
+                  }
+                  editLabel={`${store.name} 상세 편집`}
+                  index={storeIndex}
+                  itemRef={(el) => {
+                    itemRefs.current[store.id] = el;
+                  }}
+                  key={store.id}
+                  name={store.name}
+                  nameTitle={store.address || store.region}
+                  onEdit={() => onEditStore(store.id)}
+                  onSelect={() => onSelectStore(store.id)}
+                  selected={store.id === selectedStoreId}
+                  subText={<>{store.address || store.region}<span className="text-slate-400"> · {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · {store.expectedRevenue.toLocaleString()}만원</span></>}
+                  total={stores.length}
+                />
+              ))}
+              {storeShown < stores.length ? (
+                <button className="maju-button-secondary m-2 h-9 w-[calc(100%-1rem)] justify-center text-xs" onClick={() => setStoreLimit(storeShown + LIST_CHUNK)} type="button">더 보기 ({(stores.length - storeShown).toLocaleString()}곳 남음)</button>
+              ) : null}
+            </>
           ) : (
             <div className="grid h-full min-h-[180px] place-items-center px-4">
               <EmptyState
@@ -254,6 +249,8 @@ export function LeadListPanel({
   const [sortKey, setSortKey] = useState<LeadListSortKey>("default");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const sortedLeads = useMemo(() => sortLeadList(leads, sortKey, sortDirection), [leads, sortKey, sortDirection]);
+  const [leadLimit, setLeadLimit] = useState(LIST_CHUNK);
+  const leadShown = visibleCount(leadLimit, sortedLeads.length, sortedLeads.findIndex((lead) => lead.id === selectedLeadId));
   // 2026-08-31 피드백 대응: StoreManagementPanel과 동일하게, 마커 클릭으로 selectedLeadId가
   // 바뀌면 그 리드 항목이 스크롤 밖에 있어도 자동으로 보이도록 스크롤합니다.
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -383,105 +380,80 @@ export function LeadListPanel({
           ) : null}
           {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
         </div>
-        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 space-y-1.5 overflow-auto p-2 xl:max-h-none">
+        <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {sortedLeads.length ? (
-            sortedLeads.map((lead, leadIndex) => {
-              const confidence = getLeadConfidence(lead);
-              const openDate = getPermitLeadOpenDate(lead);
-              const searchLinks = buildPlaceSearchLinks({ address: lead.address, customerName: lead.businessName });
-              const savedNaverPlaceUrl = lead.naverPlaceUrl?.trim();
-              const naverPlaceUrl = !savedNaverPlaceUrl || isGenericNaverSearchLink(savedNaverPlaceUrl) ? searchLinks.naverPlaceUrl : savedNaverPlaceUrl;
-              const kakaoPlaceUrl = lead.kakaoPlaceUrl?.trim() || searchLinks.kakaoPlaceUrl;
-              const googlePlaceUrl = lead.googlePlaceUrl?.trim() || searchLinks.googleMapUrl;
-              const reminder = getMapLeadReminderLabel(lead);
-              const leadType = getPermitLeadType(lead);
-              const openDateShort = openDate ? openDate.slice(5).replace("-", "/") : "";
-              const openDays = openDate ? Math.floor((Date.now() - new Date(`${openDate}T00:00:00+09:00`).getTime()) / 86_400_000) : null;
-              const openDateBadge = openDateShort ? `개업 ${openDateShort}${openDays !== null && openDays >= 0 ? ` · D+${openDays}` : ""}` : "";
-              const subText = [
-                lead.industryPrimary || "",
-                typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : ""
-              ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
-              const storeAreaLabel = LEAD_STORE_AREA_FEATURE_ENABLED ? formatStoreAreaPyeong(lead.storeAreaSqm) : undefined;
-              return (
-                <div
-                  className={`flex flex-col gap-1.5 rounded-[10px] border bg-white p-2.5 text-left transition ${
-                    lead.id === selectedLeadId ? "border-teal-600 bg-teal-50/60 ring-1 ring-teal-200" : "border-slate-200 hover:border-slate-300"
-                  }`}
-                  key={lead.id}
-                  ref={(el) => {
-                    itemRefs.current[lead.id] = el;
-                  }}
-                >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <input aria-label={`${lead.businessName} 선택`} checked={selectedLeadIds.has(lead.id)} className="h-[18px] w-[18px] shrink-0 rounded border-slate-300 text-teal-700" onChange={() => toggleLeadSelection(lead.id)} type="checkbox" />
-                    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${leadType === "new" ? "bg-violet-100 text-violet-800" : "bg-teal-100 text-teal-800"}`}>
-                      {leadType === "new" ? "신규" : "영업"}
-                    </span>
-                    <RowNumber className={`${rowNumberWidthClass(sortedLeads.length)} shrink-0`} value={leadIndex + 1} />
-                    <button className="min-w-0 flex-1 truncate text-left text-sm font-bold text-slate-950" onClick={() => onSelectLead(lead.id)} title={[lead.businessName, lead.address].filter(Boolean).join(" · ")} type="button">
-                      {lead.businessName}
-                    </button>
-                    <button
-                      aria-label={`${lead.businessName} 상세 열기`}
-                      className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700"
-                      onClick={() => onOpenDetail(lead.id)}
-                      title="상세 열기 · 정보 기록"
-                      type="button"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <select
-                      aria-label={`${lead.businessName} 단계`}
-                      className="h-[30px] max-w-[96px] shrink-0 rounded-md border border-slate-300 bg-white px-1 text-xs text-slate-800"
-                      onChange={async (event) => {
-                        const result = await onUpdateStage(lead.id, event.target.value);
-                        setRowErrors((current) => {
-                          const next = { ...current };
-                          if (result.ok) delete next[lead.id];
-                          else next[lead.id] = result.message || "단계 변경에 실패했습니다.";
-                          return next;
-                        });
-                      }}
-                      value={toLeadStageValue(lead.status)}
-                    >
-                      {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </div>
-                  {rowErrors[lead.id] ? <p className="text-[11px] font-bold text-rose-700" role="alert">{rowErrors[lead.id]}</p> : null}
-                  <button className="flex min-w-0 items-center gap-1.5 text-left text-xs text-slate-500" onClick={() => onSelectLead(lead.id)} title={confidence.reasons.join(" · ")} type="button">
-                    <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] ${lead.grade ? permitGradeToneClassName(lead.grade, false) : "bg-teal-700 text-white"}`}>
-                      {lead.grade ? `${lead.grade}등급` : `우선 ${confidence.score}`}
-                    </span>
-                    {openDateBadge ? (
-                      <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${openDays !== null && openDays <= 30 ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600"}`}>
-                        {openDateBadge}
+            <>
+              {sortedLeads.slice(0, leadShown).map((lead, leadIndex) => {
+                const confidence = getLeadConfidence(lead);
+                const openDate = getPermitLeadOpenDate(lead);
+                const reminder = getMapLeadReminderLabel(lead);
+                const openDateShort = openDate ? openDate.slice(5).replace("-", "/") : "";
+                const openDays = openDate ? Math.floor((Date.now() - new Date(`${openDate}T00:00:00+09:00`).getTime()) / 86_400_000) : null;
+                const openDateBadge = openDateShort ? `개업 ${openDateShort}${openDays !== null && openDays >= 0 ? ` · D+${openDays}` : ""}` : "";
+                const storeAreaLabel = LEAD_STORE_AREA_FEATURE_ENABLED ? formatStoreAreaPyeong(lead.storeAreaSqm) : undefined;
+                const rating = typeof lead.rating === "number" || typeof lead.reviewCount === "number"
+                  ? `★ ${typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}${typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}` : ""}`
+                  : "";
+                const subText = [
+                  lead.industryPrimary || "",
+                  typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : "",
+                  openDateBadge,
+                  storeAreaLabel || "",
+                  rating
+                ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
+                return (
+                  <MapListRow
+                    badges={
+                      <span className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] ${lead.grade ? permitGradeToneClassName(lead.grade, false) : "bg-teal-700 text-white"}`} title={confidence.reasons.join(" · ")}>
+                        {lead.grade ? `${lead.grade}등급` : `우선 ${confidence.score}`}
                       </span>
-                    ) : null}
-                    <span className="min-w-0 truncate">{subText}</span>
-                    {storeAreaLabel ? <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-600">{storeAreaLabel}</span> : null}
-                  </button>
-                  {reminder ? (
-                    <p className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{reminder}</span>
-                    </p>
-                  ) : null}
-                  <div className="flex items-center gap-1">
-                    <MapLeadChannelIcons lead={lead} />
-                    <a aria-label="네이버 지도" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-[#03A94D] hover:bg-slate-50" href={naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
-                    <a aria-label="카카오맵" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-amber-600 hover:bg-slate-50" href={kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
-                    <a aria-label="구글 지도" className="grid h-[26px] w-[26px] place-items-center rounded-md border border-slate-300 bg-white text-[11px] font-black text-[#EA4335] hover:bg-slate-50" href={googlePlaceUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
-                    {typeof lead.rating === "number" || typeof lead.reviewCount === "number" ? (
-                      <span className="ml-auto whitespace-nowrap text-[11px] text-amber-700">
-                        ★ {typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}
-                        {typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}` : ""}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
+                    }
+                    checkbox={<input aria-label={`${lead.businessName} 선택`} checked={selectedLeadIds.has(lead.id)} className="h-[18px] w-[18px] shrink-0 rounded border-slate-300 text-teal-700" onChange={() => toggleLeadSelection(lead.id)} type="checkbox" />}
+                    editLabel={`${lead.businessName} 상세 열기`}
+                    error={rowErrors[lead.id]}
+                    icons={
+                      <>
+                        {reminder ? <span aria-label={reminder} className="grid h-[26px] w-[26px] place-items-center text-amber-600" role="img" title={reminder}><Clock className="h-3.5 w-3.5" /></span> : null}
+                        <MapLeadChannelIcons lead={lead} places={resolvePlaceUrls({ address: lead.address, googleMapUrl: lead.googlePlaceUrl, kakaoPlaceUrl: lead.kakaoPlaceUrl, name: lead.businessName, naverPlaceUrl: lead.naverPlaceUrl })} />
+                      </>
+                    }
+                    index={leadIndex}
+                    itemRef={(el) => {
+                      itemRefs.current[lead.id] = el;
+                    }}
+                    key={lead.id}
+                    name={lead.businessName}
+                    nameTitle={[lead.businessName, lead.address].filter(Boolean).join(" · ")}
+                    onEdit={() => onOpenDetail(lead.id)}
+                    onSelect={() => onSelectLead(lead.id)}
+                    selected={lead.id === selectedLeadId}
+                    stage={
+                      <select
+                        aria-label={`${lead.businessName} 단계`}
+                        className="h-6 max-w-[84px] rounded-full border border-slate-300 bg-white px-1.5 text-[11px] font-bold text-slate-800"
+                        onChange={async (event) => {
+                          const result = await onUpdateStage(lead.id, event.target.value);
+                          setRowErrors((current) => {
+                            const next = { ...current };
+                            if (result.ok) delete next[lead.id];
+                            else next[lead.id] = result.message || "단계 변경에 실패했습니다.";
+                            return next;
+                          });
+                        }}
+                        value={toLeadStageValue(lead.status)}
+                      >
+                        {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    }
+                    subText={subText}
+                    total={sortedLeads.length}
+                  />
+                );
+              })}
+              {leadShown < sortedLeads.length ? (
+                <button className="maju-button-secondary m-2 h-9 w-[calc(100%-1rem)] justify-center text-xs" onClick={() => setLeadLimit(leadShown + LIST_CHUNK)} type="button">더 보기 ({(sortedLeads.length - leadShown).toLocaleString()}곳 남음)</button>
+              ) : null}
+            </>
           ) : loadState === "loading" || loadState === "idle" ? (
             <div className="grid h-full min-h-[180px] place-items-center px-4">
               <LoadingState bare description="지도와 목록을 같은 기준으로 준비하고 있습니다." label="리드를 불러오는 중입니다." />

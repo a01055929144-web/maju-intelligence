@@ -66,7 +66,7 @@ describe("PC map workspace layout", () => {
 
   it("keeps lead card controls fixed-width and exposes guarded bulk stage changes", () => {
     expect(sidePanelSource).toContain('aria-label={`${lead.businessName} 선택`}');
-    expect(sidePanelSource).toContain("max-w-[96px] shrink-0");
+    expect(sidePanelSource).toContain("max-w-[84px] rounded-full");
     expect(sidePanelSource).toContain('aria-label="바꿀 단계"');
     expect(sidePanelSource).toContain("runMapLeadStageBulk(");
     expect(sidePanelSource).toContain("setSelectedLeadIds(new Set(failed.map");
@@ -115,10 +115,8 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     for (const label of ["휴대폰", "인스타", "톡톡", "이메일", "팩스", "매장전화"]) {
       expect(mapLeadChannelsSource).toContain(`title="${label}"`);
     }
-    expect(sidePanelSource).toContain("<MapLeadChannelIcons lead={lead} />");
-    expect(sidePanelSource).toContain('title="네이버 지도"');
-    expect(sidePanelSource).toContain('title="카카오맵"');
-    expect(sidePanelSource).toContain('title="구글 지도"');
+    expect(sidePanelSource).toContain("<MapLeadChannelIcons lead={lead} places=");
+    for (const label of ["네이버 지도", "카카오맵", "구글 지도"]) expect(mapLeadChannelsSource).toContain(`title="${label}"`);
   });
 
   it("opens customer detail on the core dashboard and preserves phone and email actions", () => {
@@ -129,7 +127,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
     expect(mapDrawerSource).toContain('title={`매장전화 · ${displayedPhone}`}');
     expect(mapDrawerSource).toContain('title="이메일"');
     expect(mapDrawerSource).toContain("const canSms = isMobilePhoneNumber(phone)");
-    expect(mapLeadChannelsSource).toContain("isMobilePhoneNumber(lead.phone)");
+    expect(mapLeadChannelsSource).toContain("isMobilePhoneNumber(lead?.phone)");
   });
 
   it("keeps an unknown current relationship stage selectable", () => {

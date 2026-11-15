@@ -61,6 +61,7 @@ import {
 } from "@/lib/route-map-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, relationshipChipClass, type StoreRow } from "@/components/map/map-row-helpers";
+import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { AddressPicker } from "@/components/map/address-picker";
 import { joinSavedAddress } from "@/domains/customer/address-line";
 import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
@@ -628,14 +629,6 @@ function IconBadge({
   );
 }
 
-// 원 안에 첫 글자만 넣던 방식 대신, 각 플랫폼의 실제 브랜드 컬러(네이버 그린·카카오 옐로우)와
-// 지도 서비스임을 알 수 있는 핀 아이콘을 조합해 한눈에 구분되도록 했습니다.
-const PLACE_LINK_BRAND_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
-  구글맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-white text-[#EA4335] ring-slate-200" },
-  네이버: { icon: <span className="text-[13px] font-black leading-none">N</span>, tone: "bg-[#03C75A] text-white ring-[#03C75A]" },
-  카카오맵: { icon: <MapPin className="h-4 w-4" />, tone: "bg-[#FEE500] text-slate-900 ring-[#FEE500]" }
-};
-
 function PlaceLinkRow({ className = "", compact = false, store }: { readonly className?: string; readonly compact?: boolean; readonly store: StoreRow }) {
   const searchLinks = buildPlaceSearchLinks({ address: store.address || store.region, customerName: store.name });
   const storeNaverPlaceUrl = store.naverPlaceUrl?.trim();
@@ -647,15 +640,8 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
 
   if (compact) {
     return (
-      <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
-        {links.map((link) => {
-          const brand = PLACE_LINK_BRAND_STYLE[link.label];
-          return (
-            <IconBadge href={link.url} key={link.label} shape="square" title={`${link.label}에서 보기`} tone={brand?.tone ?? link.tone}>
-              {brand?.icon ?? link.label[0]}
-            </IconBadge>
-          );
-        })}
+      <div className={className}>
+        <MapLeadChannelIcons name={store.name} places={{ google: links[2].url, kakao: links[1].url, naver: links[0].url }} />
       </div>
     );
   }
