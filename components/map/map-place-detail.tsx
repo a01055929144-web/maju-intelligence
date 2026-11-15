@@ -59,7 +59,8 @@ import {
   type RevenueGrade
 } from "@/lib/route-map-utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, type StoreRow } from "@/components/map/map-row-helpers";
+import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, relationshipChipClass, type StoreRow } from "@/components/map/map-row-helpers";
+import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
 const LoadingPositionGallery = dynamic(
@@ -88,6 +89,16 @@ type BusinessOcrSuggestion = {
   representativeName: string;
 };
 
+/** 거래 종료 거래처를 검색으로 열었는데 지도에는 안 보일 때의 안내(+ 보이게 하는 버튼). */
+function HiddenOnMapNotice({ onShow }: { readonly onShow: () => void }) {
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-700" role="status">
+      {TERMINATED_HIDDEN_NOTICE} ·
+      <button className="font-black text-teal-700 underline underline-offset-2 max-sm:min-h-11" onClick={onShow} type="button">지도에 보기</button>
+    </p>
+  );
+}
+
 export function StoreQuickCard({
   driverOptions,
   headerOffsetPx,
@@ -100,6 +111,7 @@ export function StoreQuickCard({
   onOpenDetail,
   onOpenQuote,
   onSave,
+  onShowOnMap,
   store,
   variant = "floating",
   vehicleOptions
@@ -119,6 +131,8 @@ export function StoreQuickCard({
   readonly onOpenDetail: () => void;
   readonly onOpenQuote?: (store: StoreRow) => void;
   readonly onSave?: (edit: StoreEdit) => Promise<{ persisted: boolean }>;
+  /** 거래 종료라 지도에서 숨겨진 거래처일 때만 전달 — "지도에 보기"를 누르면 호출. */
+  readonly onShowOnMap?: () => void;
   readonly store: StoreRow;
   /**
    * "floating": 지도 홈처럼 지도 위에 떠 있는 좌측 패널을 피해야 하는 전체화면 지도용 위치 계산.
@@ -309,6 +323,7 @@ export function StoreQuickCard({
             <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-700">{store.grade}등급</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{resolveDisplayIndustry(store)}</span>
           </div>
+          {onShowOnMap ? <HiddenOnMapNotice onShow={onShowOnMap} /> : null}
         </div>
         <button aria-label="닫기" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} type="button">
           <X className="h-3.5 w-3.5" />
@@ -667,6 +682,7 @@ function PlaceLinkRow({ className = "", compact = false, store }: { readonly cla
 export function StoreDetail({
   attachments,
   locationNote,
+  onShowOnMap,
   driverOptions,
   fuelPrices,
   history,
@@ -697,6 +713,8 @@ export function StoreDetail({
   readonly onWriteHistory: (storeId: string, memo: string) => void;
   /** 위치 상태 안내(좌표 없음·위치 추정). 정확한 위치면 빈 문자열. */
   readonly locationNote?: string;
+  /** 거래 종료라 지도에서 숨겨진 거래처일 때만 전달 — "지도에 보기"를 누르면 호출. */
+  readonly onShowOnMap?: () => void;
   readonly store: StoreRow;
   readonly vehicleOptions: string[];
 }) {
@@ -870,9 +888,20 @@ export function StoreDetail({
     }
   };
 
+  const { confirm, confirmDialog } = useConfirm();
   const updateRelationshipStatus = async (nextStatus: string) => {
     if (nextStatus === draftRelationshipStatus) return;
-    if (nextStatus === "거래종료" && !window.confirm(`${draftName}을(를) 거래 종료로 표시할까요? 목록·지도·대시보드·이탈 위험 알림·경로 계획에서 빠집니다(필터 "거래 종료 거래처 보기"로 다시 볼 수 있음).`)) return;
+    if (nextStatus === "거래종료") {
+      const ok = await confirm({
+        body: `${draftName}을(를) 거래 종료로 표시합니다. 지도·목록 기본 보기에서 숨겨집니다. 대시보드·이탈 위험 알림·경로 계획에서도 빠집니다(필터 "거래 종료 거래처 보기"로 다시 볼 수 있음).`,
+        confirmLabel: "거래 종료",
+        title: "거래 종료로 표시"
+      });
+      if (!ok) return;
+    } else if (draftRelationshipStatus === "거래종료" && nextStatus === "거래중") {
+      const ok = await confirm({ body: `${draftName}을(를) 거래 재개로 표시합니다. 지도·목록에 다시 보입니다.`, confirmLabel: "거래 재개", title: "거래 재개", tone: "default" });
+      if (!ok) return;
+    }
 
     setIsSavingRelationshipStatus(true);
     setRelationshipStatusError("");
@@ -886,7 +915,6 @@ export function StoreDetail({
     }
   };
   const toggleRelationshipStatus = () => void updateRelationshipStatus(draftRelationshipStatus === "거래종료" ? "거래중" : "거래종료");
-  const { confirm, confirmDialog } = useConfirm();
 
   return (
     <MapStoreDetailDrawer onClose={onClose}>
@@ -908,14 +936,13 @@ export function StoreDetail({
                 <span className={businessNumberValid ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700" : "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700"}>
                   {businessNumberValid ? "사업자번호 유효" : "사업자번호 확인"}
                 </span>
-                {draftRelationshipStatus === "거래종료" ? (
-                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">거래 종료</span>
-                ) : null}
+                <span className={relationshipChipClass(draftRelationshipStatus)}>{relationshipLabel(draftRelationshipStatus)}</span>
               </div>
               <p className="mt-2 text-sm font-bold text-slate-500">
                 {store.deliveryVehicleName || store.region} · {draftDeliveryDriver || "담당자 미지정"} · {draftAddress || "주소 미등록"}
               </p>
               {locationNote ? <p className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-900" role="status">{locationNote}</p> : null}
+              {onShowOnMap ? <HiddenOnMapNotice onShow={onShowOnMap} /> : null}
               <p className="mt-1 text-sm font-bold text-slate-600">
                 연락처 · {formatPhoneNumber(draftPhone) || "미등록"} · 사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}
               </p>
@@ -938,7 +965,7 @@ export function StoreDetail({
                 onClick={toggleRelationshipStatus}
                 type="button"
               >
-                {isSavingRelationshipStatus ? "저장 중..." : draftRelationshipStatus === "거래종료" ? "거래 재개로 표시" : "거래 종료로 표시"}
+                {isSavingRelationshipStatus ? "저장 중..." : draftRelationshipStatus === "거래종료" ? "거래 재개" : "거래 종료"}
               </button>
               <Link
                 className="maju-button-secondary inline-flex h-9 items-center gap-2 px-3 text-sm"
