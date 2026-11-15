@@ -12,6 +12,9 @@ it.each([
   "components/map/vehicle-helpers.tsx",
   "components/map/route-planner.tsx",
   "domains/route/distance.ts",
+  "components/map/quote-draft.tsx",
+  "components/map/quote-drawer.tsx",
+  "components/map/local-store-keys.ts",
 ])("%s는 sales-route-map-workspace를 import하지 않는다", (file) => {
   expect(readFileSync(file, "utf8")).not.toMatch(/from\s+["'][^"']*sales-route-map-workspace["']/);
 });

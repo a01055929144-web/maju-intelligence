@@ -38,8 +38,6 @@ import {
 } from "lucide-react";
 import { buildRouteNavigationLinks, GeoPoint, NavigationStop } from "@/lib/navigation-links";
 import { type StoreRow } from "@/components/map/map-row-helpers";
-import { RouteMetric, vehicleColorForId } from "@/components/map/vehicle-helpers";
-export { RouteMetric, vehicleColorForId };
 
 export type MarkerViewMode = "grade" | "vehicle";
 export type WorkspaceView = "map" | "customers" | "course" | "leads" | "history";
