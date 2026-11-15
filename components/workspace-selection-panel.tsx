@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowRight, Building2, Loader2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { CORE_HOME_HREF } from "@/lib/feature-modules";
 import type { CustomerWorkspaceSummary } from "@/lib/store";
@@ -19,6 +20,7 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
   const [pendingCompanyId, setPendingCompanyId] = useState("");
   const [leavingCompanyId, setLeavingCompanyId] = useState("");
   const [error, setError] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
   const busy = Boolean(pendingCompanyId || leavingCompanyId);
 
   async function selectWorkspace(companyId: string) {
@@ -49,11 +51,9 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
 
   async function leaveWorkspace(workspace: CustomerWorkspaceSummary) {
     const isPersonal = workspace.workspaceType === "personal";
-    const confirmed = window.confirm(
-      `"${workspace.companyName}" 워크스페이스에서 나가시겠습니까?\n${
+    const confirmed = await confirm({ title: "워크스페이스 나가기", body: `"${workspace.companyName}" 워크스페이스에서 나가시겠습니까?\n${
         isPersonal ? "개인 워크스페이스라 나가면 관련 데이터도 함께 삭제됩니다." : "다시 들어오려면 관리자의 재초대가 필요합니다."
-      }\n되돌릴 수 없습니다.`
-    );
+      }\n되돌릴 수 없습니다.`, confirmLabel: "나가기", tone: "danger" });
     if (!confirmed) return;
 
     setLeavingCompanyId(workspace.companyId);
@@ -140,6 +140,7 @@ export function WorkspaceSelectionPanel({ currentCompanyId, workspaces }: Worksp
           );
         })}
       </div>
+      {confirmDialog}
     </div>
   );
 }

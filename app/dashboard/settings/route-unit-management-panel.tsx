@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { BusFront, Save, Shuffle, Truck } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/state";
 import type { DeliveryRouteUnit } from "@/domains/delivery/route-unit";
 import type { VehicleMaster } from "@/domains/delivery/vehicle-master";
 import type { CompanyStaffMemberOption, DeliveryTerritoryItem } from "@/lib/store";
@@ -47,6 +49,7 @@ export function RouteUnitManagementPanel({
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
   const assignedUnitByVehicleId = useMemo(
     () => new Map(routeUnits.filter((unit) => unit.isActive && unit.currentVehicleId).map((unit) => [unit.currentVehicleId!, unit.name])),
     [routeUnits]
@@ -78,7 +81,7 @@ export function RouteUnitManagementPanel({
       const payload = await response.json().catch(() => null);
       if (response.status === 409 && payload?.conflict?.name && !moveVehicle) {
         setSaving(false);
-        if (window.confirm(payload.message || `${payload.conflict.name}에서 사용 중입니다. 차량을 옮기시겠습니까?`)) {
+        if (await confirm({ title: "차량 이동", body: payload.message || `${payload.conflict.name}에서 사용 중입니다. 차량을 옮기시겠습니까?`, confirmLabel: "차량 이동", tone: "default" })) {
           await submit(true);
         } else {
           setMessage("차량 이동을 취소했습니다.");
@@ -118,7 +121,7 @@ export function RouteUnitManagementPanel({
               <p className="mt-1 text-sm font-semibold text-slate-600">{unit.territoryName} · {unit.defaultDriverName || "기사 미지정"}</p>
               <p className="mt-1 text-xs text-slate-500">{unit.currentVehiclePlateNumber ? `${unit.currentVehiclePlateNumber} · ${unit.currentVehicleName || "차량"}` : "현재 차량 미지정"}</p>
             </button>
-          )) : <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">등록된 호차가 없습니다.</div>}
+          )) : <EmptyState message="등록된 호차가 없습니다." description="새 호차를 눌러 권역과 차량을 연결하세요." />}
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -169,9 +172,10 @@ export function RouteUnitManagementPanel({
               {/^(?:제?\s*)?\d+\s*호차$/.test(vehicle.name.trim()) ? <p className="mt-2 text-xs text-amber-700">차량명은 실물 장비 이름입니다. “1호차” 같은 운행 단위명은 위 호차 관리에서 지정하세요.</p> : null}
             </div>
           ))}
-          {!initialVehicles.length ? <p className="text-sm text-slate-500">등록된 차량 마스터가 없습니다. 지도 홈의 차량 마스터에서 번호판 중심으로 차량을 먼저 등록하세요.</p> : null}
+          {!initialVehicles.length ? <EmptyState className="md:col-span-2 xl:col-span-3" message="등록된 차량 마스터가 없습니다." description="지도 홈의 차량 마스터에서 번호판 중심으로 차량을 먼저 등록하세요." /> : null}
         </div>
       </div>
+      {confirmDialog}
     </section>
   );
 }
