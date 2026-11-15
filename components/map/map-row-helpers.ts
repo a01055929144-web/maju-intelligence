@@ -97,6 +97,13 @@ export function getBusinessStatusLabel(status: StoreRow["businessStatus"]) {
   return "확인필요";
 }
 
+/** 거래 상태 칩 모양: 거래 종료 = 회색, 그 밖(거래중 등) = 초록. */
+export function relationshipChipClass(status: string | null | undefined) {
+  return status === "거래종료"
+    ? "rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700"
+    : "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
+}
+
 export function businessStatusClass(status: StoreRow["businessStatus"]) {
   if (status === "active") return "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
   if (status === "closed") return "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700";

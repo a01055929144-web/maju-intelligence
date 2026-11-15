@@ -76,7 +76,7 @@ import { useMapFilters, type MapFilterPopKey } from "@/components/map/use-map-fi
 import { MapSearchResultsPanel, type SearchResultRow } from "@/components/map/map-search-results-panel";
 import { useBusinessSearch, type ExternalBusinessResult } from "@/components/map/use-business-search";
 import { assignSearchPins } from "@/components/map/search-pins";
-import { isStoreVisibleByStatus } from "@/domains/customer/relationship-filter";
+import { isStoreVisibleByStatus, isTerminatedHiddenOnMap, relationshipLabel } from "@/domains/customer/relationship-filter";
 import { MapVehicleConnectionToast } from "@/components/map-vehicle-connection-toast";
 import { MobileMapSummary } from "@/components/mobile-map-summary";
 import { SalesAreaSelector, type SalesAreaSelectorSnapshot } from "@/components/sales-area-selector";
@@ -1000,7 +1000,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const searchRows = useMemo(
     () =>
       assignSearchPins<SearchResultRow>({
-        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: customerLocationChip(customerLocationState(store.id, unplacedCustomerIds, approximateCustomerIds), store.relationshipStatus || "거래처") })),
+        customers: registeredMatches.map((store) => ({ id: store.id || store.name, name: store.name, address: store.address || store.region || "", chip: customerLocationChip(customerLocationState(store.id, unplacedCustomerIds, approximateCustomerIds), relationshipLabel(store.relationshipStatus, "거래처")) })),
         salesLeads: leadMatches.filter((lead) => getPermitLeadType(lead) === "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "영업" })),
         newLeads: leadMatches.filter((lead) => getPermitLeadType(lead) !== "sales").map((lead) => ({ id: lead.id, name: lead.businessName, address: lead.address || "주소 확인 필요", industry: lead.industryPrimary || undefined, chip: lead.status || "신규" })),
         unregistered: unregisteredResults.map((result) => ({ id: externalResultId(result), name: result.name, address: result.roadAddress || result.address, industry: result.industry || undefined, chip: "카카오 미등록" }))
@@ -1029,6 +1029,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   );
   const selectedStore = allStores.find((store) => store.id === selectedId);
   const previewStore = allStores.find((store) => store.id === previewStoreId);
+  // 거래 종료 거래처를 검색으로 열었는데 기본 지도에서는 숨겨져 있을 때 "지도에 보기"(거래 종료 보기 켜고, 이탈 제외가 가리고 있으면 끔).
+  const showTerminatedOnMap = () => {
+    setShowTerminatedStores(true);
+    setExcludeClosedStores(false);
+  };
+  const hiddenOnMapHandler = (store?: StoreRow) => (store && isTerminatedHiddenOnMap(store, { excludeClosed: excludeClosedStores, showTerminated: showTerminatedStores }) ? showTerminatedOnMap : undefined);
   const gradeCounts = useMemo(() => countGrades(gradeBaseStores), [gradeBaseStores]);
   const routeTotals = useMemo(() => getStoreTotals(visibleStores), [visibleStores]);
   const allStoreTotals = useMemo(() => getStoreTotals(allStores), [allStores]);
@@ -2981,6 +2987,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 {previewStore ? (
                   <StoreQuickCard
                     driverOptions={deliveryDefaults.drivers}
+                    onShowOnMap={hiddenOnMapHandler(previewStore)}
                     headerOffsetPx={mapHeaderHeightPx}
                     leftPanelCollapsed={mapPanelMode === "map"}
                     onAddDriver={addManualDriver}
@@ -3330,6 +3337,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
         <StoreDetail
           attachments={storeAttachments[selectedStore.id] || {}}
           locationNote={customerLocationNote(customerLocationState(selectedStore.id, unplacedCustomerIds, approximateCustomerIds))}
+          onShowOnMap={hiddenOnMapHandler(selectedStore)}
           driverOptions={deliveryDefaults.drivers}
           fuelPrices={fuelPrices}
           history={storeHistories[selectedStore.id] || []}
