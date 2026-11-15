@@ -6,6 +6,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { Toolbar } from "@/components/ui/toolbar";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/ui/search-input";
+import { formatWon } from "@/domains/shared/money";
 import { useSearchParams } from "next/navigation";
 import { documentRequest } from "@/lib/pricing/document-client";
 import {
@@ -753,15 +755,15 @@ export function PricingDocumentsWorkspace({
                         setCatalogQuery(catalogInput);
                       }}
                     >
-                      <input
+                      <SearchInput
                         value={catalogInput}
-                        onChange={(e) => setCatalogInput(e.target.value)}
+                        onChange={setCatalogInput}
                         placeholder={
                           manager ? "관리 상품명 검색" : "노출 상품명 검색"
                         }
                         aria-label="추가할 품목 검색"
                         className={box}
-                        maxLength={100}
+                        inputProps={{ maxLength: 100 }}
                       />
                       <button disabled={busy} className={box}>
                         품목 찾기
@@ -779,9 +781,9 @@ export function PricingDocumentsWorkspace({
                           {item.taxType === "unknown"
                             ? " (과세 확인 필요)"
                             : ""}{" "}
-                          · {item.price.toLocaleString()}원{" "}
+                          · {formatWon(item.price)}{" "}
                           {manager && item.cost !== undefined
-                            ? `(매입 ${item.cost.toLocaleString()}원)`
+                            ? `(매입 ${formatWon(item.cost)})`
                             : ""}{" "}
                           +
                         </button>

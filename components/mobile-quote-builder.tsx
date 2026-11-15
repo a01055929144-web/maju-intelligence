@@ -1,8 +1,13 @@
 "use client";
 import { MoneyInput } from "@/components/money-input";
+import { CopyTextButton } from "@/components/copy-text-button";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, LoadingState } from "@/components/ui/state";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { formatWon } from "@/domains/shared/money";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Check, Copy, FileText, Loader2, Plus, Search, Share2, Trash2, X } from "lucide-react";
+import { Camera, Check, FileText, Loader2, Plus, Share2, Trash2, X } from "lucide-react";
 import {
   applyDefaultMargin,
   calculateQuoteTotals,
@@ -66,7 +71,7 @@ export function MobileQuoteBuilder({
   const [issued, setIssued] = useState<IssuedQuote | null>(initialQuote?.status === "sent" ? { publicUrl: `/quote/${initialQuote.publicToken}`, quoteNumber: initialQuote.quoteNumber } : null);
   const [quoteId, setQuoteId] = useState(initialQuote?.id || "");
   const [fieldErrors, setFieldErrors] = useState<SalesQuoteFieldErrors>({});
-  const [copied, setCopied] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
   const [photos, setPhotos] = useState<Record<string, File>>({});
   const [photoStates, setPhotoStates] = useState<Record<string, "idle" | "uploading" | "uploaded" | "error">>({});
   const [uploadedPhotoPaths, setUploadedPhotoPaths] = useState<Record<string, string>>({});
@@ -101,17 +106,20 @@ export function MobileQuoteBuilder({
       const raw = window.localStorage.getItem(localDraftKey);
       if (!raw) return;
       const draft = JSON.parse(raw) as { lines?: QuoteLine[]; margin?: number; validDays?: number };
-      if (!draft.lines?.length || !window.confirm("작성 중인 견적이 있습니다. 불러올까요?")) return;
-      restoredLocalDraftRef.current = true;
-      setLines(draft.lines);
-      if (Number.isFinite(draft.margin)) setMargin(Number(draft.margin));
-      if (Number.isFinite(draft.validDays)) setValidDays(Number(draft.validDays));
-      setMessage("브라우저에 보관된 작성 중 견적을 불러왔습니다.");
-      setMessageTone("success");
+      if (!draft.lines?.length) return;
+      void confirm({ body: "작성 중인 견적이 있습니다. 불러올까요?", confirmLabel: "불러오기", tone: "default" }).then((accepted) => {
+        if (!accepted) return;
+        restoredLocalDraftRef.current = true;
+        setLines(draft.lines!);
+        if (Number.isFinite(draft.margin)) setMargin(Number(draft.margin));
+        if (Number.isFinite(draft.validDays)) setValidDays(Number(draft.validDays));
+        setMessage("브라우저에 보관된 작성 중 견적을 불러왔습니다.");
+        setMessageTone("success");
+      });
     } catch {
       // 저장소 접근 제한이나 손상된 임시 데이터는 작성 흐름을 막지 않습니다.
     }
-  }, [initialQuote, localDraftKey]);
+  }, [confirm, initialQuote, localDraftKey]);
 
   useEffect(() => {
     if (initialQuote) return;
@@ -181,10 +189,10 @@ export function MobileQuoteBuilder({
     setLines((current) => current.map((line) => line.id === id ? { ...line, ...patch } : line));
   }
 
-  function changeMargin(nextMargin: number) {
+  async function changeMargin(nextMargin: number) {
     const recalculable = lines.some((line) => !line.priceLocked && line.purchasePrice > 0);
     setMargin(nextMargin);
-    if (recalculable && window.confirm("잠금하지 않은 품목의 판매가를 새 마진율로 다시 계산할까요?")) {
+    if (recalculable && await confirm({ body: "잠금하지 않은 품목의 판매가를 새 마진율로 다시 계산할까요?", confirmLabel: "재계산", tone: "default" })) {
       setLines((current) => applyDefaultMargin(current, nextMargin));
     }
   }
@@ -275,15 +283,11 @@ export function MobileQuoteBuilder({
     }
   }
 
-  async function copyOrShare(share: boolean) {
+  async function shareQuote() {
     if (!issued) return;
-    if (share && navigator.share) {
+    if (navigator.share) {
       await navigator.share({ title: `${recipientName} 견적서`, text: `${recipientName} 담당자님, 견적서를 보내드립니다.`, url: issued.publicUrl }).catch(() => undefined);
-      return;
     }
-    await navigator.clipboard.writeText(issued.publicUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
   }
 
   return (
@@ -292,12 +296,13 @@ export function MobileQuoteBuilder({
         <div><p className="text-sm font-semibold">견적 품목 작성</p><p className="mt-0.5 text-[11px] font-semibold text-slate-500">원장 품목을 고르거나 요청 품목을 직접 추가하세요.</p></div>
         <FileText className="h-5 w-5 text-teal-700" />
       </div>
+      {confirmDialog}
       <div className="mt-3 flex gap-2">
-        <label className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input className="mobile-input min-h-10 w-full rounded-lg border py-2 pl-9 pr-3 text-sm" onChange={(event) => setQuery(event.target.value)} placeholder="상품 원장 검색" value={query} /></label>
+        <SearchInput aria-label="상품 원장 검색" className="flex-1" onChange={setQuery} placeholder="상품 원장 검색" value={query} />
         <button className="mobile-secondary-action inline-flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold" onClick={addCustomItem} type="button"><Plus className="h-4 w-4" />직접</button>
       </div>
-      {catalogState === "loading" ? <p className="mt-2 text-xs font-semibold text-slate-500">상품 원장을 불러오는 중입니다.</p> : null}
-      {catalogState === "ready" && query ? <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">{candidates.map((item) => <button className="flex min-h-11 w-full items-center justify-between rounded-lg border bg-white px-3 py-2 text-left text-xs" key={item.id} onClick={() => addCatalogItem(item)} type="button"><span><b>{item.salesName || item.name}</b><span className="ml-1 text-slate-500">{item.salesSpec || item.spec || item.unit}</span>{item.costOptions?.length ? <span className="mt-1 block text-xs text-slate-500">내부 원가 {item.costOptions.map(option=>`${option.supplierName} ${option.cost.toLocaleString()}원${option.isDefault?'(기본)':''}`).join(' · ')}</span>:null}</span><span className="font-semibold text-teal-700">추가</span></button>)}{!candidates.length ? <p className="rounded-lg bg-white p-3 text-xs text-slate-500">일치 품목이 없습니다. 직접 추가를 사용하세요.</p> : null}</div> : null}
+      {catalogState === "loading" ? <LoadingState bare className="mt-2" label="상품 원장을 불러오는 중입니다." /> : null}
+      {catalogState === "ready" && query ? <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">{candidates.map((item) => <button className="flex min-h-11 w-full items-center justify-between rounded-lg border bg-white px-3 py-2 text-left text-xs" key={item.id} onClick={() => addCatalogItem(item)} type="button"><span><b>{item.salesName || item.name}</b><span className="ml-1 text-slate-500">{item.salesSpec || item.spec || item.unit}</span>{item.costOptions?.length ? <span className="mt-1 block text-xs text-slate-500">내부 원가 {item.costOptions.map(option=>`${option.supplierName} ${formatWon(option.cost)}${option.isDefault?'(기본)':''}`).join(' · ')}</span>:null}</span><span className="font-semibold text-teal-700">추가</span></button>)}{!candidates.length ? <EmptyState bare className="rounded-lg bg-white p-3" message="일치 품목이 없습니다." description="직접 추가를 사용하세요." /> : null}</div> : null}
 
       <div className="mt-3 space-y-3">{lines.map((line, index) => <QuoteLineEditor key={line.id} index={index} line={line} photoState={photoStates[line.id] || "idle"} onPhotoChange={(file) => { setPhotos((current) => { const next = { ...current }; if (file) next[line.id] = file; else delete next[line.id]; return next; }); setUploadedPhotoPaths((current) => { const next = { ...current }; delete next[line.id]; return next; }); setPhotoStates((current) => ({ ...current, [line.id]: "idle" })); updateLine(line.id, { requestPhotoName: file?.name }); }} onChange={(patch) => updateLine(line.id, patch)} onRemove={() => setLines((current) => current.filter((item) => item.id !== line.id))} />)}</div>
       {!lines.length ? <p className="mt-3 rounded-lg border border-dashed border-teal-200 bg-white p-4 text-center text-xs font-semibold text-slate-500">견적 품목을 추가해 주세요.</p> : null}
@@ -308,10 +313,10 @@ export function MobileQuoteBuilder({
         <label className="text-[11px] font-semibold">기본 마진율<select aria-invalid={Boolean(fieldErrors.margin)} className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={margin} onChange={(event) => changeMargin(Number(event.target.value))}>{[10,12,15].map((value) => <option key={value} value={value}>{value}%</option>)}</select>{fieldErrors.margin ? <span className="mt-1 block text-rose-700">{fieldErrors.margin}</span> : null}</label>
         <label className="text-[11px] font-semibold">유효기간<select aria-invalid={Boolean(fieldErrors.validUntil)} className="mobile-input mt-1 min-h-10 w-full rounded-lg border px-2 text-sm" value={validDays} onChange={(event) => setValidDays(Number(event.target.value))}>{Array.from(new Set([7,14,30,initialValidDays])).sort((a,b) => a-b).map((value) => <option key={value} value={value}>{value}일</option>)}</select>{fieldErrors.validUntil ? <span className="mt-1 block text-rose-700">{fieldErrors.validUntil}</span> : null}</label>
       </div>
-      <div className="mt-3 rounded-lg bg-slate-900 p-3 text-white"><div className="flex justify-between text-xs"><span>판매 합계</span><b>{totals.salesAmount.toLocaleString()}원</b></div><div className="mt-1 flex justify-between text-[11px] text-slate-300"><span>내부 예상 이익 · 고객 비공개</span><span>{totals.expectedProfit.toLocaleString()}원 · {totals.marginRate.toFixed(1)}%</span></div></div>
+      <div className="mt-3 rounded-lg bg-slate-900 p-3 text-white"><div className="flex justify-between text-xs"><span>판매 합계</span><b>{formatWon(totals.salesAmount)}</b></div><div className="mt-1 flex justify-between text-[11px] text-slate-300"><span>내부 예상 이익 · 고객 비공개</span><span>{formatWon(totals.expectedProfit)} · {totals.marginRate.toFixed(1)}%</span></div></div>
       {message ? <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${messageTone === "success" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{message}</p> : null}
       <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-secondary-action inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border text-sm font-semibold disabled:opacity-60" disabled={saving||initialQuote?.status==="sent"} onClick={() => void saveQuote("draft")} title={initialQuote?.status==="sent"?"발행한 견적은 임시저장으로 되돌릴 수 없습니다.":undefined} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}임시저장</button><button className="mobile-primary-action inline-flex min-h-12 items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveQuote("sent")} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}{issued ? "수정 저장" : "고객용 발행"}</button></div>
-      {issued ? <div className="mt-2 grid grid-cols-2 gap-2"><button className="mobile-primary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg text-xs font-semibold" onClick={() => void copyOrShare(true)} type="button"><Share2 className="h-4 w-4" />공유</button><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border text-xs font-semibold" onClick={() => void copyOrShare(false)} type="button">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "복사했습니다" : "링크 복사"}</button></div> : null}
+      {issued ? <div className="mt-2 grid grid-cols-2 gap-2"><button className="mobile-primary-action inline-flex min-h-11 items-center justify-center gap-1 rounded-lg text-xs font-semibold" onClick={() => void shareQuote()} type="button"><Share2 className="h-4 w-4" />공유</button><CopyTextButton className="mobile-secondary-action !h-11 justify-center" label="링크 복사" text={issued.publicUrl} /></div> : null}
     </section>
   );
 }

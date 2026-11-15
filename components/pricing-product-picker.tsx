@@ -5,6 +5,8 @@ import type { CatalogChoice, Promotion } from "@/domains/pricing/document";
 import { filterIndex, type IndexItem } from "@/domains/pricing/catalog-filter";
 import { buildFolderTree, orderByFolder, toFolderOrder, type FolderOrder } from "@/domains/pricing/category-tree";
 import { inFolder } from "@/domains/pricing/margin-tree";
+import { formatWon } from "@/domains/shared/money";
+import { SearchInput } from "@/components/ui/search-input";
 
 /** 폴더 끌어 담기: 끌 때 담을 상품 id(최대 300개)를 실어 보낸다. 종이(PricingDocPaper)가 같은 이름으로 받는다. */
 export const FOLDER_DRAG = "application/x-maju-products";
@@ -133,7 +135,7 @@ export function PricingProductPicker({
         <>
           <div className="space-y-1.5 p-2">
             <div className="flex gap-1.5">
-              <input aria-label="추가할 품목 검색" className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 px-2 text-sm" maxLength={100} onChange={(e) => setFilter("all", e.target.value)} placeholder="코드·상품명·규격·단위 한 번에 찾기" value={filters.all} />
+              <SearchInput aria-label="추가할 품목 검색" className="flex-1" inputProps={{ maxLength: 100 }} onChange={(value) => setFilter("all", value)} placeholder="코드·상품명·규격·단위 한 번에 찾기" size="sm" value={filters.all} />
               <button aria-expanded={detail} className={`h-9 shrink-0 rounded-md border px-2 text-xs font-bold ${detail || activeDetail ? "border-teal-600 text-teal-800" : "border-slate-300"}`} onClick={() => setDetail((v) => !v)} type="button">상세{activeDetail ? ` ${activeDetail}` : ""}</button>
             </div>
             {tree.length ? <div className="flex gap-1.5">
@@ -209,7 +211,7 @@ export function PricingProductPicker({
               <span className="rounded bg-amber-200 px-1 font-bold text-amber-900">{p.badge}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-bold">{p.displayName}</span>
-                <span className="text-amber-900">{p.price.toLocaleString()}원 · {p.endsOn}까지{p.stock !== null ? ` · 재고 ${p.stock}` : ""}</span>
+                <span className="text-amber-900">{formatWon(p.price)} · {p.endsOn}까지{p.stock !== null ? ` · 재고 ${p.stock}` : ""}</span>
               </span>
               {added.has(`promo:${p.id}`) ? <span className="font-bold text-slate-500">담김</span> : <button className="rounded bg-amber-600 px-2 py-1 font-bold text-white" disabled={busy} onClick={() => onAddPromotion(p)} type="button">담기</button>}
             </div>
