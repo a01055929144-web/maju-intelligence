@@ -169,8 +169,11 @@ describe("시안 ⑫ 필터 줄 · 격자", () => {
     expect(workspaceSource).toContain('muted: !LEAD_STORE_AREA_FEATURE_ENABLED');
     expect(workspaceSource).toContain('title: LEAD_STORE_AREA_FEATURE_ENABLED ? "매장 규모(평)" : "매장 규모(평) · 준비 중"');
     expect(workspaceSource).not.toContain("lg:absolute lg:inset-x-2 lg:top-2 lg:z-20");
-    expect(workspaceSource).toContain('"lg:left-[250px]"');
-    expect(workspaceSource).toContain('"lg:right-[340px]"');
+    expect(workspaceSource).toContain('"lg:right-[250px]"');
+    expect(workspaceSource).toContain('"lg:left-[340px]"');
+    // 11/15: PC는 목록 패널이 왼쪽, 담당자·차량 패널이 오른쪽(모바일 DOM 순서는 그대로).
+    expect(workspaceSource).toContain("lg:bottom-0 lg:right-0 lg:top-0 lg:border-0 lg:border-l");
+    expect(workspaceSource.split("lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px]").length - 1).toBe(3);
     expect(workspaceSource).toContain('aria-label="보기 방식"');
     expect(workspaceSource).toContain('aria-label="현재 필터 조건"');
   });
