@@ -4,6 +4,9 @@ import Link from "next/link";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Banknote, Building2, CheckCircle2, ChevronLeft, ChevronRight, Copy, Eye, FileText, LinkIcon, MapPin, PackageCheck, PanelLeftClose, PanelLeftOpen, Pencil, Phone, Plus, RefreshCw, Route, Save, Search, Store, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SearchInput } from "@/components/ui/search-input";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { attachmentLabel, attachmentTitleFromType, buildPlaceSearchLinks, extractRegion, formatBusinessNumberInput, formatBusinessRegistrationNumber, formatPhoneNumberInput, gradeClassName, guessMimeType, isValidBusinessRegistrationNumber, normalizeBusinessRegistrationNumber, noteTypeLabel } from "@/components/customers/customer-format";
 import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
 import { CustomerAppShell } from "@/components/customer-app-shell";
@@ -13,6 +16,7 @@ import { SectionHeader } from "@/components/section-header";
 import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
+import { isStoreVisibleByStatus, relationshipLabel } from "@/domains/customer/relationship-filter";
 import { reportClientRenderTiming } from "@/lib/performance-timing";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -62,6 +66,7 @@ type CustomerView = {
   phone?: string;
   region: string;
   representativeName?: string;
+  relationshipStatus?: string;
   visitCount: number;
 };
 type TerritoryOption = { id: string; name: string; isActive: boolean; areas: string[]; defaultStaff: Array<{ staffMemberId: string; staffName: string; priority: number }> };
@@ -213,6 +218,7 @@ export default function CrmTimelinePage() {
   // 필요하면 다시 펼칠 수 있게 했습니다.
   const [listCollapsed, setListCollapsed] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [showTerminated, setShowTerminated] = useState(false);
   const [gradeFilter, setGradeFilter] = useState<"all" | "A" | "B" | "C">("all");
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("all");
   const [customerPage, setCustomerPage] = useState(1);
@@ -222,6 +228,7 @@ export default function CrmTimelinePage() {
   const [salesSummary, setSalesSummary] = useState<Record<string, { priceCount: number; lastDate: string; monthSales: number }>>({});
   const [hiddenExtraCols, setHiddenExtraCols] = useState<string[]>([]);
   const [colEditorOpen, setColEditorOpen] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
   useEffect(() => {
     try { setHiddenExtraCols(JSON.parse(window.localStorage.getItem("maju:customer-list-cols") || "[]")); } catch { /* 저장소를 못 쓰면 기본(모두 표시) */ }
   }, []);
@@ -670,6 +677,7 @@ export default function CrmTimelinePage() {
     return customers
       .map((customer, index) => ({ customer, index }))
       .filter(({ customer }) => {
+        const matchesRelationship = isStoreVisibleByStatus(customer, { excludeClosed: false, showTerminated });
         const matchesGrade = gradeFilter === "all" || customer.grade === gradeFilter;
         const matchesOperation = customerMatchesOperationFilter(customer, operationFilter);
         const matchesKeyword =
@@ -686,9 +694,9 @@ export default function CrmTimelinePage() {
             .filter(Boolean)
             .some((value) => String(value).toLowerCase().includes(keyword));
 
-        return matchesGrade && matchesOperation && matchesKeyword;
+        return matchesRelationship && matchesGrade && matchesOperation && matchesKeyword;
       });
-  }, [customerSearch, customers, gradeFilter, operationFilter]);
+  }, [customerSearch, customers, gradeFilter, operationFilter, showTerminated]);
   const customerTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / customerPageSize));
   const pagedCustomers = useMemo(() => {
     const start = (customerPage - 1) * customerPageSize;
@@ -731,7 +739,7 @@ export default function CrmTimelinePage() {
     setCustomerPage(1);
     setBulkSelectedIds(new Set());
     setBulkManagerMessage("");
-  }, [customerPageSize, customerSearch, gradeFilter, operationFilter]);
+  }, [customerPageSize, customerSearch, gradeFilter, operationFilter, showTerminated]);
 
   function jumpToCustomer(customerId: string | undefined) {
     if (!customerId) return;
@@ -741,9 +749,12 @@ export default function CrmTimelinePage() {
 
   async function mergeDuplicateIntoSelected(duplicateId: string, duplicateLabel: string) {
     if (!selectedCustomer.id || mergingCustomerId) return;
-    const confirmed = window.confirm(
-      `"${duplicateLabel}" 레코드를 "${selectedCustomer.customerName}"(으)로 병합합니다.\n매출 이력·메모·첨부는 이 거래처로 옮겨지고, "${duplicateLabel}" 레코드는 완전히 삭제됩니다. 되돌릴 수 없습니다. 계속할까요?`
-    );
+    const confirmed = await confirm({
+      body: `"${duplicateLabel}" 레코드를 "${selectedCustomer.customerName}"(으)로 병합합니다.\n매출 이력·메모·첨부는 이 거래처로 옮겨지고, "${duplicateLabel}" 레코드는 완전히 삭제됩니다. 되돌릴 수 없습니다.`,
+      confirmLabel: "병합하고 삭제",
+      title: "중복 거래처 병합",
+      tone: "danger"
+    });
     if (!confirmed) return;
 
     setMergingCustomerId(duplicateId);
@@ -1318,6 +1329,7 @@ export default function CrmTimelinePage() {
       title="거래처 관리"
       userName={isAdminPreview ? "관리자" : sessionUserName || "사용자"}
     >
+      {confirmDialog}
       <section className="w-full">
         <WorkspaceSectionNav
           items={[
@@ -1389,26 +1401,7 @@ export default function CrmTimelinePage() {
                 onRetry={customerSource === "error" ? loadCustomers : undefined}
                 title="거래처 목록"
               >
-                <label className="maju-search-field">
-                  <Search className="h-4 w-4 text-slate-400" />
-                  <input
-                    aria-label="거래처 검색"
-                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
-                    onChange={(event) => setCustomerSearch(event.target.value)}
-                    placeholder="상호명, 주소, 사업자번호, 담당자 검색"
-                    value={customerSearch}
-                  />
-                  {customerSearch ? (
-                    <button
-                      aria-label="거래처 검색어 지우기"
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                      onClick={() => setCustomerSearch("")}
-                      type="button"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                </label>
+                <SearchInput aria-label="거래처 검색" onChange={setCustomerSearch} placeholder="상호명, 주소, 사업자번호, 담당자 검색" size="sm" value={customerSearch} />
                 <div className="mt-3 border-t border-slate-200/80 pt-3">
                   <p className="maju-muted-label px-0.5 pb-1.5">빠른 필터</p>
                   <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-3">
@@ -1417,6 +1410,10 @@ export default function CrmTimelinePage() {
                     <CustomerFilterButton active={operationFilter === "loading-missing"} count={loadingMissingCount} label="적재위치" onClick={() => applyOperationFilter("loading-missing")} tone="warning" />
                     <CustomerFilterButton active={operationFilter === "manager-missing"} count={managerMissingCount} label="담당자" onClick={() => applyOperationFilter("manager-missing")} />
                   </div>
+                  <label className="mt-3 flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700">
+                    <input checked={showTerminated} onChange={(event) => setShowTerminated(event.target.checked)} type="checkbox" />
+                    거래 종료 거래처 보기
+                  </label>
                   <div className="maju-filter-box mt-3">
                     <p className="maju-muted-label px-2 pb-1">매출 등급</p>
                     <div className="grid grid-cols-4 gap-1.5">
@@ -1662,51 +1659,23 @@ export default function CrmTimelinePage() {
                       const text = col.key === "priceCount" ? String(sum?.priceCount ?? 0) : col.key === "lastDate" ? sum?.lastDate?.slice(2) || "-" : `${(sum?.monthSales ?? 0).toLocaleString("ko-KR")}원`;
                       return <span className="truncate text-right text-xs font-medium text-slate-600" key={col.key}>{text}</span>;
                     })}
-                    <Badge className={`justify-self-end px-2 py-0.5 text-xs ${issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
-                      {issues.length ? issues[0] : "준비됨"}
+                    <Badge className={`justify-self-end px-2 py-0.5 text-xs ${customer.relationshipStatus === "거래종료" ? "bg-slate-200 text-slate-700" : issues.length ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                      {customer.relationshipStatus === "거래종료" ? relationshipLabel(customer.relationshipStatus) : issues.length ? issues[0] : "준비됨"}
                     </Badge>
                   </div>
                 );
               })}
-              {!filteredCustomers.length ? (
-                <div className="maju-empty-state m-4">
-                  <p className="text-sm font-black text-slate-700">
-                    {customerSource === "error"
-                      ? "거래처 원장을 불러오지 못했습니다."
-                      : hasCustomers
-                        ? "조건에 맞는 거래처가 없습니다."
-                        : "등록된 거래처가 없습니다."}
-                  </p>
-                  <p className="mt-1 text-xs font-bold text-slate-400">
-                    {customerSource === "error"
-                      ? "실제로 거래처가 없는 것이 아니라 API 오류일 수 있습니다. 위의 다시 시도 버튼을 눌러주세요."
-                      : hasCustomers
-                        ? "검색어, 등급 또는 운영 필터를 바꿔보세요."
-                        : "거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다."}
-                  </p>
-                  {!hasCustomers && customerSource !== "error" ? (
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                      <Link className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/")}>거래처 등록·가져오기</Link>
-                      <Link className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/customers/data")}>기존 가져오기 결과 확인</Link>
-                    </div>
-                  ) : null}
-                  {!hasCustomers && customerSource !== "error" && storeOwnerActivationEnabled ? (
-                    <p className="mt-2 text-xs font-bold leading-5 text-slate-500">점주 개통 링크는 10자리 사업자번호가 저장된 거래처를 선택한 뒤 만들 수 있습니다.</p>
-                  ) : null}
-                  {hasCustomers && customerSource !== "error" ? (
-                    <button
-                      className="maju-button-secondary mt-3 min-h-10 text-xs"
-                      onClick={() => {
-                        setCustomerSearch("");
-                        setGradeFilter("all");
-                        clearOperationFilter();
-                      }}
-                      type="button"
-                    >
-                      검색·필터 초기화
-                    </button>
-                  ) : null}
-                </div>
+              {!filteredCustomers.length ? customerSource === "loading" ? (
+                <LoadingState className="m-4" description="거래처 원장과 거래 상태를 확인하고 있습니다." label="거래처를 불러오는 중입니다" />
+              ) : customerSource === "error" ? (
+                <ErrorState className="m-4" description="실제로 거래처가 없는 것이 아니라 API 오류일 수 있습니다." message="거래처 원장을 불러오지 못했습니다." onRetry={loadCustomers} />
+              ) : (
+                <EmptyState
+                  action={!hasCustomers ? <div className="flex flex-col gap-2 sm:flex-row sm:justify-center"><Link className="maju-button-primary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/")}>거래처 등록·가져오기</Link><Link className="maju-button-secondary min-h-11 w-full justify-center sm:w-auto" href={withCompanyQuery("/customers/data")}>기존 가져오기 결과 확인</Link></div> : <button className="maju-button-secondary min-h-10 text-xs" onClick={() => { setCustomerSearch(""); setGradeFilter("all"); setShowTerminated(false); clearOperationFilter(); }} type="button">검색·필터 초기화</button>}
+                  className="m-4"
+                  description={hasCustomers ? "검색어, 등급, 운영 필터 또는 거래 종료 보기를 바꿔보세요." : `거래처를 업로드하거나 수기로 등록하면 이곳에 표시됩니다.${storeOwnerActivationEnabled ? " 점주 개통 링크는 10자리 사업자번호가 저장된 거래처에서 만들 수 있습니다." : ""}`}
+                  message={hasCustomers ? "조건에 맞는 거래처가 없습니다." : "등록된 거래처가 없습니다."}
+                />
               ) : null}
               {customersTruncated ? (
                 <div className="space-y-1.5 p-3">
