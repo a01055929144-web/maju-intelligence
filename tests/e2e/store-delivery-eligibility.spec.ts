@@ -15,6 +15,7 @@ for(const width of [1440,390])test(`server delivery eligibility blocks and recov
       lines:[{key:`${productId}:`,productId,promotionId:null,name:"합성 품목",category:"",brand:"",spec:"1kg",unit:"봉",badge:"",taxType:"exempt",unitPrice:1000,priceIncludesTax:false,isMarketPrice:false,remaining:null,maximumQuantity:null,recentDispatchPrice:null,recentDispatchDate:null}]},orders:[],preferences:[],historyPage:1,historyHasMore:false}});
   });
   await page.goto("/store#synthetic-token");await page.getByRole("button",{name:"주문하기",exact:true}).click();
+  if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
   await page.getByRole("button",{name:"합성 품목 수량 늘리기",exact:true}).click();
   const submit=page.getByRole("button",{name:"후결제로 주문 신청",exact:true});
   const retry=page.getByRole("button",{name:"배송 설정 다시 확인",exact:true});

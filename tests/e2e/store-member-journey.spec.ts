@@ -81,6 +81,7 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await page.goto(`/store?fixture=store-cost-${role}#synthetic-order-token`);
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
+  if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
   await page.getByRole("button", { name: "합성 품목 수량 늘리기", exact: true }).click();
   const deliveryGuide = page.getByRole("region", { name: "배송 요일 설정 안내", exact: true });
   await expect(deliveryGuide).toContainText("배송 권역의 가능 요일이 설정되지 않았습니다.");

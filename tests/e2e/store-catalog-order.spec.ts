@@ -28,6 +28,7 @@ for (const width of [1440, 390]) test(`전체 상품 링크: 검색·담기·주
   });
   await page.goto("/store#synthetic-catalog-token");
   await storeTab(page, "주문").click();
+  if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
 
   await expect(page.getByText("합성 양파", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "즐겨찾기" })).toHaveCount(0); // 전체 상품 링크에는 품목 설정이 없다
