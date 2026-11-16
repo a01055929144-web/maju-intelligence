@@ -127,3 +127,43 @@ function buildTmapRouteParams(destination: NavigationStop) {
   });
   return params.toString();
 }
+
+// ---- CC-54: 카카오내비 길 안내(기사 화면 CX-46a가 그대로 쓴다) ----
+export type NaviDestination = { name: string; point: GeoPoint | null; address?: string };
+
+/** `Kakao.Navi.start`에 넘길 값. 좌표가 없으면 null(내비는 좌표로만 목적지를 받는다). wgs84 = x 경도, y 위도. */
+export function buildKakaoNaviStartOptions(destination: NaviDestination) {
+  if (!destination.point) return null;
+  return { name: destination.name || "목적지", x: destination.point.lng, y: destination.point.lat, coordType: "wgs84" as const };
+}
+
+/** 내비를 못 열 때 대신 여는 카카오맵 길찾기 링크: 좌표가 있으면 목적지 좌표, 없으면 주소·이름 검색. */
+export function buildKakaoMapDestinationUrl(destination: NaviDestination) {
+  if (destination.point) return `https://map.kakao.com/link/to/${encodeURIComponent(destination.name || "목적지")},${destination.point.lat},${destination.point.lng}`;
+  return `https://map.kakao.com/link/search/${encodeURIComponent((destination.address || destination.name || "").trim() || "매장")}`;
+}
+
+/**
+ * 카카오내비 앱을 목적지가 들어간 채 연다. 앱 키·SDK·좌표가 없거나 호출이 실패하면 카카오맵 길찾기 링크로 넘어간다.
+ * 휴대폰 브라우저는 사용자가 누를 때만 앱을 열 수 있으므로 누르는 동작 안에서 부른다. 처리 결과: "navi" | "map-link".
+ * 카카오 개발자 콘솔의 "카카오내비" 사용 설정이 꺼져 있으면 SDK가 던져 map-link로 대신한다.
+ */
+export async function startKakaoNavi(destination: NaviDestination): Promise<"navi" | "map-link"> {
+  const options = buildKakaoNaviStartOptions(destination);
+  const key = process.env.NEXT_PUBLIC_KAKAO_MAP_APP_KEY;
+  if (options && key) {
+    const { loadKakaoSdk } = await import("@/lib/kakao-share");
+    const kakao = await loadKakaoSdk();
+    if (kakao?.Navi) {
+      try {
+        if (!kakao.isInitialized()) kakao.init(key);
+        kakao.Navi.start(options);
+        return "navi";
+      } catch {
+        // 아래 카카오맵 링크로 대신한다.
+      }
+    }
+  }
+  window.location.assign(buildKakaoMapDestinationUrl(destination));
+  return "map-link";
+}
