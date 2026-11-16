@@ -40,10 +40,10 @@ for (const width of [1440, 390]) test(`리드 거절: 사유 저장 후 기본 �
 
   onListPage = false;
   await page.goto("/map");
-  await expect(page.getByText("합성진행식당").first()).toBeVisible();
-  await expect(page.getByText("합성거절식당")).toHaveCount(0);
+  await expect(page.getByText("합성진행식당").locator("visible=true").first()).toBeVisible();
+  await expect(page.getByText("합성거절식당").locator("visible=true")).toHaveCount(0);
   await page.getByRole("button", { name: "거절함", exact: true }).click();
-  await expect(page.getByText("합성거절식당").first()).toBeVisible();
-  await expect(page.getByText("합성제외식당")).toHaveCount(0);
-  await expect(page.getByText("합성진행식당")).toHaveCount(0);
+  await expect(page.getByText("합성거절식당").locator("visible=true").first()).toBeVisible();
+  await expect(page.getByText("합성제외식당").locator("visible=true")).toHaveCount(0);
+  await expect(page.getByText("합성진행식당").locator("visible=true")).toHaveCount(0);
 });
