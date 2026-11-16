@@ -39,7 +39,7 @@ export function StoreOrderHistory({ orders, reorderHref }: { orders: StorePortal
                   {dateFormat.format(new Date(order.submitted_at))}</td>
                 <td className="md:py-2 md:pr-3"><span className="block text-slate-600 md:hidden">배송일</span>
                   {order.delivery_date ? dateFormat.format(new Date(order.delivery_date)) : "미정"}</td>
-                <td className="tabular-nums md:py-2 md:pr-3"><span className="block text-slate-600 md:hidden">품목 수</span>{lines.length}개</td>
+                <td className="tabular-nums md:py-2 md:pr-3"><span className="block text-slate-600 md:hidden">품목 수</span><span>{lines.length}개</span></td>
                 <td className="tabular-nums md:py-2 md:pr-3"><span className="block text-slate-600 md:hidden">금액</span>
                   {formatWon(order.known_total)}{order.has_market_price ? " + 시가" : ""}</td>
                 <td className="font-medium md:py-2"><span className="block font-normal text-slate-600 md:hidden">상태</span>
