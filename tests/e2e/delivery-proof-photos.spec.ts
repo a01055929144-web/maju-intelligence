@@ -14,7 +14,7 @@ for (const width of [1440, 390]) test(`지도 상세 배송 완료 사진: 사�
     attachment("a3", "delivery_proof", "가짜 완료 사진 이전", "2026. 11. 10. 오전 9:00:00")
   ];
   await page.route(/\/api\/customer-operations\?/, (route) => route.fulfill({ json: { attachments, notes: [], messageLogs: [] } }));
-  await page.goto(`/dashboard?customer=${customerId}`);
+  await page.goto(`/map?customer=${customerId}`);
   await page.getByRole("button", { name: "상세 열기" }).first().click();
   const section = page.getByRole("region", { name: "배송 완료 사진" });
   await expect(section.getByRole("img")).toHaveCount(2);
