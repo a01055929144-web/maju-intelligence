@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { cancelBusinessDocument, confirmBusinessDocument, copyBusinessDocumentLines, createReturnDraft, moveBusinessDocumentLines } from "@/lib/business-documents";
+import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
 export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const body = await request.json().catch(() => ({})) as { action?: "confirm" | "cancel" | "return" | "move-lines" | "copy-lines"; reason?: string; companyId?: string; lineIds?: string[]; targetPartnerId?: string; targetDocumentType?: "sale" | "purchase" };
+  const body = await request.json().catch(() => ({})) as { action?: "confirm" | "cancel" | "return" | "move-lines" | "copy-lines"; reason?: string; companyId?: string; lineIds?: string[]; returnLines?: Array<{ lineId: string; quantity: number }>; targetPartnerId?: string; targetDocumentType?: "sale" | "purchase" };
   const scope = await getRequestAuthScope(request, body.companyId); if (!scope.ok) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   if (!scopeHasCapability(scope, "manage_sales")) return NextResponse.json({ message: "전표를 처리할 권한이 없습니다." }, { status: 403 });
   const actor = { userId: scope.customerSession?.userId, name: scope.customerSession?.name || scope.adminSession?.name || "운영자" };
@@ -11,7 +12,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const id = (await params).id;
     if (body.action === "confirm") return NextResponse.json({ document: await confirmBusinessDocument(scope.companyId!, id, actor) });
     if (body.action === "cancel") return NextResponse.json({ document: await cancelBusinessDocument(scope.companyId!, id, body.reason || "", actor) });
-    if (body.action === "return") return NextResponse.json({ document: await createReturnDraft(scope.companyId!, id, actor) });
+    if (body.action === "return") {
+      if (!erpOrderDocumentsEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+      return NextResponse.json({ document: await createReturnDraft(scope.companyId!, id, body.returnLines || [], actor) });
+    }
     if (body.action === "move-lines") return NextResponse.json({ document: await moveBusinessDocumentLines(scope.companyId!, { documentId: id, lineIds: body.lineIds || [], targetPartnerId: body.targetPartnerId || "", reason: body.reason }, actor) });
     if (body.action === "copy-lines") return NextResponse.json({ document: await copyBusinessDocumentLines(scope.companyId!, { documentId: id, lineIds: body.lineIds || [], targetPartnerId: body.targetPartnerId || "", targetDocumentType: body.targetDocumentType || "sale" }, actor) });
     return NextResponse.json({ message: "처리 유형을 확인해 주세요." }, { status: 400 });
