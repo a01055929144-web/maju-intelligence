@@ -105,3 +105,11 @@ limit 1;
 
 - 변경 화면: 없음(SQL 초안·시험·승인표만).
 - 실제 화면: 확인 못 함. 앱 배포는 이번 작업 범위가 아니다.
+
+## 적용 기록 (2026-11-16 17:15 KST · 컨트롤타워)
+
+- **대표 승인 문구(17:15)**: `fcmdvveqmcgtioelzqun 운영 DB에 2026-11-15-customer-coordinates.sql 적용 승인 (거래처 좌표 칸 추가, 백필 없음)`
+- **사전 확인(읽기)**: `normalized_customers` 1행 · 다섯 칸·여섯 제약 없음 · RLS 켜짐 · 이 테이블을 쓰는 실행 중 쿼리 0.
+- **적용**: 승인된 초안 그대로 한 번 실행(한 트랜잭션, `lock_timeout 3s`·`statement_timeout 20s`). 운영 변경 금지 시간(06:00~07:30) 밖.
+- **읽기 검증**: 칸 5개(`latitude`·`longitude` double precision, `geocode_accuracy` text, `geocoded_at` timestamptz, `geocoded_address` text — 모두 NULL 허용) · 제약 6개 모두 검증됨(`convalidated`) · 행 수 1 그대로 · 좌표 있는 행 0(백필 없음) · RLS 켜짐 · 감사 기록 `customer_coordinates_schema_added`(2026-11-16 08:15:33 UTC, `existing_rows=1`, `backfilled_rows=0`).
+- **앱**: 코드 변경 없음. 좌표 읽기·저장은 Claude Code **CC-48-5**(R3 대기열 5번)가 이 기록 뒤 시작.

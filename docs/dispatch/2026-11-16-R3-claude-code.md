@@ -10,7 +10,7 @@
 | 2 | **CC-47-9 지도·리드 화면 공용 부품 마무리** | 지도·리드 소유 파일의 남은 직접 구현만: `window.confirm` → `useConfirm`, `navigator.clipboard` → `CopyTextButton`/공용 복사 함수. 대상(11/16 main 재집계): `map/quote-drawer.tsx`(확인 2·복사 2) · `map/vehicle-layer.tsx`(확인 1) · `mobile-sales-workspace.tsx`(확인 1) · `permit-leads-view.tsx`(확인 2·복사 5) · `map-lead-channel-icons.tsx`(복사 1) · `map/map-place-detail.tsx`(복사 1) · `sales-route-map-workspace.tsx`(복사 2). 바꾸지 않을 이유가 있으면 그 줄에 `// shared-ui-exception: <이유>` 주석(아래 공통 규칙) | 없음 | 위 파일에서 grep 0 또는 예외 주석만, 동작 변화 없음, 삭제 확인 창 e2e 1개 |
 | 3 | **CC-50b 거절 흐름 화면 시험** | CC-50(#870)에서 빠진 e2e: 목록에서 단계 "거절" → 사유 → 기본 목록에서 사라짐 → 지도 필터 "거절함"에 보임 / "제외"는 숨김 보기에만. 1440·390, 가짜 API | 없음 | 시험 통과 |
 | 4 | **48-7ⓐ 배송 완료 사진 보기** | [CC-48](2026-11-15-map-feedback.md) 48-7ⓐ: 지도 상세에서 그 거래처의 `delivery_proof` 첨부를 날짜순으로(썸네일 + 크게 보기, 올린 날짜 `formatKstDate`). 기존 첨부 API·서명 링크 재사용, 새 테이블·칸 없음. 사진 0장이면 `EmptyState` | 없음 | 가짜 API e2e: 사진 2장 날짜순 표시 · 0장 빈 상태 · 다른 회사 첨부 안 보임(기존 API 회사 범위 시험 재사용) |
-| 5 | **48-5 좌표 저장·사용** | R2 그대로 — **좌표 SQL 운영 적용 기록이 생긴 뒤에만**. 적용 전이면 건너뛰고 "대기열 끝(48-5 승인 대기)" 보고 | 필요(승인) | R2 기준 |
+| 5 | **48-5 좌표 저장·사용** | R2 그대로 — **좌표 SQL 운영 적용 완료(11/16 17:15, [적용 기록](../work-orders/db-approval/2026-11-15-customer-coordinates.md))** → 시작 가능 | 필요(승인) | R2 기준 |
 
 ## 이번 차수 주의
 
