@@ -53,7 +53,7 @@ test("390px driver map supports slide, keyboard and route-sales outcomes", async
   await sales.getByText("전달 못 함", { exact: true }).click();
   await sales.getByRole("button", { name: "문이 닫혀 있음" }).click();
   await expect.poll(() => writes[1]).toMatchObject({ outcome: "closed", handedToOwner: false });
-  await expect(page.getByText("전달 못 함 사유를 기록했습니다.")).toBeVisible();
+  await expect(page.getByText("합성 미전달 매장", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("cx56-route-sales-390.png") });
 });
 
