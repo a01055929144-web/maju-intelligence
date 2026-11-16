@@ -1,5 +1,7 @@
 # R4 작업지시 — Claude Code (2026-11-16 22:1x 작성, R3 대기열이 끝나면 이어서)
 
+> **다음 차수**: 이 줄이 끝나면 [R5](2026-11-17-R5-claude-code.md)로 이어서(11/17 01:0x).
+
 "이어서 작업해" 규칙은 [R2 Claude Code](2026-11-15-R2-claude-code.md) 0·1·3·4·5절 그대로. **[R3](2026-11-16-R3-claude-code.md) 대기열(CC-57 #929 · CC-55 · CC-56)이 모두 병합된 뒤** 이 대기열로 넘어온다. Vercel Hobby 규칙(`maxDuration` ≤ 60)과 공유 파일 소유(공용 표 · `components/ui/mobile/` · 지도)는 R3 그대로.
 
 | 순서 | 작업 | 할 것 | DB | 완료 기준 |
