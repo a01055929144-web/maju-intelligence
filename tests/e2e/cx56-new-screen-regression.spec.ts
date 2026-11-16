@@ -35,6 +35,7 @@ test("390px driver map supports slide, keyboard and route-sales outcomes", async
   await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
   await page.mouse.down();
   await page.mouse.move(trackBox!.x + trackBox!.width - 10, handleBox!.y + handleBox!.height / 2, { steps: 8 });
+  await page.waitForTimeout(100);
   await page.mouse.up();
   await expect(page.getByRole("button", { name: "밀어서 운행 종료" })).toBeAttached();
   await page.getByRole("button", { name: "밀어서 운행 종료" }).focus();
@@ -65,6 +66,7 @@ test("1440px store order table totals fixed prices, excludes market prices and h
   const table = page.getByRole("table");
   await table.getByRole("textbox", { name: "합성 미림 수량" }).fill("2");
   await table.getByRole("textbox", { name: "합성 시가 품목 수량" }).fill("1");
+  await table.getByRole("textbox", { name: "합성 시가 품목 수량" }).press("Tab");
   await expect(table.locator("tfoot")).toContainText("2,000원");
   await expect(table.locator("tfoot")).toContainText("표 합계에서 시가 1줄 제외");
   await page.getByRole("button", { name: "열 편집" }).click();
