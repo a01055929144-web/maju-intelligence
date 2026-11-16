@@ -45,6 +45,7 @@ CI 전체 초록 → Ready for review → 병합 (병합은 작성자가 함)
 
 ## "다음 진행해"를 받았을 때 (Claude Code · Codex 총괄방 공통)
 
+> 11/16 R3부터: 대기열은 [R3 Claude Code](2026-11-16-R3-claude-code.md) · [R3 Codex](2026-11-16-R3-codex.md). 규칙(받으면 할 일·멈출 때·보고)은 아래 R2 문서 그대로.
 > 11/15 R2부터: Claude Code는 [R2 Claude Code 지시서](2026-11-15-R2-claude-code.md) 1~5절(대기열·멈출 때·보고), Codex 총괄방은 [R2 Codex 지시서](2026-11-15-R2-codex.md) 0-2절을 따른다. "이어서 작업해"도 같은 뜻.
 
 1. 최신 차수 현황판에서 **내 담당 줄**을 본다.
