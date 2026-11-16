@@ -5,6 +5,7 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, FileText, Save } from "lucide-react";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { Button } from "@/components/ui/button";
+import { CompanyIndustryField } from "@/components/company-industry-field";
 import { KOREAN_ADMINISTRATIVE_AREAS, KOREAN_PROVINCES } from "@/lib/korean-administrative-areas";
 
 const DRAFT_KEY = "maju-admin-company-onboarding-draft-v1";
@@ -31,7 +32,7 @@ type Draft = {
 };
 
 const EMPTY_DRAFT: Draft = {
-  companyName: "", businessNumber: "", businessType: "식자재 유통", ownerName: "", originAddress: "",
+  companyName: "", businessNumber: "", businessType: "", ownerName: "", originAddress: "",
   bankName: "", bankAccountLast4: "", province: "서울특별시", district: "", vehicleName: "", driverName: "",
   driverPhone: "", managerName: "", customerEmail: "", plan: "trial"
 };
@@ -58,7 +59,7 @@ export function CompanyOnboardingWorkspace({ accountCreationEnabled }: { account
   }, []);
 
   const canFinish = useMemo(() => Boolean(
-    accountCreationEnabled && draft.companyName.trim() && draft.ownerName.trim() && draft.customerEmail.trim() && password.length >= 10 && draft.district
+    accountCreationEnabled && draft.companyName.trim() && draft.businessType.trim() && draft.ownerName.trim() && draft.customerEmail.trim() && password.length >= 10 && draft.district
   ), [accountCreationEnabled, draft, password]);
 
   function update<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -83,7 +84,7 @@ export function CompanyOnboardingWorkspace({ accountCreationEnabled }: { account
   }
 
   async function finish() {
-    if (!canFinish) return setMessage("회사·대표·로그인·영업 지역 필수 항목과 10자 이상 임시 비밀번호를 확인해주세요.");
+    if (!canFinish) return setMessage("회사·업종·대표·로그인·영업 지역 필수 항목과 10자 이상 임시 비밀번호를 확인해주세요.");
     setSaving(true);
     setMessage("");
     try {
@@ -159,7 +160,7 @@ export function CompanyOnboardingWorkspace({ accountCreationEnabled }: { account
   );
 
   function renderStep() {
-    if (step === 0) return <div className="grid gap-4 sm:grid-cols-2"><Input label="회사명*" value={draft.companyName} onChange={(value) => update("companyName", value)} /><Input label="대표자*" value={draft.ownerName} onChange={(value) => update("ownerName", value)} /><Input label="사업자등록번호" value={draft.businessNumber} onChange={(value) => update("businessNumber", value.replace(/\D/g, "").slice(0, 10))} /><Input label="업종" value={draft.businessType} onChange={(value) => update("businessType", value)} /><Input label="출발지 주소" value={draft.originAddress} onChange={(value) => update("originAddress", value)} /><FileInput file={businessDocument} label="사업자등록증" onChange={(event) => selectDocument(event, setBusinessDocument)} /></div>;
+    if (step === 0) return <div className="grid gap-4 sm:grid-cols-2"><Input label="회사명*" value={draft.companyName} onChange={(value) => update("companyName", value)} /><Input label="대표자*" value={draft.ownerName} onChange={(value) => update("ownerName", value)} /><Input label="사업자등록번호" value={draft.businessNumber} onChange={(value) => update("businessNumber", value.replace(/\D/g, "").slice(0, 10))} /><CompanyIndustryField value={draft.businessType} onChange={(value) => update("businessType", value)} /><Input label="출발지 주소" value={draft.originAddress} onChange={(value) => update("originAddress", value)} /><FileInput file={businessDocument} label="사업자등록증" onChange={(event) => selectDocument(event, setBusinessDocument)} /></div>;
     if (step === 1) return <div className="grid gap-4 sm:grid-cols-2"><Input label="은행" value={draft.bankName} onChange={(value) => update("bankName", value)} /><Input label="계좌 끝 4자리만*" value={draft.bankAccountLast4} onChange={(value) => update("bankAccountLast4", value.replace(/\D/g, "").slice(-4))} /><FileInput file={bankDocument} label="통장사본" onChange={(event) => selectDocument(event, setBankDocument)} /><Notice text="전체 계좌번호·서류 원본은 임시 저장하지 않습니다. 비공개 company-documents 저장소 승인 후 등록 화면에서 업로드합니다." /></div>;
     if (step === 2) return <div className="grid gap-4 sm:grid-cols-2"><Select label="시·도" value={draft.province} onChange={(value) => { update("province", value); update("district", ""); }} options={KOREAN_PROVINCES} /><Select label="시·군·구*" value={draft.district} onChange={(value) => update("district", value)} options={districts} placeholder="선택해주세요" /><Notice text="영업권 준비 기간은 60일입니다. 거래처 엑셀 자동 등록과 겹침 표시는 기존 가져오기 화면에서 이어서 진행합니다." /></div>;
     if (step === 3) return <div className="grid gap-4 sm:grid-cols-2"><Input label="배송차 이름" value={draft.vehicleName} onChange={(value) => update("vehicleName", value)} /><Input label="기사 이름" value={draft.driverName} onChange={(value) => update("driverName", value)} /><Input label="기사 연락처" value={draft.driverPhone} onChange={(value) => update("driverPhone", value)} /><Notice text="기사 이름을 입력하면 등록 완료 시 기존 카카오 초대 흐름으로 링크를 만듭니다." /></div>;

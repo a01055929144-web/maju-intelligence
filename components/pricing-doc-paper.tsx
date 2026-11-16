@@ -9,6 +9,7 @@ import type { DocumentOutput } from "@/domains/pricing/document";
 import { FOLDER_DRAG, PROMO_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
 import { formatWon } from "@/domains/shared/money";
+import { CompanyIndustryField } from "./company-industry-field";
 
 // CC-30d: 편집 화면에서만 보이는 줄 가격 출처(인쇄·공개 문서에는 안 나옴).
 const SOURCE_LABEL: Record<NonNullable<PrintLine["priceSource"]>, string> = { store: "매장 가격", grade: "카탈로그가", base: "기본가", edited: "문서에서 고침" };
@@ -89,6 +90,9 @@ function EditablePricingDocPaper({
       {/* 11/4: 문서를 주는 회사가 가장 먼저 보이도록 — 회사명 크게, 연락처·주소는 바로 아래 */}
       <header className="border-b pb-3">
         <input aria-label="회사명" className={`${cell} text-2xl font-black`} disabled={!editable} maxLength={100} onChange={(e) => onContent({ ...content, companyName: e.target.value })} placeholder="회사명을 입력하세요" style={{ color: accent }} value={content.companyName} />
+        <div className="mt-2 max-w-xs">
+          <CompanyIndustryField label="단가표 업종" value={content.industry || ""} onChange={(industry) => onContent({ ...content, industry })} />
+        </div>
         {headerInfo.length ? (
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 px-1 text-sm text-slate-700">{headerInfo.map((item) => <span key={item.key || item.label}><span className="text-slate-500">{item.label}</span> {item.value}</span>)}</div>
         ) : <p className="px-1 text-xs text-slate-400">오른쪽 &lsquo;보여줄 정보&rsquo;에서 연락처·주소 등을 넣으세요.</p>}

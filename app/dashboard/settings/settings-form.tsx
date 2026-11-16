@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { MessageTemplateManager } from "@/components/message-template-manager";
+import { CompanyIndustryField } from "@/components/company-industry-field";
 import { CompanySettings } from "@/lib/store";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -258,14 +259,7 @@ export function CompanySettingsForm({ hideAside = false, initial, sections, show
                 />
                 <span className="block text-[11px] font-semibold text-slate-400">대표자가 직접 배송·현장 업무를 할 때만 라이브 차량과 기사 화면에 사용됩니다.</span>
               </label>
-              <label className="space-y-1.5">
-                <span className="text-xs font-bold text-muted-foreground">주력 업종 <span className="font-semibold text-slate-400">(리드 기본값)</span></span>
-                <input
-                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                  value={form.businessType}
-                  onChange={(event) => updateSection("company", { businessType: event.target.value })}
-                />
-              </label>
+              <CompanyIndustryField label="주력 업종 (리드 기본값)" value={form.businessType} onChange={(businessType) => updateSection("company", { businessType })} />
             </div>
             <div className="space-y-1.5">
               <span className="text-xs font-bold text-muted-foreground">출발지(창고) 주소</span>

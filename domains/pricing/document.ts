@@ -52,6 +52,7 @@ export type DocumentContent = {
   kind: DocumentKind;
   title: string;
   companyName: string;
+  industry?: string;
   contact: string;
   recipient: string;
   footer: string;
@@ -261,6 +262,7 @@ export function parseDocument(value: unknown): DocumentContent {
     kind: d.kind,
     title: field(d.title, 100, true, "문서 제목"),
     companyName: field(d.companyName, 100, true, "회사명"),
+    ...(field(d.industry ?? "", 40, false, "업종") ? { industry: field(d.industry, 40, false, "업종") } : {}),
     contact: field(d.contact, 100, false, "담당·연락처"),
     recipient: field(d.recipient, 100, false, "받는 곳"),
     footer: field(d.footer, 400, false, "하단 안내"),
@@ -307,6 +309,7 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
   return {
     title: d.title,
     companyName: d.companyName,
+    industry: d.industry || "",
     contact: d.contact,
     recipient: d.recipient,
     footer: d.footer,
