@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { formatKstDate } from "@/domains/shared/kst-date";
-import { EmptyState } from "@/components/ui/state";
+import { EmptyState, ErrorState } from "@/components/ui/state";
 import { diffNotificationValues, notificationStatus, sortNotifications, unreadCount, type CompanyNotification, type NotificationStatus } from "@/lib/notification-list";
 
 // CC-56 공용 알림 목록: company_notifications 한 줄 = 한 항목. 새 알림 · 읽음 · 처리됨 표시, 읽음/처리 버튼, 값이 달라진 칸의 전후 비교.
@@ -24,18 +24,39 @@ type Props = {
   /** 항목 아래에 화면이 더 넣을 것(예: 주문 보기 링크). */
   readonly renderExtra?: (item: CompanyNotification) => ReactNode;
   readonly emptyMessage?: string;
+  readonly emptyDescription?: string;
+  /** CC-64: 불러오기 실패 문구. 주면 목록 대신 오류 화면(role=alert)과 [다시 시도](onRetry)를 보인다. */
+  readonly error?: string | null;
+  readonly onRetry?: () => void;
+  /** CC-64: 종류(notification_type)별로 묶어 각 묶음에 제목 · 안 읽은 개수 배지를 단다. 묶음 순서 = 그 묶음의 가장 앞선 항목 순서. */
+  readonly groupByType?: boolean;
 };
 
-export function NotificationList({ busyId = null, emptyMessage = "새 알림이 없습니다.", fieldLabels, items, onMarkRead, onProcess, renderExtra, titles = {} }: Props) {
+export function NotificationList({ busyId = null, emptyDescription, emptyMessage = "새 알림이 없습니다.", error = null, fieldLabels, groupByType = false, items, onMarkRead, onProcess, onRetry, renderExtra, titles = {} }: Props) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const sorted = sortNotifications(items);
   const unread = unreadCount(items);
-  if (!sorted.length) return <EmptyState message={emptyMessage} />;
+  if (error) return <ErrorState message={error} onRetry={onRetry} />;
+  if (!sorted.length) return <EmptyState description={emptyDescription} message={emptyMessage} />;
+  const groups = groupByType
+    ? Array.from(new Set(sorted.map((item) => item.notificationType)), (type) => ({ type, rows: sorted.filter((item) => item.notificationType === type) }))
+    : [{ type: "", rows: sorted }];
   return (
     <section aria-label="알림">
-      <p className="mb-2 text-xs font-bold text-slate-500" role="status">안 읽은 알림 {unread.toLocaleString("ko-KR")}건 · 전체 {sorted.length.toLocaleString("ko-KR")}건</p>
+      <p className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-500" role="status">
+        {unread ? <span aria-hidden="true" className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">{unread > 99 ? "99+" : unread}</span> : null}
+        안 읽은 알림 {unread.toLocaleString("ko-KR")}건 · 전체 {sorted.length.toLocaleString("ko-KR")}건
+      </p>
+      {groups.map((group) => (
+        <div className={groupByType ? "mb-3" : ""} key={group.type} role={groupByType ? "group" : undefined} aria-labelledby={groupByType ? `notification-group-${group.type}` : undefined}>
+          {groupByType ? (
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-black text-slate-900" id={`notification-group-${group.type}`}>
+              {titles[group.type] ?? group.type}
+              {unreadCount(group.rows) ? <span aria-label={`안 읽은 ${unreadCount(group.rows)}건`} className="rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-black text-white">{unreadCount(group.rows)}</span> : null}
+            </h3>
+          ) : null}
       <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-        {sorted.map((item) => {
+        {group.rows.map((item) => {
           const status = notificationStatus(item);
           const diff = diffNotificationValues(item.beforeValues, item.afterValues, fieldLabels);
           const expanded = open.has(item.id);
@@ -71,6 +92,8 @@ export function NotificationList({ busyId = null, emptyMessage = "새 알림이 
           );
         })}
       </ul>
+        </div>
+      ))}
     </section>
   );
 }
