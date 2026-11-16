@@ -7,8 +7,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncRunStatus, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
-import { isConsecutiveDailyZeroFetch } from "../domains/lead/sync-health";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -9747,20 +9746,20 @@ function summarizeLeadSyncIngest(ingest: PermitLeadIngestResult) {
 }
 
 export type LeadSyncStatus = {
-  gov: { lastAt: string | null; status: string | null; message: string | null };
+  gov: { lastAt: string | null; lastSuccessAt: string | null; stale: boolean; status: string | null; message: string | null };
   seoul: { lastAt: string | null; status: string | null; message: string | null };
   kakaoKeyword: { lastAt: string | null; status: string | null; message: string | null };
 };
 
 export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStatus> {
   const empty: LeadSyncStatus = {
-    gov: { lastAt: null, status: null, message: null },
+    gov: { lastAt: null, lastSuccessAt: null, stale: true, status: null, message: null },
     seoul: { lastAt: null, status: null, message: null },
     kakaoKeyword: { lastAt: null, status: null, message: null }
   };
   if (!isProductionStoreConfigured()) return empty;
 
-  const rows = await supabaseRequest<
+  const [rows, successRuns] = await Promise.all([supabaseRequest<
     Array<{
       gov_restaurant_sync_last_at: string | null;
       gov_restaurant_sync_last_status: string | null;
@@ -9774,12 +9773,37 @@ export async function getLeadSyncStatus(companyId: string): Promise<LeadSyncStat
     }>
   >(
     `companies?select=gov_restaurant_sync_last_at,gov_restaurant_sync_last_status,gov_restaurant_sync_last_message,seoul_restaurant_sync_last_at,seoul_restaurant_sync_last_status,seoul_restaurant_sync_last_message,kakao_keyword_lead_sync_last_at,kakao_keyword_lead_sync_last_status,kakao_keyword_lead_sync_last_message&id=eq.${encodeURIComponent(companyId)}&limit=1`
-  ).catch(() => []);
+  ).catch(() => []), supabaseRequest<Array<{ finished_at: string | null; status: string; metadata: { dataset?: GovDataset } | null }>>(
+    `lead_sync_runs?select=finished_at,status,metadata&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&order=finished_at.desc&limit=100`
+  ).catch(() => [])]);
   const row = rows[0];
   if (!row) return empty;
+  const govDatasetLabels: Record<GovDataset, string> = {
+    general_restaurants: "일반음식점",
+    rest_cafes: "휴게음식점",
+    bakeries: "제과점",
+    group_meal_facilities: "집단급식소",
+    contract_catering: "위탁급식영업"
+  };
+  const activeDatasets = (Object.keys(govDatasetLabels) as GovDataset[]).filter((dataset) =>
+    dataset === "general_restaurants" || successRuns.some((run) => run.metadata?.dataset === dataset)
+  );
+  const staleDatasets = activeDatasets.filter((dataset) => {
+    const lastSuccess = successRuns.find((run) => run.status === "success" && run.metadata?.dataset === dataset);
+    return isGovSyncStale(lastSuccess?.finished_at);
+  });
+  const generalRestaurantSuccess = successRuns.find((run) => run.status === "success" && run.metadata?.dataset === "general_restaurants");
+  const govStale = staleDatasets.length > 0;
+  const govStaleMessage = `${staleDatasets.map((dataset) => govDatasetLabels[dataset]).join("·")} 공공데이터가 마지막 성공 후 36시간 넘게 갱신되지 않았습니다. 지금 수집을 실행해 주세요.`;
 
   return {
-    gov: { lastAt: row.gov_restaurant_sync_last_at, status: row.gov_restaurant_sync_last_status, message: row.gov_restaurant_sync_last_message },
+    gov: {
+      lastAt: row.gov_restaurant_sync_last_at,
+      lastSuccessAt: generalRestaurantSuccess?.finished_at || null,
+      stale: govStale,
+      status: govStale ? "error" : row.gov_restaurant_sync_last_status,
+      message: govStale ? govStaleMessage : row.gov_restaurant_sync_last_message
+    },
     seoul: { lastAt: row.seoul_restaurant_sync_last_at, status: row.seoul_restaurant_sync_last_status, message: row.seoul_restaurant_sync_last_message },
     kakaoKeyword: {
       lastAt: row.kakao_keyword_lead_sync_last_at,
@@ -9834,39 +9858,53 @@ export async function syncGovRestaurantLeads(
       finished_at: string | null;
       fetched_count: number;
       status: string;
-      metadata: { dataset?: GovDataset; areaCursors?: Record<string, GovAreaCursor> } | null;
+      metadata: {
+        dataset?: GovDataset;
+        areaCursors?: Record<string, GovAreaCursor>;
+        pendingAreas?: string[];
+        firstArea?: string;
+        timeoutCounts?: Record<string, number>;
+      } | null;
     }>>(
-      `lead_sync_runs?select=started_at,finished_at,fetched_count,status,metadata&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&status=eq.success&order=started_at.desc&limit=20`
+      `lead_sync_runs?select=started_at,finished_at,fetched_count,status,metadata&company_id=eq.${encodeURIComponent(companyId)}&source=eq.gov&order=started_at.desc&limit=40`
     ).catch(() => []);
     const previous = previousRuns.find((run) => run.metadata?.dataset === dataset);
+    const previousSuccess = previousRuns.find((run) => run.status === "success" && run.metadata?.dataset === dataset);
     const savedCursors = Object.fromEntries(Object.entries(previous?.metadata?.areaCursors || {})
       .filter(([areaCode]) => codes.includes(areaCode)));
     if (startPage && startPage > 1 && codes[0] && !savedCursors[codes[0]]) {
       savedCursors[codes[0]] = { areaCode: codes[0], page: startPage, cutoff: startedAt, scanStartedAt: startedAt };
     }
-    const cutoff = getGovChangeCutoff(new Date(startedAt), previous?.finished_at, days).toISOString();
-    const tasks = buildGovAreaTasks(codes, savedCursors, cutoff, startedAt);
-    // 40초는 API만의 예산이 아니라 이 함수의 수집+ingest+상태 기록 전체 목표 예산이다.
-    // 마지막 10초는 DB 후처리용으로 남기고, 공통 큐에서 기다린 작업도 실제 요청 직전에 다시 확인한다.
+    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea);
+    const cutoff = getGovChangeCutoff(new Date(startedAt), previousSuccess?.finished_at, days).toISOString();
+    const tasks = buildGovAreaTasks(orderedCodes, savedCursors, cutoff, startedAt);
     const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
-    const taskResults = await runGovAreaTasks({
-      tasks,
-      deadlineAt: requestDeadlineAt,
-      concurrency: fanoutConcurrency,
-      requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS,
-      load: (task) => (requestLimiter || (async (load) => load()))(() => {
+    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const loadTask = (task: (typeof tasks)[number]) => (requestLimiter || (async (load) => load()))(async () => {
+      const fetchOnce = (pageSize: number) => {
         if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
         return fetchGovAreaRows({
-        dataset,
-        areaCode: task.areaCode,
-        startPage: task.page,
-        maxPages: 1,
-        cutoff: new Date(task.cutoff),
-        timeoutMs: GOV_REQUEST_TIMEOUT_MS,
-        retry: false
+          dataset,
+          areaCode: task.areaCode,
+          startPage: task.page,
+          maxPages: 1,
+          cutoff: new Date(task.cutoff),
+          timeoutMs: GOV_REQUEST_TIMEOUT_MS,
+          pageSize,
+          retry: false
         });
-      })
+      };
+      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0);
     });
+    const soloTasks = tasks.filter((task) => previousTimeoutCounts[task.areaCode] >= 2);
+    const regularTasks = tasks.filter((task) => previousTimeoutCounts[task.areaCode] < 2);
+    const soloResults = soloTasks.length ? await runGovAreaTasks({
+      tasks: soloTasks, deadlineAt: requestDeadlineAt, concurrency: 1, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
+    }) : [];
+    const regularResults = regularTasks.length ? await runGovAreaTasks({
+      tasks: regularTasks, deadlineAt: requestDeadlineAt, concurrency: fanoutConcurrency, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
+    }) : [];
+    const taskResults = [...soloResults, ...regularResults];
     const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
     const nextCursors: Record<string, GovAreaCursor> = { ...savedCursors };
     for (const result of taskResults) {
@@ -9880,22 +9918,23 @@ export async function syncGovRestaurantLeads(
     const scannedPages = taskResults.filter((result) => result.status === "success").length;
     const totalPages = taskResults.reduce((sum, result) => sum + (result.value?.totalPages || 0), 0);
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
-    let status: "success" | "error" = getGovSyncRunStatus(taskResults);
-    let message = `${summarizeLeadSyncIngest(ingest)} · ${dataset} · 지역 ${codes.length}곳 · 미확인 코드 ${missing.length}곳`;
+    const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
+    const completedAreas = codes.filter((areaCode) => !pendingAreas.includes(areaCode)).length;
+    const timeoutCounts = { ...previousTimeoutCounts };
+    for (const areaCode of codes) {
+      const results = taskResults.filter((result) => result.areaCode === areaCode);
+      if (results.some((result) => isGovTimeoutError(result.error))) {
+        timeoutCounts[areaCode] = (timeoutCounts[areaCode] || 0) + 1;
+      } else if (results.length && results.every((result) => result.status === "success")) {
+        timeoutCounts[areaCode] = 0;
+      }
+    }
+    const status: "success" | "error" = rows.length > 0 ? "success" : "error";
+    let message = `${dataset} · 지역 ${codes.length}곳 중 ${completedAreas}곳 완료 · ${pendingAreas.length}곳 다음 실행`;
     if (status === "error") {
       const errorCount = taskResults.filter((result) => result.status === "error").length;
       const deferredCount = taskResults.filter((result) => result.status === "deferred").length;
-      message = `${dataset} 지역 요청이 모두 완료되지 않았습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳`;
-    } else if (trigger === "cron" && codes.length && rows.length === 0 && !Object.keys(nextCursors).length &&
-        isConsecutiveDailyZeroFetch({
-          currentStartedAt: startedAt,
-          currentFetched: 0,
-          previousStartedAt: previous?.started_at,
-          previousFetched: previous?.fetched_count,
-          previousStatus: previous?.status
-        })) {
-      status = "error";
-      message = "정부 일반음식점 API에서 이틀 연속 수집 행이 0건입니다. API 상태를 확인해 주세요.";
+      message = `${dataset} 수집 행이 없습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳 · ${pendingAreas.length}곳 다음 실행`;
     }
     await recordLeadSyncStatus(companyId, "gov", status, {
       trigger,
@@ -9905,6 +9944,11 @@ export async function syncGovRestaurantLeads(
       message,
       metadata: {
         dataset,
+        partial: pendingAreas.length > 0,
+        pendingAreaCount: pendingAreas.length,
+        pendingAreas,
+        firstArea: orderedCodes[0] || null,
+        timeoutCounts,
         scannedPages,
         areaCodes: codes.length,
         missingAreas: missing,
@@ -9971,7 +10015,7 @@ export async function syncAllCompaniesGovRestaurantLeads(
   const companies = await supabaseRequest<Array<{ id: string }>>("companies?select=id").catch(() => []);
   const deadlineAt = Date.now() + GOV_COLLECTION_BUDGET_MS;
   // 데이터셋→회사 순으로 교차한 모든 단위를 동시에 시작하되, 각 단위는 한 요청씩만 공통 큐에
-  // 제출한다. 따라서 첫 회사가 슬롯 3개를 독점하지 않고 전체 외부 요청 동시성도 정확히 3이다.
+  // 제출한다. 따라서 첫 회사가 슬롯 2개를 독점하지 않고 전체 외부 요청 동시성도 정확히 2다.
   const units = datasets.flatMap((dataset) => companies.map(({ id }) => ({ companyId: id, dataset })));
   const requestLimiter = createGovRequestLimiter(GOV_FANOUT_CONCURRENCY);
   const results = await Promise.all(units.map((unit) =>

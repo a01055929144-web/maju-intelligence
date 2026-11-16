@@ -130,11 +130,12 @@ export async function fetchGovAreaRows(input: {
   shouldStop?: () => boolean;
   timeoutMs?: number;
   retry?: boolean;
+  pageSize?: number;
 }): Promise<GovAreaFetchResult> {
   const key = getGovRestaurantApiKey();
   if (!key) throw new Error("정부 음식점 API 키가 없습니다.");
   if (!/^\d{7}$/.test(input.areaCode)) throw new Error("개방자치단체코드가 올바르지 않습니다.");
-  const pageSize = GOV_PAGE_SIZE;
+  const pageSize = Math.max(1, input.pageSize || GOV_PAGE_SIZE);
   const result = await scanGovArea<Record<string, unknown>>({
     startPage: input.startPage,
     maxPages: input.maxPages,
