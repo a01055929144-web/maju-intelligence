@@ -4008,7 +4008,7 @@ function PermitLeadDetailPanel({
                 <div className="mt-3 space-y-2">
                   {actionHistory.map((action) => (
                     <article className="rounded-lg bg-slate-50 p-3 text-sm" key={action.id}>
-                      <p className="font-bold text-slate-900">{action.result || permitLeadActionLabel(action.actionType)}</p>
+                      <p className="font-bold text-slate-900">{action.result || permitLeadActionLabel(action.actionType)}{action.memo?.startsWith("단가표 전달 · 기사") ? <span className="ml-2 rounded-md bg-teal-100 px-1.5 py-0.5 text-[11px] font-black text-teal-800">기사 전달</span> : null}</p>
                       <p className="mt-1 text-xs text-slate-500">{action.createdAt} · {action.actorName || "담당자 미기록"}</p>
                       {action.memo ? <p className="mt-2 whitespace-pre-wrap text-slate-700">{action.memo}</p> : null}
                     </article>
