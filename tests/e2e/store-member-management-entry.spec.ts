@@ -89,3 +89,27 @@ for (const width of [1440, 390]) test(`store information reuses address and memb
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   await page.screenshot({ path: info.outputPath(`store-information-${width}.png`), fullPage: true });
 });
+
+for (const width of [1440, 390]) test(`S-7b profile settings stays synthetic and owner-only at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`/store?fixture=s7b-profile-settings-owner&view=info`);
+  await expect(page.getByText(/적용 대기: 현재 화면은 합성 데이터/)).toBeVisible();
+  await expect(page.getByLabel("사업자등록번호")).toBeDisabled();
+  await expect(page.getByLabel("출입 방법")).toBeDisabled();
+  await expect(page.getByLabel("받는 분 연락처")).toBeDisabled();
+  await expect(page.getByLabel("받을 수 있는 시간")).toBeDisabled();
+  await expect(page.getByLabel(/비밀번호/)).toHaveCount(0);
+  await page.getByRole("button", { name: "정보 수정 시험" }).click();
+  await page.getByLabel("매장 주소").fill("");
+  await expect(page.getByText("매장 주소를 입력해 주세요.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "저장 시험" })).toBeDisabled();
+  await page.getByLabel("매장 주소").fill("서울 중구 세종대로 110");
+  await page.getByRole("button", { name: "저장 시험" }).click();
+  await expect(page.getByText("합성 화면에서 저장 동작을 확인했습니다.")).toBeVisible();
+
+  await page.goto(`/store?fixture=s7b-profile-settings-staff&view=info`);
+  await expect(page.getByText("매장 정보 수정은 점주만 할 수 있습니다.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "정보 수정 시험" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.screenshot({ path: info.outputPath(`s7b-profile-settings-${width}.png`), fullPage: true });
+});

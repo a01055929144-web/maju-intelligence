@@ -21,6 +21,7 @@ import { StoreAddressManagementPanel } from "@/components/store-address-manageme
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StorePortal } from "@/components/store-portal";
+import { StoreProfileSettingsPrep } from "@/components/store-profile-settings-prep";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,12 @@ export default async function StorePage({ searchParams }: {
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
   const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
+  const profileFixture = isCiLayoutFixturesEnabled() && /^s7b-profile-settings-(owner|staff)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
+  if (profileFixture) {
+    portalError = false;
+    accounts = [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-000000000001",
+      customerName: "합성 가입 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }];
+  }
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
     companyId: "00000000-0000-4000-8000-000000000001",
     storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
@@ -109,6 +116,7 @@ export default async function StorePage({ searchParams }: {
       next.set("storeAccountId", account.storeAccountId);
     }
     if (fixture) next.set("fixture", fixture);
+    if (profileFixture) next.set("fixture", profileFixture);
     return `/store?${next}`;
   };
   const stores = memberAccounts.map(account => ({ key: keyOf(account), name: account.customerName, href: storeHref(view, account) }));
@@ -138,6 +146,7 @@ export default async function StorePage({ searchParams }: {
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} documentView={documentView}
+    information={profileFixture ? <StoreProfileSettingsPrep canEdit={profileFixture.endsWith("-owner")} /> : undefined}
     home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={document => `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`} /> : null}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>

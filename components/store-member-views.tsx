@@ -13,11 +13,12 @@ import { EmptyState, ErrorState } from "./ui/state";
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, documentView, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, documentView, historyError, home, information, menu, orders, stores, view }: {
   account?: StorePortalAccount;
   documentView?: ReactNode;
   historyError: boolean;
   home: ReactNode;
+  information?: ReactNode;
   menu: string[];
   orders: StorePortalOrder[];
   stores: Array<{ key: string; name: string; href: string }>;
@@ -79,8 +80,9 @@ export function StoreMemberViews({ account, documentView, historyError, home, me
               : { message: "이 매장에서는 원가관리를 이용할 수 없습니다." }} />
           </div>}
           {view === "info" && <>
-            <StoreInformationPanel companyId={account.companyId} storeAccountId={account.storeAccountId}
+            {information ?? <StoreInformationPanel companyId={account.companyId} storeAccountId={account.storeAccountId}
               canManageAddress={account.canManageAddress} canManageMembers={account.canManageMembers} />
+            }
             {account.canManageAddress && <div id="store-address-management" className="scroll-mt-24">
               <StoreAddressManagementPanel companyId={account.companyId} storeAccountId={account.storeAccountId} />
             </div>}
