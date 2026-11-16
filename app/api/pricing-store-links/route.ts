@@ -8,6 +8,7 @@ import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { issueStoreLinkToken } from "@/lib/pricing/store-link-token";
 import { supabaseRequest } from "@/lib/store";
 import { isId } from "@/domains/pricing/document";
+import { shortShareLinksEnabled } from "@/lib/pricing/short-share-feature";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ type LinkRow = {
   can_order: boolean;
   view_count: number;
   last_viewed_at: string | null;
+  short_code?: string | null;
 };
 type LinkMetric = {
   link_id: string;
@@ -193,7 +195,7 @@ export async function GET(request: NextRequest) {
     }
     const offset = (page - 1) * 50;
     const links = await supabaseRequest<LinkRow[]>(
-      `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
+      `storefront_links?company_id=eq.${encodeURIComponent(company)}&select=id,customer_id,document_version_id,token_nonce,issued_at,expires_at,revoked_at,can_order,view_count,last_viewed_at,short_code&order=issued_at.desc,id.desc&limit=50&offset=${offset}`,
     );
     const documentVersionIds = Array.from(
       new Set(links.flatMap((l) => (l.document_version_id ? [l.document_version_id] : []))),
@@ -254,7 +256,9 @@ export async function GET(request: NextRequest) {
             kind: link.document_version_id === null ? "catalog" : "document",
             documentTitle: link.document_version_id === null ? "전체 상품" : version?.content.title ?? "문서",
             documentVersion: version?.version ?? null,
-            url: `${storePublicBase()}/store#${issueStoreLinkToken(link.id, link.token_nonce).token}`,
+            url: shortShareLinksEnabled(company) && link.short_code
+              ? `${storePublicBase()}/s/${link.short_code}`
+              : `${storePublicBase()}/store#${issueStoreLinkToken(link.id, link.token_nonce).token}`,
             issuedAt: link.issued_at,
             expiresAt: link.expires_at,
             revokedAt: link.revoked_at,
@@ -262,6 +266,11 @@ export async function GET(request: NextRequest) {
             viewCount: link.view_count,
             lastViewedAt: link.last_viewed_at,
             orderCount: metric?.order_count ?? 0,
+            stage: (metric?.order_count ?? 0) > 0
+              ? "첫 주문"
+              : link.view_count > 0
+                ? `열람(${link.view_count}회)`
+                : "보냄 전",
             recentViews: metric?.recent_views ?? 0,
             lastOrderAt: metric?.last_order_at ?? null,
             interest:
@@ -393,6 +402,17 @@ export async function POST(request: NextRequest) {
           p_actor_user_id: isId(actorUserId) ? actorUserId : null,
         }),
       });
+      const shortCodes = new Map<string, string>();
+      if (shortShareLinksEnabled(company)) {
+        await Promise.all(issued.map(async (item) => {
+          const value = await supabaseRequest<string | string[]>("rpc/assign_storefront_short_code_v1", {
+            method: "POST",
+            body: JSON.stringify({ p_company_id: company, p_storefront_link_id: item.issued_link_id, p_channel: "other" }),
+          });
+          const code = Array.isArray(value) ? value[0] : value;
+          if (typeof code === "string") shortCodes.set(item.issued_link_id, code);
+        }));
+      }
       const links = issued.map((item) => {
         const token = issueStoreLinkToken(
           item.issued_link_id,
@@ -406,7 +426,9 @@ export async function POST(request: NextRequest) {
           id: item.issued_link_id,
           customerId: item.issued_customer_id,
           created: item.was_created,
-          url: `${publicBase}/store#${token.token}`,
+          url: shortCodes.has(item.issued_link_id)
+            ? `${publicBase}/s/${shortCodes.get(item.issued_link_id)}`
+            : `${publicBase}/store#${token.token}`,
         };
       });
       return NextResponse.json(

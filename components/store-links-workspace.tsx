@@ -16,7 +16,7 @@ type Customer = { id: string; customer_name: string; address?: string | null };
 type Link = { id: string; kind?: "document" | "catalog"; customerName: string; documentTitle: string; documentVersion: number | null;
   url: string; issuedAt: string; expiresAt: string; revokedAt: string | null;
   canOrder: boolean; viewCount: number; lastViewedAt: string | null;
-  orderCount: number; interest: string };
+  orderCount: number; interest: string; stage: string };
 type Event = { id: string; event_type: string; occurred_at: string;
   device_class: string | null; actor_name: string | null };
 
@@ -188,7 +188,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     { key: "kind", label: "종류", value: (link) => link.kind === "catalog" ? "전체 상품" : "문서", sortable: true },
     { key: "document", label: "문서", value: (link) => link.kind === "catalog" ? "-" : `${link.documentTitle} v${link.documentVersion ?? ""}`, sortable: true },
     { key: "issued", label: "발행", value: (link) => link.issuedAt, sortable: true, render: (link) => new Date(link.issuedAt).toLocaleDateString("ko-KR") },
-    { key: "activity", label: "열람·주문", value: (link) => link.viewCount, sortable: true, render: (link) => `열람 ${link.viewCount}회 · 주문 ${link.orderCount}건` },
+    { key: "activity", label: "공유 단계", value: (link) => link.stage, sortable: true, render: (link) => `${link.stage} · 주문 ${link.orderCount}건` },
     { key: "status", label: "관심·상태", value: (link) => `${link.interest} · ${link.revokedAt ? "회수" : link.canOrder ? "주문 가능" : "주문 중지"}`, sortable: true },
     { key: "actions", label: "동작", sortable: false, value: () => "", render: (link) => <span className="flex flex-wrap gap-1"><button className="rounded border px-2 py-1" onClick={() => {
         setCreatedUrl(link.url);
