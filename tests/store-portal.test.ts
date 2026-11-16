@@ -3,7 +3,7 @@ import { issueDocumentShareToken } from "../lib/pricing/document-share-token";
 import { issueStoreLinkToken } from "../lib/pricing/store-link-token";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ db: vi.fn(), session: vi.fn(), active: vi.fn(), allowed: vi.fn(), feature: vi.fn() }));
+const mocks = vi.hoisted(() => ({ db: vi.fn(), session: vi.fn(), active: vi.fn(), member: vi.fn(), allowed: vi.fn(), feature: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("../lib/auth", () => ({ getStoreSession: mocks.session, createOAuthState: async (value: string) => value,
   getCustomerSession: async () => null, getStoreMemberInvitationProof: async () => null,
@@ -12,12 +12,13 @@ vi.mock("@/lib/auth", () => ({ getStoreSession: mocks.session, createOAuthState:
   getCustomerSession: async () => null, getStoreMemberInvitationProof: async () => null,
   getStoreOwnerActivationProof: async () => null, storeMemberSessionEnabled: () => process.env.STORE_MEMBER_SESSION_ENABLED === "true" }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db }));
+vi.mock("../lib/store/07-store-member-context", () => ({ getStoreMemberContext: mocks.member }));
 vi.mock("../lib/store/08-store-cost-access", () => ({ hasActiveStoreMembership: mocks.active }));
 vi.mock("../lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowed }));
 vi.mock("../lib/store/07-store-address-management", () => ({ isStoreAddressCompanyEnabled: () => true }));
 vi.mock("../lib/feature-flags", () => ({ isFeatureEnabled: mocks.feature }));
-import { hasAllowedStorePortalMembership, listStorePortalAccounts } from "../lib/store/07-store-portal";
+import { hasAllowedStorePortalMembership, listStorePortalAccounts, listStorePortalOrders } from "../lib/store/07-store-portal";
 import { GET as startKakao } from "../app/api/auth/kakao/start/route";
 
 const companyId = "00000000-0000-4000-8000-000000000001";
@@ -115,4 +116,19 @@ it("joins the authenticated store home to its consumed public signup source with
   expect(account?.documents).toEqual([{title:"가입 문서",kind:"sheet",href:`/pricing-document#${issueDocumentShareToken(shareId,nonce).token}`,canOrder:false,validUntil:"2099-01-01"}]);
   expect(mocks.db.mock.calls.every(([,init])=>init===undefined)).toBe(true);
   mocks.db.mockClear();mocks.active.mockResolvedValue(false);expect(await listStorePortalAccounts()).toEqual([]);expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it("requires session membership and binds order history to the verified company, account and customer", async () => {
+  const scope = { companyId, storeAccountId };
+  mocks.member.mockResolvedValueOnce(null);
+  expect(await listStorePortalOrders(scope)).toEqual([]);
+  expect(mocks.db).not.toHaveBeenCalled();
+
+  mocks.member.mockResolvedValueOnce(scope);
+  mocks.db.mockResolvedValueOnce([{ customer_id: customerId }]).mockResolvedValueOnce([]);
+  expect(await listStorePortalOrders(scope)).toEqual([]);
+  expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&id=eq.${storeAccountId}`);
+  const query = mocks.db.mock.calls[1][0];
+  expect(query).toContain(`company_id=eq.${companyId}&customer_id=eq.${customerId}`);
+  expect(query).toContain(`or=(store_account_id.eq.${storeAccountId},store_account_id.is.null)`);
 });

@@ -8,6 +8,10 @@ import * as jsxRuntime from "react/jsx-runtime";
 import * as accessRules from "../domains/organization/store-cost-access";
 const dependencies: Record<string, unknown> = {
   "react/jsx-runtime": jsxRuntime,
+  "next/headers": { cookies: async () => ({ get: () => undefined }) },
+  "@/components/store-app-shell": { StoreAppShell: () => null },
+  "@/components/store-member-views": { StoreMemberViews: () => null },
+  "@/lib/store-navigation": { STORE_VIEWS: [], storeViewFrom: () => "home" },
   "next/navigation": { notFound: () => { throw new Error("404"); } },
   "@/lib/auth": { storeMemberSessionEnabled: () => false },
   "@/lib/pricing/feature": { priceSheetsEnabled: () => true },
@@ -36,7 +40,8 @@ const companyId = "00000000-0000-4000-8000-000000000001";
 const storeAccountId = "20000000-0000-4000-8000-000000000001";
 async function workspace(params = { companyId, storeAccountId }) {
   const page = await StorePage({ searchParams: Promise.resolve(params) });
-  const workspace = React.Children.toArray(page.props.children).find(child => React.isValidElement(child) && "costAccess" in (child.props as object)) as React.ReactElement<{ costAccess: unknown }>;
+  const shell = React.Children.toArray(page.props.children).find(child => React.isValidElement(child) && "stores" in (child.props as object)) as React.ReactElement<{ children: React.ReactNode }>;
+  const workspace = React.Children.toArray(shell.props.children).find(child => React.isValidElement(child) && "costAccess" in (child.props as object)) as React.ReactElement<{ costAccess: unknown }>;
   return workspace;
 }
 async function access(params = { companyId, storeAccountId }) {
