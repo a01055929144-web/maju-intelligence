@@ -13,16 +13,17 @@ import { hasActiveStoreMembership } from "./08-store-cost-access";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
 type StoreLink = { id: string; token_nonce: string; token_hash: string; document_version_id: string; expires_at: string; can_order: boolean };
-type DocumentVersion = { id: string; content: { kind: "sheet" | "quote"; title: string; validUntil: string; showPrice: boolean } };
+type DocumentVersion = { id: string; content: { kind: "sheet" | "quote"; title: string; industry?: string; validUntil: string; showPrice: boolean } };
 
 export type StorePortalAccount = {
   companyId: string;
   storeAccountId: string;
   customerName: string;
+  businessType?: string;
   hasCostAccess: boolean;
   canManageMembers: boolean;
   canManageAddress: boolean;
-  documents: Array<{ title: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string }>;
+  documents: Array<{ title: string; industry?: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string }>;
 };
 
 export async function hasAllowedStorePortalMembership(authUserId: string, companyId?: string) {
@@ -49,31 +50,35 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
     isStoreMemberCompanyAllowlisted(row.company_id) && isFeatureEnabled("PRICING", row.company_id) &&
     isFeatureEnabled("STORE_ORDERING", row.company_id)).map(async row => {
     const company = encodeURIComponent(row.company_id), customer = encodeURIComponent(row.store_accounts!.customer_id);
-    const [customers, links] = await Promise.all([
+    const [customers, links, companies] = await Promise.all([
       supabaseRequest<Array<{ customer_name: string }>>(
         `normalized_customers?company_id=eq.${company}&id=eq.${customer}&select=customer_name&limit=1`),
       supabaseRequest<StoreLink[]>(
         `storefront_links?company_id=eq.${company}&customer_id=eq.${customer}&document_version_id=not.is.null&revoked_at=is.null` +
         `&expires_at=gt.${encodeURIComponent(new Date().toISOString())}` +
         `&select=id,token_nonce,token_hash,document_version_id,expires_at,can_order&order=issued_at.desc&limit=20`),
+      supabaseRequest<Array<{ business_type: string | null }>>(
+        `companies?id=eq.${company}&select=business_type&limit=1`),
     ]);
     const versions = links.length ? await supabaseRequest<DocumentVersion[]>(
       `pricing_document_versions?company_id=eq.${company}&id=in.(${links.map(link => encodeURIComponent(link.document_version_id)).join(",")})` +
       `&published_at=not.is.null&select=id,content&limit=20`
     ) : [];
     const byVersion = new Map(versions.map(version => [version.id, version.content]));
-    const documents = links.flatMap(link => {
+    const documents: StorePortalAccount["documents"] = links.flatMap(link => {
       const content = byVersion.get(link.document_version_id);
       if (!content || !["sheet", "quote"].includes(content.kind)) return [];
       const token = issueStoreLinkToken(link.id, link.token_nonce);
       if (token.hash !== link.token_hash) return [];
-      return [{ title: content.title, kind: content.kind, href: `/store#${token.token}`,
+      const industry = content.industry?.trim() || companies[0]?.business_type?.trim() || "";
+      return [{ title: content.title, ...(industry ? { industry } : {}), kind: content.kind, href: `/store#${token.token}`,
         canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
         validUntil: content.validUntil }];
     });
     documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
     const canManage = row.role === "owner" || row.role === "manager";
-    return { companyId: row.company_id, storeAccountId: row.store_account_id,
+    const businessType = companies[0]?.business_type?.trim() || "";
+    return { companyId: row.company_id, storeAccountId: row.store_account_id, ...(businessType ? { businessType } : {}),
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,
       canManageAddress: canManage && isStoreAddressCompanyEnabled(row.company_id) };

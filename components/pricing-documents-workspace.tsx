@@ -45,7 +45,7 @@ import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
-  content: { companyName: string; contact: string; footer: string };
+  content: { companyName: string; businessType: string; contact: string; footer: string };
 };
 export function PricingDocumentsWorkspace({
   companyId,
@@ -82,7 +82,7 @@ export function PricingDocumentsWorkspace({
   const [promotions, setPromotions] = useState<Promotion[]>([]),
     [profile, setProfile] = useState<Profile>({
       revision: 0,
-      content: { companyName: "", contact: "", footer: "" },
+      content: { companyName: "", businessType: "", contact: "", footer: "" },
     });
   const [error, setError] = useState(""),
     [message, setMessage] = useState(""),
@@ -241,7 +241,10 @@ export function PricingDocumentsWorkspace({
     return {
       kind,
       title: kind === "sheet" ? "단가표" : "식자재 견적서",
-      ...profile.content,
+      companyName: profile.content.companyName,
+      industry: profile.content.businessType,
+      contact: profile.content.contact,
+      footer: profile.content.footer,
       recipient: leadContext?.name.slice(0, 100) || "",
       validUntil: koreaDay(new Date(Date.now() + 14 * 86400000)),
       theme: "blue",

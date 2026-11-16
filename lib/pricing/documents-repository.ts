@@ -151,6 +151,13 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
         p_payload: payload,
       }),
     });
+    if (action === "profile") {
+      const companies = await supabaseRequest<Array<{ business_type: string | null }>>(
+        `companies?id=eq.${encodeURIComponent(scope.companyId)}&select=business_type&limit=1`,
+      );
+      const profile = result as { content?: Record<string, unknown> };
+      return { ...profile, content: { ...(profile.content || {}), businessType: companies[0]?.business_type?.trim() || "" } } as T;
+    }
     if (action === "catalog") return withCatalogSpecs(scope.companyId, result as CatalogResult) as Promise<T>;
     return result;
   },

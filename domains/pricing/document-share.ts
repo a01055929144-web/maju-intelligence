@@ -29,7 +29,7 @@ export function documentLinkLastDay(expiresAt: string) {
 export function publicDocumentOutput(version: DocumentVersion, day?: string) {
   const d = documentOutput(version, day);
   return {
-    title: d.title, companyName: d.companyName, contact: "", recipient: "", footer: "",
+    title: d.title, companyName: d.companyName, industry: d.industry, contact: "", recipient: "", footer: "",
     validUntil: d.validUntil, version: d.version, publishedAt: d.publishedAt, expired: d.expired,
     theme: d.theme, kind: d.kind, layout: d.layout,
     display: { columns: d.display.columns, promoLayout: d.display.promoLayout, info: [], productWidth: d.display.productWidth, priceIncludesTax: d.display.priceIncludesTax, showTaxType: d.display.showTaxType },
