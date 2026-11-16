@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/lib/copy-text";
 import { Instagram, Mail, MapPin, MessageCircle, Phone, Printer, Smartphone } from "lucide-react";
 import { isGenericNaverSearchLink } from "@/components/map/map-row-helpers";
 import { buildInstagramDmUrl, extractInstagramHandle, getSafeNaverTalktalkUrl, isMobilePhoneNumber } from "@/domains/lead/contact-channels";
@@ -47,7 +48,7 @@ export function MapLeadChannelIcons({ lead, name, places }: Props) {
       {talktalkUrl ? <a aria-label="네이버 톡톡" className={iconClassName} href={talktalkUrl} rel="noreferrer" target="_blank" title="톡톡"><MessageCircle aria-hidden="true" className="h-3.5 w-3.5" /></a> : null}
       {mobile ? <a aria-label="휴대폰 문자" className={iconClassName} href={`sms:${cleanPhone(mobile)}`} title="휴대폰"><Smartphone aria-hidden="true" className="h-3.5 w-3.5" /></a> : null}
       {lead?.email ? <a aria-label="이메일" className={iconClassName} href={`mailto:${lead.email}`} title="이메일"><Mail aria-hidden="true" className="h-3.5 w-3.5" /></a> : null}
-      {lead?.fax ? <button aria-label="팩스 번호 복사" className={iconClassName} onClick={() => void navigator.clipboard?.writeText(lead.fax || "")} title="팩스" type="button"><Printer aria-hidden="true" className="h-3.5 w-3.5" /></button> : null}
+      {lead?.fax ? <button aria-label="팩스 번호 복사" className={iconClassName} onClick={() => void copyText(lead.fax || "")} title="팩스" type="button"><Printer aria-hidden="true" className="h-3.5 w-3.5" /></button> : null}
       {storePhone ? <a aria-label="매장전화" className={iconClassName} href={`tel:${cleanPhone(storePhone)}`} title="매장전화"><Phone aria-hidden="true" className="h-3.5 w-3.5" /></a> : null}
     </div>
   );

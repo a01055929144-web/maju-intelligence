@@ -73,3 +73,30 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 문의 가짜유통 010-0000-0000");
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 단가표 https://example.test/pricing-document#fake-token");
 });
+
+// CC-47-9: 모바일 일괄 "제외"는 확인 창을 거친다 — 취소하면 요청이 없고, 확인하면 한 번 간다. 가짜 API만 쓴다.
+test("모바일 일괄 제외는 확인 창에서 취소하면 그대로, 확인하면 요청한다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const now = "2026-11-15T00:00:00.000Z";
+  const lead = { id: "30000000-0000-4000-8000-000000000015", businessName: "가짜식당", address: "서울 가짜구 가짜로 15", phone: "01000000000", isActive: true, leadPeriod: "old", industryPrimary: "한식", industryTags: [], isTargetIndustry: true, isTemporaryOperation: false, isTemporaryOperationSuspected: false, isDuplicate: false, status: "신규", nextActionReasons: [], scoreTotal: 50, scoreBreakdown: {}, grade: "B", createdAt: now, updatedAt: now };
+  const actions: string[] = [];
+  await page.route(/\/api\/sales-kpi/, (route) => route.fulfill({ json: {} }));
+  await page.route(/\/api\/leads\/permits\?excludeExcluded=true/, (route) => route.fulfill({ json: { leads: [lead] } }));
+  await page.route(/\/api\/leads\/permits\/[^/?]+\/action$/, (route) => {
+    actions.push(route.request().url());
+    return route.fulfill({ json: { lead: { ...lead, status: "제외" } } });
+  });
+  await page.goto("/mobile/sales");
+  await page.getByRole("button", { name: "일괄 변경" }).click();
+  await page.getByText("가짜식당", { exact: true }).last().click();
+  await page.getByRole("button", { name: "제외", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "확인" });
+  await expect(dialog).toContainText("1개 리드를 제외 상태로 변경할까요?");
+  await dialog.getByRole("button", { name: "취소" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(actions).toEqual([]);
+  await page.getByRole("button", { name: "제외", exact: true }).click();
+  await dialog.getByRole("button", { name: "제외", exact: true }).click();
+  await expect.poll(() => actions.length).toBe(1);
+});

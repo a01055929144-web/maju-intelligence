@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/copy-text";
 import { kstToday } from "@/domains/shared/kst-date";
 import { isClosedLead } from "@/lib/leads";
 import { isHiddenLeadStatus } from "@/domains/lead/map-filters";
@@ -974,12 +975,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         ].join("\n");
       })
       .join("\n\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setBulkMessage(`${selectedLeads.length.toLocaleString()}곳 영업 리스트를 복사했습니다.`);
-    } catch {
-      setBulkMessage("복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
-    }
+    setBulkMessage((await copyText(text)) ? `${selectedLeads.length.toLocaleString()}곳 영업 리스트를 복사했습니다.` : "복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
   }
 
   async function copySelectedLeadContactList(type: "instagram" | "phone") {
@@ -992,12 +988,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(values.join("\n"));
-      setBulkMessage(`${values.length.toLocaleString()}개 ${type === "phone" ? "전화번호" : "인스타 ID"}를 복사했습니다.`);
-    } catch {
-      setBulkMessage("복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
-    }
+    setBulkMessage((await copyText(values.join("\n"))) ? `${values.length.toLocaleString()}개 ${type === "phone" ? "전화번호" : "인스타 ID"}를 복사했습니다.` : "복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
   }
 
   async function copySelectedLeadDmScripts() {
@@ -1008,12 +999,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
         return [`${index + 1}. ${lead.businessName}${handle ? ` (${handle})` : ""}`, buildLeadDmScript(lead)].join("\n");
       })
       .join("\n\n---\n\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setBulkMessage(`${selectedLeads.length.toLocaleString()}곳 DM 문안을 복사했습니다.`);
-    } catch {
-      setBulkMessage("복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
-    }
+    setBulkMessage((await copyText(text)) ? `${selectedLeads.length.toLocaleString()}곳 DM 문안을 복사했습니다.` : "복사 권한이 없어 브라우저에서 클립보드를 사용할 수 없습니다.");
   }
 
   function downloadSelectedLeadCsv() {
@@ -2771,10 +2757,12 @@ export async function requestPermitLeadConversion(lead: PermitLeadItem): Promise
     const leadStaff = preview?.leadStaff?.staffName as string | undefined;
     let assignedStaffMemberId = preview?.recommendation?.assignedStaffMemberId as string | undefined;
     if (leadStaff && territoryStaff && preview?.leadStaff?.staffMemberId !== assignedStaffMemberId) {
+      // shared-ui-exception: 화면 밖 공용 async 함수(리드 목록·지도 상세가 같이 씀)라 useConfirm 훅을 쓸 수 없다. 호출 화면이 확인 창을 넘기도록 바꾸는 건 별도 작업.
       const useTerritory = window.confirm(
         `거래처 담당자를 확인해주세요.\n\n권역 기본 담당자: ${territoryStaff} (기본 선택)\n리드 영업 담당자: ${leadStaff}\n\n[확인] 권역 담당자 / [취소] 영업 담당자 선택으로 이동`
       );
       if (!useTerritory) {
+        // shared-ui-exception: 위와 같은 이유(훅 밖 함수)
         if (!window.confirm(`${leadStaff}님을 거래처 담당자로 선택할까요?`)) return { ok: false, message: "전환을 취소했습니다." };
         assignedStaffMemberId = preview.leadStaff.staffMemberId;
       }
@@ -3302,22 +3290,12 @@ function PermitLeadDetailPanel({
   }
 
   async function copyDmScript() {
-    try {
-      await navigator.clipboard.writeText(buildLeadDmScript(lead));
-      setCopyMessage("인스타 DM 문안을 복사했습니다.");
-    } catch {
-      setCopyMessage("복사 권한이 없어 문안을 직접 선택해 복사해주세요.");
-    }
+    setCopyMessage((await copyText(buildLeadDmScript(lead))) ? "인스타 DM 문안을 복사했습니다." : "복사 권한이 없어 문안을 직접 선택해 복사해주세요.");
   }
 
   async function copyInstagramHandle() {
     if (!instagramHandle) return;
-    try {
-      await navigator.clipboard.writeText(instagramHandle);
-      setInstagramSaveMessage(`${instagramHandle} ID를 복사했습니다.`);
-    } catch {
-      setInstagramSaveMessage("복사 권한이 없어 ID를 직접 선택해 복사해주세요.");
-    }
+    setInstagramSaveMessage((await copyText(instagramHandle)) ? `${instagramHandle} ID를 복사했습니다.` : "복사 권한이 없어 ID를 직접 선택해 복사해주세요.");
   }
 
   async function enrichExternalInfo() {

@@ -1,5 +1,7 @@
 "use client";
 import { MoneyInput } from "@/components/money-input";
+import { useConfirm } from "@/components/ui/confirm-dialog";
+import { copyText } from "@/lib/copy-text";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -113,15 +115,19 @@ export function QuoteDrawer({
   );
   const isQuoteDirty = editorSnapshot !== savedEditorSnapshot;
   useUnsavedChangesWarning(isQuoteDirty);
+  const { confirm, confirmDialog } = useConfirm();
 
-  function requestClose() {
-    if (isQuoteDirty && !window.confirm("저장하지 않은 변경사항이 있습니다. 나가시겠습니까?")) return;
+  async function requestClose() {
+    if (isQuoteDirty && !(await confirm({ body: "저장하지 않은 변경사항이 있습니다. 나가시겠습니까?", confirmLabel: "나가기", tone: "default" }))) return;
     onClose();
   }
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
     const draft = readQuoteDraft(subject);
-    if (draft && !window.confirm("작성 중인 견적이 있습니다. 불러올까요?")) return;
+    if (draft && !(await confirm({ body: "작성 중인 견적이 있습니다. 불러올까요?", confirmLabel: "불러오기", tone: "default" }))) return;
+    if (cancelled) return;
     const nextMarginRate = draft?.defaultMarginRate || 12;
     const nextRows = draft?.rows || buildQuoteDraftRows(subject.industry, nextMarginRate);
     const nextMenuNotes = draft?.menuNotes || subject.menuNotes || "";
@@ -138,7 +144,9 @@ export function QuoteDrawer({
     setSavedEditorSnapshot(JSON.stringify({ defaultMarginRate: nextMarginRate, menuNotes: nextMenuNotes, recommendationBasis: nextRecommendationBasis, recommendationCount: nextRecommendationCount, rows: nextRows, validDays: nextValidDays }));
     setPublishedUrl("");
     setQuoteMessage(draft ? "저장된 제안서 초안을 불러왔습니다." : "");
-  }, [draftKey, subject]);
+    })();
+    return () => { cancelled = true; };
+  }, [confirm, draftKey, subject]);
 
   useEffect(() => {
     if (!isQuoteDirty) return;
@@ -343,7 +351,7 @@ export function QuoteDrawer({
       setSavedEditorSnapshot(editorSnapshot);
       setQuoteFieldErrors({});
       deleteQuoteDraftFromLocal(subject);
-      if (status === "sent" && payload.publicUrl) await navigator.clipboard.writeText(payload.publicUrl).catch(() => undefined);
+      if (status === "sent" && payload.publicUrl) await copyText(payload.publicUrl);
       setQuoteMessage(status === "draft" ? "견적을 임시저장했습니다. 고객에게는 공개되지 않습니다." : "유효기간이 적용된 거래처용 링크를 저장하고 복사했습니다.");
     } catch (error) {
       setQuoteMessage(error instanceof Error ? error.message : "견적을 저장하지 못했습니다.");
@@ -389,12 +397,7 @@ export function QuoteDrawer({
   }
 
   async function copyQuoteText() {
-    try {
-      await navigator.clipboard.writeText(customerShareText);
-      setQuoteMessage("제안서 문안을 복사했습니다.");
-    } catch {
-      setQuoteMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
-    }
+    setQuoteMessage((await copyText(customerShareText)) ? "제안서 문안을 복사했습니다." : "복사 권한이 없어 직접 선택해서 복사해주세요.");
   }
 
   async function shareQuote() {
@@ -479,6 +482,7 @@ export function QuoteDrawer({
   }
 
   return (
+    <>
     <div className={`fixed inset-0 z-40 flex bg-slate-950/45 ${isExpanded ? "items-stretch justify-center p-3 sm:p-6" : "justify-end"}`} onClick={requestClose}>
       <div className={`h-full w-full overflow-y-auto bg-white shadow-2xl ${isExpanded ? "max-w-[1440px] rounded-2xl" : "max-w-lg"}`} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
@@ -815,5 +819,7 @@ export function QuoteDrawer({
         </div>
       </div>
     </div>
+    {confirmDialog}
+    </>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/lib/copy-text";
 import { MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -178,13 +179,10 @@ export function StoreQuickCard({
   async function copyAddress() {
     const address = store.address || store.region;
     if (!address) return;
-    try {
-      await navigator.clipboard.writeText(address);
-      setAddressCopied(true);
-      window.setTimeout(() => setAddressCopied(false), 1500);
-    } catch {
-      // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
-    }
+    // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
+    if (!(await copyText(address))) return;
+    setAddressCopied(true);
+    window.setTimeout(() => setAddressCopied(false), 1500);
   }
 
   async function revealAccessPassword() {
