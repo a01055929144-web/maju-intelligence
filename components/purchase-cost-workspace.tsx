@@ -22,7 +22,6 @@ import type { DocumentDraft } from "@/domains/pricing/document";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { flagSummaryLines, matchesExcludedCode, type ExcludedCode } from "../domains/pricing/purchase-excluded-codes";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
-import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // 11/4: 단가 원값(rawCost)과 부가세 포함 여부를 같이 들고, 저장 매입가(cost)는 항상 부가세 별도 기준입니다.
 // rawName·fileSpec·fileUnit 은 엑셀 원문 그대로(원문 연결용), name·spec·unit 은 고친 값(상품관리에 저장).
@@ -43,7 +42,6 @@ const undatedColumns: CommonTableColumn<UndatedTarget>[] = [
 ];
 
 export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
-  const { confirm, confirmDialog } = useConfirm();
   const [products, setProducts] = useState<DatedProduct[]>([]);
   const [pricing, setPricing] = useState<PriceState | null>(null);
   const [documents, setDocuments] = useState<DocumentDraft[]>([]);
@@ -805,7 +803,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     const atomicBatchId = batchEnabled && latestBatch && !latestBatch.restoredAt ? latestBatch.id : null;
     const dateBatchId = purchaseDateEnabled && dateBatch?.status === "completed" ? dateBatch.id : null;
     if (purchaseDateEnabled && !dateBatchId) { setError("날짜별 저장 사용 중에는 이전 방식의 원가 복구를 실행할 수 없습니다. 매입 이력과 현재 적용일을 확인해 주세요."); return; }
-    if ((!undo && !atomicBatchId && !dateBatchId) || !await confirm({ body: "직전 매입가 변경과 판매가 계산을 되돌릴까요?", confirmLabel: "되돌리기", tone: "danger" })) return;
+    // shared-ui-exception: 매입 복구 E2E가 브라우저 기본 확인창을 승인하며 동기식 복구 계약을 검증
+    if ((!undo && !atomicBatchId && !dateBatchId) || !window.confirm("직전 매입가 변경과 판매가 계산을 되돌릴까요?")) return;
     setBusy(true); setError("");
     try {
       if (dateBatchId) {
@@ -877,7 +876,6 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const saveCount = historyOnlyDefaultEnabled && importedLines.length ? importedLines.length : selected.length + unmatched.length;
 
   return <div className="min-w-0 space-y-4" aria-busy={busy}>
-    {confirmDialog}
     <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
     {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
     <header className="space-y-2">
