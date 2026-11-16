@@ -6,7 +6,6 @@ import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, ty
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { getStoreSession } from "../auth";
-import { hasAllowedStorePortalMembership } from "../store/07-store-portal";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
 import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
@@ -148,7 +147,9 @@ export async function readPublicDocument(token: string, requester: string) {
   const member = row.lead_id === null && await (async () => {
     try {
       const session = await getStoreSession();
-      return Boolean(session && await hasAllowedStorePortalMembership(session.authUserId, row.company_id));
+      if (!session) return false;
+      const { hasAllowedStorePortalMembership } = await import("../store/07-store-portal");
+      return await hasAllowedStorePortalMembership(session.authUserId, row.company_id);
     } catch { return false; }
   })();
   return { document: output, expiresAt: row.expires_at,
