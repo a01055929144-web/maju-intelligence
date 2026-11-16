@@ -11,6 +11,7 @@ import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSal
 import { runBulkActions } from "@/application/mobile-sales/bulk-actions";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
 import { BottomNav } from "@/components/ui/mobile/bottom-nav";
+import { BottomSheet } from "@/components/ui/mobile/bottom-sheet";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -484,8 +485,8 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           />
         </section>
 
-        {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`${selected.businessName} 컨택 기록`}><div className="mobile-card max-h-[92dvh] w-full max-w-[480px] overflow-y-auto rounded-t-2xl border p-4 sm:rounded-2xl">
-          <div className="flex items-start justify-between gap-3"><div><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getMobileLeadType(selected) === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{getMobileLeadType(selected) === "new" ? "신규 리드" : "영업 리드"}</span><h2 className="mt-2 text-xl font-bold">{selected.businessName}</h2><p className="mobile-muted mt-1 text-xs font-semibold">{selected.address || "주소 확인 필요"}</p></div><button className="min-h-11 rounded-lg border border-[var(--mobile-border)] px-3 text-xs font-semibold" onClick={() => setSelected(null)} type="button">닫기</button></div>
+        {selected ? <BottomSheet onClose={() => setSelected(null)} title={`${selected.businessName} 컨택 기록`}><div>
+          <div className="flex items-start justify-between gap-3"><div><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${getMobileLeadType(selected) === "new" ? "bg-violet-50 text-violet-700" : "bg-teal-50 text-teal-700"}`}>{getMobileLeadType(selected) === "new" ? "신규 리드" : "영업 리드"}</span><p className="mobile-muted mt-1 text-xs font-semibold">{selected.address || "주소 확인 필요"}</p></div></div>
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-[var(--mobile-border)] p-2"><span className="text-xs font-semibold">영업 상태</span><LeadStageSelect compact lead={selected} onAction={saveLeadAction} /></div>
           <div className="mt-3"><LeadContactChannelsPanel lead={selected} onAction={saveLeadAction} onLeadUpdated={(lead) => { setSelected(lead); setLeads((items) => items.map((item) => item.id === lead.id ? lead : item)); }} /></div>
           <div className="mt-3 grid grid-cols-2 gap-2"><button className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" onClick={() => document.getElementById("contact-result")?.scrollIntoView({ behavior: "smooth", block: "center" })} type="button"><MapPin className="h-4 w-4" />방문 결과</button><a className="mobile-secondary-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border text-sm font-semibold" href={selected.kakaoPlaceUrl || `https://map.kakao.com/?q=${encodeURIComponent(selected.address || selected.businessName)}`} rel="noreferrer" target="_blank"><MapPin className="h-4 w-4" />지도</a></div>
@@ -524,7 +525,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           {convertedCustomerId ? <div className="mt-3 rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs font-semibold text-teal-900"><p>배송지 · {selected.address || "주소 확인 필요"}</p><p className="mt-1">권역·오늘 코스는 지도에서 바로 확인하고 수정할 수 있습니다.</p><Link className="mt-2 inline-flex min-h-10 items-center rounded-lg bg-teal-700 px-3 text-white" href={`/map?view=customers&customerId=${encodeURIComponent(convertedCustomerId)}`}>지도에서 배송 설정</Link></div> : null}
           <button className="mobile-primary-action mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold disabled:opacity-60" disabled={saving} onClick={() => void saveContact()} type="button">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{saving ? "저장 중" : "컨택 기록 저장"}</button>
           <div className="mt-5 border-t border-[var(--mobile-border)] pt-4"><p className="text-sm font-semibold">과거 컨택 전체 흐름</p>{historyLoading ? <StateMessage icon={Loader2} text="이력을 불러오는 중입니다." spin /> : <div className="mt-2 space-y-2">{history.map((item) => <div className="mobile-card-raised rounded-lg border p-3" key={item.id}><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{getVisitResultDisplayLabel(item.result || item.actionType)}</span><span className="mobile-muted text-[11px]">{item.createdAt}</span></div><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.memo || "메모 없음"}</p>{extractReminderDate(item.memo) ? <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700"><CalendarClock className="h-3.5 w-3.5" />{extractReminderDate(item.memo)} 재연락</p> : null}<p className="mobile-muted mt-1 text-[11px]">{item.actorName || "담당자 미확인"}</p></div>)}{history.length === 0 ? <p className="mobile-muted py-4 text-center text-xs">아직 저장된 컨택 이력이 없습니다.</p> : null}</div>}</div>
-        </div></div> : null}
+        </div></BottomSheet> : null}
       </MobileThemeShell>
       {confirmDialog}
     </main>
