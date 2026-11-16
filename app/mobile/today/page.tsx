@@ -17,7 +17,7 @@ import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSessi
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { usableStoredPoint } from "@/domains/customer/coordinates";
-import { getCompanySettings, getCustomerMapSummaries, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
+import { getCompanySettings, getCustomerMapSummaries, getDeliveryCompletionEvents, getTodayRoutePlan, supabaseRequest } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 export default async function MobileTodayPage({ searchParams }: { searchParams?: Promise<{ customer?: string }> }) {
@@ -99,6 +99,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const selectedStopCompleted = selectedStop ? completedCustomerIds.has(selectedStop.id) : false;
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
+  const receiptWorkflowEnabled = isFeatureEnabled("DRIVER_RECEIPT_WORKFLOW", session.companyId);
+  const routeStops = receiptWorkflowEnabled && session.companyMemberId ? await supabaseRequest<Array<{ id: string; customer_id: string }>>(
+    `delivery_route_stops?select=id,customer_id&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&stop_type=eq.delivery&status=in.(planned,arrived)&order=stop_order.asc`,
+  ).catch(() => []) : [];
+  const routeStopByCustomer = new Map(routeStops.map(stop => [stop.customer_id, stop.id]));
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -194,6 +199,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 orderRevisions={selectedStop.orderRevisions || {}}
                 driverName={driverName}
                 driverPhone={session.operationalPhone}
+                driverReceiptWorkflowEnabled={receiptWorkflowEnabled}
+                driverStopId={routeStopByCustomer.get(selectedStop.id)}
                 structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}
               />
             </section>
