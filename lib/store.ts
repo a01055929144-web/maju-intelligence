@@ -2,6 +2,7 @@ import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { resolveDeliveryAddress } from "../domains/customer/address-line";
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { readLatestReport, readReportById } from "./analytics/report-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
@@ -8533,20 +8534,7 @@ export async function saveAnalysis(
 
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
-  // 2026-08-26 멀티테넌시 방어(P0-1): companyId가 없으면 전체 회사를 대상으로 조회하는 대신 빈
-  // 결과를 돌려줍니다. 지금은 모든 호출부가 인증된 companyId를 넘기지만, 앞으로 실수로 그 검증을
-  // 빼먹은 호출부가 생겨도 다른 회사 데이터가 새어나가지 않도록 하는 안전장치입니다.
-  if (!companyId) return analyzeCompany([]);
-
-  try {
-    const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-      `ai_reports?select=report&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=1`
-    );
-    return reports[0]?.report || analyzeCurrentCustomerMaster(companyId);
-  } catch (error) {
-    console.error("Latest report fallback:", error);
-    return analyzeCurrentCustomerMaster(companyId).catch(() => analyzeCompany([]));
-  }
+  return readLatestReport(supabaseRequest, companyId, () => analyzeCompany([]), analyzeCurrentCustomerMaster);
 }
 
 async function analyzeCurrentCustomerMaster(companyId?: string): Promise<AnalysisResult> {
@@ -8557,14 +8545,7 @@ async function analyzeCurrentCustomerMaster(companyId?: string): Promise<Analysi
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
-  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 다른 회사의 리포트를 반환하지 않습니다.
-  if (!companyId) return null;
-
-  const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-    `ai_reports?select=report&id=eq.${encodeURIComponent(reportId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
-  );
-
-  return reports[0]?.report || null;
+  return readReportById(supabaseRequest, reportId, companyId);
 }
 
 export async function getLatestBriefing(companyId?: string) {
