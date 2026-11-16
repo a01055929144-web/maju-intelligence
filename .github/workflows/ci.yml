@@ -82,6 +82,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify CX-46c delivery route stops draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx46c_delivery_route_stops_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-46c-delivery-route-stops.pg17.test.sql
+
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:

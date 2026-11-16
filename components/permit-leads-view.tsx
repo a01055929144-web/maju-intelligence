@@ -64,6 +64,7 @@ import { SalesAreaSelector } from "@/components/sales-area-selector";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
+import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
   BulkLeadActionBusy,
@@ -2801,12 +2802,21 @@ export async function requestPermitLeadConversion(lead: PermitLeadItem): Promise
 
 /** 지도 화면에서 신규·영업 리드 상세를 거래처 상세처럼 옆 창으로 엽니다(대표 요청 10-29). */
 export function PermitLeadDetailDrawer({
+  hasNext,
+  hasPrevious,
   lead,
   onClose,
   onConverted,
   onLeadChanged,
-  onOpenQuote
+  onNext,
+  onOpenQuote,
+  onPrevious
 }: {
+  /** CC-57: 이전/다음 리드 이동(지도 목록 순서). 안 주면 화살표는 꺼져 있다. */
+  readonly hasNext?: boolean;
+  readonly hasPrevious?: boolean;
+  readonly onNext?: () => void;
+  readonly onPrevious?: () => void;
   readonly lead: PermitLeadItem;
   readonly onClose: () => void;
   readonly onConverted?: (lead: PermitLeadItem, customerId?: string) => void;
@@ -2818,7 +2828,11 @@ export function PermitLeadDetailDrawer({
   return (
     <PermitLeadDetailPanel
       detailMode="drawer"
+      hasNext={hasNext}
+      hasPrevious={hasPrevious}
       lead={current}
+      onNext={onNext}
+      onPrevious={onPrevious}
       onAction={async (target, actionType, result, memo, followUpAt) => {
         const outcome = await requestPermitLeadAction(target, actionType, result, memo, followUpAt);
         if (outcome.ok) {
@@ -3427,11 +3441,7 @@ function PermitLeadDetailPanel({
             <div className="mt-1 flex min-w-0 items-center gap-2">
               <h3 className="min-w-0 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
               {/* 11/4: 지도 오른쪽 목록처럼 상호명 옆에 지도 바로가기(카카오·네이버·구글). */}
-              <span className="flex shrink-0 items-center gap-1">
-                <a aria-label="카카오맵에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#FEE500] text-xs font-black text-[#3c1e1e]" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
-                <a aria-label="네이버 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#03C75A] text-xs font-black text-white" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
-                <a aria-label="구글 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-xs font-black text-[#4285F4]" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
-              </span>
+              <span className="flex shrink-0 items-center gap-1"><PlaceLinkBadges places={{ google: placeLinks.googleMapUrl, kakao: placeLinks.kakaoPlaceUrl, naver: placeLinks.naverPlaceUrl }} /></span>
             </div>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
               {lead.industryPrimary}

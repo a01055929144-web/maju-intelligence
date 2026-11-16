@@ -1,5 +1,6 @@
 import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
+import { resolveDeliveryAddress } from "../domains/customer/address-line";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
@@ -5202,7 +5203,10 @@ export async function saveDeliveryHistoryFollowUp(
 }
 
 export type CustomerMapSummaryItem = {
+  /** CC-54: 지도가 좌표를 찾는 주소 — 배송 기본 주소가 있으면 그것, 없으면 저장된 주소. */
   address: string;
+  /** CC-54: 배송 상세 주소(층·호). 있을 때만. */
+  addressDetail?: string;
   customerName: string;
   deliveryManager?: string;
   deliveryVehicle?: string;
@@ -5298,6 +5302,19 @@ export async function getCustomerMapSummaries(
     }
   }
 
+  // CC-54: 배송 기본 주소가 있는 행만 따로 읽어 합친다(칸이 없는 환경·읽기 실패는 저장된 주소를 그대로 쓴다).
+  const deliveryAddressById = new Map<string, { base: string; detail: string | null }>();
+  if (rows.length) {
+    try {
+      const deliveryRows = await supabaseRequest<Array<{ delivery_address_detail: string | null; delivery_base_address: string | null; id: string }>>(
+        `normalized_customers?select=id,delivery_base_address,delivery_address_detail&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&delivery_base_address=not.is.null&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+      for (const row of deliveryRows) if (row.delivery_base_address?.trim()) deliveryAddressById.set(row.id, { base: row.delivery_base_address, detail: row.delivery_address_detail });
+    } catch {
+      // shortcut: 배송 주소 읽기 실패는 숨기고 저장된 address로 돌아간다, 오류를 화면에 알릴 필요가 생기면 올린다.
+    }
+  }
+
   const customers = rows
     .filter((row) => {
       if (!options?.assignmentKeys) return true;
@@ -5311,8 +5328,11 @@ export async function getCustomerMapSummaries(
     })
     .map((row) => {
       const monthlyRevenue = Number(row.monthly_revenue || 0);
+      const delivery = deliveryAddressById.get(row.id);
+      const resolved = resolveDeliveryAddress({ address: row.address, deliveryBaseAddress: delivery?.base, deliveryAddressDetail: delivery?.detail });
       return {
-        address: row.address || "",
+        address: resolved.search,
+        ...(resolved.detail ? { addressDetail: resolved.detail } : {}),
         customerName: row.customer_name,
         deliveryManager: row.delivery_manager || undefined,
         deliveryVehicle: row.delivery_vehicle || undefined,

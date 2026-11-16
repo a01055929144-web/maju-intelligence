@@ -2147,6 +2147,20 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     if (succeeded) router.refresh();
   }
 
+  // CC-57: 목록 줄·상세 ← →로 리드를 고르면 카드·목록 선택 줄·지도 중심(+주소창 pin=)이 같이 바뀌고, 상세가 열려 있으면 상세도 그 리드로 바뀐다(닫혀 있으면 카드만).
+  function selectLeadFromList(leadId: string) {
+    setPreviewStoreId("");
+    setSelectedId("");
+    setPreviewLeadId(leadId);
+    setDetailLeadId((current) => (current ? leadId : current));
+    const selectedLead = leadsForRightPanel.find((lead) => lead.id === leadId);
+    if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
+  }
+  // 상세 ← →의 순서 = 지금 왼쪽 목록 순서(필터·정렬 반영). 목록에 없는 리드의 상세면 화살표는 꺼진다.
+  const detailLeadIndex = detailLeadId ? leadsForRightPanel.findIndex((lead) => lead.id === detailLeadId) : -1;
+  const detailPreviousId = detailLeadIndex > 0 ? leadsForRightPanel[detailLeadIndex - 1].id : "";
+  const detailNextId = detailLeadIndex >= 0 && detailLeadIndex < leadsForRightPanel.length - 1 ? leadsForRightPanel[detailLeadIndex + 1].id : "";
+
   // 검색 결과 줄(상호명)·"지도에서 보기"·"상세": 지도를 그 마커로 옮긴다(11/14 대표: 눌러도 화면이 안 움직임).
   // 좌표를 못 찾은 거래처는 옮길 곳이 없으니 상세를 열어 주소를 고치게 한다.
   function focusSearchResult(group: "customers" | "leads" | "unregistered", id: string) {
@@ -2160,6 +2174,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       else setPreviewStoreId(id);
     } else if (group === "leads") {
       setPreviewLeadId(id);
+      setDetailLeadId((current) => (current ? id : current));
       setMapLeadsVisible(true);
     } else {
       setMapFocusId(id);
@@ -2849,6 +2864,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                         setPreviewStoreId("");
                         setSelectedId("");
                         setPreviewLeadId(marker.id || "");
+                        setDetailLeadId((current) => (current ? marker.id || current : current)); // CC-57: 열린 상세도 같이
                         // 2026-08-31 피드백 대응: 우측 패널이 "거래처" 탭에 머물러 있으면 리드
                         // 마커를 클릭해도 그 항목이 아예 목록에 없어 우측 패널이 안 바뀝니다.
                         setRightPanelTab("leads");
@@ -3170,13 +3186,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 collapsed={rightCollapsed}
                 leads={leadsForRightPanel}
                 loadState={allLeadsLoadState}
-                onSelectLead={(leadId) => {
-                  setPreviewStoreId("");
-                  setSelectedId("");
-                  setPreviewLeadId(leadId);
-                  const selectedLead = leadsForRightPanel.find((lead) => lead.id === leadId);
-                  if (selectedLead) setMapLeadTypeFilter(getPermitLeadType(selectedLead));
-                }}
+                onSelectLead={selectLeadFromList}
                 onOpenDetail={setDetailLeadId}
                 onRetry={() => void loadAllLeadsForMap()}
                 onUpdateStage={updateMapLeadStage}
@@ -3290,7 +3300,12 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
 
       {detailLeadId && detailLead ? (
         <PermitLeadDetailDrawer
+          key={detailLead.id}
           lead={detailLead}
+          hasNext={Boolean(detailNextId)}
+          hasPrevious={Boolean(detailPreviousId)}
+          onNext={() => { if (detailNextId) selectLeadFromList(detailNextId); }}
+          onPrevious={() => { if (detailPreviousId) selectLeadFromList(detailPreviousId); }}
           onClose={() => setDetailLeadId("")}
           onConverted={(lead) => {
             setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((item) => item.id !== lead.id) } : current));

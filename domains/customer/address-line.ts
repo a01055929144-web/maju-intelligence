@@ -17,3 +17,17 @@ export function stripDetail(saved: string, detail: string | null | undefined) {
   const text = saved.trim();
   return tail && text.endsWith(` ${tail}`) ? text.slice(0, -tail.length - 1).trim() : text;
 }
+
+/**
+ * CC-54: 지도 마커·경로·상세가 쓰는 배송 주소 한 곳. 배송 기본 주소(`delivery_base_address`)가 있으면 그것, 없으면 저장된 `address`.
+ * `search` = 지도가 좌표를 찾는 주소(상세 주소는 빼 정확도를 지킨다), `display` = 사람이 읽는 한 줄(기본 + 상세).
+ */
+export function resolveDeliveryAddress(input: { address?: string | null; deliveryBaseAddress?: string | null; deliveryAddressDetail?: string | null }) {
+  const base = (input.deliveryBaseAddress ?? "").trim();
+  if (!base) {
+    const address = (input.address ?? "").trim();
+    return { search: address, display: address, detail: "" };
+  }
+  const detail = (input.deliveryAddressDetail ?? "").trim();
+  return { search: base, display: joinSavedAddress(base, detail), detail };
+}
