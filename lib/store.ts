@@ -1,4 +1,5 @@
 import { kstDateKey } from "../domains/shared/kst-date";
+import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
@@ -5245,6 +5246,8 @@ export type CustomerMapSummaryItem = {
   monthlyRevenue: number;
   phone?: string;
   region: string;
+  /** 48-5: 저장된 좌표(없으면 지도가 브라우저에서 주소로 찾는다). 좌표를 구한 주소·정확도와 같이 온다. */
+  storedCoordinate?: { accuracy: string; address: string; lat: number; lng: number };
 };
 
 /**
@@ -5313,6 +5316,22 @@ export async function getCustomerMapSummaries(
     }
   }
 
+  // 48-5: 좌표가 있는 행만 따로 읽어 합친다(좌표 칸이 없는 환경·읽기 실패는 조용히 건너뛰고 지도가 주소로 찾는다).
+  const coordinateById = new Map<string, { accuracy: string; address: string; lat: number; lng: number }>();
+  if (rows.length) {
+    try {
+      const coordinateRows = await supabaseRequest<Array<{ geocode_accuracy: string | null; geocoded_address: string | null; id: string; latitude: number | null; longitude: number | null }>>(
+        `normalized_customers?select=id,latitude,longitude,geocode_accuracy,geocoded_address&company_id=eq.${encodeURIComponent(id)}&duplicate_of=is.null&latitude=not.is.null&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+      for (const row of coordinateRows) {
+        if (row.latitude == null || row.longitude == null || !row.geocode_accuracy) continue;
+        coordinateById.set(row.id, { accuracy: row.geocode_accuracy, address: row.geocoded_address || "", lat: Number(row.latitude), lng: Number(row.longitude) });
+      }
+    } catch {
+      // shortcut: 좌표 읽기 실패는 숨기고 기존 방식(브라우저 지오코딩)으로 돌아간다, 오류를 화면에 알릴 필요가 생기면 올린다.
+    }
+  }
+
   const customers = rows
     .filter((row) => {
       if (!options?.assignmentKeys) return true;
@@ -5336,11 +5355,36 @@ export async function getCustomerMapSummaries(
         id: row.id,
         monthlyRevenue,
         phone: row.phone || undefined,
-        region: row.region || "미분류"
+        region: row.region || "미분류",
+        storedCoordinate: coordinateById.get(row.id)
       } satisfies CustomerMapSummaryItem;
     });
 
   return { customers, source: "supabase", truncated: rows.length >= CUSTOMER_MASTER_FETCH_LIMIT };
+}
+
+/**
+ * 48-5: 지도가 브라우저에서 찾은 거래처 좌표를 저장한다(회사 범위). 손으로 지정한(manual) 좌표는 덮어쓰지 않는다.
+ * 호출한 쪽이 한국 범위·정확도 값을 이미 검사했다는 전제이고, 여기서는 회사·거래처 범위만 지킨다.
+ */
+export async function saveCustomerCoordinates(
+  companyId: string,
+  entries: ReadonlyArray<{ accuracy: string; address: string; customerId: string; lat: number; lng: number }>
+): Promise<{ saved: number }> {
+  if (!isProductionStoreConfigured() || !entries.length) return { saved: 0 };
+  let saved = 0;
+  for (const entry of entries) {
+    const rows = await supabaseRequest<Array<{ id: string }>>(
+      `normalized_customers?id=eq.${encodeURIComponent(entry.customerId)}&company_id=eq.${encodeURIComponent(companyId)}&or=(latitude.is.null,geocode_accuracy.neq.manual)&select=id`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ geocode_accuracy: entry.accuracy, geocoded_address: entry.address, geocoded_at: new Date().toISOString(), latitude: entry.lat, longitude: entry.lng })
+      }
+    ).catch(() => []);
+    saved += rows.length;
+  }
+  return { saved };
 }
 
 function normalizeAssignmentKey(value?: string | null) {
@@ -12348,6 +12392,11 @@ export async function convertPermitLeadToCustomer(
     auditContext,
     { skipLeadCleanupForLeadId: leadId }
   );
+
+  // 48-5: 리드가 이미 가진 좌표를 거래처로 옮긴다(전환 뒤 지도가 주소로 다시 찾지 않게). 실패해도 전환은 계속된다.
+  if (lead.address && isValidKoreanCoordinate(Number(lead.latitude), Number(lead.longitude))) {
+    await saveCustomerCoordinates(companyId, [{ accuracy: "lead", address: lead.address, customerId: created.customer.id, lat: Number(lead.latitude), lng: Number(lead.longitude) }]).catch(() => undefined);
+  }
 
   await supabaseRequest(
     `business_permit_leads?id=eq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}`,

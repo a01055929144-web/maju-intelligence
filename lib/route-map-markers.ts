@@ -1,4 +1,5 @@
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
+import { usableStoredPoint } from "../domains/customer/coordinates";
 
 export function operationalMarkerPersonIcon(deliveryVehicle?: string): "person" | undefined {
   return deliveryVehicle?.trim() ? undefined : "person";
@@ -18,6 +19,7 @@ type CustomerLedgerMapItem = {
   readonly id: string;
   readonly monthlyRevenue: number;
   readonly region: string;
+  readonly storedCoordinate?: { readonly accuracy: string; readonly address: string; readonly lat: number; readonly lng: number };
 };
 
 export function createRouteMapMarkers(originAddress: string, stops: ReadonlyArray<RouteMapStop>): KakaoMapMarker[] {
@@ -52,8 +54,11 @@ export function createCustomerLedgerMapMarkers(originAddress: string, customers:
       .filter((customer) => customer.address)
       .map((customer, index) => ({
         address: customer.address,
+        // 48-5: 저장된 좌표(주소가 같고 근사가 아닐 때만)가 있으면 지도가 주소를 다시 찾지 않는다. 없으면 찾은 뒤 저장한다.
+        coordinateSaveId: customer.id,
         grade: customer.grade,
         id: customer.id,
+        ...(usableStoredPoint(customer.storedCoordinate, customer.address) ?? {}),
         label: customer.grade,
         name: `${customer.customerName} · 월 ${customer.monthlyRevenue.toLocaleString()}만원`,
         tone: "lead" as const,
