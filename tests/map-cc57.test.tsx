@@ -30,3 +30,9 @@ it("지도 작업 화면: 목록·마커 선택은 열린 상세도 바꾸고, �
   expect(source).toContain("hasPrevious={Boolean(detailPreviousId)}");
   expect(source).toContain("leadsForRightPanel[detailLeadIndex + 1]");
 });
+
+it("상세 창 래퍼는 이전/다음 속성을 패널까지 넘긴다(안 넘기면 화살표가 항상 꺼짐)", () => {
+  const source = readFileSync("components/permit-leads-view.tsx", "utf8");
+  const drawer = source.slice(source.indexOf("export function PermitLeadDetailDrawer"));
+  for (const prop of ["hasNext={hasNext}", "hasPrevious={hasPrevious}", "onNext={onNext}", "onPrevious={onPrevious}"]) expect(drawer).toContain(prop);
+});

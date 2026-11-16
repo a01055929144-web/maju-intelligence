@@ -2802,12 +2802,21 @@ export async function requestPermitLeadConversion(lead: PermitLeadItem): Promise
 
 /** 지도 화면에서 신규·영업 리드 상세를 거래처 상세처럼 옆 창으로 엽니다(대표 요청 10-29). */
 export function PermitLeadDetailDrawer({
+  hasNext,
+  hasPrevious,
   lead,
   onClose,
   onConverted,
   onLeadChanged,
-  onOpenQuote
+  onNext,
+  onOpenQuote,
+  onPrevious
 }: {
+  /** CC-57: 이전/다음 리드 이동(지도 목록 순서). 안 주면 화살표는 꺼져 있다. */
+  readonly hasNext?: boolean;
+  readonly hasPrevious?: boolean;
+  readonly onNext?: () => void;
+  readonly onPrevious?: () => void;
   readonly lead: PermitLeadItem;
   readonly onClose: () => void;
   readonly onConverted?: (lead: PermitLeadItem, customerId?: string) => void;
@@ -2819,7 +2828,11 @@ export function PermitLeadDetailDrawer({
   return (
     <PermitLeadDetailPanel
       detailMode="drawer"
+      hasNext={hasNext}
+      hasPrevious={hasPrevious}
       lead={current}
+      onNext={onNext}
+      onPrevious={onPrevious}
       onAction={async (target, actionType, result, memo, followUpAt) => {
         const outcome = await requestPermitLeadAction(target, actionType, result, memo, followUpAt);
         if (outcome.ok) {
