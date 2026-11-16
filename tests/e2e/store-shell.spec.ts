@@ -95,7 +95,8 @@ for (const width of [1440, 390]) {
         publishedAt: "2026-11-16T00:00:00Z", validUntil: "2099-12-31", version: 1, expired: false,
         display: { columns: 1, info: [], productWidth: 65, promoLayout: "table" }, lines: [],
       },
-      orderEntry: { available: true, companyName: "합성 유통", title: "합성 공유 문서", version: 1 },
+      orderEntry: { available: true, companyName: "합성 유통", title: "합성 공유 문서", version: 1,
+        ...(route.request().postDataJSON().token === "synthetic-returning-member" ? { member: true } : {}) },
     } }));
     await page.route("**/api/pricing-documents/order-intent", () => { throw new Error("A received document cannot start signup"); });
     await page.goto("/store?fixture=s1-single");
@@ -118,6 +119,9 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("heading", { name: "주문", exact: true })).toBeVisible();
     await expect(page).not.toHaveURL(/document=/);
     await page.goto("/store?fixture=s1-multi&view=home&companyId=00000000-0000-4000-8000-000000000001&storeAccountId=20000000-0000-4000-8000-000000000002&document=shared-synthetic-s3-share");
-    await expect(page.getByRole("alert")).toContainText("받은 문서를 사용할 수 없습니다.");
+    await expect(page.getByRole("alert").filter({ hasText: "받은 문서를 사용할 수 없습니다." })).toBeVisible();
+    await page.goto("/pricing-document#synthetic-returning-member");
+    await expect(page.getByRole("link", { name: "이 단가표로 주문하기" })).toHaveAttribute("href", "/store?view=order");
+    await expect(page.getByRole("button", { name: "주문·점주 가입 시작" })).toHaveCount(0);
   });
 }
