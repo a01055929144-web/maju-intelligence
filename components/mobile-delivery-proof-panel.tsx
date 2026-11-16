@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, Copy, ExternalLink, FileVideo, ImageIcon, Loader2, MapPin, MessageSquareText, Plus, RefreshCw, Send, X } from "lucide-react";
 import { Notice } from "@/components/ui/notice";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
-import { Button } from "@/components/ui/button";
+import { SlideToConfirm } from "@/components/ui/mobile";
 import { LinkifiedText } from "@/components/linkified-text";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -700,10 +700,12 @@ export function MobileDeliveryProofPanel({
 
       <div className="mobile-card sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-2 mt-3 rounded-2xl border p-2 shadow-[0_-8px_28px_rgba(15,23,42,.14)] backdrop-blur">
       {!isOnline ? <p aria-live="assertive" className="mb-2 rounded-lg bg-amber-100 px-3 py-2 text-center text-xs font-black text-amber-900">오프라인입니다. 사진은 그대로 유지됩니다. 연결 후 같은 버튼을 다시 누르세요.</p> : null}
-      <Button className="mobile-primary-action h-14 w-full font-black" disabled={saving || status === "saved"} onClick={submit}>
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "saved" ? <CheckCircle2 className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
-        {saving ? progressLabel || "처리 중" : status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "실패 단계 재시도" : "배송 완료 저장"}
-      </Button>
+      <SlideToConfirm
+        busy={saving}
+        disabled={status === "saved"}
+        label={status === "saved" ? "완료 · 다음 매장으로 이동" : status === "error" ? "밀어서 실패 단계 재시도" : "밀어서 배송 완료"}
+        onConfirm={() => void submit()}
+      />
       {saving ? <p aria-live="polite" className="mobile-muted mt-2 text-center text-[11px] font-bold">화면을 닫지 마세요 · {progressLabel || "처리 중"}</p> : null}
       </div>
 
