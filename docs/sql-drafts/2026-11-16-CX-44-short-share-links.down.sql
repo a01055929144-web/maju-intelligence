@@ -41,7 +41,7 @@ alter table public.pricing_document_share_links
   drop column view_count,
   drop column last_viewed_at,
   drop column first_viewed_at,
-  drop column short_sent_by_user_id,
+  drop column short_sent_by_member_id,
   drop column short_channel,
   drop column short_code;
 commit;

@@ -3,7 +3,8 @@
 do $$ begin create role anon; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role; exception when duplicate_object then null; end $$;
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 create table companies(id uuid primary key);
 create table company_members(id uuid primary key,company_id uuid not null,unique(company_id,id));
 create table pricing_document_share_links(
@@ -110,7 +111,7 @@ delete from pricing_document_share_events;
 delete from storefront_link_events where event_type in ('order_start','signup','first_order');
 alter table pricing_document_share_links disable trigger pricing_document_share_short_code_guard;
 alter table storefront_links disable trigger storefront_short_code_guard;
-update pricing_document_share_links set short_code=null,short_channel=null,short_sent_by_user_id=null,
+update pricing_document_share_links set short_code=null,short_channel=null,short_sent_by_member_id=null,
  first_viewed_at=null,last_viewed_at=null,view_count=0;
 update storefront_links set short_code=null,short_channel=null,first_viewed_at=null,last_viewed_at=null,view_count=0;
 alter table pricing_document_share_links enable trigger pricing_document_share_short_code_guard;

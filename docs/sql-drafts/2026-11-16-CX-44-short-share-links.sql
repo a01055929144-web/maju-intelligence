@@ -6,7 +6,7 @@ set local statement_timeout = '30s';
 alter table public.pricing_document_share_links
   add column short_code text,
   add column short_channel text,
-  add column short_sent_by_user_id uuid,
+  add column short_sent_by_member_id uuid,
   add column first_viewed_at timestamptz,
   add column last_viewed_at timestamptz,
   add column view_count bigint not null default 0,
@@ -17,8 +17,8 @@ alter table public.pricing_document_share_links
       or (short_code is not null and short_channel in ('kakao', 'sms', 'other'))),
   add constraint pricing_document_share_links_view_count_check check (view_count >= 0),
   add constraint pricing_document_share_links_short_sender_fk
-    foreign key (company_id, short_sent_by_user_id)
-    references public.company_members(company_id, id) on delete set null (short_sent_by_user_id);
+    foreign key (company_id, short_sent_by_member_id)
+    references public.company_members(company_id, id) on delete set null (short_sent_by_member_id);
 
 create unique index pricing_document_share_links_short_code_uq
   on public.pricing_document_share_links(short_code) where short_code is not null;
@@ -93,7 +93,7 @@ set search_path = ''
 as $$
 declare
   v_alphabet constant text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
-  v_bytes bytea := public.gen_random_bytes(10);
+  v_bytes bytea := pg_catalog.uuid_send(pg_catalog.gen_random_uuid());
   v_code text := '';
   i integer;
 begin
@@ -109,7 +109,7 @@ create function public.assign_pricing_document_short_code_v1(
   p_company_id uuid,
   p_share_link_id uuid,
   p_channel text,
-  p_actor_user_id uuid
+  p_actor_member_id uuid
 ) returns text
 language plpgsql
 security definer
@@ -126,15 +126,15 @@ begin
     raise exception 'share_link_unavailable';
   end if;
   if v_link.short_code is not null then return v_link.short_code; end if;
-  if p_actor_user_id is not null and not exists (
+  if p_actor_member_id is not null and not exists (
     select 1 from public.company_members
-    where company_id = p_company_id and id = p_actor_user_id
+    where company_id = p_company_id and id = p_actor_member_id
   ) then raise exception 'short_link_actor_not_found'; end if;
   loop
     v_code := public.short_share_code_v1();
     begin
       update public.pricing_document_share_links
-      set short_code = v_code, short_channel = p_channel, short_sent_by_user_id = p_actor_user_id
+      set short_code = v_code, short_channel = p_channel, short_sent_by_member_id = p_actor_member_id
       where company_id = p_company_id and id = p_share_link_id;
       return v_code;
     exception when unique_violation then
