@@ -92,6 +92,8 @@ begin
     then raise exception 'store_profile_field_not_editable'; end if;
   if p_changes?'storeName' and nullif(btrim(p_changes->>'storeName'),'') is null
     then raise exception 'store_profile_name_required'; end if;
+  if p_changes?'baseAddress' and nullif(btrim(p_changes->>'baseAddress'),'') is null
+    then raise exception 'store_profile_address_required'; end if;
   select id into v_member from public.store_profile_members
     where store_profile_id=p_store_profile and auth_user_id=p_auth_user and role='owner' and status='active';
   if not found then raise exception 'store_profile_owner_required'; end if;
@@ -179,6 +181,13 @@ begin
   if n.processed_at is not null then return jsonb_build_object('notificationId',n.id,'alreadyApplied',true); end if;
   select * into a from public.store_accounts where company_id=p_company and id=n.store_account_id;
   if not found or a.customer_id<>n.customer_id then raise exception 'store_profile_notification_scope_changed'; end if;
+  -- Profile updates take the same lock, so a newer notification cannot race this check.
+  perform 1 from public.store_profiles where id=a.store_profile_id for update;
+  if exists(select 1 from public.company_notifications newer
+      where newer.company_id=p_company and newer.store_account_id=n.store_account_id
+        and newer.notification_type='store_profile_changed' and newer.processed_at is null
+        and (newer.created_at,newer.id)>(n.created_at,n.id))
+    then raise exception 'store_profile_notification_superseded'; end if;
   update public.normalized_customers set
     customer_name=case when p_apply_store_name and n.before_values->'storeName' is distinct from n.after_values->'storeName' then nullif(btrim(n.after_values->>'storeName'),'') else customer_name end,
     representative_name=case when n.before_values->'representativeName' is distinct from n.after_values->'representativeName' then nullif(btrim(n.after_values->>'representativeName'),'') else representative_name end,
@@ -191,6 +200,9 @@ begin
   select coalesce(array_agg(key order by key),'{}') into changed
     from jsonb_each(n.before_values) b(key,value) join jsonb_each(n.after_values) aft using(key)
     where b.value is distinct from aft.value and (key<>'storeName' or p_apply_store_name);
+  update public.company_notifications set processed_at=clock_timestamp(),processed_by_user_id=p_actor
+    where company_id=p_company and store_account_id=n.store_account_id and notification_type='store_profile_changed'
+      and processed_at is null and (created_at,id)<(n.created_at,n.id);
   update public.company_notifications set processed_at=clock_timestamp(),processed_by_user_id=p_actor,
     read_at=coalesce(read_at,clock_timestamp()),read_by_user_id=coalesce(read_by_user_id,p_actor) where id=n.id;
   return jsonb_build_object('notificationId',n.id,'customerId',n.customer_id,'appliedFields',to_jsonb(changed),'alreadyApplied',false);
