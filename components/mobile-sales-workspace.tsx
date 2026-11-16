@@ -5,12 +5,12 @@ import { kstToday } from "@/domains/shared/kst-date";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Bell, CalendarClock, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
+import { Bell, CalendarClock, Camera, House, CheckCircle2, ChevronRight, Crosshair, FileText, Loader2, Map as MapIcon, MapPin, MessageCircle, PlusCircle, RefreshCw, Route, Search, Send, Target } from "lucide-react";
 import { buildMobileSalesTaskGroups, type MobileSalesTaskKind } from "@/application/mobile-sales/today-tasks";
 import { flushMobileSalesActionQueue, readMobileSalesActionQueue, writeMobileSalesActionQueue, type QueuedMobileSalesAction } from "@/application/mobile-sales/action-queue";
 import { runBulkActions } from "@/application/mobile-sales/bulk-actions";
 import type { KakaoMapMarker } from "@/components/kakao-address-map";
-import { MobileSalesBottomNavigation } from "@/components/mobile-sales-bottom-navigation";
+import { BottomNav } from "@/components/ui/mobile/bottom-nav";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -472,7 +472,16 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
             </section>
           </div>
 
-          <MobileSalesBottomNavigation onQuickRecord={() => { const nearest = visibleLeads[0]; if (nearest) void openLead(nearest); else setLocationMessage("기록할 주변 매장이 없습니다."); }} />
+          <BottomNav
+            ariaLabel="모바일 배송·영업 바로가기"
+            center={{ icon: <Camera className="h-7 w-7" />, label: "가장 가까운 매장 기록", onClick: () => { const nearest = visibleLeads[0]; if (nearest) void openLead(nearest); else setLocationMessage("기록할 주변 매장이 없습니다."); } }}
+            items={[
+              { active: true, href: "/mobile/sales", icon: <House className="h-4 w-4" />, label: "오늘" },
+              { href: "/mobile/sales#lead-map", icon: <MapIcon className="h-4 w-4" />, label: "지도" },
+              { href: "/mobile/sales#lead-list", icon: <Target className="h-4 w-4" />, label: "리드" },
+              { href: "/mobile/today", icon: <Route className="h-4 w-4" />, label: "코스" }
+            ]}
+          />
         </section>
 
         {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={`${selected.businessName} 컨택 기록`}><div className="mobile-card max-h-[92dvh] w-full max-w-[480px] overflow-y-auto rounded-t-2xl border p-4 sm:rounded-2xl">
