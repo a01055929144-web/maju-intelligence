@@ -62,3 +62,30 @@ for (const width of [1440, 390]) test(`verified store member entry keeps role an
   expect(memberReads).toBe(1);
   expect(writes).toBe(0);
 });
+
+for (const width of [1440, 390]) test(`store information reuses address and member management at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  let saved: Record<string, string> | null = null;
+  await page.route("**/api/store/information?*", async route => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get("companyId")).toBe("00000000-0000-4000-8000-000000000001");
+    expect(url.searchParams.get("storeAccountId")).toBe("20000000-0000-4000-8000-000000000001");
+    if (route.request().method() === "PATCH") { saved = route.request().postDataJSON(); return route.fulfill({ json: { saved: true } }); }
+    return route.fulfill({ json: { businessRegistrationNumber: "1234567890", canEdit: true, phone: "0212345678", representativeName: "홍대표", storeName: saved?.storeName || "합성 가입 매장" } });
+  });
+  const scope = "fixture=store-portal-source-document&companyId=00000000-0000-4000-8000-000000000001&storeAccountId=20000000-0000-4000-8000-000000000001";
+  await page.goto(`/store?${scope}&view=${width === 1440 ? "home" : "info"}`);
+  if (width === 1440) await storeTab(page, "내 정보").click();
+  await expect(page.getByRole("heading", { name: "기본 정보" })).toBeVisible();
+  await expect(page.getByLabel("사업자등록번호")).toBeDisabled();
+  await expect(page.getByRole("link", { name: "배송지 관리" })).toHaveAttribute("href", /#store-address-management$/);
+  await expect(page.getByRole("link", { name: "구성원 관리" })).toHaveAttribute("href", /\/store\/members\?/);
+  await expect(page.getByRole("status")).toContainText("안전한 처리 절차 승인 후");
+  await page.getByRole("button", { name: "정보 수정" }).click();
+  await page.getByLabel("상호").fill("수정 합성 매장");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.getByText("매장 정보를 저장했습니다.")).toBeVisible();
+  expect(saved).toMatchObject({ storeName: "수정 합성 매장", representativeName: "홍대표", phone: "0212345678" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.screenshot({ path: info.outputPath(`store-information-${width}.png`), fullPage: true });
+});
