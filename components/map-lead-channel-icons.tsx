@@ -14,8 +14,8 @@ type Props = {
   readonly name?: string;
   readonly places?: PlaceUrls;
 };
-const iconClassName = "grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
-const placeClassName = "grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md text-[11px] font-black ring-1 ring-inset transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
+const iconClassName = "grid h-6 w-6 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
+const placeClassName = "grid h-6 w-6 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 shrink-0 place-items-center rounded-md text-[11px] font-black ring-1 ring-inset transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
 const cleanPhone = (value: string) => value.replace(/[^0-9+]/g, "");
 
 /** 저장된 장소 링크가 없거나 네이버 검색 링크뿐이면 상호·주소로 만든 검색 링크를 쓴다. */

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { MapLeadChannelIcons, resolvePlaceUrls } from "@/components/map-lead-channel-icons";
-import { MapListRow } from "@/components/map/map-list-row";
+import { MapListRow, StageChipSelect } from "@/components/map/map-list-row";
 import { LIST_CHUNK, visibleCount } from "@/domains/route/list-chunk";
 import {
   getPermitLeadOpenDate,
@@ -33,7 +33,7 @@ import {
   formatMinutes,
   gradeBadgeClass,
 } from "@/lib/route-map-utils";
-import { businessStatusClass, getBusinessStatusLabel, getLeadConfidence, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
+import { businessStatusClass, displayIndustry, getBusinessStatusLabel, getLeadConfidence, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
 
 export function StoreManagementPanel({
@@ -395,12 +395,13 @@ export function LeadListPanel({
                   ? `★ ${typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}${typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}` : ""}`
                   : "";
                 const subText = [
-                  lead.industryPrimary || "",
+                  displayIndustry(lead.industryPrimary),
                   typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : "",
                   openDateBadge,
                   storeAreaLabel || "",
                   rating
                 ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
+                const subTitle = lead.industryPrimary && displayIndustry(lead.industryPrimary) !== lead.industryPrimary ? lead.industryPrimary : undefined;
                 return (
                   <MapListRow
                     badges={
@@ -428,11 +429,10 @@ export function LeadListPanel({
                     onSelect={() => onSelectLead(lead.id)}
                     selected={lead.id === selectedLeadId}
                     stage={
-                      <select
-                        aria-label={`${lead.businessName} 단계`}
-                        className="h-6 max-w-[84px] rounded-full border border-slate-300 bg-white px-1.5 text-[11px] font-bold text-slate-800"
-                        onChange={async (event) => {
-                          const result = await onUpdateStage(lead.id, event.target.value);
+                      <StageChipSelect
+                        label={`${lead.businessName} 단계`}
+                        onChange={async (nextStage) => {
+                          const result = await onUpdateStage(lead.id, nextStage);
                           setRowErrors((current) => {
                             const next = { ...current };
                             if (result.ok) delete next[lead.id];
@@ -443,9 +443,10 @@ export function LeadListPanel({
                         value={toLeadStageValue(lead.status)}
                       >
                         {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      </StageChipSelect>
                     }
                     subText={subText}
+                    subTitle={subTitle}
                     total={sortedLeads.length}
                   />
                 );

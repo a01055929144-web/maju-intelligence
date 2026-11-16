@@ -1467,7 +1467,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapRightPanelVisible =
     searchTabOpen || ((mapPanelMode === "split" || mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead") && !rightCollapsed);
   // 11/15 대표: PC에서는 왼쪽 = 거래처·신규·영업 목록(340px), 오른쪽 = 담당자·차량. 모바일은 위에서 아래 순서 그대로.
-  const mapLeftInsetClass = mapRightPanelVisible ? "lg:left-[340px]" : "lg:left-0";
+  const mapLeftInsetClass = mapRightPanelVisible ? "lg:left-[340px] xl:left-[380px]" : "lg:left-0";
   const mapRightInsetClass = mapLeftPanelMini ? "lg:right-14" : !mapLeftPanelVisible ? "lg:right-0" : mapPanelMode === "split" ? "lg:right-[250px]" : "lg:right-[320px] xl:right-[360px]";
   // 레이어 바·조건 요약은 지도 칸(패널 사이) 안에 있으므로 패널 폭과 무관하게 지도 칸 기준 왼쪽 12px입니다.
   const mapOverlayLeftClass = "lg:left-3";
@@ -2982,7 +2982,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     driverOptions={deliveryDefaults.drivers}
                     onShowOnMap={hiddenOnMapHandler(previewStore)}
                     headerOffsetPx={mapHeaderHeightPx}
-                    leftPanelCollapsed={mapPanelMode === "map"}
                     onAddDriver={addManualDriver}
                     onAddVehicle={addManualVehicle}
                     onAddToRoute={() => {
@@ -3026,7 +3025,6 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                       allLeadsForMap.find((lead) => lead.id === previewLeadId) ||
                       null
                     }
-                    leftPanelCollapsed={mapPanelMode === "map"}
                     onClose={() => setPreviewLeadId("")}
                     onConverted={() => {
                       setLeadRadiusResult((current) => (current ? { ...current, leads: current.leads.filter((lead) => lead.id !== previewLeadId) } : current));
@@ -3136,11 +3134,11 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           <div
             className={`max-h-[360px] min-h-0 shrink-0 overflow-hidden border-t border-slate-200 lg:absolute lg:z-10 lg:max-h-none lg:flex-col lg:bg-white ${
               searchTabOpen
-                ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200"
+                ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] xl:w-[380px] lg:border-0 lg:border-r lg:border-slate-200"
                 : mapPanelMode === "split"
-                ? `hidden lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200 ${rightCollapsed ? "" : "lg:flex"}`
+                ? `hidden lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] xl:w-[380px] lg:border-0 lg:border-r lg:border-slate-200 ${rightCollapsed ? "" : "lg:flex"}`
                 : mapPanelMode === "customer" || mapPanelMode === "newLead" || mapPanelMode === "salesLead"
-                  ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] lg:border-0 lg:border-r lg:border-slate-200"
+                  ? "flex lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] xl:w-[380px] lg:border-0 lg:border-r lg:border-slate-200"
                   : "hidden"
             }`}
           >
@@ -4462,7 +4460,6 @@ function PermitLeadMapQuickCard({
   documentEntry,
   headerOffsetPx,
   lead,
-  leftPanelCollapsed,
   onClose,
   onConverted,
   onDismiss,
@@ -4476,7 +4473,6 @@ function PermitLeadMapQuickCard({
   /** StoreQuickCard와 동일한 목적 — 검색 헤더 높이에 맞춰 카드가 가려지지 않게 합니다. */
   readonly headerOffsetPx?: number;
   readonly lead: (PermitLeadItem & { distanceKm?: number; nearestAnchor?: { id: string; name: string } | null }) | null;
-  readonly leftPanelCollapsed?: boolean;
   readonly onClose: () => void;
   readonly onConverted: () => void;
   readonly onDismiss: (lead: PermitLeadItem) => void | Promise<void>;
@@ -4594,9 +4590,7 @@ function PermitLeadMapQuickCard({
     }
   }
 
-  const positionClassName = `left-4 w-[min(320px,calc(100%-32px))] ${
-    leftPanelCollapsed ? "lg:left-3 lg:w-[min(320px,calc(100%-24px))]" : "lg:left-[384px] lg:w-[min(320px,calc(100%-408px))] xl:left-[424px] xl:w-[min(320px,calc(100%-448px))]"
-  }`;
+  const positionClassName = "left-4 w-[min(320px,calc(100%-32px))] lg:left-3 lg:w-[min(320px,calc(100%-24px))]";
 
   return (
     <div

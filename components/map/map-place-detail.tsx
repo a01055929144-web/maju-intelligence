@@ -107,7 +107,6 @@ export function StoreQuickCard({
   driverOptions,
   headerOffsetPx,
   isInRoute,
-  leftPanelCollapsed,
   onAddDriver,
   onAddToRoute,
   onAddVehicle,
@@ -126,7 +125,6 @@ export function StoreQuickCard({
   readonly headerOffsetPx?: number;
   /** 경유 코스 탭에서만 전달됩니다 — 오늘 경유 선택에 이미 포함돼 있는지 여부. */
   readonly isInRoute?: boolean;
-  readonly leftPanelCollapsed?: boolean;
   readonly onAddDriver?: (driverName: string, fuelType?: "gasoline" | "diesel") => Promise<{ ok: boolean; message?: string }>;
   /** "경유지 추가" 버튼. 지도 홈에서는 경유 코스 탭으로 이동시키는 콜백, 경유 코스 탭에서는 즉시 토글하는 콜백을 받습니다. */
   readonly onAddToRoute?: () => void;
@@ -286,9 +284,7 @@ export function StoreQuickCard({
   const positionClassName =
     variant === "grid"
       ? "left-4 w-[min(300px,calc(100%-32px))]"
-      : `left-4 w-[min(300px,calc(100%-32px))] ${
-          leftPanelCollapsed ? "lg:left-3 lg:w-[min(300px,calc(100%-24px))]" : "lg:left-[384px] lg:w-[min(300px,calc(100%-408px))] xl:left-[424px] xl:w-[min(300px,calc(100%-448px))]"
-        }`;
+      : "left-4 w-[min(300px,calc(100%-32px))] lg:left-3 lg:w-[min(300px,calc(100%-24px))]";
   const topClassName = variant === "grid" ? "top-4" : "top-4 lg:top-[var(--quick-card-top,5rem)]";
 
   return (
