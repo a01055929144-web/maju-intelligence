@@ -28,6 +28,8 @@ export type KakaoMapMarker = {
   // 위치까지 정상 이동), 마커가 하나 이상일 때의 기본 화면 맞추기 계산에서는 제외됩니다 — 반경이
   // 제한된 "반경 리드" 마커에는 이 플래그를 붙이지 않아 그쪽 동작은 그대로입니다.
   readonly excludeFromAutoBounds?: boolean;
+  /** 48-5: 거래처 id. 이 마커를 지도가 주소로 정확히 찾았을 때 그 좌표를 거래처에 저장한다(이미 lat/lng가 있으면 저장하지 않는다). */
+  readonly coordinateSaveId?: string;
   readonly grade?: "A" | "B" | "C";
   readonly id?: string;
   readonly label: string;
@@ -654,6 +656,8 @@ export function KakaoAddressMap({
 
         let unplacedCustomerCount = 0;
         const unplacedCustomerIds: string[] = [];
+        // 48-5: 이번에 주소로 정확히 찾은 거래처 좌표(근사는 제외). 끝에 한 번 저장한다.
+        const coordinatesToSave = new Map<string, { address: string; customerId: string; lat: number; lng: number }>();
         await mapWithConcurrency(staticMarkers, 5, async (marker) => {
             // 2026-09-07 피드백("실시간 라이브 차량의 마커가 안보여") 대응: 아래 지오코딩 경로는
             // marker.address를 실제 도로명 주소로 간주해 카카오 지오코더에 넘깁니다. 라이브 차량은
@@ -686,6 +690,7 @@ export function KakaoAddressMap({
                     const lng = Number(result[0].x);
                     geocodeMemoryCache.set(marker.address, { lat, lng });
                     placeMarkerAtPosition(marker, lat, lng);
+                    if (marker.coordinateSaveId) coordinatesToSave.set(marker.coordinateSaveId, { address: marker.address, customerId: marker.coordinateSaveId, lat, lng });
                     placed = true;
                   }
 
@@ -700,6 +705,7 @@ export function KakaoAddressMap({
               if (fallbackPoint && !ignore) {
                 geocodeMemoryCache.set(marker.address, fallbackPoint);
                 placeMarkerAtPosition(marker, fallbackPoint.lat, fallbackPoint.lng);
+                if (marker.coordinateSaveId) coordinatesToSave.set(marker.coordinateSaveId, { address: marker.address, customerId: marker.coordinateSaveId, lat: fallbackPoint.lat, lng: fallbackPoint.lng });
               } else if (!ignore && marker.tone === "customer") {
                 // 거래처만: 근사 주소(부번·층 떼기) → 상호+시군구 장소 검색으로 한 번 더 찾는다(11/14 명물길 50-4).
                 const approxPoint = await findCustomerFallbackPoint(kakao, geocoder, marker, kakaoGeocodeTimeoutMs);
@@ -715,6 +721,10 @@ export function KakaoAddressMap({
           });
 
         if (geocodeCacheMissCount > 0) saveGeocodeCacheToStorage();
+        // 저장은 지도 그리기와 무관한 보조 작업이라 실패해도 조용히 넘기고(다음에 다시 찾는다) 기다리지 않는다.
+        if (!ignore && coordinatesToSave.size) {
+          void fetch("/api/customers/coordinates", { body: JSON.stringify({ entries: Array.from(coordinatesToSave.values()).slice(0, 200) }), headers: { "Content-Type": "application/json" }, method: "POST" }).catch(() => undefined);
+        }
         // 주소를 좌표로 못 바꾼 거래처 수(M1 안내용). 주소가 아예 없는 거래처는 이 수에 들지 않는다(주소 보완 필요 쪽).
         if (!ignore) onCustomerGeocodeFailedRef.current?.(unplacedCustomerCount, unplacedCustomerIds, approximateCustomerIds);
 

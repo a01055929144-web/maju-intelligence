@@ -5546,6 +5546,8 @@ function createMarkers(
 ): KakaoMapMarker[] {
   const origin = existingMarkers.find((marker) => marker.tone === "origin");
   const originWithId = origin ? { ...origin, id: origin.id || originMarkerId } : undefined;
+  // 48-5: 거래처 원장 마커가 들고 온 저장 좌표·저장 대상 id를 같은 id의 거래처 마커로 넘긴다.
+  const ledgerById = new Map(existingMarkers.filter((marker) => marker.id && marker.tone === "lead").map((marker) => [marker.id as string, marker]));
   const storeMarkers = spreadMarkers(
     stores.map((store) => {
       const vehicle = store.deliveryVehicleId ? vehicleMeta[store.deliveryVehicleId] : undefined;
@@ -5566,12 +5568,20 @@ function createMarkers(
         // 선택하면 카드가 안 보임" 버그의 실제 원인이었습니다.
         tone: "customer" as const,
         x: store.markerX,
-        y: store.markerY
+        y: store.markerY,
+        ...pickStoredPosition(ledgerById.get(store.id), store.address)
       };
     })
   );
 
   return mergeMarkers(originWithId ? [originWithId, ...storeMarkers] : storeMarkers);
+}
+
+// 화면에서 주소를 고친 뒤에는(마커 주소와 달라지면) 서버가 준 옛 좌표를 쓰지 않고 지도가 다시 찾게 한다.
+function pickStoredPosition(marker: KakaoMapMarker | undefined, currentAddress: string | undefined) {
+  if (!marker) return {};
+  if ((marker.address || "").trim() !== (currentAddress || "").trim()) return { coordinateSaveId: marker.coordinateSaveId };
+  return { coordinateSaveId: marker.coordinateSaveId, lat: marker.lat, lng: marker.lng };
 }
 
 function spreadMarkers(markers: KakaoMapMarker[]) {
