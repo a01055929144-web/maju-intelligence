@@ -5815,7 +5815,7 @@ async function excludeMatchingLeadsForNewCustomer(
   const lookup = businessNumber
     ? `business_number=eq.${encodeURIComponent(businessNumber)}`
     : `business_name=ilike.${encodeURIComponent(customer.businessName)}`;
-  const inactiveStatuses = ["제외"].map(encodeURIComponent).join(",");
+  const inactiveStatuses = ["제외", "거절"].map(encodeURIComponent).join(",");
   const leads = await supabaseRequest<Array<{
     address: string | null;
     business_name: string;
@@ -10809,7 +10809,7 @@ export type PermitLeadQueues = {
  */
 export async function getPermitLeadQueues(companyId: string, limitPerQueue = 20): Promise<PermitLeadQueues> {
   const { leads } = await listPermitLeads(companyId, { excludeExcluded: true, limit: 500, skipTotal: true });
-  const active = leads.filter((lead) => lead.status !== "제외" && lead.isActive);
+  const active = leads.filter((lead) => lead.status !== "제외" && lead.status !== "거절" && lead.isActive);
 
   const regionCounts = new Map<string, number>();
   for (const lead of active) {
@@ -10900,7 +10900,7 @@ const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
   "재연락 예정": "재연락 예정",
   "다음 방문": "방문 대상",
   보류: "검토 필요",
-  거절: "제외",
+  거절: "거절",
   제외: "제외"
 };
 

@@ -1,6 +1,7 @@
 "use client";
 import { kstToday } from "@/domains/shared/kst-date";
 import { isClosedLead } from "@/lib/leads";
+import { isHiddenLeadStatus } from "@/domains/lead/map-filters";
 
 import { LeadChangeHistory } from "@/components/lead-change-history";
 import { DistributorKakaoDrawer } from "@/components/distributor-kakao-drawer";
@@ -1485,7 +1486,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const mapLeadMarkers: KakaoMapMarker[] = useMemo(() => {
     if (viewMode !== "map") return [];
     return filteredLeads
-      .filter((lead) => lead.status !== "제외" && lead.address)
+      .filter((lead) => !isHiddenLeadStatus(lead.status) && lead.address)
       .map((lead) => ({
         id: lead.id,
         name: lead.businessName,

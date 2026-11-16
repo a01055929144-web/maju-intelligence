@@ -122,9 +122,16 @@ export type MapFilterLead = LeadDateFields & {
   readonly storeAreaSqm?: number | null;
 };
 
-/** "활성/숨김" 1차 분리 — 숨김 보기는 status가 "제외"인 것만, 활성 보기는 그 외. 폐업 리드는 켰을 때만 포함. */
-export function scopeLeadsByStatus<T extends MapFilterLead>(leads: readonly T[], options: { showDismissed: boolean; showClosed: boolean }): T[] {
-  return leads.filter((lead) => (options.showDismissed ? lead.status === "제외" : lead.status !== "제외") && (options.showClosed || !isClosedLead({ permitStatus: lead.permitStatus, status: lead.status })));
+/** 활성 보기에서 빼는 단계: 우리가 뺀 "제외"와 고객이 거절한 "거절"(CC-50). */
+export const HIDDEN_LEAD_STATUSES = ["제외", "거절"] as const;
+export function isHiddenLeadStatus(status: string | null | undefined) {
+  return HIDDEN_LEAD_STATUSES.includes(status as (typeof HIDDEN_LEAD_STATUSES)[number]);
+}
+
+/** 보기 3가지 — 활성(제외·거절 아님) / 거절함(status "거절") / 숨김(status "제외"). 폐업 리드는 켰을 때만 포함. */
+export function scopeLeadsByStatus<T extends MapFilterLead>(leads: readonly T[], options: { showDismissed: boolean; showRejected?: boolean; showClosed: boolean }): T[] {
+  const inView = (status: string | null | undefined) => (options.showDismissed ? status === "제외" : options.showRejected ? status === "거절" : !isHiddenLeadStatus(status));
+  return leads.filter((lead) => inView(lead.status) && (options.showClosed || !isClosedLead({ permitStatus: lead.permitStatus, status: lead.status })));
 }
 
 export type MapLeadFilterOptions<T> = {

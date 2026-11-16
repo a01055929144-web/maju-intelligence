@@ -82,6 +82,8 @@ type StripProps = {
   readonly onSelectLeadType: (value: "all" | PermitLeadType) => void;
   readonly showDismissed: boolean;
   readonly onSelectDismissed: (value: boolean) => void;
+  readonly showRejected: boolean;
+  readonly onSelectRejected: (value: boolean) => void;
   readonly regionOptions: ReadonlyArray<readonly [string, number]>;
   readonly dongOptions: ReadonlyArray<readonly [string, number]>;
   readonly regionSigungu: string;
@@ -134,11 +136,18 @@ export function MapLeadFilterStrip(p: StripProps) {
       </div>}
       <div className="flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
         <button
-          className={`h-8 px-2.5 text-xs font-semibold transition ${!p.showDismissed ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
-          onClick={() => p.onSelectDismissed(false)}
+          className={`h-8 px-2.5 text-xs font-semibold transition ${!p.showDismissed && !p.showRejected ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+          onClick={() => { p.onSelectDismissed(false); p.onSelectRejected(false); }}
           type="button"
         >
           활성 리드
+        </button>
+        <button
+          className={`h-8 px-2.5 text-xs font-semibold transition ${p.showRejected ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+          onClick={() => p.onSelectRejected(true)}
+          type="button"
+        >
+          거절함
         </button>
         <button
           className={`h-8 px-2.5 text-xs font-semibold transition ${p.showDismissed ? "bg-teal-700 text-white" : "text-slate-500 hover:bg-slate-50"}`}
@@ -220,7 +229,9 @@ export function MapLeadFilterStrip(p: StripProps) {
           ? "불러오는 중..."
           : p.showDismissed
             ? `숨김 리드 ${p.filteredCount.toLocaleString()}곳`
-            : `${p.filteredCount.toLocaleString()} / ${p.totalCount.toLocaleString()}곳 표시 중`}
+            : p.showRejected
+              ? `거절한 리드 ${p.filteredCount.toLocaleString()}곳`
+              : `${p.filteredCount.toLocaleString()} / ${p.totalCount.toLocaleString()}곳 표시 중`}
       </span>
     </div>
   );

@@ -934,7 +934,7 @@ export function StoreDetail({
                 연락처 · {formatPhoneNumber(draftPhone) || "미등록"} · 사업자번호 · {formatBusinessRegistrationNumber(draftBusinessNumber) || "미등록"}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1" aria-label="영업 단계">
-                {(["신규", "연락함", "견적 전달", "재연락", "계약", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
+                {(["신규", "연락함", "견적 전달", "재연락", "계약", "거절", "제외"] as const).map((stage) => <span className={`rounded-md px-2 py-1 text-[11px] font-black ${stage === "계약" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-400"}`} key={stage}>{stage}</span>)}
                 <span className="ml-1 text-xs font-bold text-amber-700">단계 저장 미연결</span>
               </div>
               {savedAt ? <p className="mt-2 text-xs font-black text-emerald-700">변경사항 반영 · {savedAt}</p> : null}

@@ -4,7 +4,7 @@ export const IMPORT_CHUNK = 500;
 
 /** 대표 시트의 영업 상태 → 공통 영업 단계 저장값(domains/lead/lead-status.ts). 모르는 값은 신규. */
 const STATUS_MAP: Record<string, string> = {
-  계약완료: "전환 진행", 데모완료: "재연락 예정", 제안중: "견적 발송", 검토중: "재연락 예정", 이탈: "제외", 미진행: "신규 수집",
+  계약완료: "전환 진행", 데모완료: "재연락 예정", 제안중: "견적 발송", 검토중: "재연락 예정", 이탈: "거절", 미진행: "신규 수집",
 };
 export const mapImportStatus = (raw: unknown) => STATUS_MAP[String(raw ?? "").replace(/\s/g, "")] ?? "신규 수집";
 

@@ -46,5 +46,5 @@ export function extractReminderDate(memo?: string): string | null {
 }
 
 export function isContactedLead(status: string): boolean {
-  return ["연락 완료", "미팅 예정", "견적 요청", "견적 발송", "재연락 예정", "방문 대상", "제외"].includes(status);
+  return ["연락 완료", "미팅 예정", "견적 요청", "견적 발송", "재연락 예정", "방문 대상", "거절", "제외"].includes(status);
 }

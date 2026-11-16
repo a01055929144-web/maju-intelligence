@@ -1,6 +1,7 @@
 // 리드 상태(영업 단계) 규칙. 2026-10-25 대표 요청: 상태는 언제든 사용자가 직접 바꿀 수 있어야 한다.
 // 저장값은 기존 business_permit_leads.status 문자열을 그대로 쓰고(데이터 이전 없음),
-// 화면에는 공통 영업 단계 이름(신규 → 연락함 → 견적 전달 → 협의·재연락 → 계약 / 보류 / 거절)으로 보여 줍니다.
+// 화면에는 공통 영업 단계 이름(신규 → 연락함 → 견적 전달 → 협의·재연락 → 계약 / 보류 / 거절 / 제외)으로 보여 줍니다.
+// 거절 = 영업했는데 고객이 거절한 결과, 제외 = 우리가 영업 대상에서 뺀 것(CC-50). 기존 "제외" 값은 그대로 제외.
 
 export type LeadStageOption = { value: string; label: string };
 
@@ -11,8 +12,15 @@ export const LEAD_STAGE_OPTIONS: readonly LeadStageOption[] = [
   { value: "재연락 예정", label: "협의·재연락" },
   { value: "전환 진행", label: "계약" },
   { value: "검토 필요", label: "보류" },
-  { value: "제외", label: "거절·제외" }
+  { value: "거절", label: "거절" },
+  { value: "제외", label: "제외" }
 ];
+
+/** 거절·제외를 고를 때 고르는 사유(선택). 새 칸 없이 lead_actions.memo에 한 줄로 남긴다(CC-50). */
+export const LEAD_STAGE_REASONS: Readonly<Record<string, readonly string[]>> = {
+  거절: ["단가", "기존 거래처 유지", "품목 안 맞음", "기타"],
+  제외: ["업종 다름", "중복", "폐업", "연락 거부", "기타"]
+};
 
 const SELECTABLE = new Set(LEAD_STAGE_OPTIONS.map((option) => option.value));
 
