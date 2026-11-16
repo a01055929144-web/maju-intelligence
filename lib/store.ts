@@ -73,6 +73,8 @@ import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
+export { makeCustomerKey, normalizeNameForDuplicateCheck } from "../domains/customer/identity";
+import { makeCustomerKey, normalizeNameForDuplicateCheck } from "../domains/customer/identity";
 import { after } from "next/server";
 export { STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
 import { evaluateStaffLocation, getStaffLocationDisplayState, resolveStaffLocationPersistence, STAFF_LOCATION_FRESHNESS_MINUTES } from "./staff-location";
@@ -13470,13 +13472,6 @@ async function getNormalizedCustomerKeyMap(companyId: string) {
   return map;
 }
 
-export function normalizeNameForDuplicateCheck(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/\s/g, "")
-    .replace(/[^0-9a-z가-힣]/g, "");
-}
-
 export type DuplicateCustomerGroup = {
   customerName: string;
   count: number;
@@ -15196,13 +15191,6 @@ function getRawCell(row: RawUploadRow, key?: string) {
 }
 
 export { normalizeBusinessNumber };
-
-export function makeCustomerKey(customerName: string, address: string) {
-  return `${customerName}-${address}`
-    .toLowerCase()
-    .replace(/\s/g, "")
-    .replace(/[^0-9a-zA-Z가-힣-]/g, "");
-}
 
 function toNumeric(value: unknown) {
   if (typeof value === "number") return value;
