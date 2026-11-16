@@ -65,6 +65,7 @@ import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-pan
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { GovSyncOverview } from "@/components/gov-sync-overview";
+import { LeadRouteStopButton } from "@/components/lead-route-stop-button";
 import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -3453,6 +3454,7 @@ function PermitLeadDetailPanel({
             <div className="mt-2">
               <LeadStageSelect lead={lead} onAction={onAction} />
             </div>
+            <LeadRouteStopButton leadId={lead.id} />
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             <button aria-label="이전 매장" className="maju-button-secondary h-8 px-2 text-xs" disabled={!hasPrevious} onClick={onPrevious} type="button"><ArrowLeft className="h-4 w-4" /></button>
