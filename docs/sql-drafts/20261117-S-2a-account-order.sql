@@ -164,6 +164,10 @@ begin
     or length(p_memo) > 500 or jsonb_typeof(p_lines) is distinct from 'array' then
     raise exception 'Invalid order request';
   end if;
+  -- Match the existing link order limit before locks, writes or line processing.
+  if jsonb_array_length(p_lines) not between 1 and 100 then
+    raise exception 'Invalid order request';
+  end if;
   select * into v_account from public.store_accounts
     where company_id = p_company and id = p_store_account_id for update;
   p_member_id := public.self_order_member(p_company, p_store_account_id, p_auth_user_id);

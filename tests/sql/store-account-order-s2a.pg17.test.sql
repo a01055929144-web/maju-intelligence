@@ -25,6 +25,10 @@ declare
   lines constant jsonb := jsonb_build_array(jsonb_build_object('productId',product,'quantity',2));
   placed jsonb;
   batch jsonb;
+  max_lines jsonb;
+  rejected_lines jsonb;
+  rejected_key uuid;
+  max_order jsonb;
 begin
   if has_function_privilege('authenticated', 'public.store_order_eligibility(uuid,uuid,uuid)', 'execute')
     or has_table_privilege('authenticated', 'public.store_order_cart', 'select')
@@ -45,6 +49,13 @@ begin
     where c.company_id = company and c.id = customer;
   if cardinality(public.store_order_eligibility(company, account, owner_user)) <> 0
     then raise exception 'fixture blocked: %', public.store_order_eligibility(company, account, owner_user); end if;
+  with products as (
+    insert into public.product_catalog(id, company_id, purchase_product_name, purchase_price, sales_unit, tax_type, order_pricing_mode)
+    select gen_random_uuid(), company, 'S-2a limit fixture ' || n, 800, 'BOX', 'exempt', 'market'
+    from generate_series(1, 99) n returning id
+  )
+  select jsonb_build_array(jsonb_build_object('productId', product, 'quantity', 1)) || jsonb_agg(jsonb_build_object('productId', id, 'quantity', 1) order by id)
+    into max_lines from products;
   perform set_config('role', 'service_role', true);
   perform public.save_store_order_cart_line(company, account, staff_user, product, null, 2);
   if (select quantity from public.store_order_cart_lines(company, account, owner_user)) is distinct from 2
@@ -56,6 +67,19 @@ begin
     perform public.place_store_account_order(company, current_date - 1, lines, gen_random_uuid(), null, null, '', account, owner_user);
     raise exception 'past cutoff accepted';
   exception when raise_exception then if sqlerrm <> 'Delivery date unavailable' then raise; end if; end;
+  for rejected_lines in select payload from (values ('[]'::jsonb), (max_lines || lines)) as rejected(payload) loop
+    rejected_key := gen_random_uuid();
+    begin
+      perform public.place_store_account_order(company, '2099-01-05', rejected_lines, rejected_key, null, null, '', account, owner_user);
+      raise exception 'out-of-range line count accepted';
+    exception when raise_exception then if sqlerrm <> 'Invalid order request' then raise; end if; end;
+    if exists (select 1 from public.store_orders o where o.company_id = company and o.idempotency_key = rejected_key)
+      or exists (select 1 from public.company_notifications n where n.company_id = company and n.idempotency_key = rejected_key::text)
+      then raise exception 'rejected line count wrote order or notification'; end if;
+  end loop;
+  max_order := public.place_store_account_order(company, '2099-01-05', max_lines, gen_random_uuid(), null, null, '', account, owner_user);
+  if (select count(*) from public.store_order_lines l where l.company_id = company and l.order_id = (max_order->>'id')::uuid) <> 100
+    then raise exception '100-line order did not save every line'; end if;
   placed := public.place_store_account_order(company, '2099-01-05', lines, key, null, null, '', account, owner_user);
   if placed->>'knownTotal' <> '2400' or placed <> public.place_store_account_order(
     company, '2099-01-05', lines, key, null, null, '', account, owner_user) then raise exception 'total or replay'; end if;
