@@ -20,6 +20,8 @@ import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
 import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
+import { readStorefront } from "@/lib/pricing/storefront";
+import { StoreReceivedDocuments } from "@/components/store-received-documents";
 import { StorePortal } from "@/components/store-portal";
 
 export const dynamic = "force-dynamic";
@@ -82,15 +84,19 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history") ? params.fixture : null;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
     companyId: "00000000-0000-4000-8000-000000000001",
     storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
+    ...(fixture === "s4-documents" ? { businessType: "농산", companyName: "합성 유통", catalogHref: "/store?view=order#synthetic-catalog" } : {}),
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
-    documents: index === 0 ? [
+    documents: fixture === "s4-documents" ? [
+      { title: "합성 농산 단가표", industry: "농산", kind: "sheet" as const, href: "/store#synthetic-s4-valid", canOrder: true, validUntil: "2099-12-31", itemCount: 8 },
+      { title: "합성 기간 지난 단가표", industry: "주류", kind: "sheet" as const, href: "/store#synthetic-s4-expired", canOrder: false, validUntil: "2000-01-01", itemCount: 3 },
+    ] : index === 0 ? [
       { title: "합성 주문 문서", kind: "sheet" as const, href: "/store#synthetic-s1-order", canOrder: true, validUntil: "2099-12-31" },
       { title: "합성 공유 문서", kind: "sheet" as const, href: "/pricing-document#synthetic-s3-share", canOrder: false, validUntil: "2099-12-31" },
     ] : [],
@@ -142,11 +148,39 @@ export default async function StorePage({ searchParams }: {
       : <StorefrontWorkspace key={requestedDocument} previewToken={openedDocument.href.split("#")[1]} />
       : <ErrorState message="받은 문서를 사용할 수 없습니다." description="선택한 매장과 링크의 열람기간을 확인해 주세요." />}
   </div> : null;
+  const receivedDocuments = Boolean(selected && view === "home" && !requestedDocument &&
+    (fixture === "s4-documents" || isFeatureEnabled("STORE_RECEIVED_DOCUMENTS_HOME", selected.companyId)));
+  const orderHref = selected?.documents.find(document => document.canOrder && document.href.startsWith("/store#"))?.href;
+  const scheduleHref = orderHref ?? selected?.catalogHref;
+  let cutoff: string | undefined;
+  if (receivedDocuments && fixture === "s4-documents") cutoff = "2099-01-01 22:00";
+  else if (receivedDocuments && scheduleHref) {
+    try {
+      const storefront = await readStorefront(scheduleHref.split("#")[1]);
+      if (storefront?.canOrder && storefront.nextDeliveryDate) {
+        const day = new Date(`${storefront.nextDeliveryDate}T00:00:00Z`);
+        day.setUTCDate(day.getUTCDate() - storefront.policy.cutoffDaysBefore);
+        cutoff = `${day.toISOString().slice(0, 10)} ${storefront.policy.cutoffTime.slice(0, 5)}`;
+      }
+    } catch { /* Documents remain available when delivery policy cannot be read. */ }
+  }
+  const documentHref = (document: NonNullable<typeof selected>["documents"][number]) =>
+    `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`;
+  const home = selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={documentHref} /> : null;
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
-    home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={document => `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`} /> : null}
+    home={selected && receivedDocuments ? <>
+      <div className="md:hidden">{home}</div>
+      <div className="hidden md:block">
+        <StoreReceivedDocuments account={selected} today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+          industry={typeof params.industry === "string" ? params.industry : undefined} cutoff={cutoff}
+          cartHref={orderHref?.replace("/store#", "/store?view=order#") ?? selected.catalogHref}
+          industryHref={industry => industry ? `${homeHref}&industry=${encodeURIComponent(industry)}` : homeHref}
+          documentHref={documentHref} />
+      </div>
+    </> : home}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
     {!memberView && addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
