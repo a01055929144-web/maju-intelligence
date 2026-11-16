@@ -2,8 +2,10 @@ import Link from "next/link";
 import { formatWon } from "@/domains/shared/money";
 import { storeOrderStatusLabel, type StoreOrderStatus } from "@/domains/order/store-order-status";
 import type { StorePortalOrder } from "@/lib/store/07-store-portal";
+import { StoreOrderReceiptAction } from "./store-order-receipt-action";
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
+const dateTimeFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const steps: Array<{ status: StoreOrderStatus; label: string }> = [
   { status: "submitted", label: "접수 대기" },
   { status: "received", label: "접수" },
@@ -11,7 +13,7 @@ const steps: Array<{ status: StoreOrderStatus; label: string }> = [
   { status: "delivered", label: "배송 완료" },
 ];
 
-export function StoreOrderHistory({ orders, reorderHref }: { orders: StorePortalOrder[]; reorderHref?: string }) {
+export function StoreOrderHistory({ companyId, orders, reorderHref, storeAccountId }: { companyId: string; orders: StorePortalOrder[]; reorderHref?: string; storeAccountId: string }) {
   return (
     <div className="space-y-3">
       {reorderHref && (
@@ -75,7 +77,14 @@ export function StoreOrderHistory({ orders, reorderHref }: { orders: StorePortal
                       {order.status === "delivered" && (
                         <section aria-label="수령 확인" id={`receipt-${order.id}`} className="space-y-1 border-t pt-3">
                           <h3 className="font-medium">수령 확인</h3>
-                          <p className="text-slate-600">빠진 품목이 있으면 유통사에 문의해 주세요.</p>
+                          {order.document ? <>
+                            <p className="font-medium">전표 {order.document.documentNumber} · {formatWon(order.document.totalAmount)}</p>
+                            <ul className="divide-y">{order.document.lines.map(line => <li className="flex flex-wrap justify-between gap-2 py-2" key={line.id}><span>{line.name}{line.specification ? ` · ${line.specification}` : ""} · {line.quantity}{line.unit}</span><span>{formatWon(line.lineAmount)}</span></li>)}</ul>
+                            {order.document.receipt?.revision === order.document.revision ? <p className={`rounded-lg px-3 py-2 font-semibold ${order.document.receipt.status === "confirmed" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{order.document.receipt.status === "confirmed" ? "이상 없음 확인됨" : "이상 있음 신고됨"} · {order.document.receipt.memberName} · {dateTimeFormat.format(new Date(order.document.receipt.confirmedAt))}{order.document.receipt.memo ? ` · ${order.document.receipt.memo}` : ""}</p> : <>
+                              {order.document.receipt ? <p className="rounded-lg bg-amber-50 px-3 py-2 font-semibold text-amber-900">전표가 수정되어 다시 확인이 필요합니다.</p> : null}
+                              <StoreOrderReceiptAction companyId={companyId} documentId={order.document.id} orderId={order.id} revision={order.document.revision} storeAccountId={storeAccountId} />
+                            </>}
+                          </> : <p className="text-slate-600">빠진 품목이 있으면 유통사에 문의해 주세요.</p>}
                         </section>
                       )}
                     </div>
