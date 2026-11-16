@@ -48,6 +48,9 @@ begin
   begin perform update_store_profile_v1(x.store_profile_id,x.auth_user_id,'{"businessRegistrationNumber":"9999999999"}','forbidden');
     raise exception 's2b_business_number_edit_accepted';
   exception when raise_exception then if sqlerrm<>'store_profile_field_not_editable' then raise; end if; end;
+  begin perform update_store_profile_v1(x.store_profile_id,x.auth_user_id,'{"baseAddress":"  "}','empty-address');
+    raise exception 's2b_empty_address_accepted';
+  exception when raise_exception then if sqlerrm<>'store_profile_address_required' then raise; end if; end;
 
   r:=update_store_profile_v1(x.store_profile_id,x.auth_user_id,
     jsonb_build_object('storeName','S2B 매장 새 이름','representativeName','S2B 대표','baseAddress','합성로 17',
@@ -72,11 +75,28 @@ begin
     or not (apply_store_profile_notification_v1(x.company_id,notification,x.auth_user_id,true)->>'alreadyApplied')::boolean
     then raise exception 's2b_explicit_apply_wrong'; end if;
 
+  -- A later unprocessed profile notification blocks an older one; applying the latest also closes the older row.
+  perform update_store_profile_v1(x.store_profile_id,x.auth_user_id,'{"deliveryContactPhone":"02-0000-0001"}','s2b-change-old');
+  perform pg_sleep(0.001);
+  perform update_store_profile_v1(x.store_profile_id,x.auth_user_id,'{"deliveryContactPhone":"02-0000-0002"}','s2b-change-new');
+  select id into notification from company_notifications where company_id=x.company_id and store_account_id=x.account_id
+    and idempotency_key like 'store-profile-change:%' and processed_at is null order by created_at,id limit 1;
+  begin perform apply_store_profile_notification_v1(x.company_id,notification,x.auth_user_id,false);
+    raise exception 's2b_superseded_notification_applied';
+  exception when raise_exception then if sqlerrm<>'store_profile_notification_superseded' then raise; end if; end;
+  select id into notification from company_notifications where company_id=x.company_id and store_account_id=x.account_id
+    and idempotency_key like 'store-profile-change:%' and processed_at is null order by created_at desc,id desc limit 1;
+  perform apply_store_profile_notification_v1(x.company_id,notification,x.auth_user_id,false);
+  if (select delivery_contact_phone from normalized_customers where company_id=x.company_id and id=x.customer_id)<>'02-0000-0002'
+    or exists(select 1 from company_notifications where company_id=x.company_id and store_account_id=x.account_id
+      and notification_type='store_profile_changed' and processed_at is null)
+    then raise exception 's2b_latest_notification_or_old_processing_wrong'; end if;
+
   -- Confirm RPC is company-scoped and fills blanks only; existing distributor values remain.
   update normalized_customers set representative_name='유통사 대표',delivery_contact_phone=null where company_id=x.company_id and id=x.customer_id;
   r:=confirm_new_store_account_v1(x.company_id,x.account_id,null,x.auth_user_id,'S2B 담당');
   if not (r->>'alreadyConfirmed')::boolean or not exists(select 1 from normalized_customers
-      where company_id=x.company_id and id=x.customer_id and representative_name='유통사 대표' and delivery_contact_phone='02-1234-5678')
+      where company_id=x.company_id and id=x.customer_id and representative_name='유통사 대표' and delivery_contact_phone='02-0000-0002')
     then raise exception 's2b_blank_fill_wrong: %',r; end if;
   begin perform confirm_new_store_account_v1(x.other_company,x.account_id,null,x.auth_user_id,'x');
     raise exception 's2b_cross_company_confirm_accepted';
