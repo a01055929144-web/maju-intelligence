@@ -559,7 +559,7 @@ function StoreOrderTable({ rows, companyName, cart, busy, pricesVisible, catalog
     { key: "spec", label: "규격", width: 95, value: line => [line.brand, line.spec, line.unit].filter(Boolean).join(" · ") },
     { key: "unit", label: "단위", width: 60, value: line => line.unit },
     { key: "price", label: "단가", width: 110, align: "right", value: line => pricesVisible ? line.unitPrice : null,
-      render: line => !pricesVisible ? "확인 필요" : line.isMarketPrice ? <span title={marketNotice}>시가{line.recentDispatchPrice !== null && line.recentDispatchDate && <span className="block text-xs text-slate-500">최근 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)}</span>}</span> : line.unitPrice === null ? "가격 문의" : <>{won(line.unitPrice)}<span className="block text-xs text-slate-500">{line.taxType === "exempt" ? "면세" : line.priceIncludesTax ? "부가세 포함" : "부가세 별도"}</span></> },
+      render: line => !pricesVisible ? "확인 필요" : line.isMarketPrice ? <span title={marketNotice}>시가{line.recentDispatchPrice !== null && line.recentDispatchDate && <span className="block text-xs text-slate-500">최근 {line.recentDispatchDate.slice(5)} {won(line.recentDispatchPrice)}</span>}</span> : line.unitPrice === null ? "가격 문의" : <>{won(line.unitPrice)}<span className="block text-xs text-slate-500">{line.taxType === "exempt" ? "면세" : line.priceIncludesTax ? "과세 · 부가세 포함" : "과세 · 부가세 별도"}</span></> },
     { key: "quantity", label: "수량", width: 95, align: "right", value: qty, total: true,
       editor: { type: "number", ariaLabel: line => `${line.name} 수량`, min: 0, max: 100000, onChange: onQuantity, disabled: () => busy } },
     { key: "lineTotal", label: "합계", width: 112, align: "right", total: true, totalFormat: won,
