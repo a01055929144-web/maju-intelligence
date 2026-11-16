@@ -64,6 +64,7 @@ import { SalesAreaSelector } from "@/components/sales-area-selector";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
+import { GovSyncOverview } from "@/components/gov-sync-overview";
 import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -1915,6 +1916,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                 {uploadResult.skippedNoName ? <span className="text-rose-600">상호명 없음 건너뜀 {uploadResult.skippedNoName.toLocaleString()}</span> : null}
               </div>
             ) : null}
+            <div className="rounded-md border border-slate-200 bg-white p-3 text-xs font-bold leading-5"><GovSyncOverview /></div>
             {sourceStatus?.syncStatus ? (
               <div className="space-y-1 rounded-md border border-slate-200 bg-white p-3 text-xs font-bold leading-5">
                 <p className="text-slate-500">야간 자동 동기화 상태 (새로고침해도 유지됨)</p>
