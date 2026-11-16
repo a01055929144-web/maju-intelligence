@@ -1,9 +1,10 @@
 import type { GovAreaCursor } from "./gov-area-scan";
 
-export const GOV_FANOUT_CONCURRENCY = 3;
-export const GOV_REQUEST_TIMEOUT_MS = 12_000;
-export const GOV_COLLECTION_BUDGET_MS = 40_000;
-export const GOV_POSTPROCESS_RESERVE_MS = 10_000;
+export const GOV_FANOUT_CONCURRENCY = 2;
+export const GOV_REQUEST_TIMEOUT_MS = 25_000;
+export const GOV_COLLECTION_BUDGET_MS = 240_000;
+export const GOV_POSTPROCESS_RESERVE_MS = 20_000;
+export const GOV_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 
 export class GovBudgetDeferredError extends Error {
   constructor() {
@@ -26,6 +27,39 @@ export type GovAreaTaskResult<T> = GovAreaTask & {
   value?: T;
   error?: string;
 };
+
+export function prioritizeGovAreaCodes(
+  areaCodes: readonly string[],
+  pendingAreas: readonly string[],
+  previousFirstArea?: string
+) {
+  const pending = Array.from(new Set(pendingAreas.filter((areaCode) => areaCodes.includes(areaCode))));
+  if (pending.length > 1 && pending[0] === previousFirstArea) pending.push(pending.shift()!);
+  return [...pending, ...areaCodes.filter((areaCode) => !pending.includes(areaCode))];
+}
+
+export function isGovTimeoutError(error?: string) {
+  return Boolean(error && /abort|timeout|time.?out/i.test(error));
+}
+
+export function isGovSyncStale(lastSuccessAt?: string | null, now = Date.now()) {
+  const lastSuccess = lastSuccessAt ? Date.parse(lastSuccessAt) : Number.NaN;
+  return !Number.isFinite(lastSuccess) || now - lastSuccess > GOV_STALE_AFTER_MS;
+}
+
+export async function loadGovAreaWithTimeoutRetry<T>(
+  load: (pageSize: number) => Promise<T>,
+  previousTimeoutCount = 0
+) {
+  const firstPageSize = previousTimeoutCount >= 2 ? 20 : 100;
+  try {
+    return await load(firstPageSize);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isGovTimeoutError(message)) throw error;
+    return load(previousTimeoutCount >= 2 ? 20 : 50);
+  }
+}
 
 export function buildGovAreaTasks(
   areaCodes: readonly string[],

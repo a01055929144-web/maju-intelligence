@@ -4,7 +4,7 @@ import { checkSyncDailyCap, recordSyncCall } from "@/lib/sync-daily-cap";
 import { syncGovRestaurantLeads } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // POST: 행정안전부_식품_일반음식점 조회서비스(전국 공공데이터)에서 최근 변경분을 가져와 신규
 // 리드로 적재합니다. 화면의 "지금 가져오기(전국 공공데이터)" 버튼에서 호출합니다.

@@ -1495,6 +1495,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
 
   const summary = queues?.summary;
   const govRestaurantConfigured = Boolean(sourceStatus?.sources?.govRestaurant);
+  const govSyncStaleWarning = sourceStatus?.syncStatus?.gov.status === "error"
+    ? sourceStatus.syncStatus.gov.message || "전국 공공데이터 수집 상태를 확인해 주세요."
+    : "";
   const seoulRestaurantConfigured = Boolean(sourceStatus?.sources?.seoulRestaurant);
   const kakaoKeywordSearchConfigured = Boolean(sourceStatus?.sources?.kakaoKeywordSearch);
   const keywordVolumeSourceConfigured = Boolean(sourceStatus?.enrichment?.keywordVolume);
@@ -1509,9 +1512,9 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     {
       description: govSyncResult
         ? `수집 ${govSyncResult.fetched.toLocaleString()} · 신규 ${govSyncResult.ingest.inserted.toLocaleString()}`
-        : govSyncWarning || "전국 음식점 인허가",
-      status: govSyncBusy ? "수집 중" : govSyncResult || govRestaurantConfigured ? "연결됨" : govSyncWarning ? "확인 필요" : "설정 필요",
-      tone: govSyncWarning || (!govRestaurantConfigured && sourceStatus) ? "warning" : govSyncResult || govRestaurantConfigured ? "ready" : "idle",
+        : govSyncWarning || govSyncStaleWarning || "전국 음식점 인허가",
+      status: govSyncBusy ? "수집 중" : govSyncWarning || govSyncStaleWarning ? "확인 필요" : govSyncResult || govRestaurantConfigured ? "연결됨" : "설정 필요",
+      tone: govSyncWarning || govSyncStaleWarning || (!govRestaurantConfigured && sourceStatus) ? "warning" : govSyncResult || govRestaurantConfigured ? "ready" : "idle",
       title: "전국 공공데이터"
     },
     {
@@ -1825,6 +1828,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </div>
             {recommendBusy ? <LoadingState className="!justify-start !border-0 !bg-teal-50 !px-3 !py-2 !text-teal-700" label="거래처 거리와 업종 적합도를 계산해 추천 순위를 갱신하는 중입니다..." /> : null}
             {recommendMessage ? <p className="text-xs font-bold text-teal-700">{recommendMessage}</p> : null}
+            {govSyncStaleWarning ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{govSyncStaleWarning}</p> : null}
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {leadSourceCards.map((source) => (
                 <LeadSourceStatusCard

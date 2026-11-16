@@ -11,7 +11,7 @@ import {
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * Daily cron target (see vercel.json "crons") that (1) refreshes every company's 사업자 휴업/폐업
