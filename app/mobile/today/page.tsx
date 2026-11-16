@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Target } from "lucide-react";
+import { Building2, Camera, House, Map as MapIcon, Route, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { MobileBottomNavigation } from "@/components/mobile-bottom-navigation";
+import { BottomNav } from "@/components/ui/mobile/bottom-nav";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
@@ -205,7 +205,17 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           ) : null}
         </div>
 
-        <MobileBottomNavigation />
+        <BottomNav
+          ariaLabel="모바일 현장 바로가기"
+          center={{ href: "#delivery-proof", icon: <Camera className="h-7 w-7" />, label: "가장 가까운 매장 배송 기록" }}
+          items={[
+            { href: "#selected-customer", icon: <House className="h-4 w-4" />, label: "오늘" },
+            { href: "/map", icon: <MapIcon className="h-4 w-4" />, label: "지도" },
+            { href: "/mobile/sales#lead-list", icon: <Target className="h-4 w-4" />, label: "리드" },
+            { href: "#route-list", icon: <Route className="h-4 w-4" />, label: "코스" }
+          ]}
+          trackHash
+        />
       </section>
       </MobileThemeShell>
     </main>
