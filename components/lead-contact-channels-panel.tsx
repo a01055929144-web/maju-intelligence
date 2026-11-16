@@ -11,6 +11,7 @@ import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { Notice } from "@/components/ui/notice";
+import { copyText } from "@/lib/copy-text";
 import {
   buildInstagramDmUrl,
   buildMailtoUrl,
@@ -309,14 +310,12 @@ export function LeadContactChannelsPanel({
 
   async function copyMessage(text = outgoing) {
     if (!requireAcknowledgedPolicy()) return false;
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setNotice({ tone: "ok", text: "문구를 복사했습니다. 열린 창에 붙여 넣어 보내 주세요." });
       return true;
-    } catch {
-      setNotice({ tone: "error", text: "복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
-      return false;
     }
+    setNotice({ tone: "error", text: "복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
+    return false;
   }
 
   async function recordSent(channel: LeadContactChannel) {
@@ -381,9 +380,7 @@ export function LeadContactChannelsPanel({
       );
       const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
       if (!response.ok || !payload?.ok) throw new Error(payload?.message || "출처 안내 기록을 남기지 못했습니다.");
-      try {
-        await navigator.clipboard.writeText(disclosure);
-      } catch {
+      if (!(await copyText(disclosure))) {
         setNotice({ tone: "error", text: "안내 기록은 저장했지만 복사 권한이 없어 문구를 직접 선택해 복사해 주세요." });
         return;
       }

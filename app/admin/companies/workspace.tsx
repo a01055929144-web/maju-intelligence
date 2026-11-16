@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/state";
 import { SortableTh } from "@/components/sortable-th";
 import { formatNumber } from "@/domains/shared/money";
 import { formatPhoneNumber } from "@/lib/phone";
+import { copyText } from "@/lib/copy-text";
 import { CompanyKindPanel } from "./company-kind-panel";
 import type { CompanyKind, DirectStaffAccountResult, ManagedCompanyAccount, ManagedCompanyAccountInput, StaffInvitation, UploadHistoryItem } from "@/lib/store";
 import { useTableSort } from "@/lib/use-table-sort";
@@ -323,21 +324,19 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
   }
 
   async function copyDirectResultField(field: "email" | "password", value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyText(value)) {
       setCopiedField(field);
       window.setTimeout(() => setCopiedField((current) => (current === field ? "" : current)), 1500);
-    } catch {
+    } else {
       setDirectMessage("클립보드 복사에 실패했습니다. 직접 선택해 복사해주세요.");
     }
   }
 
   async function copyCompanyId(companyId: string) {
-    try {
-      await navigator.clipboard.writeText(companyId);
+    if (await copyText(companyId)) {
       setCopiedCompanyId(companyId);
       window.setTimeout(() => setCopiedCompanyId((current) => (current === companyId ? "" : current)), 1800);
-    } catch {
+    } else {
       setMessage("회사 ID를 복사하지 못했습니다. 회사 정보 하단의 ID를 직접 선택해 복사해주세요.");
     }
   }
@@ -576,7 +575,7 @@ export function AdminCompaniesWorkspace({ defaultCompanyId, holdModuleCompanyIds
             </Badge>
           </div>
           <div className="mt-4 flex gap-2">
-            <SearchInput aria-label="회사 검색" className="flex-1" inputProps={{ role: "textbox" }} placeholder="회사명, 이메일 검색" value={query} onChange={(value) => { setQuery(value); setCompanyPage(1); }} />
+            <SearchInput aria-label="회사 검색" className="flex-1" placeholder="회사명, 이메일 검색" value={query} onChange={(value) => { setQuery(value); setCompanyPage(1); }} />
             <Button type="button" onClick={startNewCompany}>
               <Plus className="h-4 w-4" />
               신규

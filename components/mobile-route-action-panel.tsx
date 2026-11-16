@@ -3,6 +3,7 @@
 import { Notice, type NoticeKind } from "@/components/ui/notice";
 import { useState } from "react";
 import { Camera, CheckCircle2, Copy, MapPinned, Phone } from "lucide-react";
+import { copyText } from "@/lib/copy-text";
 
 export function MobileRouteActionPanel({
   address,
@@ -20,12 +21,9 @@ export function MobileRouteActionPanel({
   const mapUrl = `https://map.kakao.com/link/search/${encodeURIComponent(address || customerName)}`;
 
   async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(address || customerName);
-      setCopyMessage({ kind: "success", text: "주소를 복사했습니다." });
-    } catch {
-      setCopyMessage({ kind: "error", text: "복사 권한을 받을 수 없습니다." });
-    }
+    setCopyMessage((await copyText(address || customerName))
+      ? { kind: "success", text: "주소를 복사했습니다." }
+      : { kind: "error", text: "복사 권한을 받을 수 없습니다." });
   }
 
   return (

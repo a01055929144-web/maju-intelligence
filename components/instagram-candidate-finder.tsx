@@ -68,6 +68,7 @@ export function InstagramCandidateFinder({
 
   async function pasteFromClipboard() {
     try {
+      // shared-ui-exception: 공용 복사 함수는 쓰기 전용이며 이 버튼은 클립보드 읽기가 필요함
       const text = await navigator.clipboard.readText();
       if (text.trim()) onPaste(text.trim());
     } catch {
