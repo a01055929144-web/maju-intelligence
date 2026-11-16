@@ -11,7 +11,7 @@ import {
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60; // Vercel Hobby 요금제 최대 60초(11/16 10차 배포 빌드 거절 — 300은 Pro 이상)
 
 /**
  * Daily cron target (see vercel.json "crons") that (1) refreshes every company's 사업자 휴업/폐업

@@ -19,11 +19,11 @@ import {
 } from "../lib/gov-area-fanout";
 
 describe("정부 데이터 지역 fan-out", () => {
-  it("운영 제한값을 2개 동시·요청 25초·전체 240초로 고정한다", () => {
+  it("운영 제한값을 2개 동시·요청 20초·전체 40초(함수 60초 한도 안)로 고정한다", () => {
     expect(GOV_FANOUT_CONCURRENCY).toBe(2);
-    expect(GOV_REQUEST_TIMEOUT_MS).toBe(25_000);
-    expect(GOV_COLLECTION_BUDGET_MS).toBe(240_000);
-    expect(GOV_POSTPROCESS_RESERVE_MS).toBe(20_000);
+    expect(GOV_REQUEST_TIMEOUT_MS).toBe(20_000);
+    expect(GOV_COLLECTION_BUDGET_MS).toBe(40_000);
+    expect(GOV_POSTPROCESS_RESERVE_MS).toBe(10_000);
   });
 
   it("모든 지역 최신 1페이지를 먼저 배치하고 미완료 지역만 커서를 이어간다", () => {

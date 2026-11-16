@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { enrichAllCompaniesLeadsMissingContactInfo, purgeExpiredStaffLocationEvents, refreshAllCompaniesRecommendationScores, syncAllCompaniesGovRestaurantLeads } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60; // Vercel Hobby 요금제 최대 60초(11/16 10차 배포 빌드 거절 — 300은 Pro 이상)
 
 /**
  * 매일 "추천 점수"(기거래처 근접도 + 업종 유사도)를 다시 계산하는 전용 크론입니다(2026-08-24

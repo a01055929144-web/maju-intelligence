@@ -1,9 +1,10 @@
 import type { GovAreaCursor } from "./gov-area-scan";
 
 export const GOV_FANOUT_CONCURRENCY = 2;
-export const GOV_REQUEST_TIMEOUT_MS = 25_000;
-export const GOV_COLLECTION_BUDGET_MS = 240_000;
-export const GOV_POSTPROCESS_RESERVE_MS = 20_000;
+export const GOV_REQUEST_TIMEOUT_MS = 20_000;
+// 함수 한도 60초(Hobby) 안에서: 수집 40초 + 뒤처리 여유 10초. 못 끝낸 지역은 이어받기(CX-43)로 다음 실행에.
+export const GOV_COLLECTION_BUDGET_MS = 40_000;
+export const GOV_POSTPROCESS_RESERVE_MS = 10_000;
 export const GOV_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 
 export class GovBudgetDeferredError extends Error {
