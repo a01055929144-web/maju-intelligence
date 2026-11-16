@@ -82,7 +82,7 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi") ? params.fixture : null;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -112,11 +112,19 @@ export default async function StorePage({ searchParams }: {
     return `/store?${next}`;
   };
   const stores = memberAccounts.map(account => ({ key: keyOf(account), name: account.customerName, href: storeHref(view, account) }));
+  const historyDetails = fixture === "s6-history" || Boolean(selected && isFeatureEnabled("STORE_ORDER_HISTORY", selected.companyId));
   let orders: StorePortalOrder[] = [], historyError = false;
   if (view === "history" && selected) {
-    if (fixture) orders = [{ id: "synthetic-order", delivery_date: "2099-01-02", status: "submitted", known_total: selected === memberAccounts[0] ? 11100 : 22200, submitted_at: "2099-01-01T00:00:00Z", has_market_price: false }];
+    if (fixture === "s6-history") orders = [{
+      id: "synthetic-delivered", delivery_date: "2099-01-02", status: "delivered", known_total: 11100,
+      submitted_at: "2099-01-01T00:00:00Z", has_market_price: true, lines: [
+        { id: "synthetic-line-1", product_name: "합성 양파", specification: "10 kg", sales_unit: "박스", quantity: 1, unit_price: 11100, total_amount: 11100 },
+        { id: "synthetic-line-2", product_name: "합성 대파", specification: "1 kg", sales_unit: "단", quantity: 2, unit_price: null, total_amount: null },
+      ],
+    }];
+    else if (fixture) orders = [{ id: "synthetic-order", delivery_date: "2099-01-02", status: "submitted", known_total: selected === memberAccounts[0] ? 11100 : 22200, submitted_at: "2099-01-01T00:00:00Z", has_market_price: false }];
     else {
-      try { orders = await listStorePortalOrders(selected); } catch { historyError = true; }
+      try { orders = await listStorePortalOrders(selected, historyDetails); } catch { historyError = true; }
     }
   }
   // Only documents already visible to the selected member can be embedded.
@@ -137,7 +145,7 @@ export default async function StorePage({ searchParams }: {
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
-    orders={orders} historyError={historyError} documentView={documentView}
+    orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
     home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={document => `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`} /> : null}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>

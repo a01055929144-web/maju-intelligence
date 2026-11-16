@@ -8,15 +8,17 @@ import { StoreAddressManagementPanel } from "./store-address-management-panel";
 import { StoreInformationPanel } from "./store-information-panel";
 import { StoreCostPanel } from "./store-cost-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { StoreOrderHistory } from "./store-order-history";
 import { EmptyState, ErrorState } from "./ui/state";
 
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, documentView, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, documentView, historyDetails, historyError, home, menu, orders, stores, view }: {
   account?: StorePortalAccount;
   documentView?: ReactNode;
   historyError: boolean;
+  historyDetails: boolean;
   home: ReactNode;
   menu: string[];
   orders: StorePortalOrder[];
@@ -58,7 +60,9 @@ export function StoreMemberViews({ account, documentView, historyError, home, me
             <Card>
               <CardHeader><CardTitle>최근 주문</CardTitle></CardHeader>
               <CardContent>
-                {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? (
+                {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? historyDetails ? (
+                  <StoreOrderHistory orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} />
+                ) : (
                   <ul className="divide-y">
                     {orders.map(order => (
                       <li className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3 text-sm" key={order.id}>

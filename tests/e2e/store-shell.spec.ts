@@ -179,3 +179,27 @@ for (const width of [1440, 390]) {
     expect(submits).toBe(1);
   });
 }
+
+// S-6 uses synthetic order snapshots and keeps the self-order switch off.
+for (const width of [1440, 390]) {
+  test(`S-6 order history shows archived lines at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/storefront", () => {
+      throw new Error("The history fixture must not request storefront data");
+    });
+    await page.goto("/store?fixture=s6-history&view=history");
+    await expect(page.getByText("2개", { exact: true })).toBeVisible();
+    await expect(page.getByText(/11,100원 \+ 시가/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "주문 링크에서 다시 담기" })).toHaveAttribute(
+      "href", "/store?view=history#synthetic-s1-order",
+    );
+    await page.getByText("주문 상세", { exact: true }).click();
+    await expect(page.getByText("합성 양파", { exact: true })).toBeVisible();
+    await expect(page.getByText("합성 대파", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "수령 확인" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "배송 단계" }).locator('[aria-current="step"]')).toHaveText("배송 완료 (현재)");
+    await expect(page.getByRole("img", { name: /배송/ })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+    await page.screenshot({ path: info.outputPath(`S-6-history-${width}.png`) });
+  });
+}
