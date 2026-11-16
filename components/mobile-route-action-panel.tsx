@@ -4,11 +4,13 @@ import { Notice, type NoticeKind } from "@/components/ui/notice";
 import { useState } from "react";
 import { Camera, CheckCircle2, Copy, MapPinned, Phone } from "lucide-react";
 import { copyText } from "@/lib/copy-text";
+import { startKakaoNavi, type GeoPoint } from "@/lib/navigation-links";
 
 export function MobileRouteActionPanel({
   address,
   customerName,
-  phone
+  phone,
+  point
 }: {
   address: string;
   customerId: string;
@@ -16,9 +18,14 @@ export function MobileRouteActionPanel({
   distanceKm?: number;
   durationMinutes?: number;
   phone?: string;
+  point?: GeoPoint | null;
 }) {
   const [copyMessage, setCopyMessage] = useState<{ kind: NoticeKind; text: string } | null>(null);
-  const mapUrl = `https://map.kakao.com/link/search/${encodeURIComponent(address || customerName)}`;
+
+  async function openNavigation() {
+    const result = await startKakaoNavi({ address, name: customerName, point: point || null });
+    if (result === "map-link") setCopyMessage({ kind: "success", text: "좌표를 확인하지 못해 카카오맵 길찾기를 열었습니다." });
+  }
 
   async function copyAddress() {
     setCopyMessage((await copyText(address || customerName))
@@ -29,15 +36,14 @@ export function MobileRouteActionPanel({
   return (
     <section id="contact-actions">
       <div className="grid grid-cols-[1fr_1fr_44px] gap-2">
-        <a
+        <button
           className="mobile-primary-action flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold shadow-sm"
-          href={mapUrl}
-          rel="noreferrer"
-          target="_blank"
+          onClick={() => void openNavigation()}
+          type="button"
         >
           <MapPinned className="h-4 w-4" />
-          지도 열기
-        </a>
+          카카오내비 길 안내
+        </button>
         <a
           className={`mobile-primary-action flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold shadow-sm ${phone ? "" : "pointer-events-none opacity-45"}`}
           href={phone ? `tel:${phone}` : "#"}
