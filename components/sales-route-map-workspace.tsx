@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/copy-text";
 import { leadLayerColor, listTabColor, MAP_LAYER_COLORS } from "@/domains/route/map-layer-colors";
 
 import Link from "next/link";
@@ -4537,23 +4538,14 @@ function PermitLeadMapQuickCard({
 
   async function copyAddress() {
     if (!lead?.address) return;
-    try {
-      await navigator.clipboard.writeText(lead.address);
-      setAddressCopied(true);
-      window.setTimeout(() => setAddressCopied(false), 1500);
-    } catch {
-      setMessage("복사 권한이 없어 직접 선택해서 복사해주세요.");
-    }
+    if (!(await copyText(lead.address))) { setMessage("복사 권한이 없어 직접 선택해서 복사해주세요."); return; }
+    setAddressCopied(true);
+    window.setTimeout(() => setAddressCopied(false), 1500);
   }
 
   async function copyLeadDmScript() {
     if (!lead) return;
-    try {
-      await navigator.clipboard.writeText(buildLeadDmScript(lead));
-      setMessage("리드 맞춤 DM 문구를 복사했습니다.");
-    } catch {
-      setMessage("복사 권한이 없어 DM 문구를 복사하지 못했습니다.");
-    }
+    setMessage((await copyText(buildLeadDmScript(lead))) ? "리드 맞춤 DM 문구를 복사했습니다." : "복사 권한이 없어 DM 문구를 복사하지 못했습니다.");
   }
 
   function onDragHandleMouseDown(event: MouseEvent) {

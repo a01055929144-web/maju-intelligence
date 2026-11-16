@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { kstToday } from "@/domains/shared/kst-date";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -76,6 +77,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
   const [bulkMessage, setBulkMessage] = useState("");
   const structuredSaveAttemptRef = useRef<StructuredSaveAttempt | null>(null);
   const openLeadRequestRef = useRef(0);
@@ -383,7 +385,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
   async function updateSelectedLeads(actionType: "hold" | "exclude", result: "보류" | "제외") {
     const targets = leads.filter((lead) => bulkSelection.includes(lead.id));
     if (!targets.length || bulkSaving) return;
-    if (actionType === "exclude" && !window.confirm(`${targets.length}개 리드를 제외 상태로 변경할까요?`)) return;
+    if (actionType === "exclude" && !(await confirm({ body: `${targets.length}개 리드를 제외 상태로 변경할까요?`, confirmLabel: "제외" }))) return;
     setBulkSaving(true);
     setBulkMessage("");
     const outcomes = await runBulkActions(targets, async (lead) => {
@@ -515,6 +517,7 @@ export function MobileSalesWorkspace({ actorName, companyName, holdModulesEnable
           <div className="mt-5 border-t border-[var(--mobile-border)] pt-4"><p className="text-sm font-semibold">과거 컨택 전체 흐름</p>{historyLoading ? <StateMessage icon={Loader2} text="이력을 불러오는 중입니다." spin /> : <div className="mt-2 space-y-2">{history.map((item) => <div className="mobile-card-raised rounded-lg border p-3" key={item.id}><div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{getVisitResultDisplayLabel(item.result || item.actionType)}</span><span className="mobile-muted text-[11px]">{item.createdAt}</span></div><p className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.memo || "메모 없음"}</p>{extractReminderDate(item.memo) ? <p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-700"><CalendarClock className="h-3.5 w-3.5" />{extractReminderDate(item.memo)} 재연락</p> : null}<p className="mobile-muted mt-1 text-[11px]">{item.actorName || "담당자 미확인"}</p></div>)}{history.length === 0 ? <p className="mobile-muted py-4 text-center text-xs">아직 저장된 컨택 이력이 없습니다.</p> : null}</div>}</div>
         </div></div> : null}
       </MobileThemeShell>
+      {confirmDialog}
     </main>
   );
 }
