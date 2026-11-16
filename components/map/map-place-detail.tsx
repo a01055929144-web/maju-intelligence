@@ -64,7 +64,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, relationshipChipClass, type StoreRow } from "@/components/map/map-row-helpers";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { AddressPicker } from "@/components/map/address-picker";
-import { joinSavedAddress } from "@/domains/customer/address-line";
+import { addressLines, joinSavedAddress } from "@/domains/customer/address-line";
 import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
@@ -177,7 +177,7 @@ export function StoreQuickCard({
   const [addressCopied, setAddressCopied] = useState(false);
 
   async function copyAddress() {
-    const address = store.address || store.region;
+    const address = store.deliveryAddress || store.address || store.region;
     if (!address) return;
     // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
     if (!(await copyText(address))) return;
@@ -331,7 +331,13 @@ export function StoreQuickCard({
         <div className="flex items-start gap-1">
           <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
-            <span className="line-clamp-2">{store.address || store.region}</span>
+            <span className="min-w-0">
+              {(() => {
+                const lines = addressLines(store.address, store.deliveryAddress);
+                return lines.length ? lines.map((line) => <span className="line-clamp-2 block" key={line.text}>{line.label ? <span className="mr-1 text-slate-500">{line.label}:</span> : null}{line.text}</span>) : <span className="line-clamp-2 block">{store.region}</span>;
+              })()}
+              {store.industry && store.industry !== "미분류" ? <span aria-label="업종" className="mt-1 inline-block rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span> : null}
+            </span>
           </p>
           {store.address || store.region ? (
             <button

@@ -31,3 +31,14 @@ export function resolveDeliveryAddress(input: { address?: string | null; deliver
   const detail = (input.deliveryAddressDetail ?? "").trim();
   return { search: base, display: joinSavedAddress(base, detail), detail };
 }
+
+/**
+ * CC-61: 지도 상세의 주소 줄. 배송 주소가 없거나 사업장 주소와 같으면 한 줄, 다르면 "배송 / 사업장" 두 줄.
+ * 띄어쓰기 차이는 같은 주소로 본다.
+ */
+export function addressLines(businessAddress: string | null | undefined, deliveryAddress: string | null | undefined): Array<{ label?: "배송" | "사업장"; text: string }> {
+  const business = (businessAddress ?? "").trim(), delivery = (deliveryAddress ?? "").trim();
+  const squash = (value: string) => value.replace(/\s+/g, "");
+  if (!delivery || squash(delivery) === squash(business)) return business ? [{ text: business }] : [];
+  return business ? [{ label: "배송", text: delivery }, { label: "사업장", text: business }] : [{ text: delivery }];
+}
