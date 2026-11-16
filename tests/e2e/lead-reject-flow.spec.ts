@@ -42,7 +42,9 @@ for (const width of [1440, 390]) test(`리드 거절: 사유 저장 후 기본 �
   await page.goto("/map");
   await expect(page.getByText("합성진행식당").locator("visible=true").first()).toBeVisible();
   await expect(page.getByText("합성거절식당").locator("visible=true")).toHaveCount(0);
-  await page.getByRole("button", { name: "거절함", exact: true }).click();
+  if (width < 640) await page.getByRole("button", { name: "필터", exact: true }).click(); // 휴대폰은 필터 줄이 접혀 있다
+  await page.getByRole("button", { name: "더보기", exact: true }).click();
+  await page.getByLabel("거절한 리드 보기").check();
   await expect(page.getByText("합성거절식당").locator("visible=true").first()).toBeVisible();
   await expect(page.getByText("합성제외식당").locator("visible=true")).toHaveCount(0);
   await expect(page.getByText("합성진행식당").locator("visible=true")).toHaveCount(0);
