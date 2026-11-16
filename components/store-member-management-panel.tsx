@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { CopyTextButton } from "./copy-text-button";
+import { useConfirm } from "./ui/confirm-dialog";
 
 type Role = "owner" | "manager" | "staff";
 type Member = { id: string; joinedAt: string | null; name: string; role: Role; status: "active" | "invited" };
@@ -11,6 +13,7 @@ type Result = { actorMemberId: string; actorRole: "owner" | "manager"; members: 
 const roleLabel = { owner: "점주", manager: "관리자", staff: "직원" };
 
 export function StoreMemberManagementPanel({ companyId, storeAccountId }: { companyId: string; storeAccountId: string }) {
+  const { confirm, confirmDialog } = useConfirm();
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,7 +43,7 @@ export function StoreMemberManagementPanel({ companyId, storeAccountId }: { comp
   }
 
   async function remove(member: Member) {
-    if (!window.confirm(`${member.name} 구성원을 내보낼까요?`)) return;
+    if (!(await confirm({ body: `${member.name} 구성원을 내보낼까요?`, confirmLabel: "내보내기" }))) return;
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/store/members", { method: "DELETE", headers: { "Content-Type": "application/json" },
@@ -64,7 +67,7 @@ export function StoreMemberManagementPanel({ companyId, storeAccountId }: { comp
     </div>
     {inviteUrl && <div role="status" className="break-all rounded-lg bg-teal-50 p-3 text-sm text-teal-900">
       <p>초대 링크가 준비됐습니다. 초대할 구성원에게 안전하게 전달해 주세요.</p>
-      <Button className="mt-2" variant="outline" onClick={() => void navigator.clipboard.writeText(inviteUrl)}>링크 복사</Button>
+      <CopyTextButton className="mt-2" label="링크 복사" text={inviteUrl} />
     </div>}
     {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     {!result && !error && <p role="status" className="text-sm text-slate-600">구성원 목록을 불러오는 중입니다.</p>}
@@ -75,5 +78,6 @@ export function StoreMemberManagementPanel({ companyId, storeAccountId }: { comp
       </div></div>
       {canRemove(member) && <Button variant="outline" disabled={busy} onClick={() => void remove(member)}>내보내기</Button>}
     </li>)}</ul>
+    {confirmDialog}
   </CardContent></Card>;
 }
