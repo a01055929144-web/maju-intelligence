@@ -46,7 +46,7 @@ const text = (value: unknown) => (value === null || value === undefined || value
 
 /** 전후 비교: 값이 달라진 칸만, 키 이름순. 비어 있던 칸은 빈 문자열. */
 export function diffNotificationValues(before: Readonly<Record<string, unknown>> = {}, after: Readonly<Record<string, unknown>> = {}, labels: Readonly<Record<string, string>> = STORE_PROFILE_FIELD_LABELS): NotificationDiffRow[] {
-  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+  return Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
     .sort()
     .map((key) => ({ key, label: labels[key] ?? key, before: text(before[key]), after: text(after[key]) }))
     .filter((row) => row.before !== row.after);
