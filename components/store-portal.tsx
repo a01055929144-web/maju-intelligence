@@ -5,7 +5,7 @@ import { storeDirectSignupEnabled } from "@/lib/store/11-store-direct-signup";
 import { StoreDirectSignup } from "./store-direct-signup";
 import { StoreInformationPanel } from "./store-information-panel";
 
-export function StorePortal({ accounts, error = false, fixture, loginEnabled, view = "home", memberView = false }: { accounts: StorePortalAccount[] | null; error?: boolean; fixture?: string; loginEnabled: boolean; view?: string; memberView?: boolean }) {
+export function StorePortal({ accounts, error = false, fixture, loginEnabled, view = "home", memberView = false, documentHref }: { accounts: StorePortalAccount[] | null; error?: boolean; fixture?: string; loginEnabled: boolean; view?: string; memberView?: boolean; documentHref?: (document: StorePortalAccount["documents"][number]) => string }) {
   const directSignup = storeDirectSignupEnabled() || Boolean(fixture); // fixture는 CI 전용(page.tsx가 CI 픽스처 모드에서만 넘긴다)
   return <section className="space-y-4" aria-label="매장 홈">
     <div><h1 className="text-xl font-semibold sm:hidden">MAJU 매장</h1><p className="text-sm text-slate-600">받은 견적서·단가표를 확인하고 주문과 원가관리를 이어가세요.</p></div>
@@ -25,7 +25,7 @@ export function StorePortal({ accounts, error = false, fixture, loginEnabled, vi
         </div>
         <div><h2 className="font-semibold">견적서·단가표와 주문</h2>
           {account.documents.length ? <ul className="mt-2 space-y-2">{account.documents.map(document => <li key={document.href}>
-            <Link className="flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-lg border p-3 underline" href={document.href}>
+            <Link className="flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-lg border p-3 underline" href={documentHref?.(document) ?? document.href}>
               <span>{document.kind === "quote" ? "견적서" : "단가표"} · {document.title}</span>
               <span className="text-sm">{document.canOrder ? "문서 확인·주문" : "문서 확인"}</span>
             </Link>

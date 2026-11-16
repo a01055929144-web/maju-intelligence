@@ -13,8 +13,9 @@ import { EmptyState, ErrorState } from "./ui/state";
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, documentView, historyError, home, menu, orders, stores, view }: {
   account?: StorePortalAccount;
+  documentView?: ReactNode;
   historyError: boolean;
   home: ReactNode;
   menu: string[];
@@ -42,7 +43,7 @@ export function StoreMemberViews({ account, historyError, home, menu, orders, st
             <p className="text-sm text-slate-600">{account.customerName}</p>
             <h2 className="text-xl font-semibold">{items[current].label}</h2>
           </header>
-          {view === "home" && home}
+          {view === "home" && (documentView ?? home)}
           {view === "order" && (
             <Card>
               <CardHeader><CardTitle>주문 가능한 문서</CardTitle></CardHeader>

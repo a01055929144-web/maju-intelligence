@@ -11,7 +11,7 @@ import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry"
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { SearchInput } from "./ui/search-input";
-import { EmptyState } from "./ui/state";
+import { EmptyState, LoadingState } from "./ui/state";
 import { publicSalesPriceDirection, type SalesPriceDirection } from "@/domains/pricing/storefront-price-direction";
 import { DELIVERY_CONFIRMATION_NOTICE } from "../domains/order/delivery-confirmation";
 import { deliveryEligibilityMessage } from "../domains/order/delivery-eligibility";
@@ -49,20 +49,21 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));
 
-export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null, memberView }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode; memberView?: ReactNode }) {
+export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null, memberView, previewToken }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode; memberView?: ReactNode; previewToken?: string }) {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     const read = () => { const value = window.location.hash.slice(1); setToken(value === "store-address-management" ? "" : value.length <= 200 ? value : "invalid-link"); };
     read(); window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);
+  if (previewToken) return <StorefrontSession key={previewToken} token={previewToken} costAccess={null} storeLogin={null} portal={null} preview />;
   if (token === null) return <p role="status">매장 주소를 확인 중입니다.</p>;
   if (!token && memberView) return memberView;
   // A bearer link does not prove that its customer matches the signed-in store account.
   return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} portal={token ? null : portal} />;
 }
 
-function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode }) {
+function StorefrontSession({ token, costAccess, storeLogin, portal, preview = false }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode; preview?: boolean }) {
   const [data, setData] = useState<Response | null>(null);
   const [tab, setTabState] = useState<StoreView>("home");
   // PC 사이드바(?view=)와 화면 탭을 맞춘다.
@@ -285,6 +286,21 @@ function StorefrontSession({ token, costAccess, storeLogin, portal }: { token: s
     <p>{loading ? "선택한 배송일의 가격을 확인 중입니다." : loadError || "배송일을 선택해 주세요."}</p>
     {loadError && token ? <button disabled={loading || busy} className="min-h-[44px] rounded border px-3" onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>다시 불러오기</button> : null}
   </div>;
+  if (preview) {
+    if (loadError) return retryLoad;
+    if (!store || loading) return <LoadingState bare label="받은 문서를 불러오는 중입니다." />;
+    return <section aria-label="받은 문서" className="space-y-3 rounded border bg-white p-4">
+      <h3 className="text-lg font-semibold">{store.title}</h3>
+      <p className="text-sm text-slate-600">{store.companyName} · 게시 버전 {store.version} · {store.validUntil}까지</p>
+      {!pricesVisible && <p role="status">현재 판매가를 확인할 수 없습니다. 발행 회사에 문의해 주세요.</p>}
+      {store.lines.length ? <ul className="divide-y">{store.lines.map(line =>
+        <li className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3 text-sm" key={line.key}>
+          <div className="min-w-0 break-words"><strong>{line.name}</strong><p>{[line.spec, line.unit].filter(Boolean).join(" · ")}</p></div>
+          {pricesVisible && <span>{line.isMarketPrice ? "시가" : line.unitPrice === null ? "—" : won(line.unitPrice)}</span>}
+        </li>)}</ul> : <EmptyState bare message="표시할 품목이 없습니다." />}
+      {store.canOrder && pricesVisible && <Link className="maju-button-primary inline-flex min-h-11 items-center" href={`/store?view=order#${token}`}>이 단가표로 주문하기</Link>}
+    </section>;
+  }
   if (!store) return <main className="mx-auto max-w-6xl space-y-4 p-5">{portal}{storeLogin && <StoreKakaoLoginPanel access={storeLogin} />}{costAccess && <div id="store-costs"><h2 className="text-lg font-semibold">매장 원가관리</h2><StoreCostPanel access={costAccess} /></div>}{token ? retryLoad : !portal ? <p role="status">주문 링크 또는 담당자에게 받은 매장 전용 주소를 열어 주세요.</p> : null}</main>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">

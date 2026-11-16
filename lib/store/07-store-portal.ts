@@ -25,13 +25,14 @@ export type StorePortalAccount = {
   documents: Array<{ title: string; kind: "sheet" | "quote"; href: string; canOrder: boolean; validUntil: string }>;
 };
 
-export async function hasAllowedStorePortalMembership(authUserId: string) {
+export async function hasAllowedStorePortalMembership(authUserId: string, companyId?: string) {
   if (!(await hasActiveStoreMembership(authUserId))) return false;
   const rows = await supabaseRequest<Array<{ company_id: string }>>(
     `store_account_members?select=company_id,store_accounts!store_account_members_company_id_store_account_id_fkey!inner(id)&auth_user_id=eq.${encodeURIComponent(authUserId)}` +
-    `&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
+    `&status=eq.active&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20` +
+    (companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "")
   );
-  return rows.some(row => isStoreMemberCompanyAllowlisted(row.company_id));
+  return rows.some(row => (!companyId || row.company_id === companyId) && isStoreMemberCompanyAllowlisted(row.company_id));
 }
 
 /** A Kakao session, never a link token or URL parameter, chooses the visible stores. */

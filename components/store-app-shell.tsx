@@ -40,6 +40,7 @@ export function StoreAppShell({ children, stores = [], selectedStore }: {
     items: group.items.map((item) => {
       const next = new URLSearchParams(params.toString());
       next.set("view", item.active);
+      next.delete("document");
       return { ...item, href: `/store?${next.toString()}${hash}` };
     }),
   })), [params, hash]);
