@@ -8,6 +8,7 @@ import { getAppUserLoginMethods } from "@/lib/store";
 
 const SETTINGS_TABS = [
   ["/dashboard/settings/company", "회사 정보"],
+  ["/dashboard/settings/store-notifications", "매장 알림"],
   ["/dashboard/settings/sales", "영업 정보"],
   ["/dashboard/settings/staff", "직원 관리"],
   ["/dashboard/settings/routes", "권역·호차"],

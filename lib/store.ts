@@ -2,6 +2,7 @@ import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { resolveDeliveryAddress } from "../domains/customer/address-line";
 import { analyzeCompany, AnalysisResult } from "./analysis";
+import { readLatestReport, readReportById } from "./analytics/report-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
 import { accountLoginV2Enabled } from "./account-login-feature";
 import { ciLayoutCompany, ciLayoutCustomers, ciLayoutLeads, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
@@ -9,7 +10,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -73,6 +74,14 @@ import type { LeadActionRepository } from "../domains/lead/lead-action";
 import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote";
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
+import { readPublicSalesQuote, type PublicSalesQuote } from "./sales/public-quote-read";
+export type { PublicSalesQuote } from "./sales/public-quote-read";
+import {
+  getCustomerContractPrice as readCustomerContractPrice,
+  listCustomerContractPrices as readCustomerContractPrices,
+  type CustomerContractPrice
+} from "./pricing/customer-contract-price-read";
+export type { CustomerContractPrice } from "./pricing/customer-contract-price-read";
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
 import {
   extractCustomerAdministrativeArea,
@@ -7389,107 +7398,21 @@ export async function listPendingAcceptedQuotesForCustomer(
   return rows.map((row) => ({ id: row.id, quoteNumber: row.quote_number }));
 }
 
-export type PublicSalesQuote = {
-  companyName: string;
-  exemptSupplyAmount: number;
-  items: Array<{ amount: number; photoUrl?: string; productName: string; quantity: number; salesUnitPrice: number; specification?: string; supplyAmount: number; taxAmount: number; taxType: QuoteTaxType; totalAmount: number; unit: string }>;
-  quoteNumber: string;
-  recipientName?: string;
-  title: string;
-  total: number;
-  taxAmount: number;
-  taxableSupplyAmount: number;
-  validUntil: string;
-};
-
 export async function getPublicSalesQuote(publicToken: string): Promise<PublicSalesQuote | null> {
-  if (!isProductionStoreConfigured() || !/^[0-9a-f-]{36}$/i.test(publicToken)) return null;
-  try {
-    const quotes = await supabaseRequest<Array<{ company_id: string; id: string; quote_number: string; recipient_name: string | null; title: string; valid_until: string }>>(
-      `sales_quotes?select=id,company_id,quote_number,recipient_name,title,valid_until&public_token=eq.${encodeURIComponent(publicToken)}&public_enabled=eq.true&valid_until=gt.${encodeURIComponent(new Date().toISOString())}&limit=1`
-    );
-    const quote = quotes[0];
-    if (!quote) return null;
-    const [companies, items] = await Promise.all([
-      supabaseRequest<Array<{ name: string }>>(`companies?select=name&id=eq.${encodeURIComponent(quote.company_id)}&limit=1`),
-      // 고객 공개 응답에서는 내부 원가와 마진 컬럼을 SELECT 자체에서 제외합니다.
-      supabaseRequest<Array<{ photo_url: string | null; product_name: string; quantity: number; sales_unit_price: number; specification: string | null; supply_amount: number | null; tax_amount: number | null; tax_type_snapshot: QuoteTaxType | null; total_amount: number | null; unit: string }>>(
-        `sales_quote_items?select=product_name,specification,unit,quantity,sales_unit_price,photo_url,tax_type_snapshot,supply_amount,tax_amount,total_amount&company_id=eq.${encodeURIComponent(quote.company_id)}&quote_id=eq.${encodeURIComponent(quote.id)}&order=sort_order.asc`
-      )
-    ]);
-    const publicItems = await Promise.all(items.map(async (item) => {
-      const taxType: QuoteTaxType = item.tax_type_snapshot === "exempt" ? "exempt" : "taxable";
-      const fallback = calculateQuoteTaxLine(Number(item.sales_unit_price), Number(item.quantity), taxType);
-      return {
-      amount: item.total_amount == null ? fallback.totalAmount : Number(item.total_amount),
-      photoUrl: item.photo_url ? await createSalesQuotePhotoSignedUrl(quote.company_id, item.photo_url).catch(() => undefined) : undefined,
-      productName: item.product_name,
-      quantity: Number(item.quantity),
-      salesUnitPrice: Number(item.sales_unit_price),
-      specification: item.specification || undefined,
-      supplyAmount: item.supply_amount == null ? fallback.supplyAmount : Number(item.supply_amount),
-      taxAmount: item.tax_amount == null ? fallback.taxAmount : Number(item.tax_amount),
-      taxType,
-      totalAmount: item.total_amount == null ? fallback.totalAmount : Number(item.total_amount),
-      unit: item.unit
-    }; }));
-    const taxableSupplyAmount = publicItems.filter((item) => item.taxType === "taxable").reduce((sum, item) => sum + item.supplyAmount, 0);
-    const exemptSupplyAmount = publicItems.filter((item) => item.taxType === "exempt").reduce((sum, item) => sum + item.supplyAmount, 0);
-    const taxAmount = publicItems.reduce((sum, item) => sum + item.taxAmount, 0);
-    return {
-      companyName: companies[0]?.name || "MAJU 파트너",
-      exemptSupplyAmount,
-      items: publicItems,
-      quoteNumber: quote.quote_number,
-      recipientName: quote.recipient_name || undefined,
-      title: quote.title,
-      total: publicItems.reduce((sum, item) => sum + item.totalAmount, 0),
-      taxAmount,
-      taxableSupplyAmount,
-      validUntil: quote.valid_until
-    };
-  } catch (error) {
-    if (isMissingSalesQuoteSchemaError(error)) return null;
-    throw error;
-  }
+  if (!isProductionStoreConfigured()) return null;
+  return readPublicSalesQuote(supabaseRequest, publicToken, createSalesQuotePhotoSignedUrl, isMissingSalesQuoteSchemaError);
 }
-
-export type CustomerContractPrice = {
-  effectiveFrom: string;
-  effectiveUntil?: string;
-  id: string;
-  productCatalogId: string;
-  productCode?: string;
-  productName: string;
-  salesUnit: string;
-  sourceQuoteId?: string;
-  status: "active" | "cancelled" | "ended";
-  taxType: QuoteTaxType;
-  unitPrice: number;
-};
 
 function getKstDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("sv-SE", { day: "2-digit", month: "2-digit", timeZone: "Asia/Seoul", year: "numeric" }).format(date);
 }
 
 export async function listCustomerContractPrices(companyId: string, customerId: string): Promise<CustomerContractPrice[]> {
-  const rows = await supabaseRequest<Array<{
-    effective_from: string; effective_until: string | null; id: string; product_catalog_id: string;
-    product_catalog: { product_code: string | null; sales_product_name: string | null; purchase_product_name: string } | null;
-    sales_unit: string; source_quote_id: string | null; status: CustomerContractPrice["status"]; tax_type: QuoteTaxType; unit_price: number;
-  }>>(`customer_price_agreements?select=id,product_catalog_id,sales_unit,unit_price,tax_type,effective_from,effective_until,status,source_quote_id,product_catalog(product_code,sales_product_name,purchase_product_name)&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(customerId)}&order=effective_from.desc`);
-  return rows.map((row) => ({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until || undefined, id: row.id,
-    productCatalogId: row.product_catalog_id, productCode: row.product_catalog?.product_code || undefined,
-    productName: row.product_catalog?.sales_product_name || row.product_catalog?.purchase_product_name || "표준 품목",
-    salesUnit: row.sales_unit, sourceQuoteId: row.source_quote_id || undefined, status: row.status, taxType: row.tax_type, unitPrice: Number(row.unit_price) }));
+  return readCustomerContractPrices(supabaseRequest, companyId, customerId);
 }
 
 export async function getCustomerContractPrice(companyId: string, customerId: string, productCatalogId: string, date = getKstDateKey()) {
-  const rows = await supabaseRequest<Array<{ id: string; sales_unit: string; tax_type: QuoteTaxType; unit_price: number }>>(
-    `customer_price_agreements?select=id,sales_unit,unit_price,tax_type&company_id=eq.${encodeURIComponent(companyId)}&customer_id=eq.${encodeURIComponent(customerId)}&product_catalog_id=eq.${encodeURIComponent(productCatalogId)}&status=eq.active&effective_from=lte.${date}&or=(effective_until.is.null,effective_until.gte.${date})&order=effective_from.desc&limit=1`
-  );
-  const row = rows[0];
-  return row ? { id: row.id, salesUnit: row.sales_unit, taxType: row.tax_type, unitPrice: Number(row.unit_price) } : null;
+  return readCustomerContractPrice(supabaseRequest, companyId, customerId, productCatalogId, date);
 }
 
 export async function closeCustomerContractPrice(companyId: string, agreementId: string, actorName: string | undefined, mode: "cancel" | "end") {
@@ -8553,20 +8476,7 @@ export async function saveAnalysis(
 
 export async function getLatestReport(companyId?: string): Promise<AnalysisResult> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
-  // 2026-08-26 멀티테넌시 방어(P0-1): companyId가 없으면 전체 회사를 대상으로 조회하는 대신 빈
-  // 결과를 돌려줍니다. 지금은 모든 호출부가 인증된 companyId를 넘기지만, 앞으로 실수로 그 검증을
-  // 빼먹은 호출부가 생겨도 다른 회사 데이터가 새어나가지 않도록 하는 안전장치입니다.
-  if (!companyId) return analyzeCompany([]);
-
-  try {
-    const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-      `ai_reports?select=report&company_id=eq.${encodeURIComponent(companyId)}&order=created_at.desc&limit=1`
-    );
-    return reports[0]?.report || analyzeCurrentCustomerMaster(companyId);
-  } catch (error) {
-    console.error("Latest report fallback:", error);
-    return analyzeCurrentCustomerMaster(companyId).catch(() => analyzeCompany([]));
-  }
+  return readLatestReport(supabaseRequest, companyId, () => analyzeCompany([]), analyzeCurrentCustomerMaster);
 }
 
 async function analyzeCurrentCustomerMaster(companyId?: string): Promise<AnalysisResult> {
@@ -8577,14 +8487,7 @@ async function analyzeCurrentCustomerMaster(companyId?: string): Promise<Analysi
 
 export async function getReportById(reportId: string, companyId?: string): Promise<AnalysisResult | null> {
   if (!isProductionStoreConfigured()) return analyzeCompany([]);
-  // 2026-08-26 멀티테넌시 방어(P0-1): companyId 없이는 다른 회사의 리포트를 반환하지 않습니다.
-  if (!companyId) return null;
-
-  const reports = await supabaseRequest<Array<{ report: AnalysisResult }>>(
-    `ai_reports?select=report&id=eq.${encodeURIComponent(reportId)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
-  );
-
-  return reports[0]?.report || null;
+  return readReportById(supabaseRequest, reportId, companyId);
 }
 
 export async function getLatestBriefing(companyId?: string) {
@@ -9823,7 +9726,15 @@ export async function syncGovRestaurantLeads(
         fetched: 0,
         ingest: EMPTY_PERMIT_INGEST_RESULT,
         message,
-        metadata: { scannedPages: 0, areaCodes: codes.length, missingAreas: missing, areaCursor: null }
+        metadata: {
+          scannedPages: 0,
+          areaCodes: codes.length,
+          missingAreas: missing,
+          areaCursor: null,
+          remainingAreaCount: 0,
+          processedAreaCount: 0,
+          nextStartArea: null
+        }
       });
       return {
         configured: true,
@@ -9901,6 +9812,7 @@ export async function syncGovRestaurantLeads(
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
     const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
     const completedAreas = codes.filter((areaCode) => !pendingAreas.includes(areaCode)).length;
+    const observability = getGovSyncObservability(codes, pendingAreas, taskResults, orderedCodes[0]);
     const timeoutCounts = { ...previousTimeoutCounts };
     for (const areaCode of codes) {
       const results = taskResults.filter((result) => result.areaCode === areaCode);
@@ -9929,6 +9841,7 @@ export async function syncGovRestaurantLeads(
         pendingAreaCount: pendingAreas.length,
         pendingAreas,
         firstArea: orderedCodes[0] || null,
+        ...observability,
         timeoutCounts,
         scannedPages,
         areaCodes: codes.length,

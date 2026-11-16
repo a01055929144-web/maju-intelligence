@@ -14,10 +14,7 @@ describe("A-0 quote acceptance access boundaries", () => {
   });
 
   it("keeps the legacy public quote read token-scoped and company-scopes its lines", () => {
-    const store = source("lib/store.ts");
-    const start = store.indexOf("export async function getPublicSalesQuote");
-    const end = store.indexOf("export type CustomerContractPrice", start);
-    const publicQuote = store.slice(start, end);
+    const publicQuote = source("lib/sales/public-quote-read.ts");
 
     expect(publicQuote).toContain("public_token=eq.${encodeURIComponent(publicToken)}");
     expect(publicQuote).toContain("public_enabled=eq.true");

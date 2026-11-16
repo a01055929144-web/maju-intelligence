@@ -9,6 +9,34 @@ export type StoreInformation = {
   storeName: string;
 };
 
+export type StoreProfileInformation = StoreInformation & {
+  storeProfileId: string;
+  baseAddress: string;
+  addressDetail: string;
+  accessNote: string;
+  deliveryContactPhone: string;
+  preferredDeliveryTime: string;
+};
+
+export async function getStoreProfileInformation(companyId: string, storeAccountId: string): Promise<StoreProfileInformation | null> {
+  const rows = await supabaseRequest<Array<{ business_registration_number: string; store_profile_id: string | null; store_profiles: {
+    store_name: string; representative_name: string | null; base_address: string | null; address_detail: string | null;
+    access_note: string | null; delivery_contact_phone: string | null; preferred_delivery_time: string | null;
+  } | null }>>(`store_accounts?select=business_registration_number,store_profile_id,store_profiles(store_name,representative_name,base_address,address_detail,access_note,delivery_contact_phone,preferred_delivery_time)` +
+    `&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(storeAccountId)}&status=eq.active&limit=1`);
+  const account = rows[0], profile = account?.store_profiles;
+  return account?.store_profile_id && profile ? { storeProfileId: account.store_profile_id, businessRegistrationNumber: account.business_registration_number,
+    storeName: profile.store_name, representativeName: profile.representative_name || "", phone: profile.delivery_contact_phone || "",
+    baseAddress: profile.base_address || "", addressDetail: profile.address_detail || "", accessNote: profile.access_note || "",
+    deliveryContactPhone: profile.delivery_contact_phone || "", preferredDeliveryTime: profile.preferred_delivery_time || "" } : null;
+}
+
+export async function updateStoreProfileInformation(storeProfileId: string, authUserId: string, changes: Omit<StoreProfileInformation, "businessRegistrationNumber" | "storeProfileId" | "phone">, requestKey: string) {
+  return supabaseRequest<{ changedFields: string[]; alreadyApplied: boolean }>("rpc/update_store_profile_v1", { method: "POST", body: JSON.stringify({
+    p_store_profile: storeProfileId, p_auth_user: authUserId, p_changes: changes, p_request_key: requestKey,
+  }) });
+}
+
 export async function getStoreInformation(companyId: string, storeAccountId: string) {
   const rows = await supabaseRequest<Array<{ business_registration_number: string; customer_id: string; normalized_customers: {
     customer_name: string; phone: string | null; representative_name: string | null;
