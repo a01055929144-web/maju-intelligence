@@ -168,3 +168,4 @@ reset role;
 select 'isolated_public_owner_first_order_pg17_pass';
 select 'store_member_full_journey_pg17_pass';
 \ir public-owner-delivery-09.pg17.test.sql
+\ir store-connection.pg17.test.sql
