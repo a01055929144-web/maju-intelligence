@@ -173,3 +173,14 @@ export function rangeKeys(keys: readonly string[], anchor: number, target: numbe
 export function gridTsv(rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
   return rows.map((row) => row.map((value) => String(value ?? "").replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
 }
+
+/** CC-53: 숫자 입력 칸의 값 해석. 빈칸 = null(비움), 숫자가 아니거나 범위·정수 조건을 어기면 ok:false(원래 값으로 되돌림). 쉼표는 허용. */
+export function parseEditorNumber(text: string, rule: { min?: number; max?: number; integer?: boolean } = {}): { ok: true; value: number | null } | { ok: false } {
+  const trimmed = text.replace(/,/g, "").trim();
+  if (!trimmed) return { ok: true, value: null };
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return { ok: false };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || (rule.integer && !Number.isInteger(value))) return { ok: false };
+  if ((rule.min !== undefined && value < rule.min) || (rule.max !== undefined && value > rule.max)) return { ok: false };
+  return { ok: true, value };
+}
