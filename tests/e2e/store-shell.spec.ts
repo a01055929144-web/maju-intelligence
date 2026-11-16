@@ -83,6 +83,19 @@ for (const width of [1440, 390]) {
 }
 
 for (const width of [1440, 390]) {
+  test(`CX-42 synthetic receipt confirmation is usable at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/store?fixture=s6-history&view=history");
+    await page.getByText("주문 상세", { exact: true }).click();
+    await expect(page.getByText("전표 합성-명세서-001 · 11,100원")).toBeVisible();
+    await expect(page.getByText("합성 양파 · 10kg · 1망")).toBeVisible();
+    await expect(page.getByRole("button", { name: "이상 없음 확인" })).toBeVisible();
+    await page.getByRole("button", { name: "이상 있음" }).click();
+    await expect(page.getByRole("textbox", { name: "이상 내용" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`CX-42-receipt-${width}.png`), fullPage: true });
+  });
+
   test(`S-3 received documents stay inside the store at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route("**/api/storefront", route => route.fulfill({ json: {
