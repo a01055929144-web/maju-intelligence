@@ -3,8 +3,9 @@ import type { StorePortalAccount } from "@/lib/store/07-store-portal";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { storeDirectSignupEnabled } from "@/lib/store/11-store-direct-signup";
 import { StoreDirectSignup } from "./store-direct-signup";
+import { StoreInformationPanel } from "./store-information-panel";
 
-export function StorePortal({ accounts, error = false, fixture, loginEnabled }: { accounts: StorePortalAccount[] | null; error?: boolean; fixture?: string; loginEnabled: boolean }) {
+export function StorePortal({ accounts, error = false, fixture, loginEnabled, view = "home" }: { accounts: StorePortalAccount[] | null; error?: boolean; fixture?: string; loginEnabled: boolean; view?: string }) {
   const directSignup = storeDirectSignupEnabled() || Boolean(fixture); // fixture는 CI 전용(page.tsx가 CI 픽스처 모드에서만 넘긴다)
   return <section className="space-y-4" aria-label="매장 홈">
     <div><h1 className="text-xl font-semibold sm:hidden">MAJU 매장</h1><p className="text-sm text-slate-600">받은 견적서·단가표를 확인하고 주문과 원가관리를 이어가세요.</p></div>
@@ -15,6 +16,7 @@ export function StorePortal({ accounts, error = false, fixture, loginEnabled }: 
       <p role="status">이 계정에 연결된 매장이 없습니다.</p><p className="text-sm text-slate-600">받은 견적서·단가표 링크에서 매장 가입을 완료하거나 점주에게 구성원 초대를 요청해 주세요.</p>
     </CardContent></Card> : accounts.map(account => {
       const scope = new URLSearchParams({ companyId: account.companyId, storeAccountId: account.storeAccountId });
+      if (view === "info") return <StoreInformationPanel key={`${account.companyId}:${account.storeAccountId}`} {...account} />;
       return <Card key={`${account.companyId}:${account.storeAccountId}`}><CardHeader><CardTitle>{account.customerName}</CardTitle></CardHeader><CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
           {account.hasCostAccess && <Link className="maju-button-primary inline-flex min-h-[44px] items-center justify-center px-4" href={`/store?${scope}`}>원가관리</Link>}
