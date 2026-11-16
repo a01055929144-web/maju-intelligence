@@ -195,7 +195,8 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("합성 생선 수량", { exact: true })).toHaveText("0");
     await expect(page.getByLabel("합성 채소 수량", { exact: true })).toHaveText("1");
     await page.goto("/store?products=all#synthetic-catalog-link");
-    await expect(rows).toHaveCount(4);
+    const restoredRows = width === 1440 ? page.getByRole("table").locator("tbody tr") : rows;
+    await expect(restoredRows).toHaveCount(4);
     await expect(page.getByRole("status")).toContainText("다른 문서의 품목은 포함하지 않습니다");
     expired = true;
     await page.reload();
