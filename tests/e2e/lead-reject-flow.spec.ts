@@ -35,8 +35,8 @@ for (const width of [1440, 390]) test(`리드 거절: 사유 저장 후 기본 �
   expect(saved[0].result).toBe("거절");
   expect(saved[0].memo).toContain("사유: 단가");
   // 목록 표에서만 확인(저장 알림·열린 상세에는 이름이 남는다)
-  await expect(page.getByRole("row").filter({ hasText: "합성거절식당" })).toHaveCount(0);
-  await expect(page.getByRole("row").filter({ hasText: "합성진행식당" })).toHaveCount(1);
+  await expect(page.locator("tbody tr").filter({ hasText: "합성거절식당" })).toHaveCount(0);
+  await expect(page.locator("tbody tr").filter({ hasText: "합성진행식당" })).toHaveCount(1);
 
   onListPage = false;
   await page.goto("/map");
