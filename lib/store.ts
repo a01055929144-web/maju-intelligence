@@ -10,7 +10,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -9726,7 +9726,15 @@ export async function syncGovRestaurantLeads(
         fetched: 0,
         ingest: EMPTY_PERMIT_INGEST_RESULT,
         message,
-        metadata: { scannedPages: 0, areaCodes: codes.length, missingAreas: missing, areaCursor: null }
+        metadata: {
+          scannedPages: 0,
+          areaCodes: codes.length,
+          missingAreas: missing,
+          areaCursor: null,
+          remainingAreaCount: 0,
+          processedAreaCount: 0,
+          nextStartArea: null
+        }
       });
       return {
         configured: true,
@@ -9804,6 +9812,7 @@ export async function syncGovRestaurantLeads(
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
     const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
     const completedAreas = codes.filter((areaCode) => !pendingAreas.includes(areaCode)).length;
+    const observability = getGovSyncObservability(codes, pendingAreas, taskResults, orderedCodes[0]);
     const timeoutCounts = { ...previousTimeoutCounts };
     for (const areaCode of codes) {
       const results = taskResults.filter((result) => result.areaCode === areaCode);
@@ -9832,6 +9841,7 @@ export async function syncGovRestaurantLeads(
         pendingAreaCount: pendingAreas.length,
         pendingAreas,
         firstArea: orderedCodes[0] || null,
+        ...observability,
         timeoutCounts,
         scannedPages,
         areaCodes: codes.length,

@@ -40,6 +40,21 @@ export function prioritizeGovAreaCodes(
   return ordered;
 }
 
+export function getGovSyncObservability(
+  areaCodes: readonly string[],
+  pendingAreas: readonly string[],
+  results: readonly Pick<GovAreaTaskResult<unknown>, "areaCode" | "status">[],
+  currentFirstArea?: string
+) {
+  const remainingAreas = Array.from(new Set(pendingAreas.filter((areaCode) => areaCodes.includes(areaCode))));
+  const processedAreas = new Set(results.filter((result) => result.status !== "deferred").map((result) => result.areaCode));
+  return {
+    remainingAreaCount: remainingAreas.length,
+    processedAreaCount: processedAreas.size,
+    nextStartArea: prioritizeGovAreaCodes(areaCodes, remainingAreas, currentFirstArea)[0] || null
+  };
+}
+
 export function isGovTimeoutError(error?: string) {
   return Boolean(error && /abort|timeout|time.?out/i.test(error));
 }
