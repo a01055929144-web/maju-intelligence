@@ -4,6 +4,7 @@ import type { DocumentVersion } from "@/domains/pricing/document";
 import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import type { DocumentSendResult } from "@/domains/pricing/document-send";
 import { documentRequest } from "@/lib/pricing/document-client";
+import { copyText } from "@/lib/copy-text";
 
 export function PricingLeadDocumentShare({ companyId, leadId, documentId, versions, onDeliveryRecorded }: { companyId: string; leadId: string; documentId: string; versions: DocumentVersion[]; onDeliveryRecorded?: () => void }) {
   const [versionId, setVersionId] = useState(versions.find(v => v.documentId === documentId)?.id || ""), [ttlDays, setTtlDays] = useState(14);
@@ -40,7 +41,7 @@ export function PricingLeadDocumentShare({ companyId, leadId, documentId, versio
       <p>링크 만료: {new Date(prepared.expiresAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</p>
       <div className="flex flex-wrap gap-2">
         <button className={box} disabled={busy || revoked} onClick={() => void task(async () => {
-          await navigator.clipboard.writeText(new URL(prepared.publicUrl, window.location.origin).href);
+          if (!await copyText(new URL(prepared.publicUrl, window.location.origin).href)) throw new Error("복사 권한이 없어 링크를 복사하지 못했습니다.");
           setMessage("링크를 복사했습니다. 실제 전달 후 전달 완료를 확인해 주세요.");
         })}>링크 복사</button>
         {!revoked && <a className={`${box} inline-flex items-center`} href={prepared.publicUrl} target="_blank" rel="noopener noreferrer">공유 문서 열기</a>}

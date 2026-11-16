@@ -8,6 +8,7 @@ import { useConfirm } from "./ui/confirm-dialog";
 import { SearchInput } from "./ui/search-input";
 import { EmptyState } from "./ui/state";
 import NextLink from "next/link";
+import { copyText as copyToClipboard } from "@/lib/copy-text";
 
 type Draft = { id: string; content: { title: string }; revision: number };
 type Version = { id: string; version: number; content: { title: string }; publishedAt: string };
@@ -104,7 +105,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       if (copyText) {
         setCreatedUrl(copyText);
         try {
-          await navigator.clipboard.writeText(copyText);
+          if (!await copyToClipboard(copyText)) throw new Error("복사 권한이 없어 문구를 복사하지 못했습니다.");
           setMessage(`${result.links?.length ?? 1}개 매장 링크를 만들고 복사했습니다. 각 매장에 해당 링크만 전달해 주세요.`);
         } catch {
           setMessage("매장 링크는 만들어졌습니다. 아래 주소를 직접 복사해 주세요.");
@@ -162,7 +163,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       if (!processed) setMessage("발급할 거래처가 없습니다.");
       else {
         try {
-          await navigator.clipboard.writeText(output.join("\n"));
+          if (!await copyToClipboard(output.join("\n"))) throw new Error("복사 권한이 없어 문구를 복사하지 못했습니다.");
           setMessage(`${processed}곳 확인 · 새 링크 ${created}개를 복사했습니다. 각 매장에 해당 링크만 전달해 주세요.`);
         } catch {
           setMessage(`${processed}곳 확인 · 새 링크 ${created}개. 아래 목록을 직접 복사해 주세요.`);
@@ -191,7 +192,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
     { key: "status", label: "관심·상태", value: (link) => `${link.interest} · ${link.revokedAt ? "회수" : link.canOrder ? "주문 가능" : "주문 중지"}`, sortable: true },
     { key: "actions", label: "동작", sortable: false, value: () => "", render: (link) => <span className="flex flex-wrap gap-1"><button className="rounded border px-2 py-1" onClick={() => {
         setCreatedUrl(link.url);
-        void navigator.clipboard.writeText(link.url).then(() => setMessage("매장 링크를 복사했습니다."))
+        void copyToClipboard(link.url).then((copied) => setMessage(copied ? "매장 링크를 복사했습니다." : "복사 권한이 없어 링크를 복사하지 못했습니다."))
           .catch(() => setMessage("복사 권한이 없어 위 주소를 직접 복사해 주세요."));
       }} type="button">복사</button>
       <button className="rounded border px-2 py-1" disabled={busy} onClick={() => void action({ action: "mark-sent", id: link.id })} title="직접 전달한 뒤에만 누르세요. 자동 발송하지 않습니다." type="button">전달 기록</button>
@@ -252,6 +253,7 @@ export function StoreLinksWorkspace({ companyId }: { companyId: string }) {
       </div>
     </section>
     <section className="space-y-3"><h2 className="font-semibold">매장별 링크</h2>
+      {/* shared-ui-exception: CommonDataTable의 단일 emptyMessage 계약으로 로딩·빈 상태를 표시 */}
       <CommonDataTable columns={linkColumns} emptyMessage={linksLoaded ? "표시할 매장 링크가 없습니다. 등록된 거래처와 발행 버전을 확인해 주세요." : "불러오는 중…"} filename="매장링크.csv" rowKey={(link) => link.id} rows={links} settingsKey={`store-links:${companyId || "me"}`} />
       <div className="flex gap-2"><button disabled={page <= 1} className="rounded border px-3 py-2" onClick={() => setPage(page - 1)}>이전</button>
         <span className="p-2">{page}페이지</span><button disabled={!hasMore} className="rounded border px-3 py-2" onClick={() => setPage(page + 1)}>다음</button></div>

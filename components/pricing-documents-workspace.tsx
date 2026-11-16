@@ -209,6 +209,7 @@ export function PricingDocumentsWorkspace({
     }).catch((e) => setError(e instanceof Error ? e.message : "행사·임박을 자동으로 넣지 못했습니다."));
   }, [draft, autoPromos, promotions]); // eslint-disable-line react-hooks/exhaustive-deps
   function discard() {
+    // shared-ui-exception: 링크·버튼·드롭다운이 공유하는 동기식 이탈 차단 계약
     return !dirty || window.confirm("저장하지 않은 변경을 버리고 이동할까요?");
   }
   // CC-18: 마진 설정의 "이 판매가로 단가표 만들기"에서 넘어온 상품으로 새 단가표를 시작한다(가격은 현재 회사 가격 규칙으로 다시 불러옴).

@@ -6,6 +6,7 @@ import type { PreparedDocumentShare } from "@/domains/pricing/document-share";
 import { documentRequest } from "@/lib/pricing/document-client";
 import { documentOrderQr } from "@/lib/pricing/document-order-qr";
 import { Button } from "./ui/button";
+import { copyText } from "@/lib/copy-text";
 
 export type DocumentOrderQr = { dataUrl: string; customerName: string; audience?: "public"; expiresAt?: string };
 type Customer = { id: string; customer_name: string; address?: string | null };
@@ -104,7 +105,7 @@ export function PricingDocumentOrderQr({ companyId, version, onInsert, publicSha
       {shared || qr ? <div className={step}>
         <h3 className="font-bold">2 QR·링크 받기</h3>
         <p className="text-sm">링크를 복사해 보내거나 QR을 저장·인쇄에 넣습니다.{shared ? ` 가격·주문: ${version.content.validUntil}까지 · QR 품목 열람: ${documentLinkLastDay(shared.expiresAt)}까지` : ""}</p>
-        {shared ? <div className="flex flex-wrap items-center gap-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><Button className="min-h-[44px]" disabled={busy} onClick={() => { void navigator.clipboard.writeText(shared.publicUrl).then(() => setMessage("공개 링크를 복사했습니다."), () => setMessage("복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button></div> : null}
+        {shared ? <div className="flex flex-wrap items-center gap-2"><a className="inline-flex min-h-11 items-center break-all underline" href={shared.publicUrl} target="_blank" rel="noreferrer">공개 문서 열기</a><Button className="min-h-[44px]" disabled={busy} onClick={() => { void copyText(shared.publicUrl).then((copied) => setMessage(copied ? "공개 링크를 복사했습니다." : "복사하지 못했습니다. 공개 문서를 열어 주소를 복사해 주세요.")); }} type="button">공개 링크 복사</Button></div> : null}
         {qr ? <div className="flex flex-wrap items-center gap-2"><img src={qr.dataUrl} width={160} height={160} alt={`${qr.customerName} 주문 QR 미리보기`} />
           <Button className="min-h-[44px]" onClick={() => { const a = document.createElement("a"); a.href = qr.dataUrl; a.download = `order-qr-v${version.version}.png`; a.click(); }} type="button">QR PNG 저장</Button>
           <Button className="min-h-[44px]" onClick={() => { onInsert(qr); setMessage("인쇄·PNG에 QR을 넣었습니다. 공개 범위와 게시 버전을 확인해 주세요."); }} type="button">문서에 QR 넣기</Button>
