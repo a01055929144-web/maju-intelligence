@@ -129,7 +129,7 @@ describe("정부 데이터 지역 fan-out", () => {
 
   it("부분 실패의 남은 지역을 앞에 두되 같은 지역이 연속 첫 순서가 되지 않게 회전한다", () => {
     expect(prioritizeGovAreaCodes(["1", "2", "3", "4"], ["3", "2"], "3")).toEqual(["2", "3", "1", "4"]);
-    expect(prioritizeGovAreaCodes(["1", "2", "3"], ["3"], "3")).toEqual(["3", "1", "2"]);
+    expect(prioritizeGovAreaCodes(["1", "2", "3"], ["3"], "3")).toEqual(["1", "3", "2"]);
   });
 
   it("시간 초과와 마지막 성공 36시간 경과를 판정한다", () => {
@@ -157,6 +157,36 @@ describe("정부 데이터 지역 fan-out", () => {
 
     expect(calls).toEqual(expect.arrayContaining([["slow", 100], ["slow", 50], ["fast", 100]]));
     expect(results.map((result) => result.status)).toEqual(["error", "success"]);
+  });
+
+  it("30초 지연 지역이 있어도 다른 지역 결과를 보존하고 지연 지역만 한 번 재시도한다", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: Array<[string, number]> = [];
+      const resultsPromise = runGovAreaTasks({
+        tasks: buildGovAreaTasks(["slow", "fast"], {}, "cutoff", "scan"),
+        concurrency: 2,
+        deadlineAt: Date.now() + 240_000,
+        load: (task) => loadGovAreaWithTimeoutRetry((pageSize) => {
+          calls.push([task.areaCode, pageSize]);
+          if (task.areaCode === "fast") return Promise.resolve("collected");
+          return new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error("timeout after 30 seconds")), 30_000);
+          });
+        })
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      const results = await resultsPromise;
+
+      expect(calls).toEqual(expect.arrayContaining([["fast", 100], ["slow", 100], ["slow", 50]]));
+      expect(results).toEqual(expect.arrayContaining([
+        expect.objectContaining({ areaCode: "fast", status: "success", value: "collected" }),
+        expect.objectContaining({ areaCode: "slow", status: "error" })
+      ]));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("세 번째 연속 시간 초과 지역은 20행 단독 재시도 크기를 쓴다", async () => {

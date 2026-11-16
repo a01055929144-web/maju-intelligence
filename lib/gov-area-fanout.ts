@@ -34,8 +34,9 @@ export function prioritizeGovAreaCodes(
   previousFirstArea?: string
 ) {
   const pending = Array.from(new Set(pendingAreas.filter((areaCode) => areaCodes.includes(areaCode))));
-  if (pending.length > 1 && pending[0] === previousFirstArea) pending.push(pending.shift()!);
-  return [...pending, ...areaCodes.filter((areaCode) => !pending.includes(areaCode))];
+  const ordered = [...pending, ...areaCodes.filter((areaCode) => !pending.includes(areaCode))];
+  if (ordered.length > 1 && ordered[0] === previousFirstArea) [ordered[0], ordered[1]] = [ordered[1], ordered[0]];
+  return ordered;
 }
 
 export function isGovTimeoutError(error?: string) {
