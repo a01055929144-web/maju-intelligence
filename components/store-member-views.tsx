@@ -9,16 +9,17 @@ import { StoreInformationPanel } from "./store-information-panel";
 import { StoreCostPanel } from "./store-cost-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { EmptyState, ErrorState } from "./ui/state";
+import { StoreProfileSettingsPrep } from "./store-profile-settings-prep";
 
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, documentView, historyError, home, information, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, documentView, historyError, home, informationFixture, menu, orders, stores, view }: {
   account?: StorePortalAccount;
   documentView?: ReactNode;
   historyError: boolean;
   home: ReactNode;
-  information?: ReactNode;
+  informationFixture?: string;
   menu: string[];
   orders: StorePortalOrder[];
   stores: Array<{ key: string; name: string; href: string }>;
@@ -80,7 +81,7 @@ export function StoreMemberViews({ account, documentView, historyError, home, in
               : { message: "이 매장에서는 원가관리를 이용할 수 없습니다." }} />
           </div>}
           {view === "info" && <>
-            {information ?? <StoreInformationPanel companyId={account.companyId} storeAccountId={account.storeAccountId}
+            {informationFixture ? <StoreProfileSettingsPrep canEdit={informationFixture.endsWith("-owner")} /> : <StoreInformationPanel companyId={account.companyId} storeAccountId={account.storeAccountId}
               canManageAddress={account.canManageAddress} canManageMembers={account.canManageMembers} />
             }
             {account.canManageAddress && <div id="store-address-management" className="scroll-mt-24">

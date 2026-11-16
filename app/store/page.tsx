@@ -21,7 +21,6 @@ import { StoreAddressManagementPanel } from "@/components/store-address-manageme
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StorePortal } from "@/components/store-portal";
-import { StoreProfileSettingsPrep } from "@/components/store-profile-settings-prep";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +145,7 @@ export default async function StorePage({ searchParams }: {
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} documentView={documentView}
-    information={profileFixture ? <StoreProfileSettingsPrep canEdit={profileFixture.endsWith("-owner")} /> : undefined}
+    informationFixture={profileFixture}
     home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={document => `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`} /> : null}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
