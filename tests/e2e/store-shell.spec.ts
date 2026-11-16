@@ -216,3 +216,28 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: info.outputPath(`S-6-history-${width}.png`) });
   });
 }
+
+test("S-4 desktop opens received documents with industry filters and expiry", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/store?fixture=s4-documents");
+  await expect(page.getByRole("heading", { name: "받은 단가표", exact: true })).toBeVisible();
+  await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeVisible();
+  await expect(page.getByText(/8개 품목/)).toBeVisible();
+  await expect(page.getByText(/기간 지남 · 유효기간 2000-01-01/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "보고 주문" })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "품목 보기" })).toBeVisible();
+  await expect(page.getByText("2099-01-01 22:00")).toBeVisible();
+  await expect(page.getByRole("link", { name: "전체 품목으로 주문" })).toHaveAttribute("href", "/store?view=order#synthetic-catalog");
+  await page.screenshot({ path: info.outputPath("S-4-received-documents-1440.png") });
+  await page.getByRole("navigation", { name: "단가표 업종" }).getByRole("link", { name: "주류" }).click();
+  await expect(page.getByText("합성 농산 단가표", { exact: true })).toBeHidden();
+  await expect(page.getByText("합성 기간 지난 단가표", { exact: true })).toBeVisible();
+});
+
+test("S-4 leaves the mobile member home available", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/store?fixture=s4-documents");
+  await expect(page.getByRole("heading", { name: "받은 단가표", exact: true })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "견적서·단가표와 주문" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});

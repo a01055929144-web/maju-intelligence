@@ -4,7 +4,7 @@ import {issueDocumentShareToken} from "./document-share-token";
 
 type Source={document_id:string;document_version_id:string;share_link_id:string};
 type Share={id:string;document_id:string;document_version_id:string;token_nonce:string;token_hash:string;expires_at:string;revoked_at:string|null};
-type Version={id:string;document_id:string;content:{title:string;kind:"sheet"|"quote";validUntil:string}};
+type Version={id:string;document_id:string;content:{title:string;kind:"sheet"|"quote";validUntil:string;lines?:Array<{visible?:boolean}>}};
 
 /** Read only: returning to a public source never grants order or acceptance rights. */
 export async function readStorePortalSourceDocuments(companyId:string,storeAccountId:string,customerId:string) {
@@ -36,7 +36,7 @@ export async function readStorePortalSourceDocuments(companyId:string,storeAccou
     if(!content||!["sheet","quote"].includes(content.kind)||!/^\d{4}-\d{2}-\d{2}$/.test(content.validUntil)||content.validUntil<today)return null;
     const token=issueDocumentShareToken(share.id,share.token_nonce);
     if(token.hash!==share.token_hash)return null;
-    return {title:content.title,kind:content.kind,href:`/pricing-document#${token.token}`,canOrder:false,validUntil:content.validUntil};
+    return {title:content.title,kind:content.kind,href:`/pricing-document#${token.token}`,canOrder:false,validUntil:content.validUntil,...(Array.isArray(content.lines)?{itemCount:content.lines.filter(line=>line.visible).length}:{})};
   }));
   return documents.filter((item):item is NonNullable<typeof item>=>item!==null);
 }
