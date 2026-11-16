@@ -1,3 +1,7 @@
+import { cookies } from "next/headers";
+import { StoreAppShell } from "@/components/store-app-shell";
+import { StoreMemberViews } from "@/components/store-member-views";
+import { STORE_VIEWS, storeViewFrom } from "@/lib/store-navigation";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import type { StoreKakaoLogin } from "@/components/store-kakao-entry";
 import { notFound } from "next/navigation";
@@ -12,7 +16,7 @@ import { isCiLayoutFixturesEnabled } from "@/lib/ci-layout-fixtures";
 import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
 import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
-import { listStorePortalAccounts } from "@/lib/store/07-store-portal";
+import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StorePortal } from "@/components/store-portal";
 
 export const dynamic = "force-dynamic";
@@ -75,8 +79,48 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner />
-    {addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
-    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} portal={<StorePortal accounts={accounts} fixture={directFixture} error={portalError} loginEnabled={directFixture ? true : storeMemberSessionEnabled()} view={typeof params.view === "string" ? params.view : "home"} />} />
-    {addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</>;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi") ? params.fixture : null;
+  const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
+  const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
+    companyId: "00000000-0000-4000-8000-000000000001",
+    storeAccountId: `20000000-0000-4000-8000-00000000000${index + 1}`,
+    customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
+    hasCostAccess: index === 0, canManageMembers: index === 0,
+    canManageAddress: false,
+    documents: index === 0 ? [{ title: "합성 주문 문서", kind: "sheet" as const, href: "/store#synthetic-s1-order", canOrder: true, validUntil: "2099-12-31" }] : [],
+  })) : null;
+  const memberAccounts = fixtureAccounts ?? (directFixture || legacyFixture ? [] : accounts ?? []);
+  const keyOf = (account: { companyId: string; storeAccountId: string }) => `${account.companyId}:${account.storeAccountId}`;
+  const cookie = (await cookies()).get("maju_store_choice")?.value;
+  const preferred = scoped ? `${companyId}:${storeAccountId}` : cookie;
+  const selected = memberAccounts.find(account => keyOf(account) === preferred) ??
+    (memberAccounts.length === 1 ? memberAccounts[0] : undefined);
+  const view = storeViewFrom(typeof params.view === "string" ? params.view : scoped && costAccess && "companyId" in costAccess ? "data" : undefined);
+  const storeHref = (nextView: string, account?: typeof selected) => {
+    const next = new URLSearchParams({ view: nextView });
+    if (account && memberAccounts.length > 1) {
+      next.set("companyId", account.companyId);
+      next.set("storeAccountId", account.storeAccountId);
+    }
+    if (fixture) next.set("fixture", fixture);
+    return `/store?${next}`;
+  };
+  const stores = memberAccounts.map(account => ({ key: keyOf(account), name: account.customerName, href: storeHref(view, account) }));
+  let orders: StorePortalOrder[] = [], historyError = false;
+  if (view === "history" && selected) {
+    if (fixture) orders = [{ id: "synthetic-order", delivery_date: "2099-01-02", status: "submitted", known_total: selected === memberAccounts[0] ? 11100 : 22200, submitted_at: "2099-01-01T00:00:00Z", has_market_price: false }];
+    else {
+      try { orders = await listStorePortalOrders(selected); } catch { historyError = true; }
+    }
+  }
+  const memberView = memberAccounts.length ? <StoreMemberViews
+    key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
+    menu={STORE_VIEWS.map(value => storeHref(value, selected))}
+    orders={orders} historyError={historyError}
+    home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView /> : null}
+  /> : null;
+  return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
+    {!memberView && addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}
+    <StorefrontWorkspace key={costAccess && "companyId" in costAccess ? `${costAccess.companyId}:${costAccess.storeAccountId}` : "public"} costAccess={costAccess} storeLogin={storeLogin} memberView={memberView} portal={<StorePortal accounts={accounts} fixture={directFixture} error={portalError} loginEnabled={directFixture ? true : storeMemberSessionEnabled()} view={view} />} />
+    {!memberView && addressAccess && <main id="store-address-management" className="mx-auto max-w-6xl scroll-mt-4 p-5"><StoreAddressManagementPanel companyId={companyId} storeAccountId={storeAccountId} /></main>}</StoreAppShell></>;
 }

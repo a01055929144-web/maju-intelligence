@@ -7,6 +7,8 @@ import { issueStoreLinkToken } from "../pricing/store-link-token";
 import { isStoreMemberCompanyAllowlisted } from "./07-store-member-feature";
 import { isStoreAddressCompanyEnabled } from "./07-store-address-management";
 import { readStorePortalSourceDocuments } from "../pricing/store-portal-source-documents";
+import { isStoreAccountRole } from "../../domains/organization/store-cost-access";
+import { getStoreMemberContext } from "./07-store-member-context";
 import { hasActiveStoreMembership } from "./08-store-cost-access";
 
 type Membership = { company_id: string; store_account_id: string; role: string; store_accounts: { customer_id: string } | null };
@@ -42,7 +44,7 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
     `&auth_user_id=eq.${encodeURIComponent(session.authUserId)}&status=eq.active` +
     `&store_accounts.status=eq.active&store_accounts.business_status=in.(active,registration_pending)&limit=20`
   );
-  return Promise.all(memberships.filter(row => row.store_accounts?.customer_id &&
+  return Promise.all(memberships.filter(row => row.store_accounts?.customer_id && isStoreAccountRole(row.role) &&
     isStoreMemberCompanyAllowlisted(row.company_id) && isFeatureEnabled("PRICING", row.company_id) &&
     isFeatureEnabled("STORE_ORDERING", row.company_id)).map(async row => {
     const company = encodeURIComponent(row.company_id), customer = encodeURIComponent(row.store_accounts!.customer_id);
@@ -75,4 +77,25 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,
       canManageAddress: canManage && isStoreAddressCompanyEnabled(row.company_id) };
   }));
+}
+
+export type StorePortalOrder = {
+  id: string; delivery_date: string | null; status: string; known_total: number; submitted_at: string; has_market_price: boolean;
+};
+
+/** Match existing link history by customer, with an account boundary for member orders. */
+export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "companyId" | "storeAccountId">) {
+  const member = await getStoreMemberContext(scope);
+  if (!member) return [];
+  const company = encodeURIComponent(member.companyId), account = encodeURIComponent(member.storeAccountId);
+  const stores = await supabaseRequest<Array<{ customer_id: string }>>(
+    `store_accounts?select=customer_id&company_id=eq.${company}&id=eq.${account}&status=eq.active&business_status=in.(active,registration_pending)&limit=1`,
+  );
+  const customer = stores[0]?.customer_id;
+  if (!customer) return [];
+  return supabaseRequest<StorePortalOrder[]>(
+    `store_orders?company_id=eq.${company}&customer_id=eq.${encodeURIComponent(customer)}` +
+    `&or=(store_account_id.eq.${account},store_account_id.is.null)` +
+    "&select=id,delivery_date,status,known_total,submitted_at,has_market_price&order=submitted_at.desc,id.desc&limit=20",
+  );
 }

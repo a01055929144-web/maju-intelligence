@@ -27,3 +27,57 @@ for (const width of [1440, 1920, 390]) test(`store shell navigation keeps token 
   await expect(page.getByText("18L · 통", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
+
+for (const width of [1440, 390]) {
+  test(`S-1 member menus open without a storefront token at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/storefront", () => { throw new Error("Member views must not request a storefront token"); });
+    await page.route("**/api/store/costs?**", route => {
+      const query = new URL(route.request().url()).searchParams;
+      expect(query.get("companyId")).toBe("00000000-0000-4000-8000-000000000001");
+      expect(query.get("storeAccountId")).toBe("20000000-0000-4000-8000-000000000001");
+      return route.fulfill({ json: { rows: [], hasMore: false, nextOffset: null } });
+    });
+    await page.route("**/api/store/information?**", route => route.fulfill({ json: {
+      businessRegistrationNumber: "0000000000", canEdit: true, phone: "",
+      representativeName: "합성 점주", storeName: "합성 가 매장",
+    } }));
+    await page.goto("/store?fixture=store-portal-source-document");
+    await expect(page.getByText("합성 공개 가입 매장", { exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`S-1-before-${width}.png`) });
+    await page.goto("/store?fixture=s1-single");
+    const nav = page.getByRole("navigation", { name: width === 390 ? "매장 메뉴" : "주요 작업공간" });
+    await expect(page.getByRole("heading", { name: "홈", exact: true })).toBeVisible();
+    for (const [label, evidence] of [
+      ["주문", "합성 주문 문서 · 주문하기"], ["주문 내역", "접수됨 · 11,100원"],
+      ["데이터", "매장 원가관리"], ["매장 정보", "구성원 관리"],
+    ]) {
+      await nav.getByRole("link", { name: label, exact: true }).click();
+      await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+      await expect(page.getByText(evidence, { exact: true })).toBeVisible();
+      expect(new URL(page.url()).hash).toBe("");
+      expect(new URL(page.url()).searchParams.has("storeAccountId")).toBe(false);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`S-1-${new URL(page.url()).searchParams.get("view")}-${width}.png`) });
+    }
+    await nav.getByRole("link", { name: "홈", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "홈", exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`S-1-home-${width}.png`) });
+  });
+
+  test(`S-1 multi-store member selects and remembers an allowed account at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/store?fixture=s1-multi&view=history");
+    const picker = page.getByRole("region", { name: "매장 고르기" });
+    await expect(picker).toBeVisible();
+    await picker.getByRole("link", { name: "합성 나 매장" }).click();
+    await expect(page.getByText("접수됨 · 22,200원")).toBeVisible();
+    await expect(page.getByText("접수됨 · 11,100원")).toHaveCount(0);
+    await expect.poll(async () => (await page.context().cookies()).some(cookie => cookie.name === "maju_store_choice")).toBe(true);
+    await page.goto("/store?fixture=s1-multi&view=history");
+    await expect(page.getByText("접수됨 · 22,200원")).toBeVisible();
+    await page.goto("/store?fixture=s1-multi&view=history&companyId=00000000-0000-4000-8000-000000000001&storeAccountId=20000000-0000-4000-8000-000000000099");
+    await expect(picker).toBeVisible();
+    await expect(page.getByText("접수됨 · 22,200원")).toHaveCount(0);
+  });
+}

@@ -49,7 +49,7 @@ const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date(value));
 
-export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode }) {
+export function StorefrontWorkspace({ costAccess = null, storeLogin = null, portal = null, memberView }: { costAccess?: StoreCostAccess; storeLogin?: StoreKakaoLogin | null; portal?: ReactNode; memberView?: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   useEffect(() => {
     const read = () => { const value = window.location.hash.slice(1); setToken(value === "store-address-management" ? "" : value.length <= 200 ? value : "invalid-link"); };
@@ -57,6 +57,7 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null, port
     return () => window.removeEventListener("hashchange", read);
   }, []);
   if (token === null) return <p role="status">매장 주소를 확인 중입니다.</p>;
+  if (!token && memberView) return memberView;
   // A bearer link does not prove that its customer matches the signed-in store account.
   return <StorefrontSession key={token} token={token} costAccess={token ? null : costAccess} storeLogin={token ? null : storeLogin} portal={token ? null : portal} />;
 }
