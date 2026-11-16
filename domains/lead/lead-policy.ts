@@ -60,7 +60,8 @@ export function getAdministrativeSubareaForEnrichedAddress(
 
 export function resolveVisitResultStatus(actionType: string, result?: string) {
   if (result === "거래 시작") return "전환 진행";
-  if (result === "거절" || result === "제외" || actionType === "exclude") return "제외";
+  if (result === "거절") return "거절"; // CC-50: 고객이 거절한 영업 결과(우리가 뺀 "제외"와 다름)
+  if (result === "제외" || actionType === "exclude") return "제외";
   return undefined;
 }
 

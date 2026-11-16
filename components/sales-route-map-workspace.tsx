@@ -85,6 +85,7 @@ import {
   filterMapLeads,
   getPermitLeadOpenDate,
   getPermitLeadType,
+  isHiddenLeadStatus,
   isPermitLeadInOpenDateFilter,
   PERMIT_LEAD_TYPE_OPTIONS,
   parseLeadRegion,
@@ -575,10 +576,25 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     removeSelectedMapFilterPreset, resetLeadFilters, saveCurrentMapFilterPreset, selectedMapFilterPresetId, selectMapLeadRegionSigungu,
     setMapFilterPop, setMapFilterPopLeft, setMapFilterPopTop, setMapLeadAreaRange, setMapLeadIndustryFilter, setMapLeadOpenDateEnd,
     setMapLeadOpenDateEndDraft, setMapLeadOpenDateStart, setMapLeadOpenDateStartDraft, setMapLeadRegionDong, setMapLeadRegionSigungu,
-    setMapLeadReminderOnly, setMapLeadStageFilter, setMapLeadTypeFilter, setShowClosedLeadsOnMap, setShowDismissedLeadsOnMap,
-    showClosedLeadsOnMap, showDismissedLeadsOnMap
+    setMapLeadReminderOnly, setMapLeadStageFilter, setMapLeadTypeFilter, setShowClosedLeadsOnMap, setShowDismissedLeadsOnMap, setShowRejectedLeadsOnMap,
+    showClosedLeadsOnMap, showDismissedLeadsOnMap, showRejectedLeadsOnMap
   } = useMapFilters({ excludeClosedStores, gradeFilter, initialLeadType, setExcludeClosedStores, setGradeFilter });
   const [showOutsideSalesAreaOnMap, setShowOutsideSalesAreaOnMap] = useState(false);
+  // 리드 보기 3가지(활성 / 거절함 / 숨김=제외, CC-50): 거절함·숨김은 서로 겹치지 않는다.
+  const resetLeadView = () => {
+    setShowDismissedLeadsOnMap(false);
+    setShowRejectedLeadsOnMap(false);
+  };
+  const selectDismissedView = (value: boolean | ((current: boolean) => boolean)) => {
+    const next = typeof value === "function" ? value(showDismissedLeadsOnMap) : value;
+    setShowDismissedLeadsOnMap(next);
+    if (next) setShowRejectedLeadsOnMap(false);
+  };
+  const selectRejectedView = (value: boolean | ((current: boolean) => boolean)) => {
+    const next = typeof value === "function" ? value(showRejectedLeadsOnMap) : value;
+    setShowRejectedLeadsOnMap(next);
+    if (next) setShowDismissedLeadsOnMap(false);
+  };
   // CC-21: 유통사 영업을 켠 회사만 "매장|유통사" 전환이 보인다(서버가 distributorSales로 알려 줌).
   const [mapDistributorSales, setMapDistributorSales] = useState(distributorSales);
   const [mapTargetType, setMapTargetType] = useState<"restaurant" | "distributor">("restaurant");
@@ -620,7 +636,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       // 시안 ⑫: 3분할은 신규 리드 목록·지도 표시가 기본입니다(넓은 화면만 — 모바일은 지도 핀이 넘침).
       if (typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches) {
         setRightPanelTab("leads");
-        setShowDismissedLeadsOnMap(false);
+        resetLeadView();
         if (mapLeadTypeFilter === "all") setMapLeadTypeFilter("new");
         setMapLeadsVisible(true);
       }
@@ -644,7 +660,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     }
     setRightPanelTab("leads");
     setMapLeadsVisible(true);
-    setShowDismissedLeadsOnMap(false);
+    resetLeadView();
     setMapLeadTypeFilter(mode === "newLead" ? "new" : "sales");
   }
 
@@ -670,6 +686,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     mapLeadOpenDateStart,
     mapLeadOpenDateEnd,
     showDismissedLeadsOnMap,
+    showRejectedLeadsOnMap,
     mapLeadRegionSigungu,
     mapLeadRegionDong
   ]);
@@ -978,7 +995,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     const keyword = query.trim().toLowerCase();
     if (keyword.length < 2) return [];
     return allLeadsForMap
-      .filter((lead) => lead.status !== "제외")
+      .filter((lead) => !isHiddenLeadStatus(lead.status))
       .filter((lead) => `${lead.businessName} ${lead.address || ""} ${lead.industryPrimary || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(lead.phone, keyword))
       .slice(0, 30);
   }, [allLeadsForMap, query]);
@@ -1231,8 +1248,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   // "활성/숨김" 토글의 1차 분리 — 숨김 보기에서는 status가 "제외"인 것만, 활성 보기에서는 그 외
   // 전부를 보여줍니다(2026-08-24 피드백: 숨김 리드도 별도로 조회 가능해야 함).
   const statusScopedLeadsForMap = useMemo(
-    () => scopeLeadsByStatus(allLeadsForMap, { showClosed: showClosedLeadsOnMap, showDismissed: showDismissedLeadsOnMap }),
-    [allLeadsForMap, showDismissedLeadsOnMap, showClosedLeadsOnMap]
+    () => scopeLeadsByStatus(allLeadsForMap, { showClosed: showClosedLeadsOnMap, showDismissed: showDismissedLeadsOnMap, showRejected: showRejectedLeadsOnMap }),
+    [allLeadsForMap, showDismissedLeadsOnMap, showRejectedLeadsOnMap, showClosedLeadsOnMap]
   );
   // 지도 "리드 전체"용 업종 빠른 선택 옵션(개수 많은 순, 상위 12개) — 활성/숨김 범위 기준이라
   // 토글을 바꾸면 옵션 목록도 그 범위에 맞게 갱신됩니다.
@@ -1497,7 +1514,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
           return;
         }
         setRightPanelTab("leads");
-        setShowDismissedLeadsOnMap(false);
+        resetLeadView();
         setMapLeadTypeFilter(tab === "sales" ? "sales" : "new");
         setMapLeadsVisible(true);
       }}
@@ -2538,7 +2555,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
               aria-expanded={mapFilterPop === "more"}
               aria-label="필터 더보기"
               className={`grid h-9 w-10 shrink-0 place-items-center rounded-lg border text-sm font-black transition ${
-                mapFilterPop === "more" || excludeClosedStores || showTerminatedStores || gradeFilter !== "all" || showDismissedLeadsOnMap
+                mapFilterPop === "more" || excludeClosedStores || showTerminatedStores || gradeFilter !== "all" || showDismissedLeadsOnMap || showRejectedLeadsOnMap
                   ? "border-teal-700 bg-teal-50 text-teal-800"
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               }`}
@@ -2574,11 +2591,13 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 setExcludeClosedStores,
                 setGrade: (value) => setGradeFilter(value as GradeFilter),
                 setShowClosed: setShowClosedLeadsOnMap,
-                setShowDismissed: setShowDismissedLeadsOnMap,
+                setShowDismissed: selectDismissedView,
+                setShowRejected: selectRejectedView,
                 setShowOutsideSalesArea: setShowOutsideSalesAreaOnMap,
                 setShowTerminatedStores,
                 showClosed: showClosedLeadsOnMap,
                 showDismissed: showDismissedLeadsOnMap,
+                showRejected: showRejectedLeadsOnMap,
                 showOutsideSalesArea: showOutsideSalesAreaOnMap,
                 showOutsideSalesAreaChoice: mapSalesRegionsConfigured === true && mapTargetType === "restaurant",
                 showTerminatedStores,
@@ -2775,7 +2794,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             onChangeDong={setMapLeadRegionDong}
             onChangeOpenDateEndDraft={setMapLeadOpenDateEndDraft}
             onChangeOpenDateStartDraft={setMapLeadOpenDateStartDraft}
-            onSelectDismissed={setShowDismissedLeadsOnMap}
+            onSelectDismissed={selectDismissedView}
+            onSelectRejected={selectRejectedView}
             onSelectLeadType={(value) => {
               setMapLeadTypeFilter(value);
               if (value === "new") setMapPanelMode("newLead");
@@ -2792,6 +2812,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             salesRegionsConfigured={mapSalesRegionsConfigured}
             leadType={mapLeadTypeFilter}
             showDismissed={showDismissedLeadsOnMap}
+            showRejected={showRejectedLeadsOnMap}
             showOutsideSalesArea={showOutsideSalesAreaOnMap}
             totalCount={statusScopedLeadsForMap.length}
           />
@@ -2894,7 +2915,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                     const next = nextLeadLayerSelection(showAllLeadsOnMap, mapLeadTypeFilter, type);
                     setMapLeadsVisible(next.visible);
                     setMapLeadTypeFilter(next.type);
-                    setShowDismissedLeadsOnMap(false);
+                    resetLeadView();
                   }}
                   onSelectMarkerMode={() => setMarkerViewMode((mode) => (mode === "vehicle" ? "grade" : "vehicle"))}
                   showAllLeadsOnMap={showAllLeadsOnMap}
@@ -3170,7 +3191,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? (mapLeadTypeFilter === "new" ? "newLead" : "salesLead") : "map")}
                 selectedLeadId={previewLeadId}
                 tabs={rightListTabs}
-                title={showDismissedLeadsOnMap ? "숨김 리드" : mapLeadTypeFilter === "all" ? "전체 리드" : PERMIT_LEAD_TYPE_LABEL[mapLeadTypeFilter]}
+                title={showDismissedLeadsOnMap ? "숨김 리드" : showRejectedLeadsOnMap ? "거절한 리드" : mapLeadTypeFilter === "all" ? "전체 리드" : PERMIT_LEAD_TYPE_LABEL[mapLeadTypeFilter]}
               />
             ) : (
               <StoreManagementPanel
@@ -4496,7 +4517,7 @@ function PermitLeadMapQuickCard({
 
   if (!lead) return null;
 
-  const isDismissed = lead.status === "제외";
+  const isDismissed = isHiddenLeadStatus(lead.status);
   const routeFit = lead.scoreBreakdown?.route_fit_score ?? 0;
   const isNearAnchor = routeFit >= 11;
   const isOpeningSoon = lead.leadPeriod === "today" || lead.leadPeriod === "week";

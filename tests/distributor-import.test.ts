@@ -3,7 +3,7 @@ import { chunk, cleanPhones, groupDuplicates, mapImportStatus, parseImportRows }
 
 describe("distributor import", () => {
   it("maps sheet statuses to lead stages", () => {
-    expect(["계약완료", "데모완료", "제안중", "검토중", "이탈", "미진행", "", "기타"].map(mapImportStatus)).toEqual(["전환 진행", "재연락 예정", "견적 발송", "재연락 예정", "제외", "신규 수집", "신규 수집", "신규 수집"]);
+    expect(["계약완료", "데모완료", "제안중", "검토중", "이탈", "미진행", "", "기타"].map(mapImportStatus)).toEqual(["전환 진행", "재연락 예정", "견적 발송", "재연락 예정", "거절", "신규 수집", "신규 수집", "신규 수집"]);
   });
   it("restores a lost leading zero and splits several numbers", () => {
     expect(cleanPhones("10-1234-5678")).toEqual({ phone: "01012345678", extra: [] });

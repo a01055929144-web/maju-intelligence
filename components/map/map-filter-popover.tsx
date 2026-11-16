@@ -51,6 +51,8 @@ type Props = {
     readonly setShowTerminatedStores: Setter<boolean>;
     readonly showDismissed: boolean;
     readonly setShowDismissed: Setter<boolean>;
+    readonly showRejected: boolean;
+    readonly setShowRejected: Setter<boolean>;
     readonly showClosed: boolean;
     readonly setShowClosed: (value: boolean) => void;
     readonly showOutsideSalesAreaChoice: boolean;
@@ -270,6 +272,10 @@ export function MapFilterPopover(p: Props) {
           <label className={checkRow}>
             <input checked={p.more.showDismissed} className={checkbox} onChange={() => p.more.setShowDismissed((value) => !value)} type="checkbox" />
             숨김 리드 보기
+          </label>
+          <label className={checkRow}>
+            <input checked={p.more.showRejected} className={checkbox} onChange={() => p.more.setShowRejected((value) => !value)} type="checkbox" />
+            거절한 리드 보기
           </label>
           <label className={checkRow}>
             <input checked={p.more.showClosed} className={checkbox} onChange={(event) => p.more.setShowClosed(event.target.checked)} type="checkbox" />

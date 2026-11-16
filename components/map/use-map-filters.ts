@@ -38,6 +38,7 @@ export function useMapFilters({ excludeClosedStores, gradeFilter, initialLeadTyp
   const [mapFilterPresetBusy, setMapFilterPresetBusy] = useState(false);
   // 숨김(제외) 리드·폐업 리드(CC-46-4, 기본 제외) 보기.
   const [showDismissedLeadsOnMap, setShowDismissedLeadsOnMap] = useState(false);
+  const [showRejectedLeadsOnMap, setShowRejectedLeadsOnMap] = useState(false); // 거절함 보기(CC-50)
   const [showClosedLeadsOnMap, setShowClosedLeadsOnMap] = useState(false);
   const [mapLeadRegionSigungu, setMapLeadRegionSigungu] = useState("");
   const [mapLeadRegionDong, setMapLeadRegionDong] = useState("");
@@ -137,15 +138,15 @@ export function useMapFilters({ excludeClosedStores, gradeFilter, initialLeadTyp
       removeSelectedMapFilterPreset, resetLeadFilters, saveCurrentMapFilterPreset, selectedMapFilterPresetId, selectMapLeadRegionSigungu,
       setMapFilterPop, setMapFilterPopLeft, setMapFilterPopTop, setMapLeadAreaRange, setMapLeadIndustryFilter, setMapLeadOpenDateEnd,
       setMapLeadOpenDateEndDraft, setMapLeadOpenDateStart, setMapLeadOpenDateStartDraft, setMapLeadRegionDong, setMapLeadRegionSigungu,
-      setMapLeadReminderOnly, setMapLeadStageFilter, setMapLeadTypeFilter, setShowClosedLeadsOnMap, setShowDismissedLeadsOnMap,
-      showClosedLeadsOnMap, showDismissedLeadsOnMap
+      setMapLeadReminderOnly, setMapLeadStageFilter, setMapLeadTypeFilter, setShowClosedLeadsOnMap, setShowDismissedLeadsOnMap, setShowRejectedLeadsOnMap,
+      showClosedLeadsOnMap, showDismissedLeadsOnMap, showRejectedLeadsOnMap
     }),
     [
       applyMapFilterPreset, leadFiltersActive, mapFilterPop, mapFilterPopLeft, mapFilterPopTop, mapFilterPresetBusy, mapFilterPresetEnabled, mapFilterPresets,
       mapLeadAreaRange, mapLeadIndustryFilter, mapLeadOpenDateEnd, mapLeadOpenDateEndDraft, mapLeadOpenDateStart, mapLeadOpenDateStartDraft,
       mapLeadRegionDong, mapLeadRegionSigungu, mapLeadReminderOnly, mapLeadStageFilter, mapLeadTypeFilter,
       removeSelectedMapFilterPreset, resetLeadFilters, saveCurrentMapFilterPreset, selectedMapFilterPresetId, selectMapLeadRegionSigungu,
-      showClosedLeadsOnMap, showDismissedLeadsOnMap
+      showClosedLeadsOnMap, showDismissedLeadsOnMap, showRejectedLeadsOnMap
     ]
   );
 }

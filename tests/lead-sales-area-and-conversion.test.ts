@@ -58,6 +58,9 @@ describe("lead sales area and conversion state", () => {
 
   it("does not mark a visit result as converted before customer linkage succeeds", () => {
     expect(resolveVisitResultStatus("visit", "거래 시작")).toBe("전환 진행");
-    expect(resolveVisitResultStatus("exclude", "거절")).toBe("제외");
+    expect(resolveVisitResultStatus("visit", "거절")).toBe("거절"); // CC-50: 고객이 거절
+    expect(resolveVisitResultStatus("exclude", "거절")).toBe("거절");
+    expect(resolveVisitResultStatus("exclude", "제외")).toBe("제외");
+    expect(resolveVisitResultStatus("exclude")).toBe("제외");
   });
 });
