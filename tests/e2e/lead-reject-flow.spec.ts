@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // CC-50b: 목록에서 단계 "거절"(사유) → 기본 목록에서 사라짐 → 지도 "거절함"에 보임. "제외"는 거절함에 안 나온다. 가짜 API만 쓴다.
 const now = "2026-11-15T00:00:00.000Z";
-const base = { isActive: true, leadPeriod: "old", industryPrimary: "한식", industryTags: [], isTargetIndustry: true, isTemporaryOperation: false, isTemporaryOperationSuspected: false, isDuplicate: false, nextActionReasons: [], scoreTotal: 50, scoreBreakdown: {}, grade: "B", createdAt: now, updatedAt: now, latitude: 37.56, longitude: 126.98 };
+const base = { isActive: true, leadPeriod: "new", openDate: new Date().toISOString().slice(0, 10), industryPrimary: "한식", industryTags: [], isTargetIndustry: true, isTemporaryOperation: false, isTemporaryOperationSuspected: false, isDuplicate: false, nextActionReasons: [], scoreTotal: 50, scoreBreakdown: {}, grade: "B", createdAt: now, updatedAt: now, latitude: 37.56, longitude: 126.98 };
 
 for (const width of [1440, 390]) test(`리드 거절: 사유 저장 후 기본 목록에서 빠지고 지도 거절함에만 보인다 (${width}px)`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
