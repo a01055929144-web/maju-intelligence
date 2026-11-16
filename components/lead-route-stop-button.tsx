@@ -22,8 +22,8 @@ export function LeadRouteStopButton({ leadId }: { leadId: string }) {
     return () => { alive = false; };
   }, [leadId]);
 
-  async function load() {
-    setOpen(true); setMessage("");
+  async function load(keepMessage = false) {
+    setOpen(true); if (!keepMessage) setMessage("");
     const read = async (day: Day) => {
       const response = await fetchWithTimeout(`/api/leads/route-stops?leadId=${encodeURIComponent(leadId)}&date=${day}`, { cache: "no-store" }, 12000);
       if (!response.ok) throw new Error("read");
@@ -36,7 +36,7 @@ export function LeadRouteStopButton({ leadId }: { leadId: string }) {
     setMessage("넣는 중…");
     const response = await fetchWithTimeout("/api/leads/route-stops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId, date: day, driverMemberId: driver.driverMemberId }) }, 15000).catch(() => null);
     const json = response ? ((await response.json().catch(() => ({}))) as { message?: string; extraMinutes?: number }) : {};
-    if (response?.ok) { setMessage(`${DAY_LABEL[day]} ${driver.name} 경로에 넣었습니다 (+${json.extraMinutes ?? "?"}분)`); void load(); return; }
+    if (response?.ok) { setMessage(`${DAY_LABEL[day]} ${driver.name} 경로에 넣었습니다 (+${json.extraMinutes ?? "?"}분)`); void load(true); return; }
     setMessage(json.message || "경로에 넣지 못했습니다.");
   }
 
