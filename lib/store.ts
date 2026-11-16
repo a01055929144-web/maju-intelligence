@@ -72,6 +72,8 @@ import { calculateQuoteTaxLine, type QuoteTaxType } from "../domains/quote/quote
 import { invokeQuoteAcceptanceRpc } from "./quote-acceptance";
 import { applyAcceptedQuotePricesAfterConversion } from "./quote-conversion-pricing";
 import { preserveSocialProfileName, resolveCompanyStaffDisplayName } from "../domains/organization/staff-display-name";
+import { encodeStoragePath, sanitizeStorageFilename } from "../domains/organization/storage-path";
+export { encodeStoragePath, sanitizeStorageFilename } from "../domains/organization/storage-path";
 export { makeCustomerKey, normalizeNameForDuplicateCheck } from "../domains/customer/identity";
 import { makeCustomerKey, normalizeNameForDuplicateCheck } from "../domains/customer/identity";
 import { after } from "next/server";
@@ -15580,38 +15582,6 @@ function getRevenueGrade(monthlyRevenue: number): "A" | "B" | "C" {
 
 function asNullableString(value: unknown) {
   return typeof value === "string" && value ? value : null;
-}
-
-/**
- * Supabase Storage object key는 [a-zA-Z0-9!-_.*'()/&$@=;:+,?]만 허용합니다.
- * 한글 등 비-ASCII 문자가 남아있으면 업로드 시 400 InvalidKey 오류가 나므로,
- * 확장자를 보존하면서 나머지는 안전한 문자만 남기고 전부 제거합니다.
- * 원본 파일명(한글 포함)은 별도의 title 컬럼에 그대로 저장되므로 여기서는
- * storage key로만 쓰일 안전한 값을 만들면 됩니다.
- */
-export function sanitizeStorageFilename(filename: string) {
-  const fallback = "attachment";
-  const normalized = filename.normalize("NFKC").trim();
-  const lastDotIndex = normalized.lastIndexOf(".");
-  const hasExtension = lastDotIndex > 0 && lastDotIndex < normalized.length - 1;
-  const base = hasExtension ? normalized.slice(0, lastDotIndex) : normalized;
-  const extension = hasExtension ? normalized.slice(lastDotIndex + 1) : "";
-
-  const safeBase =
-    base
-      .replace(/[^a-zA-Z0-9-_]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || fallback;
-  const safeExtension = extension.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-
-  return safeExtension ? `${safeBase}.${safeExtension}` : safeBase;
-}
-
-export function encodeStoragePath(path: string) {
-  return path
-    .split("/")
-    .map((part) => encodeURIComponent(part))
-    .join("/");
 }
 
 function getSampleUploadHistory(companyId?: string): UploadHistoryItem[] {
