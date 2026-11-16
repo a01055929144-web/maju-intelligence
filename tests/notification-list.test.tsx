@@ -33,7 +33,7 @@ describe("알림 규칙 (CC-56)", () => {
 });
 
 describe("NotificationList (CC-56)", () => {
-  const html = renderToStaticMarkup(<NotificationList items={items} onMarkRead={() => undefined} onProcess={() => undefined} titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
+  const html = renderToStaticMarkup(<NotificationList items={items} onMarkRead={() => undefined} onProcess={() => undefined} processLabel="거래처에 반영" titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
   it("건수 줄 · 상태 표시 · 제목+대상 · 새 알림이 위", () => {
     expect(html).toContain("안 읽은 알림 2건 · 전체 4건");
     expect(html).toContain("새 매장 · 더새매장");

@@ -20,6 +20,7 @@ type Props = {
   /** 처리(예: 변경을 거래처에 반영). 안 주면 처리 버튼이 없다. */
   readonly onProcess?: (id: string) => void;
   readonly canProcess?: (item: CompanyNotification) => boolean;
+  readonly processLabel?: string;
   /** 요청 중인 항목 id — 그 항목 버튼을 잠근다. */
   readonly busyId?: string | null;
   /** 항목 아래에 화면이 더 넣을 것(예: 주문 보기 링크). */
@@ -33,7 +34,7 @@ type Props = {
   readonly groupByType?: boolean;
 };
 
-export function NotificationList({ busyId = null, canProcess = () => true, emptyDescription, emptyMessage = "새 알림이 없습니다.", error = null, fieldLabels, groupByType = false, items, onMarkRead, onProcess, onRetry, renderExtra, titles = {} }: Props) {
+export function NotificationList({ busyId = null, canProcess = () => true, emptyDescription, emptyMessage = "새 알림이 없습니다.", error = null, fieldLabels, groupByType = false, items, onMarkRead, onProcess, onRetry, processLabel = "처리", renderExtra, titles = {} }: Props) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const sorted = sortNotifications(items);
   const unread = unreadCount(items);
@@ -86,7 +87,7 @@ export function NotificationList({ busyId = null, canProcess = () => true, empty
               {status !== "processed" && (onMarkRead || onProcess) ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {status === "new" && onMarkRead ? <button className="maju-button-secondary h-8 text-xs" disabled={busy} onClick={() => onMarkRead(item.id)} type="button">읽음 표시</button> : null}
-                  {onProcess && canProcess(item) ? <button className="maju-button-secondary h-8 text-xs" disabled={busy} onClick={() => onProcess(item.id)} type="button">{busy ? "처리 중…" : "거래처에 반영"}</button> : null}
+                  {onProcess && canProcess(item) ? <button className="maju-button-secondary h-8 text-xs" disabled={busy} onClick={() => onProcess(item.id)} type="button">{busy ? "처리 중…" : processLabel}</button> : null}
                 </div>
               ) : null}
             </li>
