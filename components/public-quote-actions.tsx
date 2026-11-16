@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Check, Copy, Download, Printer, Share2 } from "lucide-react";
 import type { PublicSalesQuote } from "@/lib/store";
+import { copyText } from "@/lib/copy-text";
 
 export function PublicQuoteActions({ quote }: { quote: PublicSalesQuote }) {
   const [copied, setCopied] = useState(false);
 
   const copyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
+    setCopied(await copyText(window.location.href));
     window.setTimeout(() => setCopied(false), 1800);
   };
 

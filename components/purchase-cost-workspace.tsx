@@ -803,6 +803,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     const atomicBatchId = batchEnabled && latestBatch && !latestBatch.restoredAt ? latestBatch.id : null;
     const dateBatchId = purchaseDateEnabled && dateBatch?.status === "completed" ? dateBatch.id : null;
     if (purchaseDateEnabled && !dateBatchId) { setError("날짜별 저장 사용 중에는 이전 방식의 원가 복구를 실행할 수 없습니다. 매입 이력과 현재 적용일을 확인해 주세요."); return; }
+    // shared-ui-exception: 매입 복구 E2E가 브라우저 기본 확인창을 승인하며 동기식 복구 계약을 검증
     if ((!undo && !atomicBatchId && !dateBatchId) || !window.confirm("직전 매입가 변경과 판매가 계산을 되돌릴까요?")) return;
     setBusy(true); setError("");
     try {
@@ -843,6 +844,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     { key: "select", label: "선택", value: (row) => selected.includes(row.id) ? "선택" : "", render: (row) => <input aria-label={`${row.name} 선택`} checked={selected.includes(row.id)} disabled={!candidates[row.id] || candidates[row.id].reviewOnly || busy} onChange={() => setSelected((current) => current.includes(row.id) ? current.filter((id) => id !== row.id) : [...current, row.id])} type="checkbox" /> },
     { key: "name", label: "품목", value: (row) => row.name, render: (row) => <><input aria-label={`${row.name} 품목명`} className="h-8 w-full min-w-[160px] rounded-md border border-transparent bg-transparent px-1.5 text-sm font-semibold hover:border-slate-200 focus:border-teal-400 focus:bg-white" defaultValue={row.name} disabled={busy} key={`${row.id}-${row.name}`} onBlur={(event) => void saveProductField(row, "name", event.target.value.trim())} />{customerErpCode(row.code) ? <small className="block px-1.5 text-slate-500">{customerErpCode(row.code)}</small> : null}{candidates[row.id]?.fileNote ? <small className="block px-1.5 font-semibold text-amber-700">⚠ {candidates[row.id].fileNote}</small> : null}</> },
     { key: "spec", label: "규격", value: (row) => row.spec, render: (row) => <input aria-label={`${row.name} 규격`} className="h-8 w-24 rounded-md border border-transparent bg-transparent px-1.5 text-sm hover:border-slate-200 focus:border-teal-400 focus:bg-white" defaultValue={row.spec} disabled={busy} key={`${row.id}-${row.spec}`} onBlur={(event) => void saveProductField(row, "spec", event.target.value.trim())} placeholder="-" /> },
+    // shared-ui-exception: 검색창이 아니라 datalist를 쓰는 단위 편집 칸
     { key: "unit", label: "단위", value: (row) => row.unit, render: (row) => <input aria-label={`${row.name} 단위 검색·선택`} className="maju-input w-24" defaultValue={row.unit} disabled={busy} key={`${row.id}-${row.unit}`} list="purchase-unit-options" onBlur={(event) => { const value = event.target.value.trim(); if (value) void saveProductField(row, "unit", value); else event.target.value = row.unit; }} placeholder="단위 검색" /> },
     { key: "supplier", label: "매입처", value: (row) => row.supplierName || "-" },
     { key: "current", label: "현재 매입가", align: "right", total: true, value: (row) => row.cost, render: (row) => money(row.cost) },

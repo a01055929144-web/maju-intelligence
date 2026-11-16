@@ -95,8 +95,7 @@ export function PricingMarginGroups({ companyId, state, busy, send, onBusy, onMe
     if (!trimmed || margin === "" || !Number.isFinite(rate) || rate < 0 || rate > 1000 || Math.abs(rate * 100 - Math.round(rate * 100)) > 1e-8) { onError("이름과 0~1000% 마진율(소수 둘째 자리까지)을 확인해 주세요."); return; }
     if (selected.some(category => !options.some(option => option.path === category))) { onError("선택한 분류가 변경됐습니다. 목록을 다시 확인하고 선택해 주세요."); return; }
     const moved = selected.filter(category => state.categories.some(link => link.category === category && link.groupId !== id));
-    // Existing document-recalculation flows accept this browser dialog before the save request.
-    // Keep this one confirmation native until that interaction contract can migrate with its owner.
+    // shared-ui-exception: 기존 문서 재계산 E2E가 브라우저 기본 확인창을 직접 승인
     if (moved.length && !window.confirm(`${moved.length}개 분류의 기존 그룹 연결을 이 그룹으로 바꿀까요? 상품의 분류 자체는 바뀌지 않습니다.`)) return;
     onBusy(true); onError(""); onMessage(""); setSteps(["저장 중", "대기", "대기"]);
     let stage = 0, completed = 0, target = id;
