@@ -83,13 +83,14 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
       const industry = content.industry?.trim() || companies[0]?.business_type?.trim() || "";
       return [{ title: content.title, ...(industry ? { industry } : {}), kind: content.kind, href: `/store#${token.token}`,
         canOrder: link.can_order && content.showPrice && content.validUntil >= new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
-        validUntil: content.validUntil, itemCount: content.lines?.filter(line => line.visible).length }];
+        validUntil: content.validUntil, ...(receivedHome && Array.isArray(content.lines) ? { itemCount: content.lines.filter(line => line.visible).length } : {}) }];
     });
     documents.push(...await readStorePortalSourceDocuments(row.company_id,row.store_account_id,row.store_accounts!.customer_id));
     const canManage = row.role === "owner" || row.role === "manager";
     const businessType = companies[0]?.business_type?.trim() || "";
     return { companyId: row.company_id, storeAccountId: row.store_account_id, ...(businessType ? { businessType } : {}),
-      companyName: companies[0]?.name ?? undefined, catalogHref,
+      ...(receivedHome && companies[0]?.name ? { companyName: companies[0].name } : {}),
+      ...(catalogHref ? { catalogHref } : {}),
       customerName: customers[0]?.customer_name || "이름 없는 매장", documents,
       hasCostAccess: isFeatureEnabled("STORE_COSTS", row.company_id), canManageMembers: canManage,
       canManageAddress: canManage && isStoreAddressCompanyEnabled(row.company_id) };

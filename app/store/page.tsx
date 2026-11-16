@@ -20,8 +20,6 @@ import { PublicStoreTestBanner } from "@/components/public-store-test-banner";
 import { StoreAddressManagementPanel } from "@/components/store-address-management-panel";
 import { isStoreAddressCompanyEnabled } from "@/lib/store/07-store-address-management";
 import { listStorePortalAccounts, listStorePortalOrders, type StorePortalOrder } from "@/lib/store/07-store-portal";
-import { readStorefront } from "@/lib/pricing/storefront";
-import { StoreReceivedDocuments } from "@/components/store-received-documents";
 import { StorePortal } from "@/components/store-portal";
 
 export const dynamic = "force-dynamic";
@@ -156,6 +154,7 @@ export default async function StorePage({ searchParams }: {
   if (receivedDocuments && fixture === "s4-documents") cutoff = "2099-01-01 22:00";
   else if (receivedDocuments && scheduleHref) {
     try {
+      const { readStorefront } = await import("@/lib/pricing/storefront");
       const storefront = await readStorefront(scheduleHref.split("#")[1]);
       if (storefront?.canOrder && storefront.nextDeliveryDate) {
         const day = new Date(`${storefront.nextDeliveryDate}T00:00:00Z`);
@@ -167,14 +166,15 @@ export default async function StorePage({ searchParams }: {
   const documentHref = (document: NonNullable<typeof selected>["documents"][number]) =>
     `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`;
   const home = selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={documentHref} /> : null;
+  const ReceivedDocuments = receivedDocuments ? (await import("@/components/store-received-documents")).StoreReceivedDocuments : null;
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
-    home={selected && receivedDocuments ? <>
+    home={selected && ReceivedDocuments ? <>
       <div className="md:hidden">{home}</div>
       <div className="hidden md:block">
-        <StoreReceivedDocuments account={selected} today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
+        <ReceivedDocuments account={selected} today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
           industry={typeof params.industry === "string" ? params.industry : undefined} cutoff={cutoff}
           cartHref={orderHref?.replace("/store#", "/store?view=order#") ?? selected.catalogHref}
           industryHref={industry => industry ? `${homeHref}&industry=${encodeURIComponent(industry)}` : homeHref}

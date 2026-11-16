@@ -36,7 +36,7 @@ export async function readStorePortalSourceDocuments(companyId:string,storeAccou
     if(!content||!["sheet","quote"].includes(content.kind)||!/^\d{4}-\d{2}-\d{2}$/.test(content.validUntil)||content.validUntil<today)return null;
     const token=issueDocumentShareToken(share.id,share.token_nonce);
     if(token.hash!==share.token_hash)return null;
-    return {title:content.title,kind:content.kind,href:`/pricing-document#${token.token}`,canOrder:false,validUntil:content.validUntil,itemCount:content.lines?.filter(line=>line.visible).length};
+    return {title:content.title,kind:content.kind,href:`/pricing-document#${token.token}`,canOrder:false,validUntil:content.validUntil,...(Array.isArray(content.lines)?{itemCount:content.lines.filter(line=>line.visible).length}:{})};
   }));
   return documents.filter((item):item is NonNullable<typeof item>=>item!==null);
 }

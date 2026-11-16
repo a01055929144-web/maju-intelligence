@@ -14,7 +14,7 @@ export function StoreReceivedDocuments({ account, industry, today, cutoff, cartH
   documentHref: (document: Document) => string;
 }) {
   const industryOf = (document: Document) => document.industry || account.businessType;
-  const industries = [...new Set(account.documents.map(industryOf).filter((value): value is string => Boolean(value)))];
+  const industries = Array.from(new Set(account.documents.map(industryOf).filter((value): value is string => Boolean(value))));
   const selected = industry && industries.includes(industry) ? industry : undefined;
   const documents = selected ? account.documents.filter(document => industryOf(document) === selected) : account.documents;
 
