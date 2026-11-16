@@ -36,3 +36,5 @@ AGENTS.md 0-0-2에 따라 개발을 멈추지 않으려고 임시로 넣은 항�
 ## 대표 승인이 꼭 필요한 것 (임시 진행 불가)
 
 - 운영 DB 변경: `db-approval-queue.md` 1~3번(P0 · P1 · P2 store-ordering) — **2026-11-02 적용 완료, 재실행 금지**
+
+- `GOV_SYNC_CRON_SECRET` (11/16 21:1x, 대표 등록 대기) — 공공데이터 15분 정기 수집용. **GitHub 저장소 Actions 비밀값**과 **Vercel 운영(Production) 환경 변수**에 같은 값. 값은 기록하지 않음. 바꾸려면 두 곳을 같이 바꾸고 재배포.

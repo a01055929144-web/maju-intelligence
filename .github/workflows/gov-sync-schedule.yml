@@ -1,0 +1,36 @@
+name: gov-sync-schedule
+
+# 대표 11/16 21:03 ①: Vercel Hobby는 정기 실행이 하루 1번이라 공공데이터 수집이 너무 느리다.
+# 15분마다 운영의 /api/cron/gov-sync를 불러 40초씩 이어서 수집한다(CX-43 이어받기).
+# 한국 06:00~07:59(UTC 21~22시)는 건너뜀 — 하루 1번 Vercel 정기 실행(06:00)과 겹치지 않게,
+# 운영 데이터 변경 금지 시간(06:00~07:30)도 지킴.
+on:
+  schedule:
+    - cron: "*/15 0-20,23 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: gov-sync-schedule
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 공공데이터 수집 한 번
+        env:
+          GOV_SYNC_CRON_SECRET: ${{ secrets.GOV_SYNC_CRON_SECRET }}
+        run: |
+          if [ -z "$GOV_SYNC_CRON_SECRET" ]; then echo "::warning::GOV_SYNC_CRON_SECRET 없음 — 건너뜀"; exit 0; fi
+          code=$(curl -sS -o body.json -w '%{http_code}' --max-time 75 \
+            -H "Authorization: Bearer ${GOV_SYNC_CRON_SECRET}" \
+            https://maju-intelligence.vercel.app/api/cron/gov-sync || echo 000)
+          echo "HTTP $code"
+          # 결과 숫자만 남김(비밀값·개인정보 없음)
+          python3 -c "import json;d=json.load(open('body.json')).get('govRestaurantLeadSync',{});print({k:d.get(k) for k in ('configured','companiesProcessed','totalFetched','totalInserted','totalUpdated')})" 2>/dev/null || true
+          if [ "$code" = "404" ]; then echo "::notice::아직 배포 전(404) — 다음 배포 뒤부터 동작"; exit 0; fi
+          [ "$code" = "200" ]
