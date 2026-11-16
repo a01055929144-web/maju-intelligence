@@ -132,3 +132,10 @@ it("requires session membership and binds order history to the verified company,
   expect(query).toContain(`company_id=eq.${companyId}&customer_id=eq.${customerId}`);
   expect(query).toContain(`or=(store_account_id.eq.${storeAccountId},store_account_id.is.null)`);
 });
+
+it("recognizes document members only within the verified issuing company", async () => {
+  mocks.db.mockResolvedValue([{ company_id: companyId }]);
+  expect(await hasAllowedStorePortalMembership("verified-user", companyId)).toBe(true);
+  expect(await hasAllowedStorePortalMembership("verified-user", storeAccountId)).toBe(false);
+  expect(mocks.db.mock.calls.at(-1)?.[0]).toContain(`company_id=eq.${storeAccountId}`);
+});

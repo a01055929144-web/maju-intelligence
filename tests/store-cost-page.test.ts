@@ -8,6 +8,9 @@ import * as jsxRuntime from "react/jsx-runtime";
 import * as accessRules from "../domains/organization/store-cost-access";
 const dependencies: Record<string, unknown> = {
   "react/jsx-runtime": jsxRuntime,
+  "next/link": { default: () => null },
+  "@/components/public-pricing-document": { PublicPricingDocument: () => null },
+  "@/components/ui/state": { ErrorState: () => null },
   "next/headers": { cookies: async () => ({ get: () => undefined }) },
   "@/components/store-app-shell": { StoreAppShell: () => null },
   "@/components/store-member-views": { StoreMemberViews: () => null },

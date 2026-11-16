@@ -5,6 +5,7 @@ import { parseDocument, isId, koreaDay, withLivePromotions, type DocumentContent
 import { documentOrderExpiry, publicDocumentLinkExpiry, publicDocumentOutput, type PrepareDocumentShare, type PreparedDocumentShare } from "../../domains/pricing/document-share";
 import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
+import { getStoreSession } from "../auth";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
 import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
@@ -142,11 +143,20 @@ export async function readPublicDocument(token: string, requester: string) {
     `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
   });
+  // A session for a different distributor cannot change this document's signup flow.
+  const member = row.lead_id === null && await (async () => {
+    try {
+      const session = await getStoreSession();
+      if (!session) return false;
+      const { hasAllowedStorePortalMembership } = await import("../store/07-store-portal");
+      return await hasAllowedStorePortalMembership(session.authUserId, row.company_id);
+    } catch { return false; }
+  })();
   return { document: output, expiresAt: row.expires_at,
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
     ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && orderable,
       message: !orderable ? "이 문서에는 현재 주문할 품목이나 판매가가 없습니다. 발행 회사에 주문 가능한 새 문서를 요청해 주세요." : "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.",
-      companyName: output.companyName, title: output.title, version: output.version } } : {}) };
+      companyName: output.companyName, title: output.title, version: output.version, ...(member ? { member: true } : {}) } } : {}) };
 }
 
 async function resolvePublicDocument(token: string, requester: string) {

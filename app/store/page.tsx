@@ -1,5 +1,8 @@
 import { cookies } from "next/headers";
 import { StoreAppShell } from "@/components/store-app-shell";
+import Link from "next/link";
+import { PublicPricingDocument } from "@/components/public-pricing-document";
+import { ErrorState } from "@/components/ui/state";
 import { StoreMemberViews } from "@/components/store-member-views";
 import { STORE_VIEWS, storeViewFrom } from "@/lib/store-navigation";
 import { storeMemberSessionEnabled } from "@/lib/auth";
@@ -87,7 +90,10 @@ export default async function StorePage({ searchParams }: {
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
-    documents: index === 0 ? [{ title: "합성 주문 문서", kind: "sheet" as const, href: "/store#synthetic-s1-order", canOrder: true, validUntil: "2099-12-31" }] : [],
+    documents: index === 0 ? [
+      { title: "합성 주문 문서", kind: "sheet" as const, href: "/store#synthetic-s1-order", canOrder: true, validUntil: "2099-12-31" },
+      { title: "합성 공유 문서", kind: "sheet" as const, href: "/pricing-document#synthetic-s3-share", canOrder: false, validUntil: "2099-12-31" },
+    ] : [],
   })) : null;
   const memberAccounts = fixtureAccounts ?? (directFixture || legacyFixture ? [] : accounts ?? []);
   const keyOf = (account: { companyId: string; storeAccountId: string }) => `${account.companyId}:${account.storeAccountId}`;
@@ -113,11 +119,26 @@ export default async function StorePage({ searchParams }: {
       try { orders = await listStorePortalOrders(selected); } catch { historyError = true; }
     }
   }
+  // Only documents already visible to the selected member can be embedded.
+  const documentKey = (href: string) => {
+    const [path, token] = href.split("#");
+    return `${path === "/pricing-document" ? "shared" : "issued"}-${token?.split(".")[0] ?? ""}`;
+  };
+  const requestedDocument = view === "home" && typeof params.document === "string" ? params.document : null;
+  const openedDocument = requestedDocument && selected?.documents.find(document => documentKey(document.href) === requestedDocument);
+  const homeHref = storeHref("home", selected);
+  const documentView = requestedDocument ? <div className="space-y-3">
+    <Link className="inline-flex min-h-11 items-center underline" href={homeHref}>받은 문서 목록</Link>
+    {openedDocument ? openedDocument.href.startsWith("/pricing-document#")
+      ? <PublicPricingDocument key={requestedDocument} embedded={{ token: openedDocument.href.split("#")[1], orderHref: storeHref("order", selected) }} />
+      : <StorefrontWorkspace key={requestedDocument} previewToken={openedDocument.href.split("#")[1]} />
+      : <ErrorState message="받은 문서를 사용할 수 없습니다." description="선택한 매장과 링크의 열람기간을 확인해 주세요." />}
+  </div> : null;
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
-    orders={orders} historyError={historyError}
-    home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView /> : null}
+    orders={orders} historyError={historyError} documentView={documentView}
+    home={selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={document => `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`} /> : null}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
     {!memberView && addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}

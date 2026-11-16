@@ -81,3 +81,47 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("접수됨 · 22,200원")).toHaveCount(0);
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`S-3 received documents stay inside the store at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/storefront", route => route.fulfill({ json: {
+      ...storefront, store: { ...storefront.store, title: "합성 주문 문서", canOrder: true },
+    } }));
+    await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: {
+      expiresAt: "2099-12-31T15:00:00Z",
+      document: {
+        title: "합성 공유 문서", companyName: "합성 유통", kind: "sheet", layout: "table",
+        publishedAt: "2026-11-16T00:00:00Z", validUntil: "2099-12-31", version: 1, expired: false,
+        display: { columns: 1, info: [], productWidth: 65, promoLayout: "table" }, lines: [],
+      },
+      orderEntry: { available: true, companyName: "합성 유통", title: "합성 공유 문서", version: 1,
+        ...(route.request().postDataJSON().token === "synthetic-returning-member" ? { member: true } : {}) },
+    } }));
+    await page.route("**/api/pricing-documents/order-intent", () => { throw new Error("A received document cannot start signup"); });
+    await page.goto("/store?fixture=s1-single");
+    const nav = page.getByRole("navigation", { name: width === 390 ? "매장 메뉴" : "주요 작업공간" });
+    await page.getByRole("link", { name: /합성 공유 문서/ }).click();
+    await expect(page.getByRole("heading", { name: "공유 문서", exact: true })).toBeVisible();
+    await expect(page.getByText("합성 공유 문서", { exact: true })).toBeVisible();
+    await expect(nav).toBeVisible();
+    await expect(page.getByRole("button", { name: "주문·점주 가입 시작" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "이 단가표로 주문하기" })).toHaveAttribute("href", "/store?view=order&fixture=s1-single");
+    expect(new URL(page.url()).pathname).toBe("/store");
+    expect(new URL(page.url()).hash).toBe("");
+    await page.screenshot({ path: info.outputPath(`S-3-shared-${width}.png`) });
+    await page.getByRole("link", { name: "받은 문서 목록" }).click();
+    await page.getByRole("link", { name: /합성 주문 문서/ }).click();
+    await expect(page.getByRole("heading", { name: "합성 주문 문서" })).toBeVisible();
+    await expect(page.getByText("18L · 통", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "이 단가표로 주문하기" })).toHaveAttribute("href", "/store?view=order#synthetic-s1-order");
+    await nav.getByRole("link", { name: "주문", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "주문", exact: true })).toBeVisible();
+    await expect(page).not.toHaveURL(/document=/);
+    await page.goto("/store?fixture=s1-multi&view=home&companyId=00000000-0000-4000-8000-000000000001&storeAccountId=20000000-0000-4000-8000-000000000002&document=shared-synthetic-s3-share");
+    await expect(page.getByRole("alert").filter({ hasText: "받은 문서를 사용할 수 없습니다." })).toBeVisible();
+    await page.goto("/pricing-document#synthetic-returning-member");
+    await expect(page.getByRole("link", { name: "이 단가표로 주문하기" })).toHaveAttribute("href", "/store?view=order");
+    await expect(page.getByRole("button", { name: "주문·점주 가입 시작" })).toHaveCount(0);
+  });
+}
