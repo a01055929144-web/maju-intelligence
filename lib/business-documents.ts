@@ -1,5 +1,6 @@
 import { calculateErpTotals, type ErpTaxType } from "../domains/erp/business-document";
 import { supabaseRequest } from "./store";
+import { remainingReturnLines, selectReturnLines, type ReturnSelection } from "../domains/erp/return-selection";
 
 const enc = encodeURIComponent;
 
@@ -258,14 +259,20 @@ export async function cancelBusinessDocument(companyId: string, id: string, reas
     return getBusinessDocument(companyId, id);
   } catch (error) { throw new Error(toKoreanErpError(error)); }
 }
-export async function createReturnDraft(companyId: string, originalId: string, actor: ErpActor) {
+export async function createReturnDraft(companyId: string, originalId: string, selections: ReturnSelection[], actor: ErpActor) {
   const original = await getBusinessDocument(companyId, originalId);
   if (original.status !== "confirmed" || !["sale", "purchase"].includes(original.documentType)) throw new Error("확정된 매출·매입 전표에서만 반품을 작성할 수 있습니다.");
+  const returns = await supabaseRequest<Array<{ id: string }>>(
+    `business_documents?select=id&company_id=eq.${enc(companyId)}&original_document_id=eq.${enc(originalId)}&status=eq.confirmed&limit=500`,
+  );
+  const returnedLines = returns.length
+    ? await supabaseRequest<LineRow[]>(`business_document_lines?select=*&company_id=eq.${enc(companyId)}&document_id=in.(${returns.map((item) => item.id).join(",")})&limit=5000`).then((rows) => rows.map(mapLine))
+    : [];
   return saveBusinessDocument(companyId, {
     documentType: original.documentType === "sale" ? "sale_return" : "purchase_return",
     documentDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date()),
     customerId: original.customerId, supplierId: original.supplierId, originalDocumentId: original.id,
-    memo: `${original.documentNumber} 반품`, lines: original.lines.map((line) => ({ ...line })),
+    memo: `${original.documentNumber} 반품`, lines: selectReturnLines(remainingReturnLines(original.lines, returnedLines), selections),
   }, actor);
 }
 
