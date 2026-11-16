@@ -65,6 +65,7 @@ import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-pan
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { GovSyncOverview } from "@/components/gov-sync-overview";
+import { LeadRouteStopButton } from "@/components/lead-route-stop-button";
 import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -3453,6 +3454,7 @@ function PermitLeadDetailPanel({
             <div className="mt-2">
               <LeadStageSelect lead={lead} onAction={onAction} />
             </div>
+            <LeadRouteStopButton leadId={lead.id} />
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             <button aria-label="이전 매장" className="maju-button-secondary h-8 px-2 text-xs" disabled={!hasPrevious} onClick={onPrevious} type="button"><ArrowLeft className="h-4 w-4" /></button>
@@ -4006,7 +4008,7 @@ function PermitLeadDetailPanel({
                 <div className="mt-3 space-y-2">
                   {actionHistory.map((action) => (
                     <article className="rounded-lg bg-slate-50 p-3 text-sm" key={action.id}>
-                      <p className="font-bold text-slate-900">{action.result || permitLeadActionLabel(action.actionType)}</p>
+                      <p className="font-bold text-slate-900">{action.result || permitLeadActionLabel(action.actionType)}{action.memo?.startsWith("단가표 전달 · 기사") ? <span className="ml-2 rounded-md bg-teal-100 px-1.5 py-0.5 text-[11px] font-black text-teal-800">기사 전달</span> : null}</p>
                       <p className="mt-1 text-xs text-slate-500">{action.createdAt} · {action.actorName || "담당자 미기록"}</p>
                       {action.memo ? <p className="mt-2 whitespace-pre-wrap text-slate-700">{action.memo}</p> : null}
                     </article>

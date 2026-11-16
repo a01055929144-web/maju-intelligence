@@ -35,12 +35,15 @@ create table store_order_lines(
   sales_unit text not null default '', quantity numeric not null, unit_price bigint,
   tax_type text not null, price_includes_tax boolean not null default false,
   is_market_price boolean not null default false);
+create table store_cart_items(
+  company_id uuid not null, store_account_id uuid not null, product_id uuid not null, quantity numeric not null,
+  primary key(company_id,store_account_id,product_id));
 create table customer_attachments(
   id uuid primary key, company_id uuid not null, customer_id uuid not null);
 create table business_documents(
   id uuid primary key default gen_random_uuid(), company_id uuid not null, document_type text not null,
   document_number text not null, document_date date not null, status text not null default 'draft',
-  customer_id uuid, supplier_id uuid, partner_name_snapshot text not null,
+  customer_id uuid, supplier_id uuid, original_document_id uuid, partner_name_snapshot text not null,
   partner_business_number_snapshot text, partner_representative_snapshot text,
   partner_address_snapshot text, partner_contact_snapshot text, source_type text not null,
   source_id uuid, source_key text, memo text, created_by_user_id uuid, created_by_name text not null,
@@ -118,8 +121,10 @@ begin
  where company_id=$1 and id=$2 and status='draft' returning * into d;
  if not found then raise exception 'only draft documents can be confirmed'; end if;
  insert into partner_ledger_entries(company_id,source_document_id,amount,supply_amount,tax_amount,idempotency_key)
- values($1,$2,d.total_amount,d.taxable_supply_amount+d.exempt_supply_amount,d.tax_amount,'document:'||$2||':confirm');
- insert into inventory_movements values(default,$1,$2,0,-1);
+ values($1,$2,case when d.document_type='sale_return' then -d.total_amount else d.total_amount end,
+   case when d.document_type='sale_return' then -(d.taxable_supply_amount+d.exempt_supply_amount) else d.taxable_supply_amount+d.exempt_supply_amount end,
+   case when d.document_type='sale_return' then -d.tax_amount else d.tax_amount end,'document:'||$2||':confirm');
+ insert into inventory_movements values(default,$1,$2,0,case when d.document_type='sale_return' then 1 else -1 end);
  return d;
 end $$;
 create function cancel_business_document(uuid,uuid,uuid,text,text)
@@ -155,6 +160,15 @@ insert into store_accounts values
  ('00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1');
 insert into store_account_members values
  ('00000000-0000-0000-0000-0000000000b2','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000b1',null,'active');
+-- 장바구니는 확정 전 임시 상태라 전표·원장·재고를 만들지 않는다.
+insert into store_cart_items values
+ ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000a3',2),
+ ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000a4',1);
+do $$ begin
+ assert (select count(*) from business_documents)=0,'cart must not create document';
+ assert (select count(*) from partner_ledger_entries)=0,'cart must not create ledger';
+ assert (select count(*) from inventory_movements)=0,'cart must not move inventory';
+end $$;
 insert into store_orders values
  ('00000000-0000-0000-0000-0000000000d1','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1','2026-11-17','submitted',1100,'문 앞',1);
 insert into store_order_lines(company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price) values
@@ -186,18 +200,56 @@ do $$ declare d business_documents%rowtype; begin
  update business_documents set tax_invoice_locked_at=null where id=d.id;
 end $$;
 
+-- 시가 기준이 바뀌면 다음 주문 revision에서 새 제안 단가의 차액만 반영한다.
+update pricing_effective_source set cost=2080
+where company_id='00000000-0000-0000-0000-0000000000c1' and product_id='00000000-0000-0000-0000-0000000000a4';
+update store_orders set revision=3 where id='00000000-0000-0000-0000-0000000000d1';
+select revise_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',3,null,'담당','시가 단가 확정');
+select revise_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',3,null,'담당','시가 단가 확정');
+do $$ declare d business_documents%rowtype; begin
+ select * into d from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1';
+ assert d.revision=2,'market retry must not create another revision';
+ assert (select unit_price from business_document_lines where document_id=d.id and product_name_snapshot='시가품')=2500,'market final price';
+ assert (select count(*) from partner_ledger_entries where source_document_id=d.id)=3,'confirm plus two revision deltas';
+ assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=d.total_amount,'market delta keeps ledger equal to total';
+end $$;
+
 select record_business_document_receipt(
- '00000000-0000-0000-0000-0000000000c1',(select id from business_documents),1,'confirmed',
+ '00000000-0000-0000-0000-0000000000c1',(select id from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1'),2,'confirmed',
  '00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000b2',null,null);
 select record_business_document_receipt(
- '00000000-0000-0000-0000-0000000000c1',(select id from business_documents),1,'confirmed',
+ '00000000-0000-0000-0000-0000000000c1',(select id from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1'),2,'confirmed',
  '00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000b2',null,null);
 do $$ begin assert (select count(*) from business_document_receipts)=1,'receipt idempotent'; end $$;
 
-select cancel_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',null,'담당','취소');
-select cancel_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d1',null,'담당','취소');
+-- 선택 수량 1개만 반품: 원전표 연결, 원장 감소, 재고 복귀.
+insert into business_documents(company_id,document_type,document_number,document_date,status,customer_id,original_document_id,
+ partner_name_snapshot,source_type,source_key,created_by_name)
+select company_id,'sale_return','SR-2026-000001',document_date,'draft',customer_id,id,partner_name_snapshot,'manual','cx41:return','담당'
+from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1';
+select save_business_document('00000000-0000-0000-0000-0000000000c1',(select id from business_documents where source_key='cx41:return'),
+ '00000000-0000-0000-0000-0000000000a1','2026-11-17','선택 수량 반품',
+ jsonb_build_array(jsonb_build_object('product_catalog_id','00000000-0000-0000-0000-0000000000a3','product_code','TAX','product_name','과세품',
+   'specification','','unit','개','tax_type','taxable','quantity',1,'unit_price',1100,'memo','부분 반품')),null,'담당','선택 반품');
+select confirm_business_document('00000000-0000-0000-0000-0000000000c1',(select id from business_documents where source_key='cx41:return'),null,'담당');
+do $$ declare original_total bigint; return_total bigint; begin
+ select total_amount into original_total from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d1';
+ select total_amount into return_total from business_documents where source_key='cx41:return';
+ assert (select sum(amount) from partner_ledger_entries)=original_total-return_total,'return reduces ledger by selected quantity';
+ assert (select sum(quantity_delta) from inventory_movements)=0,'sale out plus selected return in fixture';
+end $$;
+
+-- 취소는 반품 원전표가 아닌 별도 주문으로 검증한다.
+insert into store_orders values
+ ('00000000-0000-0000-0000-0000000000d2','00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000a1','2026-11-17','submitted',0,'취소 주문',1);
+insert into store_order_lines(company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price) values
+ ('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d2','00000000-0000-0000-0000-0000000000a3','과세품','개',1,1100,'taxable',false);
+select confirm_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d2',null,'담당');
+
+select cancel_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d2',null,'담당','취소');
+select cancel_order_sale_document('00000000-0000-0000-0000-0000000000c1','00000000-0000-0000-0000-0000000000d2',null,'담당','취소');
 do $$ declare d business_documents%rowtype; begin
- select * into d from business_documents limit 1;
+ select * into d from business_documents where source_key='order:00000000-0000-0000-0000-0000000000d2';
  assert d.status='cancelled';
  assert (select sum(amount) from partner_ledger_entries where source_document_id=d.id)=0,'cancel ledger net zero';
  assert (select sum(quantity_delta) from inventory_movements where source_document_id=d.id)=0,'cancel inventory net zero';
@@ -210,4 +262,4 @@ do $$ begin assert to_regclass('public.business_document_receipts') is not null,
 delete from business_document_receipts;
 \ir 2026-11-16-CX-38-order-sale-documents.down.sql
 do $$ begin assert to_regclass('public.business_document_receipts') is null,'empty down must succeed'; end $$;
-select 'CX-38 order sale document PG17 checks passed' as result;
+select 'CX-41 end-to-end order ledger inventory return PG17 checks passed' as result;

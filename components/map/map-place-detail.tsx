@@ -64,7 +64,9 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { businessStatusClass, getBusinessStatusLabel, isGenericNaverSearchLink, relationshipChipClass, type StoreRow } from "@/components/map/map-row-helpers";
 import { MapLeadChannelIcons } from "@/components/map-lead-channel-icons";
 import { AddressPicker } from "@/components/map/address-picker";
-import { joinSavedAddress } from "@/domains/customer/address-line";
+import { addressLines, joinSavedAddress } from "@/domains/customer/address-line";
+import type { StopPhotoGroup } from "@/domains/delivery/stop-photo-groups";
+import { StopPhotoList } from "@/components/map/stop-photo-list";
 import { relationshipLabel, TERMINATED_HIDDEN_NOTICE } from "@/domains/customer/relationship-filter";
 import { StoreEdit, StoreHistoryItem, StoreAttachment, AttachmentFile, FuelPriceByType, resolveDisplayIndustry, permitLeadCompanyId, withPermitLeadCompanyQuery, normalizePhoneNumber } from "@/components/map/map-place-helpers";
 
@@ -177,7 +179,7 @@ export function StoreQuickCard({
   const [addressCopied, setAddressCopied] = useState(false);
 
   async function copyAddress() {
-    const address = store.address || store.region;
+    const address = store.deliveryAddress || store.address || store.region;
     if (!address) return;
     // 클립보드 권한이 없으면 조용히 무시합니다 — 이 카드에는 별도 오류 메시지 영역이 없습니다.
     if (!(await copyText(address))) return;
@@ -331,7 +333,13 @@ export function StoreQuickCard({
         <div className="flex items-start gap-1">
           <p className="flex min-w-0 flex-1 gap-2 text-[13px] font-bold leading-5 text-slate-600">
             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
-            <span className="line-clamp-2">{store.address || store.region}</span>
+            <span className="min-w-0">
+              {(() => {
+                const lines = addressLines(store.address, store.deliveryAddress);
+                return lines.length ? lines.map((line) => <span className="line-clamp-2 block" key={line.text}>{line.label ? <span className="mr-1 text-slate-500">{line.label}:</span> : null}{line.text}</span>) : <span className="line-clamp-2 block">{store.region}</span>;
+              })()}
+              {store.industry && store.industry !== "미분류" ? <span aria-label="업종" className="mt-1 inline-block rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black text-slate-700">{store.industry}</span> : null}
+            </span>
           </p>
           {store.address || store.region ? (
             <button
@@ -1713,11 +1721,16 @@ function QuickCardAccessPhotoPreview({ customerId }: { readonly customerId: stri
 // 올린 날짜는 API가 준 한국 시각 문자열을 그대로 보여 준다. 사진과 배송(날짜·코스) 연결은 48-7ⓑ(DB 변경) 몫.
 function DeliveryProofBox({ customerId }: { readonly customerId: string }) {
   const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+  // CC-63: 정류장 사진(최근 5회 배송)이 있으면 그것을 날짜·주문별로, 없거나 못 읽으면 아래 거래처 첨부 방식을 그대로 쓴다.
+  const [stopGroups, setStopGroups] = useState<StopPhotoGroup[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
     let cancelled = false;
     setLoadState("loading");
+    setStopGroups([]);
+    void fetch(`/api/customers/delivery-stop-photos?customerId=${encodeURIComponent(customerId)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null)).then((json: { groups?: StopPhotoGroup[] } | null) => { if (!cancelled && json?.groups?.length) setStopGroups(json.groups); }).catch(() => undefined);
     fetchCustomerOperationsAttachments(customerId).then((payload) => {
       if (cancelled) return;
       if (!payload) {
@@ -1736,10 +1749,11 @@ function DeliveryProofBox({ customerId }: { readonly customerId: string }) {
     <section aria-label="배송 완료 사진" className="rounded-xl border border-slate-200 bg-white p-3">
       <h4 className="text-sm font-black text-slate-900">배송 완료 사진</h4>
       <div className="mt-2">
-        {loadState === "loading" ? <LoadingState bare label="배송 완료 사진을 불러오는 중입니다." /> : null}
-        {loadState === "error" ? <ErrorState bare message="배송 완료 사진을 불러오지 못했습니다." /> : null}
-        {loadState === "ready" && !items.length ? <EmptyState bare description="기사 화면이나 거래처 이력에서 올린 사진이 여기에 쌓입니다." message="배송 완료 사진이 없습니다." /> : null}
-        {loadState === "ready" && items.length ? <LoadingPositionGallery items={items} /> : null}
+        {stopGroups.length ? <StopPhotoList groups={stopGroups} /> : null}
+        {stopGroups.length ? null : loadState === "loading" ? <LoadingState bare label="배송 완료 사진을 불러오는 중입니다." /> : null}
+        {stopGroups.length ? null : loadState === "error" ? <ErrorState bare message="배송 완료 사진을 불러오지 못했습니다." /> : null}
+        {stopGroups.length ? null : loadState === "ready" && !items.length ? <EmptyState bare description="기사 화면이나 거래처 이력에서 올린 사진이 여기에 쌓입니다." message="배송 완료 사진이 없습니다." /> : null}
+        {stopGroups.length ? null : loadState === "ready" && items.length ? <LoadingPositionGallery items={items} /> : null}
       </div>
     </section>
   );

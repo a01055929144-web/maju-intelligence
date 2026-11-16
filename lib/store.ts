@@ -1,6 +1,13 @@
 import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { resolveDeliveryAddress } from "../domains/customer/address-line";
+import {
+  buildTodayRoutePlan,
+  readRouteOrderConfirmationMap,
+  type RoutePlan,
+  type RoutePlanStop
+} from "../domains/route/read";
+export type { RoutePlan, RoutePlanGroup, RoutePlanStop } from "../domains/route/read";
 import { analyzeCompany, AnalysisResult } from "./analysis";
 import { readLatestReport, readReportById } from "./analytics/report-read";
 import { publicOwnerTestAccessAllowed } from "./store/public-owner-test-mode";
@@ -388,58 +395,6 @@ export type LeadItem = {
   reasons?: string[];
   status: LeadStatus | string;
   expectedRevenue: number;
-};
-export type RoutePlanStop = LeadItem & {
-  address?: string;
-  birthDate?: string;
-  businessNumber?: string;
-  businessStatus?: string;
-  deliveryArea?: string;
-  deliveryDriver?: string;
-  deliveryVehicle?: string;
-  distanceKm?: number;
-  durationMinutes?: number;
-  email?: string;
-  industry?: string;
-  loadingPosition?: string;
-  accessMethodType?: string;
-  accessNote?: string;
-  accessPassword?: string;
-  hasAccessPassword?: boolean;
-  businessHours?: string;
-  menuSummary?: string;
-  naverPlaceUrl?: string;
-  kakaoPlaceUrl?: string;
-  googleMapUrl?: string;
-  openingDate?: string;
-  order: number;
-  phone?: string;
-  relationshipStatus?: string;
-  representativeName?: string;
-  reviewSummary?: string;
-  reviewKeywords?: string[];
-  reviewSource?: string;
-  reviewsUpdatedAt?: string;
-  routeCalculatedAt?: string;
-  routeProvider?: "tmap" | "estimated" | "cached";
-  // 동시 편집 감지(낙관적 동시성 제어)용. 편집 화면이 이 값을 저장해뒀다가 다음 저장 요청에
-  // expectedUpdatedAt으로 실어 보냅니다. lib/store.ts의 CustomerMasterItem.updatedAt 참고.
-  updatedAt?: string;
-};
-export type RoutePlanGroup = {
-  region: string;
-  stops: RoutePlanStop[];
-  expectedRevenue: number;
-  totalDistanceKm: number;
-  totalDurationMinutes: number;
-};
-export type RoutePlan = {
-  groups: RoutePlanGroup[];
-  source: "empty" | "supabase";
-  totalDistanceKm: number;
-  totalDurationMinutes: number;
-  totalExpectedRevenue: number;
-  totalStops: number;
 };
 export type DeliveryVehicle = {
   id: string;
@@ -12588,16 +12543,9 @@ export async function refreshAllCompaniesRecommendationScores(): Promise<Recomme
 // { 담당자 이름 -> 확정된 거래처 id 순서 } 맵으로 돌려줍니다. 확정 기록이 없으면 빈 맵을 돌려주고,
 // 이 경우 아래 getTodayRoutePlan은 예전과 동일하게 원장 순서를 그대로 씁니다(동작 변화 없음).
 async function getRouteOrderConfirmationMap(companyId: string, date?: string): Promise<Map<string, string[]>> {
-  const map = new Map<string, string[]>();
-  if (!isProductionStoreConfigured()) return map;
+  if (!isProductionStoreConfigured()) return new Map<string, string[]>();
   const today = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : toKstDateKey(new Date().toISOString());
-  const rows = await supabaseRequest<Array<{ driver_name: string; customer_ids: unknown }>>(
-    `route_plan_confirmations?select=driver_name,customer_ids&company_id=eq.${encodeURIComponent(companyId)}&route_date=eq.${today}`
-  ).catch(() => []);
-  for (const row of rows) {
-    if (Array.isArray(row.customer_ids)) map.set(row.driver_name, row.customer_ids as string[]);
-  }
-  return map;
+  return readRouteOrderConfirmationMap(supabaseRequest, companyId, today);
 }
 
 export async function saveRouteOrderConfirmation(companyId: string | undefined, driverName: string, customerIds: string[], confirmedBy?: string) {
@@ -12628,97 +12576,22 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
     getCustomerMaster(companyId, { assignmentKeys: options?.assignmentKeys }),
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
-  const planned = customerMaster.customers
-    .map((customer, index) => {
-      const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
-      const cached = routeCache.get(address);
-      const distanceKm = cached?.distanceKm ?? customer.deliveryKm;
-      const routeProvider: RoutePlanStop["routeProvider"] = cached ? "cached" : "estimated";
-      // 배송담당자별로 확정된 순서가 있으면 그 위치(1부터)를 order로 쓰고, 확정 목록에 없는(예:
-      // 확정 이후 새로 배정된) 거래처는 10000+index로 밀어 항상 확정된 거래처들 뒤에 오게 합니다.
-      // 확정 기록이 아예 없는 담당자는 예전과 동일하게 원장 순서(index+1)를 그대로 씁니다.
-      const driverKey = (customer.deliveryManager || "").trim();
-      const confirmedIds = driverKey ? routeOrderConfirmations.get(driverKey) : undefined;
-      let order = index + 1;
-      if (confirmedIds) {
-        const confirmedPosition = confirmedIds.indexOf(customer.id);
-        order = confirmedPosition >= 0 ? confirmedPosition + 1 : 10000 + index;
+  // CC-61: 배송 기본 주소가 있는 거래처만 따로 읽는다(칸이 없는 환경·읽기 실패는 사업장 주소만 보여 준다).
+  const deliveryAddressById = new Map<string, string>();
+  if (customerMaster.customers.length) {
+    try {
+      const rows = await supabaseRequest<Array<{ delivery_address_detail: string | null; delivery_base_address: string | null; id: string }>>(
+        `normalized_customers?select=id,delivery_base_address,delivery_address_detail&company_id=eq.${encodeURIComponent(resolvedCompanyId)}&duplicate_of=is.null&delivery_base_address=not.is.null&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+      for (const row of rows) {
+        const line = resolveDeliveryAddress({ deliveryBaseAddress: row.delivery_base_address, deliveryAddressDetail: row.delivery_address_detail }).display;
+        if (line) deliveryAddressById.set(row.id, line);
       }
-
-      return {
-        id: customer.id || `customer-${index + 1}`,
-        name: customer.customerName,
-        region: customer.region || "미분류",
-        score: Math.max(50, Math.min(99, Math.round(Number(customer.monthlyRevenue || 0) / 5))),
-        reasons: ["거래처 원장 기준", customer.grade ? `${customer.grade}등급` : "등급 산정", customer.deliveryManager || "담당자 배정"],
-        status: index < 15 ? "today" : "visit-planned",
-        expectedRevenue: Number(customer.monthlyRevenue || 0),
-        address,
-        birthDate: customer.birthDate,
-        businessNumber: customer.businessNumber,
-        businessStatus: customer.businessStatus,
-        distanceKm,
-        durationMinutes: cached?.durationMinutes ?? customer.deliveryMinutes ?? estimateMinutesFromKm(distanceKm),
-        email: customer.email,
-        industry: customer.industry,
-        loadingPosition: customer.loadingPosition,
-        accessMethodType: customer.accessMethodType,
-        accessNote: customer.accessNote,
-        hasAccessPassword: customer.hasAccessPassword,
-        businessHours: customer.businessHours,
-        menuSummary: customer.menuSummary,
-        naverPlaceUrl: customer.naverPlaceUrl,
-        kakaoPlaceUrl: customer.kakaoPlaceUrl,
-        googleMapUrl: customer.googleMapUrl,
-        openingDate: customer.openingDate,
-        phone: customer.phone,
-        relationshipStatus: customer.relationshipStatus,
-        representativeName: customer.representativeName,
-        reviewSummary: customer.reviewSummary,
-        reviewKeywords: customer.reviewKeywords,
-        reviewSource: customer.reviewSource,
-        reviewsUpdatedAt: customer.reviewsUpdatedAt,
-        deliveryArea: customer.deliveryZone || customer.region || "미분류",
-        deliveryDriver: customer.deliveryManager,
-        deliveryVehicle: customer.deliveryVehicle,
-        order,
-        routeCalculatedAt: cached?.calculatedAt,
-        routeProvider,
-        updatedAt: customer.updatedAt
-      };
-    })
-    // 오늘 코스를 한 번 확정한 담당자는 확정 목록에 포함된 거래처만 배송 대상으로 봅니다.
-    // 목록에서 뺀 거래처는 삭제가 아니라 "오늘 배송 없음"이며, 다음 날에는 다시 전체 후보로 돌아옵니다.
-    .filter((stop) => {
-      const driverKey = (stop.deliveryDriver || "").trim();
-      const confirmedIds = driverKey ? routeOrderConfirmations.get(driverKey) : undefined;
-      return confirmedIds === undefined || confirmedIds.includes(stop.id);
-    });
-
-  const groupMap = new Map<string, RoutePlanStop[]>();
-  planned.forEach((lead) => {
-    const region = lead.region || "미분류";
-    groupMap.set(region, [...(groupMap.get(region) || []), lead]);
-  });
-
-  const groups = Array.from(groupMap.entries())
-    .map(([region, stops]) => ({
-      region,
-      stops,
-      expectedRevenue: stops.reduce((total, stop) => total + stop.expectedRevenue, 0),
-      totalDistanceKm: roundToOneDecimal(stops.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
-      totalDurationMinutes: stops.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0)
-    }))
-    .sort((a, b) => b.expectedRevenue - a.expectedRevenue);
-
-  return {
-    groups,
-    source: customerMaster.source,
-    totalDistanceKm: roundToOneDecimal(planned.reduce((total, stop) => total + Number(stop.distanceKm || 0), 0)),
-    totalDurationMinutes: planned.reduce((total, stop) => total + Number(stop.durationMinutes || 0), 0),
-    totalExpectedRevenue: planned.reduce((total, stop) => total + stop.expectedRevenue, 0),
-    totalStops: planned.length
-  };
+    } catch {
+      // shortcut: 읽기 실패는 숨기고 사업장 주소만 보여 준다, 화면에 알릴 필요가 생기면 올린다.
+    }
+  }
+  return buildTodayRoutePlan(customerMaster.customers, customerMaster.source, routeCache, routeOrderConfirmations, deliveryAddressById);
 }
 
 export async function getCompanyOriginAddress(companyId?: string) {
@@ -13149,15 +13022,6 @@ function findSampleCustomerForLead(lead: LeadItem) {
     sampleCustomers.find((customer) => name.includes(customer.region) || customer.region === region) ||
     sampleCustomers.find((customer) => customer.region === region)
   );
-}
-
-function estimateMinutesFromKm(distanceKm?: number) {
-  if (!distanceKm) return undefined;
-  return Math.max(10, Math.round(distanceKm * 2.2));
-}
-
-function roundToOneDecimal(value: number) {
-  return Math.round(value * 10) / 10;
 }
 
 export async function saveVisitResult(input: {

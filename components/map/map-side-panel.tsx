@@ -34,6 +34,8 @@ import {
   gradeBadgeClass,
 } from "@/lib/route-map-utils";
 import { businessStatusClass, displayIndustry, getBusinessStatusLabel, getLeadConfidence, LEAD_STORE_AREA_FEATURE_ENABLED, permitGradeToneClassName, type StoreRow } from "@/components/map/map-row-helpers";
+import { deliveryResultParts } from "@/domains/lead/delivery-result";
+import { useLeadDeliveryResults } from "@/components/map/use-lead-delivery-results";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
 
 export function StoreManagementPanel({
@@ -239,6 +241,7 @@ export function LeadListPanel({
   readonly tabs?: ReactNode;
   readonly title: string;
 }) {
+  const deliveryResults = useLeadDeliveryResults();
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState("");
   const [bulkReason, setBulkReason] = useState("");
@@ -395,6 +398,7 @@ export function LeadListPanel({
                   ? `★ ${typeof lead.rating === "number" ? lead.rating.toFixed(1) : "-"}${typeof lead.reviewCount === "number" ? ` · ${lead.reviewCount.toLocaleString()}` : ""}`
                   : "";
                 const subText = [
+                  deliveryResultParts(deliveryResults.get(lead.id), Date.now()).join(" · "),
                   displayIndustry(lead.industryPrimary),
                   typeof lead.distanceKm === "number" ? `${lead.distanceKm}km` : "",
                   openDateBadge,

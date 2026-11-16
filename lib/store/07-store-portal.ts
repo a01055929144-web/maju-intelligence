@@ -86,11 +86,18 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
 }
 
 export type StorePortalOrder = {
+  lines?: Array<{ id: string; product_name: string; specification: string; sales_unit: string;
+    quantity: number; unit_price: number | null; total_amount: number | null }>;
   id: string; delivery_date: string | null; status: string; known_total: number; submitted_at: string; has_market_price: boolean;
+  document?: {
+    id: string; revision: number; documentNumber: string; totalAmount: number;
+    lines: Array<{ id: string; name: string; specification?: string; unit: string; quantity: number; unitPrice: number; lineAmount: number }>;
+    receipt?: { status: "confirmed" | "disputed"; revision: number; confirmedAt: string; memberName: string; memo?: string };
+  };
 };
 
 /** Match existing link history by customer, with an account boundary for member orders. */
-export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "companyId" | "storeAccountId">) {
+export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "companyId" | "storeAccountId">, includeLines = false) {
   const member = await getStoreMemberContext(scope);
   if (!member) return [];
   const company = encodeURIComponent(member.companyId), account = encodeURIComponent(member.storeAccountId);
@@ -99,9 +106,46 @@ export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "com
   );
   const customer = stores[0]?.customer_id;
   if (!customer) return [];
-  return supabaseRequest<StorePortalOrder[]>(
+  const orders = await supabaseRequest<StorePortalOrder[]>(
     `store_orders?company_id=eq.${company}&customer_id=eq.${encodeURIComponent(customer)}` +
     `&or=(store_account_id.eq.${account},store_account_id.is.null)` +
-    "&select=id,delivery_date,status,known_total,submitted_at,has_market_price&order=submitted_at.desc,id.desc&limit=20",
+    "&select=id,delivery_date,status,known_total,submitted_at,has_market_price" +
+    (includeLines ? ",lines:store_order_lines!store_order_lines_order_fk(id,product_name,specification,sales_unit,quantity,unit_price,total_amount)" : "") +
+    "&order=submitted_at.desc,id.desc&limit=20",
   );
+  if (!orders.length || !isFeatureEnabled("ERP_ORDER_DOCUMENTS", member.companyId)) return orders;
+  const sourceKeys = orders.map(order => encodeURIComponent(`order:${order.id}`)).join(",");
+  const documents = await supabaseRequest<Array<{ id: string; source_key: string; revision: number; document_number: string; total_amount: number }>>(
+    `business_documents?select=id,source_key,revision,document_number,total_amount&company_id=eq.${company}&customer_id=eq.${encodeURIComponent(customer)}` +
+    `&document_type=eq.sale&status=eq.confirmed&source_type=eq.order&source_key=in.(${sourceKeys})&limit=20`,
+  );
+  if (!documents.length) return orders;
+  const documentIds = documents.map(document => encodeURIComponent(document.id)).join(",");
+  const [lines, receipts] = await Promise.all([
+    supabaseRequest<Array<{ id: string; document_id: string; product_name_snapshot: string; specification_snapshot: string | null; unit_snapshot: string; quantity: number; unit_price: number; total_amount: number }>>(
+      `business_document_lines?select=id,document_id,product_name_snapshot,specification_snapshot,unit_snapshot,quantity,unit_price,total_amount&company_id=eq.${company}&document_id=in.(${documentIds})&order=sort_order.asc`,
+    ),
+    supabaseRequest<Array<{ document_id: string; revision: number; status: "confirmed" | "disputed"; confirmed_at: string; memo: string | null; store_member_id: string }>>(
+      `business_document_receipts?select=document_id,revision,status,confirmed_at,memo,store_member_id&company_id=eq.${company}&document_id=in.(${documentIds})&order=confirmed_at.desc`,
+    ),
+  ]);
+  const memberIds = Array.from(new Set(receipts.map(receipt => receipt.store_member_id)));
+  const members = memberIds.length ? await supabaseRequest<Array<{ id: string; app_users: { name: string } | null }>>(
+    `store_account_members?select=id,app_users(name)&company_id=eq.${company}&store_account_id=eq.${account}&id=in.(${memberIds.map(encodeURIComponent).join(",")})`,
+  ) : [];
+  const memberNames = new Map(members.map(member => [member.id, member.app_users?.name || "매장 구성원"]));
+  const bySource = new Map(documents.map(document => [document.source_key, document]));
+  return orders.map(order => {
+    const document = bySource.get(`order:${order.id}`);
+    if (!document) return order;
+    const receipt = receipts.find(item => item.document_id === document.id);
+    return { ...order, document: {
+      id: document.id, revision: document.revision, documentNumber: document.document_number, totalAmount: Number(document.total_amount),
+      lines: lines.filter(line => line.document_id === document.id).map(line => ({ id: line.id, name: line.product_name_snapshot,
+        ...(line.specification_snapshot ? { specification: line.specification_snapshot } : {}), unit: line.unit_snapshot,
+        quantity: Number(line.quantity), unitPrice: Number(line.unit_price), lineAmount: Number(line.total_amount) })),
+      ...(receipt ? { receipt: { status: receipt.status, revision: receipt.revision, confirmedAt: receipt.confirmed_at, memberName: memberNames.get(receipt.store_member_id) || "매장 구성원",
+        ...(receipt.memo ? { memo: receipt.memo } : {}) } } : {})
+    } };
+  });
 }

@@ -7,16 +7,20 @@ import { storeOrderStatusLabel } from "@/domains/order/store-order-status";
 import { StoreAddressManagementPanel } from "./store-address-management-panel";
 import { StoreInformationPanel } from "./store-information-panel";
 import { StoreCostPanel } from "./store-cost-panel";
+import { StoreOrderReceiptAction } from "./store-order-receipt-action";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { StoreOrderHistory } from "./store-order-history";
 import { EmptyState, ErrorState } from "./ui/state";
 
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
+const dateTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, documentView, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, documentView, historyDetails, historyError, home, menu, orders, stores, view }: {
   account?: StorePortalAccount;
   documentView?: ReactNode;
   historyError: boolean;
+  historyDetails: boolean;
   home: ReactNode;
   menu: string[];
   orders: StorePortalOrder[];
@@ -58,12 +62,24 @@ export function StoreMemberViews({ account, documentView, historyError, home, me
             <Card>
               <CardHeader><CardTitle>최근 주문</CardTitle></CardHeader>
               <CardContent>
-                {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? (
+                {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? historyDetails ? (
+                  <StoreOrderHistory companyId={account.companyId} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} storeAccountId={account.storeAccountId} />
+                ) : (
                   <ul className="divide-y">
                     {orders.map(order => (
-                      <li className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-3 text-sm" key={order.id}>
-                        <span>{date.format(new Date(order.submitted_at))} · 배송 {order.delivery_date || "미정"}</span>
-                        <span>{storeOrderStatusLabel(order.status)} · {formatWon(order.known_total)}{order.has_market_price ? " + 시가" : ""}</span>
+                      <li className="py-3 text-sm" key={order.id}>
+                        <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+                          <span>{date.format(new Date(order.submitted_at))} · 배송 {order.delivery_date || "미정"}</span>
+                          <span>{storeOrderStatusLabel(order.status)} · {formatWon(order.known_total)}{order.has_market_price ? " + 시가" : ""}</span>
+                        </div>
+                        {order.document ? <details className="mt-3 rounded-lg border bg-white p-3" open={!order.document.receipt || order.document.receipt.revision !== order.document.revision}>
+                          <summary className="cursor-pointer font-semibold">전표 {order.document.documentNumber} · {formatWon(order.document.totalAmount)}</summary>
+                          <ul className="mt-3 space-y-1">{order.document.lines.map(line => <li className="flex justify-between gap-3" key={line.id}><span>{line.name}{line.specification ? ` · ${line.specification}` : ""} · {line.quantity}{line.unit}</span><span>{formatWon(line.unitPrice)} · {formatWon(line.lineAmount)}</span></li>)}</ul>
+                          {order.document.receipt?.revision === order.document.revision ? <p className={`mt-3 rounded-lg px-3 py-2 font-semibold ${order.document.receipt.status === "confirmed" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>{order.document.receipt.status === "confirmed" ? "이상 없음 확인됨" : "이상 있음 신고됨"} · {order.document.receipt.memberName} · {dateTime.format(new Date(order.document.receipt.confirmedAt))}{order.document.receipt.memo ? ` · ${order.document.receipt.memo}` : ""}</p> : order.status === "delivered" ? <>
+                            {order.document.receipt ? <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 font-semibold text-amber-900">전표가 수정되어 다시 확인이 필요합니다.</p> : null}
+                            <StoreOrderReceiptAction companyId={account.companyId} documentId={order.document.id} orderId={order.id} revision={order.document.revision} storeAccountId={account.storeAccountId} />
+                          </> : <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-slate-700">배송 완료 뒤 수령 확인할 수 있습니다.</p>}
+                        </details> : null}
                       </li>
                     ))}
                   </ul>
