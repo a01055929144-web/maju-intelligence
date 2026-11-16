@@ -92,6 +92,22 @@ export function buildGovAreaTasks(
   return [...latest, ...continuation];
 }
 
+/**
+ * 지난 실행의 지역별 시간 초과 횟수로 작업을 "혼자 실행"(2번 이상)과 "같이 실행"으로 나눈다.
+ * 횟수 기록이 없는 지역(첫 실행 · 빈 기록)은 0번으로 본다 — 11/17 06:13·07:57 운영에서
+ * `undefined >= 2`와 `undefined < 2`가 둘 다 거짓이라 모든 지역이 빠져 0쪽 수집으로 멈췄다.
+ */
+export function splitGovTasksByTimeouts<T extends { areaCode: string }>(
+  tasks: readonly T[],
+  timeoutCounts: Readonly<Record<string, number | undefined>>
+): { solo: T[]; regular: T[] } {
+  const count = (areaCode: string) => timeoutCounts[areaCode] || 0;
+  return {
+    solo: tasks.filter((task) => count(task.areaCode) >= 2),
+    regular: tasks.filter((task) => count(task.areaCode) < 2)
+  };
+}
+
 export function dedupeGovRows<T extends { sourceRecordKey?: string }>(rows: readonly T[]): T[] {
   const seen = new Set<string>();
   return rows.filter((row, index) => {
