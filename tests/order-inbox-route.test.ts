@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), enabled: vi.fn(() => true), manage: vi.fn(() => true), supabase: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), enabled: vi.fn(() => true), manage: vi.fn(() => true), notifications: vi.fn(), supabase: vi.fn() }));
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mocks.enabled }));
 vi.mock("@/lib/pricing/feature", () => ({ priceSheetsEnabled: () => true }));
 vi.mock("@/lib/pricing/store-order-feature", () => ({ storeOrderingEnabled: () => true }));
 vi.mock("@/domains/pricing/access", () => ({ canManagePriceSheets: mocks.manage }));
 vi.mock("@/lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
 vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.supabase }));
+vi.mock("@/lib/store/07-company-notifications", () => ({ markNewOrderNotificationProcessed: mocks.notifications }));
 import { GET, POST } from "../app/api/orders/route";
 import { canConfirmStoreOrder, storeOrderStatusLabel } from "../domains/order/store-order-status";
 
@@ -24,6 +25,7 @@ describe("order inbox API", () => {
     mocks.supabase.mockReset();
     mocks.enabled.mockReturnValue(true);
     mocks.manage.mockReturnValue(true);
+    mocks.notifications.mockResolvedValue(undefined);
     mocks.auth.mockResolvedValue(customer);
   });
 
@@ -106,6 +108,7 @@ describe("order inbox API", () => {
     const [path, init] = mocks.supabase.mock.calls[0];
     expect(path).toContain(`company_id=eq.${companyId}&id=eq.${orderId}&status=eq.submitted&revision=eq.2`);
     expect(JSON.parse(init.body)).toMatchObject({ status: "received", revision: 3 });
+    expect(mocks.notifications).toHaveBeenCalledWith(companyId, orderId);
   });
 
   it("reports a conflict when the owner edited or someone already confirmed", async () => {
