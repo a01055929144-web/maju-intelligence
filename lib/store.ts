@@ -25,8 +25,9 @@ import {
 } from "../domains/lead/canonical-identity";
 import { classifyPermitLeadIndustry, PERMIT_INDUSTRY_RULES } from "../domains/lead/industry-classification";
 import { classifyTemporaryPermitLead, resolveTemporaryLeadIngestStatus } from "../domains/lead/temporary-operation";
-import { isSelectableLeadStatus } from "../domains/lead/lead-status";
 import { normalizeDoNotContactValue } from "../domains/lead/outreach-governance";
+import { computePermitLeadPeriod, resolvePermitLeadStatus, type PermitLeadActionType, type PermitLeadPeriod } from "../domains/lead/permit-lead-state";
+export { computePermitLeadPeriod, resolvePermitLeadStatus, type PermitLeadActionType, type PermitLeadPeriod } from "../domains/lead/permit-lead-state";
 import { getStoreAreaSqmFilterBounds, mergePendingInsertStoreArea, storeAreaWriteFields, type StoreAreaRange } from "../domains/lead/store-area";
 import { resolveStaffWorkWindow } from "../domains/delivery/staff-location";
 import {
@@ -48,7 +49,6 @@ import {
   isLeadAddressInSalesAreas,
   isUserSalesLeadAction,
   resolveMatchedCustomerLeadStatus,
-  resolveVisitResultStatus,
   shouldApplySalesAreaFilter
 } from "../domains/lead/lead-policy";
 import { summarizePastedReviewText } from "./review-summarizer";
@@ -8688,8 +8688,6 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus, compa
 // 아래는 완전히 별개인 "사업자 인허가 신규 데이터"를 원천으로 하는 신규 영업 후보입니다.
 // 지도 홈에서 "오늘 새로 문 연 곳"을 찾아 전화/DM/방문으로 이어가는 용도입니다.
 
-export type PermitLeadPeriod = "today" | "week" | "month" | "recent";
-
 export type PermitLeadIngestRow = {
   businessName: string;
   businessNumber?: string;
@@ -8842,28 +8840,6 @@ type PermitLeadRow = {
   updated_at: string;
   store_area_sqm?: number | null;
 };
-
-/**
- * 기준 날짜(호출하는 쪽에서 개업일 우선, 없으면 인허가일을 넘겨줌)로 오늘/이번 주(월요일 시작)/
- * 이번 달/최근 90일 중 어느 구간에 속하는지 계산합니다.
- */
-export function computePermitLeadPeriod(permitDateText: string | null | undefined, referenceDate: Date = new Date()): PermitLeadPeriod {
-  if (!permitDateText) return "recent";
-  const permitDate = new Date(permitDateText);
-  if (Number.isNaN(permitDate.getTime())) return "recent";
-
-  const startOfToday = new Date(referenceDate);
-  startOfToday.setHours(0, 0, 0, 0);
-  const dayOfWeek = startOfToday.getDay() || 7; // 일요일(0)을 7로 취급해 월요일 시작 주간을 계산
-  const startOfWeek = new Date(startOfToday);
-  startOfWeek.setDate(startOfWeek.getDate() - (dayOfWeek - 1));
-  const startOfMonth = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1);
-
-  if (permitDate >= startOfToday) return "today";
-  if (permitDate >= startOfWeek) return "week";
-  if (permitDate >= startOfMonth) return "month";
-  return "recent";
-}
 
 function isPermitStatusActive(statusText?: string) {
   if (!statusText) return true;
@@ -10865,51 +10841,6 @@ function hasRecentConfirmedPermitDate(dateText?: string) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - NEW_LEAD_MAX_AGE_DAYS);
   return date >= cutoff;
-}
-
-export type PermitLeadActionType = "call" | "dm" | "visit" | "hold" | "exclude" | "quote" | "sms" | "talktalk" | "email" | "fax" | "status";
-
-const PERMIT_LEAD_ACTION_TO_STATUS: Record<PermitLeadActionType, string> = {
-  call: "전화 대상",
-  dm: "DM 발송",
-  email: "이메일 발송",
-  exclude: "제외",
-  fax: "팩스 발송",
-  hold: "검토 필요",
-  quote: "견적 요청",
-  sms: "문자 발송",
-  status: "검토 필요",
-  talktalk: "톡톡 발송",
-  visit: "방문 대상"
-};
-
-const PERMIT_LEAD_RESULT_TO_STATUS: Record<string, string> = {
-  부재: "방문 대상",
-  관심: "미팅 예정",
-  "단가표 전달": "재연락 예정",
-  "재방문 예정": "재연락 예정",
-  "거래 시작": "전환 진행",
-  "통화 성공": "연락 완료",
-  부재중: "전화 대상",
-  "DM 발송": "DM 발송",
-  "문자 발송": "문자 발송",
-  "톡톡 발송": "톡톡 발송",
-  "이메일 발송": "이메일 발송",
-  "팩스 발송": "팩스 발송",
-  "관심 있음": "미팅 예정",
-  "견적 요청": "견적 요청",
-  "견적 발송": "견적 발송",
-  "재연락 예정": "재연락 예정",
-  "다음 방문": "방문 대상",
-  보류: "검토 필요",
-  거절: "거절",
-  제외: "제외"
-};
-
-export function resolvePermitLeadStatus(actionType: PermitLeadActionType, result?: string) {
-  // 사용자가 상태를 직접 고른 경우(언제든 변경 가능)는 고른 값을 그대로 씁니다. 허용된 단계 값만 받습니다.
-  if (actionType === "status") return isSelectableLeadStatus(result) ? result : "검토 필요";
-  return resolveVisitResultStatus(actionType, result) || (result && PERMIT_LEAD_RESULT_TO_STATUS[result]) || PERMIT_LEAD_ACTION_TO_STATUS[actionType] || "검토 필요";
 }
 
 /** 전화/DM/방문/보류/제외 등 영업 행동을 기록하고, 그 결과로 리드 상태를 갱신합니다. */
