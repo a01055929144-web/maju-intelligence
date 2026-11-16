@@ -86,11 +86,13 @@ export async function listStorePortalAccounts(): Promise<StorePortalAccount[] | 
 }
 
 export type StorePortalOrder = {
+  lines?: Array<{ id: string; product_name: string; specification: string; sales_unit: string;
+    quantity: number; unit_price: number | null; total_amount: number | null }>;
   id: string; delivery_date: string | null; status: string; known_total: number; submitted_at: string; has_market_price: boolean;
 };
 
 /** Match existing link history by customer, with an account boundary for member orders. */
-export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "companyId" | "storeAccountId">) {
+export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "companyId" | "storeAccountId">, includeLines = false) {
   const member = await getStoreMemberContext(scope);
   if (!member) return [];
   const company = encodeURIComponent(member.companyId), account = encodeURIComponent(member.storeAccountId);
@@ -102,6 +104,8 @@ export async function listStorePortalOrders(scope: Pick<StorePortalAccount, "com
   return supabaseRequest<StorePortalOrder[]>(
     `store_orders?company_id=eq.${company}&customer_id=eq.${encodeURIComponent(customer)}` +
     `&or=(store_account_id.eq.${account},store_account_id.is.null)` +
-    "&select=id,delivery_date,status,known_total,submitted_at,has_market_price&order=submitted_at.desc,id.desc&limit=20",
+    "&select=id,delivery_date,status,known_total,submitted_at,has_market_price" +
+    (includeLines ? ",lines:store_order_lines!store_order_lines_order_fk(id,product_name,specification,sales_unit,quantity,unit_price,total_amount)" : "") +
+    "&order=submitted_at.desc,id.desc&limit=20",
   );
 }
