@@ -81,6 +81,16 @@ import {
   normalizeSelectableSalesArea,
   resolveEffectiveSalesAreas
 } from "../domains/organization/sales-area";
+import {
+  resolveExistingCustomerStaffAssignment,
+  resolveNewCustomerStaffAssignment
+} from "../domains/organization/staff-assignment";
+import { groupRowsByColumnSignature } from "../domains/organization/row-grouping";
+export {
+  resolveExistingCustomerStaffAssignment,
+  resolveNewCustomerStaffAssignment
+} from "../domains/organization/staff-assignment";
+export { groupRowsByColumnSignature } from "../domains/organization/row-grouping";
 export {
   extractCustomerAdministrativeArea,
   extractCustomerAdministrativeSubarea,
@@ -1070,67 +1080,6 @@ function assignCustomerByTerritoryFromContext(address: string, context: Territor
 /** 신규 거래처 등록 시에만 호출하는 공통 권역 추천 함수입니다. 이 함수 자체는 DB를 수정하지 않습니다. */
 export async function assignCustomerByTerritory(companyId: string, address: string): Promise<CustomerTerritoryRecommendation> {
   return assignCustomerByTerritoryFromContext(address, await loadTerritoryResolutionContext(companyId));
-}
-
-export function resolveNewCustomerStaffAssignment(
-  input: Pick<CustomerMasterInput, "assignedStaffMemberId" | "deliveryManager">,
-  recommendation: CustomerTerritoryRecommendation,
-  activeStaff: CompanyStaffMemberOption[]
-) {
-  if (input.assignedStaffMemberId) {
-    const selected = activeStaff.find((staff) => staff.id === input.assignedStaffMemberId);
-    return { assignedStaffMemberId: selected?.id, assignedStaffName: input.deliveryManager?.trim() || selected?.name };
-  }
-  const requestedName = input.deliveryManager?.trim();
-  if (requestedName) {
-    const normalized = requestedName.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ");
-    const matches = activeStaff.filter((staff) => staff.name.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ") === normalized);
-    return { assignedStaffMemberId: matches.length === 1 ? matches[0].id : undefined, assignedStaffName: requestedName };
-  }
-  return {
-    assignedStaffMemberId: recommendation.assignedStaffMemberId,
-    assignedStaffName: recommendation.assignedStaffName
-  };
-}
-
-export function resolveExistingCustomerStaffAssignment(
-  input: Pick<CustomerMasterInput, "assignedStaffMemberId" | "deliveryManager">,
-  existing: { assignedStaffMemberId?: string | null; deliveryManager?: string | null },
-  activeStaff: CompanyStaffMemberOption[]
-) {
-  const requestedName = input.deliveryManager?.trim() || "";
-  const currentName = existing.deliveryManager?.trim() || "";
-  const managerChanged = requestedName !== currentName;
-
-  if (input.assignedStaffMemberId) {
-    const selected = activeStaff.find((staff) => staff.id === input.assignedStaffMemberId);
-    if (!selected) throw new Error("선택한 담당자는 현재 활성 직원이 아닙니다.");
-    if (requestedName && requestedName !== selected.name.trim()) {
-      throw new Error(`담당자명과 연결 직원이 다릅니다. 선택한 직원명은 \"${selected.name}\"입니다.`);
-    }
-    return { assignedStaffMemberId: selected.id, assignedStaffName: selected.name.trim() };
-  }
-  if (!managerChanged) {
-    return { assignedStaffMemberId: existing.assignedStaffMemberId || undefined, assignedStaffName: requestedName || undefined };
-  }
-  const normalized = requestedName.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ");
-  const matches = requestedName
-    ? activeStaff.filter((staff) => staff.name.toLocaleLowerCase("ko-KR").replace(/\s+/g, " ") === normalized)
-    : [];
-  return {
-    assignedStaffMemberId: matches.length === 1 ? matches[0].id : undefined,
-    assignedStaffName: requestedName || undefined
-  };
-}
-
-/** PostgREST bulk 요청은 모든 JSON 객체의 키가 같아야 하므로 동일 컬럼 묶음별로 분리합니다. */
-export function groupRowsByColumnSignature(rows: Array<Record<string, unknown>>) {
-  const groups = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of rows) {
-    const signature = Object.keys(row).sort().join(",");
-    groups.set(signature, [...(groups.get(signature) || []), row]);
-  }
-  return Array.from(groups.values());
 }
 
 export async function getCompanyStaffMemberOptions(companyId: string): Promise<CompanyStaffMemberOption[]> {
