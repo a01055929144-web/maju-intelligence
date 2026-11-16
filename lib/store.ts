@@ -401,6 +401,8 @@ export type RoutePlanStop = LeadItem & {
   durationMinutes?: number;
   email?: string;
   industry?: string;
+  /** CC-61: 배송 주소(기본 + 상세). 있을 때만 — 사업장 주소(address)와 다르면 지도 상세가 두 줄로 보여 준다. */
+  deliveryAddress?: string;
   loadingPosition?: string;
   accessMethodType?: string;
   accessNote?: string;
@@ -12628,6 +12630,18 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
     getCustomerMaster(companyId, { assignmentKeys: options?.assignmentKeys }),
     getRouteOrderConfirmationMap(resolvedCompanyId)
   ]);
+  // CC-61: 배송 기본 주소가 있는 거래처만 따로 읽는다(칸이 없는 환경·읽기 실패는 사업장 주소만 보여 준다).
+  const deliveryAddressById = new Map<string, string>();
+  if (customerMaster.customers.length) {
+    try {
+      const rows = await supabaseRequest<Array<{ delivery_address_detail: string | null; delivery_base_address: string | null; id: string }>>(
+        `normalized_customers?select=id,delivery_base_address,delivery_address_detail&company_id=eq.${encodeURIComponent(resolvedCompanyId)}&duplicate_of=is.null&delivery_base_address=not.is.null&limit=${CUSTOMER_MASTER_FETCH_LIMIT}`
+      );
+      for (const row of rows) { const line = resolveDeliveryAddress({ deliveryBaseAddress: row.delivery_base_address, deliveryAddressDetail: row.delivery_address_detail }).display; if (line) deliveryAddressById.set(row.id, line); }
+    } catch {
+      // shortcut: 읽기 실패는 숨기고 사업장 주소만 보여 준다, 화면에 알릴 필요가 생기면 올린다.
+    }
+  }
   const planned = customerMaster.customers
     .map((customer, index) => {
       const address = customer.address || `${customer.region || "미분류"} ${customer.customerName}`;
@@ -12661,6 +12675,7 @@ export async function getTodayRoutePlan(companyId?: string, options?: { assignme
         durationMinutes: cached?.durationMinutes ?? customer.deliveryMinutes ?? estimateMinutesFromKm(distanceKm),
         email: customer.email,
         industry: customer.industry,
+        deliveryAddress: deliveryAddressById.get(customer.id),
         loadingPosition: customer.loadingPosition,
         accessMethodType: customer.accessMethodType,
         accessNote: customer.accessNote,
