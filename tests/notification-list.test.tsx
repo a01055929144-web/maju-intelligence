@@ -33,7 +33,7 @@ describe("알림 규칙 (CC-56)", () => {
 });
 
 describe("NotificationList (CC-56)", () => {
-  const html = renderToStaticMarkup(<NotificationList items={items} onMarkRead={() => undefined} onProcess={() => undefined} titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
+  const html = renderToStaticMarkup(<NotificationList items={items} onMarkRead={() => undefined} onProcess={() => undefined} processLabel="거래처에 반영" titles={{ new_store: "새 매장", store_profile_changed: "매장 정보 변경" }} />);
   it("건수 줄 · 상태 표시 · 제목+대상 · 새 알림이 위", () => {
     expect(html).toContain("안 읽은 알림 2건 · 전체 4건");
     expect(html).toContain("새 매장 · 더새매장");
@@ -45,7 +45,14 @@ describe("NotificationList (CC-56)", () => {
     expect(html).toContain("전후 비교 보기 (2칸)");
     expect(html).not.toContain("서울 중구 가짜로 9");
     expect((html.match(/읽음 표시/g) || []).length).toBe(2);
-    expect((html.match(/>처리</g) || []).length).toBe(3);
+    expect((html.match(/>거래처에 반영</g) || []).length).toBe(3);
+  });
+  it("새 주문은 읽음만 표시하고 거래처 반영 버튼은 만들지 않는다", () => {
+    const order = { id: "order", notificationType: "new_order", createdAt: "2026-11-17T00:00:00Z" };
+    const orderHtml = renderToStaticMarkup(<NotificationList canProcess={(item) => item.notificationType !== "new_order"} items={[order]} onMarkRead={() => undefined} onProcess={() => undefined} titles={{ new_order: "새 주문" }} />);
+    expect(orderHtml).toContain("새 주문");
+    expect(orderHtml).toContain("읽음 표시");
+    expect(orderHtml).not.toContain("거래처에 반영");
   });
   it("비어 있으면 안내, 처리 중 항목은 버튼 잠금", () => {
     expect(renderToStaticMarkup(<NotificationList items={[]} />)).toContain("새 알림이 없습니다.");

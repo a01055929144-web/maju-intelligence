@@ -77,5 +77,7 @@ test("order inbox shows a retry action when loading fails", async ({ page }) => 
   await login(page);
   await page.route("**/api/orders*", (route) => route.fulfill({ status: 500, json: { message: "주문을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." } }));
   await page.goto("/orders");
-  await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "주문을 불러오지 못했습니다." }).getByRole("button", { name: "다시 시도" }),
+  ).toBeVisible();
 });

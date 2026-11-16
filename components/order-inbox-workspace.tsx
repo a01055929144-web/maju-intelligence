@@ -8,6 +8,7 @@ import { useConfirm } from "./ui/confirm-dialog";
 import { SearchInput } from "./ui/search-input";
 import { ErrorState, LoadingState } from "./ui/state";
 import { STORE_ORDER_STATUSES, canConfirmStoreOrder, storeOrderStatusLabel } from "../domains/order/store-order-status";
+import { StoreNotificationSettings } from "./store-notification-settings";
 
 type Line = { name: string; spec: string; unit: string; quantity: number; total: number | null; marketPrice: boolean };
 type Order = {
@@ -72,6 +73,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
     const result = await response.json().catch(() => ({})) as { message?: string };
     setBusyId("");
     setNotice(response.ok ? `${order.customerName} 주문을 확인했습니다.` : result.message || "확인 처리하지 못했습니다.");
+    if (response.ok) window.dispatchEvent(new Event("company-notifications:reload"));
     await load();
   }
 
@@ -127,6 +129,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
   ];
 
   return <section className="space-y-4">
+    {!preview ? <StoreNotificationSettings /> : null}
     <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); setStoreName(query.trim()); setPage(1); }} role="search">
       <label className="text-sm font-semibold text-slate-700">상태
         <select aria-label="주문 상태" className="maju-input mt-1 block h-11 min-w-[140px]" onChange={(event) => { setStatus(event.target.value); setPage(1); }} value={status}>

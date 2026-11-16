@@ -7,10 +7,15 @@ type Row = { id: string; notification_type: string; store_account_id: string | n
 
 export async function listCompanyStoreNotifications(companyId: string): Promise<CompanyNotification[]> {
   const rows = await supabaseRequest<Row[]>(`company_notifications?select=id,notification_type,store_account_id,customer_id,before_values,after_values,read_at,processed_at,created_at` +
-    `&company_id=eq.${encodeURIComponent(companyId)}&notification_type=in.(new_store,store_review_required,store_profile_changed)&order=created_at.desc&limit=100`);
+    `&company_id=eq.${encodeURIComponent(companyId)}&notification_type=in.(new_order,new_store,store_review_required,store_profile_changed)&order=created_at.desc&limit=100`);
   return rows.map(row => ({ id: row.id, notificationType: row.notification_type, createdAt: row.created_at, readAt: row.read_at,
     processedAt: row.processed_at, beforeValues: row.before_values, afterValues: row.after_values,
     subject: String(row.after_values.storeName || row.before_values.storeName || "매장") }));
+}
+
+export async function markNewOrderNotificationProcessed(companyId: string, orderId: string) {
+  await supabaseRequest(`company_notifications?company_id=eq.${encodeURIComponent(companyId)}&order_id=eq.${encodeURIComponent(orderId)}` +
+    `&notification_type=eq.new_order&processed_at=is.null`, { method: "PATCH", body: JSON.stringify({ processed_at: new Date().toISOString() }), headers: { Prefer: "return=minimal" } });
 }
 
 export async function markCompanyNotificationRead(companyId: string, notificationId: string, actorId: string) {
