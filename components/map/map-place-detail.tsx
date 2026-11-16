@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { LinkifiedText } from "@/components/linkified-text";
 import { CustomerContractPrices } from "@/components/customer-contract-prices";
-import { LoadingState } from "@/components/ui/state";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { MapStoreDetailActions, MapStoreDetailDrawer } from "@/components/map-store-detail-drawer";
 import type { LoadingPositionMediaItem } from "@/components/loading-position-gallery";
 import { buildPlaceSearchLinks } from "@/lib/place-links";
@@ -1222,6 +1222,7 @@ export function StoreDetail({
               <CollapsibleSection defaultOpen title="첨부자료">
                 <div className="mt-4 space-y-3">
                   <LoadingPositionAttachmentBox customerId={store.id} customerName={store.name} />
+                  <DeliveryProofBox customerId={store.id} />
                   <AttachmentBox
                     description="업로드하면 OCR 후보값을 읽어 기본정보와 비교합니다."
                     file={attachments.businessCertificate}
@@ -1705,6 +1706,42 @@ function QuickCardAccessPhotoPreview({ customerId }: { readonly customerId: stri
         />
       ))}
     </div>
+  );
+}
+
+// 48-7ⓐ: 배송 완료 사진(delivery_proof) 보기. 기존 거래처 운영 API(회사·담당 범위 검사 포함)를 그대로 쓰고,
+// 올린 날짜는 API가 준 한국 시각 문자열을 그대로 보여 준다. 사진과 배송(날짜·코스) 연결은 48-7ⓑ(DB 변경) 몫.
+function DeliveryProofBox({ customerId }: { readonly customerId: string }) {
+  const [items, setItems] = useState<LoadingPositionMediaItem[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadState("loading");
+    fetchCustomerOperationsAttachments(customerId).then((payload) => {
+      if (cancelled) return;
+      if (!payload) {
+        setLoadState("error");
+        return;
+      }
+      setItems((payload.attachments || []).filter((item) => item.attachmentType === "delivery_proof"));
+      setLoadState("ready");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  return (
+    <section aria-label="배송 완료 사진" className="rounded-xl border border-slate-200 bg-white p-3">
+      <h4 className="text-sm font-black text-slate-900">배송 완료 사진</h4>
+      <div className="mt-2">
+        {loadState === "loading" ? <LoadingState bare label="배송 완료 사진을 불러오는 중입니다." /> : null}
+        {loadState === "error" ? <ErrorState bare message="배송 완료 사진을 불러오지 못했습니다." /> : null}
+        {loadState === "ready" && !items.length ? <EmptyState bare description="기사 화면이나 거래처 이력에서 올린 사진이 여기에 쌓입니다." message="배송 완료 사진이 없습니다." /> : null}
+        {loadState === "ready" && items.length ? <LoadingPositionGallery items={items} /> : null}
+      </div>
+    </section>
   );
 }
 
