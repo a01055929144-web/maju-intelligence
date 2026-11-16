@@ -79,6 +79,8 @@ export function MobileDeliveryProofPanel({
   customerName,
   driverName,
   driverPhone,
+  driverReceiptWorkflowEnabled = false,
+  driverStopId,
   deliveryCompleteMessage,
   deliveryDate,
   deliveryIssueMessage,
@@ -99,6 +101,8 @@ export function MobileDeliveryProofPanel({
   customerName: string;
   driverName: string;
   driverPhone?: string;
+  driverReceiptWorkflowEnabled?: boolean;
+  driverStopId?: string;
   deliveryCompleteMessage?: string;
   deliveryDate: string;
   deliveryIssueMessage?: string;
@@ -382,6 +386,25 @@ export function MobileDeliveryProofPanel({
         setProgressLabel("");
         setStatus("error");
         return;
+      }
+    }
+    if (driverReceiptWorkflowEnabled && deliveryStatus !== "arrived") {
+      if (!driverStopId) {
+        setErrorDetail("기사 정류장 연결 정보를 다시 불러온 후 재시도해 주세요.");
+        setSaving(false); setProgressLabel(""); setStatus("error"); return;
+      }
+      setProgressLabel("일부·문제 배송을 유통사에 알리는 중");
+      const stopReasonDetail = [itemName, itemQuantity, issueCause, memo.trim()].filter(Boolean).join(" · ").slice(0, 500);
+      const outcomeResponse = await fetchWithTimeout("/api/mobile/driver-stop-outcomes", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          stopId: driverStopId, outcome: deliveryStatus === "partial" ? "partial" : "problem",
+          reasonCode: driverStopReason(deliveryStatus), detail: stopReasonDetail, attachmentIds: savedAttachments.map(item => item.id),
+        }),
+      }, 15000).catch(() => null);
+      const outcomePayload = await outcomeResponse?.json().catch(() => null) as { message?: string } | null;
+      if (!outcomeResponse?.ok) {
+        setErrorDetail(outcomePayload?.message || "일부·문제 배송을 유통사에 알리지 못했습니다. 다시 시도해 주세요.");
+        setSaving(false); setProgressLabel(""); setStatus("error"); return;
       }
     }
     setProgressLabel("알림 처리 중");
@@ -961,6 +984,14 @@ function createOwnerMessage(
 
 function deliveryStatusLabel(status: DeliveryStatus) {
   return DELIVERY_RECORD_TYPES.find((item) => item.value === status)?.label || "기타";
+}
+
+function driverStopReason(status: DeliveryStatus) {
+  if (status === "partial") return "quantity_short";
+  if (status === "return") return "return_requested";
+  if (status === "damage") return "damaged";
+  if (status === "missing") return "other_problem";
+  return "other_problem";
 }
 
 function createSmsHref(phone: string, message: string) {
