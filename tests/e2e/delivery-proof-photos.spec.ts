@@ -17,9 +17,9 @@ for (const width of [1440, 390]) test(`지도 상세 배송 완료 사진: 사�
   await page.getByRole("button", { name: "A", exact: true }).first().click(); // 거래처 마커(A등급) 선택 → 퀵카드
   await page.getByRole("button", { name: "상세 열기" }).first().click();
   const section = page.getByRole("region", { name: "배송 완료 사진" });
-  await expect(section.getByRole("img")).toHaveCount(2);
-  await expect(section.getByRole("img").first()).toHaveAttribute("alt", "가짜 완료 사진 최신");
-  await expect(section.getByRole("img").nth(1)).toHaveAttribute("alt", "가짜 완료 사진 이전");
+  await expect(section.locator("img")).toHaveCount(2);
+  await expect(section.locator("img").first()).toHaveAttribute("alt", "가짜 완료 사진 최신");
+  await expect(section.locator("img").nth(1)).toHaveAttribute("alt", "가짜 완료 사진 이전");
   await expect(section.getByText("2026. 11. 15. 오후 3:00:00")).toBeVisible();
 
   // 0장이면 빈 상태
