@@ -15,7 +15,8 @@ for (const width of [1440, 390]) test(`리드 거절: 사유 저장 후 기본 �
   const saved: Array<{ actionType: string; memo: string; result: string }> = [];
   let onListPage = true;
   await page.route(/\/api\/leads\/permits\?/, (route) => route.fulfill({ json: { leads: onListPage ? leads.filter((lead) => lead.status !== "제외" && lead.status !== "거절") : leads, salesRegionsConfigured: true } }));
-  await page.route(/\/api\/leads\/permits\/[^/?]+\/action/, (route) => {
+  await page.route(/\/api\/leads\/permits\/[^/?]+\/action(\?|$)/, (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
     const body = route.request().postDataJSON() as { actionType: string; memo: string; result: string };
     saved.push(body);
     const lead = leads.find((item) => route.request().url().includes(item.id))!;
