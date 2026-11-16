@@ -19,10 +19,12 @@ type Props = {
   readonly height?: SheetHeight;
   /** 주면 손잡이가 단추가 되어 누를 때마다 다음 높이로 바뀐다. */
   readonly onHeightChange?: (height: SheetHeight) => void;
+  /** 하단 메뉴와 함께 쓰는 지도 화면에서 시트가 메뉴를 가리지 않게 한다. */
+  readonly aboveBottomNav?: boolean;
 };
 
 // shortcut: 손잡이는 누르면 단계가 바뀌는 단추만(끌어 올리기 없음). 끌기가 필요하면 포인터 이벤트로 단계 사이를 스냅.
-export function BottomSheet({ children, height = "medium", mode = "modal", onClose, onHeightChange, title }: Props) {
+export function BottomSheet({ aboveBottomNav = false, children, height = "medium", mode = "modal", onClose, onHeightChange, title }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -58,7 +60,7 @@ export function BottomSheet({ children, height = "medium", mode = "modal", onClo
     <div
       aria-label={typeof title === "string" ? title : undefined}
       aria-modal={mode === "modal" ? true : undefined}
-      className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none ${mode === "docked" ? HEIGHT_CLASS[height] : "max-h-[85vh]"}`}
+      className={`fixed inset-x-0 z-[70] flex flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none ${aboveBottomNav ? "bottom-[calc(4.5rem+env(safe-area-inset-bottom))]" : "bottom-0"} ${mode === "docked" ? HEIGHT_CLASS[height] : "max-h-[85vh]"}`}
       ref={ref}
       role="dialog"
       tabIndex={-1}

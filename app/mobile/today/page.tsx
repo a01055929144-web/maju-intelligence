@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Camera, House, Map as MapIcon, Route, Target } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { BottomNav } from "@/components/ui/mobile/bottom-nav";
+import { MobileDriverRouteWorkspace } from "@/components/mobile-driver-route-workspace";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
 import { MobileLoadingAttachmentPanel } from "@/components/mobile-loading-attachment-panel";
@@ -15,7 +15,8 @@ import { isLegacyDeliveryOwner } from "@/domains/organization/staff-access";
 import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSession, shouldScopeCustomerData } from "@/lib/auth";
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
 import { isFeatureEnabled } from "@/lib/feature-flags";
-import { getCompanySettings, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
+import { usableStoredPoint } from "@/domains/customer/coordinates";
+import { getCompanySettings, getCustomerMapSummaries, getDeliveryCompletionEvents, getTodayRoutePlan } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
 export default async function MobileTodayPage({ searchParams }: { searchParams?: Promise<{ customer?: string }> }) {
@@ -32,10 +33,11 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const isScopedStaffView = shouldScopeCustomerData(session) || deliveryOwner;
   const driverName = getCustomerOperationalName(session);
   const deliveryDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
-  const [routePlan, companySettings, completionEvents] = await Promise.all([
+  const [routePlan, companySettings, completionEvents, mapSummaries] = await Promise.all([
     getTodayRoutePlan(session.companyId, { assignmentKeys }),
     getCompanySettings(session.companyId, session.companyName),
-    getDeliveryCompletionEvents(session.companyId, { deliveryVehicle: session.assignedVehicle, driverName, hours: 20 })
+    getDeliveryCompletionEvents(session.companyId, { deliveryVehicle: session.assignedVehicle, driverName, hours: 20 }),
+    getCustomerMapSummaries(session.companyId, { assignmentKeys })
   ]);
   const orderProjection = await loadTodayRouteOrderProjection(session.companyId, routePlan, deliveryDate);
   const projectedRoutePlan = orderProjection.routePlan;
@@ -50,12 +52,22 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   // 전부 비어 보였습니다. 이제 일반 직원(운영/영업 등, owner·manager가 아닌 계정)은 이미
   // getTodayRoutePlan 단계에서 assignmentKeys(세션 userId/이름/이메일)로 담당 거래처만 걸러
   // 받아오므로 여기서 다시 이름을 엄격히 매칭할 필요가 없습니다.
+  const destinationById = new Map(mapSummaries.customers.map((customer) => [customer.id, customer]));
   const myStops = (isScopedStaffView
     ? allStops
     : normalizedDriverName
       ? allStops.filter((stop) => stop.deliveryDriver?.trim() === normalizedDriverName)
       : []
-  ).sort((a, b) => a.order - b.order);
+  ).map((stop) => {
+    const destination = destinationById.get(stop.id);
+    const searchAddress = destination?.address || stop.address || stop.region;
+    return {
+      ...stop,
+      address: [searchAddress, destination?.addressDetail].filter(Boolean).join(" "),
+      navigationAddress: searchAddress,
+      navigationPoint: usableStoredPoint(destination?.storedCoordinate, searchAddress)
+    };
+  }).sort((a, b) => a.order - b.order);
   const isPersonalized = myStops.length > 0;
   // 2026-08-28 피드백 대응(담당자 이름이 정확히 안 맞으면 엉뚱한 거래처 목록이 뜸): 예전에는
   // 담당자 이름이 매칭되지 않으면 이 기사님과 무관한, 매출 상위 권역의 아무 거래처 6곳을 그냥
@@ -90,30 +102,19 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <MobileThemeShell>
-      <section className="mobile-app-frame mx-auto flex min-h-screen w-full max-w-[480px] flex-col shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-        <header className="mobile-card sticky top-0 z-10 shrink-0 border-b px-4 py-3 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">MAJU 오늘의 배송</p>
-              <p className="mobile-muted mt-0.5 truncate text-xs font-bold">{driverName} · {session.companyName}</p>
-              <p className="mt-1 text-[11px] font-black text-emerald-700">● 근무 중</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-teal-700 px-3 text-xs font-semibold text-white" href="/mobile/sales"><Target className="h-4 w-4" />영업</Link>
-              <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
-              <Link className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200" href="/map">PC</Link>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-4 gap-2" aria-label="업무 모드">
-            <span className="mobile-primary-action grid min-h-10 place-items-center rounded-full text-xs font-bold">배송</span>
-            <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=new#lead-list">신규</Link>
-            <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=sales#lead-list">영업</Link>
-            <Link className="mobile-secondary-action grid min-h-10 place-items-center rounded-full border text-xs font-bold" href="/mobile/sales?mode=route#lead-map">가는 길</Link>
+      <section className="mobile-app-frame mx-auto min-h-screen w-full max-w-[480px] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+        <MobileDriverRouteWorkspace
+          driverName={driverName}
+          selectedStopId={selectedStop?.id}
+          stops={todayStops.map((stop) => ({ address: stop.navigationAddress, completed: completedCustomerIds.has(stop.id), id: stop.id, name: stop.name, order: stop.order, point: stop.navigationPoint, region: stop.region }))}
+          vehicleLabel={selectedStop?.deliveryVehicle}
+        >
+        <div className="space-y-3 pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0"><p className="truncate text-sm font-bold">{driverName}</p><p className="truncate text-xs font-semibold text-slate-500">{session.companyName}</p></div>
+            <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
           </div>
           <MobileLocationReporter autoStart={todayStops.length > 0} currentCustomerId={selectedStop?.id} currentCustomerName={selectedStop?.name} deliveryVehicle={selectedStop?.deliveryVehicle} />
-        </header>
-
-        <div className="flex-1 space-y-3 px-3 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-3">
           {!sourceReady ? (
             <MobileOperationalEmptyState />
           ) : null}
@@ -157,6 +158,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                   distanceKm={selectedStop.distanceKm}
                   durationMinutes={selectedStop.durationMinutes}
                   phone={selectedStop.phone}
+                  point={selectedStop.navigationPoint}
                 />
               </div>
             </section>
@@ -204,18 +206,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             </>
           ) : null}
         </div>
-
-        <BottomNav
-          ariaLabel="모바일 현장 바로가기"
-          center={{ href: "#delivery-proof", icon: <Camera className="h-7 w-7" />, label: "가장 가까운 매장 배송 기록" }}
-          items={[
-            { href: "#selected-customer", icon: <House className="h-4 w-4" />, label: "오늘" },
-            { href: "/map", icon: <MapIcon className="h-4 w-4" />, label: "지도" },
-            { href: "/mobile/sales#lead-list", icon: <Target className="h-4 w-4" />, label: "리드" },
-            { href: "#route-list", icon: <Route className="h-4 w-4" />, label: "코스" }
-          ]}
-          trackHash
-        />
+        </MobileDriverRouteWorkspace>
       </section>
       </MobileThemeShell>
     </main>

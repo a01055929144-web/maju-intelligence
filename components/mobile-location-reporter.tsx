@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Crosshair, RefreshCw } from "lucide-react";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { evaluateStaffLocation, getStaffLocationPostIntervalMs, type StaffLocationPoint } from "@/lib/staff-location";
+import { SlideToConfirm } from "@/components/ui/mobile";
 
 type MobileLocationReporterProps = {
   readonly autoStart?: boolean;
@@ -355,9 +356,9 @@ export function MobileLocationReporter({ autoStart = false, currentCustomerId, c
           </button>
         ) : null}
       </div>
-      <button className={`mt-2 min-h-11 w-full rounded-lg px-3 text-xs font-black ${workActive ? "bg-slate-900 text-white" : "bg-teal-600 text-white"}`} onClick={toggleWork} type="button">
-        {workActive ? "근무 중 · 종료" : "근무 시작"}
-      </button>
+      <div className="mt-2">
+        <SlideToConfirm label={workActive ? "밀어서 운행 종료" : "밀어서 운행 시작"} onConfirm={toggleWork} />
+      </div>
       {!workActive ? <p className="mt-1 text-xs text-slate-600">근무를 시작해야 위치가 공유됩니다. 12시간 뒤 자동 종료됩니다.</p> : null}
       {needsAction ? (
         <p aria-live="polite" className="mt-1 text-xs font-medium leading-5 text-amber-700">
