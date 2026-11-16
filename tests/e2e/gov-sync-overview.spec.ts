@@ -13,6 +13,7 @@ for (const width of [1440, 390]) for (const item of cases) test(`공공데이터
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   await page.route(/\/api\/leads\/gov-sync-overview/, (route) => route.fulfill({ json: { summary: item.body } }));
   await page.goto("/leads");
+  await page.getByRole("button", { name: "리드 공급원·파일 업로드 상세" }).click();
   const box = page.getByRole("group", { name: "전국 공공데이터 수집 상태" });
   await expect(box).toBeVisible();
   for (const text of item.expectText) await expect(box).toContainText(text);
