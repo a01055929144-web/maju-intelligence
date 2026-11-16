@@ -58,7 +58,7 @@ describe("ARC-02 organization access contracts", () => {
   it("keeps the current public link path token-scoped and separate from staff permissions", () => {
     const routeSource = source("app/api/public/quotes/[token]/route.ts");
     const storeSource = source("lib/store.ts");
-    const publicQuoteSource = between(storeSource, "export async function getPublicSalesQuote", "export type CustomerContractPrice");
+    const publicQuoteSource = between(storeSource, "export async function getPublicSalesQuote", "function getKstDateKey");
 
     expect(routeSource).not.toContain("getRequestAuthScope");
     expect(routeSource).not.toContain("getCustomerSession");
