@@ -10,6 +10,8 @@ import { CompanyProfileForm } from "@/components/company-profile-form";
 import { StoreOrderSettingsWorkspace } from "@/components/store-order-settings-workspace";
 import { CompanySettingsForm } from "../settings-form";
 import { SettingsShell } from "../settings-shell";
+import { IndustryBasketSettings } from "@/components/industry-basket-settings";
+import { industryBasketsEnabled } from "@/lib/pricing/industry-basket-feature";
 
 /**
  * 11/3: 회사 정보 한 곳에서 기본·품목·배송·주문·결제·상담·서류를 입력합니다.
@@ -31,7 +33,8 @@ export default async function CompanyInformationSettingsPage({ searchParams }: {
         initialTab={params?.tab || "basic"}
         orderContent={orderEnabled ? <StoreOrderSettingsWorkspace companyId={session.companyId} /> : undefined}
         slots={{
-          delivery: <CompanySettingsForm hideAside initial={company} sections={["deliveryTemplates"]} showHoldModules={showHoldModules} />
+          delivery: <CompanySettingsForm hideAside initial={company} sections={["deliveryTemplates"]} showHoldModules={showHoldModules} />,
+          ...(industryBasketsEnabled(session.companyId) ? { products: <IndustryBasketSettings /> } : {})
         }}
       />
     </SettingsShell>
