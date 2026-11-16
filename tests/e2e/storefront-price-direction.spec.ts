@@ -103,7 +103,8 @@ for (const width of [1440, 390]) {
     await page.goto("/store#synthetic-catalog-link");
     await expect(page.getByRole("heading", { name: "판매가 변동" })).toBeVisible();
     await page.getByRole("button", { name: "변동 품목 주문하기" }).click();
-    const rows = page.locator("main li");
+    if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
+    const rows = page.getByRole("list", { name: "주문 품목" }).getByRole("listitem");
     const categories = page.getByRole("group", { name: "품목 대분류", exact: true });
     const views = page.getByRole("group", { name: "품목 보기", exact: true });
     await expect(rows).toHaveCount(2);
@@ -127,7 +128,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByText("합성 고기")).toHaveCount(0);
     if (width === 1440) {
       await page.getByRole("button", { name: "표형", exact: true }).click();
-      await expect(page.getByText("품목 · 규격 · 판매가")).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: /품목/ })).toBeVisible();
       await page.getByRole("button", { name: "격자형", exact: true }).click();
     } else await expect(page.getByRole("button", { name: "표형", exact: true })).toBeHidden();
     await rows.getByRole("button", { name: "즐겨찾기", exact: true }).click();
@@ -172,7 +173,6 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "다시 불러오기", exact: true }).click();
     await expect(submit).toBeEnabled();
     await expect(page.getByText("확정된 품목 합계 18,000원", { exact: true })).toBeVisible();
-    if (width === 1440) await page.getByRole("button", { name: "표형", exact: true }).click();
     for (const target of [page.getByLabel("정렬", { exact: true }), rows.first().getByRole("button", { name: /수량 늘리기/ })]) expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
     await page.screenshot({ path: info.outputPath(`store-controls-ready-${width}.png`), fullPage: true });
@@ -195,7 +195,8 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("합성 생선 수량", { exact: true })).toHaveText("0");
     await expect(page.getByLabel("합성 채소 수량", { exact: true })).toHaveText("1");
     await page.goto("/store?products=all#synthetic-catalog-link");
-    await expect(rows).toHaveCount(4);
+    const restoredRows = width === 1440 ? page.getByRole("table").locator("tbody tr") : rows;
+    await expect(restoredRows).toHaveCount(4);
     await expect(page.getByRole("status")).toContainText("다른 문서의 품목은 포함하지 않습니다");
     expired = true;
     await page.reload();
@@ -299,6 +300,7 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByText("합성 최초 조회 실패")).toBeVisible();
   await page.getByRole("button", { name: "다시 불러오기", exact: true }).click();
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
+  if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
   await page.getByRole("button", { name: "합성 주문 품목 수량 늘리기" }).click();
   const submit = page.getByRole("button", { name: "후결제로 주문 신청", exact: true });
   const day = page.getByLabel("배송일", { exact: true });
@@ -347,6 +349,7 @@ for (const width of [1440, 390]) test(`store order waits for delivery date price
   await expect(page.getByText("주문 당시 품목", { exact: false })).toHaveCount(0);
   await storeTab(page, "주문").click();
   await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
+  if (width === 1440) await page.getByRole("button", { name: "격자형", exact: true }).click();
   await page.getByRole("button", { name: "합성 주문 품목 수량 늘리기" }).click();
   await page.evaluate(() => { window.location.hash = "synthetic-revoked-link"; });
   await expect(page.getByText(/사용할 수 없는 매장 링크입니다/)).toBeVisible();

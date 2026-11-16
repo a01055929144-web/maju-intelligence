@@ -125,3 +125,57 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("button", { name: "주문·점주 가입 시작" })).toHaveCount(0);
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`S-5 token order uses the shared PC table and keeps the cart at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const product = storefront.store.lines[0];
+    const market = { ...product, key: "market", productId: "market", name: "합성 시가 품목", unitPrice: null, isMarketPrice: true };
+    let submits = 0;
+    await page.route("**/api/storefront", route => {
+      if (route.request().method() === "PUT") {
+        submits++;
+        return route.fulfill({ status: 503, json: { message: "합성 주문 실패" } });
+      }
+      return route.fulfill({ json: {
+        ...storefront, store: { ...storefront.store, canOrder: true,
+          policy: { ...storefront.store.policy, weekdays: [0, 1, 2, 3, 4, 5, 6] }, lines: [product, market] },
+      } });
+    });
+    await page.goto("/store?view=order#synthetic-s5-token");
+    const cart = page.getByRole("complementary", { name: "장바구니" });
+    await expect(cart).toBeVisible();
+    if (width === 1440) {
+      const table = page.getByRole("table");
+      const amount = table.getByRole("textbox", { name: "합성 미림 수량" });
+      await amount.fill("2");
+      await amount.press("Enter");
+      await expect(table.getByRole("textbox", { name: "합성 시가 품목 수량" })).toBeFocused();
+      await table.getByRole("textbox", { name: "합성 시가 품목 수량" }).fill("1");
+      await table.getByRole("textbox", { name: "합성 시가 품목 수량" }).press("Tab");
+      await expect(table.locator("tfoot")).toContainText("2,000원");
+      await expect(table.locator("tfoot")).toContainText("표 합계에서 시가 1줄 제외");
+      await expect(table.getByText("배송 때 확정")).toBeVisible();
+      await expect(table.getByRole("columnheader", { name: /유통사/ })).toBeVisible();
+      await page.getByRole("button", { name: "열 편집" }).click();
+      const edit = page.getByText("유통사", { exact: true }).locator("..").getByRole("checkbox");
+      await edit.uncheck();
+      await expect(table.getByRole("columnheader", { name: /유통사/ })).toHaveCount(0);
+      await page.getByRole("button", { name: "열 편집" }).click();
+    } else {
+      await expect(page.getByRole("table")).toHaveCount(0);
+      const plus = page.getByRole("button", { name: "합성 미림 수량 늘리기" });
+      await plus.click();
+      await plus.click();
+      expect((await plus.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(cart).toContainText("합성 미림 · 2통");
+    await expect(cart).toContainText("확정된 품목 합계 2,000원");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`S-5-order-${width}.png`) });
+    await cart.getByRole("button", { name: "후결제로 주문 신청" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "합성 주문 실패" })).toBeVisible();
+    await expect(cart).toContainText("합성 미림 · 2통");
+    expect(submits).toBe(1);
+  });
+}

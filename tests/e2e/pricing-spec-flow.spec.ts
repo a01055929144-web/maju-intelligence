@@ -78,13 +78,14 @@ for (const width of [1440, 390]) test(`public order link shows published spec at
   await page.getByRole("button", { name: "주문하기", exact: true }).click();
   await expect(page.getByText("18L · 통", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "원가관리", exact: true })).toHaveCount(0);
-  const layout = await page.evaluate(() => ({
-    columns: getComputedStyle(document.querySelector("main ul")!).gridTemplateColumns.split(" ").length,
-    navigation: getComputedStyle(document.querySelector("nav[aria-label='매장 메뉴']")!).display,
-  }));
-  expect(layout.columns).toBe(width === 390 ? 1 : 3);
-  // CX-11: PC는 사이드바가 메뉴를 맡고 하단 탭은 휴대폰에서만 보인다.
-  expect(layout.navigation).toBe(width === 390 ? "grid" : "none");
+  const mobileMenu = page.getByRole("navigation", { name: "매장 메뉴" });
+  if (width === 390) {
+    await expect(mobileMenu).toBeVisible();
+    expect(await page.getByRole("list", { name: "주문 품목" }).evaluate(list => getComputedStyle(list).gridTemplateColumns.split(" ").length)).toBe(1);
+  } else {
+    await expect(mobileMenu).toBeHidden();
+    await expect(page.getByRole("table").getByRole("columnheader", { name: /규격/ })).toBeVisible();
+  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
 
@@ -209,8 +210,9 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
     });
     await page.goto("/store#synthetic-snapshot-store");
     await page.getByRole("button", { name: "주문하기", exact: true }).click();
-    const exempt = page.locator("main ul > li").filter({ has: page.getByText("합성 품목 1", { exact: true }) });
-    const taxable = page.locator("main ul > li").filter({ has: page.getByText("합성 품목 2", { exact: true }) });
+    const productRows = width === 1440 ? page.getByRole("table").locator("tbody tr") : page.getByRole("list", { name: "주문 품목" }).getByRole("listitem");
+    const exempt = productRows.filter({ has: page.getByText("합성 품목 1", { exact: true }) });
+    const taxable = productRows.filter({ has: page.getByText("합성 품목 2", { exact: true }) });
     await expect(exempt).toContainText("통"); await expect(exempt).toContainText("1,000원"); await expect(exempt.getByText("면세", { exact: true })).toBeVisible();
     await expect(taxable).toContainText("1,100원"); await expect(taxable.getByText("과세 · 부가세 포함", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "후결제로 주문 신청", exact: true })).toBeDisabled();
