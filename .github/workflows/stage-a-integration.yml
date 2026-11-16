@@ -1,6 +1,15 @@
 name: Stage A real API PG17 integration
 on:
   pull_request:
+    paths:
+      - "app/**"
+      - "components/**"
+      - "domains/**"
+      - "lib/**"
+      - "tests/integration/**"
+      - "scripts/setup-stage-a-integration.mjs"
+      - "supabase/migrations/**"
+      - ".github/workflows/stage-a-integration.yml"
   push:
     branches: [main]
   workflow_dispatch:
@@ -8,7 +17,7 @@ permissions:
   contents: read
 jobs:
   stage-a-integration:
-    if: startsWith(github.head_ref, 'codex/09-stage-a-integration-') || startsWith(github.head_ref, 'codex/04-history-only-') || startsWith(github.head_ref, 'codex/04-stage-a-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'pull_request' || startsWith(github.head_ref, 'codex/09-stage-a-integration-') || startsWith(github.head_ref, 'codex/04-history-only-') || startsWith(github.head_ref, 'codex/04-stage-a-') || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
