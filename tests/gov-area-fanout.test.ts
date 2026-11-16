@@ -4,6 +4,7 @@ import {
   buildGovAreaTasks,
   createGovRequestLimiter,
   dedupeGovRows,
+  getGovSyncObservability,
   getGovSyncRunStatus,
   GOV_COLLECTION_BUDGET_MS,
   GOV_FANOUT_CONCURRENCY,
@@ -130,6 +131,38 @@ describe("정부 데이터 지역 fan-out", () => {
   it("부분 실패의 남은 지역을 앞에 두되 같은 지역이 연속 첫 순서가 되지 않게 회전한다", () => {
     expect(prioritizeGovAreaCodes(["1", "2", "3", "4"], ["3", "2"], "3")).toEqual(["2", "3", "1", "4"]);
     expect(prioritizeGovAreaCodes(["1", "2", "3"], ["3"], "3")).toEqual(["1", "3", "2"]);
+  });
+
+  it("화면이 읽을 수집 관찰값을 일관된 키로 계산하고 deferred 지역은 처리 수에서 뺀다", () => {
+    expect(getGovSyncObservability(["1", "2", "3"], ["2", "3"], [
+      { areaCode: "1", status: "success" },
+      { areaCode: "2", status: "error" },
+      { areaCode: "3", status: "deferred" },
+      { areaCode: "1", status: "success" }
+    ], "2")).toEqual({
+      remainingAreaCount: 2,
+      processedAreaCount: 2,
+      nextStartArea: "3"
+    });
+  });
+
+  it("남은 지역이 없어도 다음 실행의 회전 시작 지역을 알려 준다", () => {
+    expect(getGovSyncObservability(["1", "2"], [], [
+      { areaCode: "1", status: "success" },
+      { areaCode: "2", status: "success" }
+    ], "1")).toEqual({
+      remainingAreaCount: 0,
+      processedAreaCount: 2,
+      nextStartArea: "2"
+    });
+  });
+
+  it("수집 지역이 없으면 세 관찰값을 0과 null로 고정한다", () => {
+    expect(getGovSyncObservability([], [], [])).toEqual({
+      remainingAreaCount: 0,
+      processedAreaCount: 0,
+      nextStartArea: null
+    });
   });
 
   it("시간 초과와 마지막 성공 36시간 경과를 판정한다", () => {
