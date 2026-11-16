@@ -44,18 +44,31 @@ for (const width of [1440, 390]) {
     const context = await authenticatedContext(browser, "customer", width, 844);
     try {
       const page = await context.newPage();
-      const priceState = { groups: [], categories: [], items: [], defaultMargin: 10, defaultRounding: 10, pendingCount: 0, total: 0, page: 1, pageSize: 50, lastBatch: null, restored: false };
+      const product = { id: "30000000-0000-4000-8000-000000000001", name: "양파", category: "농산 > 채소", cost: 1000, price: 1200, appliedCost: 1000, appliedMargin: 20, appliedRounding: 10, active: true, groupId: null, itemMargin: null, directPrice: null };
+      const priceState = { groups: [], categories: [], items: [product], defaultMargin: 20, defaultRounding: 10, pendingCount: 0, total: 1, page: 1, pageSize: 50, lastBatch: null, restored: false };
+      const catalog = { id: "60000000-0000-4000-8000-000000000001", name: "양식", margin: 32, rounding: 10, categories: [], storeCount: 0 };
       await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: priceState }));
+      await page.route("**/api/margin-templates?*", (route) => route.fulfill({ json: { templates: [catalog] } }));
       const response = await page.goto("/revenue/pricing/catalog", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByRole("tab", { name: "판매가" })).toHaveAttribute("aria-selected", "true");
+      await page.getByRole("combobox", { name: "카탈로그로 보기" }).selectOption(catalog.id);
+      await expect(page.getByRole("columnheader", { name: "이 카탈로그 판매가" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "차이(%)" })).toBeVisible();
+      await expect(page.getByText("+10%", { exact: true })).toBeVisible();
+      await expect(page.getByText(/카탈로그 비교/)).toHaveCount(0);
+      expect(await collectLayoutProblems(page)).toEqual([]);
+      await page.screenshot({ path: testInfo.outputPath(`pricing-catalog-tabs-${width}.png`), fullPage: false });
+      await page.getByRole("tab", { name: "카탈로그" }).click();
+      await page.getByRole("button", { name: "판매가 보기" }).click();
+      await expect(page).toHaveURL(new RegExp(`view=prices.*catalog=${catalog.id}`));
+      await expect(page.getByRole("combobox", { name: "카탈로그로 보기" })).toHaveValue(catalog.id);
       await page.getByRole("tab", { name: /마진 그룹/ }).click();
       await expect(page).toHaveURL(/view=groups/);
       await page.reload({ waitUntil: "domcontentloaded" });
       await expect(page.getByRole("tab", { name: /마진 그룹/ })).toHaveAttribute("aria-selected", "true");
       await expect(page.getByRole("heading", { name: "마진 그룹 선택" })).toBeVisible();
       expect(await collectLayoutProblems(page)).toEqual([]);
-      await page.screenshot({ path: testInfo.outputPath(`pricing-catalog-tabs-${width}.png`), fullPage: false });
     } finally { await context.close(); }
   });
 }

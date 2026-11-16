@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PriceItem, PriceState } from "@/domains/pricing/price-rules";
 import { calculatePrice } from "@/domains/pricing/price-rules";
+import { templatePrice, type MarginTemplate } from "@/domains/pricing/margin-template";
 import type { PricingBulkCommand, PricingCommand } from "@/application/pricing/manage-price-sheets";
 
 
@@ -25,6 +26,8 @@ import { Tabs } from "./ui/tabs";
 export { marginSource } from "./pricing-margin-group-options";
 
 const box = "h-9 rounded-md border border-slate-300 bg-white px-2 text-sm";
+type CatalogTemplate = { id: string; name: string; margin: number; rounding: number; categories: { category: string; margin: number }[] };
+const catalogModel = (template: CatalogTemplate): MarginTemplate => ({ margin: template.margin, rounding: template.rounding, categories: template.categories, items: [] });
 
 /**
  * 11/4 마진 설정 단순화.
@@ -56,6 +59,27 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
   const [allItems, setAllItems] = useState<PriceItem[] | null>(null);
   const [version, setVersion] = useState(0);
   useEffect(() => { void fetchAllPriceItems(companyId).then(setAllItems).catch(() => setAllItems(null)); }, [companyId, version]);
+  const [catalogs, setCatalogs] = useState<CatalogTemplate[]>([]);
+  useEffect(() => {
+    if (!marginTemplates) { setCatalogs([]); return; }
+    void fetch(`/api/margin-templates?${new URLSearchParams({ companyId })}`, { cache: "no-store" })
+      .then(async (response) => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "카탈로그를 불러오지 못했습니다."); return body as { templates?: CatalogTemplate[] }; })
+      .then((body) => setCatalogs(body.templates ?? []))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "카탈로그를 불러오지 못했습니다."));
+  }, [companyId, marginTemplates]);
+  const selectedCatalog = catalogs.find((catalog) => catalog.id === searchParams.get("catalog")) ?? null;
+  const loadedItems = allItems ?? state?.items;
+  const catalogPrices = useMemo(() => {
+    if (!selectedCatalog) return null;
+    const model = catalogModel(selectedCatalog);
+    return new Map((loadedItems ?? []).map((item) => [item.id, templatePrice(model, item).price]));
+  }, [loadedItems, selectedCatalog]);
+  const selectCatalog = (catalog: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", "prices");
+    if (catalog) params.set("catalog", catalog); else params.delete("catalog");
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
   const [folder, setFolder] = useState<string | null>(null);
   // CC-26: 폴더 순서(상품관리와 같은 순서). 읽지 못하면 이름순으로 계속 보여 준다.
   const [folderOrder, setFolderOrder] = useState<FolderOrder>(new Map());
@@ -139,7 +163,12 @@ export function PriceSheetsWorkspace({ companyId, marginTemplates = false }: { c
       {(showDefault || zeroMargin) && sample ? <p className="mt-2 text-sm text-slate-700">예시: 매입가 <strong>{formatWon(sample.cost)}</strong> → 판매가 <strong className="text-teal-800">{formatWon(sample.price)}</strong> (이익 {formatWon(sample.price - sample.cost)})</p> : null}
     </section>
 
-    <PricingSalesPriceTable busy={busy} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(splitHidden(allItems ?? state.items).visible, state, folderOrder)} />
+    {marginTemplates ? <label className="flex flex-wrap items-center gap-2 text-sm font-bold">카탈로그로 보기:
+      <select aria-label="카탈로그로 보기" className={box} onChange={(event) => selectCatalog(event.target.value)} value={selectedCatalog?.id ?? ""}>
+        <option value="">기본</option>{catalogs.map((catalog) => <option key={catalog.id} value={catalog.id}>{catalog.name}</option>)}
+      </select>
+    </label> : null}
+    <PricingSalesPriceTable busy={busy} catalog={catalogPrices ? { prices: catalogPrices } : null} folder={folder} folderTools={folder ? <PricingFolderMargin busy={busy} companyId={companyId} folder={folder} key={`margin-${folder}`} onBusy={setBusy} onError={setError} onMessage={setMessage} send={send} state={state} /> : null} items={allItems ?? state.items} onFolder={setFolder} run={run} state={state} tree={buildMarginTree(splitHidden(allItems ?? state.items).visible, state, folderOrder)} />
     {allItems === null ? <p className="text-xs text-slate-500">전체 상품을 읽지 못해 이 페이지({state.items.length}개)만 보여 줍니다.</p> : null}
     </> : null}
     {view === "groups" ? <section aria-label="마진 그룹 직접 관리" className="rounded-xl border border-slate-200 bg-white p-3" data-testid="margin-advanced">
