@@ -82,6 +82,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify CX-41 order-to-return journey on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx41_order_return_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-38-order-sale-documents.pg17.test.sql
+
       - name: Verify CX-46c delivery route stops draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
