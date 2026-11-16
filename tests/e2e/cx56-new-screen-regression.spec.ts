@@ -103,7 +103,7 @@ test("store information update is followed by a company notification", async ({ 
     id: "notification-1", notificationType: "store_profile_changed", subject: "합성 변경 매장", createdAt: "2026-11-17T00:00:00Z", readAt: null, processedAt: null,
     beforeValues: { storeName: "합성 이전 매장" }, afterValues: { storeName: information.storeName },
   }] } }));
-  await page.goto("/dashboard/settings/store-notifications");
+  await page.goto("/orders");
   await expect(page.getByText("매장 정보 바뀜 · 합성 변경 매장", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "전후 비교 보기 (1칸)" }).click();
   await expect(page.getByRole("cell", { name: "합성 이전 매장" })).toBeVisible();
