@@ -7,6 +7,7 @@ import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
+import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -157,6 +158,7 @@ export async function POST(request: NextRequest) {
     const order = updated?.[0];
     if (!order)
       return NextResponse.json({ message: "점주가 방금 수정했거나 이미 처리된 주문입니다. 새로고침 후 다시 확인해 주세요." }, { status: 409 });
+    await markNewOrderNotificationProcessed(scope, orderId).catch(() => undefined);
     return NextResponse.json({ order });
   } catch (error) {
     if (error instanceof Error && error.message.includes("store_customer_review_required"))
