@@ -66,7 +66,8 @@ describe("PC map workspace layout", () => {
 
   it("keeps lead card controls fixed-width and exposes guarded bulk stage changes", () => {
     expect(sidePanelSource).toContain('aria-label={`${lead.businessName} 선택`}');
-    expect(sidePanelSource).toContain("max-w-[84px] rounded-full");
+    expect(readFileSync("components/map/map-list-row.tsx", "utf8")).toContain("max-w-16");
+    expect(sidePanelSource).toContain("<StageChipSelect");
     expect(sidePanelSource).toContain('aria-label="바꿀 단계"');
     expect(sidePanelSource).toContain("runMapLeadStageBulk(");
     expect(sidePanelSource).toContain("setSelectedLeadIds(new Set(failed.map");
@@ -111,7 +112,7 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
   });
 
   it("supports six accessible 26px lead contact channel icons", () => {
-    expect(mapLeadChannelsSource).toContain("h-[26px] w-[26px]");
+    expect(mapLeadChannelsSource).toContain("h-6 w-6");
     for (const label of ["휴대폰", "인스타", "톡톡", "이메일", "팩스", "매장전화"]) {
       expect(mapLeadChannelsSource).toContain(`title="${label}"`);
     }
@@ -170,10 +171,10 @@ describe("시안 ⑫ 필터 줄 · 격자", () => {
     expect(workspaceSource).toContain('title: LEAD_STORE_AREA_FEATURE_ENABLED ? "매장 규모(평)" : "매장 규모(평) · 준비 중"');
     expect(workspaceSource).not.toContain("lg:absolute lg:inset-x-2 lg:top-2 lg:z-20");
     expect(workspaceSource).toContain('"lg:right-[250px]"');
-    expect(workspaceSource).toContain('"lg:left-[340px]"');
+    expect(workspaceSource).toContain('"lg:left-[340px] xl:left-[380px]"');
     // 11/15: PC는 목록 패널이 왼쪽, 담당자·차량 패널이 오른쪽(모바일 DOM 순서는 그대로).
     expect(workspaceSource).toContain("lg:bottom-0 lg:right-0 lg:top-0 lg:border-0 lg:border-l");
-    expect(workspaceSource.split("lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px]").length - 1).toBe(3);
+    expect(workspaceSource.split("lg:bottom-0 lg:left-0 lg:top-0 lg:w-[340px] xl:w-[380px]").length - 1).toBe(3);
     expect(workspaceSource).toContain('aria-label="보기 방식"');
     expect(workspaceSource).toContain('aria-label="현재 필터 조건"');
   });

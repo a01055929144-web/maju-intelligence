@@ -104,6 +104,11 @@ export function relationshipChipClass(status: string | null | undefined) {
     : "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
 }
 
+/** 목록 행에 보여 줄 업종: 괄호 앞까지만(`외국음식전문점(인도,태국등)` → `외국음식전문점`). 전체 글은 호출하는 쪽이 title로 둔다. */
+export function displayIndustry(value: string | null | undefined) {
+  return (value ?? "").split(/[(（]/)[0].trim();
+}
+
 export function businessStatusClass(status: StoreRow["businessStatus"]) {
   if (status === "active") return "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-700";
   if (status === "closed") return "rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-700";
