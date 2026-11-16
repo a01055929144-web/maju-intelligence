@@ -125,6 +125,8 @@ export default async function StorePage({ searchParams }: {
         { id: "synthetic-line-1", product_name: "합성 양파", specification: "10 kg", sales_unit: "박스", quantity: 1, unit_price: 11100, total_amount: 11100 },
         { id: "synthetic-line-2", product_name: "합성 대파", specification: "1 kg", sales_unit: "단", quantity: 2, unit_price: null, total_amount: null },
       ],
+      document: { id: "30000000-0000-4000-8000-000000000001", revision: 2, documentNumber: "합성-명세서-001", totalAmount: 11100,
+        lines: [{ id: "line-1", name: "합성 양파", specification: "10kg", unit: "망", quantity: 1, unitPrice: 10000, lineAmount: 10000 }, { id: "line-2", name: "배송비", unit: "건", quantity: 1, unitPrice: 1100, lineAmount: 1100 }] },
     }];
     else if (fixture) orders = [{ id: "synthetic-order", delivery_date: "2099-01-02", status: "submitted", known_total: selected === memberAccounts[0] ? 11100 : 22200, submitted_at: "2099-01-01T00:00:00Z", has_market_price: false }];
     else {
