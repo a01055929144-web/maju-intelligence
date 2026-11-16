@@ -17,7 +17,8 @@ import { WorkspaceSectionNav } from "@/components/workspace-section-nav";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getCustomerRevenueGrade } from "@/lib/customer/domain/customer-grade";
 import { isStoreVisibleByStatus, relationshipLabel } from "@/domains/customer/relationship-filter";
-import { formatWon } from "@/domains/shared/money";
+import { formatNumber, formatWon } from "@/domains/shared/money";
+import { copyText } from "@/lib/copy-text";
 import { reportClientRenderTiming } from "@/lib/performance-timing";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 
@@ -1130,10 +1131,9 @@ export default function CrmTimelinePage() {
 
   async function copyActivationLink(url = activationUrl) {
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setActivationMessage("점주 개통 링크를 복사했습니다. 30분 안에 점주에게 전달하세요.");
-    } catch {
+    } else {
       setActivationMessage("자동 복사에 실패했습니다. 아래 링크를 길게 눌러 직접 복사하세요.");
     }
   }
@@ -1854,7 +1854,7 @@ export default function CrmTimelinePage() {
                 <div className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4">
                   <InfoTile icon={Building2} label="사업자번호" value={selectedCustomer.businessNumber || "미등록"} />
                   <InfoTile icon={Phone} label="연락처" value={selectedCustomer.phone || "미등록"} />
-                  <InfoTile icon={Banknote} label="월 매출" value={`${selectedCustomer.monthlyRevenue.toLocaleString()}만원`} />
+                  <InfoTile icon={Banknote} label="월 매출" value={`${formatNumber(selectedCustomer.monthlyRevenue)}만원`} />
                   <InfoTile icon={Route} label="출발지 거리" value={`${selectedCustomer.deliveryKm}km`} />
                 </div>
                 <div className="grid gap-0 border-t border-slate-200 sm:grid-cols-3">
@@ -1980,6 +1980,7 @@ export default function CrmTimelinePage() {
                       <div className="mt-3 flex flex-col gap-2 lg:flex-row">
                         <label className="maju-search-field flex h-10 min-w-0 flex-1 items-center gap-2 px-3">
                           <Search className="h-4 w-4 text-slate-400" />
+                          {/* shared-ui-exception: 주소 결과 목록과 키보드 포커스를 함께 제어하는 전용 검색칸 */}
                           <input
                             className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
                             onChange={(event) => setAddressQuery(event.target.value)}

@@ -71,7 +71,7 @@ describe("lead outreach governance", () => {
   it("records source disclosure before writing to the clipboard", () => {
     const panel = fs.readFileSync(path.join(process.cwd(), "components/lead-contact-channels-panel.tsx"), "utf8");
     const disclosureHandler = panel.slice(panel.indexOf("async function copySourceDisclosure"), panel.indexOf("function confirmAfterHoursSms"));
-    expect(disclosureHandler.indexOf("fetchWithTimeout")).toBeLessThan(disclosureHandler.indexOf("navigator.clipboard.writeText"));
+    expect(disclosureHandler.indexOf("fetchWithTimeout")).toBeLessThan(disclosureHandler.indexOf("copyText(disclosure)"));
     expect(disclosureHandler).toContain("출처 안내 기록을 남기지 못해 문구를 복사하지 않았습니다.");
     expect(disclosureHandler).toContain("if (recordingSourceDisclosure) return");
     expect(disclosureHandler).toContain("setRecordingSourceDisclosure(false)");

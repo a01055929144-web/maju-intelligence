@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { LinkifiedText } from "@/components/linkified-text";
 import { MessageTemplateManager } from "@/components/message-template-manager";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { copyText } from "@/lib/copy-text";
 import { formatUploadSizeMb, MAX_UPLOAD_SIZE_BYTES } from "@/lib/upload-limits";
 import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 import { DELIVERY_ACTIONS, DELIVERY_EVENT_STATUSES, DELIVERY_ISSUE_CAUSES, DELIVERY_OCCURRENCE_STAGES, DELIVERY_RECORD_TYPES, requiresDeliveryIssueCause, requiresDeliveryItems, type DeliveryAction, type DeliveryEventStatus, type DeliveryIssueCause, type DeliveryOccurrenceStage, type DeliveryRecordType } from "@/domains/delivery/issue-causes";
@@ -469,12 +470,7 @@ export function MobileDeliveryProofPanel({
   }
 
   async function copyOwnerMessage() {
-    try {
-      await navigator.clipboard.writeText(ownerMessage);
-      setCopyMessage("점주 발송 문구를 복사했습니다.");
-    } catch {
-      setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
-    }
+    setCopyMessage((await copyText(ownerMessage)) ? "점주 발송 문구를 복사했습니다." : "복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
   }
 
   async function shareOwnerMessage(sharedFiles: File[] = files) {
@@ -487,7 +483,7 @@ export function MobileDeliveryProofPanel({
       return false;
     }
     try {
-      await navigator.clipboard?.writeText(ownerMessage).catch(() => undefined);
+      await copyText(ownerMessage);
       const messageCard = await createMessageCardFile(customerName, ownerMessage);
       const filesWithMessage = messageCard ? [messageCard, ...sharedFiles] : sharedFiles;
       const shareData: ShareData = { text: ownerMessage, title: `${customerName} 배송 안내` };

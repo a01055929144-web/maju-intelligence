@@ -12,6 +12,7 @@ import { DriverSelectField } from "@/components/driver-select-field";
 import { formatNumber } from "@/domains/shared/money";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatPhoneNumber } from "@/lib/phone";
+import { copyText as copyTextToClipboard } from "@/lib/copy-text";
 import { shareToKakao } from "@/lib/kakao-share";
 import { DEFAULT_STAFF_JOB_TITLES, type CompanyJobTitle } from "@/lib/staff-job-titles";
 import type { StaffInvitation } from "@/lib/store";
@@ -398,7 +399,7 @@ export function StaffManagementPanel({
   }
 
   async function copyText(value: string, nextMessage: string) {
-    await navigator.clipboard?.writeText(value).catch(() => null);
+    await copyTextToClipboard(value);
     setMessage(nextMessage);
   }
 
@@ -478,7 +479,7 @@ export function StaffManagementPanel({
 
           {invitations.length ? (
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
-              <SearchInput aria-label="직원 검색" inputProps={{ role: "textbox" }} onChange={(value) => { setSearchQuery(value); setPage(1); }} onClear={() => { setSearchQuery(""); setPage(1); }} placeholder="이름, 연락처, 카카오/소셜 ID, 담당자·차량 검색" value={searchQuery} />
+              <SearchInput aria-label="직원 검색" onChange={(value) => { setSearchQuery(value); setPage(1); }} onClear={() => { setSearchQuery(""); setPage(1); }} placeholder="이름, 연락처, 카카오/소셜 ID, 담당자·차량 검색" value={searchQuery} />
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   aria-label="직원 연결 상태 필터"

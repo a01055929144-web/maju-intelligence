@@ -2,6 +2,7 @@
 
 import { Check, Copy, Loader2, Printer, Share2 } from "lucide-react";
 import { useState } from "react";
+import { copyText } from "@/lib/copy-text";
 
 type ActionFeedback = {
   message: string;
@@ -26,14 +27,12 @@ export function ReportActions({ companyName }: { readonly companyName: string })
     if (isCopying) return;
     setIsCopying(true);
     setFeedback(null);
-    try {
-      await navigator.clipboard.writeText(window.location.href);
+    if (await copyText(window.location.href)) {
       setFeedback({ message: "리포트 링크를 복사했습니다. 메모나 대화창에 붙여넣어 다시 사용할 수 있습니다.", tone: "success" });
-    } catch {
+    } else {
       setFeedback({ message: "링크를 복사하지 못했습니다. 주소창의 주소를 길게 눌러 직접 복사해 주세요.", tone: "error" });
-    } finally {
-      setIsCopying(false);
     }
+    setIsCopying(false);
   }
 
   async function shareReport() {
@@ -52,7 +51,7 @@ export function ReportActions({ companyName }: { readonly companyName: string })
         setFeedback({ message: "리포트를 공유했습니다.", tone: "success" });
         return;
       }
-      await navigator.clipboard.writeText(window.location.href);
+      if (!(await copyText(window.location.href))) throw new Error("copy failed");
       setFeedback({ message: "이 브라우저에서는 공유 창을 열 수 없어 리포트 링크를 대신 복사했습니다.", tone: "neutral" });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {

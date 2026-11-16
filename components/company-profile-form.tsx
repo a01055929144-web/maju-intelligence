@@ -86,6 +86,7 @@ export function CompanyProfileForm({ companyId, initialTab = "basic", orderConte
     const onClick = (event: MouseEvent) => {
       const anchor = (event.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank" || anchor.href.startsWith("javascript:")) return;
+      // shared-ui-exception: 캡처 단계 링크 이동을 동기적으로 막아야 해 비동기 확인창을 쓸 수 없음
       if (!window.confirm("저장하지 않은 내용이 있습니다. 저장하지 않고 이동할까요?")) { event.preventDefault(); event.stopPropagation(); }
     };
     window.addEventListener("beforeunload", beforeUnload);
@@ -292,7 +293,7 @@ function AddressSearchInput({ onPick, placeholder, readOnly, value }: { onPick: 
   return (
     <div>
       <div className="mt-1 flex gap-1.5">
-        <SearchInput aria-label={placeholder || "주소 검색"} className="flex-1" inputProps={{ disabled: readOnly, role: "textbox", onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); void run(); } } }} onChange={(next) => { onPick(null, next); setResults([]); }} placeholder={placeholder} size="sm" value={value} />
+        <SearchInput aria-label={placeholder || "주소 검색"} className="flex-1" inputProps={{ disabled: readOnly, onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); void run(); } } }} onChange={(next) => { onPick(null, next); setResults([]); }} placeholder={placeholder} size="sm" value={value} />
         {!readOnly ? <button className="maju-button-secondary h-9 shrink-0 px-3 text-xs" disabled={busy} onClick={() => void run()} type="button"><MapPin className="h-3.5 w-3.5" />{busy ? "검색 중" : "주소 검색"}</button> : null}
       </div>
       {message ? <p className="mt-1 text-[11px] font-semibold text-slate-500">{message}</p> : null}

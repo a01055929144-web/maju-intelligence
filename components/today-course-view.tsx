@@ -14,7 +14,8 @@ import {
 import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState } from "@/components/ui/state";
 import { Notice } from "@/components/ui/notice";
-import { formatWon } from "@/domains/shared/money";
+import { formatNumber, formatWon } from "@/domains/shared/money";
+import { copyText } from "@/lib/copy-text";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { RouteSequence, RouteSequenceAction } from "@/components/route-sequence-action";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
@@ -858,7 +859,7 @@ export function TodayCourseView({
                             </span>
                             <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
                             <span className="mt-2 block text-xs font-bold text-slate-400">
-                              출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원
+                              출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {formatNumber(store.expectedRevenue)}만원
                             </span>
                           </span>
                           </span>
@@ -984,7 +985,7 @@ export function TodayCourseView({
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-slate-950">{store.name}</span>
                           <span className="mt-1 block truncate text-xs font-bold text-slate-500">{store.address || store.region}</span>
-                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {store.expectedRevenue.toLocaleString()}만원</span>
+                          <span className="mt-2 block text-xs font-bold text-slate-400">출발지 기준 {formatDistanceKmLabel(store.distanceKm)} · {formatMinutes(store.durationMinutes || 0)} · 매출 {formatNumber(store.expectedRevenue)}만원</span>
                           {store.orderIds?.length ? <span className="mt-1 block text-xs font-semibold text-violet-700">주문 {store.orderIds.length}건 · revision {Math.max(...Object.values(store.orderRevisions || {}))}</span> : null}
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-2">
@@ -1075,12 +1076,7 @@ function DeliveryProofPanel({
     setMemo("");
   };
   const copyOwnerMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(ownerMessage);
-      setCopyMessage("점주 발송 문구를 복사했습니다.");
-    } catch {
-      setCopyMessage("복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
-    }
+    setCopyMessage((await copyText(ownerMessage)) ? "점주 발송 문구를 복사했습니다." : "복사 권한을 받을 수 없습니다. 문구를 직접 선택해 복사하세요.");
   };
   const retrySavedProof = async (proof: DeliveryProof) => {
     const key = deliveryProofSessionKey(proof);
