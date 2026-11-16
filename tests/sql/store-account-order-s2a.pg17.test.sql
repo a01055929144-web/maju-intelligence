@@ -45,6 +45,7 @@ begin
     where c.company_id = company and c.id = customer;
   if cardinality(public.store_order_eligibility(company, account, owner_user)) <> 0
     then raise exception 'fixture blocked: %', public.store_order_eligibility(company, account, owner_user); end if;
+  perform set_config('role', 'service_role', true);
   perform public.save_store_order_cart_line(company, account, staff_user, product, null, 2);
   if (select quantity from public.store_order_cart_lines(company, account, owner_user)) is distinct from 2
     then raise exception 'cart is not shared'; end if;
