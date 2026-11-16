@@ -64,6 +64,7 @@ import { SalesAreaSelector } from "@/components/sales-area-selector";
 import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
+import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
   BulkLeadActionBusy,
@@ -3427,11 +3428,7 @@ function PermitLeadDetailPanel({
             <div className="mt-1 flex min-w-0 items-center gap-2">
               <h3 className="min-w-0 truncate text-lg font-black text-slate-950">{lead.businessName}</h3>
               {/* 11/4: 지도 오른쪽 목록처럼 상호명 옆에 지도 바로가기(카카오·네이버·구글). */}
-              <span className="flex shrink-0 items-center gap-1">
-                <a aria-label="카카오맵에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#FEE500] text-xs font-black text-[#3c1e1e]" href={placeLinks.kakaoPlaceUrl} rel="noreferrer" target="_blank" title="카카오맵">K</a>
-                <a aria-label="네이버 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md bg-[#03C75A] text-xs font-black text-white" href={placeLinks.naverPlaceUrl} rel="noreferrer" target="_blank" title="네이버 지도">N</a>
-                <a aria-label="구글 지도에서 보기" className="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white text-xs font-black text-[#4285F4]" href={placeLinks.googleMapUrl} rel="noreferrer" target="_blank" title="구글 지도">G</a>
-              </span>
+              <span className="flex shrink-0 items-center gap-1"><PlaceLinkBadges places={{ google: placeLinks.googleMapUrl, kakao: placeLinks.kakaoPlaceUrl, naver: placeLinks.naverPlaceUrl }} /></span>
             </div>
             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">
               {lead.industryPrimary}

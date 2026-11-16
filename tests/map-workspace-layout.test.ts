@@ -17,6 +17,7 @@ const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
 const mapControlsSource = readFileSync("components/map-corner-controls.tsx", "utf8");
 const mapDrawerSource = readFileSync("components/map-store-detail-drawer.tsx", "utf8");
 const mapLeadChannelsSource = readFileSync("components/map-lead-channel-icons.tsx", "utf8");
+const placeLinkBadgesSource = readFileSync("components/place-link-badges.tsx", "utf8");
 const mapVehicleConnectionToastSource = readFileSync("components/map-vehicle-connection-toast.tsx", "utf8");
 // 47-6: 접속 토스트는 공통 Toast(components/ui/notice.tsx) 위에 얹혀 있다 — 읽어 주는 속성은 거기서 확인.
 const noticeSource = readFileSync("components/ui/notice.tsx", "utf8");
@@ -117,7 +118,9 @@ describe("시안 ⑫ 남은 지도 상호작용", () => {
       expect(mapLeadChannelsSource).toContain(`title="${label}"`);
     }
     expect(sidePanelSource).toContain("<MapLeadChannelIcons lead={lead} places=");
-    for (const label of ["네이버 지도", "카카오맵", "구글 지도"]) expect(mapLeadChannelsSource).toContain(`title="${label}"`);
+    // CC-57: 지도 링크 배지(K·N·G)는 공용 부품 한 곳 — 채널 아이콘도 그것을 쓴다.
+    expect(mapLeadChannelsSource).toContain("<PlaceLinkBadges");
+    for (const label of ["네이버 지도", "카카오맵", "구글 지도"]) expect(placeLinkBadgesSource).toContain(`title="${label}"`);
   });
 
   it("opens customer detail on the core dashboard and preserves phone and email actions", () => {
