@@ -643,6 +643,9 @@ jobs:
       - name: Check generated schema document
         run: node scripts/gen-schema-doc.mjs --check
 
+      - name: Check Vercel maxDuration
+        run: node scripts/check-max-duration.mjs
+
       - name: Test
         run: npm test
 
