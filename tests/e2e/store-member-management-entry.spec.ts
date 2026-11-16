@@ -80,7 +80,7 @@ for (const width of [1440, 390]) test(`store information reuses address and memb
   await expect(page.getByLabel("사업자등록번호")).toBeDisabled();
   await expect(page.getByRole("link", { name: "배송지 관리" })).toHaveAttribute("href", /#store-address-management$/);
   await expect(page.getByRole("link", { name: "구성원 관리" })).toHaveAttribute("href", /\/store\/members\?/);
-  await expect(page.getByRole("status")).toContainText("안전한 처리 절차 승인 후");
+  await expect(page.getByText(/연결 해제·이용 종료는 안전한 처리 절차 승인 후/)).toBeVisible();
   await page.getByRole("button", { name: "정보 수정" }).click();
   await page.getByLabel("상호").fill("수정 합성 매장");
   await page.getByRole("button", { name: "저장", exact: true }).click();
