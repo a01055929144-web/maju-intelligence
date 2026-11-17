@@ -30,6 +30,6 @@ for (const width of [1440, 390]) test(`creates a store-wide staff invitation at 
   await page.getByRole("button", { name: "점장", exact: true }).click();
   await page.getByRole("button", { name: "초대 링크 만들기" }).click();
   await expect(page.getByText("연결된 모든 유통사에서 같은 역할")).toBeVisible();
-  await expect(page.getByRole("button", { name: "초대 링크 복사" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "링크 복사", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 });
