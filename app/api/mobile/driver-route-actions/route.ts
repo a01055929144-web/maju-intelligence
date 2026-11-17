@@ -36,13 +36,41 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
+export async function PATCH(request: NextRequest) {
+  const verified = await scope(request);
+  if (!verified) return NextResponse.json({ message: "기능이 열리지 않았거나 기사 권한이 없습니다." }, { status: 404 });
+  const body = await request.json().catch(() => null) as { customerIds?: string[] } | null;
+  const customerIds = body?.customerIds;
+  if (!Array.isArray(customerIds) || !customerIds.length || new Set(customerIds).size !== customerIds.length || customerIds.some((id) => !uuid.test(id))) return NextResponse.json({ message: "완료할 배송지를 확인해 주세요." }, { status: 400 });
+
+  const company = encodeURIComponent(verified.companyId), driver = encodeURIComponent(verified.memberId), date = today();
+  const rows = await supabaseRequest<Array<{ customer_id: string; id: string; status: string; stop_type: string }>>(
+    `delivery_route_stops?select=id,customer_id,status,stop_type&company_id=eq.${company}&driver_member_id=eq.${driver}&route_date=eq.${date}&customer_id=in.(${customerIds.map(encodeURIComponent).join(",")})`,
+  );
+  const byCustomer = new Map(rows.map((row) => [row.customer_id, row]));
+  const selected = customerIds.map((id) => byCustomer.get(id));
+  if (selected.some((row) => !row) || selected.some((row) => row?.stop_type !== "delivery" || !["planned", "arrived"].includes(row.status))) {
+    return NextResponse.json({ message: "경로가 바뀌었습니다. 새로고침한 뒤 다시 시도해 주세요." }, { status: 409 });
+  }
+
+  const completedAt = new Date().toISOString();
+  const stopIds = selected.map((row) => row!.id);
+  const updated = await supabaseRequest<Array<{ id: string }>>(
+    `delivery_route_stops?company_id=eq.${company}&driver_member_id=eq.${driver}&route_date=eq.${date}&id=in.(${stopIds.map(encodeURIComponent).join(",")})&status=in.(planned,arrived)`,
+    { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ completed_at: completedAt, status: "completed", updated_at: completedAt }) },
+  );
+  if (updated.length !== stopIds.length) return NextResponse.json({ message: "일부 정류장 상태가 바뀌었습니다. 새로고침해 확인해 주세요." }, { status: 409 });
+  return NextResponse.json({ completedAt, customerIds, ok: true, stopIds });
+}
+
 export async function DELETE(request: NextRequest) {
   const verified = await scope(request);
   if (!verified) return NextResponse.json({ message: "기능이 열리지 않았거나 기사 권한이 없습니다." }, { status: 404 });
-  const body = await request.json().catch(() => null) as { completedAt?: string; stopId?: string } | null;
-  if (!body?.stopId || !uuid.test(body.stopId) || !body.completedAt || Number.isNaN(Date.parse(body.completedAt))) return NextResponse.json({ message: "되돌릴 기록을 확인해 주세요." }, { status: 400 });
+  const body = await request.json().catch(() => null) as { completedAt?: string; stopId?: string; stopIds?: string[] } | null;
+  const stopIds = body?.stopIds || (body?.stopId ? [body.stopId] : []);
+  if (!stopIds.length || new Set(stopIds).size !== stopIds.length || stopIds.some((id) => !uuid.test(id)) || !body?.completedAt || Number.isNaN(Date.parse(body.completedAt))) return NextResponse.json({ message: "되돌릴 기록을 확인해 주세요." }, { status: 400 });
   try {
-    await supabaseRequest("rpc/undo_driver_route_stop", { method: "POST", body: JSON.stringify({ p_company_id: verified.companyId, p_driver_member_id: verified.memberId, p_stop_id: body.stopId, p_completed_at: body.completedAt }) });
+    await Promise.all(stopIds.map((stopId) => supabaseRequest("rpc/undo_driver_route_stop", { method: "POST", body: JSON.stringify({ p_company_id: verified.companyId, p_driver_member_id: verified.memberId, p_stop_id: stopId, p_completed_at: body.completedAt }) })));
   } catch {
     return NextResponse.json({ message: "5초가 지났거나 기록이 이미 바뀌었습니다." }, { status: 409 });
   }
