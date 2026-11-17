@@ -423,10 +423,18 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setMessage(`매입처 ${suppliers.join(", ")}에 기존 상품 ${targets.length}개를 연결하는 중입니다…`);
       let linked = 0;
       for (let offset = 0; offset < targets.length; offset += 200) {
+        setMessage(`매입처 연결 ${offset}/${targets.length}개 처리 중…`);
         const response = await fetch("/api/price-sheets/links", { body: JSON.stringify({ companyId, fileName: fileName || "매입가 업로드", links: targets.slice(offset, offset + 200) }), headers: { "Content-Type": "application/json" }, method: "POST" });
-        const result = (await response.json().catch(() => null)) as { linked?: number; message?: string } | null;
-        if (!response.ok) throw new Error(result?.message || "매입처 연결에 실패했습니다. 잠시 후 다시 열 정렬을 눌러 주세요.");
+        const result = (await response.json().catch(() => null)) as { attempted?: number; linked?: number; message?: string; retryable?: boolean } | null;
+        if (!response.ok) {
+          if (result?.retryable) {
+            await load({ documents: false }).catch(() => undefined);
+            throw new Error(`${result.message || "매입처 연결을 끝내지 못했습니다."} 파일은 그대로입니다. ② 열 정렬을 다시 누르면 남은 연결부터 재시도합니다.`);
+          }
+          throw new Error(result?.message || "매입처 연결에 실패했습니다. 잠시 후 다시 열 정렬을 눌러 주세요.");
+        }
         linked += Number(result?.linked || 0);
+        setMessage(`매입처 연결 ${Math.min(offset + Number(result?.attempted || 200), targets.length)}/${targets.length}개 처리 중…`);
       }
       const fresh = await load({ documents: false });
       applyFileWith((fresh as DatedProduct[] | undefined) || products, `매입처 ${suppliers.join(", ")} 연결 ${linked}개 · `, linked);
@@ -948,7 +956,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
               ? <input aria-label={`${line.rowNumber}행 이 코드 다음에도 제외`} checked={rememberRows.has(line.rowNumber)} className="h-5 w-5" onChange={event => setRememberRows(toggleRow(rememberRows, line.rowNumber, event.target.checked))} type="checkbox" />
               : <span className="text-xs text-slate-400">{skipRows.has(line.rowNumber) ? "코드 없음" : "-"}</span> },
             { key: "code", label: "코드", value: line => line.code || "-" },
-            { key: "rowNumber", label: "원본 행", value: line => line.rowNumber }, { key: "name", label: "품목", value: line => line.name },
+            { key: "rowNumber", label: "원본 행", value: line => line.rowNumber }, { key: "name", label: "품목(원문)", value: line => line.rawName },
+            { key: "spec", label: "규격", value: line => line.spec || "-" }, { key: "unit", label: "단위", value: line => line.unit || "-" },
             { key: "purchaseDate", label: "적용일", value: line => line.purchaseDate }, { key: "cost", label: "단가(별도)", value: line => line.cost }, { key: "quantity", label: "수량", value: line => line.quantity ?? "-" }]} />
         {rememberRows.size ? <label className="flex flex-wrap items-center gap-2 text-sm"><span className="font-semibold">다음에도 제외할 범위</span>
           <select aria-label="다음에도 제외할 범위" className="maju-input min-h-[44px]" onChange={event => setRememberScope(event.target.value as "supplier" | "company")} value={rememberScope}><option value="supplier">이 매입처만</option><option value="company">회사 전체</option></select></label> : null}
