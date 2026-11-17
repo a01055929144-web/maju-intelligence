@@ -103,12 +103,12 @@ describe("order inbox API", () => {
     });
   });
 
-  it.each(["order_receipt_conflict", "order_receipt_document_unlinked"])("does not patch order on RPC failure %s", async error => {
+  it.each(["order_receipt_conflict", "order_receipt_document_unlinked", "order_receipt_amount_mismatch"])("does not patch order on RPC failure %s", async error => {
     vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
     mocks.supabase.mockRejectedValueOnce(new Error(error));
     const response = await confirm();
     expect(response.status).toBe(409);
-    if (error === "order_receipt_document_unlinked") expect(await response.json()).toMatchObject({ code: "order_document_failed" });
+    if (error !== "order_receipt_conflict") expect(await response.json()).toMatchObject({ code: "order_document_failed" });
     expect(mocks.supabase).toHaveBeenCalledTimes(1);
     expect(mocks.notifications).not.toHaveBeenCalled();
   });

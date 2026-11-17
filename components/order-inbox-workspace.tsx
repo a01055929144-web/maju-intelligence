@@ -16,7 +16,7 @@ type Order = {
   id: string; storeAccountId: string | null; customerName: string; deliveryAddress: string | null; orderedBy: string;
   deliveryDate: string | null; status: string; knownTotal: number; hasMarketPrice: boolean;
   requestMemo: string; submittedAt: string; revision: number; lines: Line[];
-  orderDocument?: { status: "confirmed"; number: string } | { status: "unlinked" };
+  orderDocument?: { status: "draft" | "confirmed"; number: string } | { status: "unlinked" };
 };
 
 type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
@@ -132,9 +132,11 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
     ...(orders?.some(row => row.orderDocument) ? [{
-      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "confirmed"
+      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
         ? row.orderDocument.number : row.status === "submitted" ? "접수 시 전표 연결" : "미연결",
-      render: (row: Order) => failedDocumentOrder === row.id ? "전표 연결 실패" : row.orderDocument?.status === "confirmed"
+      render: (row: Order) => failedDocumentOrder === row.id ? "전표 연결 실패" : row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
         ? row.orderDocument.number : row.status === "submitted" ? "접수 시 전표 연결" : "미연결",
     }] : []),
     { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)

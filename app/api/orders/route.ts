@@ -6,7 +6,7 @@ import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
-import { readConfirmedOrderSaleDocuments, receiveStoreOrderWithSaleDocument } from "@/lib/pricing/store-order-sale-document";
+import { readOrderSaleDocuments, receiveStoreOrderWithSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
       accountIds.length ? supabaseRequest<Array<{ id: string }>>(
         `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
       ) : Promise.resolve([]),
-      erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
+      erpEnabled ? readOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
     ]);
     const needsReview = new Set(pending.map((row) => row.id));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
           revision: order.revision,
           ...(erpEnabled ? {
             orderDocument: document?.customer_id === order.customer_id
-              ? { status: "confirmed", number: document.document_number }
+              ? { status: document.status, number: document.document_number }
               : { status: "unlinked" },
           } : {}),
           lines: order.store_order_lines.map((line) => ({
@@ -191,6 +191,8 @@ export async function POST(request: NextRequest) {
     if (erpEnabled) {
       if (error instanceof Error && error.message.includes("order_receipt_conflict"))
         return NextResponse.json({ message: "주문이 변경됐습니다. 새로고침 후 다시 시도해 주세요." }, { status: 409 });
+      if (error instanceof Error && error.message.includes("order_receipt_amount_mismatch"))
+        return NextResponse.json({ code: "order_document_failed", message: "주문과 전표 금액이 달라 접수하지 않았습니다. 금액을 확인해 주세요." }, { status: 409 });
       return NextResponse.json({ code: "order_document_failed", message: "전표 연결에 실패했습니다. 주문을 접수하지 않았습니다." }, { status: 409 });
     }
     return NextResponse.json({ message: "주문을 확인 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 500 });

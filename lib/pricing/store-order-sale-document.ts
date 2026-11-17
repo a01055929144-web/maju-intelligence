@@ -10,13 +10,13 @@ export function receiveStoreOrderWithSaleDocument(companyId: string, orderId: st
   );
 }
 
-type ConfirmedSaleDocument = { source_id: string; source_key: string; customer_id: string; document_number: string };
+type OrderSaleDocument = { source_id: string; source_key: string; customer_id: string; document_number: string; status: "draft" | "confirmed" };
 
-export async function readConfirmedOrderSaleDocuments(companyId: string, orderIds: string[]) {
-  if (!orderIds.length) return new Map<string, ConfirmedSaleDocument>();
-  const rows = await supabaseRequest<ConfirmedSaleDocument[]>(
-    `business_documents?company_id=eq.${encodeURIComponent(companyId)}&document_type=eq.sale&source_type=eq.order&status=eq.confirmed` +
-    `&source_id=in.(${orderIds.map(encodeURIComponent).join(",")})&select=source_id,source_key,customer_id,document_number`,
+export async function readOrderSaleDocuments(companyId: string, orderIds: string[]) {
+  if (!orderIds.length) return new Map<string, OrderSaleDocument>();
+  const rows = await supabaseRequest<OrderSaleDocument[]>(
+    `business_documents?company_id=eq.${encodeURIComponent(companyId)}&document_type=eq.sale&source_type=eq.order&status=in.(draft,confirmed)` +
+    `&source_id=in.(${orderIds.map(encodeURIComponent).join(",")})&select=source_id,source_key,customer_id,document_number,status`,
   );
   return new Map(rows.filter(row => row.source_key === `order:${row.source_id}`).map(row => [row.source_id, row]));
 }
