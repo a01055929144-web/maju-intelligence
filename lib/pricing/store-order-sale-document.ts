@@ -8,6 +8,7 @@ export async function syncStoreOrderSaleDocument(
   companyId: string,
   result: Record<string, unknown>,
   actorUserId: string | null,
+  actorName = "매장 온라인 주문",
 ): Promise<OrderDocumentStatus | undefined> {
   if (!erpOrderDocumentsEnabled(companyId)) return undefined;
   const { id, revision } = result;
@@ -19,7 +20,7 @@ export async function syncStoreOrderSaleDocument(
     p_company_id: companyId,
     p_order_id: id,
     p_actor_user_id: actorUserId,
-    p_actor_name: "매장 온라인 주문",
+    p_actor_name: actorName,
   };
   try {
     // Confirm is idempotent and can recover an order whose first document attempt failed.
@@ -35,4 +36,15 @@ export async function syncStoreOrderSaleDocument(
     // Keep the saved order acknowledgement intact and do not expose accounting errors to the link holder.
     return "failed";
   }
+}
+
+type ConfirmedSaleDocument = { source_id: string; source_key: string; customer_id: string; document_number: string };
+
+export async function readConfirmedOrderSaleDocuments(companyId: string, orderIds: string[]) {
+  if (!orderIds.length) return new Map<string, ConfirmedSaleDocument>();
+  const rows = await supabaseRequest<ConfirmedSaleDocument[]>(
+    `business_documents?company_id=eq.${encodeURIComponent(companyId)}&document_type=eq.sale&source_type=eq.order&status=eq.confirmed` +
+    `&source_id=in.(${orderIds.map(encodeURIComponent).join(",")})&select=source_id,source_key,customer_id,document_number`,
+  );
+  return new Map(rows.filter(row => row.source_key === `order:${row.source_id}`).map(row => [row.source_id, row]));
 }

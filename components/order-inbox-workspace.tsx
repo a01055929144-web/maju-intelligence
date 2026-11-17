@@ -16,6 +16,7 @@ type Order = {
   id: string; storeAccountId: string | null; customerName: string; deliveryAddress: string | null; orderedBy: string;
   deliveryDate: string | null; status: string; knownTotal: number; hasMarketPrice: boolean;
   requestMemo: string; submittedAt: string; revision: number; lines: Line[];
+  orderDocument?: { status: "confirmed"; number: string } | { status: "unlinked" };
 };
 
 type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
@@ -85,6 +86,19 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     if (!response.ok) throw new Error(result.message || "처리하지 못했습니다.");
     return result;
   }
+  async function retryOrderDocument(order: Order) {
+    setBusyId(order.id);
+    setNotice("");
+    try {
+      await post({ action: "retry_order_document", orderId: order.id, revision: order.revision });
+      setNotice("전표를 연결했습니다. 주문을 확인할 수 있습니다.");
+      await load();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "전표 연결에 실패했습니다.");
+    } finally {
+      setBusyId("");
+    }
+  }
   async function openReview(order: Order) {
     setNotice(""); setReview({ order, candidates: null });
     try { setReview({ order, candidates: (await post({ action: "candidates", storeAccountId: order.storeAccountId })).candidates ?? [] }); }
@@ -123,8 +137,14 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     </details> },
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
+    ...(orders?.some(row => row.orderDocument) ? [{
+      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "confirmed"
+        ? row.orderDocument.number : row.status === "submitted" ? "전표 연결 실패 또는 대기" : "미연결",
+    }] : []),
     { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void openReview(row)} size="sm" variant="outline">거래처 확인</Button>
+      : canConfirm && canConfirmStoreOrder(row.status) && row.orderDocument?.status === "unlinked"
+      ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void retryOrderDocument(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
       : canConfirm && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm">{busyId === row.id ? "확인 중…" : "확인"}</Button>
       : null },

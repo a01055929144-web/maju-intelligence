@@ -5,6 +5,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
+import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
+import { readConfirmedOrderSaleDocuments, syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
@@ -54,13 +56,14 @@ async function authorize(request: NextRequest, write: boolean, companyId?: strin
     return NextResponse.json({ message: write ? "주문 확인 권한이 없습니다." : "주문을 볼 권한이 없습니다." }, { status: 403 });
   if (write && !customer)
     return NextResponse.json({ message: "고객사 계정으로 확인해 주세요." }, { status: 403 });
-  return auth.companyId;
+  return { companyId: auth.companyId, customerSession: customer };
 }
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const scope = await authorize(request, false, params.get("companyId") || undefined);
-  if (typeof scope !== "string") return scope;
+  const auth = await authorize(request, false, params.get("companyId") || undefined);
+  if (auth instanceof NextResponse) return auth;
+  const scope = auth.companyId;
   const company = encodeURIComponent(scope);
   const page = Math.max(1, Math.min(500, Number.parseInt(params.get("page") || "1", 10) || 1));
   const status = params.get("status") || "submitted";
@@ -89,7 +92,8 @@ export async function GET(request: NextRequest) {
     const customerIds = Array.from(new Set(items.map((order) => order.customer_id)));
     const memberIds = Array.from(new Set(items.map((order) => order.ordered_by_member_id).filter((id): id is string => Boolean(id))));
     const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
-    const [customers, members, pending] = await Promise.all([
+    const erpEnabled = erpOrderDocumentsEnabled(scope);
+    const [customers, members, pending, documents] = await Promise.all([
       customerIds.length ? supabaseRequest<CustomerRow[]>(
         `normalized_customers?company_id=eq.${company}&id=in.(${customerIds.join(",")})&select=id,customer_name,address,delivery_base_address,delivery_address_detail`,
       ) : Promise.resolve([]),
@@ -99,6 +103,7 @@ export async function GET(request: NextRequest) {
       accountIds.length ? supabaseRequest<Array<{ id: string }>>(
         `store_accounts?company_id=eq.${company}&id=in.(${accountIds.join(",")})&customer_review_status=eq.needs_review&select=id`,
       ) : Promise.resolve([]),
+      erpEnabled ? readConfirmedOrderSaleDocuments(scope, items.map(order => order.id)) : undefined,
     ]);
     const needsReview = new Set(pending.map((row) => row.id));
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
@@ -109,6 +114,7 @@ export async function GET(request: NextRequest) {
       items: items.map((order) => {
         const customer = customerById.get(order.customer_id);
         const base = customer?.delivery_base_address?.trim();
+        const document = documents?.get(order.id);
         return {
           id: order.id,
           storeAccountId: order.store_account_id && needsReview.has(order.store_account_id) ? order.store_account_id : null,
@@ -123,6 +129,11 @@ export async function GET(request: NextRequest) {
           requestMemo: order.request_memo,
           submittedAt: order.submitted_at,
           revision: order.revision,
+          ...(erpEnabled ? {
+            orderDocument: document?.customer_id === order.customer_id
+              ? { status: "confirmed", number: document.document_number }
+              : { status: "unlinked" },
+          } : {}),
           lines: order.store_order_lines.map((line) => ({
             name: line.product_name, spec: line.specification, unit: line.sales_unit,
             quantity: line.quantity, total: line.total_amount, marketPrice: line.is_market_price,
@@ -142,14 +153,36 @@ export async function POST(request: NextRequest) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
     body = parsed as Record<string, unknown>;
   } catch { return NextResponse.json({ message: "입력값을 확인해 주세요." }, { status: 400 }); }
-  const scope = await authorize(request, true, typeof body.companyId === "string" ? body.companyId : undefined);
-  if (typeof scope !== "string") return scope;
+  const auth = await authorize(request, true, typeof body.companyId === "string" ? body.companyId : undefined);
+  if (auth instanceof NextResponse) return auth;
+  const scope = auth.companyId;
   if (body.action === "candidates" || body.action === "confirm_customer" || body.action === "link_customer") return reviewAction(request, scope, body);
   const { orderId, revision } = body;
-  if (body.action !== "confirm" || typeof orderId !== "string" || !UUID.test(orderId) ||
+  const retryDocument = body.action === "retry_order_document";
+  if ((!retryDocument && body.action !== "confirm") || typeof orderId !== "string" || !UUID.test(orderId) ||
     typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1)
     return NextResponse.json({ message: "확인할 주문을 다시 선택해 주세요." }, { status: 400 });
+  const erpEnabled = erpOrderDocumentsEnabled(scope);
+  if (retryDocument && !erpEnabled) return unavailable();
   try {
+    if (erpEnabled) {
+      const [current] = await supabaseRequest<Array<{ id: string; customer_id: string }>>(
+        `store_orders?company_id=eq.${encodeURIComponent(scope)}&id=eq.${orderId}&status=eq.submitted&revision=eq.${revision}&select=id,customer_id&limit=1`,
+      );
+      if (!current) return NextResponse.json({ message: "주문이 변경됐습니다. 새로고침 후 다시 시도해 주세요." }, { status: 409 });
+      const linked = async () => (await readConfirmedOrderSaleDocuments(scope, [orderId])).get(orderId)?.customer_id === current.customer_id;
+      if (!retryDocument && !await linked())
+        return NextResponse.json({ message: "전표가 연결되지 않았습니다. 전표 연결을 다시 시도한 뒤 접수해 주세요." }, { status: 409 });
+
+      // A saved amendment can outlive a failed ERP update. Reconcile at the expected revision before receipt.
+      if (retryDocument || revision > 1) {
+        const result = await syncStoreOrderSaleDocument(scope, { id: current.id, revision },
+          auth.customerSession?.userId ?? null, getCustomerOperationalName(auth.customerSession) || "고객사 주문 확인");
+        if (result !== "confirmed" || !await linked())
+          return NextResponse.json({ message: "전표 연결에 실패했습니다. 주문 상태는 그대로입니다." }, { status: 409 });
+      }
+      if (retryDocument) return NextResponse.json({ orderDocumentStatus: "confirmed" });
+    }
     // status·revision 조건을 한 번의 UPDATE에 넣어 점주 수정과 동시에 눌려도 한쪽만 성공한다.
     const updated = await supabaseRequest<Array<{ id: string; status: string; revision: number }>>(
       `store_orders?company_id=eq.${encodeURIComponent(scope)}&id=eq.${orderId}&status=eq.submitted&revision=eq.${revision}&select=id,status,revision`,
