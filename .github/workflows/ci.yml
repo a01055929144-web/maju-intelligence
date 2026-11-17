@@ -148,6 +148,18 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-58-customer-business-identity.pg17.test.sql
 
+      - name: Verify CX-64 document cancellation guards draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx64_document_cancellation_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-64-document-cancellation-guards.pg17.test.sql
+
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:

@@ -34,6 +34,7 @@ export type ErpActor = { name: string; userId?: string };
 type DocumentRow = {
   id: string; company_id: string; document_type: BusinessDocumentType; document_number: string;
   document_date: string; status: BusinessDocumentStatus; customer_id: string | null; supplier_id: string | null;
+  source_type: string | null; source_key: string | null;
   original_document_id: string | null; partner_name_snapshot: string;
   partner_business_number_snapshot: string | null; partner_representative_snapshot: string | null;
   partner_address_snapshot: string | null; partner_contact_snapshot: string | null; memo: string | null;
@@ -66,6 +67,7 @@ function mapDocument(row: DocumentRow) {
   return {
     id: row.id, companyId: row.company_id, documentType: row.document_type, documentNumber: row.document_number,
     documentDate: row.document_date, status: row.status, customerId: row.customer_id || undefined,
+    sourceType: row.source_type || undefined, sourceKey: row.source_key || undefined,
     supplierId: row.supplier_id || undefined, originalDocumentId: row.original_document_id || undefined,
     partnerName: row.partner_name_snapshot,
     partnerBusinessNumber: row.partner_business_number_snapshot || undefined,
@@ -89,14 +91,14 @@ function mapLine(row: LineRow) {
 }
 
 export async function listBusinessDocuments(companyId: string, filters: {
-  cursor?: string; dateFrom?: string; dateTo?: string; type?: string; status?: string; partnerId?: string;
+  cursor?: string; dateFrom?: string; dateTo?: string; type?: string; status?: string; partnerId?: string; includeCancelled?: boolean;
 } = {}) {
   const clauses = [
     `company_id=eq.${enc(companyId)}`,
     filters.dateFrom ? `document_date=gte.${enc(filters.dateFrom)}` : "",
     filters.dateTo ? `document_date=lte.${enc(filters.dateTo)}` : "",
     filters.type ? `document_type=eq.${enc(filters.type)}` : "",
-    filters.status ? `status=eq.${enc(filters.status)}` : "",
+    filters.status ? `status=eq.${enc(filters.status)}` : filters.includeCancelled ? "" : "status=neq.cancelled",
     filters.cursor ? `created_at=lt.${enc(filters.cursor)}` : "",
     filters.partnerId ? `or=(customer_id.eq.${enc(filters.partnerId)},supplier_id.eq.${enc(filters.partnerId)})` : "",
   ].filter(Boolean).join("&");
@@ -253,9 +255,15 @@ export async function confirmBusinessDocument(companyId: string, id: string, act
   } catch (error) { throw new Error(toKoreanErpError(error)); }
 }
 export async function cancelBusinessDocument(companyId: string, id: string, reason: string, actor: ErpActor) {
-  if (!reason.trim()) throw new Error("취소 사유를 입력해 주세요.");
+  const document = await getBusinessDocument(companyId, id);
+  if (document.sourceType === "order") throw new Error("주문 전표 삭제는 접수·전표 원자 취소 계약 적용 뒤 사용할 수 있습니다.");
+  const returns = await supabaseRequest<Array<{ id: string }>>(
+    `business_documents?select=id&company_id=eq.${enc(companyId)}&original_document_id=eq.${enc(id)}&status=eq.confirmed&limit=500`,
+  );
+  if (returns.length) throw new Error(`확정된 반품 전표 ${returns.length}건이 연결돼 있습니다. 반품 전표를 먼저 삭제해 주세요.`);
+  const normalizedReason = reason.trim() || "삭제";
   try {
-    await supabaseRpc("cancel_business_document", { p_company_id: companyId, p_document_id: id, p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_reason: reason.trim() });
+    await supabaseRpc("cancel_business_document", { p_company_id: companyId, p_document_id: id, p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_reason: normalizedReason });
     return getBusinessDocument(companyId, id);
   } catch (error) { throw new Error(toKoreanErpError(error)); }
 }
@@ -354,6 +362,8 @@ export function toKoreanErpError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (/return total exceeds/i.test(message)) return "반품 합계가 원전표의 남은 금액을 초과합니다.";
   if (/cancel the confirmed return/i.test(message)) return "확정된 반품 전표를 먼저 취소해 주세요.";
+  if (/business_document_return_linked:(\d+)/i.test(message)) return `확정된 반품 전표 ${message.match(/business_document_return_linked:(\d+)/i)?.[1]}건이 연결돼 있습니다.`;
+  if (/business_document_payment_linked:(\d+)/i.test(message)) return `수금·지급 ${message.match(/business_document_payment_linked:(\d+)/i)?.[1]}건이 연결돼 있습니다.`;
   if (/only draft documents/i.test(message)) return "작성중 전표만 확정할 수 있습니다.";
   if (/document number year/i.test(message)) return "거래일 연도와 전표번호 연도가 달라 재저장이 필요합니다.";
   if (/erp_document_transition|status change/i.test(message)) return "전표 상태는 확정·취소 버튼으로만 변경할 수 있습니다.";

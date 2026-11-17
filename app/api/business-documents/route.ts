@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       type: request.nextUrl.searchParams.get("type") || undefined,
       status: request.nextUrl.searchParams.get("status") || undefined,
       partnerId: request.nextUrl.searchParams.get("partnerId") || undefined,
+      includeCancelled: request.nextUrl.searchParams.get("includeCancelled") === "true",
     }));
   } catch (e) { return NextResponse.json({ message: e instanceof Error ? e.message : "전표를 불러오지 못했습니다." }, { status: 500 }); }
 }
