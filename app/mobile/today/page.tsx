@@ -18,6 +18,7 @@ import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSessi
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { usableStoredPoint } from "@/domains/customer/coordinates";
+import { summarizeDriverDay, type DriverDaySummaryStop } from "@/domains/delivery/driver-day-summary";
 import { getCompanySettings, getCustomerMapSummaries, getDeliveryCompletionEvents, getTodayRoutePlan, supabaseRequest } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -102,10 +103,15 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const receiptWorkflowEnabled = isFeatureEnabled("DRIVER_RECEIPT_WORKFLOW", session.companyId);
   const runExperienceEnabled = isFeatureEnabled("DRIVER_RUN_EXPERIENCE", session.companyId);
-  const routeStops = receiptWorkflowEnabled && session.companyMemberId ? await supabaseRequest<Array<{ id: string; customer_id: string }>>(
-    `delivery_route_stops?select=id,customer_id&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&stop_type=eq.delivery&status=in.(planned,arrived)&order=stop_order.asc`,
+  const routeStops = (receiptWorkflowEnabled || runExperienceEnabled) && session.companyMemberId ? await supabaseRequest<DriverDaySummaryStop[]>(
+    `delivery_route_stops?select=id,customer_id,status,stop_type&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&order=stop_order.asc`,
   ).catch(() => []) : [];
-  const routeStopByCustomer = new Map(routeStops.map(stop => [stop.customer_id, stop.id]));
+  const routeStopByCustomer = new Map(routeStops.filter(stop => stop.stop_type === "delivery" && ["planned", "arrived"].includes(stop.status) && stop.customer_id).map(stop => [stop.customer_id!, stop.id]));
+  const stopIds = routeStops.map((stop) => stop.id);
+  const stopPhotos = runExperienceEnabled && stopIds.length ? await supabaseRequest<Array<{ id: string }>>(
+    `delivery_route_stop_photos?select=id&company_id=eq.${encodeURIComponent(session.companyId)}&stop_id=in.(${stopIds.map(encodeURIComponent).join(",")})&limit=1000`,
+  ).catch(() => []) : [];
+  const daySummary = summarizeDriverDay(routeStops, completedCustomerIds, stopPhotos.length);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -119,7 +125,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         >
         <div className="space-y-3 pb-3">
           <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} />
-          {runExperienceEnabled ? <MobileDriverRunExtras completed={completedCustomerIds.size} failed={0} photos={0} sales={0} /> : null}
+          {runExperienceEnabled ? <MobileDriverRunExtras {...daySummary} /> : null}
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0"><p className="truncate text-sm font-bold">{driverName}</p><p className="truncate text-xs font-semibold text-slate-500">{session.companyName}</p></div>
             <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
