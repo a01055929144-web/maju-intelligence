@@ -699,6 +699,7 @@ for (const mode of ["이력만 저장", "현재 가격도 변경"] as const) tes
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("단위 미기재 1행을 이 화면에서 채워 주세요");
+  await expect(review.getByRole("cell", { name: "합성 상품", exact: true }).first()).toBeVisible();
   await review.getByRole("textbox", { name: "2행 단위", exact: true }).fill("BOX");
   await expect(review.getByRole("textbox", { name: "2행 단위", exact: true })).toHaveValue("BOX");
   await page.getByRole("button", { name: /^③ 저장/ }).click();

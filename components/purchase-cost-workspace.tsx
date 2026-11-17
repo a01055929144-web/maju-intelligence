@@ -1042,7 +1042,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         columns={[
           { key: "pick", label: "선택", width: 56, value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
           { key: "rowNumber", label: "원본 행", priority: 3, value: line => line.rowNumber },
-          { key: "name", label: "품목(원문)", priority: 3, value: line => line.rawName },
+          { key: "name", label: "품목(원문)", width: 140, value: line => line.rawName },
           { key: "spec", label: "규격", priority: 3, value: line => line.spec || "-" },
           { key: "unit", label: "단위", width: 120, value: line => line.unit || "", render: line => <input aria-label={`${line.rowNumber}행 단위`} className={`maju-input min-h-[44px] min-w-24 ${line.unit.trim() ? "" : "border-amber-400"}`} list="purchase-unit-options" onChange={event => updateImportedUnits([line.rowNumber], event.target.value)} placeholder="EA·BOX·KG" value={line.unit} /> },
           { key: "purchaseDate", label: "적용일", priority: 3, value: line => line.purchaseDate || receiptDate },
