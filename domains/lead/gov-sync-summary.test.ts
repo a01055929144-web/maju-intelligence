@@ -28,6 +28,15 @@ describe("summarizeGovSync (CC-60)", () => {
     expect(summary).toMatchObject({ result: "error", errorAreas: 2, deferredAreas: 2, weekFetched: 0 });
     expect(summary.message).toBe("수집 실패 · 오류 2곳 · 시간 예산 이월 2곳");
   });
+  it("CC-68: 지역을 모두 돌았는데 새 행이 0건이면 실패가 아니라 \"새 행 없음(지역 n곳 확인)\"", () => {
+    const summary = summarizeGovSync([run({ started_at: "2026-11-16T10:00:00Z", status: "success", fetched_count: 0, metadata: { dataset: "general_restaurants", pendingAreaCount: 0, areas: [{ status: "success" }, { status: "success" }, { status: "success" }] } })], now);
+    expect(summary).toMatchObject({ result: "success", noNewRows: true, errorAreas: 0, message: "새 행 없음(지역 3곳 확인)" });
+  });
+  it("CC-68: 행을 가져왔으면 noNewRows가 아니고, 실패·이월은 새 행 없음으로 보이지 않는다", () => {
+    expect(summarizeGovSync([run({ started_at: "2026-11-16T10:00:00Z", status: "success", fetched_count: 5, metadata: { dataset: "d", pendingAreaCount: 0, areas: [{ status: "success" }] } })], now).noNewRows).toBe(false);
+    expect(summarizeGovSync([run({ started_at: "2026-11-16T10:00:00Z", status: "success", fetched_count: 0, metadata: { dataset: "d", pendingAreaCount: 2, areas: [{ status: "deferred" }] } })], now)).toMatchObject({ result: "partial", noNewRows: false });
+    expect(summarizeGovSync([run({ started_at: "2026-11-16T10:00:00Z", status: "error", fetched_count: 0, metadata: { dataset: "d", pendingAreaCount: 1, areas: [{ status: "error" }] } })], now)).toMatchObject({ result: "error", noNewRows: false });
+  });
   it("실행 중인 행은 마지막 실행으로 보지 않는다", () => {
     expect(summarizeGovSync([run({ started_at: "2026-11-16T23:00:00Z", status: "running", finished_at: null }), run({ started_at: "2026-11-16T10:00:00Z" })], now).lastRunAt).toBe("2026-11-16T10:00:00Z");
   });
