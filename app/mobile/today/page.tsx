@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDriverRouteWorkspace } from "@/components/mobile-driver-route-workspace";
+import { MobileDriverRunExtras } from "@/components/mobile-driver-run-extras";
 import { MobileDriverSalesStops } from "@/components/mobile-driver-sales-stops";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -17,6 +18,7 @@ import { getCustomerAssignmentKeys, getCustomerOperationalName, getCustomerSessi
 import { areStructuredFieldRecordsEnabled } from "@/lib/feature-modules";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { usableStoredPoint } from "@/domains/customer/coordinates";
+import { summarizeDriverDay, type DriverDaySummaryStop } from "@/domains/delivery/driver-day-summary";
 import { getCompanySettings, getCustomerMapSummaries, getDeliveryCompletionEvents, getTodayRoutePlan, supabaseRequest } from "@/lib/store";
 import { normalizeWorkspaceRole, workspaceRoleLabels } from "@/lib/workspace";
 
@@ -100,10 +102,16 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const receiptWorkflowEnabled = isFeatureEnabled("DRIVER_RECEIPT_WORKFLOW", session.companyId);
-  const routeStops = receiptWorkflowEnabled && session.companyMemberId ? await supabaseRequest<Array<{ id: string; customer_id: string }>>(
-    `delivery_route_stops?select=id,customer_id&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&stop_type=eq.delivery&status=in.(planned,arrived)&order=stop_order.asc`,
+  const runExperienceEnabled = isFeatureEnabled("DRIVER_RUN_EXPERIENCE", session.companyId);
+  const routeStops = (receiptWorkflowEnabled || runExperienceEnabled) && session.companyMemberId ? await supabaseRequest<DriverDaySummaryStop[]>(
+    `delivery_route_stops?select=id,customer_id,status,stop_type&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&order=stop_order.asc`,
   ).catch(() => []) : [];
-  const routeStopByCustomer = new Map(routeStops.map(stop => [stop.customer_id, stop.id]));
+  const routeStopByCustomer = new Map(routeStops.filter(stop => stop.stop_type === "delivery" && ["planned", "arrived"].includes(stop.status) && stop.customer_id).map(stop => [stop.customer_id!, stop.id]));
+  const stopIds = routeStops.map((stop) => stop.id);
+  const stopPhotos = runExperienceEnabled && stopIds.length ? await supabaseRequest<Array<{ id: string }>>(
+    `delivery_route_stop_photos?select=id&company_id=eq.${encodeURIComponent(session.companyId)}&stop_id=in.(${stopIds.map(encodeURIComponent).join(",")})&limit=1000`,
+  ).catch(() => []) : [];
+  const daySummary = summarizeDriverDay(routeStops, completedCustomerIds, stopPhotos.length);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
@@ -116,7 +124,8 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           vehicleLabel={selectedStop?.deliveryVehicle}
         >
         <div className="space-y-3 pb-3">
-          <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} />
+          <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} undoEnabled={runExperienceEnabled} />
+          {runExperienceEnabled ? <MobileDriverRunExtras {...daySummary} /> : null}
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0"><p className="truncate text-sm font-bold">{driverName}</p><p className="truncate text-xs font-semibold text-slate-500">{session.companyName}</p></div>
             <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
@@ -137,7 +146,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" role="status">주문 연결 정보를 확인하지 못했습니다. 기존 수동 코스는 그대로 표시합니다.</p>
           ) : null}
 
-          <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
+          <MobileRouteList atomicOrderEnabled={runExperienceEnabled} completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
             <section className="mobile-card scroll-mt-24 overflow-hidden rounded-xl border" id="selected-customer">
@@ -200,6 +209,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 driverName={driverName}
                 driverPhone={session.operationalPhone}
                 driverReceiptWorkflowEnabled={receiptWorkflowEnabled}
+                driverRunExperienceEnabled={runExperienceEnabled}
                 driverStopId={routeStopByCustomer.get(selectedStop.id)}
                 structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}
               />
