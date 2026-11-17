@@ -470,7 +470,7 @@ for (const replace of [false, true]) test(`undated existing price needs separate
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("기준일 미확정 기존가 1품목");
   await expect(review.getByRole("cell", { name: "100원", exact: true })).toBeVisible();
-  await expect(review.getByRole("cell", { name: "2026-11-07", exact: true })).toBeVisible();
+  await expect(review.getByRole("cell", { name: "2026-11-07", exact: true }).first()).toBeVisible();
   if (replace) await review.getByRole("checkbox", { name: "기준일 없는 기존가 교체", exact: true }).check();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (replace) await page.screenshot({ path: info.outputPath("purchase-date-undated-current-390.png"), fullPage: true });
