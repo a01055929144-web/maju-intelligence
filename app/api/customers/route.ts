@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCustomerAssignmentKeys, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { CustomerMasterInput, getCustomerMaster, upsertCustomerMaster } from "@/lib/store";
 import { RequestTiming } from "@/lib/performance-timing";
+import { parseCustomerBusinessIdentity } from "@/domains/customer/business-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,10 @@ export async function POST(request: NextRequest) {
   }
   if (body.validateBusinessNumber && body.businessNumber && !isValidBusinessRegistrationNumber(body.businessNumber)) {
     return timedJson(timing, { message: "유효하지 않은 사업자등록번호입니다." }, 400);
+  }
+  const businessIdentity = parseCustomerBusinessIdentity(body);
+  if (!businessIdentity.ok) {
+    return timedJson(timing, { message: businessIdentity.message }, 400);
   }
 
   const result = await timing.measure("db_customer_upsert", () => upsertCustomerMaster(

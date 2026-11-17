@@ -83,6 +83,28 @@ describe("customer import history status", () => {
     expect(importStatuses()).toEqual(["processing", "completed"]);
   });
 
+  it("stores business identity fields and separates a sub-business normalized key", async () => {
+    await upsertCustomerMaster({
+      customerName: "합성 지점",
+      address: "서울",
+      businessName: "합성 주식회사",
+      businessNumber: "1234567890",
+      subBusinessNumber: "0002",
+      businessEntityType: "corporation",
+      corporateRegistrationNumber: "123456-7890123"
+    }, "company-1");
+
+    const save = calls.find((call) => call.method === "POST" && call.path.startsWith("normalized_customers?"));
+    expect((save?.body as Array<Record<string, unknown>>)[0]).toMatchObject({
+      business_name: "합성 주식회사",
+      business_registration_number: "1234567890",
+      sub_business_number: "0002",
+      business_entity_type: "corporation",
+      corporate_registration_number: "1234567890123",
+      normalized_key: "1234567890-0002"
+    });
+  });
+
   it("moves a failed manual update from processing to failed", async () => {
     existingCustomer = true;
     failNormalizedSave = true;
