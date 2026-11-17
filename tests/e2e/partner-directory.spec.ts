@@ -6,7 +6,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
     await page.route(/\/api\/partner-ledger/, (route) => route.fulfill({ json: { openingBalance: 0, closingBalance: 330000, entries: [{ id: "e1", entry_date: "2026-11-10", entry_type: "sale", amount: 330000, runningBalance: 330000, memo: "합성 매출" }] } }));
-    const base = { address: "서울 가짜구 가짜로 1", deliveryKm: 3, grade: "B", industry: "한식", lastOrderDays: 2, memoCount: 1, monthlyRevenue: 120, region: "서울", phone: "01000000000", representativeName: "가짜대표", businessNumber: "1234567890" };
+    const base = { address: "서울 가짜구 가짜로 1", deliveryKm: 3, grade: "B", industry: "한식", lastOrderDays: 2, memoCount: 1, visitCount: 3, monthlyRevenue: 120, region: "서울", phone: "01000000000", representativeName: "가짜대표", businessNumber: "1234567890" };
     await page.route(/\/api\/customers(\?|$)/, (route) => route.fulfill({ json: { source: "supabase", truncated: false, customers: [
       { ...base, id: "10000000-0000-4000-8000-000000000001", customerName: "합성거래처 01" },
       { ...base, id: "10000000-0000-4000-8000-000000000002", customerName: "합성거래처 02" }
