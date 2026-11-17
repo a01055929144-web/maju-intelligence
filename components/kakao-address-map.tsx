@@ -480,11 +480,15 @@ export function KakaoAddressMap({
       }
 
       try {
+        // CC-69: 첫 로드가 오래 걸릴 때 어느 단계인지 남긴다(SDK 로드 · 컨테이너 크기 대기 · 지도 생성). 5초 넘을 때만 한 줄.
+        const bootStartedAt = performance.now();
         await withTimeout(loadKakaoMapSdk(appKey!), kakaoSdkTimeoutMs, "Kakao map SDK load timed out");
+        const sdkMs = Math.round(performance.now() - bootStartedAt);
         if (ignore || !mapRef.current || !window.kakao?.maps) return;
         // 접힌 패널·탭 전환 중에는 컨테이너가 잠시 0×0이 될 수 있습니다. 이때 Kakao Map을
         // 생성하면 타일 캔버스가 빈 크기로 고정되므로 실제 크기가 생길 때까지 초기화를 미룹니다.
         await waitForVisibleMapContainer(mapRef.current, () => ignore);
+        const containerMs = Math.round(performance.now() - bootStartedAt) - sdkMs;
         if (ignore || !mapRef.current || !window.kakao?.maps) return;
         mapRef.current.innerHTML = "";
 
@@ -499,6 +503,7 @@ export function KakaoAddressMap({
         mapInstanceRef.current = map;
         window.setTimeout(() => map.relayout?.(), 0);
         setStatus("ready");
+        if (performance.now() - bootStartedAt > 5000) console.warn(`[KakaoAddressMap] 첫 로드 지연: SDK ${sdkMs}ms · 컨테이너 크기 대기 ${containerMs}ms · 전체 ${Math.round(performance.now() - bootStartedAt)}ms`);
         // 새 지도 인스턴스가 생겼으니, 아래 차량 애니메이션 effect가 이전 인스턴스에 붙어 있던
         // 차량 오버레이 참조를 버리고 새 지도 위에 다시 그리도록 신호를 보냅니다.
         setMapBootId((value) => value + 1);
@@ -549,7 +554,9 @@ export function KakaoAddressMap({
     };
     // focusedMarkerId·onMarkerClick은 의도적으로 제외합니다 — 마커 선택/부모 리렌더마다 지도를 다시 만들면 안 됩니다.
     // 마커·길 선이 바뀌어도 지도는 다시 만들지 않고 아래 배치 effect가 레이어만 교체합니다(CC-42a).
-  }, [appKey, canUseKakao, salesAreaBoundary?.province]);
+    // CC-69: 시·도(salesAreaBoundary.province)는 여기 넣지 않는다 — 부팅은 경계를 쓰지 않고(ref로만 읽음) 경계 effect가 자체 deps로 다시 그린다.
+    // 넣으면 첫 로드 때 영업 지역 설정이 늦게 도착하는 순간(undefined → 시·도) 지도가 통째로 다시 만들어지고 "불러오는 중" 덮개가 다시 뜬다.
+  }, [appKey, canUseKakao]);
 
   // 마커·길 선 배치: 지도가 준비된 뒤, 마커 구성(markersSignature)이나 길(routePath)이 바뀔 때마다 레이어만 교체한다.
   useEffect(() => {
