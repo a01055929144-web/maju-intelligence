@@ -24,7 +24,7 @@ export function MobileDriverSalesStops({ enabled, undoEnabled = false }: { enabl
   }, [enabled]);
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
-  if (!enabled || !stops.length) return null;
+  if (!enabled || (!stops.length && !undo && !message)) return null;
   async function finish(stop: Stop, outcome: "completed" | "closed" | "moved_or_closed" | "refused" | "no_time") {
     setBusy(stop.id); setMessage("");
     const response = await fetchWithTimeout("/api/mobile/driver-sales-stops", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stopId: stop.id, outcome, handedToOwner: handed[stop.id] === true }) }, 15000).catch(() => null);
