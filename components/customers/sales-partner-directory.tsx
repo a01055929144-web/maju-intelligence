@@ -23,6 +23,8 @@ export type SalesPartnerSource = {
   readonly phone?: string;
   readonly region: string;
   readonly representativeName?: string;
+  readonly businessName?: string;
+  readonly subBusinessNumber?: string;
 };
 
 type Row = PartnerRow & { source: SalesPartnerSource; grade: string };
@@ -35,7 +37,7 @@ export function lastTradeDateFromDays(days: number, now: Date = new Date()): str
 
 export function SalesPartnerDirectory({ companyId = "", customers, query }: { companyId?: string; customers: readonly SalesPartnerSource[]; query: (path: string, customerId?: string) => string }) {
   const rows = useMemo<Row[]>(() => customers.flatMap((customer) => customer.id ? [{
-    id: customer.id, displayName: customer.customerName, businessNumber: customer.businessNumber, representativeName: customer.representativeName, phone: customer.phone,
+    id: customer.id, displayName: customer.customerName, businessName: customer.businessName, subBusinessNumber: customer.subBusinessNumber, businessNumber: customer.businessNumber, representativeName: customer.representativeName, phone: customer.phone,
     lastTradeDate: lastTradeDateFromDays(customer.lastOrderDays), monthAmount: customer.monthlyRevenue > 0 ? customer.monthlyRevenue * 10000 : null,
     status: customer.businessStatus === "closed" ? "폐업" : customer.businessStatus === "suspended" ? "휴업" : "거래중", grade: customer.grade, source: customer
   }] : []), [customers]);
