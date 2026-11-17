@@ -3,6 +3,7 @@ import { formatWon } from "@/domains/shared/money";
 import { storeOrderStatusLabel, type StoreOrderStatus } from "@/domains/order/store-order-status";
 import type { StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StoreOrderReceiptAction } from "./store-order-receipt-action";
+import { OrderDeliveryPhotos } from "./order-delivery-photos";
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const dateTimeFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
@@ -13,7 +14,7 @@ const steps: Array<{ status: StoreOrderStatus; label: string }> = [
   { status: "delivered", label: "배송 완료" },
 ];
 
-export function StoreOrderHistory({ companyId, orders, reorderHref, storeAccountId }: { companyId: string; orders: StorePortalOrder[]; reorderHref?: string; storeAccountId: string }) {
+export function StoreOrderHistory({ companyId, deliveryPhotosEnabled = false, orders, reorderHref, storeAccountId }: { companyId: string; deliveryPhotosEnabled?: boolean; orders: StorePortalOrder[]; reorderHref?: string; storeAccountId: string }) {
   return (
     <div className="space-y-3">
       {reorderHref && (
@@ -74,6 +75,7 @@ export function StoreOrderHistory({ companyId, orders, reorderHref, storeAccount
                           ))}
                         </ul>
                       ) : <p className="text-slate-600">표시할 품목이 없습니다.</p>}
+                      {deliveryPhotosEnabled ? <OrderDeliveryPhotos audience="store" companyId={companyId} orderId={order.id} storeAccountId={storeAccountId} /> : null}
                       {order.status === "delivered" && (
                         <section aria-label="수령 확인" id={`receipt-${order.id}`} className="space-y-1 border-t pt-3">
                           <h3 className="font-medium">수령 확인</h3>
