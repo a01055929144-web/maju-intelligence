@@ -56,12 +56,13 @@ test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채
 
   await page.goto("/mobile/sales");
   await page.getByText("가짜분식", { exact: true }).last().click();
-  const shortcuts = page.getByLabel("연락 채널 바로가기");
+  const shortcuts = page.locator('[aria-label="연락 채널 바로가기"]');
   for (const channel of ["방문", "연락처", "카톡", "인스타 DM", "네이버 톡톡", "이메일", "팩스"]) {
-    await expect(shortcuts.getByRole("button", { name: new RegExp(`^${channel}`) })).toBeVisible();
+    await expect(shortcuts.locator("button").filter({ hasText: channel }).first()).toBeVisible();
   }
-  await expect(shortcuts.getByRole("button", { name: /^네이버 톡톡.*\[입력\]/ })).toBeVisible();
-  await shortcuts.getByRole("button", { name: /^네이버 톡톡/ }).click();
+  const talktalkShortcut = shortcuts.locator("button").filter({ hasText: "네이버 톡톡" });
+  await expect(talktalkShortcut).toContainText("[입력]");
+  await talktalkShortcut.click();
   const panel = page.getByRole("region", { name: "영업 채널" });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("textbox", { name: "톡톡 주소" })).toBeVisible();
