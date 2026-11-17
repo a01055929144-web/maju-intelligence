@@ -109,7 +109,7 @@ for (const width of [1440, 390]) test(`전표 목록에서 여러 건을 한 번
   await checks.nth(0).check();
   await checks.nth(1).check();
   await page.getByRole("button", { name: "선택 삭제" }).click();
-  const dialog = page.getByRole("dialog", { name: "확인" });
+  const dialog = page.getByRole("dialog", { name: "전표 2건 삭제" });
   await dialog.getByLabel("사유 (선택)").fill("합성 삭제");
   await dialog.getByRole("button", { name: "삭제", exact: true }).click();
   await expect(page.getByText("2건을 삭제했습니다.")).toBeVisible();
