@@ -129,6 +129,36 @@ export function getGovSyncRunStatus(results: readonly Pick<GovAreaTaskResult<unk
   return results.length > 0 && results.every((result) => result.status !== "success") ? "error" : "success";
 }
 
+export function getGovCollectionOutcome(
+  dataset: string,
+  areaCodes: readonly string[],
+  newRowCount: number,
+  results: readonly Pick<GovAreaTaskResult<unknown>, "areaCode" | "status">[]
+): { status: "success" | "error"; message: string } {
+  const pendingAreas = new Set(results.filter((result) => result.status !== "success").map((result) => result.areaCode));
+  const confirmedAreaCount = areaCodes.filter((areaCode) => {
+    const areaResults = results.filter((result) => result.areaCode === areaCode);
+    return areaResults.length > 0 && areaResults.every((result) => result.status === "success");
+  }).length;
+
+  if (newRowCount > 0) {
+    return {
+      status: "success",
+      message: `${dataset} · 지역 ${areaCodes.length}곳 중 ${areaCodes.length - pendingAreas.size}곳 완료 · ${pendingAreas.size}곳 다음 실행`
+    };
+  }
+  if (confirmedAreaCount === areaCodes.length && areaCodes.length > 0 && pendingAreas.size === 0) {
+    return { status: "success", message: `새 행 없음(지역 ${areaCodes.length}곳 확인)` };
+  }
+
+  const errorCount = results.filter((result) => result.status === "error").length;
+  const deferredCount = results.filter((result) => result.status === "deferred").length;
+  return {
+    status: "error",
+    message: `${dataset} 수집 행이 없습니다. 오류 ${errorCount}곳 · 시간 예산 이월 ${deferredCount}곳 · ${pendingAreas.size}곳 다음 실행`
+  };
+}
+
 export type GovRequestLimiter = <T>(load: () => Promise<T>) => Promise<T>;
 
 /** 여러 회사·데이터셋이 함께 실행돼도 실제 외부 요청은 전체 합계 max개만 진행한다. */
