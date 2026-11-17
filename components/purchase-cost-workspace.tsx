@@ -87,6 +87,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [filterIds, setFilterIds] = useState<string[] | null>(null);
   const [rowPick, setRowPick] = useState<number[]>([]);
   const [bulkUnit, setBulkUnit] = useState("");
+  const [importUnitPick, setImportUnitPick] = useState<number[]>([]);
+  const [importBulkUnit, setImportBulkUnit] = useState("");
   const [emptyOnly, setEmptyOnly] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
   const [history, setHistory] = useState<PurchaseHistoryItem[]>([]);
@@ -624,6 +626,38 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setRowPick([]);
   }
 
+  function updateImportedUnits(rowNumbers: readonly number[], value: string) {
+    const unit = value.trim();
+    if (!unit && rowNumbers.length !== 1) return;
+    const targets = new Set(rowNumbers);
+    setImportedLines((current) => current.map((line) => {
+      if (!targets.has(line.rowNumber)) return line;
+      const edited = { ...line, unit };
+      const matched = matchByAlias(aliasKey(line.rawName, line.spec, unit), line.supplier, products)
+        || matchCostImportRow(edited, products)
+        || matchCostImportRow({ ...edited, supplier: "" }, unique);
+      return { ...edited, productId: matched?.id, supplierProductId: matched?.supplierProductId };
+    }));
+    setConfirmedReview("");
+    setSaveReview(false);
+  }
+
+  function resetCurrentImport() {
+    if (!window.confirm("아직 저장하지 않은 이번 업로드의 확인 내용만 초기화할까요? 저장된 매입 이력과 상품은 지우지 않습니다.")) return;
+    setImportedLines([]);
+    setUnmatched([]);
+    setCandidates({});
+    setSelected([]);
+    setImportUnitPick([]);
+    setImportBulkUnit("");
+    setConflictChoices({});
+    setSaveReview(false);
+    setConfirmedReview("");
+    setAlignResult(null);
+    setFileName("");
+    setMessage("이번 업로드 확인 내용을 초기화했습니다. 저장된 데이터는 바뀌지 않았습니다.");
+  }
+
   function openFilter(kind: "all" | "unit" | "suspect", rows: NewRow[] = unmatched) {
     setTab("신규");
     setNewFilter(kind);
@@ -980,8 +1014,27 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </>}
     </section> : null}
     {importedLines.length ? <section aria-label="저장 전 적용일 확인" className="maju-section-card space-y-3 p-4">
-      <p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
-      {importedLines.some(line => !line.unit.trim()) ? <p>단위 미기재 {importedLines.filter(line => !line.unit.trim()).length}행은 원문 그대로 보관합니다. 상품관리에서 단위를 확인해 주세요.</p> : null}
+      <div className="flex flex-wrap items-start justify-between gap-2"><p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
+        <button className="maju-button-secondary min-h-[44px]" onClick={resetCurrentImport} type="button">이번 업로드 초기화</button>
+      </div>
+      {importedLines.some(line => !line.unit.trim()) ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <p className="text-sm font-semibold text-amber-900">단위 미기재 {importedLines.filter(line => !line.unit.trim()).length}행을 이 화면에서 채워 주세요.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input aria-label="저장 전 일괄 입력할 단위" className="maju-input min-h-[44px] w-32" list="purchase-unit-options" onChange={event => setImportBulkUnit(event.target.value)} placeholder="EA·BOX·KG" value={importBulkUnit} />
+          <button className="maju-button-secondary min-h-[44px]" disabled={!importUnitPick.length || !importBulkUnit.trim()} onClick={() => updateImportedUnits(importUnitPick, importBulkUnit)} type="button">선택 {importUnitPick.length}행에 넣기</button>
+          <button className="maju-button-secondary min-h-[44px]" disabled={!importBulkUnit.trim()} onClick={() => updateImportedUnits(importedLines.filter(line => !line.unit.trim()).map(line => line.rowNumber), importBulkUnit)} type="button">빈 단위 모두 넣기</button>
+        </div>
+      </div> : null}
+      <CommonDataTable<DatedPurchaseLine> selectable={false} settingsKey={`purchase-save-review:${companyId}`} filename="매입가_저장전확인.csv" rowKey={line => String(line.rowNumber)} rows={importedLines}
+        columns={[
+          { key: "pick", label: "선택", value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
+          { key: "rowNumber", label: "원본 행", value: line => line.rowNumber },
+          { key: "name", label: "품목(원문)", value: line => line.rawName },
+          { key: "spec", label: "규격", value: line => line.spec || "-" },
+          { key: "unit", label: "단위", value: line => line.unit || "", render: line => <input aria-label={`${line.rowNumber}행 단위`} className={`maju-input min-h-[44px] min-w-24 ${line.unit.trim() ? "" : "border-amber-400"}`} list="purchase-unit-options" onChange={event => updateImportedUnits([line.rowNumber], event.target.value)} placeholder="EA·BOX·KG" value={line.unit} /> },
+          { key: "purchaseDate", label: "적용일", value: line => line.purchaseDate || receiptDate },
+          { key: "cost", label: "단가(별도)", value: line => line.cost, render: line => money(line.cost) }
+        ]} />
       <ul>{reviewDates.map(([date, count]) => <li key={date}>{date || "날짜 없음"} · {count}행</li>)}</ul>
       {batchEnabled && !usesDateBatch && priceChangeCount > 100 ? <p role="alert">가격 변경 {priceChangeCount}건은 최대 100건을 초과합니다. 저장 전 선택 건수를 줄여 주세요. 새 상품·이력을 먼저 저장하지 않습니다.</p> : null}
       {dateSaveBlocked ? <p role="status">구매일 기준 저장은 준비 중입니다. 현재 가격일보다 과거인 단가는 현재 매입가에 반영하지 않는 저장 경로가 필요합니다.</p> : null}
