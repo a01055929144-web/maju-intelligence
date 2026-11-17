@@ -11,7 +11,7 @@ vi.mock("@/lib/auth", () => ({ getRequestAuthScope }));
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled }));
 vi.mock("@/lib/store", () => ({ supabaseRequest }));
 
-import { POST } from "../app/api/mobile/driver-visit-materials/route";
+import { GET, POST } from "../app/api/mobile/driver-visit-materials/route";
 
 const companyId = "11111111-1111-1111-1111-111111111111";
 const memberId = "22222222-2222-2222-2222-222222222222";
@@ -57,6 +57,19 @@ describe("CX-85 기사 방문 자료 API", () => {
     const response = await POST(request({ stopId, materials: ["명함"] }));
     expect(response.status).toBe(404);
     expect(supabaseRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("재방문 후보도 세션 회사에서 기사에게 배정된 영업 리드만 읽는다", async () => {
+    supabaseRequest
+      .mockResolvedValueOnce([{ lead_id: "44444444-4444-4444-4444-444444444444" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const response = await GET(new NextRequest("https://example.test/api/mobile/driver-visit-materials"));
+    expect(response.status).toBe(200);
+    expect(String(supabaseRequest.mock.calls[0][0])).toContain(`company_id=eq.${companyId}`);
+    expect(String(supabaseRequest.mock.calls[0][0])).toContain(`driver_member_id=eq.${memberId}`);
+    expect(String(supabaseRequest.mock.calls[1][0])).toContain("lead_id=in.(44444444-4444-4444-4444-444444444444)");
   });
 });
 

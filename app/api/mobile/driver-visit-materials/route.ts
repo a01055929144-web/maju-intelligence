@@ -21,10 +21,11 @@ export async function GET(request: NextRequest) {
   if ("error" in auth) return auth.error;
   try {
     const company = q(auth.companyId);
-    const visits = await supabaseRequest<VisitRow[]>(`lead_actions?select=lead_id,collateral_types,memo,metadata,created_at&company_id=eq.${company}&action_type=eq.visit&result=eq.${q("방문 자료 전달")}&voided_at=is.null&order=created_at.desc&limit=500`);
-    const leadIds = Array.from(new Set(visits.map((visit) => visit.lead_id)));
+    const assigned = await supabaseRequest<Array<{ lead_id: string }>>(`delivery_route_stops?select=lead_id&company_id=eq.${company}&driver_member_id=eq.${q(auth.memberId)}&stop_type=eq.sales&lead_id=not.is.null&limit=500`);
+    const leadIds = Array.from(new Set(assigned.map((stop) => stop.lead_id)));
     if (!leadIds.length) return NextResponse.json({ items: [] });
     const ids = leadIds.map(q).join(",");
+    const visits = await supabaseRequest<VisitRow[]>(`lead_actions?select=lead_id,collateral_types,memo,metadata,created_at&company_id=eq.${company}&lead_id=in.(${ids})&action_type=eq.visit&result=eq.${q("방문 자료 전달")}&voided_at=is.null&order=created_at.desc&limit=500`);
     const [opens, accepts] = await Promise.all([
       supabaseRequest<Array<{ lead_id: string; first_viewed_at: string }>>(`pricing_document_share_links?select=lead_id,first_viewed_at&company_id=eq.${company}&lead_id=in.(${ids})&first_viewed_at=not.is.null&order=first_viewed_at.desc&limit=500`),
       supabaseRequest<Array<{ lead_id: string; customer_id: string; created_at: string }>>(`pricing_document_acceptance_requests?select=lead_id,customer_id,created_at&company_id=eq.${company}&lead_id=in.(${ids})&customer_id=not.is.null&order=created_at.desc&limit=500`)
