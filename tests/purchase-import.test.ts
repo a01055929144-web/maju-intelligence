@@ -121,6 +121,7 @@ describe("purchase import", () => {
     const parsed = parsePurchaseLines(buildPurchaseSheet(values), { purchaseDate: 0, name: 1, cost: 2 }, "excluded");
     expect(parsed.lines.map((line) => line.purchaseDate)).toEqual(["2026-11-01", "2026-11-17", "2026-11-05"]);
     expect(parsed.dateIssues).toEqual([5, 6]);
+    expect(parsed.lines[0]).toMatchObject({ rawName: "콘센트치킨스타 [1.2KG*6EA]", name: "콘센트치킨스타", spec: "1.2KG*6EA" });
   });
 
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
