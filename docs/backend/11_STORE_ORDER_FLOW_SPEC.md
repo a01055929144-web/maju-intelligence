@@ -28,7 +28,7 @@
 | 계산서 이메일 | `normalized_customers.email`(매출처 쪽) | **`store_profiles.tax_invoice_email`** 추가 |
 | 주소 | `store_profiles.base_address/address_detail` · 매출처 `delivery_base_address/detail` + 좌표 | 카카오 주소 부품 = 고객사 정보 입력과 같은 컴포넌트, 좌표 저장 |
 | 받는 방법 · 시간 · 출입 메모 | `store_profiles.preferred_delivery_time/access_note/delivery_contact_phone` | 받는 방법(문 앞/매장 안/새벽) 칸 |
-| 새벽 출입 비밀번호 | ⚠ `normalized_customers.access_password` **평문** | **암호화 저장(pgsodium/vault 또는 앱 키 AES)** · 배정 기사 · 고객사 관리자만 복호화 RPC · 열람 기록 |
+| 새벽 출입 비밀번호 | `normalized_customers.access_password` (평문) | **암호화 안 함(대표 결정 21:21)**. 대신 **보는 사람 제한**: 그 매장 담당자(`assigned_staff_member_id`) · 권한 있는 내근직만. 일반 목록 · 엑셀 · 로그 · 알림 응답에서 빼고 전용 읽기 함수로만 |
 | 보관 사진 3장 | `customer_attachments`(매출처 쪽) | 매장 프로필 첨부(종류: 냉장/냉동/실온) · 매출처로 공유 |
 | 개업 준비 중 | `business_status='registration_pending'` · ⚠ `activate_preopening_store_owner_v1`(셀프 경로) | **셀프 경로 차단**: 고객사가 만든 `store_owner_activation_requests`로만 |
 | 고객사 확인 → 매출처 | `store_accounts.customer_review_status` · `confirm_new_store_account_v1` · `confirm_store_customer_v1` · `link_store_account_to_customer_v1` · `store_customer_review_candidates_v1` | 같은 사업자번호 묶어 보기, 만들 때 프로필 → 매출처 칸 복사(관리 상호명은 따로) |
@@ -42,11 +42,11 @@
 ## 3. 스키마 변경 초안 (모두 `docs/sql-drafts/` 초안 + down + PG17 → 대표 승인 → 잠금 → 적용)
 | 초안 | 내용 | 위험 |
 |---|---|---|
-| S-3a store-profile-delivery | `store_profiles`에 `tax_invoice_email`(형식 체크) · `receive_method`('door','inside','dawn') · `access_secret_ciphertext`(bytea) · `access_secret_updated_at`; 프로필 첨부 테이블(`store_profile_attachments`: kind cold/frozen/room, storage_path) + RLS | 개인정보 · 비밀번호 → 평문 금지, select 정책은 본인 매장 · 연결 고객사 관리자 · 배정 기사만 |
+| S-3a store-profile-delivery | `store_profiles`에 `tax_invoice_email`(형식 체크) · `receive_method`('door','inside','dawn') · `access_password`(text, 길이 체크) · `access_password_updated_at`; 프로필 첨부 테이블(`store_profile_attachments`: kind cold/frozen/room, storage_path) + RLS | 비밀번호 칸은 일반 select에서 빼고(별도 테이블 또는 컬럼 권한) 읽기 함수가 매장 본인 · 그 매장 담당자 · 권한 있는 내근직만 돌려줌 |
 | S-3b product-order-cutoff | `product_catalog.order_cutoff_days_before smallint null` · `order_cutoff_time time null` + core 주문 함수가 품목 마감 검사 | 돈: 마감 지난 품목 접수 거부 · 서버 기준 시각(Asia/Seoul) |
 | S-3c promotion-remaining | 읽기 함수 `promotion_remaining_v1(company, promotion_ids[])` (security definer, 회사 범위) | 동시 주문 → 접수 때 core가 다시 잠금(`for update`) 검사, 화면 값은 안내용 |
 | S-3d preopening-gate | `activate_preopening_store_owner_v1`을 고객사가 준비한 요청 토큰 있을 때만 허용(없으면 거부) | 기존 매장 영향 없음 · 셀프 가입 막힘 |
-| S-3e access-password-migrate | `normalized_customers.access_password` 평문 → 암호문 칸으로 옮기고 평문 비우기 | **P1 보안** · 백필 + down 시 복원 불가 경고 · 별도 승인 |
+| S-3e access-password-visibility | 암호화 없음. `normalized_customers.access_password`를 일반 조회 · 내보내기 · 감사 로그 응답에서 빼고, 읽기 함수 `customer_access_password_v1(customer_id)` = 매장 담당자 · 권한(`customer.access_password.view`) 있는 내근직만 | 데이터 변경 없음 · 권한 경계만 |
 
 ## 4. 주문 함수 정리 (돈 안전 점검표 대상)
 운영에 주문 접수 함수가 여러 개: `place_store_order` · `place_store_member_order` · `place_store_account_order(s)` · `place_store_catalog_order_v1` · `place_store_catalog_member_order_v1` · `place_store_catalog_order_core_v1`.
@@ -62,6 +62,6 @@
 
 ## 6. 하지 말 것
 - 가입 전 가격에 매장 등급가 노출 금지(단가표 가격만). 전체 상품 · 등급가는 로그인 + 연결 회사만.
-- 비밀번호 · 보관 사진을 로그 · 알림 · 엑셀에 넣지 않기.
+- 비밀번호 · 보관 사진을 로그 · 알림 · 엑셀에 넣지 않기. 비밀번호는 암호화하지 않되 보는 사람만 제한(매장 담당자 · 권한 있는 내근직). 배송 기사가 "담당자"에 들어가는지는 대표 확인.
 - 장바구니를 주문으로 보이게 하는 문구 금지("주문하기" 누르기 전엔 "아직 주문 전").
 - 카톡 · 문자 자동 발송 없음.
