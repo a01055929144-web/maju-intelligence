@@ -27,7 +27,9 @@ test("CX-65 기사 운행 부품은 390px에서 화면과 키보드로 접근된
   await expect(extras.getByText("사진")).toBeVisible();
 
   await expect(page.getByText("가는 길 매장")).toBeVisible();
-  await page.getByRole("button", { name: "밀어서 단가표 완료" }).click();
+  const keyboardComplete = page.getByRole("button", { name: "밀어서 단가표 완료" });
+  await keyboardComplete.focus();
+  await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "되돌리기" })).toBeVisible();
   await page.getByRole("button", { name: "되돌리기" }).click();
   expect(undone).toBe(true);
