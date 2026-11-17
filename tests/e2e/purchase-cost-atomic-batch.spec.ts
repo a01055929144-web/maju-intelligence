@@ -700,8 +700,8 @@ for (const mode of ["이력만 저장", "현재 가격도 변경"] as const) tes
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("단위 미기재 1행을 이 화면에서 채워 주세요");
   await expect(review.getByRole("cell", { name: "합성 상품", exact: true }).first()).toBeVisible();
-  await review.getByRole("textbox", { name: "2행 단위", exact: true }).fill("BOX");
-  await expect(review.getByRole("textbox", { name: "2행 단위", exact: true })).toHaveValue("BOX");
+  await review.getByLabel("2행 단위", { exact: true }).fill("BOX");
+  await expect(review.getByLabel("2행 단위", { exact: true })).toHaveValue("BOX");
   await page.getByRole("button", { name: /^③ 저장/ }).click();
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
@@ -720,7 +720,7 @@ test("현재가 충돌 선택 뒤 단위를 바꾸면 이전 선택으로 저장
   await page.getByLabel("합성 상품 2026-11-01 적용 단가", { exact: true }).selectOption("3");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
-  await review.getByRole("textbox", { name: "2행 단위", exact: true }).fill("BOX");
+  await review.getByLabel("2행 단위", { exact: true }).fill("BOX");
   await expect(review.getByRole("alert")).toContainText("잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다");
   await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
   expect(dateWrites).toEqual([]);
