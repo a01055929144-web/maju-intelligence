@@ -6,7 +6,7 @@ import { canManagePriceSheets } from "@/domains/pricing/access";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
-import { readConfirmedOrderSaleDocuments, syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
+import { readConfirmedOrderSaleDocuments, receiveStoreOrderWithSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
@@ -166,22 +166,14 @@ export async function POST(request: NextRequest) {
   if (retryDocument && !erpEnabled) return unavailable();
   try {
     if (erpEnabled) {
-      const [current] = await supabaseRequest<Array<{ id: string; customer_id: string }>>(
-        `store_orders?company_id=eq.${encodeURIComponent(scope)}&id=eq.${orderId}&status=eq.submitted&revision=eq.${revision}&select=id,customer_id&limit=1`,
-      );
-      if (!current) return NextResponse.json({ message: "주문이 변경됐습니다. 새로고침 후 다시 시도해 주세요." }, { status: 409 });
-      const linked = async () => (await readConfirmedOrderSaleDocuments(scope, [orderId])).get(orderId)?.customer_id === current.customer_id;
-      if (!retryDocument && !await linked())
-        return NextResponse.json({ message: "전표가 연결되지 않았습니다. 전표 연결을 다시 시도한 뒤 접수해 주세요." }, { status: 409 });
-
-      // A saved amendment can outlive a failed ERP update. Reconcile at the expected revision before receipt.
-      if (retryDocument || revision > 1) {
-        const result = await syncStoreOrderSaleDocument(scope, { id: current.id, revision },
-          auth.customerSession?.userId ?? null, getCustomerOperationalName(auth.customerSession) || "고객사 주문 확인");
-        if (result !== "confirmed" || !await linked())
-          return NextResponse.json({ message: "전표 연결에 실패했습니다. 주문 상태는 그대로입니다." }, { status: 409 });
-      }
-      if (retryDocument) return NextResponse.json({ orderDocumentStatus: "confirmed" });
+      const order = await receiveStoreOrderWithSaleDocument(scope, orderId, revision, {
+        userId: auth.customerSession?.userId ?? null,
+        name: getCustomerOperationalName(auth.customerSession) || "고객사 주문 확인",
+      });
+      if (order?.id !== orderId || order.status !== "received" || order.revision !== revision + 1)
+        throw new Error("order_receipt_document_unlinked");
+      await markNewOrderNotificationProcessed(scope, orderId).catch(() => undefined);
+      return NextResponse.json({ order });
     }
     // status·revision 조건을 한 번의 UPDATE에 넣어 점주 수정과 동시에 눌려도 한쪽만 성공한다.
     const updated = await supabaseRequest<Array<{ id: string; status: string; revision: number }>>(
@@ -196,6 +188,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.includes("store_customer_review_required"))
       return NextResponse.json({ message: "이 매장은 첫 거래 거래처 확인이 필요합니다. 주문 줄의 '거래처 확인'을 먼저 해 주세요." }, { status: 409 });
+    if (erpEnabled) {
+      if (error instanceof Error && error.message.includes("order_receipt_conflict"))
+        return NextResponse.json({ message: "주문이 변경됐습니다. 새로고침 후 다시 시도해 주세요." }, { status: 409 });
+      return NextResponse.json({ code: "order_document_failed", message: "전표 연결에 실패했습니다. 주문을 접수하지 않았습니다." }, { status: 409 });
+    }
     return NextResponse.json({ message: "주문을 확인 처리하지 못했습니다. 다시 시도해 주세요." }, { status: 500 });
   }
 }

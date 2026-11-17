@@ -17,8 +17,8 @@ vi.mock("@/lib/business-documents", () => ({
 import { POST } from "../app/api/business-documents/[id]/actions/route";
 
 const company = "00000000-0000-4000-8000-000000000001";
-const oldEnabled = process.env.ERP_ORDER_DOCUMENTS;
-const oldCompanies = process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS;
+const oldEnabled = process.env.FEATURE_ERP_ORDER_DOCUMENTS;
+const oldCompanies = process.env.FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -26,10 +26,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (oldEnabled === undefined) delete process.env.ERP_ORDER_DOCUMENTS;
-  else process.env.ERP_ORDER_DOCUMENTS = oldEnabled;
-  if (oldCompanies === undefined) delete process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS;
-  else process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS = oldCompanies;
+  if (oldEnabled === undefined) delete process.env.FEATURE_ERP_ORDER_DOCUMENTS;
+  else process.env.FEATURE_ERP_ORDER_DOCUMENTS = oldEnabled;
+  if (oldCompanies === undefined) delete process.env.FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS;
+  else process.env.FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS = oldCompanies;
 });
 
 const request = () => POST(new NextRequest("http://localhost/api/business-documents/doc-1/actions", {
@@ -38,15 +38,14 @@ const request = () => POST(new NextRequest("http://localhost/api/business-docume
 }), { params: Promise.resolve({ id: "doc-1" }) });
 
 it("기능이 꺼지면 반품 초안 쓰기를 시작하지 않는다", async () => {
-  delete process.env.ERP_ORDER_DOCUMENTS;
-  process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS = company;
+  delete process.env.FEATURE_ERP_ORDER_DOCUMENTS;
+  delete process.env.FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS;
   expect((await request()).status).toBe(404);
   expect(mocks.createReturn).not.toHaveBeenCalled();
 });
 
-it("전역 스위치와 회사 allowlist가 모두 맞을 때 선택 줄을 전달한다", async () => {
-  process.env.ERP_ORDER_DOCUMENTS = "true";
-  process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS = company;
+it("회사 allowlist에 있을 때 선택 줄을 전달한다", async () => {
+  process.env.FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS = company;
   mocks.createReturn.mockResolvedValue({ id: "return-1" });
   expect((await request()).status).toBe(200);
   expect(mocks.createReturn).toHaveBeenCalledWith(company, "doc-1", [{ lineId: "line-1", quantity: 2 }], expect.objectContaining({ name: "담당" }));

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { calculateErpLine, calculateErpTotals, calculateLedgerBalance } from "../domains/erp/business-document";
 import {
   buildBusinessDocumentLineRows,
@@ -9,18 +9,18 @@ import { erpOrderDocumentsEnabled } from "../lib/erp-order-documents-feature";
 
 describe("ERP 전표 금액", () => {
   it("CX-40 반품은 기본 OFF이고 회사 allowlist에서만 열린다", () => {
-    const previousEnabled = process.env.ERP_ORDER_DOCUMENTS;
-    const previousCompanies = process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS;
-    delete process.env.ERP_ORDER_DOCUMENTS;
-    process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS = "company-a";
-    expect(erpOrderDocumentsEnabled("company-a")).toBe(false);
-    process.env.ERP_ORDER_DOCUMENTS = "true";
-    expect(erpOrderDocumentsEnabled("company-a")).toBe(true);
-    expect(erpOrderDocumentsEnabled("company-b")).toBe(false);
-    if (previousEnabled === undefined) delete process.env.ERP_ORDER_DOCUMENTS;
-    else process.env.ERP_ORDER_DOCUMENTS = previousEnabled;
-    if (previousCompanies === undefined) delete process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS;
-    else process.env.ERP_ORDER_DOCUMENTS_COMPANY_IDS = previousCompanies;
+    try {
+      vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
+      vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", "company-a");
+      vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS", "");
+      vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS", "");
+      expect(erpOrderDocumentsEnabled("company-a")).toBe(false);
+      vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS", "company-a");
+      expect(erpOrderDocumentsEnabled("company-a")).toBe(true);
+      expect(erpOrderDocumentsEnabled("company-b")).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
   it("라인별 원 단위 반올림 후 과세·면세 합계를 분리한다", () => {
     expect(calculateErpLine({ quantity: 1.25, unitPrice: 101, taxType: "taxable" })).toEqual({
