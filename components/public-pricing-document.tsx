@@ -118,7 +118,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   return <Container className={`mx-auto max-w-[900px] space-y-4 p-4 ${showOrder && !embedded ? "max-md:pb-28" : ""}`}>
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
     {message && <p role="status">{message}</p>}
-    {!safeDocument && !busy && message && <Button variant="outline" className="min-h-11" onClick={() => void load()}>다시 확인</Button>}
+    {!safeDocument && !busy && message && <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>다시 확인</Button>}
     {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <>
       <header className="space-y-1 md:hidden print:hidden">
         <p className={`text-[15px] font-bold ${companyColor}`}>{safeDocument.companyName}</p>
@@ -159,8 +159,8 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         : !orderEntry?.available ? <p>{orderEntry?.message || "주문 연결을 준비 중입니다. 발행 회사에 문의해 주세요."}</p>
         : <p>카카오로 로그인한 뒤 주문을 시작할 수 있습니다.</p>}
       {orderMessage && <p role="status">{orderMessage}</p>}
-      {member ? !orderDisabled && <Link className={`maju-button-primary inline-flex min-h-12 items-center justify-center ${embedded ? "" : "max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:z-30"}`} href={orderHref}>{orderLabel}</Link> : <>
-        <Button className="hidden min-h-12 md:inline-flex" disabled={orderDisabled || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>
+      {member ? !orderDisabled && <Link className={`maju-button-primary inline-flex min-h-[48px] items-center justify-center ${embedded ? "" : "max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:z-30"}`} href={orderHref}>{orderLabel}</Link> : <>
+        <Button className="hidden min-h-[48px] md:inline-flex" disabled={orderDisabled || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>
         <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
           <BottomActionBar busy={orderBusy} disabled={orderDisabled} onClick={() => void startOrder()}>{orderLabel}</BottomActionBar>
         </div>
