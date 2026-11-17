@@ -709,6 +709,37 @@ for (const mode of ["이력만 저장", "현재 가격도 변경"] as const) tes
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("현재가 충돌 선택 뒤 단위를 바꾸면 이전 선택으로 저장하지 않는다 at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-01,150\nERP-1,합성 상품,1kg,봉,2026-11-01,220\n");
+  await page.getByRole("radio", { name: "현재 가격도 변경", exact: true }).check();
+  await page.getByLabel("합성 상품 2026-11-01 적용 단가", { exact: true }).selectOption("3");
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await review.getByRole("textbox", { name: "2행 단위", exact: true }).fill("BOX");
+  await expect(review.getByRole("alert")).toContainText("잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다");
+  await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
+  expect(dateWrites).toEqual([]);
+});
+
+test("이번 업로드 초기화 뒤 같은 파일을 다시 골라도 단위 선택이 남지 않는다 at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await purchaseUpload(page, { blankUnit: true, historyOnlyDefault: true });
+  const csv = "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,,2026-11-01,150\n";
+  await selectPurchaseCsv(page, csv);
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  let review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await review.getByRole("checkbox", { name: "2행 단위 입력 선택", exact: true }).check();
+  page.once("dialog", dialog => dialog.accept());
+  await review.getByRole("button", { name: "이번 업로드 초기화", exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await selectPurchaseCsv(page, csv);
+  await page.getByRole("button", { name: /^② 열 정렬/ }).click();
+  review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await expect(review.getByRole("checkbox", { name: "2행 단위 입력 선택", exact: true })).not.toBeChecked();
+});
+
 test("괄호 용량과 이중 대괄호 원문을 확인표에서 잃지 않는다 at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await purchaseUpload(page, { historyOnlyDefault: true });
