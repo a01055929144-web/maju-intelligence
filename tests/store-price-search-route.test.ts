@@ -1,8 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mock = vi.hoisted(() => ({ flag: vi.fn(), accounts: vi.fn(), store: vi.fn(), catalog: vi.fn(), share: vi.fn() }));
+const mock = vi.hoisted(() => ({ flag: vi.fn(), member: vi.fn(), accounts: vi.fn(), store: vi.fn(), catalog: vi.fn(), share: vi.fn() }));
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mock.flag }));
+vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreMemberContext: mock.member }));
 vi.mock("@/lib/store/07-store-portal", () => ({ listStorePortalAccounts: mock.accounts }));
 vi.mock("@/lib/pricing/storefront", () => ({ readStorefront: mock.store }));
 vi.mock("@/lib/pricing/storefront-catalog-read", () => ({ readStorefrontCatalogPage: mock.catalog }));
@@ -17,6 +18,7 @@ const request = (extra: Record<string, string> = {}) => GET(new NextRequest(
 beforeEach(() => {
   vi.resetAllMocks();
   mock.flag.mockReturnValue(true);
+  mock.member.mockResolvedValue({ companyId, storeAccountId });
   mock.accounts.mockResolvedValue([{ companyId, storeAccountId, documents: [
     { href: "/store#link.secret", kind: "sheet", canOrder: true, validUntil: "2099-01-01" },
     { href: "/pricing-document#quote.secret", kind: "quote", validUntil: "2099-01-01" },
@@ -25,6 +27,9 @@ beforeEach(() => {
 
 it("rejects disabled, unrelated store, and out-of-scope document reads", async () => {
   mock.flag.mockReturnValueOnce(false);
+  expect((await request()).status).toBe(404);
+  expect(mock.member).not.toHaveBeenCalled();
+  mock.member.mockResolvedValueOnce(null);
   expect((await request()).status).toBe(404);
   expect(mock.accounts).not.toHaveBeenCalled();
   expect((await request({ storeAccountId: companyId })).status).toBe(404);

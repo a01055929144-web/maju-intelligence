@@ -5,6 +5,7 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { readPublicDocument } from "@/lib/pricing/document-share";
 import { readStorefront } from "@/lib/pricing/storefront";
 import { readStorefrontCatalogPage } from "@/lib/pricing/storefront-catalog-read";
+import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { listStorePortalAccounts } from "@/lib/store/07-store-portal";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
   if (!Number.isSafeInteger(page) || page < 1 || page > 1000) return unavailable();
 
   try {
+    const member = await getStoreMemberContext({ companyId, storeAccountId });
+    if (!member) return unavailable();
     const accounts = await listStorePortalAccounts();
     const account = accounts?.find(row => row.companyId === companyId && row.storeAccountId === storeAccountId);
     if (!account) return unavailable();
