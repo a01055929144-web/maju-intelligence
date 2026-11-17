@@ -793,7 +793,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (purchaseDateEnabled && !importedLines.length) { setError("날짜별 저장 사용 중에는 직접 원가 수정을 저장할 수 없습니다. 적용일과 단가가 있는 파일을 올려 날짜별 저장으로 진행해 주세요."); return; }
     if (importedLines.length && confirmedReview !== reviewKey) { setSaveReview(true); setError("적용 날짜와 건수를 확인하고 동의한 뒤 저장해 주세요."); return; }
     if (importedLines.some(line => !line.purchaseDate || !/^\d{4}-\d{2}-\d{2}$/.test(line.purchaseDate))) { setError("저장할 원본 거래의 적용일을 확인해 주세요."); return; }
-    const changes = selected.filter((id) => candidates[id] && candidates[id].cost !== unique.find((item) => item.id === id)?.cost &&
+    const changes = selected.filter((id) => candidates[id] && unique.some((item) => item.id === id) && candidates[id].cost !== unique.find((item) => item.id === id)?.cost &&
       !historicalPrice(id)).map((id) => {
       const product = unique.find((item) => item.id === id)!;
       return { productId: id, supplierProductId: candidates[id].supplierProductId, expectedCost: product.cost, cost: candidates[id].cost, fileName: candidates[id].source, ...(requiresDateContract && candidates[id].purchaseDate ? { priceDate: candidates[id].purchaseDate } : {}) };
@@ -1066,7 +1066,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
         {error ? <p aria-live="assertive" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error}</p> : null}
         {busy || message ? <p aria-live="polite" className="rounded border border-slate-200 bg-slate-50 p-3 text-slate-700">{busy ? (message || "저장 중…") : message}</p> : null}
-        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
+        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save().catch((cause) => { setBusy(false); setError(`저장 중 화면 오류가 났습니다: ${cause instanceof Error ? cause.message : String(cause)}. 이 문구를 캡처해 담당자에게 보내 주세요. 아무것도 저장되지 않았습니다.`); })}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
     </section> : null}
