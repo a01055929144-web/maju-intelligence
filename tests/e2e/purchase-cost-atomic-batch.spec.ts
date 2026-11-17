@@ -690,3 +690,16 @@ test("재시도 가능한 매입처 연결 실패는 파일을 유지하고 남�
   await expect(page.getByRole("status").filter({ hasText: "열 정렬 완료 · 이력만 1행" })).toContainText("매입처 연결 1개");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("괄호 용량과 이중 대괄호 원문을 확인표에서 잃지 않는다 at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await purchaseUpload(page, { historyOnlyDefault: true });
+  await selectPurchaseCsv(page, "품목,단가,구매일\n합성치킨스탁(가상 1.2KG*6EA),100,2026-11-01\n\"합성토마토소스(가상,대상)\",200,2026-11-01\n합성고추장[14KG] [[14kg]],300,2026-11-01\n");
+  const preview = page.getByRole("region", { name: "업로드 적용일과 단가 확인" });
+  for (const source of ["합성치킨스탁(가상 1.2KG*6EA)", "합성토마토소스(가상,대상)", "합성고추장[14KG] [[14kg]]"]) {
+    await expect(preview.getByRole("cell", { name: source, exact: true })).toBeVisible();
+  }
+  await expect(preview.getByRole("cell", { name: "가상 1.2KG*6EA", exact: true })).toBeVisible();
+  await expect(preview.getByRole("cell", { name: "14KG", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
