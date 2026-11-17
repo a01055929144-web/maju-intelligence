@@ -10,7 +10,7 @@ import { CommonDataTable, type CommonTableColumn } from "@/components/common-dat
 import { PurchaseHistoryPanel } from "@/components/purchase-history-panel";
 import type { PurchaseHistoryItem } from "@/domains/pricing/purchase-receipt";
 import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
-import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
+import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
 import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
@@ -407,7 +407,34 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     else setError(((await response.json().catch(() => null)) as { message?: string } | null)?.message || "제외 코드를 저장하지 못했습니다.");
   }
 
-  function applyFile() {
+  // 11/17: 엑셀 매입처가 아직 MAJU 매입처로 연결되지 않은 기존 상품이면, 열 정렬 때 매입처를 만들고 기존 상품에 확정 연결한 뒤
+  // 상품 목록을 다시 읽어 정렬한다(연결 없이 진행하면 0건이 되거나 같은 품목이 새 상품으로 또 생긴다).
+  async function applyFile() {
+    if (!catalogReady || !sheet || !importPreview || importPreview.error) { applyFileWith(products); return; }
+    const targets = supplierLinkTargets(importPreview.lines, products);
+    if (!targets.length) { applyFileWith(products); return; }
+    setBusy(true); setError("");
+    try {
+      const suppliers = Array.from(new Set(targets.map(target => target.supplierName)));
+      setMessage(`매입처 ${suppliers.join(", ")}에 기존 상품 ${targets.length}개를 연결하는 중입니다…`);
+      let linked = 0;
+      for (let offset = 0; offset < targets.length; offset += 200) {
+        const response = await fetch("/api/price-sheets/links", { body: JSON.stringify({ companyId, fileName: fileName || "매입가 업로드", links: targets.slice(offset, offset + 200) }), headers: { "Content-Type": "application/json" }, method: "POST" });
+        const result = (await response.json().catch(() => null)) as { linked?: number; message?: string } | null;
+        if (!response.ok) throw new Error(result?.message || "매입처 연결에 실패했습니다. 잠시 후 다시 열 정렬을 눌러 주세요.");
+        linked += Number(result?.linked || 0);
+      }
+      const fresh = await load({ documents: false });
+      applyFileWith((fresh as DatedProduct[] | undefined) || products, `매입처 ${suppliers.join(", ")} 연결 ${linked}개 · `);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "매입처 연결에 실패했습니다."); }
+    finally { setBusy(false); }
+  }
+
+  function applyFileWith(catalogProducts: readonly DatedProduct[], notePrefix = "") {
+    const catalogUnique = Array.from(new Set(catalogProducts.map((product) => product.id))).map((id) => {
+      const linked = catalogProducts.filter((product) => product.id === id);
+      return linked.length === 1 ? linked[0] : { ...linked[0], supplierProductId: undefined, supplierName: "여러 매입처" };
+    });
     if (!catalogReady) { setError("상품 목록을 불러온 뒤 다시 시도해 주세요."); return; }
     try {
       if (!sheet) return;
@@ -416,7 +443,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const { lines, skipped } = importPreview;
       void saveRememberedCodes();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
-        matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products) || matchCostImportRow(line, products)]));
+        matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, catalogProducts) || matchCostImportRow(line, catalogProducts)]));
       const productByLine = new Map<string, string>();
       for (const line of lines) {
         const matched = matchedRows.get(line.rowNumber);
@@ -434,7 +461,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setCandidates(current => Object.fromEntries(Object.entries(current).filter(([id]) => !touched.has(id))));
         setSelected(current => current.filter(id => !touched.has(id))); setUnmatched([]); setImportedLines(matchedLines); setSheet(null);
         setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false); setFileHasDates(importPreview.hasDates); setFileHadConflicts(importPreview.conflicts.length > 0); setSaveReview(false); setConfirmedReview("");
-        setMessage(`과거 매입 이력 ${matchedLines.length}행 · 현재 가격 변경 0품목 · 연결되지 않은 ${lines.length - matchedLines.length}행 제외. 같은 품목·날짜의 서로 다른 단가도 원문 이력으로 모두 보존합니다.`);
+        setMessage(`${notePrefix}과거 매입 이력 ${matchedLines.length}행 · 현재 가격 변경 0품목 · 연결되지 않은 ${lines.length - matchedLines.length}행 제외. 같은 품목·날짜의 서로 다른 단가도 원문 이력으로 모두 보존합니다.`);
         return;
       }
       const held = importPreview.conflicts.filter(group => conflictChoices[group.key] === "hold");
@@ -471,7 +498,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         seen.add(key);
         const row: CostImportRow = { code: line.code, cost: line.cost, name: line.name, spec: line.spec, supplier: line.supplier, unit: line.unit };
         const matched = matchedRows.get(line.rowNumber);
-        const current = matched ? unique.find(product => product.id === matched.id) : undefined;
+        const current = matched ? catalogUnique.find(product => product.id === matched.id) : undefined;
         if (current?.priceDate && date < current.priceDate) continue;
         const fileNote = matched ? [matched.name.replace(/\s+/g, "") !== line.name.replace(/\s+/g, "") ? `파일 품목명 ${line.name}` : "", (matched.spec || "").replace(/\s+/g, "").toLowerCase() !== line.spec.replace(/\s+/g, "").toLowerCase() && line.spec ? `파일 규격 ${line.spec}` : "", (matched.unit || "").toLowerCase() !== line.unit.toLowerCase() && line.unit ? `파일 단위 ${line.unit}` : ""].filter(Boolean).join(" · ") : "";
         if (matched && (!row.supplier || matched.supplierProductId)) next[matched.id] = { purchaseDate: date, cost: line.cost, method: "엑셀", quantity: line.quantity, rawCost: line.rawCost, source: fileName, supplierProductId: matched.supplierProductId, taxType: line.taxType, vatIncluded: line.vatIncluded, ...(fileNote ? { fileNote } : {}) };
@@ -485,12 +512,12 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setImportedLines(lines.map((line) => ({ ...line, productId: productByLine.get(`${line.lineKey}|${line.code}|${line.supplier}`), supplierProductId: matchedRows.get(line.rowNumber)?.supplierProductId })));
       setSheet(null);
       if (missing.some((row) => missingFields(row).length)) openFilter("unit", missing);
-      else if (missing.some((row) => findDuplicateSuspects(row, unique, 1).length)) openFilter("suspect", missing);
+      else if (missing.some((row) => findDuplicateSuspects(row, catalogUnique, 1).length)) openFilter("suspect", missing);
       else if (!Object.keys(next).length && missing.length) setTab("신규");
       const vatCount = Object.values(next).filter((candidate) => candidate.vatIncluded).length;
       const exemptCount = lines.filter((line) => line.taxType === "exempt").length;
       const taxableCount = lines.filter((line) => line.taxType === "taxable").length;
-      setMessage(`변경 후보 ${Object.keys(next).length}개 · 새 상품/확인 필요 ${missing.length}개${skipped.length ? ` · 품목·단가가 없어 건너뛴 행 ${skipped.length}개` : ""}${vatCount ? ` · 부가세 포함으로 본 품목 ${vatCount}개(별도 금액으로 바꿔 저장)` : ""}${mapping.vatAmount !== undefined ? ` · 부가세 열 기준 과세 ${taxableCount}개 · 면세 ${exemptCount}개` : ""}. 내용을 고친 뒤 '저장'을 누르면 새 상품은 상품관리에 등록되고 매입가·매입 기록이 함께 저장됩니다.`);
+      setMessage(`${notePrefix}변경 후보 ${Object.keys(next).length}개 · 새 상품/확인 필요 ${missing.length}개${skipped.length ? ` · 품목·단가가 없어 건너뛴 행 ${skipped.length}개` : ""}${vatCount ? ` · 부가세 포함으로 본 품목 ${vatCount}개(별도 금액으로 바꿔 저장)` : ""}${mapping.vatAmount !== undefined ? ` · 부가세 열 기준 과세 ${taxableCount}개 · 면세 ${exemptCount}개` : ""}. 내용을 고친 뒤 '저장'을 누르면 새 상품은 상품관리에 등록되고 매입가·매입 기록이 함께 저장됩니다.`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "열 맞추기를 확인해 주세요."); }
   }
 
@@ -883,7 +910,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <h2 className="mr-auto text-lg font-bold">매입가 업로드</h2>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">업로드 적용일<input aria-label="매입일" className="maju-input min-h-[44px] max-w-full" onChange={(event) => changeReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={`min-h-[44px] ${sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"}`} disabled={!catalogReady} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
-        <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={applyFile} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">② 열 정렬</button>
+        <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">② 열 정렬</button>
         <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || (!usesDateBatch && missingTotal > 0) || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => importedLines.length ? setSaveReview(true) : void save()} title={missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
         <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
       </div>
@@ -894,7 +921,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {batchEnabled ? <p className="text-xs text-slate-600">선택한 매입가 최대 100건과 판매가 계산을 함께 저장합니다. 새 상품·원문 연결·매입 기록은 별도로 저장됩니다.</p> : null}
     {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}{categoryReviewLink && !busy && message.includes("상품관리 미분류에서 확인") ? <> <Link className="font-bold text-teal-700 underline" href={`/revenue/products?category=unsorted&companyId=${encodeURIComponent(companyId)}`}>미분류 상품 보기</Link></> : null}</p> : null}
-    {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3 [&_select]:min-h-[44px]"><PurchaseSheetMapper mapping={mapping} onMapping={next => { setMapping(next); setConflictChoices({}); }} onVatMode={next => { setVatMode(next); setConflictChoices({}); }} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={applyFile} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
+    {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3 [&_select]:min-h-[44px]"><PurchaseSheetMapper mapping={mapping} onMapping={next => { setMapping(next); setConflictChoices({}); }} onVatMode={next => { setVatMode(next); setConflictChoices({}); }} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {importPreview ? <section aria-label="업로드 적용일과 단가 확인" className="maju-section-card min-w-0 space-y-3 p-4">
       <h3 className="font-semibold">적용 날짜·중복 단가 확인</h3>
       <p className="text-sm">{mapping.purchaseDate !== undefined ? "파일의 구매일을 행별 적용일로 사용합니다. 빈 날짜나 잘못된 날짜는 먼저 수정해 주세요." : `구매일 열이 없어 업로드 적용일 ${receiptDate || "(날짜 선택 필요)"}을 사용합니다.`}</p>
