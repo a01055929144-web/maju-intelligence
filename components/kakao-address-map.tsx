@@ -465,7 +465,7 @@ export function KakaoAddressMap({
   useEffect(() => {
     let ignore = false;
     // 11/17 핫픽스: 운영에서 SDK는 불러왔는데 지도 객체가 만들어지지 않고 "불러오는 중"에 계속 머무는 일이 있었다.
-    // 단계마다 기록하고, 7초 안에 준비되지 않으면 같은 effect 안에서 최대 2번 다시 부팅한다(이전 시도는 run 번호로 무시).
+    // 단계마다 기록하고, 7초 안에 준비되지 않거나 중간에 끊기면 같은 effect 안에서 최대 4번 다시 부팅한다(이전 시도는 run 번호로 무시).
     let currentRun = 0;
     let runStartedAt = 0;
     let booted = false;
@@ -494,8 +494,10 @@ export function KakaoAddressMap({
         await withTimeout(loadKakaoMapSdk(appKey!), kakaoSdkTimeoutMs, "Kakao map SDK load timed out");
         if (stale()) return;
         if (!mapRef.current || !window.kakao?.maps) {
-          // 여기서 조용히 끝나면 "불러오는 중"에 계속 머문다 → 이유를 남기고 아래 감시가 다시 시도한다.
+          // 여기서 조용히 끝나면 "불러오는 중"에 계속 머문다 → 이유를 남기고 아래 감시가 1초 안에 다시 시도한다.
+          // 운영 확인(11/17): SDK를 불러오는 사이 지도 칸이 잠깐 빠졌다가 다시 붙는다("지도 칸 없음").
           console.warn(`[KakaoAddressMap] SDK 뒤 지도 준비 중단: ${!mapRef.current ? "지도 칸 없음" : "kakao.maps 없음"}`);
+          runStartedAt = Number.NEGATIVE_INFINITY;
           return;
         }
         // 접힌 패널·탭 전환 중에는 컨테이너가 잠시 0×0이 될 수 있습니다. 이때 Kakao Map을
@@ -506,6 +508,7 @@ export function KakaoAddressMap({
         if (!mapRef.current || !window.kakao?.maps) {
           // 여기서 조용히 끝나면 "불러오는 중"에 계속 머문다 → 이유를 남기고 아래 감시가 다시 시도한다.
           console.warn(`[KakaoAddressMap] 칸 크기 확인 뒤 지도 준비 중단: ${!mapRef.current ? "지도 칸 없음" : "kakao.maps 없음"}`);
+          runStartedAt = Number.NEGATIVE_INFINITY;
           return;
         }
         stage = "create";
@@ -570,15 +573,15 @@ export function KakaoAddressMap({
     const watchdog = window.setInterval(() => {
       if (ignore || booted) { window.clearInterval(watchdog); return; }
       if (performance.now() - runStartedAt < 7000) return;
-      if (retries >= 2) {
+      if (retries >= 4) {
         window.clearInterval(watchdog);
-        console.error(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 멈췄습니다(다시 시도 2번 실패).${getKakaoDomainHint()}`);
+        console.error(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 멈췄습니다(다시 시도 4번 실패).${getKakaoDomainHint()}`);
         setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
         setStatus("fallback");
         return;
       }
       retries += 1;
-      console.warn(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 7초 넘게 멈춰 다시 시도합니다(${retries}/2).`);
+      console.warn(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 멈춰 다시 시도합니다(${retries}/4).`);
       currentRun += 1;
       void bootMap(currentRun);
     }, 1000);
