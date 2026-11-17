@@ -38,6 +38,12 @@ describe("purchase import", () => {
     expect(included.cost).toBeCloseTo(4090.91, 2);
   });
 
+  it("keeps brand-only parentheses but splits capacity parentheses and repeated bracket specs", () => {
+    expect(splitNameSpec("합성치킨스탁(가상 1.2KG*6EA)", "")).toEqual({ name: "합성치킨스탁", spec: "가상 1.2KG*6EA", unit: "" });
+    expect(splitNameSpec("합성토마토소스(가상,대상)", "")).toEqual({ name: "합성토마토소스(가상,대상)", spec: "", unit: "" });
+    expect(splitNameSpec("합성고추장[14KG] [[14kg]]", "")).toEqual({ name: "합성고추장", spec: "14KG", unit: "" });
+  });
+
   it("merges duplicate items in one file and stores one receipt row per day/item", () => {
     const samePrice = matrix.map((row, index) => index === 4 ? ["냉동오징어 [EA]", "2", "4500", "9000", "", "9000"] : row);
     const sheet = buildPurchaseSheet(samePrice);
