@@ -141,7 +141,7 @@ for (const width of [1440, 390]) {
       const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
       await expect(review.getByRole("button", { name: "확인한 날짜로 저장", exact: true })).toBeDisabled();
       expect(saved).toHaveLength(0);
-      await review.getByRole("checkbox").check();
+      await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
       await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
       await expect(page.getByText(/매입가 1건 저장/)).toBeVisible();
       expect(saved).toHaveLength(1);

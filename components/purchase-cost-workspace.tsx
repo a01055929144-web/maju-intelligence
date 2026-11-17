@@ -87,6 +87,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [filterIds, setFilterIds] = useState<string[] | null>(null);
   const [rowPick, setRowPick] = useState<number[]>([]);
   const [bulkUnit, setBulkUnit] = useState("");
+  const [importUnitPick, setImportUnitPick] = useState<number[]>([]);
+  const [importBulkUnit, setImportBulkUnit] = useState("");
+  const [unitRelinkBlockedRows, setUnitRelinkBlockedRows] = useState<number[]>([]);
   const [emptyOnly, setEmptyOnly] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
   const [history, setHistory] = useState<PurchaseHistoryItem[]>([]);
@@ -387,6 +390,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const nextSheet = buildPurchaseSheet(matrix);
       if (!nextSheet.rows.length) throw new Error("파일에 품목이 없습니다.");
       setSheet(nextSheet);
+      setImportUnitPick([]);
+      setImportBulkUnit("");
+      setUnitRelinkBlockedRows([]);
       setConflictChoices({}); setUpdateCurrentPrices(false); setExcludedImportRows(0); setSaveReview(false); setConfirmedReview("");
       setMapping(suggestPurchaseMapping(nextSheet));
       setFileName(file.name);
@@ -624,6 +630,45 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     setRowPick([]);
   }
 
+  function updateImportedUnits(rowNumbers: readonly number[], value: string) {
+    const unit = value.trim();
+    if (!unit && rowNumbers.length !== 1) return;
+    const targets = new Set(rowNumbers);
+    const blocked = new Set(unitRelinkBlockedRows);
+    const next = importedLines.map((line) => {
+      if (!targets.has(line.rowNumber)) return line;
+      const edited = { ...line, unit };
+      const matched = matchByAlias(aliasKey(line.rawName, line.spec, unit), line.supplier, products)
+        || matchCostImportRow(edited, products)
+        || matchCostImportRow({ ...edited, supplier: "" }, unique);
+      const identityChanged = matched?.id !== line.productId || (fileHadConflicts && updateCurrentPrices);
+      if (identityChanged) blocked.add(line.rowNumber); else blocked.delete(line.rowNumber);
+      return { ...edited, productId: matched?.id, supplierProductId: matched?.supplierProductId };
+    });
+    setImportedLines(next);
+    setUnitRelinkBlockedRows(Array.from(blocked));
+    setConflictChoices({});
+    setConfirmedReview("");
+    setSaveReview(false);
+  }
+
+  function resetCurrentImport() {
+    if (!window.confirm("아직 저장하지 않은 이번 업로드의 확인 내용만 초기화할까요? 저장된 매입 이력과 상품은 지우지 않습니다.")) return;
+    setImportedLines([]);
+    setUnmatched([]);
+    setCandidates({});
+    setSelected([]);
+    setImportUnitPick([]);
+    setImportBulkUnit("");
+    setUnitRelinkBlockedRows([]);
+    setConflictChoices({});
+    setSaveReview(false);
+    setConfirmedReview("");
+    setAlignResult(null);
+    setFileName("");
+    setMessage("이번 업로드 확인 내용을 초기화했습니다. 저장된 데이터는 바뀌지 않았습니다.");
+  }
+
   function openFilter(kind: "all" | "unit" | "suspect", rows: NewRow[] = unmatched) {
     setTab("신규");
     setNewFilter(kind);
@@ -743,6 +788,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   }
 
   async function save() {
+    if (unitRelinkBlockedRows.length) { setError(`단위 변경으로 상품 연결을 다시 확인해야 하는 원본 행이 있습니다: ${unitRelinkBlockedRows.join(", ")}행. 단위 열을 채운 원본 파일을 다시 올려 열 정렬해 주세요.`); return; }
     if (!catalogReady) { setError("상품 목록을 정상적으로 불러온 뒤 적용 날짜와 가격을 다시 확인해 주세요."); return; }
     if (purchaseDateEnabled && !importedLines.length) { setError("날짜별 저장 사용 중에는 직접 원가 수정을 저장할 수 없습니다. 적용일과 단가가 있는 파일을 올려 날짜별 저장으로 진행해 주세요."); return; }
     if (importedLines.length && confirmedReview !== reviewKey) { setSaveReview(true); setError("적용 날짜와 건수를 확인하고 동의한 뒤 저장해 주세요."); return; }
@@ -930,7 +976,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">업로드 적용일<input aria-label="매입일" className="maju-input min-h-[44px] max-w-full" onChange={(event) => changeReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={`min-h-[44px] ${sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"}`} disabled={!catalogReady} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
         <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">{`② 열 정렬${historyOnlyDefaultEnabled ? ` (${updateCurrentPrices ? "현재 가격도 변경" : "이력만 저장"})` : ""}`}</button>
-        <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || (!usesDateBatch && missingTotal > 0) || suspectCount > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => importedLines.length ? setSaveReview(true) : void save()} title={missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : suspectCount ? `중복 의심 ${suspectCount}개는 줄마다 연결 또는 새 상품 맞음을 골라 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
+        <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || unitRelinkBlockedRows.length > 0 || (!usesDateBatch && missingTotal > 0) || suspectCount > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => importedLines.length ? setSaveReview(true) : void save()} title={unitRelinkBlockedRows.length ? "단위 변경으로 달라진 상품 연결을 다시 확인해 주세요" : missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : suspectCount ? `중복 의심 ${suspectCount}개는 줄마다 연결 또는 새 상품 맞음을 골라 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
         <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
       </div>
       <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal && !usesDateBatch ? `새 상품 ${missingTotal}개에 단위가 비어 있습니다. 단위를 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
@@ -980,8 +1026,28 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </>}
     </section> : null}
     {importedLines.length ? <section aria-label="저장 전 적용일 확인" className="maju-section-card space-y-3 p-4">
-      <p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
-      {importedLines.some(line => !line.unit.trim()) ? <p>단위 미기재 {importedLines.filter(line => !line.unit.trim()).length}행은 원문 그대로 보관합니다. 상품관리에서 단위를 확인해 주세요.</p> : null}
+      <div className="flex flex-wrap items-start justify-between gap-2"><p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
+        <button className="maju-button-secondary min-h-[44px]" onClick={resetCurrentImport} type="button">이번 업로드 초기화</button>
+      </div>
+      {importedLines.some(line => !line.unit.trim()) ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <p className="text-sm font-semibold text-amber-900">단위 미기재 {importedLines.filter(line => !line.unit.trim()).length}행을 이 화면에서 채워 주세요.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input aria-label="저장 전 일괄 입력할 단위" className="maju-input min-h-[44px] w-32" list="purchase-unit-options" onChange={event => setImportBulkUnit(event.target.value)} placeholder="EA·BOX·KG" value={importBulkUnit} />
+          <button className="maju-button-secondary min-h-[44px]" disabled={!importUnitPick.length || !importBulkUnit.trim()} onClick={() => updateImportedUnits(importUnitPick, importBulkUnit)} type="button">선택 {importUnitPick.length}행에 넣기</button>
+          <button className="maju-button-secondary min-h-[44px]" disabled={!importBulkUnit.trim()} onClick={() => updateImportedUnits(importedLines.filter(line => !line.unit.trim()).map(line => line.rowNumber), importBulkUnit)} type="button">빈 단위 모두 넣기</button>
+        </div>
+      </div> : null}
+      {unitRelinkBlockedRows.length ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">단위 변경으로 상품 연결을 다시 확인해야 하는 원본 행: {unitRelinkBlockedRows.join(", ")}행. 잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다. 단위 열을 채운 원본 파일을 다시 올려 열 정렬해 주세요.</p> : null}
+      <CommonDataTable<DatedPurchaseLine> selectable={false} settingsKey={`purchase-save-review:${companyId}`} filename="매입가_저장전확인.csv" rowKey={line => String(line.rowNumber)} rows={importedLines}
+        columns={[
+          { key: "pick", label: "선택", width: 56, value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
+          { key: "rowNumber", label: "원본 행", priority: 3, value: line => line.rowNumber },
+          { key: "name", label: "품목(원문)", width: 140, value: line => line.rawName },
+          { key: "spec", label: "규격", priority: 3, value: line => line.spec || "-" },
+          { key: "unit", label: "단위", width: 120, value: line => line.unit || "", render: line => <input aria-label={`${line.rowNumber}행 단위`} className={`maju-input min-h-[44px] min-w-24 ${line.unit.trim() ? "" : "border-amber-400"}`} list="purchase-unit-options" onChange={event => updateImportedUnits([line.rowNumber], event.target.value)} placeholder="EA·BOX·KG" value={line.unit} /> },
+          { key: "purchaseDate", label: "적용일", priority: 3, value: line => line.purchaseDate || receiptDate },
+          { key: "cost", label: "단가(별도)", priority: 3, value: line => line.cost, render: line => money(line.cost) }
+        ]} />
       <ul>{reviewDates.map(([date, count]) => <li key={date}>{date || "날짜 없음"} · {count}행</li>)}</ul>
       {batchEnabled && !usesDateBatch && priceChangeCount > 100 ? <p role="alert">가격 변경 {priceChangeCount}건은 최대 100건을 초과합니다. 저장 전 선택 건수를 줄여 주세요. 새 상품·이력을 먼저 저장하지 않습니다.</p> : null}
       {dateSaveBlocked ? <p role="status">구매일 기준 저장은 준비 중입니다. 현재 가격일보다 과거인 단가는 현재 매입가에 반영하지 않는 저장 경로가 필요합니다.</p> : null}
@@ -998,7 +1064,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
         </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
+        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
     </section> : null}
