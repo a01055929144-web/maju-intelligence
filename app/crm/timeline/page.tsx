@@ -558,6 +558,9 @@ export default function CrmTimelinePage() {
     const requested = new URLSearchParams(window.location.search).get("section");
     return requested === "partners" || requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
   });
+  // CC-73: 주소의 section을 처음 그릴 때 읽기 때문에 서버가 그린 모양과 달라지는 새 섹션(partners)은 브라우저가 붙은 뒤에만 그린다(하이드레이션 불일치 방지).
+  const [clientReady, setClientReady] = useState(false);
+  useEffect(() => { setClientReady(true); }, []);
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const businessNumberInputRef = useRef<HTMLInputElement | null>(null);
@@ -1345,7 +1348,7 @@ export default function CrmTimelinePage() {
           title="거래처 관리"
         />
 
-        {workspaceSection === "partners" ? (
+        {workspaceSection === "partners" && clientReady ? (
           <SalesPartnerDirectory companyId={adminCompanyId || ""} customers={customers} query={(path, customerId) => withCompanyQuery(customerId ? `${path}${path.includes("?") ? "&" : "?"}customerId=${encodeURIComponent(customerId)}` : path)} />
         ) : null}
 
