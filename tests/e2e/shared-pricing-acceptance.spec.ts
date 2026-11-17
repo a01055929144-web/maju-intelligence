@@ -22,7 +22,7 @@ for (const width of [1440, 390]) test(`explicit acceptance preserves retry and l
     return route.fulfill({ json: { documentVersionId: "version", kind: "quote", needsReview: mode === "review", orderEnabled: mode !== "review", orderSetupRequired: mode === "setup", storefrontToken: "synthetic-order-token" } });
   });
   await page.goto("/pricing-document#off");
-  await expect(page.getByText("합성 수락 견적", { exact: true })).toBeVisible();
+  await expect(page.getByText("합성 수락 견적", { exact: true }).filter({ visible: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "문서 수락 요청" })).toHaveCount(0);
   await page.goto("/pricing-document#one");
   const button = page.getByRole("button", { name: "문서 수락 요청", exact: true });
