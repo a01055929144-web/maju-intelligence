@@ -81,6 +81,7 @@ export function MobileDeliveryProofPanel({
   driverName,
   driverPhone,
   driverReceiptWorkflowEnabled = false,
+  driverRunExperienceEnabled = false,
   driverStopId,
   deliveryCompleteMessage,
   deliveryDate,
@@ -103,6 +104,7 @@ export function MobileDeliveryProofPanel({
   driverName: string;
   driverPhone?: string;
   driverReceiptWorkflowEnabled?: boolean;
+  driverRunExperienceEnabled?: boolean;
   driverStopId?: string;
   deliveryCompleteMessage?: string;
   deliveryDate: string;
@@ -596,7 +598,7 @@ export function MobileDeliveryProofPanel({
       {files.length ? <div className="mt-3 grid grid-cols-3 gap-2">{files.map((file, index) => <div className="mobile-card-raised relative rounded-lg border p-2" key={fileKey(file)}><ImageIcon className="mobile-accent h-8 w-8" /><p className="mobile-muted mt-1 truncate pr-7 text-xs font-bold">{file.name}</p><button aria-label={`${file.name} 삭제`} className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-full" onClick={() => removeFile(index)} type="button"><span className="grid h-7 w-7 place-items-center rounded-full bg-white text-slate-950 ring-1 ring-slate-200"><X className="h-3.5 w-3.5" /></span></button></div>)}</div> : null}
       {fileError ? <p className="mt-2 text-xs font-bold text-rose-600">{fileError}</p> : null}
 
-      {driverReceiptWorkflowEnabled ? <DriverItemIssueEditor onChange={(issue) => {
+      {driverRunExperienceEnabled ? <DriverItemIssueEditor onChange={(issue) => {
         setItemName(issue.item);
         setMemo(issue.memo);
         if (issue.status === "normal") { setDeliveryStatus("arrived"); setIssueCause(""); }

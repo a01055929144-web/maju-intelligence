@@ -203,6 +203,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
                 driverName={driverName}
                 driverPhone={session.operationalPhone}
                 driverReceiptWorkflowEnabled={receiptWorkflowEnabled}
+                driverRunExperienceEnabled={runExperienceEnabled}
                 driverStopId={routeStopByCustomer.get(selectedStop.id)}
                 structuredRecordsEnabled={areStructuredFieldRecordsEnabled(session.companyId)}
               />
