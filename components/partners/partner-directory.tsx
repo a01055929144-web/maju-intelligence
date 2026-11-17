@@ -8,6 +8,8 @@ import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-t
 import { formatBusinessNumber, partnerDocumentHref, PARTNER_LABELS, PARTNER_TABS, type PartnerRow, type PartnerTabId, type PartnerType } from "@/domains/partner/directory";
 import { formatWon } from "@/domains/shared/money";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { kstToday } from "@/domains/shared/kst-date";
+import { createPartnerPaymentAttempt, getPaymentAttemptStorage, loadPartnerPaymentAttempt, removePartnerPaymentAttempt, savePartnerPaymentAttempt, type PartnerPaymentAttempt } from "@/domains/erp/payment-attempt";
 
 // CC-73 공용 거래처 틀. 왼쪽 목록(공용 표) · 오른쪽 상세(공통 탭 순서: 기본 정보 · 품목/단가 · 전표 · 원장 · 메모). 매출처 · 매입처는 partnerType만 바꿔 쓴다.
 // 이 틀은 UI만 맡는다 — 탭 안 내용(기본 정보 폼·품목/단가 표 등)은 쓰는 화면이 주고, 원장·전표 진입은 두 화면 공통이라 여기서 준다.
@@ -122,15 +124,24 @@ function PartnerDocumentsTab({ companyId, partner, partnerType }: { companyId: s
   );
 }
 
-type Ledger = { openingBalance: number; closingBalance: number; entries: Array<{ id: string; entry_date: string; entry_type: string; amount: number; runningBalance: number; memo: string | null }> };
+type LedgerEntry = { id: string; entry_date: string; entry_type: string; amount: number; runningBalance: number; memo: string | null; payment_method: string | null; source_document_id: string | null; reverses_entry_id: string | null };
+type Ledger = { openingBalance: number; closingBalance: number; paymentEnabled?: boolean; documents?: Array<{ id: string; document_number: string; document_date: string; total_amount: number }>; entries: LedgerEntry[] };
 
 /** 원장 탭 기본 화면 — 두 거래처 종류가 같은 `/api/partner-ledger`를 쓴다(읽기 전용). */
 export function PartnerLedgerTab({ companyId = "", partnerId, partnerType }: { companyId?: string; partnerId: string; partnerType: PartnerType }) {
   const [state, setState] = useState<{ key: string; data?: Ledger; error?: string }>({ key: "" });
-  const key = `${partnerType}|${partnerId}|${companyId}`;
+  const today = kstToday();
+  const [dateFrom, setDateFrom] = useState(`${today.slice(0, 7)}-01`);
+  const [dateTo, setDateTo] = useState(today);
+  const [reload, setReload] = useState(0);
+  const [form, setForm] = useState({ amount: "", documentId: "", entryDate: today, memo: "", paymentMethod: "bank" as "cash" | "bank" | "card" });
+  const [pending, setPending] = useState<PartnerPaymentAttempt | null>(null);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const key = `${partnerType}|${partnerId}|${companyId}|${dateFrom}|${dateTo}|${reload}`;
   useEffect(() => {
     let live = true;
-    const query = new URLSearchParams({ ...(companyId ? { companyId } : {}), partnerType, partnerId });
+    const query = new URLSearchParams({ ...(companyId ? { companyId } : {}), partnerType, partnerId, dateFrom, dateTo });
     void fetchWithTimeout(`/api/partner-ledger?${query.toString()}`, { cache: "no-store" }, 12000)
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
@@ -139,20 +150,50 @@ export function PartnerLedgerTab({ companyId = "", partnerId, partnerType }: { c
       })
       .catch((error) => { if (live) setState({ key, error: error instanceof Error ? error.message : "원장을 불러오지 못했습니다." }); });
     return () => { live = false; };
-  }, [key, companyId, partnerId, partnerType]);
+  }, [key, companyId, partnerId, partnerType, dateFrom, dateTo]);
+  useEffect(() => {
+    const storage = getPaymentAttemptStorage();
+    setPending(storage ? loadPartnerPaymentAttempt(storage, { companyId, partnerType, partnerId }) : null);
+  }, [companyId, partnerId, partnerType]);
   const labels = PARTNER_LABELS[partnerType];
-  const columns = useMemo<CommonTableColumn<Ledger["entries"][number]>[]>(() => [
+  const columns: CommonTableColumn<LedgerEntry>[] = [
     { key: "date", label: "날짜", value: (row) => row.entry_date, sortable: true },
-    { key: "type", label: "구분", value: (row) => row.entry_type },
+    { key: "type", label: "구분", value: (row) => ({ receipt: "입금", payment: "지급", reversal: "취소", adjustment: "상계" }[row.entry_type] || row.entry_type) },
+    { key: "method", label: "수단", value: (row) => ({ cash: "현금", bank: "계좌", card: "카드" }[row.payment_method || ""] || "-") },
     { key: "amount", label: "금액", value: (row) => row.amount, render: (row) => money(row.amount), align: "right", sortable: true },
     { key: "balance", label: labels.balance, value: (row) => row.runningBalance, render: (row) => money(row.runningBalance), align: "right" },
-    { key: "memo", label: "메모", value: (row) => row.memo ?? "" }
-  ], [labels.balance]);
+    { key: "memo", label: "메모", value: (row) => row.memo ?? "" },
+    { key: "actions", label: "작업", value: () => "", sortable: false, render: (row) => state.data?.paymentEnabled && ["receipt", "payment"].includes(row.entry_type) && !state.data.entries.some((entry) => entry.reverses_entry_id === row.id) ? <button className="font-bold text-rose-700" onClick={() => void reverse(row)} type="button">취소</button> : null }
+  ];
+  const submit = async () => {
+    const storage = getPaymentAttemptStorage();
+    if (!storage) { setMessage("브라우저에 안전한 재시도 정보를 저장할 수 없습니다."); return; }
+    const attempt = pending ?? createPartnerPaymentAttempt({ companyId, partnerType, partnerId, entryDate: form.entryDate, amount: Number(form.amount.replaceAll(",", "")), paymentMethod: form.paymentMethod, ...(form.documentId ? { documentId: form.documentId } : {}), ...(form.memo.trim() ? { memo: form.memo.trim() } : {}) });
+    if (!pending && !savePartnerPaymentAttempt(storage, attempt)) { setMessage("재시도 정보를 저장하지 못해 등록하지 않았습니다."); return; }
+    setPending(attempt); setSaving(true); setMessage("");
+    try {
+      const response = await fetchWithTimeout("/api/partner-ledger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...attempt, action: "record" }) }, 12000);
+      const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "등록하지 못했습니다.");
+      removePartnerPaymentAttempt(storage, attempt); setPending(null); setForm({ amount: "", documentId: "", entryDate: today, memo: "", paymentMethod: "bank" }); setReload((value) => value + 1);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "등록하지 못했습니다."); } finally { setSaving(false); }
+  };
+  const reverse = async (entry: LedgerEntry) => {
+    const reason = window.prompt("취소 사유를 입력하세요."); if (!reason?.trim()) return;
+    setSaving(true); setMessage("");
+    try {
+      const response = await fetchWithTimeout("/api/partner-ledger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reverse", companyId, entryId: entry.id, reason, idempotencyKey: crypto.randomUUID() }) }, 12000);
+      const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "취소하지 못했습니다."); setReload((value) => value + 1);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "취소하지 못했습니다."); } finally { setSaving(false); }
+  };
   const loading = state.key !== key;
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><label className="text-xs font-bold">시작일<input className="maju-input mt-1 w-full" onChange={(event) => setDateFrom(event.target.value)} type="date" value={dateFrom} /></label><label className="text-xs font-bold">종료일<input className="maju-input mt-1 w-full" onChange={(event) => setDateTo(event.target.value)} type="date" value={dateTo} /></label><button className="maju-button-secondary self-end" onClick={() => setReload((value) => value + 1)} type="button">조회</button></div>
       {state.data ? <p className="text-xs font-bold text-slate-600">기초 {money(state.data.openingBalance)} · 현재 {labels.balance} {money(state.data.closingBalance)}</p> : null}
+      {state.data?.paymentEnabled ? <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2"><input aria-label="입출금 날짜" className="maju-input" onChange={(event) => setForm({ ...form, entryDate: event.target.value })} type="date" value={form.entryDate} /><select aria-label="입출금 수단" className="maju-input" onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as typeof form.paymentMethod })} value={form.paymentMethod}><option value="cash">현금</option><option value="bank">계좌</option><option value="card">카드</option></select><input aria-label="입출금 금액" className="maju-input" inputMode="numeric" onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="금액" value={form.amount} /><select aria-label="연결 전표" className="maju-input" onChange={(event) => setForm({ ...form, documentId: event.target.value })} value={form.documentId}><option value="">연결 전표 없음</option>{state.data.documents?.map((document) => <option key={document.id} value={document.id}>{document.document_date} · {document.document_number} · {money(document.total_amount)}</option>)}</select><input aria-label="입출금 메모" className="maju-input sm:col-span-2" onChange={(event) => setForm({ ...form, memo: event.target.value })} placeholder="메모" value={form.memo} /><button className="maju-button-primary sm:col-span-2" disabled={saving || (!pending && !(Number(form.amount.replaceAll(",", "")) > 0))} onClick={() => void submit()} type="button">{pending ? "같은 요청 재시도" : partnerType === "customer" ? "입금 등록" : "지급 등록"}</button></div> : null}
+      {message ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{message}</p> : null}
       <CommonDataTable columns={columns} emptyMessage="원장 내역이 없습니다." error={state.key === key ? state.error : undefined} filename="원장.csv" loading={loading} rowKey={(row) => row.id} rows={state.data?.entries ?? []} selectable={false} settingsKey={`partners:${partnerType}:ledger`} />
+      {state.data?.paymentEnabled ? <p className="text-xs text-slate-500">상계는 사업자번호·종사업장 겸업 식별 SQL 적용 뒤 이 탭에서 엽니다.</p> : null}
     </div>
   );
 }

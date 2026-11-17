@@ -160,6 +160,18 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-64-document-cancellation-guards.pg17.test.sql
 
+      - name: Verify CX-69 partner payments and offset draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx69_partner_payments_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-69-partner-payments-offset.pg17.test.sql
+
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:

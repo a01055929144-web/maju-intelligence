@@ -343,7 +343,7 @@ export async function getPartnerLedger(companyId: string, input: { partnerType: 
     supabaseRequest<Array<{ opening_balance: number | null }>>(
       `partner_ledger_entries?select=opening_balance:amount.sum()&${base}&entry_date=lt.${enc(input.dateFrom)}`,
     ),
-    supabaseRequest<Array<{ id: string; entry_date: string; entry_type: string; amount: number; supply_amount: number; tax_amount: number; payment_method: string | null; memo: string | null; created_at: string; source_document_id: string | null }>>(`partner_ledger_entries?select=id,entry_date,entry_type,amount,supply_amount,tax_amount,payment_method,memo,created_at,source_document_id&${base}&entry_date=gte.${enc(input.dateFrom)}&entry_date=lte.${enc(input.dateTo)}&order=entry_date,created_at&limit=10000`),
+    supabaseRequest<Array<{ id: string; entry_date: string; entry_type: string; amount: number; supply_amount: number; tax_amount: number; payment_method: string | null; memo: string | null; created_at: string; source_document_id: string | null; reverses_entry_id: string | null }>>(`partner_ledger_entries?select=id,entry_date,entry_type,amount,supply_amount,tax_amount,payment_method,memo,created_at,source_document_id,reverses_entry_id&${base}&entry_date=gte.${enc(input.dateFrom)}&entry_date=lte.${enc(input.dateTo)}&order=entry_date,created_at&limit=10000`),
   ]);
   const openingBalance = Number(openingRows[0]?.opening_balance || 0);
   let runningBalance = openingBalance;
@@ -351,11 +351,23 @@ export async function getPartnerLedger(companyId: string, input: { partnerType: 
   return { openingBalance, entries, closingBalance: runningBalance };
 }
 
+export async function listPartnerPaymentDocuments(companyId: string, partnerType: "customer" | "supplier", partnerId: string) {
+  const column = partnerType === "customer" ? "customer_id" : "supplier_id";
+  return supabaseRequest<Array<{ id: string; document_number: string; document_date: string; total_amount: number }>>(
+    `business_documents?select=id,document_number,document_date,total_amount&company_id=eq.${enc(companyId)}&${column}=eq.${enc(partnerId)}&status=eq.confirmed&order=document_date.desc&limit=200`,
+  );
+}
+
 export async function recordPartnerPayment(companyId: string, input: { partnerType: "customer" | "supplier"; partnerId: string; entryDate: string; amount: number; paymentMethod: "cash" | "bank" | "card"; memo?: string; idempotencyKey: string }, actor: ErpActor) {
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("입금·지급 금액을 확인해 주세요.");
   const idempotencyKey = input.idempotencyKey?.trim();
   if (!idempotencyKey) throw new Error("입금·지급 재시도 키를 확인해 주세요.");
-  return supabaseRpc("record_partner_payment", { p_company_id: companyId, p_partner_type: input.partnerType, p_partner_id: input.partnerId, p_entry_date: input.entryDate, p_amount: Math.round(input.amount), p_payment_method: input.paymentMethod, p_idempotency_key: idempotencyKey, p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_memo: input.memo?.trim() || null });
+  return supabaseRpc("record_partner_payment_v2", { p_company_id: companyId, p_partner_type: input.partnerType, p_partner_id: input.partnerId, p_entry_date: input.entryDate, p_amount: Math.round(input.amount), p_payment_method: input.paymentMethod, p_idempotency_key: idempotencyKey, p_actor_user_id: actor.userId || null, p_actor_name: actor.name, p_memo: input.memo?.trim() || null, p_document_id: (input as { documentId?: string }).documentId || null });
+}
+
+export async function reversePartnerPayment(companyId: string, entryId: string, reason: string, idempotencyKey: string, actor: ErpActor) {
+  if (!entryId || !reason.trim() || !idempotencyKey.trim()) throw new Error("취소할 입출금과 사유를 확인해 주세요.");
+  return supabaseRpc("reverse_partner_payment_v1", { p_company_id: companyId, p_entry_id: entryId, p_reason: reason.trim(), p_idempotency_key: idempotencyKey.trim(), p_actor_user_id: actor.userId || null, p_actor_name: actor.name });
 }
 
 export function toKoreanErpError(error: unknown) {
