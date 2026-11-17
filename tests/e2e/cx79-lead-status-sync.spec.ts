@@ -14,8 +14,7 @@ for (const width of [1440, 390]) test(`CX-79 목록과 상세 상태가 즉시 �
     await route.fulfill({ json: { action: { id: "a79" }, status: body.result } });
   });
 
-  await page.goto("/map");
-  await page.getByRole("button", { name: /^영업 1/ }).and(page.locator("button:not([title])")).click();
+  await page.goto("/map?panel=salesLead");
   const listStage = page.getByRole("combobox", { name: "합성상태식당 단계" });
   await expect(listStage).toHaveValue("");
   await expect(listStage.locator("option:checked")).toHaveText("현장 확인");
