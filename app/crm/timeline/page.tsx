@@ -9,6 +9,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
 import { attachmentLabel, attachmentTitleFromType, buildPlaceSearchLinks, extractRegion, formatBusinessNumberInput, formatBusinessRegistrationNumber, formatPhoneNumberInput, gradeClassName, guessMimeType, isValidBusinessRegistrationNumber, normalizeBusinessRegistrationNumber, noteTypeLabel } from "@/components/customers/customer-format";
 import { SalesPartnerPanel } from "@/components/customers/sales-partner-panels";
+import { SalesPartnerDirectory } from "@/components/customers/sales-partner-directory";
 import { CustomerAppShell } from "@/components/customer-app-shell";
 import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
 import { LinkifiedText } from "@/components/linkified-text";
@@ -552,10 +553,10 @@ export default function CrmTimelinePage() {
   const [noteMessage, setNoteMessage] = useState("");
   const [isAttachmentSaving, setIsAttachmentSaving] = useState(false);
   const [attachmentMessage, setAttachmentMessage] = useState("");
-  const [workspaceSection] = useState<"list" | "ledger" | "history" | "products" | "transactions">(() => {
+  const [workspaceSection] = useState<"partners" | "list" | "ledger" | "history" | "products" | "transactions">(() => {
     if (typeof window === "undefined") return "list";
     const requested = new URLSearchParams(window.location.search).get("section");
-    return requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
+    return requested === "partners" || requested === "ledger" || requested === "history" || requested === "products" || requested === "transactions" ? requested : "list";
   });
   const [detailTab, setDetailTab] = useState<CustomerDetailTab>(() => (workspaceSection === "history" ? "history" : "ledger"));
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -1334,6 +1335,7 @@ export default function CrmTimelinePage() {
       <section className="w-full">
         <WorkspaceSectionNav
           items={[
+            { active: workspaceSection === "partners", description: "매입처와 같은 틀(목록 · 기본 정보 · 품목/단가 · 전표 · 원장 · 메모)로 봅니다.", href: withCompanyQuery("/crm/timeline?section=partners"), icon: Building2, label: "통합 화면" },
             { active: workspaceSection === "list", description: "거래처를 검색하고 등급·보완 항목으로 좁힙니다.", href: withCompanyQuery("/crm/timeline?section=list"), icon: Search, label: "목록" },
             { active: workspaceSection === "ledger", description: "사업자정보, 배송 기준값, 첨부자료를 수정합니다.", href: withCompanyQuery("/crm/timeline?section=ledger"), icon: Pencil, label: "원장" },
             { active: workspaceSection === "history", description: "상담 메모, 방문 기록, 다음 액션을 누적합니다.", href: withCompanyQuery("/crm/timeline?section=history"), icon: FileText, label: "기록" },
@@ -1342,6 +1344,10 @@ export default function CrmTimelinePage() {
           ]}
           title="거래처 관리"
         />
+
+        {workspaceSection === "partners" ? (
+          <SalesPartnerDirectory companyId={adminCompanyId || ""} customers={customers} query={(path, customerId) => withCompanyQuery(customerId ? `${path}${path.includes("?") ? "&" : "?"}customerId=${encodeURIComponent(customerId)}` : path)} />
+        ) : null}
 
         {workspaceSection === "products" || workspaceSection === "transactions" ? (
           <div className="mb-4 min-w-0 space-y-3">
