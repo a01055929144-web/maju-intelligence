@@ -80,20 +80,39 @@ begin
     and sub_business_number is null and business_name='합성 법인')
   then raise exception 'cx60_omission_or_explicit_clear_wrong'; end if;
 
-  for notification in select id from public.company_notifications
-    where store_account_id=account.id and company_id=account.company_id and notification_type='store_profile_changed'
-      and processed_at is null order by created_at desc,id desc
+end $$;
+
+-- The first down must refuse to restore any RPC while a change is unreviewed.
+\set ON_ERROR_STOP off
+\ir ../../docs/sql-drafts/20261117-CX-60-store-business-identity-settings.down.sql
+\set ON_ERROR_STOP on
+do $$ declare
+  pending record;
+begin
+  if exists(select 1 from cx60_before where pg_get_functiondef(oid)=definition)
+    then raise exception 'cx60_down_did_not_preserve_patched_rpcs_with_pending_notification'; end if;
+
+  -- Verify application uses only the selected company, then resolve the
+  -- other company's fixture alerts before exercising a successful rollback.
+  for pending in
+    select distinct on (n.company_id,n.store_account_id)
+      n.id,n.company_id,m.auth_user_id
+    from public.company_notifications n
+    join public.store_accounts a on a.id=n.store_account_id and a.company_id=n.company_id
+    join public.store_profile_members m on m.store_profile_id=a.store_profile_id and m.role='owner' and m.status='active'
+    where n.notification_type='store_profile_changed' and n.processed_at is null
+      and n.after_values ? 'businessName' and a.customer_id is not null
+    order by n.company_id,n.store_account_id,n.created_at desc,n.id desc
   loop
-    perform public.apply_store_profile_notification_v1(account.company_id,notification,account.auth_user_id,false);
-    exit;
+    perform public.apply_store_profile_notification_v1(pending.company_id,pending.id,pending.auth_user_id,false);
   end loop;
-  -- The fixture also links a second company. Mark its synthetic alerts reviewed
-  -- before exercising a rollback with no outstanding identity changes.
+
+  -- A linked account without a mapped customer has no applicable target.
   update public.company_notifications n set processed_at=clock_timestamp()
-  from public.store_accounts linked
-  where linked.id=n.store_account_id and linked.store_profile_id=account.store_profile_id
-    and linked.company_id<>account.company_id and n.notification_type='store_profile_changed'
-    and n.processed_at is null;
+  from public.store_accounts a
+  where a.id=n.store_account_id and a.company_id=n.company_id and a.customer_id is null
+    and n.notification_type='store_profile_changed' and n.processed_at is null
+    and n.after_values ? 'businessName';
 end $$;
 \ir ../../docs/sql-drafts/20261117-CX-60-store-business-identity-settings.down.sql
 do $$ begin
