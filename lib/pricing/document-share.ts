@@ -7,7 +7,7 @@ import { supabaseRequest } from "../store";
 import { documentSharingEnabled } from "./document-share-feature";
 import { getStoreSession } from "../auth";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
-import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
+import { publicDocumentOrderEntryEnabled, publicDocumentShoppingEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 import { industryBasketsEnabled } from "./industry-basket-feature";
 import { documentSharePreview } from "../../domains/pricing/industry-basket";
@@ -164,7 +164,8 @@ export async function readPublicDocument(token: string, requester: string) {
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
     ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && orderable,
       message: !orderable ? "이 문서에는 현재 주문할 품목이나 판매가가 없습니다. 발행 회사에 주문 가능한 새 문서를 요청해 주세요." : "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.",
-      companyName: output.companyName, title: output.title, version: output.version, ...(member ? { member: true } : {}) } } : {}) };
+      companyName: output.companyName, title: output.title, version: output.version,
+      ...(publicDocumentShoppingEnabled(row.company_id) ? { shopping: true } : {}), ...(member ? { member: true } : {}) } } : {}) };
 }
 
 async function resolvePublicDocument(token: string, requester: string) {

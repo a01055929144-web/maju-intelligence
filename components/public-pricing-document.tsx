@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
+import { PublicDocumentPaperImages } from "./public-document-paper-images";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { SharedPricingAcceptance } from "./shared-pricing-acceptance";
 import { Button } from "./ui/button";
@@ -10,7 +11,7 @@ import { SearchInput } from "./ui/search-input";
 import { BottomActionBar, MobileListRow, MoneyText } from "./ui/mobile";
 import { EmptyState } from "./ui/state";
 
-type OrderEntry = { available: boolean; companyName: string; title: string; version: number; message?: string; member?: boolean };
+type OrderEntry = { available: boolean; companyName: string; title: string; version: number; message?: string; member?: boolean; shopping?: boolean };
 
 export function PublicPricingDocument({ embedded }: { embedded?: { token: string; orderHref: string } }) {
   const [document, setDocument] = useState<PublicDocumentOutput | null>(null);
@@ -22,12 +23,14 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [orderMessage, setOrderMessage] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"table" | "image" | "catalog">("table");
   const sequence = useRef(0);
   const continuedOrder = useRef(false);
   const embeddedToken = embedded?.token;
   const member = Boolean(embedded || orderEntry?.member);
+  const shopping = !embedded && orderEntry?.shopping === true;
   const startOrder = useCallback(async () => {
-    if (member || !acceptance || !orderEntry?.available || orderBusy) return;
+    if ((!shopping && member) || !acceptance || !orderEntry?.available || orderBusy) return;
     const current = sequence.current, token = acceptance.token;
     setOrderBusy(true); setOrderMessage("");
     try {
@@ -48,10 +51,10 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     } catch (error) {
       if (sequence.current === current) setOrderMessage(error instanceof Error ? error.message : "가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
     } finally { setOrderBusy(false); }
-  }, [acceptance, member, orderEntry, orderBusy]);
+  }, [acceptance, member, orderEntry, orderBusy, shopping]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuery(""); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = embeddedToken ?? window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
@@ -107,19 +110,39 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const showOrder = Boolean(safeDocument && (orderEntry || member));
   const orderDisabled = Boolean(safeDocument?.expired || (!member && !orderEntry?.available));
   const orderLabel = safeDocument?.expired ? "주문 기간 종료"
+    : shopping && orderEntry?.available ? (member ? "주문 화면 열기" : "카카오로 시작")
     : member ? "이 단가표로 주문하기" : orderEntry?.available ? "이 단가로 주문 시작" : "주문 연결 준비 중";
+  const tableVisible = !shopping || view === "table";
   const keyword = query.trim().toLocaleLowerCase("ko-KR");
   const lines = safeDocument?.lines.filter(line => !keyword ||
     [line.displayName, line.brand, line.spec, line.unit].some(value => value.toLocaleLowerCase("ko-KR").includes(keyword))) ?? [];
   const filtered = Boolean(safeDocument && lines.length !== safeDocument.lines.length);
+  const desktopTable = safeDocument && shopping && safeDocument.layout !== "table"
+    ? { ...safeDocument, layout: "table" as const } : safeDocument;
+  const separateScreenTable = desktopTable !== safeDocument || filtered;
   const end = safeDocument && /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeDocument.validUntil);
   const until = end ? `${Number(end[2])}월 ${Number(end[3])}일까지` : "";
   const companyColor = safeDocument?.theme === "blue" ? "text-blue-700" : safeDocument?.theme === "green" ? "text-emerald-700" : "text-slate-800";
-  return <Container className={`mx-auto max-w-[900px] space-y-4 p-4 ${showOrder && !embedded ? "max-md:pb-28" : ""}`}>
+  return <Container className={`mx-auto max-w-[900px] space-y-4 p-4 ${showOrder && !embedded ? (shopping ? "pb-32 print:pb-4" : "max-md:pb-28") : ""}`}>
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
     {message && <p role="status">{message}</p>}
     {!safeDocument && !busy && message && <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>다시 확인</Button>}
-    {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <>
+    {safeDocument && shopping && <nav aria-label="공개 문서 보기" className="flex flex-wrap gap-2 print:hidden">
+      {([["table", "표"], ["image", "문서 이미지"], ["catalog", "전체 상품"]] as const).map(([id, label]) =>
+        <Button key={id} type="button" variant={view === id ? "default" : "outline"} aria-pressed={view === id}
+          className="min-h-[44px]" onClick={() => setView(id)}>{label}</Button>)}
+    </nav>}
+    {safeDocument && shopping && view === "image" && <div className="print:hidden"><PublicDocumentPaperImages document={safeDocument} /></div>}
+    {safeDocument && shopping && view === "catalog" && <section aria-label="전체 상품" className="space-y-4 rounded border bg-white p-4 print:hidden">
+      <h2 className="text-base font-bold">전체 상품</h2>
+      <p>{member ? "주문 화면에서 연결된 유통사의 상품과 내 단가를 확인할 수 있습니다." : "가입하면 이 유통사의 전체 상품을 볼 수 있습니다."}</p>
+      {!member && <div className="grid gap-3 blur-sm" aria-hidden="true">
+        {[0, 1, 2].map(row => <div key={row} className="flex justify-between gap-4 border-b pb-3">
+          <span className="h-4 w-32 rounded bg-slate-300" /><span className="h-4 w-16 rounded bg-slate-300" />
+        </div>)}
+      </div>}
+    </section>}
+    {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <div className={tableVisible ? "space-y-4" : "hidden print:block"}>
       <header className="space-y-1 md:hidden print:hidden">
         <p className={`text-[15px] font-bold ${companyColor}`}>{safeDocument.companyName}</p>
         <h1 className="break-keep text-xl font-bold">{safeDocument.title}</h1>
@@ -129,11 +152,11 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       {safeDocument.lines.length > 15 && <div className="print:hidden">
         <SearchInput aria-label="문서 품목 검색" className="w-full min-h-11" placeholder="품목명·규격 검색" value={query} onChange={setQuery} />
       </div>}
-      <div className={filtered ? "hidden print:block" : "hidden md:block print:block"}>
+      <div className={separateScreenTable ? "hidden print:block" : "hidden md:block print:block"}>
         <PricingDocPaper output={safeDocument} />
       </div>
-      {filtered && <div className="hidden md:block print:hidden">
-        {lines.length ? <PricingDocPaper output={{ ...safeDocument, lines }} /> : <EmptyState bare message="검색에 맞는 품목이 없습니다." />}
+      {separateScreenTable && desktopTable && <div className="hidden md:block print:hidden">
+        {lines.length ? <PricingDocPaper output={{ ...desktopTable, lines }} /> : <EmptyState bare message="검색에 맞는 품목이 없습니다." />}
       </div>}
       <section aria-label="문서 품목" className="overflow-hidden rounded-lg border bg-white md:hidden print:hidden">
         {lines.length ? <ul>{lines.map((line, index) => (
@@ -151,18 +174,18 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
           </li>
         ))}</ul> : <EmptyState bare className="p-4" message={keyword ? "검색에 맞는 품목이 없습니다." : "표시 가능한 품목이 없습니다."} />}
       </section>
-    </>)}
+    </div>)}
     {showOrder && <section aria-label="공개 문서 주문 안내" className="space-y-2 text-[15px] text-slate-700 print:hidden">
       <p>가격·주문 {until}</p>
-      {member ? <p>주문 메뉴에서 발급된 주문 가능 문서를 확인해 주세요.</p>
+      {shopping && orderEntry?.available && !member ? <p>카카오로 시작하면 거래 약관에 동의합니다.</p> : member ? <p>주문 메뉴에서 발급된 주문 가능 문서를 확인해 주세요.</p>
         : safeDocument?.expired ? <p>새 단가표는 발행 회사에 요청해 주세요.</p>
         : !orderEntry?.available ? <p>{orderEntry?.message || "주문 연결을 준비 중입니다. 발행 회사에 문의해 주세요."}</p>
         : <p>카카오로 로그인한 뒤 주문을 시작할 수 있습니다.</p>}
       {orderMessage && <p role="status">{orderMessage}</p>}
-      {member ? !orderDisabled && <Link className={`maju-button-primary inline-flex min-h-[48px] items-center justify-center ${embedded ? "" : "max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:z-30"}`} href={orderHref}>{orderLabel}</Link> : <>
-        <Button className="hidden min-h-[48px] md:inline-flex" disabled={orderDisabled || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>
+      {member && !shopping ? !orderDisabled && <Link className={`maju-button-primary inline-flex min-h-[48px] items-center justify-center ${embedded ? "" : "max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:z-30"}`} href={orderHref}>{orderLabel}</Link> : <>
+        <Button className={shopping ? "hidden md:fixed md:bottom-4 md:right-8 md:z-30 md:inline-flex min-h-[48px]" : "hidden min-h-[48px] md:inline-flex"} disabled={orderDisabled || !orderEntry?.available || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>
         <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
-          <BottomActionBar busy={orderBusy} disabled={orderDisabled} onClick={() => void startOrder()}>{orderLabel}</BottomActionBar>
+          <BottomActionBar busy={orderBusy} disabled={orderDisabled || !orderEntry?.available} onClick={() => void startOrder()}>{orderLabel}</BottomActionBar>
         </div>
       </>}
     </section>}

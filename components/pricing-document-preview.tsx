@@ -14,6 +14,15 @@ import { documentLinkLastDay } from "@/domains/pricing/document-share";
 import { Button } from "./ui/button";
 import { formatWon } from "@/domains/shared/money";
 
+export function pricingPaperStyle(fontScale: number) {
+  return `.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}`;
+}
+
+export async function pricingPaperImage(paper: HTMLElement) {
+  const { toPng } = await import("html-to-image");
+  return toPng(paper, { backgroundColor: "#ffffff", pixelRatio: 2, skipFonts: true });
+}
+
 type OutputLine = DocumentOutput["lines"][number];
 
 /** 11/4: A4·휴대폰·편집 미리보기가 모두 쓰는 한 장. 회사 정보 줄, 행사 블록(카드/표), 품목 격자(1~3열). */
@@ -246,12 +255,7 @@ export function PricingDocumentPreview({
       await prepare();
       const paper = papers.current[index];
       if (!paper) throw new Error("페이지를 확인해 주세요.");
-      const { toPng } = await import("html-to-image");
-      const url = await toPng(paper, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        skipFonts: true,
-      });
+      const url = await pricingPaperImage(paper);
       const a = document.createElement("a");
       a.download = `document-v${current.version}-${index + 1}.png`;
       a.href = url;
@@ -319,7 +323,7 @@ export function PricingDocumentPreview({
           </div>
         </div>
       </div>
-      <style>{`.pricing-paper{width:210mm;min-height:297mm;height:297mm;padding:10mm;box-sizing:border-box;color:#111827}.pricing-paper .pricing-output-content{min-height:277mm}.pricing-output-content{min-height:260mm;display:flex;flex-direction:column;overflow-wrap:anywhere}.pricing-output-content th{background:white}.pricing-paper table{font-size:${Math.round(12 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper table .text-xs{font-size:inherit;line-height:inherit}.pricing-paper .pricing-output-table td,.pricing-paper .pricing-output-table th{padding:3px 4px}.pricing-paper table [data-document-price]{font-size:${Math.round(11 * fontScale)}px}.pricing-paper .pricing-output-grid{gap:3mm;margin-top:3mm;margin-bottom:3mm}.pricing-paper footer img{width:30mm;height:30mm}.pricing-output-table td,.pricing-output-table th{min-width:0;overflow-wrap:anywhere;word-break:normal}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}.pricing-paper header{font-size:${Math.round(11 * fontScale)}px;line-height:${Math.round(16 * fontScale)}px}.pricing-paper h2{font-size:${Math.round(20 * fontScale)}px;line-height:${Math.round(24 * fontScale)}px}.pricing-paper h3{font-size:14px;line-height:18px}.pricing-paper footer{font-size:11px;line-height:16px}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
+      <style>{`${pricingPaperStyle(fontScale)}.pricing-online .pricing-output-content{min-height:0}.pricing-online .pricing-output-grid,.pricing-online .pricing-promo-cards{grid-template-columns:minmax(0,1fr)!important}.pricing-online table{table-layout:auto}.pricing-online col{width:auto!important}.pricing-online [data-document-price]{white-space:nowrap;overflow-wrap:normal;text-align:right;width:1%}.pricing-online article [data-document-price]{width:auto}.pricing-online [data-document-spec]{overflow-wrap:anywhere}.pricing-preview-modal:has(.pricing-document-preview){margin:0!important;isolation:isolate;z-index:100}.pricing-preview-modal:has(.pricing-document-preview)>div:first-child{position:sticky;top:0;z-index:20;background:#fff;isolation:isolate}@page{size:A4;margin:0}@media print{body *{visibility:hidden!important}#pricing-print-root,#pricing-print-root *{visibility:visible!important}#pricing-print-root{position:absolute;left:0;top:0;width:210mm}#pricing-print-root .pricing-no-print{display:none!important}.pricing-paper{box-shadow:none!important;break-after:page;page-break-after:always}.pricing-no-print{display:none!important}#pricing-print-root>div:last-child .pricing-paper{break-after:auto;page-break-after:auto}.pricing-output-content th{position:static}}`}</style>
     </section>
   );
 }
