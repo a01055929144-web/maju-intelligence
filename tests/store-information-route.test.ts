@@ -54,4 +54,23 @@ describe("store information route", () => {
       expect.objectContaining({ baseAddress: "서울", accessNote: "호출" }), expect.any(String));
     expect(mocks.update).not.toHaveBeenCalled();
   });
+
+  it("accepts scoped identity changes only when enabled and preserves leading zeros", async () => {
+    mocks.getProfile.mockResolvedValue({ storeProfileId: "profile" });
+    mocks.enabled.mockImplementation(feature => feature === "STORE_PROFILE_SETTINGS");
+    const required = { storeName: "합성 매장", baseAddress: "합성 주소" };
+    const fields = { businessName: null, subBusinessNumber: "0002" };
+
+    expect((await PATCH(request({ ...required, ...fields }))).status).toBe(200);
+    expect(mocks.updateProfile.mock.lastCall?.[2]).not.toHaveProperty("subBusinessNumber");
+    mocks.updateProfile.mockClear();
+
+    mocks.enabled.mockImplementation((feature, company) =>
+      feature === "STORE_PROFILE_SETTINGS" || (feature === "STORE_BUSINESS_IDENTITY" && company === companyId));
+    expect((await PATCH(request({ ...required, subBusinessNumber: "002" }))).status).toBe(400);
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
+    expect((await PATCH(request({ ...required, ...fields }))).status).toBe(200);
+    expect(mocks.updateProfile.mock.lastCall?.[2]).toMatchObject({ businessName: "", subBusinessNumber: "0002" });
+    expect(mocks.updateProfile.mock.lastCall?.[2]).not.toHaveProperty("businessEntityType");
+  });
 });

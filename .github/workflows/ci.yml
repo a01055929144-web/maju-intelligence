@@ -645,6 +645,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-customer-review-cx13.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-notifications-s2b.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-account-order-s2a.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-cx60-identity-settings.pg17.test.sql
 
       - name: Verify CX-68 order money safety and performance on PostgreSQL 17
         env:
