@@ -50,6 +50,8 @@ import {
 
 type EditableChannel = "fax" | "email" | "naverTalktalkUrl";
 
+export type LeadContactChannelTarget = "visit" | "contact" | "kakao" | "instagram" | "talktalk" | "email" | "fax";
+
 const CHANNEL_ACTION: Record<LeadContactChannel, { actionType: PermitLeadActionKind; result: string }> = {
   sms: { actionType: "sms", result: "문자 발송" },
   instagram: { actionType: "dm", result: "DM 발송" },
@@ -68,11 +70,13 @@ const INPUT_LABEL: Record<EditableChannel, { label: string; placeholder: string 
 export function LeadContactChannelsPanel({
   lead,
   onAction,
-  onLeadUpdated
+  onLeadUpdated,
+  requestedChannel
 }: {
   readonly lead: PermitLeadItem;
   readonly onAction: (lead: PermitLeadItem, actionType: PermitLeadActionKind, result?: string, memo?: string, followUpAt?: string) => Promise<PermitLeadActionResult>;
   readonly onLeadUpdated: (lead: PermitLeadItem) => void;
+  readonly requestedChannel?: { channel: LeadContactChannelTarget; requestId: number } | null;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [message, setMessage] = useState(() => buildLeadDmScript(lead));
@@ -204,6 +208,16 @@ export function LeadContactChannelsPanel({
     // 다른 리드로 바뀔 때만 초기화합니다(같은 리드의 저장 결과 반영 때 작성 중인 문구를 지우지 않도록).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
+
+  useEffect(() => {
+    if (!requestedChannel) return;
+    const { channel } = requestedChannel;
+    const editable = channel === "talktalk" ? "naverTalktalkUrl" : channel === "email" || channel === "fax" ? channel : null;
+    if (editable) setEditing(editable);
+    requestAnimationFrame(() => {
+      document.getElementById(`lead-contact-channel-${channel}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [requestedChannel]);
 
   async function refreshDoNotContacts() {
     setDncState((current) => ({ ...current, loading: true }));
@@ -647,7 +661,7 @@ export function LeadContactChannelsPanel({
         {OUTREACH_TEXT_CHANNELS.map((channel) => {
           const formatted = buildOutreachChannelText(channel, outgoing, selectedPriceSheetUrl || undefined);
           return (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2" key={channel}>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2" id={channel === "kakao" ? "lead-contact-channel-kakao" : undefined} key={channel}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-black text-slate-800">{OUTREACH_TEXT_CHANNEL_LABEL[channel]}</span>
                 {channel === "sms" ? <span className={`text-[10px] font-black ${formatted.longSms ? "text-amber-700" : "text-slate-500"}`}>{formatted.longSms ? "장문 문자" : `${formatted.bytes} bytes`}</span> : null}
@@ -670,7 +684,11 @@ export function LeadContactChannelsPanel({
 
       <div aria-label="영업 채널 표" className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
         {channelRows.map(({ channel, value, url }) => (
-          <div className={`grid gap-2 py-2 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center ${channel === primary ? "bg-teal-50" : ""}`} key={channel}>
+          <div
+            className={`grid gap-2 py-2 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center ${channel === primary ? "bg-teal-50" : ""}`}
+            id={`lead-contact-channel-${channel === "sms" ? "contact" : channel}`}
+            key={channel}
+          >
             <div className="flex items-center gap-1.5 px-2">
               <span className="text-xs font-black text-slate-900">{LEAD_CONTACT_CHANNEL_LABELS[channel]}</span>
               {channel === primary ? <span className="rounded-full bg-teal-700 px-1.5 py-0.5 text-[10px] font-black text-white">먼저</span> : null}

@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식된 문의 번호를 보여 준다", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
+for (const viewport of [{ width: 390, height: 900 }, { width: 1440, height: 1000 }]) {
+test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채널과 연결된다`, async ({ page }) => {
+  await page.setViewportSize(viewport);
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   const now = "2026-11-15T00:00:00.000Z";
   const lead = {
@@ -55,8 +56,15 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
 
   await page.goto("/mobile/sales");
   await page.getByText("가짜분식", { exact: true }).last().click();
+  const shortcuts = page.getByLabel("연락 채널 바로가기");
+  for (const channel of ["방문", "연락처", "카톡", "인스타 DM", "네이버 톡톡", "이메일", "팩스"]) {
+    await expect(shortcuts.getByRole("button", { name: new RegExp(`^${channel}`) })).toBeVisible();
+  }
+  await expect(shortcuts.getByRole("button", { name: /^네이버 톡톡.*\[입력\]/ })).toBeVisible();
+  await shortcuts.getByRole("button", { name: /^네이버 톡톡/ }).click();
   const panel = page.getByRole("region", { name: "영업 채널" });
   await expect(panel).toBeVisible();
+  await expect(panel.getByRole("textbox", { name: "톡톡 주소" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "영업 연락 수칙" })).toHaveCount(0);
   acknowledge?.();
   await expect(panel.getByText("영업 연락 수칙을 확인해 주세요", { exact: true })).toBeVisible();
@@ -73,6 +81,7 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 문의 가짜유통 010-0000-0000");
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 단가표 https://example.test/pricing-document#fake-token");
 });
+}
 
 // CC-47-9: 모바일 일괄 "제외"는 확인 창을 거친다 — 취소하면 요청이 없고, 확인하면 한 번 간다. 가짜 API만 쓴다.
 test("모바일 일괄 제외는 확인 창에서 취소하면 그대로, 확인하면 요청한다", async ({ page }) => {
