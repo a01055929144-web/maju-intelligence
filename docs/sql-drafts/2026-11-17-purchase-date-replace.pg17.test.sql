@@ -1,5 +1,7 @@
 -- Disposable PostgreSQL 17 fixture only. Never run against production.
 \ir ../../tests/sql/pricing-p0-fixture.sql
+-- CI는 같은 클러스터에서 앞선 테스트가 service_role 을 bypassrls 없이 만들 수 있어 운영(Supabase)과 같게 맞춘다.
+alter role service_role bypassrls;
 alter table public.product_catalog
   add column sales_unit text not null default 'EA',
   add column updated_at timestamptz not null default now(),
