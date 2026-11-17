@@ -94,7 +94,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     const file=syntheticFile(scenario.existing);
     await page.locator('input[type="file"]').setInputFiles({name:'stage-a-synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:file.buffer});
     const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
-    await preview.getByRole('checkbox',{name:'현재 가격도 변경',exact:true}).check();
+    await page.getByRole('radio',{name:'현재 가격도 변경',exact:true}).check();
     await expect(preview).toContainText('미선택 188그룹');
     const conflicts=page.getByRole('region',{name:'상이 단가 선택',exact:true});
     await conflicts.getByRole('combobox').first().selectOption('100');
@@ -110,7 +110,7 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
       if(chosen<188)await conflicts.getByRole('button',{name:'다음',exact:true}).click();
     }
     await expect(preview).toContainText('미선택 0그룹');
-    await page.getByRole('button',{name:'② 열 정렬',exact:true}).click();
+    await page.getByRole('button',{name:/^② 열 정렬/}).click();
     await page.getByRole('button',{name:/③ 저장/}).click();
     const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
     await expect(review).toContainText('매입 이력 3417행');
@@ -222,13 +222,13 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   await page.locator('input[type="file"]').setInputFiles({name:'stage-a-history-only.csv',mimeType:'text/csv',buffer:historyOnlyFile()});
   await expect(receiptDateInput).toHaveValue('2026-11-01');
   const preview=page.getByRole('region',{name:'업로드 적용일과 단가 확인',exact:true});
-  await expect(preview.getByRole('checkbox',{name:'현재 가격도 변경',exact:true})).not.toBeChecked();
+  await expect(page.getByRole('radio',{name:'현재 가격도 변경',exact:true})).not.toBeChecked();
   await expect(preview).toContainText('상이 단가 188품목의 모든 원문 행을 매입 이력에 보존합니다');
   await receiptDateInput.fill('2026-11-02');
   await expect(preview.getByRole('cell',{name:'2026-11-02',exact:true}).first()).toBeVisible();
   await receiptDateInput.fill('2026-11-01');
   await expect(preview.getByRole('cell',{name:'2026-11-01',exact:true}).first()).toBeVisible();
-  await page.getByRole('button',{name:'② 열 정렬',exact:true}).click();
+  await page.getByRole('button',{name:/^② 열 정렬/}).click();
   await page.getByRole('button',{name:/③ 저장/}).click();
   const review=page.getByRole('region',{name:'저장 전 적용일 확인',exact:true});
   await expect(review).toContainText('매입 이력 3389행 · 현재 가격 변경 0품목 · 연결되지 않은 원문 28행 제외');
