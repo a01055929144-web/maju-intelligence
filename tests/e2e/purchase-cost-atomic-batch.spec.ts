@@ -701,6 +701,7 @@ test("괄호 용량과 이중 대괄호 원문을 확인표에서 잃지 않는�
   }
   await expect(preview.getByRole("cell", { name: "가상 1.2KG*6EA", exact: true })).toBeVisible();
   await expect(preview.getByRole("cell", { name: "14KG", exact: true })).toBeVisible();
-  await expect(preview.getByRole("columnheader", { name: "단위", exact: true })).toBeVisible();
+  await expect(preview.getByRole("columnheader", { name: "단위 *", exact: true })).toBeVisible();
+  await expect(preview.getByRole("textbox", { name: "1행 단위", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
