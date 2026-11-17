@@ -95,3 +95,34 @@ export function PublicMemberCatalog({ token }: { token: string }) {
       </>}
   </div>;
 }
+
+
+export function PublicSavedCart({ token, rows }: { token: string; rows: ShoppingRow[] }) {
+  const [quantities, setQuantities] = useState<Record<string, number> | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/pricing-documents/shopping-cart", { method: "POST", signal: controller.signal,
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+        if (!response.ok) throw new Error("Cart unavailable");
+        const result = await response.json() as { quantities: Record<string, number> };
+        if (!controller.signal.aborted) setQuantities(result.quantities);
+      } catch { if (!controller.signal.aborted) setError(true); }
+    })();
+    return () => controller.abort();
+  }, [token]);
+  const selected = new Map(rows.flatMap(row => row.itemKey && quantities?.[row.itemKey]
+    ? [[row.itemKey, row] as const] : []));
+  return <section aria-label="장바구니" className="space-y-3 rounded border bg-white p-4 print:hidden">
+    <h2 className="font-bold">장바구니</h2>
+    <p>담은 품목을 저장했습니다. 아직 주문 전입니다.</p>
+    {error ? <p role="status">장바구니를 불러오지 못했습니다. 다시 확인해 주세요.</p> :
+      !quantities ? <p role="status">저장한 품목을 불러오는 중입니다.</p> :
+      selected.size ? <ul>{Array.from(selected, ([key, row]) => <li key={key}>
+        <MobileListRow title={row.displayName} subtitle={[row.spec, row.unit].filter(Boolean).join(" · ")}
+          trailing={`${quantities[key]}개`} />
+      </li>)}</ul> : <p>이 단가표에서 저장한 품목이 없습니다.</p>}
+  </section>;
+}

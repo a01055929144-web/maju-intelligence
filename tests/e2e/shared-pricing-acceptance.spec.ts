@@ -98,17 +98,24 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
     return route.fulfill({ json: member ? { next: "order", storeUrl: `/store?products=all#${signedToken}`,
       cart: [{ productId, promotionId: null, quantity: 3 }] } : { intent: "synthetic.cx70", next: "kakao" } });
   });
-  await page.route(url => url.pathname === "/store", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<h1>합성 주문 화면</h1>" }));
+  await page.route("**/api/pricing-documents/shopping-cart", route => {
+    expect(member).toBe(true);
+    expect(route.request().postDataJSON()).toEqual({ token: "cx70" });
+    return route.fulfill({ json: { quantities: { [itemKey]: 3 } } });
+  });
   await page.route(url => url.pathname === "/store/activate", route => route.fulfill({ body: "<h1>합성 가입</h1>", contentType: "text/html; charset=utf-8" }));
   await start.click();
   await expect(page).toHaveURL(/\/store\/activate#synthetic\.cx70$/);
   member = true;
   await page.goto("/pricing-document?continueOrder=1#cx70");
-  await expect(page).toHaveURL(new RegExp(`/store\\?products=all#${productId}`));
-  await expect(page.getByRole("heading", { name: "합성 주문 화면" })).toBeVisible();
-  expect(await page.evaluate(id => JSON.parse(sessionStorage.getItem(`maju:cart-handoff:${id}`) || "null"), productId))
-    .toEqual([{ productId, promotionId: null, quantity: 3 }]);
+  await expect(page).toHaveURL(/\/pricing-document\?view=cart#cx70$/);
+  const savedCart = page.getByRole("region", { name: "장바구니" });
+  await expect(savedCart).toContainText("합성 새우");
+  await expect(savedCart).toContainText("3개");
   expect(await page.evaluate(() => localStorage.getItem("maju:public-cart:cx70-fixture"))).toBeNull();
+  await page.reload();
+  await expect(savedCart).toContainText("3개");
+  await page.screenshot({ path: info.outputPath(`cx70-cart-${width}.png`) });
   await page.goto("/pricing-document#cx70");
   await tabs.getByRole("button", { name: "전체 상품", exact: true }).click();
   await expect(page.getByText("가입 후 상품", { exact: true }).filter({ visible: true })).toBeVisible();

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
-import { PublicMemberCatalog, PublicShoppingRows } from "./public-document-shopping";
+import { PublicMemberCatalog, PublicSavedCart, PublicShoppingRows } from "./public-document-shopping";
 import { formatWon } from "@/domains/shared/money";
 import { PublicDocumentPaperImages } from "./public-document-paper-images";
 import { PricingDocPaper } from "./pricing-doc-paper";
@@ -26,7 +26,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [orderBusy, setOrderBusy] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"table" | "image" | "catalog">("table");
+  const [view, setView] = useState<"table" | "image" | "catalog" | "cart">("table");
   const sequence = useRef(0);
   const continuedOrder = useRef(false);
   const embeddedToken = embedded?.token;
@@ -49,11 +49,11 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         if (sequence.current === current && window.location.hash.slice(1) === token) {
           if (cart.length) {
             if (!Array.isArray(result.cart) || result.cart.length !== cart.length) throw new Error("담은 품목을 옮기지 못했습니다. 다시 시도해 주세요.");
-            const orderToken = result.storeUrl.split("#")[1];
-            sessionStorage.setItem(`maju:cart-handoff:${orderToken.split(".")[0]}`, JSON.stringify(result.cart));
             try { localStorage.removeItem(draftStorageKey); } catch { /* The server cart is already saved. */ }
-          }
-          window.location.assign(result.storeUrl);
+            setQuantities({});
+            setView("cart");
+            window.history.replaceState(null, "", `/pricing-document?view=cart#${token}`);
+          } else window.location.assign(result.storeUrl);
         }
         return;
       }
@@ -85,6 +85,8 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
             typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 9999).slice(0, 100)) as Record<string, number>);
         } catch { /* Browser storage may be unavailable. */ }
       }
+      if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.member &&
+        new URLSearchParams(window.location.search).get("view") === "cart") setView("cart");
       if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage(""); }
     } catch (error) { if (sequence.current === current) setMessage(error instanceof Error ? error.message : "문서를 확인하지 못했습니다."); }
     finally { if (sequence.current === current) setBusy(false); }
@@ -129,7 +131,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const safeDocument = document && koreaDay() > document.validUntil ? { ...document, expired: true, lines: document.lines.map(l => ({ ...l, price: null })) } : document;
   const Container = embedded ? "section" : "main";
   const orderHref = embedded?.orderHref ?? "/store?view=order";
-  const showOrder = Boolean(safeDocument && (orderEntry || member));
+  const showOrder = Boolean(safeDocument && (orderEntry || member)) && view !== "cart";
   const orderDisabled = Boolean(safeDocument?.expired || (!member && !orderEntry?.available));
   const orderLabel = safeDocument?.expired ? "주문 기간 종료"
     : shopping && orderEntry?.available ? (member ? "주문 화면 열기" : "카카오로 시작")
@@ -173,8 +175,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     {safeDocument && shopping && <nav aria-label="공개 문서 보기" className="flex flex-wrap gap-2 print:hidden">
       {([["table", `단가표 품목 ${safeDocument.lines.length}`], ["catalog", member ? "전체 상품" : "전체 상품 · 가입 후"], ["image", "문서 이미지"]] as const).map(([id, label]) =>
         <Button key={id} type="button" variant={view === id ? "default" : "outline"} aria-pressed={view === id}
-          className="min-h-[44px]" onClick={() => setView(id)}>{label}</Button>)}
+          className="min-h-[44px]" onClick={() => {
+            if (view === "cart") window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+            setView(id);
+          }}>{label}</Button>)}
     </nav>}
+    {safeDocument && shopping && member && view === "cart" && acceptance &&
+      <PublicSavedCart token={acceptance.token} rows={shoppingRows} />}
     {safeDocument && shopping && view === "image" && <div className="print:hidden"><PublicDocumentPaperImages document={safeDocument} /></div>}
     {safeDocument && shopping && view === "catalog" && <section aria-label="전체 상품" className="space-y-4 rounded border bg-white p-4 print:hidden">
       <h2 className="text-base font-bold">전체 상품</h2>
