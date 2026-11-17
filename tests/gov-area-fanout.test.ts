@@ -4,6 +4,7 @@ import {
   buildGovAreaTasks,
   createGovRequestLimiter,
   dedupeGovRows,
+  getGovCollectionOutcome,
   getGovSyncObservability,
   getGovSyncRunStatus,
   GOV_COLLECTION_BUDGET_MS,
@@ -106,6 +107,23 @@ describe("정부 데이터 지역 fan-out", () => {
   it("모든 지역이 error 또는 deferred이면 성공 상태를 남기지 않는다", () => {
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "deferred" }])).toBe("error");
     expect(getGovSyncRunStatus([{ status: "error" }, { status: "success" }])).toBe("success");
+  });
+
+  it("모든 지역을 오류·이월 없이 확인하고 새 행이 없으면 성공으로 남긴다", () => {
+    expect(getGovCollectionOutcome("general_restaurants", ["1", "2"], 0, [
+      { areaCode: "1", status: "success" },
+      { areaCode: "2", status: "success" }
+    ])).toEqual({ status: "success", message: "새 행 없음(지역 2곳 확인)" });
+  });
+
+  it("새 행이 없어도 지역 오류나 이월이 있으면 기존 실패 판정을 유지한다", () => {
+    expect(getGovCollectionOutcome("general_restaurants", ["1", "2"], 0, [
+      { areaCode: "1", status: "error" },
+      { areaCode: "2", status: "deferred" }
+    ])).toEqual({
+      status: "error",
+      message: "general_restaurants 수집 행이 없습니다. 오류 1곳 · 시간 예산 이월 1곳 · 2곳 다음 실행"
+    });
   });
 
   it("여러 회사 큐가 동시에 제출해도 전체 외부 요청은 2개를 넘지 않는다", async () => {
