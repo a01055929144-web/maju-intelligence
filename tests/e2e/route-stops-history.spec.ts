@@ -11,7 +11,7 @@ for (const width of [1440, 390]) for (const withStops of [true, false]) test(`�
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   await page.route(/\/api\/route-stops/, (route) => route.fulfill({ json: { stops: withStops ? stops : [] } }));
   await page.goto("/map");
-  await page.locator('button[title="달력·방문순서·경로"]').click();
+  await page.locator('button[title^="달력에서 날짜를 골라"]').click();
   const box = page.getByRole("region", { name: "정류장 기준 배송 기록" });
   if (!withStops) { await page.waitForTimeout(800); await expect(box).toHaveCount(0); return; }
   await expect(box).toContainText("1. 합성배송식당");
