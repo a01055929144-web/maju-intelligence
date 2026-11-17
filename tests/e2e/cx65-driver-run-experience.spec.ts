@@ -29,9 +29,18 @@ test("CX-65 기사 운행 부품은 390px에서 화면과 키보드로 접근된
   await expect(page.getByText("가는 길 매장")).toBeVisible();
   const keyboardComplete = page.getByRole("button", { name: "밀어서 단가표 완료" });
   await keyboardComplete.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("button", { name: "되돌리기" })).toBeVisible();
-  await page.getByRole("button", { name: "되돌리기" }).click();
+  await expect(keyboardComplete).toBeFocused();
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/mobile/driver-sales-stops") && response.request().method() === "POST"),
+    page.keyboard.press("Enter"),
+  ]);
+  const undoButton = page.getByRole("button", { name: "되돌리기" });
+  await expect(undoButton).toBeVisible({ timeout: 3_000 });
+  await undoButton.focus();
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/mobile/driver-route-actions") && response.request().method() === "DELETE"),
+    page.keyboard.press("Enter"),
+  ]);
   expect(undone).toBe(true);
   await expect(page.getByText("방금 처리를 되돌렸습니다.")).toBeVisible();
   await expect(page.getByText("가는 길 매장")).toBeVisible();
