@@ -746,10 +746,14 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
       if (edited) throw new Error("파일 적용 후 직접 수정한 단가는 날짜별 원문 선택과 다릅니다. 원본 파일에서 단가를 확인하고 다시 올려 주세요.");
-      const rows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
+      const allRows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
+      // 반품(음수 수량) 행은 매입 기록 제약(quantity >= 0)에 걸려 전체 저장이 실패한다. 저장에서 빼고 몇 행인지 알린다.
+      const returnRows = allRows.filter(row => typeof row.quantity === "number" && row.quantity < 0);
+      const rows = allRows.filter(row => !(typeof row.quantity === "number" && row.quantity < 0));
+      if (!rows.length) throw new Error(`저장할 매입 행이 없습니다. 반품(수량 음수) ${returnRows.length}행은 저장하지 않습니다.`);
       const payload = { action: "save", companyId, receiptDate, fileName: fileName || "매입가 반영", rows };
       const digest = await dateRequestDigest(payload);
       let pending;
@@ -781,7 +785,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount });
       forgetDateRequest(companyId);
       setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
-      setMessage(`원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
+      setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
     finally { setBusy(false); }
