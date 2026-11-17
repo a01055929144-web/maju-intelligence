@@ -1064,6 +1064,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
         </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
+        {error ? <p aria-live="assertive" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error}</p> : null}
+        {busy || message ? <p aria-live="polite" className="rounded border border-slate-200 bg-slate-50 p-3 text-slate-700">{busy ? (message || "저장 중…") : message}</p> : null}
         <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
