@@ -2,8 +2,8 @@
 import { formatWon } from "@/domains/shared/money";
 import { kstToday } from "@/domains/shared/kst-date";
 import { MoneyInput } from "@/components/money-input";
+import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { EmptyState } from "@/components/ui/state";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, Printer, RotateCcw, Search, Trash2, WalletCards, X } from "lucide-react";
@@ -11,7 +11,7 @@ import { calculateErpLine, calculateErpTotals, type ErpTaxType } from "@/domains
 import { createPartnerPaymentAttempt, findCompanyPartnerPaymentAttempt, getPaymentAttemptStorage, loadPartnerPaymentAttempt, removePartnerPaymentAttempt, savePartnerPaymentAttempt, type PartnerPaymentAttempt } from "@/domains/erp/payment-attempt";
 
 type DocType = "sale" | "purchase" | "sale_return" | "purchase_return";
-type Doc = { id: string; documentType: DocType; documentNumber: string; documentDate: string; status: "draft" | "confirmed" | "cancelled"; customerId?: string; supplierId?: string; originalDocumentId?: string; partnerName: string; memo?: string; reason?: string; totalAmount: number; taxAmount: number; createdAt: string; lines?: Line[] };
+type Doc = { id: string; documentType: DocType; documentNumber: string; documentDate: string; status: "draft" | "confirmed" | "cancelled"; customerId?: string; supplierId?: string; sourceType?: string; sourceKey?: string; originalDocumentId?: string; partnerName: string; memo?: string; reason?: string; totalAmount: number; taxAmount: number; createdAt: string; lines?: Line[] };
 type Line = { id?: string; productCatalogId?: string; supplierProductId?: string; productCode?: string; productName: string; specification?: string; unit: string; taxType: ErpTaxType; quantity: number; unitPrice: number };
 type Option = { id: string; name: string };
 type Options = { customers: Option[]; suppliers: Option[]; products: Array<{ id: string; product_code?: string; canonical_name?: string; purchase_product_name: string; specification_value?: string; specification_unit?: string; sales_unit?: string; tax_type?: ErpTaxType; default_sales_price?: number }>; supplierProducts: Array<{ id: string; supplier_id: string; raw_name: string; raw_spec?: string; raw_unit?: string; latest_cost?: number; parsed_tax_type?: ErpTaxType }> };
@@ -20,6 +20,12 @@ const money = (v: number) => formatWon(Math.round(v));
 const labels = { sale: "매출", purchase: "매입", sale_return: "매출 반품", purchase_return: "매입 반품" } as const;
 const statusLabels = { draft: "작성중", confirmed: "확정", cancelled: "취소" } as const;
 const emptyLine = (): Line => ({ productName: "", unit: "EA", taxType: "taxable", quantity: 1, unitPrice: 0 });
+type InitialPartner = { id: string; type: "customer" | "supplier" };
+
+function newDocument(initialPartner?: InitialPartner): Doc {
+  const isCustomer = initialPartner?.type !== "supplier";
+  return { id: "", documentType: isCustomer ? "sale" : "purchase", documentNumber: "저장 시 자동 채번", documentDate: today(), status: "draft", ...(initialPartner ? (isCustomer ? { customerId: initialPartner.id } : { supplierId: initialPartner.id }) : {}), partnerName: "", totalAmount: 0, taxAmount: 0, createdAt: "", lines: [emptyLine()] };
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
@@ -28,36 +34,68 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function BusinessDocumentWorkspace({ companyId = "", returnEnabled = false }: { companyId?: string; returnEnabled?: boolean }) {
+export function BusinessDocumentWorkspace({ cancellationEnabled = false, companyId = "", initialPartner, returnEnabled = false }: { cancellationEnabled?: boolean; companyId?: string; initialPartner?: InitialPartner; returnEnabled?: boolean }) {
+  const { confirm, confirmDialog } = useConfirm();
   const suffix = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const [tab, setTab] = useState<"documents" | "ledger">("documents");
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [options, setOptions] = useState<Options>({ customers: [], suppliers: [], products: [], supplierProducts: [] });
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", type: "", status: "", partnerId: "" });
-  const [editor, setEditor] = useState<Doc | null>(null);
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", type: "", status: "", partnerId: initialPartner?.id || "" });
+  const [includeCancelled, setIncludeCancelled] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editor, setEditor] = useState<Doc | null>(() => initialPartner ? newDocument(initialPartner) : null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
-    const query = new URLSearchParams({ ...(companyId ? { companyId } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) });
+    const query = new URLSearchParams({ ...(companyId ? { companyId } : {}), ...(includeCancelled ? { includeCancelled: "true" } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) });
     const result = await api<{ items: Doc[] }>(`/api/business-documents?${query}`);
     setDocuments(result.items);
-  }, [companyId, filters]);
+  }, [companyId, filters, includeCancelled]);
   useEffect(() => { void Promise.all([load(), api<Options>(`/api/business-documents${suffix}${suffix ? "&" : "?"}mode=options`).then(setOptions)]).catch((e) => setMessage(e.message)); }, [load, suffix]);
 
-  const openNew = (type: "sale" | "purchase" = "sale") => setEditor({ id: "", documentType: type, documentNumber: "저장 시 자동 채번", documentDate: today(), status: "draft", partnerName: "", totalAmount: 0, taxAmount: 0, createdAt: "", lines: [emptyLine()] });
+  const openNew = (type: "sale" | "purchase" = "sale") => setEditor(newDocument(initialPartner && (type === "sale") === (initialPartner.type === "customer") ? initialPartner : undefined));
   const openDocument = async (doc: Doc) => {
     setBusy(true); setMessage("");
     try { const result = await api<{ document: Doc }>(`/api/business-documents/${doc.id}${suffix}`); setEditor(result.document); }
     catch (e) { setMessage(e instanceof Error ? e.message : "전표를 열지 못했습니다."); } finally { setBusy(false); }
   };
-  const act = async (doc: Doc, action: "confirm" | "cancel" | "return", returnLines?: Array<{ lineId: string; quantity: number }>) => {
-    const reason = action === "cancel" ? window.prompt("취소 사유를 입력해 주세요.") : "";
-    if (action === "cancel" && !reason) return;
+  const act = async (doc: Doc, action: "confirm" | "cancel" | "return", returnLines?: Array<{ lineId: string; quantity: number }>, reason = "") => {
     setBusy(true); setMessage("작업 진행 중입니다…");
     try {
       const result = await api<{ document: Doc }>(`/api/business-documents/${doc.id}/actions${suffix}`, { method: "POST", body: JSON.stringify({ action, reason, companyId, returnLines }) });
       setEditor(result.document); setMessage(action === "return" ? "반품 전표 초안을 만들었습니다." : "처리했습니다."); await load();
     } catch (e) { setMessage(e instanceof Error ? e.message : "처리하지 못했습니다."); } finally { setBusy(false); }
+  };
+  const deleteDocument = async (doc: Doc, reason: string) => {
+    if (doc.status === "draft") await api(`/api/business-documents/${doc.id}${suffix}`, { method: "DELETE" });
+    else if (doc.status === "confirmed") await api(`/api/business-documents/${doc.id}/actions${suffix}`, { method: "POST", body: JSON.stringify({ action: "cancel", reason: reason.trim() || "삭제", companyId }) });
+  };
+  const removeDocuments = async (ids: string[]) => {
+    const targets = documents.filter((doc) => ids.includes(doc.id) && doc.status !== "cancelled");
+    if (!targets.length) return;
+    const orderCount = targets.filter((doc) => doc.sourceType === "order").length;
+    let reason = "";
+    if (!(await confirm({
+      title: targets.length > 1 ? `전표 ${targets.length}건 삭제` : "전표 삭제",
+      body: <div className="space-y-3"><p>작성중 전표는 지우고, 확정 전표는 원장·재고를 되돌린 뒤 삭제한 전표로 보관합니다.</p>{orderCount ? <p className="text-rose-700">주문 원천 전표 {orderCount}건은 접수·전표 원자 취소 계약 적용 전이라 삭제되지 않습니다.</p> : null}<label className="block text-left text-xs font-bold">사유 (선택)<input className="maju-input mt-1" defaultValue="" onChange={(event) => { reason = event.target.value; }} placeholder="비우면 ‘삭제’로 기록" /></label></div>,
+      confirmLabel: "삭제",
+      tone: "danger",
+    }))) return;
+    setBusy(true); setMessage("전표를 삭제하고 있습니다…");
+    const failures: string[] = [];
+    try {
+      for (const doc of targets) {
+        try { await deleteDocument(doc, reason || "삭제"); }
+        catch (error) { failures.push(`${doc.documentNumber}: ${error instanceof Error ? error.message : "삭제하지 못했습니다."}`); }
+      }
+      await load();
+      setSelected(new Set(failures.length ? targets.filter((doc) => failures.some((failure) => failure.startsWith(`${doc.documentNumber}:`))).map((doc) => doc.id) : []));
+      setMessage(failures.length ? failures.join("\n") : `${targets.length}건을 삭제했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "삭제 결과를 새로 불러오지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
   };
   const removeDraft = async (doc: Doc) => {
     if (doc.status !== "draft") return;
@@ -74,7 +112,17 @@ export function BusinessDocumentWorkspace({ companyId = "", returnEnabled = fals
     }
   };
 
-  return <div className="space-y-4">
+  const columns: CommonTableColumn<Doc>[] = [
+    { key: "date", label: "거래일", value: (doc) => doc.documentDate, width: 120 },
+    { key: "number", label: "전표번호", value: (doc) => doc.documentNumber, searchable: true, width: 170 },
+    { key: "type", label: "유형", value: (doc) => labels[doc.documentType], width: 100 },
+    { key: "partner", label: "거래처", value: (doc) => doc.partnerName, searchable: true, weight: 2 },
+    { key: "status", label: "상태", value: (doc) => statusLabels[doc.status], width: 90 },
+    { key: "total", label: "합계", value: (doc) => doc.totalAmount, render: (doc) => money(doc.totalAmount), align: "right", total: true, totalFormat: money, width: 130 },
+    { key: "actions", label: "작업", value: () => "", sortable: false, render: (doc) => <div className="flex justify-end gap-3"><button className="font-semibold text-teal-700" disabled={busy} onClick={() => void openDocument(doc)} type="button">열기</button>{cancellationEnabled && doc.status !== "cancelled" ? <button className="font-semibold text-rose-700" disabled={busy} onClick={() => void removeDocuments([doc.id])} type="button">삭제</button> : null}</div>, align: "right", width: 140 },
+  ];
+
+  return <div className="space-y-4">{confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
         <button className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === "documents" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`} onClick={() => setTab("documents")}>전표</button>
@@ -84,23 +132,24 @@ export function BusinessDocumentWorkspace({ companyId = "", returnEnabled = fals
     </div>
     {message && <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">{message}</div>}
     {tab === "documents" ? <>
-      <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-5">
+      <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-6">
         <input className="maju-input" type="date" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
         <input className="maju-input" type="date" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
         <select className="maju-input" value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}><option value="">유형 전체</option><option value="sale">매출</option><option value="purchase">매입</option><option value="sale_return">매출 반품</option><option value="purchase_return">매입 반품</option></select>
         <select className="maju-input" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">상태 전체</option><option value="draft">작성중</option><option value="confirmed">확정</option><option value="cancelled">취소</option></select>
-        <button className="maju-button-secondary" onClick={() => void load()}><Search className="h-4 w-4" /> 조회</button>
+        <select aria-label="거래처 필터" className="maju-input" value={filters.partnerId} onChange={(e) => setFilters({ ...filters, partnerId: e.target.value })}><option value="">거래처 전체</option><optgroup label="매출처">{options.customers.map((partner) => <option key={`customer-${partner.id}`} value={partner.id}>{partner.name}</option>)}</optgroup><optgroup label="매입처">{options.suppliers.map((partner) => <option key={`supplier-${partner.id}`} value={partner.id}>{partner.name}</option>)}</optgroup></select>
+        <div className="flex items-center gap-2">{cancellationEnabled ? <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input checked={includeCancelled} onChange={(event) => setIncludeCancelled(event.target.checked)} type="checkbox" /> 삭제한 전표 보기</label> : null}<button className="maju-button-secondary" onClick={() => void load()}><Search className="h-4 w-4" /> 조회</button></div>
       </div>
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="px-4 py-3">거래일</th><th>전표번호</th><th>유형</th><th>거래처</th><th>상태</th><th className="text-right">합계</th><th className="px-4 text-right">작업</th></tr></thead><tbody className="divide-y divide-slate-100">{documents.map((doc) => <tr key={doc.id} className="hover:bg-slate-50"><td className="px-4 py-3">{doc.documentDate}</td><td className="font-medium">{doc.documentNumber}</td><td>{labels[doc.documentType]}</td><td>{doc.partnerName}</td><td><span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{statusLabels[doc.status]}</span></td><td className="text-right font-semibold">{money(doc.totalAmount)}</td><td className="px-4 text-right"><button className="text-sm font-semibold text-teal-700" onClick={() => void openDocument(doc)}>열기</button></td></tr>)}</tbody></table></div>
-        {!documents.length && <EmptyState bare className="p-12" message="조건에 맞는 전표가 없습니다." />}
+        {cancellationEnabled && selected.size ? <div className="flex flex-wrap items-center gap-2 border-b border-teal-300 bg-teal-50 px-3 py-2 text-sm"><b>선택 {selected.size}건</b><button className="maju-button-secondary h-8 text-xs text-rose-700" disabled={busy} onClick={() => void removeDocuments(Array.from(selected))} type="button">선택 삭제</button><button className="ml-auto text-xs font-bold underline" onClick={() => setSelected(new Set())} type="button">선택 해제</button></div> : null}
+        <CommonDataTable columns={columns} emptyMessage="조건에 맞는 전표가 없습니다." filename="전표.csv" phoneCards rowKey={(doc) => doc.id} rows={documents} selectable={cancellationEnabled} selection={cancellationEnabled ? { selected, onChange: setSelected } : undefined} settingsKey="business-documents" />
       </div>
     </> : <LedgerPanel companyId={companyId} options={options} />}
-    {editor && <DocumentEditor busy={busy} companyId={companyId} doc={editor} options={options} returnEnabled={returnEnabled} onAct={act} onClose={() => setEditor(null)} onDelete={removeDraft} onSaved={async (doc) => { setEditor(doc); setMessage("전표를 저장했습니다."); await load(); }} />}
+    {editor && <DocumentEditor busy={busy} cancellationEnabled={cancellationEnabled} companyId={companyId} doc={editor} options={options} returnEnabled={returnEnabled} onAct={act} onClose={() => setEditor(null)} onDelete={removeDraft} onSaved={async (doc) => { setEditor(doc); setMessage("전표를 저장했습니다."); await load(); }} />}
   </div>;
 }
 
-function DocumentEditor({ busy, companyId, doc, options, returnEnabled, onAct, onClose, onDelete, onSaved }: { busy: boolean; companyId: string; doc: Doc; options: Options; returnEnabled: boolean; onAct: (doc: Doc, action: "confirm" | "cancel" | "return", returnLines?: Array<{ lineId: string; quantity: number }>) => Promise<void>; onClose: () => void; onDelete: (doc: Doc) => Promise<void>; onSaved: (doc: Doc) => Promise<void> }) {
+function DocumentEditor({ busy, cancellationEnabled, companyId, doc, options, returnEnabled, onAct, onClose, onDelete, onSaved }: { busy: boolean; cancellationEnabled: boolean; companyId: string; doc: Doc; options: Options; returnEnabled: boolean; onAct: (doc: Doc, action: "confirm" | "cancel" | "return", returnLines?: Array<{ lineId: string; quantity: number }>, reason?: string) => Promise<void>; onClose: () => void; onDelete: (doc: Doc) => Promise<void>; onSaved: (doc: Doc) => Promise<void> }) {
   const { confirm, confirmDialog } = useConfirm();
   const [form, setForm] = useState({ ...doc, lines: doc.lines?.length ? doc.lines : [emptyLine()] });
   const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
@@ -179,7 +228,7 @@ function DocumentEditor({ busy, companyId, doc, options, returnEnabled, onAct, o
       {selectedLineIds.length > 0 && <div className="sticky bottom-0 flex flex-wrap items-center gap-2 rounded-xl border border-teal-200 bg-white p-3 shadow-lg"><strong>선택 {selectedLineIds.length}건 · {money(selectedTotal)}</strong><button className="maju-button-secondary ml-auto" disabled={saving || form.documentType.includes("return")} onClick={() => void runLineAction("move-lines")}>선택 품목 이동</button><button className="maju-button-primary" disabled={saving} onClick={() => void runLineAction("copy-lines")}>선택 품목 복사</button></div>}
       <div className="ml-auto grid max-w-lg grid-cols-2 gap-2 rounded-xl bg-slate-50 p-4 text-sm"><span>과세 공급가</span><b className="text-right">{money(totals.taxableSupplyAmount)}</b><span>면세 공급가</span><b className="text-right">{money(totals.exemptSupplyAmount)}</b><span>부가세</span><b className="text-right">{money(totals.taxAmount)}</b><span className="text-base font-bold">합계</span><b className="text-right text-lg text-teal-800">{money(totals.totalAmount)}</b></div>
     </div>
-    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{isConfirmed && <><button className="maju-button-primary mr-auto" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "수정 저장"}</button><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{returnEnabled && ["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy || selectedLineIds.length === 0} onClick={() => void onAct(form, "return", form.lines.filter((line) => line.id && selectedLineIds.includes(line.id)).map((line) => ({ lineId: line.id!, quantity: Number(line.quantity) })))}><RotateCcw className="h-4 w-4" /> 선택 품목 반품</button>}<button className="maju-button-secondary text-red-600" disabled={busy} onClick={async () => { if (await confirm({ title: "전표 삭제", body: "원장에서 금액이 빠집니다. 전표를 삭제할까요?", confirmLabel: "삭제", tone: "danger" })) await onAct(form, "cancel"); }}>삭제</button></>}{isDraft && <>{form.id && <button className="maju-button-secondary mr-auto text-red-600" disabled={busy || saving} onClick={async () => { if (await confirm({ title: "작성중 전표 삭제", body: `${form.documentNumber} 작성중 전표를 삭제합니다. 되돌릴 수 없습니다.`, confirmLabel: "삭제", tone: "danger" })) await onDelete(form); }}><Trash2 className="h-4 w-4" /> 작성중 삭제</button>}<button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
+    <footer className="flex flex-wrap justify-end gap-2 border-t p-4">{isConfirmed && <><button className="maju-button-primary mr-auto" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "수정 저장"}</button><a className="maju-button-secondary" href={`/operations/documents/${form.id}/print${companyId ? `?companyId=${companyId}` : ""}`} target="_blank"><Printer className="h-4 w-4" /> 거래명세서</a>{returnEnabled && ["sale", "purchase"].includes(form.documentType) && <button className="maju-button-secondary" disabled={busy || selectedLineIds.length === 0} onClick={() => void onAct(form, "return", form.lines.filter((line) => line.id && selectedLineIds.includes(line.id)).map((line) => ({ lineId: line.id!, quantity: Number(line.quantity) })))}><RotateCcw className="h-4 w-4" /> 선택 품목 반품</button>}{cancellationEnabled && <button className="maju-button-secondary text-red-600" disabled={busy || form.sourceType === "order"} title={form.sourceType === "order" ? "주문 상태와 원자적으로 처리하는 계약 적용 뒤 사용할 수 있습니다." : undefined} onClick={async () => { let reason = ""; if (await confirm({ title: "전표 삭제", body: <div className="space-y-3"><p>원장·재고를 되돌리고 삭제한 전표로 보관합니다.</p><label className="block text-left text-xs font-bold">사유 (선택)<input className="maju-input mt-1" onChange={(event) => { reason = event.target.value; }} placeholder="비우면 ‘삭제’로 기록" /></label></div>, confirmLabel: "삭제", tone: "danger" })) await onAct(form, "cancel", undefined, reason || "삭제"); }}>삭제</button>}</>}{isDraft && <>{cancellationEnabled && form.id && <button className="maju-button-secondary mr-auto text-red-600" disabled={busy || saving} onClick={async () => { if (await confirm({ title: "작성중 전표 삭제", body: `${form.documentNumber} 작성중 전표를 삭제합니다. 되돌릴 수 없습니다.`, confirmLabel: "삭제", tone: "danger" })) await onDelete(form); }}><Trash2 className="h-4 w-4" /> 작성중 삭제</button>}<button className="maju-button-secondary" disabled={saving} onClick={() => void save()}>{saving ? "저장 중…" : "작성중 저장"}</button>{form.id && <button className="maju-button-primary" disabled={busy} onClick={() => void onAct(form, "confirm")}>확정</button>}</>}</footer>
   </div></div>;
 }
 

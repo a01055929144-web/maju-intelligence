@@ -8,6 +8,10 @@ const customers = [
     customerName: "A 거래처",
     deliveryKm: 2.25,
     deliveryManager: "김배송",
+    businessName: "주식회사 합성에이",
+    subBusinessNumber: "0002",
+    businessEntityType: "corporation" as const,
+    corporateRegistrationNumber: "1234567890123",
     grade: "A" as const,
     industry: "한식",
     monthlyRevenue: 100,
@@ -80,5 +84,18 @@ describe("route reads", () => {
       deliveryAddress: "서울 B 2층"
     });
     expect(result.totalDistanceKm).toBe(6.2);
+  });
+
+  it("keeps customer business identity on route stops", () => {
+    const stop = buildTodayRoutePlan(customers, "supabase", new Map(), new Map()).groups
+      .flatMap((group) => group.stops)
+      .find((item) => item.id === "customer-a");
+
+    expect(stop).toMatchObject({
+      businessName: "주식회사 합성에이",
+      subBusinessNumber: "0002",
+      businessEntityType: "corporation",
+      corporateRegistrationNumber: "1234567890123"
+    });
   });
 });

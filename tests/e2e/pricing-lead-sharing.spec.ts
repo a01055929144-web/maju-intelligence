@@ -182,34 +182,34 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
       : route.fulfill({ status: 503, json: { message: "카카오 가입 연결 준비 중입니다. 현재 주문은 접수되지 않습니다." } });
   });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
   const order = publicViewer.getByRole("region", { name: "공개 문서 주문 안내" });
   await expect(order.getByRole("button", { name: "주문 연결 준비 중", exact: true })).toBeDisabled();
   signupReady = true;
-  await publicViewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await publicViewer.reload();
+  await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).click();
   await expect(order.getByRole("status")).toContainText("현재 주문은 접수되지 않습니다");
   expect(await publicViewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-  expect((await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await publicViewer.screenshot({ path: info.outputPath(`public-order-entry-${kind}-${width}.png`), fullPage: true });
   intentReady = true;
   await publicViewer.route(url => url.pathname === "/store/activate", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<!doctype html><meta charset=\"utf-8\"><h1>합성 07 점주 가입</h1>" }));
-  await order.getByRole("button", { name: "주문·점주 가입 시작", exact: true }).click();
+  await order.getByRole("button", { name: "이 단가로 주문 시작", exact: true }).click();
   await expect(publicViewer).toHaveURL(/\/store\/activate#synthetic\.intent$/);
   await expect(publicViewer.getByRole("heading", { name: "합성 07 점주 가입" })).toBeVisible();
   await publicViewer.clock.install({ time: new Date(`${version().content.validUntil}T14:59:59Z`) });
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(publicViewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   await publicViewer.clock.fastForward(2_000);
   await expect(publicViewer.getByRole("status")).toContainText("가격·주문 유효기간이 지났습니다");
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(publicViewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(publicViewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await expect(publicViewer.getByRole("button", { name: "주문 기간 종료", exact: true })).toBeDisabled();
   await publicViewer.clock.setSystemTime(new Date(Date.parse(publicExpiry()) + 1000));
   expect(await publicViewer.evaluate(() => Date.now())).toBeGreaterThanOrEqual(Date.parse(publicExpiry()));
   await publicViewer.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(publicViewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
-  await expect(publicViewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await expect(publicViewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await preview.getByText("관리 · 회수와 기존 거래처 전용 QR", { exact: true }).click();
   await preview.getByRole("button", { name: "공개 링크 회수", exact: true }).click();
   await publicViewer.goto(new URL(publicUrl, page.url()).href);
@@ -248,8 +248,8 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await viewer.route("**/api/pricing-documents/public", publicHandler);
   await viewer.clock.install({ time: new Date("2026-11-08T00:00:00Z") });
   await viewer.goto(new URL(publicUrl, page.url()).href);
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   expect(deliveryRecords.size).toBe(0); expect(contactRecords.size).toBe(0);
   await share.getByRole("checkbox").check();
   await share.getByRole("button", { name: "실제 전달 완료 기록", exact: true }).click();
@@ -265,30 +265,30 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
   await page.screenshot({ path: info.outputPath(`lead-share-${kind}-${width}.png`), fullPage: true });
   await viewer.reload();
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
-  await expect(viewer.getByText(/^18L\s*(?:·\s*)?통$/)).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText(/^18L\s*(?:·\s*)?통(?: \/|$)/).filter({ visible: true })).toBeVisible();
   await expect(viewer.getByText(/PRIVATE-|CANARY/)).toHaveCount(0);
   expect(await viewer.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
-  expect((await viewer.getByRole("button", { name: "다시 확인", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(viewer.getByRole("button", { name: "다시 확인", exact: true })).toHaveCount(0);
   await viewer.screenshot({ path: info.outputPath(`public-${kind}-${width}.png`), fullPage: true });
-  readError = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByRole("status")).toContainText("합성 열람 확인 실패"); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  readError = true; await viewer.reload();
+  await expect(viewer.getByRole("status")).toContainText("합성 열람 확인 실패"); await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   readError = false; linkExpiresAt = "2026-11-08T00:01:00Z";
   await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByText("1,000원", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toBeVisible();
   await viewer.clock.fastForward(61_000);
   await expect(viewer.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
-  await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
-  linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.getByRole("button", { name: "다시 확인", exact: true }).click();
-  await expect(viewer.getByText("유효기간이 지나 가격을 표시하지 않습니다.", { exact: true })).toBeVisible();
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toBeVisible(); await expect(viewer.getByText("1,000원", { exact: true })).toHaveCount(0);
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  linkExpiresAt = "2099-01-01T00:00:00Z"; expiredPrice = true; await viewer.reload();
+  await expect(viewer.getByText("유효기간이 지나 가격을 표시하지 않습니다.", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toBeVisible(); await expect(viewer.getByText("1,000원", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await share.getByRole("button", { name: "링크 회수", exact: true }).click();
   await expect(share.getByRole("status")).toContainText("링크를 회수했습니다");
   expect(revoked).toBe(true);
   await viewer.reload(); await expect(viewer.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
-  await expect(viewer.getByText("합성 공개 품목", { exact: true })).toHaveCount(0);
+  await expect(viewer.getByText("합성 공개 품목", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await viewerContext.close();
   const prepareCount = prepareInputs.length;
   await page.getByRole("button", { name: "← 문서 목록", exact: true }).click();
@@ -310,4 +310,52 @@ for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const)
   await expect(history).toContainText("합성 담당");
   await page.screenshot({ path: info.outputPath(`lead-contact-${kind}-${width}.png`), fullPage: true });
 
+});
+
+test("CX-45 keeps mobile prices on one line and preserves print columns", async ({ page }, info) => {
+  const lines = Array.from({ length: 16 }, (_, index) => ({
+    displayName: index ? `합성 완숙 토마토 ${index}` : "합성 특대 새우 베트남",
+    spec: "1kg", unit: "봉", brand: "", price: 29700, badge: "",
+  }));
+  await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: {
+    expiresAt: "2099-12-31T15:00:00Z",
+    document: {
+      title: "합성 공개 단가표", companyName: "합성 유통", kind: "sheet", layout: "table", theme: "green",
+      display: { columns: 2, info: [], productWidth: 65, promoLayout: "table", priceIncludesTax: false },
+      validUntil: "2099-12-31", publishedAt: "2026-11-16T00:00:00Z", version: 1, expired: false, lines,
+    },
+    orderEntry: { available: true },
+  } }));
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/pricing-document#cx45");
+  const list = page.getByRole("region", { name: "문서 품목" });
+  await expect(list.getByRole("listitem")).toHaveCount(16);
+  const price = list.getByText("29,700원", { exact: true }).first();
+  await expect(price).toHaveCSS("white-space", "nowrap");
+  expect((await price.boundingBox())!.height).toBeLessThan(28);
+  await expect(list.getByText(lines[0].displayName, { exact: true })).toHaveCSS("word-break", "keep-all");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  const order = page.getByRole("button", { name: "이 단가로 주문 시작", exact: true });
+  const position = await order.boundingBox();
+  expect(position?.height).toBe(48);
+  await page.screenshot({ path: info.outputPath("cx45-390-after.png") });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  expect(await order.boundingBox()).toEqual(position);
+  const search = page.getByRole("searchbox", { name: "문서 품목 검색" });
+  await search.fill("특대 새우");
+  await expect(list.getByRole("listitem")).toHaveCount(1);
+  await search.press("Escape");
+  await expect(list.getByRole("listitem")).toHaveCount(16);
+  for (const width of [768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(list).toBeHidden();
+    await expect(page.getByRole("table")).toHaveCount(2);
+  }
+  await page.setViewportSize({ width: 390, height: 700 });
+  await search.fill("특대 새우");
+  await page.emulateMedia({ media: "print" });
+  await expect(search).toBeHidden();
+  await expect(order).toBeHidden();
+  await expect(page.getByRole("table")).toHaveCount(2);
+  await expect(page.getByRole("table").getByText("합성 완숙 토마토 15")).toBeVisible();
 });

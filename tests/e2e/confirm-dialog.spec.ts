@@ -81,3 +81,46 @@ test("작성중 전표 삭제는 취소하면 유지되고 확인하면 가짜 A
   await expect(page.getByText("작성중 전표를 삭제했습니다.")).toBeVisible();
   expect(deleted).toBe(1);
 });
+
+for (const width of [1440, 390]) test(`전표 목록에서 여러 건을 한 번에 삭제하고 삭제 전표를 다시 본다 (${width}px)`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  const documents = [
+    { id: "draft-1", documentType: "purchase", documentNumber: "P-SYN-1", documentDate: "2026-11-17", status: "draft", partnerName: "합성 매입처", totalAmount: 1000, taxAmount: 91, createdAt: "2026-11-17T00:00:00Z" },
+    { id: "confirmed-1", documentType: "sale", documentNumber: "S-SYN-1", documentDate: "2026-11-17", status: "confirmed", partnerName: "합성 매출처", totalAmount: 2000, taxAmount: 182, createdAt: "2026-11-17T00:00:00Z" },
+  ];
+  const removed = new Set<string>();
+  const cancelBodies: unknown[] = [];
+  const listUrls: string[] = [];
+  await page.route("**/api/business-documents**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "DELETE") { removed.add(url.pathname.split("/").at(-1)!); return route.fulfill({ json: { ok: true } }); }
+    if (request.method() === "POST" && url.pathname.endsWith("/actions")) { const body = request.postDataJSON(); cancelBodies.push(body); removed.add(url.pathname.split("/").at(-2)!); return route.fulfill({ json: { document: {} } }); }
+    if (url.searchParams.get("mode") === "options") return route.fulfill({ json: { customers: [], suppliers: [], products: [], supplierProducts: [] } });
+    listUrls.push(request.url());
+    const includeCancelled = url.searchParams.get("includeCancelled") === "true";
+    return route.fulfill({ json: { items: includeCancelled ? documents.map((item) => removed.has(item.id) ? { ...item, status: "cancelled" } : item) : documents.filter((item) => !removed.has(item.id)) } });
+  });
+  await page.goto("/operations/documents");
+  await expect(page.getByText("P-SYN-1")).toBeVisible();
+  expect(listUrls[0]).not.toContain("includeCancelled=true");
+  const checks = page.getByLabel("줄 선택");
+  await checks.nth(0).check();
+  await checks.nth(1).check();
+  await page.getByRole("button", { name: "선택 삭제" }).click();
+  const dialog = page.getByRole("dialog", { name: "전표 2건 삭제" });
+  await dialog.getByLabel("사유 (선택)").fill("합성 삭제");
+  await dialog.getByRole("button", { name: "삭제", exact: true }).click();
+  await expect(page.getByText("2건을 삭제했습니다.")).toBeVisible();
+  expect(removed).toEqual(new Set(["draft-1", "confirmed-1"]));
+  expect(cancelBodies).toEqual([expect.objectContaining({ action: "cancel", reason: "합성 삭제" })]);
+  await page.getByLabel("삭제한 전표 보기").check();
+  await expect(page.getByText("P-SYN-1")).toBeVisible();
+  const cancelledStatus = width === 390
+    ? page.locator("li").filter({ hasText: "P-SYN-1" }).getByText("취소", { exact: true })
+    : page.getByRole("cell", { name: "취소", exact: true }).first();
+  await expect(cancelledStatus).toBeVisible();
+  expect(listUrls.at(-1)).toContain("includeCancelled=true");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});

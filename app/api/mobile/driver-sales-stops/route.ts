@@ -35,5 +35,5 @@ export async function POST(request: NextRequest) {
   if (!updated.length) return NextResponse.json({ message: "이미 처리된 정류장입니다." }, { status: 409 });
   if (completed) await recordPermitLeadAction(auth.companyId, stop.lead_id, { actionType: "quote", actorName: auth.customerSession.name || "배송기사", collateralTypes: ["단가표"], memo: `단가표 전달 · 기사 · ${now}`, result: "견적 전달" });
   else if (body.outcome === "moved_or_closed" || body.outcome === "refused") await recordPermitLeadAction(auth.companyId, stop.lead_id, { actionType: body.outcome === "moved_or_closed" ? "exclude" : "status", actorName: auth.customerSession.name || "배송기사", memo: body.outcome === "moved_or_closed" ? "폐업" : "기존 거래처 유지", result: body.outcome === "moved_or_closed" ? "제외" : "거절" });
-  return NextResponse.json({ ok: true, status: completed ? "견적 발송" : "not_delivered" });
+  return NextResponse.json({ completedAt: now, ok: true, status: completed ? "견적 발송" : "not_delivered", stopId: stop.id });
 }

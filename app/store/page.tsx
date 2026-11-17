@@ -82,7 +82,7 @@ export default async function StorePage({ searchParams }: {
   // CX-11 직접 가입 화면 픽스처(CI 전용, 세션·DB 없음): guest=로그인 전, new=로그인했고 매장 없음(입력 폼), profile=가입 직후 홈.
   const directFixture = isCiLayoutFixturesEnabled() && /^store-direct-signup-(guest|new|profile|connected)$/.test(String(params.fixture)) ? String(params.fixture) : undefined;
   if (directFixture) { portalError = false; accounts = directFixture === "store-direct-signup-guest" ? null : directFixture === "store-direct-signup-connected"? [{ companyId: "00000000-0000-4000-8000-000000000001", storeAccountId: "20000000-0000-4000-8000-0000000000c1", customerName: "합성 연결 유통 매장", hasCostAccess: false, canManageMembers: false, canManageAddress: false, documents: [] }] : []; }
-  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents") ? params.fixture : null;
+  const fixture = isCiLayoutFixturesEnabled() && (params.fixture === "s1-single" || params.fixture === "s1-multi" || params.fixture === "s6-history" || params.fixture === "s4-documents" || params.fixture === "cx63-price-search") ? params.fixture : null;
   const legacyFixture = isCiLayoutFixturesEnabled() && params.fixture === "store-portal-source-document";
   const fixtureAccounts = fixture ? Array.from({ length: fixture === "s1-multi" ? 2 : 1 }, (_, index) => ({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -91,7 +91,10 @@ export default async function StorePage({ searchParams }: {
     customerName: index === 0 ? "합성 가 매장" : "합성 나 매장",
     hasCostAccess: index === 0, canManageMembers: index === 0,
     canManageAddress: false,
-    documents: fixture === "s4-documents" ? [
+    documents: fixture === "cx63-price-search" ? [
+      { title: "합성 받은 단가표", kind: "sheet" as const, href: "/store#synthetic-cx63-sheet", canOrder: true, validUntil: "2099-12-31" },
+      { title: "합성 받은 견적서", kind: "quote" as const, href: "/pricing-document#synthetic-cx63-quote", canOrder: false, validUntil: "2099-12-31" },
+    ] : fixture === "s4-documents" ? [
       { title: "합성 농산 단가표", industry: "농산", kind: "sheet" as const, href: "/store#synthetic-s4-valid", canOrder: true, validUntil: "2099-12-31", itemCount: 8 },
       { title: "합성 기간 지난 단가표", industry: "주류", kind: "sheet" as const, href: "/store#synthetic-s4-expired", canOrder: false, validUntil: "2000-01-01", itemCount: 3 },
     ] : index === 0 ? [
@@ -165,16 +168,22 @@ export default async function StorePage({ searchParams }: {
       }
     } catch { /* Documents remain available when delivery policy cannot be read. */ }
   }
-  const documentHref = (document: NonNullable<typeof selected>["documents"][number]) =>
+  const documentHref = (document: { href: string }) =>
     `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`;
   const home = selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={documentHref} /> : null;
   const ReceivedDocuments = receivedDocuments ? (await import("@/components/store-received-documents")).StoreReceivedDocuments : null;
+  const PriceSearch = selected && view === "home" && !requestedDocument &&
+    (fixture === "cx63-price-search" || isFeatureEnabled("STORE_PRICE_SEARCH", selected.companyId))
+    ? (await import("@/components/store-price-search")).StorePriceSearch : null;
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
     deliveryPhotosEnabled={Boolean(selected && isFeatureEnabled("DELIVERY_ORDER_PHOTOS", selected.companyId))}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
-    home={selected && ReceivedDocuments ? <>
+    home={<>
+      {selected && PriceSearch && <PriceSearch companyId={selected.companyId} storeAccountId={selected.storeAccountId}
+        documents={selected.documents.map(document => ({ key: documentKey(document.href), title: document.title, kind: document.kind }))} />}
+      {selected && ReceivedDocuments ? <>
       <div className="md:hidden">{home}</div>
       <div className="hidden md:block">
         <ReceivedDocuments account={selected} today={new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })}
@@ -183,7 +192,8 @@ export default async function StorePage({ searchParams }: {
           industryHref={industry => industry ? `${homeHref}&industry=${encodeURIComponent(industry)}` : homeHref}
           documentHref={documentHref} />
       </div>
-    </> : home}
+      </> : home}
+    </>}
   /> : null;
   return <><meta name="referrer" content="no-referrer" /><PublicStoreTestBanner /><StoreAppShell stores={stores} selectedStore={selected && memberAccounts.length > 1 ? keyOf(selected) : undefined}>
     {!memberView && addressAccess && <div className="mx-auto max-w-6xl px-5 pt-5"><a className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-teal-700 bg-white px-4 font-medium text-teal-800 sm:w-auto" href="#store-address-management">배송지 주소 확인·수정</a></div>}

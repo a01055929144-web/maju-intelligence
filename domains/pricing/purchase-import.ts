@@ -135,14 +135,30 @@ export function isUnitWord(value: string) {
  * "냉동오징어 [EA]" → 이름 냉동오징어 · 단위 EA
  * "껍질가리비 [180G*10EA]" → 이름 껍질가리비 · 규격 180G*10EA (단위는 확인 필요)
  * 대괄호 안이 단위 낱말이면 단위, 숫자가 섞여 있으면 규격으로 봅니다.
+ * 끝 괄호에 용량이 있거나 같은 규격이 이중 대괄호로 반복돼도 원문은 보존하고 한 번만 분리합니다.
  */
 export function splitNameSpec(name: string, spec: string, unit = "") {
-  const trimmed = name.trim();
-  const match = trimmed.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
-  if (!match) return { name: trimmed, spec: spec.trim(), unit: unit.trim() };
-  const inner = match[2].trim();
-  if (isUnitWord(inner)) return { name: match[1].trim(), spec: spec.trim(), unit: unit.trim() || inner };
-  return { name: match[1].trim(), spec: spec.trim() || inner, unit: unit.trim() };
+  let base = name.trim().replace(/\[\[([^\[\]]+)\]\]\s*$/, "[$1]");
+  const inferredSpecs: string[] = [];
+  let parsedUnit = unit.trim();
+  for (;;) {
+    const match = base.match(/^(.*?)\s*\[([^\]]+)\]\s*$/);
+    if (!match) break;
+    const inner = match[2].trim();
+    base = match[1].trim();
+    if (isUnitWord(inner)) parsedUnit ||= inner;
+    else {
+      const duplicate = inferredSpecs.findIndex(value => norm(value) === norm(inner));
+      if (duplicate >= 0) inferredSpecs[duplicate] = inner;
+      else inferredSpecs.unshift(inner);
+    }
+  }
+  const parenthetical = base.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (parenthetical && /\d+(?:[.,]\d+)?\s*(?:ml|kg|l|g)\b/i.test(parenthetical[2])) {
+    base = parenthetical[1].trim();
+    if (!inferredSpecs.some(value => norm(value) === norm(parenthetical[2]))) inferredSpecs.unshift(parenthetical[2].trim());
+  }
+  return { name: base, spec: spec.trim() || inferredSpecs.join(" "), unit: parsedUnit };
 }
 
 /** 품목 비교 키: 이름+규격, 대소문자·띄어쓰기·괄호 무시. 같은 키는 같은 품목으로 봅니다. */

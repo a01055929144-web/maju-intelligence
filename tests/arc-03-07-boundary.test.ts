@@ -26,7 +26,8 @@ describe("ARC-03 / ARC-07 ownership boundary", () => {
     expect(erpStore).toContain('supabaseRpc("save_business_document"');
     expect(erpStore).toContain('supabaseRpc("confirm_business_document"');
     expect(erpStore).toContain('supabaseRpc("cancel_business_document"');
-    expect(erpStore).toContain('supabaseRpc("record_partner_payment"');
+    expect(erpStore).toContain('supabaseRpc("record_partner_payment_v2"');
+    expect(erpStore).toContain('supabaseRpc("reverse_partner_payment_v1"');
     expect(erpStore).toContain("입금·지급 재시도 키를 확인해 주세요.");
   });
 

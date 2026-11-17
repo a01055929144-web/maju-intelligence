@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { cancelBusinessDocument, confirmBusinessDocument, copyBusinessDocumentLines, createReturnDraft, moveBusinessDocumentLines } from "@/lib/business-documents";
 import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
+import { businessDocumentCancellationEnabled } from "@/lib/business-document-cancellation-feature";
 export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const body = await request.json().catch(() => ({})) as { action?: "confirm" | "cancel" | "return" | "move-lines" | "copy-lines"; reason?: string; companyId?: string; lineIds?: string[]; returnLines?: Array<{ lineId: string; quantity: number }>; targetPartnerId?: string; targetDocumentType?: "sale" | "purchase" };
@@ -11,7 +12,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const id = (await params).id;
     if (body.action === "confirm") return NextResponse.json({ document: await confirmBusinessDocument(scope.companyId!, id, actor) });
-    if (body.action === "cancel") return NextResponse.json({ document: await cancelBusinessDocument(scope.companyId!, id, body.reason || "", actor) });
+    if (body.action === "cancel") {
+      if (!businessDocumentCancellationEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
+      return NextResponse.json({ document: await cancelBusinessDocument(scope.companyId!, id, body.reason || "", actor) });
+    }
     if (body.action === "return") {
       if (!erpOrderDocumentsEnabled(scope.companyId)) return NextResponse.json({ message: "사용할 수 없는 기능입니다." }, { status: 404 });
       return NextResponse.json({ document: await createReturnDraft(scope.companyId!, id, body.returnLines || [], actor) });

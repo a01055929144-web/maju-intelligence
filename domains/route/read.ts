@@ -8,8 +8,11 @@ export type RoutePlanStop = {
   expectedRevenue: number;
   address?: string;
   birthDate?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: "individual" | "corporation";
   businessStatus?: string;
+  corporateRegistrationNumber?: string;
   deliveryArea?: string;
   deliveryAddress?: string;
   deliveryDriver?: string;
@@ -33,6 +36,7 @@ export type RoutePlanStop = {
   phone?: string;
   relationshipStatus?: string;
   representativeName?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -63,10 +67,13 @@ type RouteCustomer = {
   id: string;
   address: string;
   birthDate?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: "individual" | "corporation";
   businessStatus?: string;
   businessHours?: string;
   customerName: string;
+  corporateRegistrationNumber?: string;
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -89,6 +96,7 @@ type RouteCustomer = {
   region: string;
   relationshipStatus?: string;
   representativeName?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -147,8 +155,11 @@ export function buildTodayRoutePlan(
         expectedRevenue: Number(customer.monthlyRevenue || 0),
         address,
         birthDate: customer.birthDate,
+        businessName: customer.businessName,
         businessNumber: customer.businessNumber,
+        businessEntityType: customer.businessEntityType,
         businessStatus: customer.businessStatus,
+        corporateRegistrationNumber: customer.corporateRegistrationNumber,
         distanceKm,
         durationMinutes: cached?.durationMinutes ?? customer.deliveryMinutes ?? estimateMinutesFromKm(distanceKm),
         email: customer.email,
@@ -167,6 +178,7 @@ export function buildTodayRoutePlan(
         phone: customer.phone,
         relationshipStatus: customer.relationshipStatus,
         representativeName: customer.representativeName,
+        subBusinessNumber: customer.subBusinessNumber,
         reviewSummary: customer.reviewSummary,
         reviewKeywords: customer.reviewKeywords,
         reviewSource: customer.reviewSource,

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ context: vi.fn(), enabled: vi.fn(), get: vi.fn(), getProfile: vi.fn(), update: vi.fn(), updateProfile: vi.fn() }));
+const mocks = vi.hoisted(() => ({ context: vi.fn(), enabled: vi.fn(), get: vi.fn(), getProfile: vi.fn(), update: vi.fn(), updateProfile: vi.fn(), updateDelivery: vi.fn() }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreMemberContext: mocks.context }));
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mocks.enabled }));
 vi.mock("@/lib/store/07-store-information", () => ({ getStoreInformation: mocks.get, getStoreProfileInformation: mocks.getProfile,
-  updateStoreInformation: mocks.update, updateStoreProfileInformation: mocks.updateProfile }));
+  updateStoreInformation: mocks.update, updateStoreProfileInformation: mocks.updateProfile, updateStoreProfileDeliveryInformation: mocks.updateDelivery }));
 import { GET, PATCH } from "../app/api/store/information/route";
 
 const companyId = "00000000-0000-4000-8000-000000000001";
@@ -43,7 +43,7 @@ describe("store information route", () => {
   });
 
   it("uses the owner-only profile RPC when the company rollout is enabled", async () => {
-    mocks.enabled.mockReturnValue(true);
+    mocks.enabled.mockImplementation(feature => feature === "STORE_PROFILE_SETTINGS");
     mocks.getProfile.mockResolvedValue({ storeProfileId: "50000000-0000-4000-8000-000000000001", businessRegistrationNumber: "1234567890",
       storeName: "홍매장", representativeName: "홍대표", phone: "", baseAddress: "서울", addressDetail: "1층", accessNote: "호출",
       deliveryContactPhone: "01012345678", preferredDeliveryTime: "오전" });
@@ -53,5 +53,35 @@ describe("store information route", () => {
     expect(mocks.updateProfile).toHaveBeenCalledWith("50000000-0000-4000-8000-000000000001", "40000000-0000-4000-8000-000000000001",
       expect.objectContaining({ baseAddress: "서울", accessNote: "호출" }), expect.any(String));
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts scoped identity changes only when enabled and preserves leading zeros", async () => {
+    mocks.getProfile.mockResolvedValue({ storeProfileId: "profile" });
+    mocks.enabled.mockImplementation(feature => feature === "STORE_PROFILE_SETTINGS");
+    const required = { storeName: "합성 매장", baseAddress: "합성 주소" };
+    const fields = { businessName: null, subBusinessNumber: "0002" };
+
+    expect((await PATCH(request({ ...required, ...fields }))).status).toBe(200);
+    expect(mocks.updateProfile.mock.lastCall?.[2]).not.toHaveProperty("subBusinessNumber");
+    mocks.updateProfile.mockClear();
+
+    mocks.enabled.mockImplementation((feature, company) =>
+      feature === "STORE_PROFILE_SETTINGS" || (feature === "STORE_BUSINESS_IDENTITY" && company === companyId));
+    expect((await PATCH(request({ ...required, subBusinessNumber: "002" }))).status).toBe(400);
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
+    expect((await PATCH(request({ ...required, ...fields }))).status).toBe(200);
+    expect(mocks.updateProfile.mock.lastCall?.[2]).toMatchObject({ businessName: "", subBusinessNumber: "0002" });
+    expect(mocks.updateProfile.mock.lastCall?.[2]).not.toHaveProperty("businessEntityType");
+  });
+
+  it("keeps delivery settings behind its own rollout and never requires a returned password", async () => {
+    mocks.enabled.mockImplementation(feature => feature === "STORE_PROFILE_SETTINGS" || feature === "STORE_PROFILE_DELIVERY");
+    mocks.getProfile.mockResolvedValue({ storeProfileId: "50000000-0000-4000-8000-000000000001", hasAccessPassword: true });
+    const response = await PATCH(request({ storeName: "합성 매장", representativeName: "대표", baseAddress: "서울", taxInvoiceEmail: "tax@example.com", receiveMethod: "dawn" }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateDelivery).toHaveBeenCalledWith("50000000-0000-4000-8000-000000000001", "40000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ taxInvoiceEmail: "tax@example.com", receiveMethod: "dawn" }), expect.any(String));
+    expect(mocks.updateDelivery.mock.lastCall?.[2]).not.toHaveProperty("accessPassword");
+    expect(mocks.updateProfile).not.toHaveBeenCalled();
   });
 });
