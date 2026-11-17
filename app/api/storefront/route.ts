@@ -191,6 +191,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
+          (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)
+            ? { mobileCommon: true } : {}),
         ...(memberManagement ? { memberManagement } : {}),
         ...(memberLogin ? { memberLogin } : {}),
         preferences: preferences.map((item) => ({

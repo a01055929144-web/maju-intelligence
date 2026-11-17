@@ -153,3 +153,33 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await expect(page.getByRole("button", { name: "엑셀 원가 업로드", exact: true })).toHaveCount(0);
   expect(costRequests).toBe(0);
 });
+
+test("CX-47 mobile order shows the shared cart sheet and preserves quantity", async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/storefront", route => {
+    expect(route.request().method()).toBe("POST");
+    return route.fulfill({ json: {
+      mobileCommon: true, orders: [], preferences: [], historyPage: 1, historyHasMore: false,
+      store: {
+        title: "합성 주문", companyName: "합성 유통", customerName: "합성 매장",
+        priceAvailable: true, canOrder: true, nextDeliveryDate: "2099-01-05", selectedDeliveryDate: "2099-01-05",
+        policy: { weekdays: [0, 1, 2, 3, 4, 5, 6], holidays: [], cutoffDaysBefore: 0, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 },
+        lines: [{ key: "synthetic:", productId: "synthetic", promotionId: null, name: "합성 양파", category: "농산", brand: "", spec: "1kg", unit: "봉", badge: "", taxType: "exempt", unitPrice: 1200, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }],
+      },
+    } });
+  });
+  await page.goto("/store?view=order#synthetic-cx47");
+  await expect(page.getByRole("navigation", { name: "매장 메뉴" })).toHaveCount(0);
+  await page.getByRole("button", { name: "합성 양파 수량 늘리기" }).click();
+  const open = page.getByRole("button", { name: "장바구니 확인 · 1개 품목" });
+  await open.click();
+  const sheet = page.getByRole("dialog", { name: "장바구니" });
+  await expect(sheet.getByText("합성 양파 · 1봉")).toBeVisible();
+  await expect(sheet.getByText("1,200원", { exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath("CX-47-cart-390.png") });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(open).toBeFocused();
+  await open.click();
+  await expect(sheet.getByText("합성 양파 · 1봉")).toBeVisible();
+});
