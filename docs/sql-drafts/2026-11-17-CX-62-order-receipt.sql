@@ -1,6 +1,42 @@
 -- CX-62 draft. Apply only after approval. CX-38 line mapping and CX-13 order guard must already exist.
 begin;
 
+-- Capture the establishment identifier in an existing document snapshot memo.
+-- A shared save or dispatch must retain the identity captured at receipt.
+create function public.preserve_order_sale_identity_snapshot()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_sub_business_number text;
+  v_snapshot_line text;
+begin
+  if tg_op = 'UPDATE' and old.source_type = 'order' and old.document_type = 'sale'
+    and old.customer_id is not distinct from new.customer_id then
+    v_snapshot_line := substring(old.memo from '(?n)^\[종사업장번호\] [0-9]{4}$');
+    new.partner_name_snapshot := old.partner_name_snapshot;
+    new.partner_business_number_snapshot := old.partner_business_number_snapshot;
+    new.partner_representative_snapshot := old.partner_representative_snapshot;
+    new.partner_address_snapshot := old.partner_address_snapshot;
+  else
+    select nullif(btrim(c.sub_business_number), '') into v_sub_business_number
+      from public.normalized_customers c
+      where c.company_id = new.company_id and c.id = new.customer_id;
+    if v_sub_business_number is not null then
+      if v_sub_business_number !~ '^[0-9]{4}$' then raise exception 'order_sub_business_number_invalid'; end if;
+      v_snapshot_line := '[종사업장번호] ' || v_sub_business_number;
+    end if;
+  end if;
+  -- This reserved line is generated from the verified customer, never from input memo.
+  new.memo := nullif(btrim(concat_ws(E'\n',
+    nullif(btrim(regexp_replace(coalesce(new.memo, ''), '(?n)^\[종사업장번호\][^\n]*(\n|$)', '', 'g'), E' \t\r\n'), ''),
+    v_snapshot_line)), '');
+  return new;
+end $$;
+revoke all on function public.preserve_order_sale_identity_snapshot() from public, anon, authenticated;
+create trigger preserve_order_sale_identity_snapshot
+  before insert or update on public.business_documents for each row
+  when (new.source_type = 'order' and new.document_type = 'sale')
+  execute function public.preserve_order_sale_identity_snapshot();
+
 create function public.receive_store_order_with_sale_document(
   p_company_id uuid, p_order_id uuid, p_expected_revision integer,
   p_actor_user_id uuid, p_actor_name text

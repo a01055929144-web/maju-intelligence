@@ -6,7 +6,7 @@ do $$ begin
 end $$;
 \ir 2026-11-16-CX-38-order-sale-documents.sql
 alter table public.store_orders add column updated_at timestamptz, add column known_total bigint not null default 0;
-alter table public.normalized_customers add column business_name text, add column delivery_base_address text;
+alter table public.normalized_customers add column business_name text, add column delivery_base_address text, add column sub_business_number text;
 \ir 2026-11-17-CX-62-order-receipt.sql
 do $$ begin
   assert not exists(select 1 from pg_trigger where tgrelid='public.business_documents'::regclass
@@ -21,7 +21,7 @@ create extension dblink;
 \set blocked_order '00000000-0000-0000-0000-0000000000d4'
 \set mismatch_order '00000000-0000-0000-0000-0000000000d5'
 update normalized_customers set customer_name='관리 매장명', business_name='  등록증 상호  ', business_registration_number='1234567890',
-  address=null, delivery_base_address='합성 배송 주소' where id=:'customer' and company_id=:'company';
+  address=null, delivery_base_address='합성 배송 주소', sub_business_number='0002' where id=:'customer' and company_id=:'company';
 insert into store_orders(id,company_id,customer_id,delivery_date,status,delivery_fee,known_total)
 values (:'edited_order',:'company',:'customer','2026-11-17','submitted',110,1920),
        (:'blocked_order',:'company',:'customer','2026-11-17','submitted',0,1210),
@@ -105,9 +105,45 @@ do $$ declare d public.business_documents%rowtype; begin
   assert (select quantity from business_document_lines where document_id=d.id and product_name_snapshot='접수 경합 품목')=3;
   assert d.partner_name_snapshot = '등록증 상호' and d.partner_business_number_snapshot = '1234567890';
   assert d.partner_address_snapshot is not distinct from '';
+  assert d.memo like '%[종사업장번호] 0002';
+  assert not has_function_privilege('authenticated','public.preserve_order_sale_identity_snapshot()','execute');
+
   assert (select count(*) from partner_ledger_entries) = (select ledger from cx62_before);
   assert (select count(*) from inventory_movements) = (select inventory from cx62_before);
 end $$;
+-- A same-looking customer in another company must contribute only its own identifier.
+begin;
+insert into normalized_customers(id,company_id,customer_name,sub_business_number)
+values('00000000-0000-0000-0000-0000000000e8','00000000-0000-0000-0000-0000000000e9','타사 매장','0007');
+insert into business_documents(company_id,document_type,document_number,document_date,status,customer_id,
+  partner_name_snapshot,source_type,source_id,source_key,memo,created_by_name)
+values('00000000-0000-0000-0000-0000000000e9','sale','ISOLATION','2026-11-18','draft',
+  '00000000-0000-0000-0000-0000000000e8','타사 등록증','order',
+  '00000000-0000-0000-0000-0000000000e7','order:00000000-0000-0000-0000-0000000000e7',
+  '[종사업장번호] 8888','합성');
+do $$ begin
+  assert (select memo='[종사업장번호] 0007' from business_documents where source_id='00000000-0000-0000-0000-0000000000e7');
+  assert (select memo like '%[종사업장번호] 0002' from business_documents where source_id='00000000-0000-0000-0000-0000000000d3');
+end $$;
+rollback;
+
+-- Resaving through the actual shared RPC must preserve receipt-time legal identity,
+-- even after the master record changes. Everything here is rolled back.
+begin;
+update normalized_customers set sub_business_number='0099', business_name='다음 등록증 상호', address='다음 사업장 주소'
+  where company_id=:'company' and id=:'customer';
+do $$ declare d public.business_documents%rowtype; begin
+  select * into strict d from business_documents where company_id='00000000-0000-0000-0000-0000000000c1'
+    and source_id='00000000-0000-0000-0000-0000000000d3';
+  select * into d from save_business_document(d.company_id,d.id,d.customer_id,d.document_date,
+    E'수정 메모\n[종사업장번호] 8888',
+    order_sale_document_lines(d.company_id,d.source_id),null,'합성 담당','재저장 시험');
+  assert d.memo=E'수정 메모\n[종사업장번호] 0002', format('snapshot memo %L',d.memo);
+  assert d.partner_name_snapshot='등록증 상호' and d.partner_address_snapshot='';
+  assert d.partner_business_number_snapshot='1234567890';
+end $$;
+rollback;
+
 -- Exercise the detached CX-66 contract separately from the receipt activation.
 begin;
 \ir 2026-11-17-CX-62-dispatch-guard.handoff.sql
@@ -120,7 +156,8 @@ do $$ declare d public.business_documents%rowtype; begin
   exception when raise_exception then assert sqlerrm = 'order_sale_document_requires_dispatch'; end;
   perform set_config('maju.dispatch_confirm_order',d.source_id::text,true);
   perform confirm_business_document(d.company_id,d.id,null,'합성 출고');
-  assert (select status='confirmed' from business_documents where id=d.id);
+  assert (select status='confirmed' and memo like '%[종사업장번호] 0002'
+      and partner_name_snapshot='등록증 상호' from business_documents where id=d.id);
 end $$;
 \ir 2026-11-17-CX-62-dispatch-guard.handoff.down.sql
 rollback;

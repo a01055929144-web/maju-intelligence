@@ -8,6 +8,8 @@ do $$ begin
 end $$;
 drop trigger remove_cancelled_order_sale_draft on public.store_orders;
 drop function public.remove_cancelled_order_sale_draft();
+drop trigger preserve_order_sale_identity_snapshot on public.business_documents;
+drop function public.preserve_order_sale_identity_snapshot();
 drop function public.receive_store_order_with_sale_document(uuid, uuid, integer, uuid, text);
 notify pgrst, 'reload schema';
 commit;
