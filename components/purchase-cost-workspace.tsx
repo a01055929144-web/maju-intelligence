@@ -913,7 +913,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
     {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
     <header className="space-y-2">
-      {historyOnlyDefaultEnabled ? <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 p-2 text-sm"><legend className="px-1 text-xs font-black text-slate-600">저장 방식</legend>
+      {historyOnlyDefaultEnabled && sheet ? <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 p-2 text-sm"><legend className="px-1 text-xs font-black text-slate-600">저장 방식</legend>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="이력만 저장" checked={!updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(false); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />이력만 저장 <span className="text-xs text-slate-500">(현재 가격은 그대로)</span></label>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="현재 가격도 변경" checked={updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(true); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />현재 가격도 변경 <span className="text-xs text-slate-500">(상품 현재 매입가·판매가가 바뀜)</span></label>
       </fieldset> : null}
