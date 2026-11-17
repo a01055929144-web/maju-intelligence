@@ -464,8 +464,18 @@ export function KakaoAddressMap({
 
   useEffect(() => {
     let ignore = false;
+    // 11/17 핫픽스: 운영에서 SDK는 불러왔는데 지도 객체가 만들어지지 않고 "불러오는 중"에 계속 머무는 일이 있었다.
+    // 단계마다 기록하고, 7초 안에 준비되지 않으면 같은 effect 안에서 최대 2번 다시 부팅한다(이전 시도는 run 번호로 무시).
+    let currentRun = 0;
+    let runStartedAt = 0;
+    let booted = false;
+    let retries = 0;
+    let stage = "start";
 
-    async function bootMap() {
+    async function bootMap(run: number) {
+      const stale = () => ignore || run !== currentRun;
+      runStartedAt = performance.now();
+      stage = "start";
       mapViewportReadyRef.current = false;
       refitViewportRef.current = null;
       fittedOnceRef.current = false;
@@ -480,12 +490,25 @@ export function KakaoAddressMap({
       }
 
       try {
+        stage = "sdk";
         await withTimeout(loadKakaoMapSdk(appKey!), kakaoSdkTimeoutMs, "Kakao map SDK load timed out");
-        if (ignore || !mapRef.current || !window.kakao?.maps) return;
+        if (stale()) return;
+        if (!mapRef.current || !window.kakao?.maps) {
+          // 여기서 조용히 끝나면 "불러오는 중"에 계속 머문다 → 이유를 남기고 아래 감시가 다시 시도한다.
+          console.warn(`[KakaoAddressMap] SDK 뒤 지도 준비 중단: ${!mapRef.current ? "지도 칸 없음" : "kakao.maps 없음"}`);
+          return;
+        }
         // 접힌 패널·탭 전환 중에는 컨테이너가 잠시 0×0이 될 수 있습니다. 이때 Kakao Map을
         // 생성하면 타일 캔버스가 빈 크기로 고정되므로 실제 크기가 생길 때까지 초기화를 미룹니다.
-        await waitForVisibleMapContainer(mapRef.current, () => ignore);
-        if (ignore || !mapRef.current || !window.kakao?.maps) return;
+        stage = "container";
+        await waitForVisibleMapContainer(mapRef.current, stale);
+        if (stale()) return;
+        if (!mapRef.current || !window.kakao?.maps) {
+          // 여기서 조용히 끝나면 "불러오는 중"에 계속 머문다 → 이유를 남기고 아래 감시가 다시 시도한다.
+          console.warn(`[KakaoAddressMap] 칸 크기 확인 뒤 지도 준비 중단: ${!mapRef.current ? "지도 칸 없음" : "kakao.maps 없음"}`);
+          return;
+        }
+        stage = "create";
         mapRef.current.innerHTML = "";
 
         const kakao = window.kakao;
@@ -497,6 +520,8 @@ export function KakaoAddressMap({
           level: 8
         });
         mapInstanceRef.current = map;
+        booted = true;
+        stage = "ready";
         window.setTimeout(() => map.relayout?.(), 0);
         setStatus("ready");
         // 새 지도 인스턴스가 생겼으니, 아래 차량 애니메이션 effect가 이전 인스턴스에 붙어 있던
@@ -531,7 +556,8 @@ export function KakaoAddressMap({
         });
 
       } catch (error) {
-        if (!ignore) {
+        if (!stale()) {
+          booted = true; // 오류 화면으로 넘어갔으면 다시 시도하지 않는다.
           const message = error instanceof Error ? error.message : "카카오맵 로딩에 실패했습니다.";
           console.error(`[KakaoAddressMap] ${message}${getKakaoDomainHint()}`, error);
           setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
@@ -540,10 +566,26 @@ export function KakaoAddressMap({
       }
     }
 
-    bootMap();
+    void bootMap(currentRun);
+    const watchdog = window.setInterval(() => {
+      if (ignore || booted) { window.clearInterval(watchdog); return; }
+      if (performance.now() - runStartedAt < 7000) return;
+      if (retries >= 2) {
+        window.clearInterval(watchdog);
+        console.error(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 멈췄습니다(다시 시도 2번 실패).${getKakaoDomainHint()}`);
+        setFallbackReason(KAKAO_MAP_USER_FALLBACK_MESSAGE);
+        setStatus("fallback");
+        return;
+      }
+      retries += 1;
+      console.warn(`[KakaoAddressMap] 지도 준비가 ${stage} 단계에서 7초 넘게 멈춰 다시 시도합니다(${retries}/2).`);
+      currentRun += 1;
+      void bootMap(currentRun);
+    }, 1000);
 
     return () => {
       ignore = true;
+      window.clearInterval(watchdog);
       mapViewportReadyRef.current = false;
       refitViewportRef.current = null;
     };
@@ -1657,22 +1699,22 @@ async function fetchAddressCoordinate(address: string) {
 
 function waitForVisibleMapContainer(element: HTMLElement, isCancelled: () => boolean) {
   if (element.clientWidth > 0 && element.clientHeight > 0) return Promise.resolve();
+  // ResizeObserver 알림만 기다리면 한 번 놓쳤을 때 영원히 멈춘다(11/17 운영). 250ms 확인을 함께 둔다.
   return new Promise<void>((resolve) => {
-    if (typeof ResizeObserver === "undefined") {
-      const check = () => {
-        if (isCancelled() || (element.clientWidth > 0 && element.clientHeight > 0)) resolve();
-        else window.requestAnimationFrame(check);
-      };
-      window.requestAnimationFrame(check);
-      return;
+    let observer: ResizeObserver | null = null;
+    const done = () => {
+      window.clearInterval(poll);
+      observer?.disconnect();
+      resolve();
+    };
+    const check = () => {
+      if (isCancelled() || (element.clientWidth > 0 && element.clientHeight > 0)) done();
+    };
+    const poll = window.setInterval(check, 250);
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(check);
+      observer.observe(element);
     }
-    const observer = new ResizeObserver(() => {
-      if (isCancelled() || (element.clientWidth > 0 && element.clientHeight > 0)) {
-        observer.disconnect();
-        resolve();
-      }
-    });
-    observer.observe(element);
   });
 }
 
