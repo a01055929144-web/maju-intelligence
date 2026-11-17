@@ -114,13 +114,14 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const filtered = Boolean(safeDocument && lines.length !== safeDocument.lines.length);
   const end = safeDocument && /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeDocument.validUntil);
   const until = end ? `${Number(end[2])}월 ${Number(end[3])}일까지` : "";
+  const companyColor = safeDocument?.theme === "blue" ? "text-blue-700" : safeDocument?.theme === "green" ? "text-emerald-700" : "text-slate-800";
   return <Container className={`mx-auto max-w-[900px] space-y-4 p-4 ${showOrder && !embedded ? "max-md:pb-28" : ""}`}>
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
     {message && <p role="status">{message}</p>}
     {!safeDocument && !busy && message && <Button variant="outline" className="min-h-11" onClick={() => void load()}>다시 확인</Button>}
     {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <>
       <header className="space-y-1 md:hidden print:hidden">
-        <p className="text-[15px] font-bold text-teal-800">{safeDocument.companyName}</p>
+        <p className={`text-[15px] font-bold ${companyColor}`}>{safeDocument.companyName}</p>
         <h1 className="break-keep text-xl font-bold">{safeDocument.title}</h1>
         <p className="text-[15px] text-slate-600">{until} · {safeDocument.display.priceIncludesTax ? "부가세 포함" : "부가세 별도"} <span className="text-xs">v{safeDocument.version}</span></p>
         {safeDocument.expired && <p className="text-[15px] text-slate-600">유효기간이 지나 가격을 표시하지 않습니다.</p>}
@@ -137,8 +138,16 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       <section aria-label="문서 품목" className="overflow-hidden rounded-lg border bg-white md:hidden print:hidden">
         {lines.length ? <ul>{lines.map((line, index) => (
           <li key={index}>
-            <MobileListRow title={line.displayName} subtitle={[ [line.spec, line.unit].filter(Boolean).join(" · "), line.brand, line.badge, safeDocument.display.showTaxType ? (line.taxType === "exempt" ? "면세" : "과세") : "" ].filter(Boolean).join(" / ")}
-              trailing={line.price === null ? undefined : <MoneyText value={line.price} />} />
+            <MobileListRow title={line.displayName} subtitle={<>
+              <span>{[line.spec, line.unit].filter(Boolean).join(" · ")}</span>
+              <span className="block whitespace-normal">{[
+                line.brand,
+                safeDocument.display.showTaxType ? (line.taxType === "exempt" ? "면세" : "과세") : "",
+                line.badge,
+                line.badge && line.endsOn ? `${line.endsOn}까지` : "",
+                line.badge && line.remaining != null ? `남은 ${line.remaining}` : "",
+              ].filter(Boolean).join(" · ")}</span>
+            </>} trailing={line.price === null ? undefined : <MoneyText value={line.price} />} />
           </li>
         ))}</ul> : <EmptyState bare className="p-4" message={keyword ? "검색에 맞는 품목이 없습니다." : "표시 가능한 품목이 없습니다."} />}
       </section>
