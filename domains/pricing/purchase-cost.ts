@@ -1,4 +1,5 @@
 import { purchaseSpecification } from "./purchase-import";
+import { supplierNameKey } from "./supplier-name";
 
 export type CostProduct = {
   id: string;
@@ -57,8 +58,8 @@ export type CostImportRow = {
 const normalized = (value: string) => value.normalize("NFKC").toLocaleLowerCase("ko").replace(/\s+/g, "").trim();
 
 export function matchCostImportRow(row: CostImportRow, products: readonly CostProduct[]) {
-  const supplier = normalized(row.supplier);
-  const choices = supplier ? products.filter((product) => !product.supplierName || normalized(product.supplierName) === supplier) : products;
+  const supplier = supplierNameKey(row.supplier);
+  const choices = supplier ? products.filter((product) => !product.supplierName || supplierNameKey(product.supplierName) === supplier) : products;
   const code = normalized(row.code);
   const byCode = code ? choices.filter((product) => [product.supplierCode, product.code].some((value) => value && normalized(value) === code)) : [];
   if (byCode.length === 1) return byCode[0];
@@ -113,8 +114,8 @@ export function aliasKey(rawName: string, spec = "", unit = "") {
 /** 한 번 연결한 원문이면 이름이 달라도 같은 상품으로 붙입니다. */
 export function matchByAlias(key: string, supplier: string, products: readonly CostProduct[]) {
   if (!key.replaceAll("|", "")) return null;
-  const supplierKey = normalized(supplier);
-  const hits = products.filter((product) => product.supplierRawKey === key && (!supplierKey || !product.supplierName || normalized(product.supplierName) === supplierKey));
+  const supplierKey = supplierNameKey(supplier);
+  const hits = products.filter((product) => product.supplierRawKey === key && (!supplierKey || !product.supplierName || supplierNameKey(product.supplierName) === supplierKey));
   if (!hits.length) return null;
   return new Set(hits.map((product) => product.id)).size === 1 ? hits[0] : null;
 }
@@ -184,10 +185,10 @@ export function supplierLinkTargets(
     const supplierName = line.supplier.trim();
     if (!supplierName || !line.rawName.trim()) continue;
     const direct = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), supplierName, products) || matchCostImportRow(line, products);
-    if (direct?.supplierProductId && direct.supplierName && normalized(direct.supplierName) === normalized(supplierName)) continue;
+    if (direct?.supplierProductId && direct.supplierName && supplierNameKey(direct.supplierName) === supplierNameKey(supplierName)) continue;
     const existing = direct || matchCostImportRow({ ...line, supplier: "" }, products);
     if (!existing) continue;
-    const key = [normalized(supplierName), line.rawName.trim(), line.spec, line.unit].join("|");
+    const key = [supplierNameKey(supplierName), line.rawName.trim(), line.spec, line.unit].join("|");
     if (!targets.has(key)) targets.set(key, { productId: existing.id, rawName: line.rawName.trim(), spec: line.spec, unit: line.unit, cost: line.cost, supplierName });
   }
   return Array.from(targets.values());

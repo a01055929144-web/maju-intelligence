@@ -110,6 +110,7 @@ describe("product catalog import data access", () => {
 
   it("returns the source fingerprint to supplier product ID contract", async () => {
     supabaseRequest
+      .mockResolvedValueOnce([{ name: "기본 매입처" }])
       .mockResolvedValueOnce([{ id: "supplier-1" }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "import-1" }])
