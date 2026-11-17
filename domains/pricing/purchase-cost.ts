@@ -167,3 +167,28 @@ export function findDuplicateSuspects(row: { name: string; spec: string; unit: s
   }
   return out.sort((a, b) => b.score - a.score).slice(0, limit);
 }
+
+export type SupplierLinkTarget = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
+
+/**
+ * 11/17: 엑셀에 매입처 이름이 있는데 그 매입처로 연결된 상품이 아직 없을 때,
+ * 이름·규격·코드로 찾은 기존 상품을 그 매입처에 연결할 목록을 만든다(새 상품 중복 생성 방지).
+ * 이미 그 매입처로 연결된 줄과 기존 상품이 없는 줄(→ 새 상품 등록 대상)은 빼고, 같은 원문은 한 번만 넣는다.
+ */
+export function supplierLinkTargets(
+  lines: readonly (CostImportRow & { rawName: string })[],
+  products: readonly CostProduct[]
+): SupplierLinkTarget[] {
+  const targets = new Map<string, SupplierLinkTarget>();
+  for (const line of lines) {
+    const supplierName = line.supplier.trim();
+    if (!supplierName || !line.rawName.trim()) continue;
+    const direct = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), supplierName, products) || matchCostImportRow(line, products);
+    if (direct?.supplierProductId && direct.supplierName && normalized(direct.supplierName) === normalized(supplierName)) continue;
+    const existing = direct || matchCostImportRow({ ...line, supplier: "" }, products);
+    if (!existing) continue;
+    const key = [normalized(supplierName), line.rawName.trim(), line.spec, line.unit].join("|");
+    if (!targets.has(key)) targets.set(key, { productId: existing.id, rawName: line.rawName.trim(), spec: line.spec, unit: line.unit, cost: line.cost, supplierName });
+  }
+  return Array.from(targets.values());
+}
