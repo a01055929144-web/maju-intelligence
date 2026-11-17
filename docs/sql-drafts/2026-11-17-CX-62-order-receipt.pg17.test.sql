@@ -6,7 +6,12 @@ do $$ begin
 end $$;
 \ir 2026-11-16-CX-38-order-sale-documents.sql
 alter table public.store_orders add column updated_at timestamptz, add column known_total bigint not null default 0;
+alter table public.normalized_customers add column business_name text, add column delivery_base_address text;
 \ir 2026-11-17-CX-62-order-receipt.sql
+do $$ begin
+  assert not exists(select 1 from pg_trigger where tgrelid='public.business_documents'::regclass
+    and tgname='order_sale_document_requires_dispatch'), 'receipt-only SQL must leave existing confirmation available';
+end $$;
 create extension dblink;
 
 \set company '00000000-0000-0000-0000-0000000000c1'
@@ -15,6 +20,8 @@ create extension dblink;
 \set edited_order '00000000-0000-0000-0000-0000000000d3'
 \set blocked_order '00000000-0000-0000-0000-0000000000d4'
 \set mismatch_order '00000000-0000-0000-0000-0000000000d5'
+update normalized_customers set customer_name='관리 매장명', business_name='  등록증 상호  ', business_registration_number='1234567890',
+  address=null, delivery_base_address='합성 배송 주소' where id=:'customer' and company_id=:'company';
 insert into store_orders(id,company_id,customer_id,delivery_date,status,delivery_fee,known_total)
 values (:'edited_order',:'company',:'customer','2026-11-17','submitted',110,1920),
        (:'blocked_order',:'company',:'customer','2026-11-17','submitted',0,1210),
@@ -96,24 +103,46 @@ do $$ declare d public.business_documents%rowtype; begin
   assert d.status = 'draft' and d.taxable_supply_amount = 3400 and d.exempt_supply_amount = 600 and d.tax_amount = 340;
   assert d.total_amount = (select known_total from store_orders where id=d.source_id) and d.total_amount = 4340;
   assert (select quantity from business_document_lines where document_id=d.id and product_name_snapshot='접수 경합 품목')=3;
+  assert d.partner_name_snapshot = '등록증 상호' and d.partner_business_number_snapshot = '1234567890';
+  assert d.partner_address_snapshot is not distinct from '';
+  assert (select count(*) from partner_ledger_entries) = (select ledger from cx62_before);
+  assert (select count(*) from inventory_movements) = (select inventory from cx62_before);
+end $$;
+-- Exercise the detached CX-66 contract separately from the receipt activation.
+begin;
+\ir 2026-11-17-CX-62-dispatch-guard.handoff.sql
+do $$ declare d public.business_documents%rowtype; begin
+  select * into strict d from business_documents where source_id='00000000-0000-0000-0000-0000000000d3';
+  perform set_config('maju.dispatch_confirm_order','00000000-0000-0000-0000-0000000000d4',true);
   begin
     perform confirm_business_document(d.company_id,d.id,null,'합성 담당');
     raise exception 'manual confirmation bypassed dispatch';
   exception when raise_exception then assert sqlerrm = 'order_sale_document_requires_dispatch'; end;
-  assert (select count(*) from partner_ledger_entries) = (select ledger from cx62_before);
-  assert (select count(*) from inventory_movements) = (select inventory from cx62_before);
+  perform set_config('maju.dispatch_confirm_order',d.source_id::text,true);
+  perform confirm_business_document(d.company_id,d.id,null,'합성 출고');
+  assert (select status='confirmed' from business_documents where id=d.id);
 end $$;
+\ir 2026-11-17-CX-62-dispatch-guard.handoff.down.sql
+rollback;
+
 \set ON_ERROR_STOP off
 \ir 2026-11-17-CX-62-order-receipt.down.sql
 \set ON_ERROR_STOP on
 do $$ begin
   assert to_regprocedure('public.receive_store_order_with_sale_document(uuid,uuid,integer,uuid,text)') is not null;
 end $$;
--- Fixture-only terminal state; production down cannot remove the guard while drafts exist.
-update business_documents set status='cancelled' where source_id=:'edited_order';
+-- Verify cancellation removes the linked draft and lines without financial effects.
+create temporary table cx62_cancelled_document as select id from business_documents where source_id=:'edited_order';
+update store_orders set status='cancelled', revision=revision+1 where id=:'edited_order' and status='received';
+do $$ begin
+  assert not exists(select 1 from business_documents where id=(select id from cx62_cancelled_document));
+  assert not exists(select 1 from business_document_lines where document_id=(select id from cx62_cancelled_document));
+  assert (select count(*) from partner_ledger_entries) = (select ledger from cx62_before);
+  assert (select count(*) from inventory_movements) = (select inventory from cx62_before);
+end $$;
 \ir 2026-11-17-CX-62-order-receipt.down.sql
 do $$ begin
   assert to_regprocedure('public.receive_store_order_with_sale_document(uuid,uuid,integer,uuid,text)') is null;
-  assert (select status='received' from store_orders where id='00000000-0000-0000-0000-0000000000d3');
+  assert (select status='cancelled' from store_orders where id='00000000-0000-0000-0000-0000000000d3');
 end $$;
 select 'CX-62 atomic order receipt PG17 checks passed' as result;

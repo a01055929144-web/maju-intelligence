@@ -39,9 +39,9 @@ begin
     ) values (
       p_company_id, 'sale', public.next_erp_number(p_company_id, 'sale', v_order.delivery_date),
       v_order.delivery_date, 'draft', v_order.customer_id,
-      coalesce(v_customer->>'customer_name', v_customer->>'name'),
-      coalesce(v_customer->>'business_registration_number', v_customer->>'business_number'),
-      v_customer->>'representative_name', v_customer->>'address',
+      coalesce(nullif(btrim(v_customer->>'business_name'), ''), v_customer->>'customer_name', v_customer->>'name'),
+      nullif(btrim(v_customer->>'business_registration_number'), ''),
+      v_customer->>'representative_name', coalesce(btrim(v_customer->>'address'), ''),
       coalesce(v_customer->>'phone', v_customer->>'contact_phone'),
       'order', p_order_id, 'order:' || p_order_id, nullif(btrim(v_order.request_memo), ''),
       p_actor_user_id, p_actor_name
@@ -67,6 +67,17 @@ begin
     if v_document.status is distinct from 'draft' then
       raise exception 'order_receipt_document_unlinked';
     end if;
+    -- The shared save RPC refreshes snapshots from the management customer record.
+    -- Reapply the legal identity after its last save, in the receipt transaction.
+    select to_jsonb(c) into strict v_customer from public.normalized_customers c
+      where c.company_id = p_company_id and c.id = v_order.customer_id;
+    update public.business_documents
+      set partner_name_snapshot = coalesce(nullif(btrim(v_customer->>'business_name'), ''),
+            v_customer->>'customer_name', v_customer->>'name'),
+          partner_business_number_snapshot = nullif(btrim(v_customer->>'business_registration_number'), ''),
+          partner_address_snapshot = coalesce(btrim(v_customer->>'address'), '')
+      where company_id = p_company_id and id = v_document.id
+      returning * into v_document;
     -- The existing line mapper may round gross prices at unit level. Reject a changed
     -- known total instead of accepting a discrepancy that could later reach the ledger.
     if not exists (select 1 from public.store_order_lines
@@ -84,18 +95,30 @@ end $$;
 
 revoke all on function public.receive_store_order_with_sale_document(uuid, uuid, integer, uuid, text) from public, anon, authenticated;
 grant execute on function public.receive_store_order_with_sale_document(uuid, uuid, integer, uuid, text) to service_role;
--- CX-66 must supply the controlled dispatch transition before order sale drafts can be confirmed.
-create function public.block_order_sale_document_early_confirmation()
-returns trigger language plpgsql set search_path = '' as $$
+-- Shared cancellation boundary for existing store and customer cancellation entry points.
+create function public.remove_cancelled_order_sale_draft()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_document_id uuid;
 begin
-  raise exception 'order_sale_document_requires_dispatch';
+  select id into v_document_id from public.business_documents
+    where company_id = new.company_id and document_type = 'sale'
+      and source_type = 'order' and source_id = new.id and source_key = 'order:' || new.id
+      and customer_id = new.customer_id and status = 'draft'
+    for update;
+  if found then
+    delete from public.business_document_lines
+      where company_id = new.company_id and document_id = v_document_id;
+    delete from public.business_documents
+      where company_id = new.company_id and id = v_document_id and status = 'draft';
+  end if;
+  return new;
 end $$;
-revoke all on function public.block_order_sale_document_early_confirmation() from public, anon, authenticated;
-create trigger order_sale_document_requires_dispatch
-  before update of status on public.business_documents for each row
-  when (old.source_type = 'order' and old.document_type = 'sale'
-    and old.status = 'draft' and new.status = 'confirmed')
-  execute function public.block_order_sale_document_early_confirmation();
+revoke all on function public.remove_cancelled_order_sale_draft() from public, anon, authenticated;
+create trigger remove_cancelled_order_sale_draft
+  after update of status on public.store_orders for each row
+  when (old.status = 'received' and new.status = 'cancelled')
+  execute function public.remove_cancelled_order_sale_draft();
 
 notify pgrst, 'reload schema';
 commit;
