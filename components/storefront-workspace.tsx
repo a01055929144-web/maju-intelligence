@@ -50,6 +50,7 @@ type Response = { store: Store; orders: Order[]; preferences: Preference[];
   memberManagement?: { href: string } | { message: string };
   mobileCommon?: boolean;
   historyPage: number; historyHasMore: boolean; message?: string };
+const maxQuantity = (line: Product) => Math.max(0, Math.min(100000, line.maximumQuantity ?? 100000, line.remaining ?? 100000));
 const won = formatWon;
 const kstDay = (value: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
@@ -151,6 +152,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const retryKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const loadSequence = useRef(0);
+  const cartHandoffRead = useRef(false);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("products") === "all") {
       setTab("order"); setProductView("complete"); setCategory("전체"); setPriceChangesOnly(false);
@@ -173,6 +175,22 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         throw new Error(result.message || "매장 링크를 열 수 없습니다.");
       }
       setData(result);
+      if (!preview && !result.memberLogin && !cartHandoffRead.current) {
+        cartHandoffRead.current = true;
+        const key = `maju:cart-handoff:${token.split(".")[0]}`;
+        try {
+          const incoming = JSON.parse(sessionStorage.getItem(key) || "[]") as Array<{ productId: string; promotionId: string | null; quantity: number }>;
+          if (Array.isArray(incoming) && incoming.length) {
+            const next: Record<string, number> = {};
+            for (const saved of incoming) {
+              const line = result.store.lines.find(item => item.productId === saved.productId && item.promotionId === saved.promotionId);
+              if (line && Number.isSafeInteger(saved.quantity) && saved.quantity > 0) next[line.key] = Math.min(maxQuantity(line), saved.quantity);
+            }
+            setCart(current => ({ ...next, ...current }));
+            sessionStorage.removeItem(key);
+          }
+        } catch { /* The server cart is already saved. */ }
+      }
       setMemberAccessChanged(false);
       setDeliveryDate(result.store.selectedDeliveryDate);
     } catch (error) {
@@ -181,7 +199,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
     } finally {
       if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [endpoint, token]);
+  }, [endpoint, preview, token]);
   useEffect(() => { if (token) void load().catch(() => undefined); }, [load, token]);
   const baseStore = data?.store;
   const store = baseStore && catalogMode ? { ...baseStore, lines: Object.values(catalogAll).flatMap((line): Product[] =>
@@ -223,7 +241,6 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       priceIncludesTax: line.priceIncludesTax,
     })), store.policy);
   } catch { /* The server returns a field-level order error on submission. */ }
-  const maxQuantity = (line: Product) => Math.max(0, Math.min(100000, line.maximumQuantity ?? 100000, line.remaining ?? 100000));
   function changeQuantity(line: Product, delta: number) {
     retryKey.current = null;
     setCart(old => ({ ...old, [line.key]: Math.max(0, Math.min(maxQuantity(line), (old[line.key] || 0) + delta)) }));

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PublicDocumentOutput } from "@/domains/pricing/document-share";
 import { koreaDay } from "@/domains/pricing/document";
+import { PublicMemberCatalog, PublicShoppingRows } from "./public-document-shopping";
+import { formatWon } from "@/domains/shared/money";
 import { PublicDocumentPaperImages } from "./public-document-paper-images";
 import { PricingDocPaper } from "./pricing-doc-paper";
 import { SharedPricingAcceptance } from "./shared-pricing-acceptance";
@@ -11,7 +13,7 @@ import { SearchInput } from "./ui/search-input";
 import { BottomActionBar, MobileListRow, MoneyText } from "./ui/mobile";
 import { EmptyState } from "./ui/state";
 
-type OrderEntry = { available: boolean; companyName: string; title: string; version: number; message?: string; member?: boolean; shopping?: boolean };
+type OrderEntry = { available: boolean; companyName: string; title: string; version: number; message?: string; member?: boolean; shopping?: boolean; cartScope?: string; itemKeys?: Array<string | null> };
 
 export function PublicPricingDocument({ embedded }: { embedded?: { token: string; orderHref: string } }) {
   const [document, setDocument] = useState<PublicDocumentOutput | null>(null);
@@ -22,6 +24,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const [orderEntry, setOrderEntry] = useState<OrderEntry | null>(null);
   const [orderMessage, setOrderMessage] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"table" | "image" | "catalog">("table");
   const sequence = useRef(0);
@@ -29,21 +32,32 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const embeddedToken = embedded?.token;
   const member = Boolean(embedded || orderEntry?.member);
   const shopping = !embedded && orderEntry?.shopping === true;
-  const startOrder = useCallback(async () => {
+  const draftStorageKey = orderEntry?.cartScope ? `maju:public-cart:${orderEntry.cartScope}` : "";
+  const startOrder = useCallback(async (resume = false) => {
     if ((!shopping && member) || !acceptance || !orderEntry?.available || orderBusy) return;
     const current = sequence.current, token = acceptance.token;
     setOrderBusy(true); setOrderMessage("");
     try {
+      const cart = shopping ? Object.entries(quantities).map(([key, quantity]) => ({ key, quantity })) : [];
       const response = await fetch("/api/pricing-documents/order-intent", { method: "POST", cache: "no-store",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const result = await response.json() as { intent?: string; message?: string; next?: string; storeUrl?: string };
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, ...(cart.length ? { cart } : {}) }) });
+      const result = await response.json() as { cart?: unknown[]; intent?: string; message?: string; next?: string; storeUrl?: string };
       if (!response.ok) throw new Error(result.message || "가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (result.next === "order") {
         if (typeof result.storeUrl !== "string" || !/^\/store\?products=all#[0-9a-f-]{36}\.[0-9a-f]{32}\.[0-9a-f]{64}$/.test(result.storeUrl))
           throw new Error("주문 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
-        if (sequence.current === current && window.location.hash.slice(1) === token) window.location.assign(result.storeUrl);
+        if (sequence.current === current && window.location.hash.slice(1) === token) {
+          if (cart.length) {
+            if (!Array.isArray(result.cart) || result.cart.length !== cart.length) throw new Error("담은 품목을 옮기지 못했습니다. 다시 시도해 주세요.");
+            const orderToken = result.storeUrl.split("#")[1];
+            sessionStorage.setItem(`maju:cart-handoff:${orderToken.split(".")[0]}`, JSON.stringify(result.cart));
+            try { localStorage.removeItem(draftStorageKey); } catch { /* The server cart is already saved. */ }
+          }
+          window.location.assign(result.storeUrl);
+        }
         return;
       }
+      if (resume) throw new Error("매장 연결이 확인되면 다시 주문을 시작해 주세요. 담은 품목은 이 브라우저에 남아 있습니다.");
       if (typeof result.intent !== "string" || result.intent.length > 1500 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(result.intent))
         throw new Error("가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
       if (sequence.current === current && window.location.hash.slice(1) === token)
@@ -51,10 +65,10 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     } catch (error) {
       if (sequence.current === current) setOrderMessage(error instanceof Error ? error.message : "가입 연결을 확인하지 못했습니다. 다시 시도해 주세요.");
     } finally { setOrderBusy(false); }
-  }, [acceptance, member, orderEntry, orderBusy, shopping]);
+  }, [acceptance, draftStorageKey, member, orderEntry, orderBusy, quantities, shopping]);
   const load = useCallback(async () => {
     const current = ++sequence.current;
-    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
+    setDocument(null); setAcceptance(null); setOrderEntry(null); setOrderMessage(""); setQuantities({}); setQuery(""); setView("table"); setBusy(true); setMessage("문서를 확인하고 있습니다.");
     try {
       const token = embeddedToken ?? window.location.hash.slice(1);
       if (!token || token.length > 200) throw new Error("공유 링크를 확인해 주세요. 담당자에게 새 링크를 요청해 주세요.");
@@ -63,6 +77,14 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       const result = await response.json() as { document?: PublicDocumentOutput; expiresAt?: string; message?: string; acceptanceAvailable?: boolean; orderEntry?: OrderEntry };
       if (!response.ok || !result.document) throw new Error(result.message || "문서를 확인하지 못했습니다. 다시 시도해 주세요.");
       if (!result.expiresAt || !Number.isFinite(Date.parse(result.expiresAt))) throw new Error("링크 유효기간을 확인하지 못했습니다. 다시 시도해 주세요.");
+      if (sequence.current === current && result.orderEntry?.shopping && result.orderEntry.cartScope) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(`maju:public-cart:${result.orderEntry.cartScope}`) || "{}") as Record<string, unknown>;
+          const allowed = new Set(result.orderEntry.itemKeys ?? []);
+          setQuantities(Object.fromEntries(Object.entries(saved).filter(([key, value]) => allowed.has(key) &&
+            typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 9999).slice(0, 100)) as Record<string, number>);
+        } catch { /* Browser storage may be unavailable. */ }
+      }
       if (sequence.current === current) { setDocument(result.document); setExpiresAt(result.expiresAt); setAcceptance({ token, available: result.acceptanceAvailable === true }); setOrderEntry(result.orderEntry ?? null); setMessage(""); }
     } catch (error) { if (sequence.current === current) setMessage(error instanceof Error ? error.message : "문서를 확인하지 못했습니다."); }
     finally { if (sequence.current === current) setBusy(false); }
@@ -74,11 +96,11 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     return () => { ++sequence.current; window.removeEventListener("hashchange", load); window.removeEventListener("pageshow", restore); };
   }, [load]);
   useEffect(() => {
-    if (member || !acceptance || !orderEntry?.available || continuedOrder.current || new URLSearchParams(window.location.search).get("continueOrder") !== "1") return;
+    if ((!shopping && member) || !acceptance || !orderEntry?.available || continuedOrder.current || new URLSearchParams(window.location.search).get("continueOrder") !== "1") return;
     continuedOrder.current = true;
     window.history.replaceState(null, "", window.location.pathname + window.location.hash);
-    void startOrder();
-  }, [acceptance, member, orderEntry, startOrder]);
+    void startOrder(shopping);
+  }, [acceptance, member, orderEntry, shopping, startOrder]);
   useEffect(() => {
     if (!document) return;
     const hardCutoff = Date.parse(expiresAt), priceCutoff = document.expired ? Infinity : Date.parse(`${document.validUntil}T15:00:00Z`);
@@ -116,6 +138,22 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
   const keyword = query.trim().toLocaleLowerCase("ko-KR");
   const lines = safeDocument?.lines.filter(line => !keyword ||
     [line.displayName, line.brand, line.spec, line.unit].some(value => value.toLocaleLowerCase("ko-KR").includes(keyword))) ?? [];
+  const shoppingRows = safeDocument?.lines.map((line, rowKey) => ({
+    ...line, rowKey, itemKey: safeDocument.expired ? null : orderEntry?.itemKeys?.[rowKey] ?? null,
+  })) ?? [];
+  const picked = new Map(shoppingRows.flatMap(row => row.itemKey && quantities[row.itemKey] ? [[row.itemKey, row] as const] : []));
+  const pickedQuantity = Array.from(picked.keys()).reduce((sum, key) => sum + quantities[key], 0);
+  const pickedTotal = Array.from(picked).reduce((sum, [key, row]) => sum + Math.round((row.price ?? 0) * quantities[key]), 0);
+  function changeQuantity(key: string, quantity: number) {
+    const next = { ...quantities };
+    if (quantity) next[key] = quantity;
+    else delete next[key];
+    if (Object.keys(next).length > 100) { setOrderMessage("한 번에 100개 품목까지 담을 수 있습니다."); return; }
+    try { localStorage.setItem(draftStorageKey, JSON.stringify(next)); }
+    catch { setOrderMessage("브라우저 저장 공간이 비활성화되어 품목을 담을 수 없습니다."); return; }
+    setQuantities(next);
+    setOrderMessage("");
+  }
   const filtered = Boolean(safeDocument && lines.length !== safeDocument.lines.length);
   const desktopTable = safeDocument && shopping && safeDocument.layout !== "table"
     ? { ...safeDocument, layout: "table" as const } : safeDocument;
@@ -141,6 +179,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     {safeDocument && shopping && view === "catalog" && <section aria-label="전체 상품" className="space-y-4 rounded border bg-white p-4 print:hidden">
       <h2 className="text-base font-bold">전체 상품</h2>
       <p>{member ? "주문 화면에서 연결된 유통사의 상품과 내 단가를 확인할 수 있습니다." : "가입하면 이 유통사의 전체 상품을 볼 수 있습니다."}</p>
+      {member && acceptance && <PublicMemberCatalog token={acceptance.token} />}
       {!member && <div className="grid gap-3 blur-sm" aria-hidden="true">
         {[0, 1, 2].map(row => <div key={row} className="flex justify-between gap-4 border-b pb-3">
           <span className="h-4 w-32 rounded bg-slate-300" /><span className="h-4 w-16 rounded bg-slate-300" />
@@ -148,7 +187,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       </div>}
     </section>}
     {safeDocument && (embedded ? <PricingDocPaper output={safeDocument} /> : <div className={tableVisible ? "space-y-4" : "hidden print:block"}>
-      <header className="space-y-1 md:hidden print:hidden">
+      <header className={shopping ? "space-y-1 print:hidden" : "space-y-1 md:hidden print:hidden"}>
         <p className={`text-[15px] font-bold ${companyColor}`}>{safeDocument.companyName}</p>
         <h1 className="break-keep text-xl font-bold">{safeDocument.title}</h1>
         <p className="text-[15px] text-slate-600">{until} · {safeDocument.display.priceIncludesTax ? "부가세 포함" : "부가세 별도"} <span className="text-xs">v{safeDocument.version}</span></p>
@@ -157,13 +196,15 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
       {(shopping || safeDocument.lines.length > 15) && <div className="print:hidden">
         <SearchInput aria-label="문서 품목 검색" className="w-full min-h-11" placeholder="품목명·규격 검색" value={query} onChange={setQuery} />
       </div>}
-      <div className={separateScreenTable ? "hidden print:block" : "hidden md:block print:block"}>
+      <div className={shopping || separateScreenTable ? "hidden print:block" : "hidden md:block print:block"}>
         <PricingDocPaper output={safeDocument} />
       </div>
-      {separateScreenTable && desktopTable && <div className="hidden md:block print:hidden">
+      {shopping && <PublicShoppingRows rows={shoppingRows.filter((_, index) => lines.includes(safeDocument.lines[index]))}
+        quantities={quantities} change={changeQuantity} />}
+      {!shopping && separateScreenTable && desktopTable && <div className="hidden md:block print:hidden">
         {lines.length ? <PricingDocPaper output={{ ...desktopTable, lines }} /> : <EmptyState bare message="검색에 맞는 품목이 없습니다." />}
       </div>}
-      <section aria-label="문서 품목" className="overflow-hidden rounded-lg border bg-white md:hidden print:hidden">
+      {!shopping && <section aria-label="문서 품목" className="overflow-hidden rounded-lg border bg-white md:hidden print:hidden">
         {lines.length ? <ul>{lines.map((line, index) => (
           <li key={index}>
             <MobileListRow title={line.displayName} subtitle={<>
@@ -178,7 +219,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
             </>} trailing={line.price === null ? undefined : <MoneyText value={line.price} />} />
           </li>
         ))}</ul> : <EmptyState bare className="p-4" message={keyword ? "검색에 맞는 품목이 없습니다." : "표시 가능한 품목이 없습니다."} />}
-      </section>
+      </section>}
     </div>)}
     {showOrder && <section aria-label="공개 문서 주문 안내" className="space-y-2 text-[15px] text-slate-700 print:hidden">
       <p>가격·주문 {until}</p>
@@ -188,8 +229,11 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         : <p>카카오로 로그인한 뒤 주문을 시작할 수 있습니다.</p>}
       {orderMessage && <p role="status">{orderMessage}</p>}
       {member && !shopping ? !orderDisabled && <Link className={`maju-button-primary inline-flex min-h-[48px] items-center justify-center ${embedded ? "" : "max-md:fixed max-md:inset-x-4 max-md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:z-30"}`} href={orderHref}>{orderLabel}</Link> : <>
-        <Button className={shopping ? "hidden md:fixed md:bottom-4 md:right-8 md:z-30 md:inline-flex min-h-[48px]" : "hidden min-h-[48px] md:inline-flex"} disabled={orderDisabled || !orderEntry?.available || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>
-        <div className="fixed inset-x-0 bottom-0 z-30 md:hidden">
+        {!shopping && <Button className="hidden min-h-[48px] md:inline-flex" disabled={orderDisabled || !orderEntry?.available || orderBusy} type="button" onClick={() => void startOrder()}>{orderBusy ? "확인 중…" : orderLabel}</Button>}
+        <div className={shopping ? "fixed inset-x-0 bottom-0 z-30 mx-auto max-w-[900px] bg-white" : "fixed inset-x-0 bottom-0 z-30 md:hidden"}>
+          {shopping && picked.size > 0 && !orderDisabled && <p className="px-4 pt-2 text-sm" role="status">
+            담은 품목 {picked.size} · 수량 {pickedQuantity} · 표시 단가 합계 {formatWon(pickedTotal)} · 아직 주문 전
+          </p>}
           <BottomActionBar busy={orderBusy} disabled={orderDisabled || !orderEntry?.available} onClick={() => void startOrder()}>{orderLabel}</BottomActionBar>
         </div>
       </>}

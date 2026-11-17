@@ -285,9 +285,8 @@ export function refreshedDocumentVersion(expected: DocumentVersion, received: Do
     throw new Error("게시 버전 달라졌습니다. 미리보기를 닫고 버전을 다시 선택해 주세요.");
   return { ...received, content: parseDocument(expected.content) };
 }
-export function documentOutput(version: DocumentVersion, day = koreaDay()) {
-  const d = parseDocument(version.content),
-    expired = day > d.validUntil;
+export function visibleDocumentLines(version: DocumentVersion, day = koreaDay()) {
+  const d = parseDocument(version.content);
   const currentStock = (line: PrintLine) =>
     line.promotionId &&
     version.promotionStock &&
@@ -306,6 +305,12 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
           day <= l.endsOn! &&
           currentStock(l) !== 0)),
   );
+  return { d, visible, currentStock };
+}
+
+export function documentOutput(version: DocumentVersion, day = koreaDay()) {
+  const { d, visible, currentStock } = visibleDocumentLines(version, day);
+  const expired = day > d.validUntil;
   return {
     title: d.title,
     companyName: d.companyName,
