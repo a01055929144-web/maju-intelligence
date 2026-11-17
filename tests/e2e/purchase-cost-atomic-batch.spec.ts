@@ -99,7 +99,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
         const chosen = group.find(row => row.priceDate === latest && row.priceSelected);
         return !chosen || (options.currentDate && latest < options.currentDate) || (options.undatedCurrent && !chosen.replaceUndatedCurrent);
       }).length;
-      if (options.mixed) {
+      if (options.mixed || options.blankUnit) {
         if (body.action === "save") {
           beforePrices = structuredClone(products);
           for (const [id, group] of Array.from(groups)) {
@@ -707,6 +707,8 @@ for (const mode of ["이력만 저장", "현재 가격도 변경"] as const) tes
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect.poll(() => dateWrites.length).toBe(1);
   expect(dateWrites[0].rows[0]).toMatchObject({ unit: "BOX", priceSelected: mode === "현재 가격도 변경" });
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]")).toContainText("1kg · BOX");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
