@@ -16,19 +16,25 @@ export type StoreProfileInformation = StoreInformation & {
   accessNote: string;
   deliveryContactPhone: string;
   preferredDeliveryTime: string;
+  businessName?: string;
+  subBusinessNumber?: string;
+  businessEntityType?: string;
 };
 
-export async function getStoreProfileInformation(companyId: string, storeAccountId: string): Promise<StoreProfileInformation | null> {
+export async function getStoreProfileInformation(companyId: string, storeAccountId: string, includeIdentity = false): Promise<StoreProfileInformation | null> {
   const rows = await supabaseRequest<Array<{ business_registration_number: string; store_profile_id: string | null; store_profiles: {
     store_name: string; representative_name: string | null; base_address: string | null; address_detail: string | null;
+    business_name?: string | null; sub_business_number?: string | null; business_entity_type?: string | null;
     access_note: string | null; delivery_contact_phone: string | null; preferred_delivery_time: string | null;
-  } | null }>>(`store_accounts?select=business_registration_number,store_profile_id,store_profiles(store_name,representative_name,base_address,address_detail,access_note,delivery_contact_phone,preferred_delivery_time)` +
+  } | null }>>(`store_accounts?select=business_registration_number,store_profile_id,store_profiles(store_name,representative_name,base_address,address_detail,access_note,delivery_contact_phone,preferred_delivery_time${includeIdentity ? ",business_name,sub_business_number,business_entity_type" : ""})` +
     `&company_id=eq.${encodeURIComponent(companyId)}&id=eq.${encodeURIComponent(storeAccountId)}&status=eq.active&limit=1`);
   const account = rows[0], profile = account?.store_profiles;
   return account?.store_profile_id && profile ? { storeProfileId: account.store_profile_id, businessRegistrationNumber: account.business_registration_number,
     storeName: profile.store_name, representativeName: profile.representative_name || "", phone: profile.delivery_contact_phone || "",
     baseAddress: profile.base_address || "", addressDetail: profile.address_detail || "", accessNote: profile.access_note || "",
-    deliveryContactPhone: profile.delivery_contact_phone || "", preferredDeliveryTime: profile.preferred_delivery_time || "" } : null;
+    deliveryContactPhone: profile.delivery_contact_phone || "", preferredDeliveryTime: profile.preferred_delivery_time || "",
+    ...(includeIdentity ? { businessName: profile.business_name || "", subBusinessNumber: profile.sub_business_number || "",
+      businessEntityType: profile.business_entity_type || "" } : {}) } : null;
 }
 
 export async function updateStoreProfileInformation(storeProfileId: string, authUserId: string, changes: Omit<StoreProfileInformation, "businessRegistrationNumber" | "storeProfileId" | "phone">, requestKey: string) {

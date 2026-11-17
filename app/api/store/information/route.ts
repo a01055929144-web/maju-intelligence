@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
 import { getStoreInformation, getStoreProfileInformation, updateStoreInformation, updateStoreProfileInformation } from "@/lib/store/07-store-information";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { parseCustomerBusinessIdentity } from "@/domains/customer/business-identity";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +17,10 @@ export async function GET(request: NextRequest) {
     const member = await getStoreMemberContext(ids);
     if (!member) return NextResponse.json({ message: "매장 로그인을 확인해 주세요." }, { status: 403, headers: noStore });
     const enabled = isFeatureEnabled("STORE_PROFILE_SETTINGS", ids.companyId);
-    const information = enabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId) : await getStoreInformation(ids.companyId, ids.storeAccountId);
-    return information ? NextResponse.json({ ...information, canEdit: member.role === "owner", profileSettingsEnabled: enabled }, { headers: noStore }) :
+    const businessIdentityEnabled = enabled && isFeatureEnabled("STORE_BUSINESS_IDENTITY", ids.companyId);
+    const information = businessIdentityEnabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId, true)
+      : enabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId) : await getStoreInformation(ids.companyId, ids.storeAccountId);
+    return information ? NextResponse.json({ ...information, canEdit: member.role === "owner", profileSettingsEnabled: enabled, ...(businessIdentityEnabled ? { businessIdentityEnabled: true } : {}) }, { headers: noStore }) :
       NextResponse.json({ message: "매장 정보를 찾지 못했습니다." }, { status: 404, headers: noStore });
   } catch { return NextResponse.json({ message: "매장 정보를 불러오지 못했습니다." }, { status: 503, headers: noStore }); }
 }
@@ -41,9 +44,24 @@ export async function PATCH(request: NextRequest) {
       const text = (key: string, max: number) => typeof body?.[key] === "string" ? String(body[key]).trim().slice(0, max) : "";
       const baseAddress = text("baseAddress", 300);
       if (!baseAddress) return NextResponse.json({ message: "매장 주소를 입력해 주세요.", code: "store_profile_address_required" }, { status: 400, headers: noStore });
+      const fields = ["businessName", "subBusinessNumber", "businessEntityType"] as const;
+      const identity: Partial<Record<(typeof fields)[number], string>> = {};
+      if (isFeatureEnabled("STORE_BUSINESS_IDENTITY", ids.companyId)) {
+        for (const key of fields) {
+          if (!body || !Object.prototype.hasOwnProperty.call(body, key)) continue;
+          const value = body[key];
+          if (value !== null && typeof value !== "string")
+            return NextResponse.json({ message: "사업자 정보를 확인해 주세요." }, { status: 400, headers: noStore });
+          identity[key] = value?.trim() ?? "";
+        }
+        const validated = parseCustomerBusinessIdentity(identity);
+        if (!validated.ok || (identity.businessName?.length ?? 0) > 100)
+          return NextResponse.json({ message: validated.ok ? "사업자 상호는 100자 이하로 입력해 주세요." : validated.message },
+            { status: 400, headers: noStore });
+      }
       await updateStoreProfileInformation(information.storeProfileId, member.authUserId, { storeName, representativeName,
         baseAddress, addressDetail: text("addressDetail", 300), accessNote: text("accessNote", 500),
-        deliveryContactPhone: text("deliveryContactPhone", 30), preferredDeliveryTime: text("preferredDeliveryTime", 100) }, randomUUID());
+        deliveryContactPhone: text("deliveryContactPhone", 30), preferredDeliveryTime: text("preferredDeliveryTime", 100), ...identity }, randomUUID());
     } else await updateStoreInformation(ids.companyId, ids.storeAccountId, { storeName, representativeName, phone });
     return NextResponse.json({ saved: true }, { headers: noStore });
   } catch { return NextResponse.json({ message: "매장 정보를 저장하지 못했습니다." }, { status: 503, headers: noStore }); }

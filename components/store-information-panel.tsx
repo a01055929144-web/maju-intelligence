@@ -8,9 +8,10 @@ import { ErrorState, LoadingState } from "./ui/state";
 import { Notice } from "./ui/notice";
 
 type Information = { businessRegistrationNumber: string; canEdit: boolean; phone: string; representativeName: string; storeName: string;
+  businessIdentityEnabled?: boolean; businessName?: string; subBusinessNumber?: string; businessEntityType?: string;
   profileSettingsEnabled?: boolean; baseAddress?: string; addressDetail?: string; accessNote?: string; deliveryContactPhone?: string; preferredDeliveryTime?: string };
-type Draft = { phone: string; representativeName: string; storeName: string; baseAddress: string; addressDetail: string; accessNote: string; deliveryContactPhone: string; preferredDeliveryTime: string };
-const draftOf = (value?: Information): Draft => ({ phone: value?.phone || "", representativeName: value?.representativeName || "", storeName: value?.storeName || "",
+type Draft = { businessName: string; subBusinessNumber: string; businessEntityType: string; phone: string; representativeName: string; storeName: string; baseAddress: string; addressDetail: string; accessNote: string; deliveryContactPhone: string; preferredDeliveryTime: string };
+const draftOf = (value?: Information): Draft => ({ businessName: value?.businessName || "", subBusinessNumber: value?.subBusinessNumber || "", businessEntityType: value?.businessEntityType || "", phone: value?.phone || "", representativeName: value?.representativeName || "", storeName: value?.storeName || "",
   baseAddress: value?.baseAddress || "", addressDetail: value?.addressDetail || "", accessNote: value?.accessNote || "",
   deliveryContactPhone: value?.deliveryContactPhone || "", preferredDeliveryTime: value?.preferredDeliveryTime || "" });
 
@@ -37,7 +38,9 @@ export function StoreInformationPanel({ canManageAddress, canManageMembers, comp
   async function save() {
     setBusy(true); setError(""); setSaved(false);
     try {
-      const response = await fetch(`/api/store/information?${query}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+      const { businessName, subBusinessNumber, businessEntityType, ...settings } = draft;
+      const payload = information?.businessIdentityEnabled ? { ...settings, businessName, subBusinessNumber, businessEntityType } : settings;
+      const response = await fetch(`/api/store/information?${query}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json() as { message?: string };
       if (!response.ok) throw new Error(body.message || "매장 정보를 저장하지 못했습니다.");
       await load(); setEditing(false); setSaved(true);
@@ -52,6 +55,16 @@ export function StoreInformationPanel({ canManageAddress, canManageMembers, comp
       <label className="block text-sm font-medium">상호<input className={field} disabled={!editing} maxLength={100} onChange={event => setDraft({ ...draft, storeName: event.target.value })} value={draft.storeName} /></label>
       <label className="block text-sm font-medium">사업자등록번호<input className={field} disabled value={information.businessRegistrationNumber} /></label>
       <p className="text-xs text-slate-500">사업자등록번호 변경은 사업자 확인이 필요해 담당자에게 요청해 주세요.</p>
+      {information.businessIdentityEnabled && <>
+        <label className="block text-sm font-medium">사업자 상호<input className={field} disabled={!editing} maxLength={100}
+          value={draft.businessName} onChange={event => setDraft({ ...draft, businessName: event.target.value })} /></label>
+        <label className="block text-sm font-medium">종사업장번호<input className={field} disabled={!editing} inputMode="numeric" maxLength={4}
+          value={draft.subBusinessNumber} onChange={event => setDraft({ ...draft, subBusinessNumber: event.target.value })} /></label>
+        <label className="block text-sm font-medium">사업자 유형<select className={field} disabled={!editing}
+          value={draft.businessEntityType} onChange={event => setDraft({ ...draft, businessEntityType: event.target.value })}>
+          <option value="">선택 안 함</option><option value="individual">개인</option><option value="corporation">법인</option>
+        </select></label>
+      </>}
       <label className="block text-sm font-medium">대표자<input className={field} disabled={!editing} maxLength={50} onChange={event => setDraft({ ...draft, representativeName: event.target.value })} value={draft.representativeName} /></label>
       <label className="block text-sm font-medium">연락처<input className={field} disabled={!editing} inputMode="tel" maxLength={30} onChange={event => setDraft({ ...draft, phone: event.target.value })} value={draft.phone} /></label>
       {information.profileSettingsEnabled ? <>
