@@ -3,10 +3,10 @@ import { existsSync } from "node:fs";
 import { assertOrderMoney, assertOrderMoneyPhase, ORDER_MONEY_SCENARIOS } from "./helpers/order-money-safety";
 
 describe("CX-68 order money safety gate", () => {
-  it("tracks every mandatory scenario and separates the pending CX-62 receipt contract", () => {
+  it("tracks every mandatory scenario and names the reviewed CX-62 evidence", () => {
     expect(ORDER_MONEY_SCENARIOS.map(([number]) => number)).toEqual(Array.from({ length: 15 }, (_, index) => index + 1));
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 pending"))).toHaveLength(3);
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 pending"))
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 #1015@2893bd2"))).toHaveLength(4);
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 #1015@2893bd2"))
       .every(([, , evidence]) => existsSync(evidence))).toBe(true);
   });
 
