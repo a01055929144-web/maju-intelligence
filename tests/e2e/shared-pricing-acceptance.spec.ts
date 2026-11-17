@@ -98,12 +98,13 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
     return route.fulfill({ json: member ? { next: "order", storeUrl: `/store?products=all#${signedToken}`,
       cart: [{ productId, promotionId: null, quantity: 3 }] } : { intent: "synthetic.cx70", next: "kakao" } });
   });
-  await page.route(url => url.pathname === "/store", route => route.fulfill({ contentType: "text/html", body: "<h1>합성 주문 화면</h1>" }));
-  await page.route(url => url.pathname === "/store/activate", route => route.fulfill({ body: "<h1>합성 가입</h1>", contentType: "text/html" }));
+  await page.route(url => url.pathname === "/store", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: "<h1>합성 주문 화면</h1>" }));
+  await page.route(url => url.pathname === "/store/activate", route => route.fulfill({ body: "<h1>합성 가입</h1>", contentType: "text/html; charset=utf-8" }));
   await start.click();
   await expect(page).toHaveURL(/\/store\/activate#synthetic\.cx70$/);
   member = true;
   await page.goto("/pricing-document?continueOrder=1#cx70");
+  await expect(page).toHaveURL(new RegExp(`/store\\?products=all#${productId}`));
   await expect(page.getByRole("heading", { name: "합성 주문 화면" })).toBeVisible();
   expect(await page.evaluate(id => JSON.parse(sessionStorage.getItem(`maju:cart-handoff:${id}`) || "null"), productId))
     .toEqual([{ productId, promotionId: null, quantity: 3 }]);
@@ -114,7 +115,7 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
   expect(catalogReads).toBe(1);
   await page.screenshot({ path: info.outputPath(`cx70-catalog-member-${width}.png`) });
   expired = true;
-  await page.goto("/pricing-document#cx70");
+  await page.reload();
   const notice = page.getByRole("region", { name: "기간 지난 단가표" });
   await expect(notice).toContainText("새 단가표를 받으세요");
   await expect(notice.getByRole("link", { name: "받은 단가표로 돌아가기" })).toHaveAttribute("href", "/store?view=home");
