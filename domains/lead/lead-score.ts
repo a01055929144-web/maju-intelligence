@@ -1,6 +1,8 @@
 import { squareMetersToPyeong } from "./store-area";
 
 export type LeadScoreGrade = "A" | "B" | "C" | null;
+export type LeadSearchStatus = "found" | "not_found" | "not_searched";
+export const VISIT_NEEDED_PRIORITY_BONUS = 10;
 
 export type LeadScoreInput = {
   hasPhone: boolean;
@@ -16,6 +18,8 @@ export type LeadScoreInput = {
   storeAreaSqm?: number | null;
   hasInstagram?: boolean;
   hasTalktalk?: boolean;
+  searchStatuses?: { instagram: LeadSearchStatus; place: LeadSearchStatus; web: LeadSearchStatus };
+  visitNeededBonusEnabled?: boolean;
 };
 
 export type LeadScoreSettings = {
@@ -41,10 +45,12 @@ export type LeadScoreResult = {
     freshness_score: number;
     industry_fit_score: number;
     store_size_score: number;
+    visit_needed_score?: number;
   };
   grade: LeadScoreGrade;
   reasons: string[];
   total: number;
+  visitNeeded: boolean;
 };
 
 export function computeLeadScore(input: LeadScoreInput, settings: LeadScoreSettings = DEFAULT_LEAD_SCORE_SETTINGS): LeadScoreResult {
@@ -53,12 +59,14 @@ export function computeLeadScore(input: LeadScoreInput, settings: LeadScoreSetti
   const industryFit = scale(!input.isTarget ? 0 : input.industryKnown ? 15 : 7, 15, settings.weights.industryFit);
   const storeSize = scoreStoreSize(input.storeAreaSqm, settings.weights.storeSize);
   const activity = scoreActivity(input, settings.weights.activity);
+  const visitNeeded = isVisitNeeded(input);
   const breakdown = {
     contactability_score: contactability,
     freshness_score: freshness,
     industry_fit_score: industryFit,
     store_size_score: storeSize,
     activity_score: activity,
+    ...(visitNeeded ? { visit_needed_score: VISIT_NEEDED_PRIORITY_BONUS } : {}),
   };
   const total = Object.values(breakdown).reduce((sum, score) => sum + score, 0);
 
@@ -67,6 +75,7 @@ export function computeLeadScore(input: LeadScoreInput, settings: LeadScoreSetti
     total,
     grade: total >= settings.gradeThresholds.A ? "A" : total >= settings.gradeThresholds.B ? "B" : total >= settings.gradeThresholds.C ? "C" : null,
     reasons: buildReasons(input),
+    visitNeeded,
   };
 }
 
@@ -105,5 +114,11 @@ function buildReasons(input: LeadScoreInput) {
   const pyeong = squareMetersToPyeong(input.storeAreaSqm);
   if (pyeong !== undefined) reasons.push(`${pyeong}평`);
   if ((input.reviewCount || 0) > 0 || (input.keywordVolume || 0) > 0) reasons.push("온라인 활성도");
+  if (isVisitNeeded(input)) reasons.push("검색 안 됨 → 방문");
   return reasons;
+}
+
+function isVisitNeeded(input: LeadScoreInput) {
+  return input.visitNeededBonusEnabled === true && input.searchStatuses !== undefined
+    && Object.values(input.searchStatuses).every((status) => status === "not_found");
 }
