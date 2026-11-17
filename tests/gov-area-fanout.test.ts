@@ -16,7 +16,8 @@ import {
   loadGovAreaWithTimeoutRetry,
   prioritizeGovAreaCodes,
   rotateGovSyncUnits,
-  runGovAreaTasks
+  runGovAreaTasks,
+  splitGovTasksByTimeouts
 } from "../lib/gov-area-fanout";
 
 describe("정부 데이터 지역 fan-out", () => {
@@ -229,5 +230,23 @@ describe("정부 데이터 지역 fan-out", () => {
       throw new Error("timeout");
     }, 2)).rejects.toThrow("timeout");
     expect(sizes).toEqual([20, 20]);
+  });
+});
+
+describe("splitGovTasksByTimeouts", () => {
+  const tasks = [{ areaCode: "A" }, { areaCode: "B" }, { areaCode: "C" }];
+  it("기록이 없는 지역은 0번으로 보고 같이 실행에 넣는다 (11/17 운영 0쪽 수집 재발 방지)", () => {
+    const { solo, regular } = splitGovTasksByTimeouts(tasks, {});
+    expect(solo).toEqual([]);
+    expect(regular.map((task) => task.areaCode)).toEqual(["A", "B", "C"]);
+  });
+  it("2번 이상 시간 초과한 지역만 혼자 실행", () => {
+    const { solo, regular } = splitGovTasksByTimeouts(tasks, { A: 2, B: 1 });
+    expect(solo.map((task) => task.areaCode)).toEqual(["A"]);
+    expect(regular.map((task) => task.areaCode)).toEqual(["B", "C"]);
+  });
+  it("모든 작업이 둘 중 하나에 반드시 들어간다", () => {
+    const { solo, regular } = splitGovTasksByTimeouts(tasks, { A: undefined, B: 5 });
+    expect(solo.length + regular.length).toBe(tasks.length);
   });
 });

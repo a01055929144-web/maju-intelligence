@@ -17,7 +17,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, splitGovTasksByTimeouts, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -9743,8 +9743,7 @@ export async function syncGovRestaurantLeads(
       };
       return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0);
     });
-    const soloTasks = tasks.filter((task) => previousTimeoutCounts[task.areaCode] >= 2);
-    const regularTasks = tasks.filter((task) => previousTimeoutCounts[task.areaCode] < 2);
+    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts);
     const soloResults = soloTasks.length ? await runGovAreaTasks({
       tasks: soloTasks, deadlineAt: requestDeadlineAt, concurrency: 1, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
     }) : [];
