@@ -9,7 +9,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 export type MobileRouteStop = { address?: string; distanceKm?: number; durationMinutes?: number; id: string; name: string; orderIds?: string[]; orderRevisions?: Record<string, number>; phone?: string; region: string };
 type RouteStatusFilter = "all" | "pending" | "completed";
 
-export function MobileRouteList({ completedCustomerIds = [], driverName, initialStops, routeArea, selectedStopId }: { completedCustomerIds?: string[]; driverName: string; initialStops: MobileRouteStop[]; routeArea: string; selectedStopId?: string }) {
+export function MobileRouteList({ atomicOrderEnabled = false, completedCustomerIds = [], driverName, initialStops, routeArea, selectedStopId }: { atomicOrderEnabled?: boolean; completedCustomerIds?: string[]; driverName: string; initialStops: MobileRouteStop[]; routeArea: string; selectedStopId?: string }) {
   const [stops, setStops] = useState(initialStops);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<RouteStatusFilter>("all");
@@ -89,7 +89,7 @@ export function MobileRouteList({ completedCustomerIds = [], driverName, initial
     setSaveError(false);
     setMessage("순서를 저장 중입니다.");
     try {
-      const response = await fetchWithTimeout("/api/routes/confirm-order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ driverName, customerIds: pendingStops.map((stop) => stop.id) }) }, 15000);
+      const response = await fetchWithTimeout(atomicOrderEnabled ? "/api/mobile/driver-route-actions" : "/api/routes/confirm-order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ driverName, customerIds: pendingStops.map((stop) => stop.id) }) }, 15000);
       const payload = await response.json().catch(() => null) as { message?: string } | null;
       if (response.ok) {
         failedStopsRef.current = null;

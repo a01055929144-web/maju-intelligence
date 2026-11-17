@@ -124,7 +124,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
           vehicleLabel={selectedStop?.deliveryVehicle}
         >
         <div className="space-y-3 pb-3">
-          <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} />
+          <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} undoEnabled={runExperienceEnabled} />
           {runExperienceEnabled ? <MobileDriverRunExtras {...daySummary} /> : null}
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0"><p className="truncate text-sm font-bold">{driverName}</p><p className="truncate text-xs font-semibold text-slate-500">{session.companyName}</p></div>
@@ -146,7 +146,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" role="status">주문 연결 정보를 확인하지 못했습니다. 기존 수동 코스는 그대로 표시합니다.</p>
           ) : null}
 
-          <MobileRouteList completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
+          <MobileRouteList atomicOrderEnabled={runExperienceEnabled} completedCustomerIds={Array.from(completedCustomerIds)} driverName={driverName} initialStops={todayStops} routeArea={routeArea} selectedStopId={selectedStop?.id} />
 
           {selectedStop ? (
             <section className="mobile-card scroll-mt-24 overflow-hidden rounded-xl border" id="selected-customer">
