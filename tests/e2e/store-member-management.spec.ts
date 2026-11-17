@@ -17,7 +17,7 @@ test("manages store members without horizontal overflow at 390px", async ({ page
 
 for (const width of [1440, 390]) test(`creates a store-wide staff invitation at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-  await page.route("**/api/store/members?**", async route => {
+  await page.route("**/api/store/members**", async route => {
     if (route.request().method() === "POST") return route.fulfill({ contentType: "application/json", body: JSON.stringify({ inviteUrl: "http://localhost:3000/store/invite#test-token" }) });
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({
       actorMemberId: "owner", actorRole: "owner", profileMode: true, members: [
