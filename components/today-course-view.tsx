@@ -1,5 +1,6 @@
 "use client";
 
+import { RouteStopsTimeline } from "@/components/route-stops-timeline";
 import { useEffect, useState } from "react";
 import {
   Camera,
@@ -467,6 +468,9 @@ export function TodayCourseView({
               >
                 <PanelLeftClose className="h-4 w-4" />
               </button>
+            </div>
+            <div className="border-b border-slate-200/80 empty:hidden [&>section]:rounded-none [&>section]:border-0 [&>section]:shadow-none">
+              <RouteStopsTimeline date={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())} />
             </div>
             <div className="space-y-2 border-b border-slate-200/80 bg-white p-3">
               <select

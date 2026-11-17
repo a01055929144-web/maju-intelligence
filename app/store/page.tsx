@@ -171,6 +171,7 @@ export default async function StorePage({ searchParams }: {
   const ReceivedDocuments = receivedDocuments ? (await import("@/components/store-received-documents")).StoreReceivedDocuments : null;
   const memberView = memberAccounts.length ? <StoreMemberViews
     key={selected ? keyOf(selected) : "choose"} account={selected} view={view} stores={stores}
+    deliveryPhotosEnabled={Boolean(selected && isFeatureEnabled("DELIVERY_ORDER_PHOTOS", selected.companyId))}
     menu={STORE_VIEWS.map(value => storeHref(value, selected))}
     orders={orders} historyError={historyError} historyDetails={historyDetails} documentView={documentView}
     home={selected && ReceivedDocuments ? <>

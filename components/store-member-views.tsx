@@ -16,8 +16,9 @@ const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyl
 const dateTime = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
 const linkClass = "inline-flex min-h-11 items-center rounded-lg border px-3 underline";
 
-export function StoreMemberViews({ account, documentView, historyDetails, historyError, home, menu, orders, stores, view }: {
+export function StoreMemberViews({ account, deliveryPhotosEnabled = false, documentView, historyDetails, historyError, home, menu, orders, stores, view }: {
   account?: StorePortalAccount;
+  deliveryPhotosEnabled?: boolean;
   documentView?: ReactNode;
   historyError: boolean;
   historyDetails: boolean;
@@ -63,7 +64,7 @@ export function StoreMemberViews({ account, documentView, historyDetails, histor
               <CardHeader><CardTitle>최근 주문</CardTitle></CardHeader>
               <CardContent>
                 {historyError ? <ErrorState bare message="주문 내역을 불러오지 못했습니다." /> : orders.length ? historyDetails ? (
-                  <StoreOrderHistory companyId={account.companyId} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} storeAccountId={account.storeAccountId} />
+                  <StoreOrderHistory companyId={account.companyId} deliveryPhotosEnabled={deliveryPhotosEnabled} orders={orders} reorderHref={orderDocuments[0]?.href.replace("/store#", "/store?view=history#")} storeAccountId={account.storeAccountId} />
                 ) : (
                   <ul className="divide-y">
                     {orders.map(order => (

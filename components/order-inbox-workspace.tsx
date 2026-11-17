@@ -9,6 +9,7 @@ import { SearchInput } from "./ui/search-input";
 import { ErrorState, LoadingState } from "./ui/state";
 import { STORE_ORDER_STATUSES, canConfirmStoreOrder, storeOrderStatusLabel } from "../domains/order/store-order-status";
 import { StoreNotificationSettings } from "./store-notification-settings";
+import { OrderDeliveryPhotos } from "./order-delivery-photos";
 
 type Line = { name: string; spec: string; unit: string; quantity: number; total: number | null; marketPrice: boolean };
 type Order = {
@@ -39,7 +40,7 @@ export async function confirmExistingCustomerLink({
   return true;
 }
 
-export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: { canConfirm: boolean; companyId: string; preview?: boolean }) {
+export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; preview?: boolean }) {
   const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
   const [query, setQuery] = useState("");
@@ -118,6 +119,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, preview = false }: 
       <ul className="mt-1 space-y-1 text-sm text-slate-600">{row.lines.map((line, index) => <li key={index}>
         {line.name}{line.spec ? ` ${line.spec}` : ""} · {line.quantity}{line.unit} · {line.marketPrice || line.total === null ? "시가" : won(line.total)}
       </li>)}</ul>
+      {deliveryPhotosEnabled ? <OrderDeliveryPhotos audience="customer" companyId={companyId} orderId={row.id} /> : null}
     </details> },
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },

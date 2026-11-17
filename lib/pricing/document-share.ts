@@ -9,13 +9,16 @@ import { getStoreSession } from "../auth";
 import { quoteAcceptanceEnabled } from "./acceptance-feature";
 import { publicDocumentOrderEntryEnabled, publicDocumentSignupEnabled } from "./public-document-order-feature";
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
+import { industryBasketsEnabled } from "./industry-basket-feature";
+import { documentSharePreview } from "../../domains/pricing/industry-basket";
 
 type ShareRow = {
   id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
   idempotency_key: string; created_by_key: string; token_nonce: string; token_hash: string;
   ttl_days: number | null; created_at: string; expires_at: string; revoked_at: string | null; send_id: string | null;
+  preview_id: string | null; preview_title: string | null; preview_description: string | null;
 };
-const shareFields = "id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash,ttl_days,created_at,expires_at,revoked_at,send_id";
+const shareFields = "id,company_id,document_id,document_version_id,lead_id,idempotency_key,created_by_key,token_nonce,token_hash,ttl_days,created_at,expires_at,revoked_at,send_id,preview_id,preview_title,preview_description";
 function missing(): never { throw new DocumentSendError("공유 문서를 사용할 수 없습니다.", 404); }
 function enabled(scope: DocumentScope) {
   if (!scope.sharingEnabled || !documentSharingEnabled(scope.companyId)) missing();
@@ -34,7 +37,7 @@ function publicUrl(row: ShareRow) {
   const issued = issueDocumentShareToken(row.id, row.token_nonce);
   if (!equalShareHash(issued.hash, row.token_hash))
     throw new DocumentSendError("링크 설정이 변경됐습니다. 기존 링크를 회수하고 새 링크를 준비해 주세요.", 409);
-  return `/pricing-document#${issued.token}`;
+  return row.preview_id ? `/q/${row.preview_id}#${issued.token}` : `/pricing-document#${issued.token}`;
 }
 async function published(company: string, versionId: string, actor?: string): Promise<DocumentVersion> {
   const versions = await supabaseRequest<Array<{ id: string; document_id: string; version: number; revision: number; content: DocumentContent; published_at: string }>>(
@@ -79,11 +82,16 @@ export async function prepareDocumentShare(scope: DocumentScope, input: PrepareD
   if (!existing && version.content.validUntil < koreaDay()) missing();
   if (input.leadId !== null) await assertLead(scope.companyId, input.leadId);
   const issued = issueDocumentShareToken(id);
+  const preview = industryBasketsEnabled(scope.companyId)
+    ? documentSharePreview({ companyName: version.content.companyName, documentTitle: version.content.title, industry: version.content.industry, validUntil: version.content.validUntil })
+    : null;
+  const previewId = preview ? randomUUID() : null;
   const expected = { company_id: scope.companyId, document_id: version.documentId, document_version_id: version.id,
     lead_id: input.leadId, idempotency_key: input.idempotencyKey, created_by_key: scope.actor, ttl_days: input.ttlDays };
   if (!existing) await supabaseRequest("pricing_document_share_links?on_conflict=company_id,idempotency_key", {
     method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
-    body: JSON.stringify({ ...expected, id, token_nonce: issued.nonce, token_hash: issued.hash }),
+    body: JSON.stringify({ ...expected, id, token_nonce: issued.nonce, token_hash: issued.hash,
+      preview_id: previewId, preview_title: preview?.title || null, preview_description: preview?.description || null }),
   });
   const saved = existing || (await supabaseRequest<ShareRow[]>(keyPath))[0];
   if (!saved) throw new Error("Share preparation unconfirmed");
