@@ -41,7 +41,7 @@ export async function confirmExistingCustomerLink({
   return true;
 }
 
-export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; preview?: boolean }) {
+export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, fulfillmentEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; fulfillmentEnabled?: boolean; preview?: boolean }) {
   const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
   const [query, setQuery] = useState("");
@@ -152,6 +152,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
 
   return <section className="space-y-4">
     {!preview ? <StoreNotificationSettings /> : null}
+    {fulfillmentEnabled ? <div className="flex justify-end"><a className="maju-button-secondary min-h-11" href={`/orders/fulfillment?companyId=${encodeURIComponent(companyId)}`}>출고 준비·인쇄</a></div> : null}
     <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); setStoreName(query.trim()); setPage(1); }} role="search">
       <label className="text-sm font-semibold text-slate-700">상태
         <select aria-label="주문 상태" className="maju-input mt-1 block h-11 min-w-[140px]" onChange={(event) => { setStatus(event.target.value); setPage(1); }} value={status}>
