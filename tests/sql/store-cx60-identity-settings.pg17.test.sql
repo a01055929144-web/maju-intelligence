@@ -87,6 +87,13 @@ begin
     perform public.apply_store_profile_notification_v1(account.company_id,notification,account.auth_user_id,false);
     exit;
   end loop;
+  -- The fixture also links a second company. Mark its synthetic alerts reviewed
+  -- before exercising a rollback with no outstanding identity changes.
+  update public.company_notifications n set processed_at=clock_timestamp()
+  from public.store_accounts linked
+  where linked.id=n.store_account_id and linked.store_profile_id=account.store_profile_id
+    and linked.company_id<>account.company_id and n.notification_type='store_profile_changed'
+    and n.processed_at is null;
 end $$;
 \ir ../../docs/sql-drafts/20261117-CX-60-store-business-identity-settings.down.sql
 do $$ begin
