@@ -7,7 +7,7 @@ import { executeLeadBulkItem, leadBulkRepository } from "@/lib/lead-bulk-enrichm
 import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs } from "@/lib/lead-bulk-enrichment-feature";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value);
 
