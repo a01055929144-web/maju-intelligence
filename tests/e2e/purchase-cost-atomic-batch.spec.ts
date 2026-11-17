@@ -522,6 +522,11 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
   const nav = page.getByRole("navigation", { name: "매입가 보기", exact: true });
   await expect(nav.getByRole("button", { name: "인상 1", exact: true })).toBeVisible();
   await expect(nav.getByRole("button", { name: "인하 1", exact: true })).toBeVisible();
+  // CC-72: 기존 상품과 이름이 비슷한 새 상품(합성 상품 5)은 줄마다 "새 상품 맞음"을 골라야 저장된다.
+  await expect(page.getByRole("button", { name: "③ 저장 (4건)", exact: true })).toBeDisabled();
+  await nav.getByRole("button", { name: /^신규/ }).click();
+  const notDuplicate = page.getByRole("button", { name: "새 상품 맞음" });
+  while (await notDuplicate.count()) await notDuplicate.first().click();
   await page.getByRole("button", { name: "③ 저장 (4건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("원본 거래 6행"); await expect(review).toContainText("가격 반영 보류 1그룹");
