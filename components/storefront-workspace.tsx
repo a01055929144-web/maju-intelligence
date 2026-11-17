@@ -247,7 +247,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       const response = await fetch(endpoint, { method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, ...updated }) });
-      const result = await response.json() as { message?: string };
+      const result = await response.json() as { message?: string; orderDocumentStatus?: "confirmed" | "failed" };
       if (!response.ok) throw new Error(result.message || "품목 설정을 저장하지 못했습니다.");
       setData((old) => old ? { ...old, preferences: [
         ...old.preferences.filter((item) => item.productId !== productId), updated,
@@ -295,7 +295,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
           orderId: editing?.id ?? null, expectedRevision: editing?.revision ?? null,
           lines: selected.map((line) => ({ productId: line.productId,
             promotionId: line.promotionId, quantity: cart[line.key] })) }) });
-      const result = await response.json() as { message?: string };
+      const result = await response.json() as { message?: string; orderDocumentStatus?: "confirmed" | "failed" };
       if (!response.ok) {
         if (response.status === 403 && /권한.*변경/.test(result.message || "")) setMemberAccessChanged(true);
         throw new Error(result.message || "주문을 저장하지 못했습니다.");
@@ -304,7 +304,9 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       setTab("history");
       try {
         await load(undefined, 1);
-        setMessage("주문을 받았습니다. 주문 내역에서 확인해 주세요.");
+        setMessage(result.orderDocumentStatus === "failed"
+          ? "주문은 저장됐습니다. 전표 연결은 유통사에 확인해 주세요."
+          : "주문을 받았습니다. 주문 내역에서 확인해 주세요.");
       } catch {
         setMessage("주문은 저장됐습니다. 내역을 불러오지 못했으니 화면을 새로고침해 확인해 주세요.");
       }

@@ -4,6 +4,8 @@ import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { storeOrderDeliverySnapshotEnabled } from "@/lib/pricing/store-order-delivery-feature";
+import { orderReceiptDraftEnabled } from "@/lib/erp-order-documents-feature";
+import { syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { placeStoreOrderWithDelivery } from "@/lib/pricing/store-order-delivery-producer";
 import { readStorefront } from "@/lib/pricing/storefront";
 import { getStoreOrderActor } from "@/lib/pricing/store-order-member";
@@ -393,15 +395,18 @@ export async function PUT(request: NextRequest) {
       const placed = await placeStoreOrderWithDelivery(eligibility
         ? {scope:{...store,deliveryAddress:`${eligibility.baseAddress} ${eligibility.addressDetail}`},payload}
         : {scope:store,payload,snapshot:body.deliverySnapshot});
-      return NextResponse.json(placed, { headers: { "Cache-Control": "no-store" } });
+      const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, placed.result, member?.authUserId ?? null);
+      return NextResponse.json({ ...placed, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },
+        { headers: { "Cache-Control": "no-store" } });
     }
     const result = await supabaseRequest<Record<string, unknown>>(
       catalog
         ? (memberOrdering ? "rpc/place_store_catalog_member_order_v1" : "rpc/place_store_catalog_order_v1")
         : (memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order"),
       { method: "POST", body: JSON.stringify(payload) });
+    const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, result, member?.authUserId ?? null);
     return NextResponse.json(
-      { result },
+      { result, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

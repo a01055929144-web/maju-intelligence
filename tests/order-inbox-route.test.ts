@@ -80,8 +80,20 @@ describe("order inbox API", () => {
   });
 
 
+  it("retains legacy ERP receipt when the old allowlist is set and the CX-62 switch is off", async () => {
+    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
+    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", "");
+    mocks.supabase.mockResolvedValueOnce([{ id: orderId, customer_id: "c1" }])
+      .mockResolvedValueOnce([]);
+    const response = await confirm();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ message: "전표가 연결되지 않았습니다. 전표 연결을 다시 시도한 뒤 접수해 주세요." });
+    expect(mocks.supabase.mock.calls.map(([path]) => path)).not.toContain("rpc/receive_store_order_with_sale_document");
+  });
+
   it("shows a pending document and accepts only the atomic receipt response", async () => {
-    vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", companyId);
     mocks.supabase.mockImplementationOnce(async (path: string) => routeFor(path))
       .mockImplementationOnce(async (path: string) => routeFor(path))
       .mockImplementationOnce(async (path: string) => routeFor(path))
@@ -104,7 +116,7 @@ describe("order inbox API", () => {
   });
 
   it.each(["order_receipt_conflict", "order_receipt_document_unlinked", "order_receipt_amount_mismatch"])("does not patch order on RPC failure %s", async error => {
-    vi.stubEnv("FEATURE_ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", companyId);
     mocks.supabase.mockRejectedValueOnce(new Error(error));
     const response = await confirm();
     expect(response.status).toBe(409);

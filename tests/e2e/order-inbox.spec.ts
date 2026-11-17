@@ -95,7 +95,7 @@ test("CX-62 retries a failed receipt without treating an unlinked order as recei
       return route.fulfill({ json: { order: { id: "o1", status: "received", revision: 2 } } });
     }
     return route.fulfill({ json: { hasMore: false, items: attempts > 1 ? [] : [{
-      ...order("o1", "합성 전표 매장"), orderDocument: { status: "unlinked" },
+      ...order("o1", "합성 전표 매장"), draftReceipt: true, orderDocument: { status: "unlinked" },
     }] } });
   });
   await page.goto("/orders");
