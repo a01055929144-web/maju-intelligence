@@ -7,22 +7,35 @@ create function public.preserve_order_sale_identity_snapshot()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   v_sub_business_number text;
+  v_customer jsonb;
   v_snapshot_line text;
 begin
   if tg_op = 'UPDATE' and old.source_type = 'order' and old.document_type = 'sale'
+    and old.company_id = new.company_id
+    and old.source_id is not distinct from new.source_id
     and old.customer_id is not distinct from new.customer_id then
-    v_snapshot_line := substring(old.memo from '(?n)^\[종사업장번호\] [0-9]{4}$');
+    v_snapshot_line := substring(old.memo from '(?n)^\[종사업장번호\] (?:[0-9]{4}|미등록)$');
+  end if;
+  if v_snapshot_line is not null then
     new.partner_name_snapshot := old.partner_name_snapshot;
     new.partner_business_number_snapshot := old.partner_business_number_snapshot;
     new.partner_representative_snapshot := old.partner_representative_snapshot;
     new.partner_address_snapshot := old.partner_address_snapshot;
   else
-    select nullif(btrim(c.sub_business_number), '') into v_sub_business_number
-      from public.normalized_customers c
+    select to_jsonb(c) into v_customer from public.normalized_customers c
       where c.company_id = new.company_id and c.id = new.customer_id;
+    if v_customer is null then raise exception 'order_customer_not_found'; end if;
+    v_sub_business_number := nullif(btrim(v_customer->>'sub_business_number'), '');
+    new.partner_name_snapshot := coalesce(nullif(btrim(v_customer->>'business_name'), ''),
+      v_customer->>'customer_name', v_customer->>'name');
+    new.partner_business_number_snapshot := nullif(btrim(v_customer->>'business_registration_number'), '');
+    new.partner_representative_snapshot := v_customer->>'representative_name';
+    new.partner_address_snapshot := coalesce(btrim(v_customer->>'address'), '');
     if v_sub_business_number is not null then
       if v_sub_business_number !~ '^[0-9]{4}$' then raise exception 'order_sub_business_number_invalid'; end if;
       v_snapshot_line := '[종사업장번호] ' || v_sub_business_number;
+    else
+      v_snapshot_line := '[종사업장번호] 미등록';
     end if;
   end if;
   -- This reserved line is generated from the verified customer, never from input memo.

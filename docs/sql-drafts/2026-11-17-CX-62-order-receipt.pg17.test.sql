@@ -122,7 +122,12 @@ values('00000000-0000-0000-0000-0000000000e9','sale','ISOLATION','2026-11-18','d
   '00000000-0000-0000-0000-0000000000e7','order:00000000-0000-0000-0000-0000000000e7',
   '[종사업장번호] 8888','합성');
 do $$ begin
-  assert (select memo='[종사업장번호] 0007' from business_documents where source_id='00000000-0000-0000-0000-0000000000e7');
+  -- A pre-existing order draft without the reservation line captures its number on first save.
+  alter table business_documents disable trigger preserve_order_sale_identity_snapshot;
+  update business_documents set memo='예전 초안 메모' where source_id='00000000-0000-0000-0000-0000000000e7';
+  alter table business_documents enable trigger preserve_order_sale_identity_snapshot;
+  update business_documents set memo='재저장 메모' where source_id='00000000-0000-0000-0000-0000000000e7';
+  assert (select memo=E'재저장 메모\n[종사업장번호] 0007' from business_documents where source_id='00000000-0000-0000-0000-0000000000e7');
   assert (select memo like '%[종사업장번호] 0002' from business_documents where source_id='00000000-0000-0000-0000-0000000000d3');
 end $$;
 rollback;
