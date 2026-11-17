@@ -17,6 +17,8 @@ export type GovSyncSummary = {
   readonly pendingAreas: number;
   /** 최근 7일 성공 실행이 가져온 행 수(신규·갱신 합 — 새 리드 수 아님). */
   readonly weekFetched: number;
+  /** CC-68: 마지막 실행이 지역을 모두 돌았는데 새 행이 0건(CX-57 "변경 없음 = 성공"). 실패가 아니다. */
+  readonly noNewRows: boolean;
   readonly message: string;
 };
 
@@ -26,7 +28,7 @@ const time = (run: Pick<GovSyncRunRow, "started_at" | "finished_at">) => Date.pa
 export function summarizeGovSync(runs: readonly GovSyncRunRow[], now: Date = new Date()): GovSyncSummary {
   const finished = runs.filter((run) => run.status !== "running").sort((a, b) => time(b) - time(a));
   const latest = finished[0];
-  if (!latest) return { lastRunAt: null, result: "none", errorAreas: 0, deferredAreas: 0, pendingAreas: 0, weekFetched: 0, message: "아직 수집 기록이 없습니다." };
+  if (!latest) return { lastRunAt: null, result: "none", errorAreas: 0, deferredAreas: 0, pendingAreas: 0, weekFetched: 0, noNewRows: false, message: "아직 수집 기록이 없습니다." };
 
   const areas = latest.metadata?.areas ?? [];
   const errorAreas = areas.filter((area) => area.status === "error").length;
@@ -40,11 +42,12 @@ export function summarizeGovSync(runs: readonly GovSyncRunRow[], now: Date = new
   const weekFetched = finished.filter((run) => run.status === "success" && now.getTime() - time(run) <= 7 * DAY_MS).reduce((sum, run) => sum + (run.fetched_count ?? 0), 0);
 
   const result = latest.status === "error" ? "error" : (latest.metadata?.pendingAreaCount ?? 0) > 0 ? "partial" : "success";
+  const noNewRows = result === "success" && (latest.fetched_count ?? 0) === 0;
   const parts = [errorAreas ? `오류 ${errorAreas}곳` : "", deferredAreas ? `시간 예산 이월 ${deferredAreas}곳` : ""].filter(Boolean);
   const message = result === "error"
     ? `수집 실패${parts.length ? ` · ${parts.join(" · ")}` : ""}`
     : result === "partial"
       ? `일부 완료 · 남은 ${latest.metadata?.pendingAreaCount ?? 0}곳은 다음 실행에서 이어받음${parts.length ? ` (${parts.join(" · ")})` : ""}`
-      : "정상 · 남은 지역 없음";
-  return { lastRunAt: latest.finished_at || latest.started_at, result, errorAreas, deferredAreas, pendingAreas, weekFetched, message };
+      : noNewRows ? `새 행 없음(지역 ${areas.length}곳 확인)` : "정상 · 남은 지역 없음";
+  return { lastRunAt: latest.finished_at || latest.started_at, result, errorAreas, deferredAreas, pendingAreas, weekFetched, noNewRows, message };
 }
