@@ -104,9 +104,13 @@ const toNumber = (value: string | undefined) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+/** ERP 일자-No.("2026/11/01 -1")의 뒤 전표 번호를 떼고 날짜만 남깁니다. */
+const ERP_VOUCHER_SUFFIX = /^(\d{4}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{1,2})\s*-\s*\d{1,6}$/;
+
 const toPurchaseDate = (value: string | undefined) => {
-  const raw = value?.trim();
-  if (!raw) return undefined;
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const raw = trimmed.match(ERP_VOUCHER_SUFFIX)?.[1] ?? trimmed;
   if (/^\d{5}(?:\.\d+)?$/.test(raw)) return new Date((Number(raw) - 25569) * 86400000).toISOString().slice(0, 10);
   const monthFirst = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   const normalized = monthFirst

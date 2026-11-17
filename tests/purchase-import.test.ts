@@ -109,6 +109,20 @@ describe("purchase import", () => {
     expect(parsed.dateIssues).toEqual([3]);
   });
 
+  it("reads ERP 일자-No. dates by dropping the voucher suffix", () => {
+    const values = [
+      ["일자-No.", "품목명(규격)", "단가"],
+      ["2026/11/01 -1", "콘센트치킨스타 [1.2KG*6EA]", "9818"],
+      ["2026/11/17-12", "양파", "1000"],
+      ["2026-11-05 - 3", "대파", "2000"],
+      ["2026/11/31 -1", "감자", "3000"],
+      ["2026/10  계", "합계", "5000"]
+    ];
+    const parsed = parsePurchaseLines(buildPurchaseSheet(values), { purchaseDate: 0, name: 1, cost: 2 }, "excluded");
+    expect(parsed.lines.map((line) => line.purchaseDate)).toEqual(["2026-11-01", "2026-11-17", "2026-11-05"]);
+    expect(parsed.dateIssues).toEqual([5, 6]);
+  });
+
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
     const products = [{ id: "p1", code: "", name: "냉동 오징어", spec: "EA", unit: "", cost: 4000 }];
     expect(matchCostImportRow({ code: "", name: "냉동오징어", spec: "[EA]", unit: "", supplier: "", cost: 4500 }, products)?.id).toBe("p1");
