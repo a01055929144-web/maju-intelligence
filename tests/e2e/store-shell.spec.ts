@@ -241,3 +241,35 @@ test("S-4 leaves the mobile member home available", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "견적서·단가표와 주문" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
+
+for (const width of [1440, 390]) test(`CX-63 searches prices and handles access at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
+  let failQuote = true;
+  await page.route("**/api/store/price-search?**", route => {
+    const query = new URL(route.request().url()).searchParams;
+    const kind = query.get("kind");
+    if (kind === "quote" && failQuote) { failQuote = false; return route.fulfill({ status: 503, json: {} }); }
+    if (kind === "catalog" && query.get("q") === "권한") return route.fulfill({ status: 404, json: {} });
+    const rows = query.get("q") === "없는 품목" ? [] : [{
+      id: "synthetic-price", name: kind === "quote" ? "합성 견적 양파" : "합성 양파", spec: "10kg", unit: "박스",
+      price: kind === "catalog" ? null : 12000,
+      recent: kind === "catalog" ? { date: "2026-11-12", price: 9800 } : null,
+    }];
+    return route.fulfill({ json: { rows, hasMore: false } });
+  });
+  await page.goto("/store?fixture=cx63-price-search");
+  const search = page.getByRole("region", { name: "품목 단가 확인" });
+  await expect(search.getByText("12,000원", { exact: true }).filter({ visible: true })).toBeVisible();
+  await search.getByRole("button", { name: "받은 견적서" }).click();
+  await expect(search.getByText("단가를 불러오지 못했습니다.")).toBeVisible();
+  await search.getByRole("button", { name: "다시 시도" }).click();
+  await expect(search.getByText("합성 견적 양파", { exact: true }).filter({ visible: true })).toBeVisible();
+  await search.getByRole("button", { name: "전체 상품" }).click();
+  await expect(search.getByText(/최근 출고가/).filter({ visible: true })).toBeVisible();
+  const input = search.getByRole("textbox", { name: "품목명 또는 규격 검색" });
+  await input.fill("없는 품목");
+  await expect(search.getByText("검색 조건에 맞는 품목이 없습니다.")).toBeVisible();
+  await input.fill("권한");
+  await expect(search.getByText("이 매장의 단가를 볼 수 없습니다.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+});
