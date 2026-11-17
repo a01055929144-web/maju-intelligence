@@ -81,3 +81,25 @@ test("order inbox shows a retry action when loading fails", async ({ page }) => 
     page.getByRole("alert").filter({ hasText: "주문을 불러오지 못했습니다." }).getByRole("button", { name: "다시 시도" }),
   ).toBeVisible();
 });
+
+test("CX-39 order inbox retries a missing document before offering receipt", async ({ page }) => {
+  await login(page);
+  let linked = false;
+  await page.route("**/api/orders*", async route => {
+    if (route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toMatchObject({ action: "retry_order_document", orderId: "o1", revision: 1 });
+      linked = true;
+      return route.fulfill({ json: { orderDocumentStatus: "confirmed" } });
+    }
+    return route.fulfill({ json: { hasMore: false, items: [{
+      ...order("o1", "합성 전표 매장"),
+      orderDocument: linked ? { status: "confirmed", number: "S-001" } : { status: "unlinked" },
+    }] } });
+  });
+  await page.goto("/orders");
+  await expect(page.getByText("전표 연결 실패 또는 대기", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "확인", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "전표 연결 다시 시도" }).click();
+  await expect(page.getByText("S-001", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "확인", exact: true })).toBeVisible();
+});

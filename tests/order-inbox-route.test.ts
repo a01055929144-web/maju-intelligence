@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), enabled: vi.fn(() => true), manage: vi.fn(() => true), notifications: vi.fn(), supabase: vi.fn() }));
@@ -6,7 +6,7 @@ vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mocks.enabled }));
 vi.mock("@/lib/pricing/feature", () => ({ priceSheetsEnabled: () => true }));
 vi.mock("@/lib/pricing/store-order-feature", () => ({ storeOrderingEnabled: () => true }));
 vi.mock("@/domains/pricing/access", () => ({ canManagePriceSheets: mocks.manage }));
-vi.mock("@/lib/auth", () => ({ getRequestAuthScope: mocks.auth }));
+vi.mock("@/lib/auth", () => ({ getRequestAuthScope: mocks.auth, getCustomerOperationalName: () => "합성 담당자" }));
 vi.mock("@/lib/store", () => ({ supabaseRequest: mocks.supabase }));
 vi.mock("@/lib/store/07-company-notifications", () => ({ markNewOrderNotificationProcessed: mocks.notifications }));
 import { GET, POST } from "../app/api/orders/route";
@@ -20,6 +20,7 @@ const confirm = (body: Record<string, unknown> = {}) => POST(new NextRequest("ht
 }));
 
 describe("order inbox API", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.supabase.mockReset();
@@ -72,6 +73,54 @@ describe("order inbox API", () => {
     expect((await empty.json()).items).toEqual([]);
     expect(mocks.supabase).toHaveBeenCalledTimes(1);
     expect((await GET(new NextRequest("http://localhost/api/orders?q=a*b"))).status).toBe(400);
+  });
+
+
+  it("shows an unlinked sale document and blocks direct receipt before any write", async () => {
+    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
+    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    mocks.supabase.mockImplementation(async (path: string, init?: RequestInit) => {
+      expect(init).toBeUndefined();
+      if (path.startsWith("business_documents?")) {
+        expect(path).toContain(`company_id=eq.${companyId}&document_type=eq.sale&source_type=eq.order&status=eq.confirmed`);
+        return [];
+      }
+      return routeFor(path);
+    });
+    const result = await (await GET(new NextRequest("http://localhost/api/orders"))).json();
+    expect(result.items[0].orderDocument).toEqual({ status: "unlinked" });
+    expect((await confirm()).status).toBe(409);
+    expect(mocks.notifications).not.toHaveBeenCalled();
+  });
+
+  it("retries through the order RPC without receiving, then receives only with the matching document", async () => {
+    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
+    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    const document = { source_id: orderId, source_key: `order:${orderId}`, customer_id: "c1", document_number: "S-001" };
+    const rows = [{ id: orderId, customer_id: "c1" }];
+    mocks.supabase.mockResolvedValueOnce(rows).mockResolvedValueOnce(document).mockResolvedValueOnce([document]);
+    expect((await confirm({ action: "retry_order_document", revision: 1 })).status).toBe(200);
+    expect(mocks.supabase.mock.calls[1][0]).toBe("rpc/confirm_order_sale_document");
+    expect(JSON.parse(mocks.supabase.mock.calls[1][1].body)).toMatchObject({ p_company_id: companyId, p_order_id: orderId });
+    expect(mocks.supabase.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+
+    mocks.supabase.mockResolvedValueOnce(rows).mockResolvedValueOnce([document])
+      .mockResolvedValueOnce([{ id: orderId, status: "received", revision: 2 }]);
+    expect((await confirm({ revision: 1 })).status).toBe(200);
+    expect(mocks.supabase.mock.calls.at(-1)?.[1]?.method).toBe("PATCH");
+  });
+
+  it("does not receive a revised order when its document synchronization fails", async () => {
+    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
+    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
+    const document = { source_id: orderId, source_key: `order:${orderId}`, customer_id: "c1", document_number: "S-001" };
+    mocks.supabase.mockResolvedValueOnce([{ id: orderId, customer_id: "c1" }])
+      .mockResolvedValueOnce([document]).mockResolvedValueOnce(document).mockRejectedValueOnce(new Error("revision changed"));
+    expect((await confirm()).status).toBe(409);
+    expect(mocks.supabase.mock.calls.map(([path]) => path).slice(-2)).toEqual([
+      "rpc/confirm_order_sale_document", "rpc/revise_order_sale_document",
+    ]);
+    expect(mocks.supabase.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
   });
 
   it("lets sales staff view orders but not confirm them", async () => {
