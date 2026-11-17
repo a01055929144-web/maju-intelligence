@@ -9,6 +9,7 @@ import {
 } from "../domains/product/catalog-import";
 import { suggestCategory } from "../domains/pricing/product-category";
 import type { ImportPreviewRow } from "../domains/product/import-row-editor";
+import { resolveExistingSupplierName } from "../domains/pricing/supplier-name";
 import { supabaseRequest as db } from "./store";
 import { ciLayoutProductImports, isCiLayoutFixturesEnabled } from "./ci-layout-fixtures";
 
@@ -203,8 +204,12 @@ export async function saveProductCatalogImport(input: {
   editedRows?: ImportPreviewRow[];
   includeExtraMapping?: boolean;
 }) {
-  const supplierName = input.supplierName.trim();
-  if (!supplierName) throw new Error("유통사명을 입력해 주세요.");
+  if (!input.supplierName.trim()) throw new Error("유통사명을 입력해 주세요.");
+  // 11/17: "(주)OO"·"주식회사 OO"처럼 법인 표기만 다른 이름은 이미 등록된 매입처 이름으로 맞춘다(매입처 중복 생성 방지).
+  const knownSuppliers = await db<Array<{ name: string }>>(
+    `product_suppliers?select=name&company_id=eq.${enc(input.companyId)}`,
+  ).catch(() => []);
+  const supplierName = resolveExistingSupplierName(input.supplierName, knownSuppliers.map((row) => row.name));
   if (!input.products.length) throw new Error("저장할 정상 품목이 없습니다.");
   const supplierRows = await db<Array<{ id: string }>>(
     `product_suppliers?on_conflict=company_id,name`,
