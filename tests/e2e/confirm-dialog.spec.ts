@@ -117,7 +117,10 @@ for (const width of [1440, 390]) test(`전표 목록에서 여러 건을 한 번
   expect(cancelBodies).toEqual([expect.objectContaining({ action: "cancel", reason: "합성 삭제" })]);
   await page.getByLabel("삭제한 전표 보기").check();
   await expect(page.getByText("P-SYN-1")).toBeVisible();
-  await expect(page.getByText("취소").first()).toBeVisible();
+  const cancelledStatus = width === 390
+    ? page.locator("li").filter({ hasText: "P-SYN-1" }).getByText("취소", { exact: true })
+    : page.getByRole("cell", { name: "취소", exact: true }).first();
+  await expect(cancelledStatus).toBeVisible();
   expect(listUrls.at(-1)).toContain("includeCancelled=true");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
