@@ -127,8 +127,13 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     {embedded && <h1 className="text-lg font-semibold">공유 문서</h1>}
     {message && <p role="status">{message}</p>}
     {!safeDocument && !busy && message && <Button variant="outline" className="min-h-[44px]" onClick={() => void load()}>다시 확인</Button>}
+    {safeDocument?.expired && shopping && <section aria-label="기간 지난 단가표" className="space-y-2 rounded border bg-white p-4 print:hidden">
+      <h2 className="font-bold">새 단가표를 받으세요</h2>
+      <p>기간이 지나 이 단가표로는 주문할 수 없습니다. 발행 회사 담당자에게 새 단가표를 요청해 주세요.</p>
+      {member && <Link className="maju-button-primary inline-flex min-h-[44px] items-center" href="/store?view=home">받은 단가표로 돌아가기</Link>}
+    </section>}
     {safeDocument && shopping && <nav aria-label="공개 문서 보기" className="flex flex-wrap gap-2 print:hidden">
-      {([["table", "표"], ["image", "문서 이미지"], ["catalog", "전체 상품"]] as const).map(([id, label]) =>
+      {([["table", `단가표 품목 ${safeDocument.lines.length}`], ["catalog", member ? "전체 상품" : "전체 상품 · 가입 후"], ["image", "문서 이미지"]] as const).map(([id, label]) =>
         <Button key={id} type="button" variant={view === id ? "default" : "outline"} aria-pressed={view === id}
           className="min-h-[44px]" onClick={() => setView(id)}>{label}</Button>)}
     </nav>}
@@ -149,7 +154,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
         <p className="text-[15px] text-slate-600">{until} · {safeDocument.display.priceIncludesTax ? "부가세 포함" : "부가세 별도"} <span className="text-xs">v{safeDocument.version}</span></p>
         {safeDocument.expired && <p className="text-[15px] text-slate-600">유효기간이 지나 가격을 표시하지 않습니다.</p>}
       </header>
-      {safeDocument.lines.length > 15 && <div className="print:hidden">
+      {(shopping || safeDocument.lines.length > 15) && <div className="print:hidden">
         <SearchInput aria-label="문서 품목 검색" className="w-full min-h-11" placeholder="품목명·규격 검색" value={query} onChange={setQuery} />
       </div>}
       <div className={separateScreenTable ? "hidden print:block" : "hidden md:block print:block"}>
@@ -177,7 +182,7 @@ export function PublicPricingDocument({ embedded }: { embedded?: { token: string
     </div>)}
     {showOrder && <section aria-label="공개 문서 주문 안내" className="space-y-2 text-[15px] text-slate-700 print:hidden">
       <p>가격·주문 {until}</p>
-      {shopping && orderEntry?.available && !member ? <p>카카오로 시작하면 거래 약관에 동의합니다.</p> : member ? <p>주문 메뉴에서 발급된 주문 가능 문서를 확인해 주세요.</p>
+      {shopping && !orderDisabled && orderEntry?.available && !member ? <p>카카오로 시작하면 거래 약관과 개인정보 처리에 동의합니다.</p> : member ? <p>주문 메뉴에서 발급된 주문 가능 문서를 확인해 주세요.</p>
         : safeDocument?.expired ? <p>새 단가표는 발행 회사에 요청해 주세요.</p>
         : !orderEntry?.available ? <p>{orderEntry?.message || "주문 연결을 준비 중입니다. 발행 회사에 문의해 주세요."}</p>
         : <p>카카오로 로그인한 뒤 주문을 시작할 수 있습니다.</p>}

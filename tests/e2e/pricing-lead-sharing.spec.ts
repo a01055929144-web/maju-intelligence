@@ -362,20 +362,20 @@ test("CX-45 keeps mobile prices on one line and preserves print columns", async 
 
 for (const width of [1440, 390]) test(`CX-70 switches public document views at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 740 });
-  let enabled = true;
+  let enabled = true, expired = false, member = false;
   await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: {
     expiresAt: "2099-12-31T15:00:00Z",
     document: {
       title: "합성 주문 단가표", companyName: "합성 유통", kind: "sheet", layout: "cards", theme: "green",
       display: { columns: 2, info: [], productWidth: 65, promoLayout: "table", priceIncludesTax: false },
-      validUntil: "2099-12-31", publishedAt: "2026-11-16T00:00:00Z", version: 1, expired: false,
-      lines: [{ displayName: "합성 새우", spec: "1kg", unit: "봉", brand: "", price: 29700, badge: "" }],
+      validUntil: "2099-12-31", publishedAt: "2026-11-16T00:00:00Z", version: 1, expired,
+      lines: [{ displayName: "합성 새우", spec: "1kg", unit: "봉", brand: "", price: expired ? null : 29700, badge: "" }],
     },
-    orderEntry: { available: true, ...(enabled ? { shopping: true } : {}) },
+    orderEntry: { available: !expired, member, ...(enabled ? { shopping: true } : {}) },
   } }));
   await page.goto("/pricing-document#cx70");
   const tabs = page.getByRole("navigation", { name: "공개 문서 보기" });
-  await expect(tabs.getByRole("button", { name: "표", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(tabs.getByRole("button", { name: "단가표 품목 1", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("29,700원", { exact: true }).filter({ visible: true })).toBeVisible();
   if (width === 1440) await expect(page.getByRole("table")).toHaveCount(1);
   const start = page.getByRole("button", { name: "카카오로 시작", exact: true });
@@ -392,8 +392,19 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
   await page.route(url => url.pathname === "/store/activate", route => route.fulfill({ body: "<h1>합성 가입</h1>", contentType: "text/html" }));
   await start.click();
   await expect(page).toHaveURL(/\/store\/activate#synthetic\.cx70$/);
-  enabled = false;
+  expired = true;
+  member = true;
   await page.goto("/pricing-document#cx70");
+  const notice = page.getByRole("region", { name: "기간 지난 단가표" });
+  await expect(notice).toContainText("새 단가표를 받으세요");
+  await expect(notice.getByRole("link", { name: "받은 단가표로 돌아가기" })).toHaveAttribute("href", "/store?view=home");
+  await expect(page.getByRole("button", { name: "주문 기간 종료" })).toBeDisabled();
+  await expect(page.getByText("29,700원", { exact: true })).toHaveCount(0);
+
+  enabled = false;
+  expired = false;
+  member = false;
+  await page.reload();
   await expect(page.getByRole("button", { name: "이 단가로 주문 시작", exact: true })).toBeVisible();
   await expect(tabs).toHaveCount(0);
 });
