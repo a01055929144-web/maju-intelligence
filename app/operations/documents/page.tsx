@@ -5,12 +5,14 @@ import { customerHasCapability, getAdminSession, getCustomerSession, resolvePage
 import { erpOrderDocumentsEnabled } from "@/lib/erp-order-documents-feature";
 import { businessDocumentCancellationEnabled } from "@/lib/business-document-cancellation-feature";
 export const dynamic = "force-dynamic";
-export default async function BusinessDocumentsPage({ searchParams }: { searchParams?: Promise<{ companyId?: string }> }) {
+export default async function BusinessDocumentsPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; partnerType?: string; partnerId?: string }> }) {
   const params = await searchParams; const customerSession = await getCustomerSession(); const adminSession = await getAdminSession();
   if (!customerSession && !adminSession) redirect("/dashboard/login");
   if (customerSession && !customerHasCapability(customerSession, "manage_sales")) redirect("/dashboard");
   if (!customerSession && adminSession && !params?.companyId) redirect("/admin/companies");
   const companyId = resolvePageCompanyId(customerSession, adminSession, params?.companyId) || ""; const preview = Boolean(adminSession && !customerSession);
-  return <CustomerAppShell active="erp-documents" companyName={customerSession?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} subtitle="매출·매입·반품을 전표 한 곳에서 기록하고 거래처원장으로 이어갑니다." title="전표·거래처원장" userName={customerSession?.name || "관리자"} workspaceRole={customerSession?.workspaceRole}><section className="mx-auto max-w-[1560px] px-4 py-4"><BusinessDocumentWorkspace cancellationEnabled={businessDocumentCancellationEnabled(companyId)} companyId={preview ? companyId : ""} returnEnabled={erpOrderDocumentsEnabled(companyId)} /></section></CustomerAppShell>;
+  const partnerType = params?.partnerType === "customer" || params?.partnerType === "supplier" ? params.partnerType : undefined;
+  const partnerId = partnerType ? params?.partnerId?.trim() : undefined;
+  return <CustomerAppShell active="erp-documents" companyName={customerSession?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} subtitle="매출·매입·반품을 전표 한 곳에서 기록하고 거래처원장으로 이어갑니다." title="전표·거래처원장" userName={customerSession?.name || "관리자"} workspaceRole={customerSession?.workspaceRole}><section className="mx-auto max-w-[1560px] px-4 py-4"><BusinessDocumentWorkspace cancellationEnabled={businessDocumentCancellationEnabled(companyId)} companyId={preview ? companyId : ""} initialPartner={partnerType && partnerId ? { id: partnerId, type: partnerType } : undefined} returnEnabled={erpOrderDocumentsEnabled(companyId)} /></section></CustomerAppShell>;
 }
 

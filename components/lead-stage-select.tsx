@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { LEAD_STAGE_OPTIONS, LEAD_STAGE_REASONS, leadStageLabel, toLeadStageValue } from "@/domains/lead/lead-status";
+import { isSelectableLeadStatus, LEAD_STAGE_OPTIONS, LEAD_STAGE_REASONS, leadStageLabel, toLeadStageValue } from "@/domains/lead/lead-status";
 import type { PermitLeadItem } from "@/lib/store";
 import type { PermitLeadActionKind, PermitLeadActionResult } from "@/components/sales-route-map-workspace";
 
@@ -23,7 +23,7 @@ export function LeadStageSelect({
   const [pending, setPending] = useState("");
   const [reason, setReason] = useState("");
   const current = toLeadStageValue(lead.status);
-  const isKnown = LEAD_STAGE_OPTIONS.some((option) => option.value === current);
+  const isKnown = isSelectableLeadStatus(current);
 
   async function save(next: string, chosenReason = "") {
     setSaving(true);

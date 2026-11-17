@@ -1686,7 +1686,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const focusOrigin = () => {
     if (initialView === "leads") {
       const params = new URLSearchParams(window.location.search);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1698,7 +1698,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const resetWorkspace = () => {
     if (initialView === "leads") {
       const params = new URLSearchParams(window.location.search);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView("map");
@@ -1733,7 +1733,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       const params = new URLSearchParams(window.location.search);
       if (nextView === "map") params.delete("view");
       else params.set("view", nextView);
-      router.push(`/map${params.size ? `?${params.toString()}` : ""}`);
+      window.location.assign(`/map${params.size ? `?${params.toString()}` : ""}`);
       return;
     }
     setActiveView(nextView);
@@ -3197,7 +3197,9 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
                   params.delete("pin");
                   params.delete("detail");
                   params.set("type", mapLeadTypeFilter === "sales" ? "keyword" : "permit");
-                  router.push(`/leads?${params.toString()}`);
+                  // /map 과 /leads 는 같은 /dashboard 로 rewrite 되어 router.push 로는 화면(initialView)이 바뀌지 않는다.
+                  // 사이드바와 같은 방식으로 문서를 새로 연다.
+                  window.location.assign(`/leads?${params.toString()}`);
                 }}
                 onToggleCollapsed={() => setMapPanelMode(rightCollapsed ? (mapLeadTypeFilter === "new" ? "newLead" : "salesLead") : "map")}
                 selectedLeadId={previewLeadId}

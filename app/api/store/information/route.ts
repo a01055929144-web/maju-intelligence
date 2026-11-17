@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStoreMemberContext } from "@/lib/store/07-store-member-context";
-import { getStoreInformation, getStoreProfileInformation, updateStoreInformation, updateStoreProfileInformation } from "@/lib/store/07-store-information";
+import { getStoreInformation, getStoreProfileInformation, updateStoreInformation, updateStoreProfileDeliveryInformation, updateStoreProfileInformation } from "@/lib/store/07-store-information";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { parseCustomerBusinessIdentity } from "@/domains/customer/business-identity";
 import { randomUUID } from "crypto";
@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
     if (!member) return NextResponse.json({ message: "매장 로그인을 확인해 주세요." }, { status: 403, headers: noStore });
     const enabled = isFeatureEnabled("STORE_PROFILE_SETTINGS", ids.companyId);
     const businessIdentityEnabled = enabled && isFeatureEnabled("STORE_BUSINESS_IDENTITY", ids.companyId);
-    const information = businessIdentityEnabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId, true)
-      : enabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId) : await getStoreInformation(ids.companyId, ids.storeAccountId);
-    return information ? NextResponse.json({ ...information, canEdit: member.role === "owner", profileSettingsEnabled: enabled, ...(businessIdentityEnabled ? { businessIdentityEnabled: true } : {}) }, { headers: noStore }) :
+    const deliveryEnabled = enabled && isFeatureEnabled("STORE_PROFILE_DELIVERY", ids.companyId);
+    const information = enabled ? await getStoreProfileInformation(ids.companyId, ids.storeAccountId, businessIdentityEnabled, deliveryEnabled) : await getStoreInformation(ids.companyId, ids.storeAccountId);
+    return information ? NextResponse.json({ ...information, canEdit: member.role === "owner", profileSettingsEnabled: enabled,
+      ...(businessIdentityEnabled ? { businessIdentityEnabled: true } : {}), ...(deliveryEnabled ? { deliverySettingsEnabled: true } : {}) }, { headers: noStore }) :
       NextResponse.json({ message: "매장 정보를 찾지 못했습니다." }, { status: 404, headers: noStore });
   } catch { return NextResponse.json({ message: "매장 정보를 불러오지 못했습니다." }, { status: 503, headers: noStore }); }
 }
@@ -59,9 +60,17 @@ export async function PATCH(request: NextRequest) {
           return NextResponse.json({ message: validated.ok ? "사업자 상호는 100자 이하로 입력해 주세요." : validated.message },
             { status: 400, headers: noStore });
       }
-      await updateStoreProfileInformation(information.storeProfileId, member.authUserId, { storeName, representativeName,
-        baseAddress, addressDetail: text("addressDetail", 300), accessNote: text("accessNote", 500),
-        deliveryContactPhone: text("deliveryContactPhone", 30), preferredDeliveryTime: text("preferredDeliveryTime", 100), ...identity }, randomUUID());
+      const baseChanges = { storeName, representativeName, baseAddress, addressDetail: text("addressDetail", 300), accessNote: text("accessNote", 500),
+        deliveryContactPhone: text("deliveryContactPhone", 30), preferredDeliveryTime: text("preferredDeliveryTime", 100), ...identity };
+      if (isFeatureEnabled("STORE_PROFILE_DELIVERY", ids.companyId)) {
+        const email = text("taxInvoiceEmail", 254), receiveMethod = text("receiveMethod", 10), accessPassword = text("accessPassword", 100);
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ message: "계산서 이메일을 확인해 주세요." }, { status: 400, headers: noStore });
+        if (receiveMethod && !["door", "inside", "dawn"].includes(receiveMethod)) return NextResponse.json({ message: "받는 방법을 확인해 주세요." }, { status: 400, headers: noStore });
+        if (receiveMethod === "dawn" && !accessPassword && !information.hasAccessPassword)
+          return NextResponse.json({ message: "새벽 배송 출입 비밀번호를 입력해 주세요." }, { status: 400, headers: noStore });
+        await updateStoreProfileDeliveryInformation(information.storeProfileId, member.authUserId,
+          { ...baseChanges, taxInvoiceEmail: email, receiveMethod, ...(accessPassword ? { accessPassword } : {}) }, randomUUID());
+      } else await updateStoreProfileInformation(information.storeProfileId, member.authUserId, baseChanges, randomUUID());
     } else await updateStoreInformation(ids.companyId, ids.storeAccountId, { storeName, representativeName, phone });
     return NextResponse.json({ saved: true }, { headers: noStore });
   } catch { return NextResponse.json({ message: "매장 정보를 저장하지 못했습니다." }, { status: 503, headers: noStore }); }

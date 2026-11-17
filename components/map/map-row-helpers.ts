@@ -9,9 +9,12 @@ export type StoreRow = RoutePlanStop & RouteOrderFields & {
   accountCopyStatus: "missing" | "received";
   bankAccount: string;
   birthDate: string;
+  businessName?: string;
   businessCertificateStatus: "missing" | "received";
   businessRegistrationNumber: string;
+  businessEntityType?: "individual" | "corporation";
   businessStatus: "active" | "closed" | "unknown";
+  corporateRegistrationNumber?: string;
   deliveryArea?: string;
   deliveryDriver?: string;
   deliveryVehicleId?: string;
@@ -25,6 +28,7 @@ export type StoreRow = RoutePlanStop & RouteOrderFields & {
   openingDate: string;
   phone: string;
   representativeName: string;
+  subBusinessNumber?: string;
 };
 
 /**
