@@ -2,6 +2,12 @@ import { kstDateKey } from "../domains/shared/kst-date";
 import { isValidKoreanCoordinate } from "../domains/customer/coordinates";
 import { resolveDeliveryAddress } from "../domains/customer/address-line";
 import {
+  buildCustomerBusinessKey,
+  hasSubBusinessNumberConflict,
+  parseCustomerBusinessIdentity,
+  type BusinessEntityType
+} from "../domains/customer/business-identity";
+import {
   buildTodayRoutePlan,
   readRouteOrderConfirmationMap,
   type RoutePlan,
@@ -242,10 +248,13 @@ export type CustomerMasterItem = {
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: BusinessEntityType;
   businessStatus?: string;
   businessStatusCheckedAt?: string;
   customerName: string;
+  corporateRegistrationNumber?: string;
   deliveryKm: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -279,6 +288,7 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -299,9 +309,12 @@ export type CustomerMasterInput = {
   bankAccountFileUrl?: string;
   birthDate?: string;
   businessLicenseFileUrl?: string;
+  businessName?: string;
   businessNumber?: string;
+  businessEntityType?: BusinessEntityType;
   businessStatus?: string;
   customerName: string;
+  corporateRegistrationNumber?: string;
   deliveryKm?: number;
   deliveryManager?: string;
   deliveryMinutes?: number;
@@ -326,6 +339,7 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
   reviewSource?: string;
@@ -954,6 +968,7 @@ const CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE = `${CUSTOMER_MASTER_SELECT_WIT
 // PHASE 1 assignment IDs are the authoritative references once populated. This remains the
 // outermost tier so older/local databases can still fall back to the legacy text-only model.
 const CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS = `${CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE},assigned_staff_member_id,delivery_vehicle_id,delivery_territory_id`;
+const CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY = `${CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS},business_name,sub_business_number,business_entity_type,corporate_registration_number`;
 // Fixed caps keep reads predictable; callers expose a partial-data warning when caps are hit.
 const CUSTOMER_MASTER_FETCH_LIMIT = 3000;
 const SALES_TRANSACTIONS_FETCH_LIMIT = 1000;
@@ -4933,10 +4948,13 @@ export async function getCustomerMaster(
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
+    business_name?: string | null;
     business_registration_number: string | null;
+    business_entity_type?: string | null;
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    corporate_registration_number?: string | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -4959,6 +4977,7 @@ export async function getCustomerMaster(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
     access_method_type?: string | null;
@@ -4981,6 +5000,7 @@ export async function getCustomerMaster(
   // 때문에, 특정 컬럼 이름으로 좁게 매칭하면 select에 함께 들어있는 다른(더 오래된) 누락 컬럼을
   // 놓치고 상위로 다시 던져버려 정상 동작하던 하위 fallback까지 깨뜨릴 수 있습니다.
   const CUSTOMER_MASTER_SELECT_TIERS = [
+    CUSTOMER_MASTER_SELECT_WITH_BUSINESS_IDENTITY,
     CUSTOMER_MASTER_SELECT_WITH_ASSIGNMENT_IDS,
     CUSTOMER_MASTER_SELECT_WITH_GRADE_OVERRIDE,
     CUSTOMER_MASTER_SELECT_WITH_CONCURRENCY,
@@ -5374,6 +5394,9 @@ export async function upsertCustomerMaster(
 ) {
   const customerName = input.customerName.trim();
   if (!customerName) throw new Error("거래처명은 필수입니다.");
+  const parsedBusinessIdentity = parseCustomerBusinessIdentity(input);
+  if (!parsedBusinessIdentity.ok) throw new Error(parsedBusinessIdentity.message);
+  const businessIdentity = parsedBusinessIdentity.value;
   // 2026-09-07 피드백("배송차, 담당자 값들이 통일되지 않은 것 같아 확인해") 대응: 거래처 다건
   // 재배정(bulkUpdateDeliveryManager/bulkUpdateDeliveryVehicle)은 이미 trim()해서 저장하는데,
   // 거래처 단건 저장 경로인 이 함수만 입력값을 그대로 저장해왔습니다. CRM 타임라인 상세 편집의
@@ -5411,10 +5434,13 @@ export async function upsertCustomerMaster(
       bank_account_file_url: input.bankAccountFileUrl || null,
       birth_date: input.birthDate || null,
       business_license_file_url: input.businessLicenseFileUrl || null,
+      business_name: businessIdentity.businessName || null,
       business_registration_number: normalizeBusinessNumber(input.businessNumber || ""),
+      business_entity_type: businessIdentity.businessEntityType || null,
       business_status: input.businessStatus || "확인 필요",
       business_status_checked_at: null,
       customer_name: customerName,
+      corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
       delivery_km: input.deliveryKm || 0,
       delivery_manager: deliveryManager || null,
       delivery_minutes: input.deliveryMinutes || null,
@@ -5432,6 +5458,7 @@ export async function upsertCustomerMaster(
       place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
+      sub_business_number: businessIdentity.subBusinessNumber || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
       access_method_type: input.accessMethodType || null,
@@ -5469,8 +5496,12 @@ export async function upsertCustomerMaster(
   const exemptBusinessNumbers = businessNumber ? await getExemptBusinessNumberSet(id) : new Set<string>();
   // 종사업자번호 등 중복 허용 목록에 등록된 사업자번호는 상호명+주소 기준 key를 사용해,
   // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 병합되지 않도록 합니다.
-  const normalizedKey =
-    businessNumber && !exemptBusinessNumbers.has(businessNumber) ? businessNumber : makeCustomerKey(customerName, input.address || "");
+  const normalizedKey = buildCustomerBusinessKey(
+    businessNumber,
+    businessIdentity.subBusinessNumber,
+    exemptBusinessNumbers,
+    makeCustomerKey(customerName, input.address || "")
+  );
   // updated_at도 함께 읽어 아래 동시 편집 감지(낙관적 동시성 제어)에 사용합니다. 이 컬럼이 아직
   // 없는 환경(마이그레이션 미적용)에서도 나머지 저장 로직이 깨지지 않도록 실패 시 컬럼 없이 재시도합니다.
   const existingRows = await supabaseRequest<Array<{ id: string; updated_at?: string | null; delivery_manager?: string | null; assigned_staff_member_id?: string | null }>>(
@@ -5536,13 +5567,16 @@ export async function upsertCustomerMaster(
     bank_account_file_url: input.bankAccountFileUrl || null,
     birth_date: toPostgresDate(input.birthDate),
     business_license_file_url: input.businessLicenseFileUrl || null,
+    business_name: businessIdentity.businessName || null,
     // 병합 키에는 자리채움 값을 빈 값으로 취급하지만(위 businessNumber 계산 참고), 실제 DB 컬럼에는
     // 사용자가 입력한 원래 값을 그대로 저장합니다 — 나중에 진짜 번호로 고칠 수 있어야 하기 때문입니다.
     business_registration_number: rawBusinessNumber || null,
+    business_entity_type: businessIdentity.businessEntityType || null,
     business_status: input.businessStatus || "확인 필요",
     business_status_checked_at: null,
     company_id: id,
     customer_name: customerName,
+    corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
     delivery_km: input.deliveryKm || 0,
     delivery_manager: resolvedDeliveryManager || null,
     delivery_minutes: input.deliveryMinutes || null,
@@ -5556,6 +5590,7 @@ export async function upsertCustomerMaster(
     phone: input.phone || resolvedPlaceLinks.enrichedPhone || null,
     region: input.region || "미분류",
     representative_name: input.representativeName || null,
+    sub_business_number: businessIdentity.subBusinessNumber || null,
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
   };
@@ -8113,10 +8148,22 @@ export async function saveAnalysis(
     .map((row, index) => {
       const rawRow = options.rawRows?.[index];
       const businessRegistrationNumber = rawRow ? normalizeBusinessNumber(getRawCell(rawRow, options.columnMapping?.businessRegistrationNumber)) : "";
+      const parsedBusinessIdentity = parseCustomerBusinessIdentity({
+        businessName: rawRow ? getRawCell(rawRow, options.columnMapping?.businessName) : undefined,
+        subBusinessNumber: rawRow ? getRawCell(rawRow, options.columnMapping?.subBusinessNumber) : undefined,
+        businessEntityType: rawRow ? getRawCell(rawRow, options.columnMapping?.businessEntityType) : undefined,
+        corporateRegistrationNumber: rawRow ? getRawCell(rawRow, options.columnMapping?.corporateRegistrationNumber) : undefined
+      });
+      if (!parsedBusinessIdentity.ok) throw new Error(`${index + 1}행: ${parsedBusinessIdentity.message}`);
+      const businessIdentity = parsedBusinessIdentity.value;
       // 중복 허용 목록에 등록된 사업자번호(종사업자번호 등)는 상호명+주소 기준 key를 사용해,
       // 같은 사업자번호를 쓰는 다른 거래처가 하나의 레코드로 덮어써지지 않도록 합니다.
-      const normalizedKey =
-        businessRegistrationNumber && !exemptBusinessNumbers.has(businessRegistrationNumber) ? businessRegistrationNumber : makeNormalizedKey(row);
+      const normalizedKey = buildCustomerBusinessKey(
+        businessRegistrationNumber,
+        businessIdentity.subBusinessNumber,
+        exemptBusinessNumbers,
+        makeNormalizedKey(row)
+      );
 
       const nameKey = row.customerName.trim().toLowerCase();
       const existingMatches = existingByNameLower.get(nameKey) || [];
@@ -8135,7 +8182,11 @@ export async function saveAnalysis(
         company_id: companyId,
         import_id: resolvedImportId,
         customer_name: row.customerName,
+        business_name: businessIdentity.businessName || null,
         business_registration_number: businessRegistrationNumber || null,
+        sub_business_number: businessIdentity.subBusinessNumber || null,
+        business_entity_type: businessIdentity.businessEntityType || null,
+        corporate_registration_number: businessIdentity.corporateRegistrationNumber || null,
         representative_name: rawRow ? getRawCell(rawRow, options.columnMapping?.representativeName) || null : null,
         opening_date: rawRow ? toPostgresDate(rawRow[options.columnMapping?.openingDate || ""]) : null,
         region: row.region,
@@ -8193,6 +8244,12 @@ export async function saveAnalysis(
       const customer = { ...row };
       delete customer.company_id;
       delete customer.import_id;
+      // 기존 import_customers_atomic_v1의 허용 목록에는 CX-59 칸이 아직 없습니다. 이 RPC를
+      // 바꾸지 않는 범위에서는 종사업장번호를 key 계산에만 쓰고 새 칸은 보내지 않습니다.
+      delete customer.business_name;
+      delete customer.sub_business_number;
+      delete customer.business_entity_type;
+      delete customer.corporate_registration_number;
       return customer;
     });
     const atomicMappings = Object.entries(options.columnMapping || {}).map(([targetField, sourceHeader]) => ({
@@ -11203,6 +11260,7 @@ export async function getPermitLeadIdentityForCompany(
 
 export type PermitLeadProfileInput = {
   businessNumber?: string | null;
+  subBusinessNumber?: string | null;
   instagramUrl?: string | null;
   fax?: string | null;
   email?: string | null;
@@ -11229,6 +11287,8 @@ export async function updatePermitLeadProfile(
   const changed: string[] = [];
   if ("businessNumber" in input) {
     const businessNumber = normalizeBusinessNumber(input.businessNumber || "");
+    const parsedBusinessIdentity = parseCustomerBusinessIdentity({ subBusinessNumber: input.subBusinessNumber });
+    if (!parsedBusinessIdentity.ok) return { ok: false, message: parsedBusinessIdentity.message };
     if (businessNumber && !isValidBusinessRegistrationNumber(businessNumber)) {
       return { ok: false, message: "사업자등록번호 10자리를 확인해주세요." };
     }
@@ -11242,17 +11302,30 @@ export async function updatePermitLeadProfile(
     if (!currentRows.length) return { ok: false, message: "리드를 찾을 수 없습니다." };
     const currentLead = currentRows[0];
     if (businessNumber) {
-      const [duplicateLeadRows, duplicateCustomerRows] = await Promise.all([
+      const [duplicateLeadRows, duplicateCustomerRows, exemptBusinessNumbers] = await Promise.all([
         supabaseRequest<Array<{ id: string }>>(
           `business_permit_leads?select=id&id=neq.${encodeURIComponent(leadId)}&company_id=eq.${encodeURIComponent(companyId)}&merged_into_lead_id=is.null&business_number=eq.${encodeURIComponent(businessNumber)}&limit=1`
         ),
-        supabaseRequest<Array<{ id: string }>>(
-          `normalized_customers?select=id&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=2`
-        )
+        supabaseRequest<Array<{ id: string; sub_business_number: string | null }>>(
+          `normalized_customers?select=id,sub_business_number&company_id=eq.${encodeURIComponent(companyId)}&business_registration_number=eq.${encodeURIComponent(businessNumber)}&limit=100`
+        ),
+        getExemptBusinessNumberSet(companyId)
       ]);
-      const hasOtherCustomer = duplicateCustomerRows.some((row) => row.id !== currentLead.matched_customer_id);
-      if (duplicateLeadRows.length || hasOtherCustomer) {
-        return { ok: false, message: "같은 회사에 이미 등록된 사업자등록번호입니다." };
+      if (!exemptBusinessNumbers.has(businessNumber)) {
+        const currentCustomerSubBusinessNumber = duplicateCustomerRows.find((row) => row.id === currentLead.matched_customer_id)?.sub_business_number || undefined;
+        const subBusinessNumber = parsedBusinessIdentity.value.subBusinessNumber || currentCustomerSubBusinessNumber;
+        const hasConflictingCustomer = hasSubBusinessNumberConflict(
+          subBusinessNumber,
+          duplicateCustomerRows
+            .filter((row) => row.id !== currentLead.matched_customer_id)
+            .map((row) => row.sub_business_number)
+        );
+        if (duplicateLeadRows.length || hasConflictingCustomer) {
+          return {
+            ok: false,
+            message: "같은 회사에 이미 등록된 사업자등록번호입니다. 종사업장이면 종사업장번호를 넣거나 '중복 허용 사업자번호'에 추가하세요."
+          };
+        }
       }
     }
     payload.business_number = businessNumber || null;
@@ -14880,12 +14953,22 @@ async function saveSalesTransactions(companyId: string, importId: string, rawRow
     .map((row) => {
       const customerName = getRawCell(row, columnMapping.customerName);
       const businessRegistrationNumber = normalizeBusinessNumber(getRawCell(row, columnMapping.businessRegistrationNumber));
+      const parsedBusinessIdentity = parseCustomerBusinessIdentity({
+        subBusinessNumber: getRawCell(row, columnMapping.subBusinessNumber)
+      });
+      if (!parsedBusinessIdentity.ok) throw new Error(parsedBusinessIdentity.message);
       // 중복 허용 목록에 등록된 사업자번호는 매출 매칭 key로 쓰지 않고 상호명/주소 기준으로 대체합니다.
       // (사업자번호 자체는 원래 값 그대로 저장하고, key 계산에서만 제외합니다.)
-      const keyEligibleBusinessNumber = exemptBusinessNumbers.has(businessRegistrationNumber) ? "" : businessRegistrationNumber;
       const address = getRawCell(row, columnMapping.address);
-      const nameOnlyMatch = !keyEligibleBusinessNumber && !address ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) : undefined;
-      const customerKey = keyEligibleBusinessNumber || nameOnlyMatch || makeCustomerKey(customerName, address);
+      const fallbackKey = !address
+        ? nameOnlyLookup.get(normalizeNameForDuplicateCheck(customerName)) || makeCustomerKey(customerName, address)
+        : makeCustomerKey(customerName, address);
+      const customerKey = buildCustomerBusinessKey(
+        businessRegistrationNumber,
+        parsedBusinessIdentity.value.subBusinessNumber,
+        exemptBusinessNumbers,
+        fallbackKey
+      );
 
       return {
         company_id: companyId,
@@ -15061,10 +15144,13 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     bank_account_file_url: asNullableString(row.bank_account_file_url),
     birth_date: asNullableString(row.birth_date),
     business_license_file_url: asNullableString(row.business_license_file_url),
+    business_name: asNullableString(row.business_name),
     business_registration_number: asNullableString(row.business_registration_number),
+    business_entity_type: asNullableString(row.business_entity_type),
     business_status: asNullableString(row.business_status),
     business_status_checked_at: asNullableString(row.business_status_checked_at),
     customer_name: String(row.customer_name || ""),
+    corporate_registration_number: asNullableString(row.corporate_registration_number),
     delivery_km: row.delivery_km as number | string | null,
     delivery_manager: asNullableString(row.delivery_manager),
     delivery_minutes: typeof row.delivery_minutes === "number" ? row.delivery_minutes : null,
@@ -15085,6 +15171,7 @@ function toNormalizedCustomerRow(row: Record<string, unknown>) {
     place_links_checked_at: asNullableString(row.place_links_checked_at),
     region: asNullableString(row.region),
     representative_name: asNullableString(row.representative_name),
+    sub_business_number: asNullableString(row.sub_business_number),
     visit_count: typeof row.visit_count === "number" ? row.visit_count : 0,
     loading_position: asNullableString(row.loading_position),
     business_hours: asNullableString(row.business_hours),
@@ -15105,10 +15192,13 @@ function toCustomerMasterItem(
     bank_account_file_url: string | null;
     birth_date: string | null;
     business_license_file_url: string | null;
+    business_name?: string | null;
     business_registration_number: string | null;
+    business_entity_type?: string | null;
     business_status: string | null;
     business_status_checked_at: string | null;
     customer_name: string;
+    corporate_registration_number?: string | null;
     delivery_km: number | string | null;
     delivery_manager: string | null;
     delivery_minutes: number | null;
@@ -15131,6 +15221,7 @@ function toCustomerMasterItem(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
     access_method_type?: string | null;
@@ -15160,10 +15251,13 @@ function toCustomerMasterItem(
     bankAccountFileUrl: row.bank_account_file_url || undefined,
     birthDate: row.birth_date || undefined,
     businessLicenseFileUrl: row.business_license_file_url || undefined,
+    businessName: row.business_name || undefined,
     businessNumber: row.business_registration_number || undefined,
+    businessEntityType: row.business_entity_type === "individual" || row.business_entity_type === "corporation" ? row.business_entity_type : undefined,
     businessStatus: row.business_status || undefined,
     businessStatusCheckedAt: row.business_status_checked_at || undefined,
     customerName: row.customer_name,
+    corporateRegistrationNumber: row.corporate_registration_number || undefined,
     deliveryKm: Number(row.delivery_km || 0),
     deliveryManager: row.delivery_manager || undefined,
     deliveryMinutes: row.delivery_minutes || undefined,
@@ -15197,6 +15291,7 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    subBusinessNumber: row.sub_business_number || undefined,
     reviewSummary: row.review_summary || undefined,
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,
     reviewSource: row.review_source || undefined,
