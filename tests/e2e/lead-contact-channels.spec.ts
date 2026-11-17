@@ -32,7 +32,7 @@ test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { (window as Window & { copiedText?: string }).copiedText = text; } } });
   });
-  await page.route(/\/api\/leads\/permits\?excludeExcluded=true/, (route) => route.fulfill({ json: { leads: [lead] } }));
+  await page.route(/\/api\/leads\/permits(?:\?.*)?$/, (route) => route.fulfill({ json: { leads: [lead] } }));
   await page.route(/\/api\/leads\/permits\/[^/]+\/actions/, (route) => route.fulfill({ json: { actions: [] } }));
   await page.route(/\/api\/leads\/permits\/[^/]+\/(?:do-not-contact|source-disclosure)/, (route) => route.fulfill({ json: route.request().url().includes("do-not-contact") ? { enabled: false, entries: [] } : { sources: [] } }));
   await page.route(/\/api\/leads\/dm-template/, (route) => route.fulfill({ json: { canEdit: false, excluded: "", template: "안녕하세요. 가짜 제안입니다." } }));
