@@ -8,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { formatMinutes } from "@/lib/route-map-utils";
 import { DeliveryCompletionEvent, DeliveryHistoryDay, DeliveryHistoryDriverGroup, DeliveryHistoryFollowUpStatus, StaffLocationEvent } from "@/lib/store";
 import { RouteMetric, StoreRow } from "@/components/sales-route-map-workspace";
+import { RouteStopsTimeline } from "@/components/route-stops-timeline";
 
 // 2026-09-07 피드백("매일 배송 경로, 경유, 배송완료 여부 등 히스토리 파악 할 수 있도록 해야해,
 // 달력으로 표기해서 기간 설정을 하고, 특정일자의 배송 일자를 보면 좋을 것 같아") 대응 화면입니다.
@@ -299,6 +300,7 @@ export function DeliveryHistoryView({ companyId, onOpenStore, stores }: Delivery
 
   return (
     <section className="flex flex-1 flex-col gap-4 overflow-auto p-4">
+      <RouteStopsTimeline date={selectedDate} />
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className="maju-section-card p-3">
           <div className="flex items-center justify-between gap-2 px-1 py-1">
