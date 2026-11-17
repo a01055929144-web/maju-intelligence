@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MobileDriverRouteWorkspace } from "@/components/mobile-driver-route-workspace";
+import { MobileDriverRunExtras } from "@/components/mobile-driver-run-extras";
 import { MobileDriverSalesStops } from "@/components/mobile-driver-sales-stops";
 import { MobileDeliveryProofPanel } from "@/components/mobile-delivery-proof-panel";
 import { MobileLocationReporter } from "@/components/mobile-location-reporter";
@@ -100,6 +101,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
   const workspaceRole = normalizeWorkspaceRole(session.workspaceRole || session.role);
   const roleLabel = workspaceRoleLabels[workspaceRole];
   const receiptWorkflowEnabled = isFeatureEnabled("DRIVER_RECEIPT_WORKFLOW", session.companyId);
+  const runExperienceEnabled = isFeatureEnabled("DRIVER_RUN_EXPERIENCE", session.companyId);
   const routeStops = receiptWorkflowEnabled && session.companyMemberId ? await supabaseRequest<Array<{ id: string; customer_id: string }>>(
     `delivery_route_stops?select=id,customer_id&company_id=eq.${encodeURIComponent(session.companyId)}&driver_member_id=eq.${encodeURIComponent(session.companyMemberId)}&route_date=eq.${deliveryDate}&stop_type=eq.delivery&status=in.(planned,arrived)&order=stop_order.asc`,
   ).catch(() => []) : [];
@@ -117,6 +119,7 @@ export default async function MobileTodayPage({ searchParams }: { searchParams?:
         >
         <div className="space-y-3 pb-3">
           <MobileDriverSalesStops enabled={isFeatureEnabled("DRIVER_SALES_STOPS", session.companyId)} />
+          {runExperienceEnabled ? <MobileDriverRunExtras completed={completedCustomerIds.size} failed={0} photos={0} sales={0} /> : null}
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0"><p className="truncate text-sm font-bold">{driverName}</p><p className="truncate text-xs font-semibold text-slate-500">{session.companyName}</p></div>
             <Badge className="whitespace-nowrap bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-100">{roleLabel}</Badge>
