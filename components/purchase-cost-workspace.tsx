@@ -1040,13 +1040,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       {unitRelinkBlockedRows.length ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">단위 변경으로 상품 연결을 다시 확인해야 하는 원본 행: {unitRelinkBlockedRows.join(", ")}행. 잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다. 단위 열을 채운 원본 파일을 다시 올려 열 정렬해 주세요.</p> : null}
       <CommonDataTable<DatedPurchaseLine> selectable={false} settingsKey={`purchase-save-review:${companyId}`} filename="매입가_저장전확인.csv" rowKey={line => String(line.rowNumber)} rows={importedLines}
         columns={[
-          { key: "pick", label: "선택", value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
-          { key: "rowNumber", label: "원본 행", value: line => line.rowNumber },
-          { key: "name", label: "품목(원문)", value: line => line.rawName },
-          { key: "spec", label: "규격", value: line => line.spec || "-" },
-          { key: "unit", label: "단위", value: line => line.unit || "", render: line => <input aria-label={`${line.rowNumber}행 단위`} className={`maju-input min-h-[44px] min-w-24 ${line.unit.trim() ? "" : "border-amber-400"}`} list="purchase-unit-options" onChange={event => updateImportedUnits([line.rowNumber], event.target.value)} placeholder="EA·BOX·KG" value={line.unit} /> },
-          { key: "purchaseDate", label: "적용일", value: line => line.purchaseDate || receiptDate },
-          { key: "cost", label: "단가(별도)", value: line => line.cost, render: line => money(line.cost) }
+          { key: "pick", label: "선택", width: 56, value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
+          { key: "rowNumber", label: "원본 행", priority: 3, value: line => line.rowNumber },
+          { key: "name", label: "품목(원문)", priority: 3, value: line => line.rawName },
+          { key: "spec", label: "규격", priority: 3, value: line => line.spec || "-" },
+          { key: "unit", label: "단위", width: 120, value: line => line.unit || "", render: line => <input aria-label={`${line.rowNumber}행 단위`} className={`maju-input min-h-[44px] min-w-24 ${line.unit.trim() ? "" : "border-amber-400"}`} list="purchase-unit-options" onChange={event => updateImportedUnits([line.rowNumber], event.target.value)} placeholder="EA·BOX·KG" value={line.unit} /> },
+          { key: "purchaseDate", label: "적용일", priority: 3, value: line => line.purchaseDate || receiptDate },
+          { key: "cost", label: "단가(별도)", priority: 3, value: line => line.cost, render: line => money(line.cost) }
         ]} />
       <ul>{reviewDates.map(([date, count]) => <li key={date}>{date || "날짜 없음"} · {count}행</li>)}</ul>
       {batchEnabled && !usesDateBatch && priceChangeCount > 100 ? <p role="alert">가격 변경 {priceChangeCount}건은 최대 100건을 초과합니다. 저장 전 선택 건수를 줄여 주세요. 새 상품·이력을 먼저 저장하지 않습니다.</p> : null}
