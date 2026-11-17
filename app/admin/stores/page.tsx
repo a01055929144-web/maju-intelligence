@@ -32,13 +32,13 @@ export default async function AdminStoresPage({ searchParams }: { searchParams: 
       <form className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto]" method="get">
         <input aria-label="매장 검색" className="h-11 min-w-0 rounded-lg border border-slate-300 px-3 text-sm" defaultValue={params.q} name="q" placeholder="매장명, 사업자번호, 주소, 유통사 검색" />
         <label className="flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold"><input defaultChecked={params.duplicate === "1"} name="duplicate" type="checkbox" value="1" />중복 의심만</label>
-        <button className="min-h-11 rounded-lg bg-slate-950 px-4 text-sm font-black text-white">조회</button>
+        <button className="min-h-11 rounded-lg bg-slate-950 px-4 text-sm font-black text-white" type="submit">조회</button>
       </form>
-      {!stores ? <Notice text="매장 목록 조회에 실패했습니다. 0건과 구분해 표시합니다." /> : null}
-      {stores && !filtered.length ? <Notice text="조건에 맞는 매장이 없습니다." /> : null}
+      {!stores ? <Notice kind="error" text="매장 목록 조회에 실패했습니다. 0건과 구분해 표시합니다." /> : null}
+      {stores && !filtered.length ? <Notice kind="status" text="조건에 맞는 매장이 없습니다." /> : null}
       {selected ? <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.6fr)]">
         <div className="space-y-2">
-          {filtered.map((store) => <Link className={`block rounded-xl border p-3 ${selected.id === store.id ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white"}`} href={href(params, store.id)} key={store.id}>
+          {filtered.map((store) => <Link aria-current={selected.id === store.id ? "page" : undefined} className={`block rounded-xl border p-3 ${selected.id === store.id ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white"}`} href={href(params, store.id)} key={store.id}>
             <div className="flex min-w-0 items-start justify-between gap-2"><p className="min-w-0 break-words text-sm font-black text-slate-950">{store.storeName}</p>{store.duplicateSuspected ? <Badge className="shrink-0 bg-rose-100 text-rose-800">중복 의심</Badge> : null}</div>
             <p className="mt-1 break-words text-xs font-semibold text-slate-600">{store.address || "주소 미입력"}</p>
             <p className="mt-2 text-xs font-bold text-slate-500">유통사 {store.connections.length} · 사람 {store.members.length} · {statusLabel(store.status)}</p>
@@ -63,11 +63,11 @@ function StoreDetail({ store }: { store: Awaited<ReturnType<typeof getAdminStore
   </div>;
 }
 
-function Section({ children, empty, icon: Icon, title }: { children: ReactNode; empty: string; icon: typeof Store; title: string }) { const has = Array.isArray(children) ? children.length > 0 : Boolean(children); return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Icon className="h-4 w-4" />{title}</CardTitle></CardHeader><CardContent className="space-y-2">{has ? children : <p className="text-sm font-semibold text-slate-500">{empty}</p>}</CardContent></Card>; }
+function Section({ children, empty, icon: Icon, title }: { children: ReactNode; empty: string; icon: typeof Store; title: string }) { const has = Array.isArray(children) ? children.length > 0 : Boolean(children); return <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Icon aria-hidden="true" className="h-4 w-4" />{title}</CardTitle></CardHeader><CardContent className="space-y-2">{has ? children : <p className="text-sm font-semibold text-slate-500">{empty}</p>}</CardContent></Card>; }
 function Row({ text, title }: { text: string; title: string }) { return <div className="min-w-0 rounded-lg border border-slate-200 p-3"><p className="break-words text-sm font-black text-slate-900">{title}</p><p className="mt-1 break-words text-xs font-semibold text-slate-600">{text}</p></div>; }
 function Info({ label, value }: { label: string; value: string }) { return <div className="min-w-0"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 break-words font-black text-slate-900">{value}</p></div>; }
 function Summary({ label, tone, value }: { label: string; tone?: "warn"; value: number }) { return <Card className={tone ? "border-rose-200 bg-rose-50" : ""}><CardContent className="p-4"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value.toLocaleString()}</p></CardContent></Card>; }
-function Notice({ text }: { text: string }) { return <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900"><AlertTriangle className="h-5 w-5 shrink-0" />{text}</div>; }
+function Notice({ kind, text }: { kind: "error" | "status"; text: string }) { return <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900" role={kind === "error" ? "alert" : "status"}><AlertTriangle aria-hidden="true" className="h-5 w-5 shrink-0" />{text}</div>; }
 function href(params: { duplicate?: string; q?: string }, storeId: string) { const q = new URLSearchParams(); if (params.q) q.set("q", params.q); if (params.duplicate) q.set("duplicate", params.duplicate); q.set("storeId", storeId); return `/admin/stores?${q}`; }
 const statusLabel = (value: string) => ({ active: "활성", suspended: "멈춤", closed: "종료", registration_pending: "개업 준비 중", removed: "내보냄" }[value] || value);
 const roleLabel = (value: string) => ({ owner: "점주", manager: "관리자", staff: "직원" }[value] || value);
