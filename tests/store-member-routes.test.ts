@@ -2,15 +2,16 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  allowlisted: vi.fn(), context: vi.fn(), create: vi.fn(), enabled: vi.fn(),
-  list: vi.fn(), origin: vi.fn(), prepared: vi.fn(), proof: vi.fn(), remove: vi.fn()
+  allowlisted: vi.fn(), context: vi.fn(), create: vi.fn(), createProfile: vi.fn(), enabled: vi.fn(), feature: vi.fn(),
+  list: vi.fn(), listProfile: vi.fn(), origin: vi.fn(), prepared: vi.fn(), proof: vi.fn(), remove: vi.fn(), removeProfile: vi.fn()
 }));
 vi.mock("@/lib/auth", () => ({ setStoreMemberInvitationProof: mocks.proof, storeMemberSessionEnabled: mocks.enabled }));
 vi.mock("@/lib/store/07-store-member-feature", () => ({ isStoreMemberCompanyAllowlisted: mocks.allowlisted }));
+vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mocks.feature }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreMemberContext: mocks.context }));
 vi.mock("@/lib/store/07-store-member-management", () => ({
-  createStoreMemberInvitation: mocks.create, getPreparedStoreMemberInvitation: mocks.prepared,
-  listStoreMembers: mocks.list, removeStoreMember: mocks.remove
+  createStoreMemberInvitation: mocks.create, createStoreProfileMemberInvitation: mocks.createProfile, getPreparedStoreMemberInvitation: mocks.prepared,
+  listStoreMembers: mocks.list, listStoreProfileMembers: mocks.listProfile, removeStoreMember: mocks.remove, removeStoreProfileMember: mocks.removeProfile
 }));
 vi.mock("@/lib/store/07-store-owner-provisioning", () => ({ getStorePublicBaseUrl: mocks.origin }));
 
@@ -28,6 +29,7 @@ describe("store member route feature boundaries", () => {
     vi.clearAllMocks();
     mocks.enabled.mockReturnValue(true);
     mocks.allowlisted.mockReturnValue(true);
+    mocks.feature.mockReturnValue(false);
   });
 
   it("returns 404 without reading the invitation while store sessions are off", async () => {
@@ -82,6 +84,26 @@ describe("store member route feature boundaries", () => {
     expect(await response.json()).toMatchObject({ actorMemberId: "actor", actorRole: "manager",
       members: [{ id: "staff", role: "staff" }] });
     expect(mocks.list).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId });
+  });
+
+  it("uses the store-profile invitation boundary only for an allowlisted owner", async () => {
+    mocks.feature.mockImplementation(feature => feature === "STORE_PROFILE_INVITATIONS");
+    mocks.context.mockResolvedValue({ authUserId: "auth-user", companyId, memberId: "owner", role: "owner", storeAccountId });
+    mocks.origin.mockReturnValue("https://store.test");
+    mocks.createProfile.mockResolvedValue("a".repeat(43));
+    const response = await createInvitation(request("/api/store/members", {
+      companyId, displayName: "주방 김OO", role: "manager", storeAccountId
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.createProfile).toHaveBeenCalledExactlyOnceWith({
+      authUserId: "auth-user", companyId, displayName: "주방 김OO", role: "manager", storeAccountId
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    mocks.listProfile.mockResolvedValue([]);
+    const listResponse = await listMembers(new NextRequest(`https://test/api/store/members?companyId=${companyId}&storeAccountId=${storeAccountId}`));
+    expect(await listResponse.json()).toMatchObject({ profileMode: true });
+    expect(mocks.listProfile).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId });
   });
 
   it("does not read the roster for a staff member or a company outside the rollout", async () => {
