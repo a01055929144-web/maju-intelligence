@@ -93,6 +93,8 @@ export async function GET(request: NextRequest) {
     lineKey && `line_key=eq.${encodeURIComponent(lineKey)}`].filter(Boolean);
   const correctionEnabled = canCorrect(auth.companyId);
   const receiptTable = correctionEnabled ? "purchase_receipt_effective" : "purchase_receipt_lines";
+  // 날짜별 재업로드로 바뀐(무효 처리된) 예전 행은 이력에 보이지 않는다. effective 뷰는 DB에서 같은 조건으로 거른다.
+  if (!correctionEnabled) filters.push("invalidated_at=is.null");
   const select = `select=id,receipt_date,line_key,product_catalog_id,product_name,spec,unit,supplier_name,quantity,unit_price,unit_cost_ex_vat,price_includes_vat,tax_type,total_amount${correctionEnabled ? ",correction_revision,corrected" : ""}`;
   const rows = await historyPages(`${receiptTable}?${select}&company_id=eq.${encodeURIComponent(auth.companyId)}&${filters.join("&")}${filters.length ? "&" : ""}order=receipt_date.desc,id.desc`).catch(() => null);
   if (!rows) return NextResponse.json({ message: "매입 이력을 불러오지 못했습니다." }, { status: 500 });
