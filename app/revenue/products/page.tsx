@@ -6,6 +6,7 @@ import { customerItemsFileImportEnabled } from "../../../lib/customer-items-impo
 import { areHoldModulesEnabled } from "../../../lib/feature-modules";
 import { isFeatureEnabled } from "../../../lib/feature-flags";
 import { canManagePriceSheets } from "@/domains/pricing/access";
+import { productInventoryHistoryEnabled } from "@/lib/product-inventory-history-feature";
 
 export default async function ProductCatalogPage({ searchParams }: { searchParams?: Promise<{ companyId?: string; tab?: string }> }) {
   const params = await searchParams;
@@ -40,6 +41,7 @@ export default async function ProductCatalogPage({ searchParams }: { searchParam
           companyId={isAdminPreview ? companyId : ""}
           importAuditV2Enabled={isFeatureEnabled("PRODUCT_IMPORT_AUDIT_V2", companyId)}
           importTargetsEnabled={isFeatureEnabled("PRODUCT_IMPORT_TARGETS", companyId)}
+          inventoryHistoryEnabled={productInventoryHistoryEnabled(companyId)}
           customerItemsEnabled={customerItemsFileImportEnabled(companyId) && areHoldModulesEnabled(companyId)}
           rowEditorEnabled={isFeatureEnabled("IMPORT_ROW_EDITOR", companyId)}
           initialTab={initialTab}

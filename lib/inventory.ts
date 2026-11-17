@@ -62,10 +62,24 @@ export async function listInventory(companyId: string, input: { cursor?: string;
 }
 
 export async function listInventoryMovements(companyId: string, productId: string) {
-  return supabaseRequest<Array<{ id: string; movement_type: string; quantity_delta: number; value_delta: number; unit_cost: number | null; business_date: string; source_document_number_snapshot: string | null; reason: string | null; actor_name: string | null; created_at: string }>>(
-    `inventory_movements?select=id,movement_type,quantity_delta,value_delta,unit_cost,business_date,source_document_number_snapshot,reason,actor_name,created_at&company_id=eq.${enc(companyId)}&product_catalog_id=eq.${enc(productId)}&order=created_at.desc&limit=200`,
+  if (process.env.CI_LAYOUT_FIXTURES === "enabled" && process.env.VERCEL_ENV !== "production") return inventoryMovementFixtures;
+  const rows = await supabaseRequest<Array<InventoryMovementRow>>(
+    `inventory_movements?select=id,movement_type,quantity_delta,value_delta,unit_cost,business_date,source_document_number_snapshot,reason,actor_name,created_at,business_documents!inventory_movements_document_fk(partner_name_snapshot)&company_id=eq.${enc(companyId)}&product_catalog_id=eq.${enc(productId)}&order=created_at.desc&limit=200`,
   );
+  return rows.map(({ business_documents, ...row }) => ({
+    ...row,
+    store_name: row.movement_type === "sale_out" ? embeddedDocument(business_documents)?.partner_name_snapshot || null : null,
+  }));
 }
+
+type InventoryMovementDocument = { partner_name_snapshot: string };
+export type InventoryMovement = { id: string; movement_type: string; quantity_delta: number; value_delta: number; unit_cost: number | null; business_date: string; source_document_number_snapshot: string | null; reason: string | null; actor_name: string | null; created_at: string; store_name: string | null };
+type InventoryMovementRow = Omit<InventoryMovement, "store_name"> & { business_documents: InventoryMovementDocument | InventoryMovementDocument[] | null };
+const embeddedDocument = (value: InventoryMovementRow["business_documents"]) => Array.isArray(value) ? value[0] : value;
+const inventoryMovementFixtures: InventoryMovement[] = [
+  { id: "movement-1", movement_type: "sale_out", quantity_delta: -4, value_delta: -48000, unit_cost: 12000, business_date: "2026-11-17", source_document_number_snapshot: "매출-20261117-001", reason: null, actor_name: "CI 담당자", created_at: "2026-11-17T01:00:00Z", store_name: "테스트 한식당" },
+  { id: "movement-2", movement_type: "purchase_in", quantity_delta: 10, value_delta: 90000, unit_cost: 9000, business_date: "2026-11-16", source_document_number_snapshot: "매입-20261116-001", reason: null, actor_name: "CI 담당자", created_at: "2026-11-16T01:00:00Z", store_name: null },
+];
 
 export async function searchStocktakeProducts(companyId: string, search = "") {
   const productQuery = [
