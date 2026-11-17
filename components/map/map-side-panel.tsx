@@ -26,7 +26,7 @@ import { getMapLeadReminderLabel, runMapLeadStageBulk } from "@/lib/map-lead-wor
 import type {
   PermitLeadItem,
 } from "@/lib/store";
-import { LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
+import { isSelectableLeadStatus, LEAD_STAGE_OPTIONS, toLeadStageValue } from "@/domains/lead/lead-status";
 import { formatStoreAreaPyeong } from "@/domains/lead/store-area";
 import {
   formatDistanceKmLabel,
@@ -406,6 +406,7 @@ export function LeadListPanel({
                   rating
                 ].filter(Boolean).join(" · ") || lead.address || "주소 확인 필요";
                 const subTitle = lead.industryPrimary && displayIndustry(lead.industryPrimary) !== lead.industryPrimary ? lead.industryPrimary : undefined;
+                const stageValue = toLeadStageValue(lead.status);
                 return (
                   <MapListRow
                     badges={
@@ -444,8 +445,9 @@ export function LeadListPanel({
                             return next;
                           });
                         }}
-                        value={toLeadStageValue(lead.status)}
+                        value={isSelectableLeadStatus(stageValue) ? stageValue : ""}
                       >
+                        {!isSelectableLeadStatus(stageValue) ? <option value="">{lead.status || "선택"}</option> : null}
                         {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </StageChipSelect>
                     }
