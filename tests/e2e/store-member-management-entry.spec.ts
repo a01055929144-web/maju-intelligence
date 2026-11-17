@@ -35,8 +35,7 @@ for (const width of [1440, 390]) test(`verified store member entry keeps role an
   await expect(page.getByText("첫 가입은 받은 견적서·단가표 링크에서 진행합니다.", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "구성원 관리", exact: true })).toHaveCount(0);
   for (const token of ["owner", "manager", "staff", "anonymous", "off", "retry"]) {
-    await page.goto(`/store#${token}`);
-    await storeTab(page, "내 정보").click();
+    await page.goto(`/store?view=info#${token}`);
     const entry = page.getByRole("link", { name: "구성원 관리", exact: true });
     if (token === "owner" || token === "manager") {
       await expect(entry).toHaveAttribute("href", href);

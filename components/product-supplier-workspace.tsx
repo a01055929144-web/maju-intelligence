@@ -1,12 +1,11 @@
 "use client";
 
 import { formatWon } from "@/domains/shared/money";
-import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, FileSpreadsheet, Save } from "lucide-react";
-import { SearchInput } from "@/components/ui/search-input";
+import { CheckCircle2, Save } from "lucide-react";
 import { CommonDataTable, type CommonTableColumn } from "@/components/common-data-table";
-import { ErpPartnerDirectoryToolbar } from "@/components/erp-partner-directory-toolbar";
+import { PartnerDirectory } from "@/components/partners/partner-directory";
+import type { PartnerRow } from "@/domains/partner/directory";
 import type { ProductSupplierDirectory, ProductSupplierSummary } from "@/lib/product-suppliers";
 
 const money = (value: number) => formatWon(Math.round(value));
@@ -18,22 +17,8 @@ const businessNumber = (value?: string) => {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
 };
 
-type SupplierTab = "list" | "products" | "history";
-const SUPPLIER_TABS: ReadonlyArray<readonly [SupplierTab, string]> = [["list", "매입처 목록"], ["products", "매입 상품"], ["history", "거래내역"]];
-
 export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" }: { companyId?: string; data: ProductSupplierDirectory; loadError?: string }) {
   const [suppliers, setSuppliers] = useState(data.suppliers);
-  const [selectedId, setSelectedId] = useState(data.suppliers[0]?.id || "");
-  const [tab, setTab] = useState<SupplierTab>("list");
-  const [supplierQuery, setSupplierQuery] = useState("");
-  const selected = suppliers.find((supplier) => supplier.id === selectedId);
-  const products = useMemo(() => data.products.filter((item) => item.supplierId === selectedId), [data.products, selectedId]);
-  const visibleSuppliers = useMemo(() => {
-    const normalized = supplierQuery.trim().toLocaleLowerCase("ko");
-    return normalized ? suppliers.filter((supplier) => supplier.name.toLocaleLowerCase("ko").includes(normalized)) : suppliers;
-  }, [supplierQuery, suppliers]);
-  const history = useMemo(() => data.costHistory.filter((item) => item.supplierId === selectedId), [data.costHistory, selectedId]);
-  const imports = useMemo(() => data.imports.filter((item) => item.supplierId === selectedId), [data.imports, selectedId]);
   const uploadHref = companyId ? `/revenue/pricing?companyId=${encodeURIComponent(companyId)}` : "/revenue/pricing"; // 매입처 가격 파일은 매입가 반영에서 올린다(2149)
   const productColumns = useMemo<CommonTableColumn<ProductSupplierDirectory["products"][number]>[]>(() => [
     { key: "name", label: "매입 상품", value: (row) => row.rawName, sortable: true },
@@ -54,14 +39,31 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
     { key: "status", label: "상태", value: (row) => row.status },
     { key: "rows", label: "행 수", value: (row) => row.totalRows, render: (row) => row.totalRows.toLocaleString(), align: "right", sortable: true },
   ], []);
-  const supplierPicker = (
-    <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">
-      매입처
-      <select aria-label="매입처 선택" className="maju-input min-h-11 sm:min-h-9" onChange={(event) => setSelectedId(event.target.value)} value={selectedId}>
-        {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-      </select>
-    </label>
-  );
+  // CC-73: 매출처와 같은 공용 거래처 틀(PartnerDirectory). 기존 기본정보 폼·상품 표·이력 표는 지우지 않고 틀의 탭 안으로 옮겼다.
+  const rows = useMemo<Array<PartnerRow & { supplier: ProductSupplierSummary }>>(() => suppliers.map((supplier) => ({
+    id: supplier.id, displayName: supplier.name, businessNumber: supplier.businessNumber, representativeName: supplier.representativeName,
+    phone: supplier.contactPhone, lastTradeDate: supplier.latestImportAt ? date(supplier.latestImportAt) : undefined, status: supplier.isActive ? "활성" : "비활성", supplier
+  })), [suppliers]);
+  const tabs = useMemo(() => ({
+    info: (row: PartnerRow & { supplier: ProductSupplierSummary }) => (
+      <SupplierProfileCard companyId={companyId} key={row.id} onSaved={(saved) => setSuppliers((current) => current.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)))} supplier={row.supplier} />
+    ),
+    items: (row: PartnerRow & { supplier: ProductSupplierSummary }) => (
+      <div className="space-y-4">
+        <p className="text-xs font-semibold text-slate-500">{row.displayName} · 매입 상품 {row.supplier.productCount.toLocaleString()}개 · 원가 확정률 {row.supplier.confirmedCostRate}%</p>
+        <CommonDataTable columns={productColumns} emptyMessage="조건에 맞는 매입 상품이 없습니다." filename="매입상품.csv" rowKey={(item) => item.id} rows={data.products.filter((item) => item.supplierId === row.id)} selectable={false} settingsKey="supplier-products" />
+        <h4 className="text-sm font-black text-slate-900">원가 이력</h4>
+        <CommonDataTable columns={historyColumns} emptyMessage="저장된 원가 이력이 없습니다." filename="원가이력.csv" rowKey={(item) => item.id} rows={data.costHistory.filter((item) => item.supplierId === row.id)} selectable={false} settingsKey="supplier-cost-history" />
+      </div>
+    ),
+    memo: (row: PartnerRow & { supplier: ProductSupplierSummary }) => (
+      <p className="whitespace-pre-wrap text-sm text-slate-700">{row.supplier.memo?.trim() || "메모가 없습니다."}<span className="mt-2 block text-xs text-slate-500">메모는 [기본 정보]에서 수정합니다.</span></p>
+    )
+  }), [companyId, data.costHistory, data.products, historyColumns, productColumns]);
+  const extraTabs = useMemo(() => [{
+    id: "imports", label: "업로드 이력",
+    render: (row: PartnerRow) => <CommonDataTable columns={importColumns} emptyMessage="저장된 업로드 이력이 없습니다." filename="업로드이력.csv" rowKey={(item) => item.id} rows={data.imports.filter((item) => item.supplierId === row.id)} selectable={false} settingsKey="supplier-imports" />
+  }], [data.imports, importColumns]);
 
   return (
     <div className="space-y-4">
@@ -70,106 +72,7 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
         <Metric label="매입 상품" value={`${data.products.length.toLocaleString()}개`} />
         <Metric label="원가 비교 가능" value={`${data.comparisons.length.toLocaleString()}개 품목`} />
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div aria-label="매입처 화면" className="flex max-w-full gap-1 overflow-x-auto" role="tablist">
-          {SUPPLIER_TABS.map(([id, label]) => (
-            <button aria-selected={tab === id} className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold ${tab === id ? "bg-teal-700 text-white" : "text-slate-600 hover:bg-slate-100"}`} key={id} onClick={() => setTab(id)} role="tab" type="button">{label}</button>
-          ))}
-        </div>
-        <Link className="maju-button-primary min-h-11 px-3 text-xs sm:min-h-9" href={uploadHref}><FileSpreadsheet className="h-4 w-4" /> 단가표 업로드</Link>
-      </div>
-
-      {tab === "list" ? (
-        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
-          <aside className="maju-section-card overflow-hidden">
-            <ErpPartnerDirectoryToolbar
-              countLabel={`${visibleSuppliers.length}/${suppliers.length}곳`}
-              description="매입처를 검색한 뒤 상품 수, 원가 확정률, 최근 업로드와 활성 상태를 비교하세요."
-              error={loadError || undefined}
-              onRetry={loadError ? () => window.location.reload() : undefined}
-              title="매입처 목록"
-            >
-              <SearchInput aria-label="매입처 검색" className="max-w-xl" onChange={setSupplierQuery} placeholder="매입처명 검색" value={supplierQuery} />
-            </ErpPartnerDirectoryToolbar>
-            {visibleSuppliers.length ? (
-              <div className="max-h-[680px] divide-y divide-slate-100 overflow-y-auto">
-                {visibleSuppliers.map((supplier) => (
-                  <button
-                    aria-pressed={selectedId === supplier.id}
-                    className={`min-h-24 w-full px-4 py-3 text-left transition ${selectedId === supplier.id ? "bg-teal-50 ring-1 ring-inset ring-teal-200" : "bg-white hover:bg-slate-50"}`}
-                    key={supplier.id}
-                    onClick={() => setSelectedId(supplier.id)}
-                    type="button"
-                  >
-                    <span className="flex items-start justify-between gap-3">
-                      <b className="min-w-0 break-words text-sm text-slate-950">{supplier.name}</b>
-                      <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-bold ${supplier.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{supplier.isActive ? "활성" : "비활성"}</span>
-                    </span>
-                    <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
-                      <span>상품 {supplier.productCount.toLocaleString()}개</span>
-                      <span>원가 확정률 {supplier.confirmedCostRate}%</span>
-                      <span className="col-span-2 font-medium text-slate-500">최근 업로드 {date(supplier.latestImportAt)}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : loadError ? null : (
-              <div className="maju-empty-state m-4">
-                <p className="text-sm font-black text-slate-700">{suppliers.length ? "검색 조건에 맞는 매입처가 없습니다." : "등록된 매입처가 없습니다."}</p>
-                <p className="mt-1 text-xs font-bold leading-5 text-slate-400">{suppliers.length ? "검색어를 바꿔보세요." : "매입 단가표를 업로드하면 매입처가 생성됩니다."}</p>
-                {suppliers.length ? <button className="maju-button-secondary mt-3 min-h-11" onClick={() => setSupplierQuery("")} type="button">검색 초기화</button> : <Link className="maju-button-primary mt-3 min-h-11" href={uploadHref}>단가표 업로드</Link>}
-              </div>
-            )}
-          </aside>
-          <div className="min-w-0 space-y-4">
-            {selected ? (
-              <SupplierProfileCard
-                companyId={companyId}
-                key={selected.id}
-                onSaved={(supplier) => {
-                  setSuppliers((current) => current.map((item) => (
-                    item.id === supplier.id ? { ...item, ...supplier } : item
-                  )));
-                }}
-                supplier={selected}
-              />
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "products" ? (
-        <>
-          <section className="maju-section-card">
-            <div className="maju-card-header flex flex-wrap items-center justify-between gap-3">
-              <div><h2 className="maju-section-title">매입 상품</h2><p className="mt-1 maju-muted-label">{selected ? `${selected.name} · 상품 ${selected.productCount.toLocaleString()}개 · 최근 업로드 ${date(selected.latestImportAt)}` : "매입처를 고르세요."}</p></div>
-              {supplierPicker}
-            </div>
-            <div className="border-t border-slate-100 p-4">
-              <CommonDataTable columns={productColumns} emptyMessage="조건에 맞는 매입 상품이 없습니다." filename="매입상품.csv" rowKey={(row) => row.id} rows={products} settingsKey="supplier-products" />
-            </div>
-          </section>
-          <section className="maju-section-card">
-            <div className="maju-card-header"><h2 className="maju-section-title">같은 마스터 상품의 매입처별 원가 비교</h2><p className="mt-1 maju-muted-label">현재 회사가 보유한 확정 원가만 비교합니다. 다른 회사 데이터는 포함하지 않습니다.</p></div>
-            <div className="grid gap-3 border-t border-slate-100 p-4 lg:grid-cols-2">{data.comparisons.slice(0, 20).map((comparison) => <div className="rounded-xl border border-slate-200 p-4" key={comparison.catalogId}><b>{comparison.catalogName}</b><div className="mt-3 space-y-2">{comparison.offers.toSorted((a, b) => a.cost - b.cost).map((offer) => <div className="flex items-center justify-between gap-3 text-sm" key={`${comparison.catalogId}-${offer.supplierId}`}><span className="text-slate-600">{offer.supplierName}</span><span className="font-bold">{money(offer.cost)}</span></div>)}</div></div>)}</div>
-            {!data.comparisons.length ? <Empty text="두 곳 이상의 매입처에 연결된 확정 원가가 아직 없습니다." /> : null}
-          </section>
-        </>
-      ) : null}
-
-      {tab === "history" ? (
-        <div className="grid gap-4 2xl:grid-cols-2">
-          <section className="maju-section-card">
-            <div className="maju-card-header flex flex-wrap items-center justify-between gap-3"><h2 className="maju-section-title">원가 이력</h2>{supplierPicker}</div>
-            <div className="border-t border-slate-100 p-4"><CommonDataTable columns={historyColumns} emptyMessage="저장된 원가 이력이 없습니다." filename="원가이력.csv" rowKey={(row) => row.id} rows={history} settingsKey="supplier-cost-history" /></div>
-          </section>
-          <section className="maju-section-card">
-            <div className="maju-card-header"><h2 className="maju-section-title">업로드 이력</h2><p className="mt-1 maju-muted-label">{imports.length}건</p></div>
-            <div className="border-t border-slate-100 p-4"><CommonDataTable columns={importColumns} emptyMessage="저장된 업로드 이력이 없습니다." filename="업로드이력.csv" rowKey={(row) => row.id} rows={imports} settingsKey="supplier-imports" /></div>
-          </section>
-        </div>
-      ) : null}
+      <PartnerDirectory companyId={companyId} extraTabs={extraTabs} loadError={loadError} partnerType="supplier" registerHref={uploadHref} rows={rows} tabs={tabs} uploadHref={uploadHref} />
     </div>
   );
 }
@@ -288,4 +191,3 @@ function ProfileField({ children, hint, label }: { children: React.ReactNode; hi
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value}</p></div>; }
-function Empty({ text }: { text: string }) { return <div className="p-8 text-center text-sm font-semibold text-slate-500">{text}</div>; }

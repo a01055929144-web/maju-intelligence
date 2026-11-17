@@ -243,6 +243,7 @@ test("S-4 leaves the mobile member home available", async ({ page }) => {
 });
 
 for (const width of [1440, 390]) test(`CX-63 searches prices and handles access at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
   await page.setViewportSize({ width, height: 844 });
   let failQuote = true;
   await page.route("**/api/store/price-search?**", route => {
@@ -266,7 +267,7 @@ for (const width of [1440, 390]) test(`CX-63 searches prices and handles access 
   await expect(search.getByText("합성 견적 양파", { exact: true }).filter({ visible: true })).toBeVisible();
   await search.getByRole("button", { name: "전체 상품" }).click();
   await expect(search.getByText(/최근 출고가/).filter({ visible: true })).toBeVisible();
-  const input = search.getByRole("textbox", { name: "품목명 또는 규격 검색" });
+  const input = search.getByRole("searchbox", { name: "품목명 또는 규격 검색" });
   await input.fill("없는 품목");
   await expect(search.getByText("검색 조건에 맞는 품목이 없습니다.")).toBeVisible();
   await input.fill("권한");
