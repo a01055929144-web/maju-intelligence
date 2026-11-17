@@ -20,6 +20,12 @@ const money = (v: number) => formatWon(Math.round(v));
 const labels = { sale: "매출", purchase: "매입", sale_return: "매출 반품", purchase_return: "매입 반품" } as const;
 const statusLabels = { draft: "작성중", confirmed: "확정", cancelled: "취소" } as const;
 const emptyLine = (): Line => ({ productName: "", unit: "EA", taxType: "taxable", quantity: 1, unitPrice: 0 });
+type InitialPartner = { id: string; type: "customer" | "supplier" };
+
+function newDocument(initialPartner?: InitialPartner): Doc {
+  const isCustomer = initialPartner?.type !== "supplier";
+  return { id: "", documentType: isCustomer ? "sale" : "purchase", documentNumber: "저장 시 자동 채번", documentDate: today(), status: "draft", ...(initialPartner ? (isCustomer ? { customerId: initialPartner.id } : { supplierId: initialPartner.id }) : {}), partnerName: "", totalAmount: 0, taxAmount: 0, createdAt: "", lines: [emptyLine()] };
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
@@ -28,16 +34,16 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function BusinessDocumentWorkspace({ cancellationEnabled = false, companyId = "", returnEnabled = false }: { cancellationEnabled?: boolean; companyId?: string; returnEnabled?: boolean }) {
+export function BusinessDocumentWorkspace({ cancellationEnabled = false, companyId = "", initialPartner, returnEnabled = false }: { cancellationEnabled?: boolean; companyId?: string; initialPartner?: InitialPartner; returnEnabled?: boolean }) {
   const { confirm, confirmDialog } = useConfirm();
   const suffix = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const [tab, setTab] = useState<"documents" | "ledger">("documents");
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [options, setOptions] = useState<Options>({ customers: [], suppliers: [], products: [], supplierProducts: [] });
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", type: "", status: "", partnerId: "" });
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", type: "", status: "", partnerId: initialPartner?.id || "" });
   const [includeCancelled, setIncludeCancelled] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [editor, setEditor] = useState<Doc | null>(null);
+  const [editor, setEditor] = useState<Doc | null>(() => initialPartner ? newDocument(initialPartner) : null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
@@ -47,7 +53,7 @@ export function BusinessDocumentWorkspace({ cancellationEnabled = false, company
   }, [companyId, filters, includeCancelled]);
   useEffect(() => { void Promise.all([load(), api<Options>(`/api/business-documents${suffix}${suffix ? "&" : "?"}mode=options`).then(setOptions)]).catch((e) => setMessage(e.message)); }, [load, suffix]);
 
-  const openNew = (type: "sale" | "purchase" = "sale") => setEditor({ id: "", documentType: type, documentNumber: "저장 시 자동 채번", documentDate: today(), status: "draft", partnerName: "", totalAmount: 0, taxAmount: 0, createdAt: "", lines: [emptyLine()] });
+  const openNew = (type: "sale" | "purchase" = "sale") => setEditor(newDocument(initialPartner && (type === "sale") === (initialPartner.type === "customer") ? initialPartner : undefined));
   const openDocument = async (doc: Doc) => {
     setBusy(true); setMessage("");
     try { const result = await api<{ document: Doc }>(`/api/business-documents/${doc.id}${suffix}`); setEditor(result.document); }
@@ -126,11 +132,12 @@ export function BusinessDocumentWorkspace({ cancellationEnabled = false, company
     </div>
     {message && <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">{message}</div>}
     {tab === "documents" ? <>
-      <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-5">
+      <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-6">
         <input className="maju-input" type="date" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
         <input className="maju-input" type="date" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
         <select className="maju-input" value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}><option value="">유형 전체</option><option value="sale">매출</option><option value="purchase">매입</option><option value="sale_return">매출 반품</option><option value="purchase_return">매입 반품</option></select>
         <select className="maju-input" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">상태 전체</option><option value="draft">작성중</option><option value="confirmed">확정</option><option value="cancelled">취소</option></select>
+        <select aria-label="거래처 필터" className="maju-input" value={filters.partnerId} onChange={(e) => setFilters({ ...filters, partnerId: e.target.value })}><option value="">거래처 전체</option><optgroup label="매출처">{options.customers.map((partner) => <option key={`customer-${partner.id}`} value={partner.id}>{partner.name}</option>)}</optgroup><optgroup label="매입처">{options.suppliers.map((partner) => <option key={`supplier-${partner.id}`} value={partner.id}>{partner.name}</option>)}</optgroup></select>
         <div className="flex items-center gap-2">{cancellationEnabled ? <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input checked={includeCancelled} onChange={(event) => setIncludeCancelled(event.target.checked)} type="checkbox" /> 삭제한 전표 보기</label> : null}<button className="maju-button-secondary" onClick={() => void load()}><Search className="h-4 w-4" /> 조회</button></div>
       </div>
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
