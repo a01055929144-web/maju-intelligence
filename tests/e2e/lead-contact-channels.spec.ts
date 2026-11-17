@@ -54,9 +54,9 @@ test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채
     return route.fulfill({ json: { acknowledged: false } });
   });
 
-  await page.goto("/leads");
-  await page.getByText("가짜분식", { exact: true }).last().click();
+  await page.goto(`/leads?type=permit&lead=${lead.id}`);
   const shortcuts = page.locator('[aria-label="연락 채널 바로가기"]');
+  await expect(shortcuts).toBeVisible();
   for (const channel of ["방문", "연락처", "카톡", "인스타 DM", "네이버 톡톡", "이메일", "팩스"]) {
     await expect(shortcuts.locator("button").filter({ hasText: channel }).first()).toBeVisible();
   }
@@ -66,6 +66,7 @@ test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채
   const panel = page.getByRole("region", { name: "영업 채널" });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("textbox", { name: "톡톡 주소" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await expect(page.getByRole("dialog", { name: "영업 연락 수칙" })).toHaveCount(0);
   acknowledge?.();
   await expect(panel.getByText("영업 연락 수칙을 확인해 주세요", { exact: true })).toBeVisible();
