@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { assertOrderMoney, ORDER_MONEY_SCENARIOS } from "./helpers/order-money-safety";
+import { assertOrderMoney, assertOrderMoneyPhase, ORDER_MONEY_SCENARIOS } from "./helpers/order-money-safety";
 
 describe("CX-68 order money safety gate", () => {
   it("tracks every mandatory scenario and separates the pending CX-62 receipt contract", () => {
     expect(ORDER_MONEY_SCENARIOS.map(([number]) => number)).toEqual(Array.from({ length: 15 }, (_, index) => index + 1));
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 isolated"))).toHaveLength(3);
-    expect(ORDER_MONEY_SCENARIOS.every(([, , evidence]) => evidence.endsWith(".sql") || evidence.endsWith(".test.sql"))).toBe(true);
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 isolated"))
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 pending"))).toHaveLength(3);
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 pending"))
       .every(([, , evidence]) => existsSync(evidence))).toBe(true);
   });
 
@@ -18,6 +17,15 @@ describe("CX-68 order money safety gate", () => {
   });
 
   it("allows submitted orders to be checked before CX-62 creates a document", () => {
-    expect(() => assertOrderMoney({ orderKnownTotal: 1_100n, lineTotal: 1_100n })).not.toThrow();
+    expect(() => assertOrderMoneyPhase("submitted", { orderKnownTotal: 1_100n, lineTotal: 1_100n })).not.toThrow();
+  });
+
+  it("keeps receipt draft-only and moves money only when shipped", () => {
+    expect(() => assertOrderMoneyPhase("received", { orderKnownTotal: 1_100n, lineTotal: 1_100n,
+      documentTotal: 1_100n, ledgerIncrease: 0n, inventoryMovementCount: 0n })).not.toThrow();
+    expect(() => assertOrderMoneyPhase("received", { orderKnownTotal: 1_100n, lineTotal: 1_100n,
+      documentTotal: 1_100n, ledgerIncrease: 1_100n })).toThrow("receipt_not_draft_only");
+    expect(() => assertOrderMoneyPhase("shipped", { orderKnownTotal: 1_100n, lineTotal: 1_100n,
+      documentTotal: 1_100n, ledgerIncrease: 1_100n, inventoryMovementCount: 1n })).not.toThrow();
   });
 });

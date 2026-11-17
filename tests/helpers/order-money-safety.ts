@@ -3,6 +3,7 @@ export type MoneySnapshot = {
   lineTotal: bigint;
   documentTotal?: bigint;
   ledgerIncrease?: bigint;
+  inventoryMovementCount?: bigint;
 };
 
 export function assertOrderMoney(snapshot: MoneySnapshot) {
@@ -10,12 +11,19 @@ export function assertOrderMoney(snapshot: MoneySnapshot) {
   if (values.some(value => value !== snapshot.orderKnownTotal)) throw new Error(`order_money_mismatch:${[snapshot.orderKnownTotal, ...values].join(":")}`);
 }
 
+export function assertOrderMoneyPhase(phase: "submitted" | "received" | "shipped", snapshot: MoneySnapshot) {
+  if (snapshot.lineTotal !== snapshot.orderKnownTotal) throw new Error("order_money_mismatch");
+  if (phase === "submitted" && (snapshot.documentTotal !== undefined || (snapshot.ledgerIncrease ?? 0n) !== 0n)) throw new Error("submitted_has_financial_effect");
+  if (phase === "received" && (snapshot.documentTotal !== snapshot.orderKnownTotal || (snapshot.ledgerIncrease ?? 0n) !== 0n || (snapshot.inventoryMovementCount ?? 0n) !== 0n)) throw new Error("receipt_not_draft_only");
+  if (phase === "shipped") assertOrderMoney(snapshot);
+}
+
 export const ORDER_MONEY_SCENARIOS = [
   [1, "same order retry", "tests/sql/store-member-order.pg17.test.sql"],
   [2, "idempotency conflict", "tests/sql/store-member-order.pg17.test.sql"],
-  [3, "edit versus receipt revision", "CX-62 isolated: 2026-11-17-CX-62-order-receipt.pg17.test.sql"],
-  [4, "double receipt", "CX-62 isolated: 2026-11-17-CX-62-order-receipt.pg17.test.sql"],
-  [5, "document failure rollback", "CX-62 isolated: 2026-11-17-CX-62-order-receipt.pg17.test.sql"],
+  [3, "edit versus receipt revision", "CX-62 pending: draft receipt RPC revision"],
+  [4, "double receipt creates one draft document", "CX-62 pending: draft document idempotency"],
+  [5, "receipt failure keeps submitted and ledger inventory zero", "CX-62 pending: draft-only rollback"],
   [6, "order document ledger equality", "tests/sql/order-money-safety-cx68.pg17.test.sql"],
   [7, "market price receipt guard", "docs/sql-drafts/2026-11-16-CX-38-order-sale-documents.pg17.test.sql"],
   [8, "promotion and quantity limits", "tests/sql/promotion-reservation-cx08.pg17.test.sql"],
