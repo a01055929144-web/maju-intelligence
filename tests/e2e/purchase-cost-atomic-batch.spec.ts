@@ -128,7 +128,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
   });
   await page.route("**/api/price-sheets/receipts*", route => {
     if (route.request().method() === "POST") receipts.push(route.request().postDataJSON());
-    if (options.mixed && route.request().method() === "GET") {
+    if ((options.mixed || options.blankUnit) && route.request().method() === "GET") {
       const params = new URL(route.request().url()).searchParams;
       const rows = params.has("productId") ? historyRows.filter(row => row.product_catalog_id === params.get("productId")) : historyRows;
       return route.fulfill({ json: params.has("summary") ? { summary: summarizePurchaseHistory(rows) } : { rows, hasMore: false, canCorrect: true } });
