@@ -168,7 +168,7 @@ export default async function StorePage({ searchParams }: {
       }
     } catch { /* Documents remain available when delivery policy cannot be read. */ }
   }
-  const documentHref = (document: NonNullable<typeof selected>["documents"][number]) =>
+  const documentHref = (document: { href: string }) =>
     `${homeHref}&document=${encodeURIComponent(documentKey(document.href))}`;
   const home = selected ? <StorePortal accounts={[selected]} loginEnabled memberView documentHref={documentHref} /> : null;
   const ReceivedDocuments = receivedDocuments ? (await import("@/components/store-received-documents")).StoreReceivedDocuments : null;
