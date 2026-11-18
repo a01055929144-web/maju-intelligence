@@ -468,7 +468,7 @@ test("date rollout blocks direct v1 cost changes without leaving a stale price d
 
 test("현재 매입가 변경은 기준일 없는 기존가를 자동 교체한다", async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  const { dateWrites } = await purchaseUpload(page, { undatedCurrent: true });
+  const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true, undatedCurrent: true });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\nERP-1,합성 상품,1kg,봉,2026-11-04,200\n");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
