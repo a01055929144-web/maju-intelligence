@@ -375,7 +375,7 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
     const mainChars = Math.max(4, Math.floor(width / Math.round(12 * scale)));
     const textHeight = rows(line.displayName, mainChars) * mainHeight + (line.brand ? rows(line.brand, mainChars) * mainHeight : 0) +
       (line.spec || line.unit ? rows([line.spec, line.unit].filter(Boolean).join(" · "), mainChars) * mainHeight : 0) +
-      (count > 1 ? mainHeight : 0);
+      (count > 1 && output.display.showTaxType ? mainHeight : 0);
     const priceWidth = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
       (1 - output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
     const priceChars = Math.max(1, Math.floor(priceWidth / Math.round(11 * scale)));
