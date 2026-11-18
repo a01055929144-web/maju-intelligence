@@ -418,6 +418,11 @@ for (const width of [1440, 390]) test(`document editor toolbar keeps title and a
   const back = page.getByRole("button", { name: "← 문서 목록", exact: true });
   const publish = page.getByRole("button", { name: "판매가 버전 확정", exact: true });
   const more = page.getByRole("button", { name: "더보기", exact: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  for (const button of [back, publish, more]) expect(await button.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
   const backBox = (await back.boundingBox())!, titleBox = (await title.boundingBox())!, publishBox = (await publish.boundingBox())!, moreBox = (await more.boundingBox())!;
   expect(backBox.x + backBox.width).toBeLessThanOrEqual(titleBox.x + 1);
   expect(publishBox.x + publishBox.width).toBeLessThanOrEqual(moreBox.x + 1);
