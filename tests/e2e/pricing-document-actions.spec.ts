@@ -498,6 +498,18 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     for (const element of await notes.all()) await expect(element).toHaveText(note);
     const overflow = await preview.locator(".pricing-paper").evaluateAll(papers => papers.some(paper => { const content = paper.querySelector(".pricing-output-content")!; const style = getComputedStyle(paper); return content.getBoundingClientRect().height > paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + 2; }));
     expect(overflow).toBe(false);
+    const spacing = await preview.locator(".pricing-paper").evaluateAll(papers => papers.map(paper => {
+      const rows = Array.from(paper.querySelectorAll(".pricing-output-table tbody tr"));
+      const note = paper.querySelector("[data-document-footer]")!;
+      const pageNumber = paper.querySelector("footer")!.lastElementChild!;
+      return { rows: rows.length, gap: note.getBoundingClientRect().top - Math.max(...rows.map(row => row.getBoundingClientRect().bottom)), pageNumber: pageNumber.textContent, bottom: pageNumber.getBoundingClientRect().bottom, pageBottom: paper.getBoundingClientRect().bottom };
+    }));
+    for (const metric of spacing) {
+      expect(metric.rows).toBeGreaterThan(0);
+      expect(metric.gap).toBeGreaterThanOrEqual(0);
+      expect(metric.pageNumber).toMatch(/\d+ \/ \d+쪽/);
+      expect(metric.bottom).toBeLessThanOrEqual(metric.pageBottom);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
     await page.screenshot({ path: `test-results/readonly-pg17/document-footer-format/preview-${size}-${width}.png`, fullPage: true });
     const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
