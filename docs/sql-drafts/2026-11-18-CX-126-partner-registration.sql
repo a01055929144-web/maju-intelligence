@@ -28,8 +28,8 @@ alter table public.product_suppliers drop constraint if exists product_suppliers
 alter table public.product_suppliers add constraint product_suppliers_business_entity_type_check
   check (business_entity_type is null or business_entity_type in ('individual','corporation'));
 alter table public.product_suppliers drop constraint if exists product_suppliers_registration_pending_check;
-alter table public.product_suppliers add constraint product_suppliers_registration_pending_check
-  check (business_status = 'registration_pending' or (business_number is not null and business_entity_type is not null and tax_invoice_email is not null));
+-- Existing active suppliers predate the entity/email columns and must remain writable.
+-- Required fields for newly confirmed suppliers are enforced by the registration API.
 alter table public.product_suppliers drop constraint if exists product_suppliers_tax_invoice_email_check;
 alter table public.product_suppliers add constraint product_suppliers_tax_invoice_email_check
   check (tax_invoice_email is null or (length(tax_invoice_email) between 3 and 254 and tax_invoice_email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'));
