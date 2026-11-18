@@ -526,18 +526,34 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     const difference = await page.evaluate(async ({ reference, exported, crop }) => {
       const load = async (base64: string) => { const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode(); return image; };
       const [live, png] = await Promise.all([load(reference), load(exported)]);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.ceil(live.width / 4); canvas.height = Math.ceil(live.height / 4);
-      const context = canvas.getContext("2d")!;
-      context.drawImage(live, 0, 0, canvas.width, canvas.height);
-      const before = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      // Geometry is checked separately above. Compare ink, tolerating html-to-image's
+      // documented 0.1px font reduction and the two rasterizers' subpixel placement.
+      const ink = (image: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+        const source = document.createElement("canvas"); source.width = Math.ceil(width); source.height = Math.ceil(height);
+        const context = source.getContext("2d")!;
+        context.fillStyle = "white"; context.fillRect(0, 0, source.width, source.height);
+        context.drawImage(image, x, y, width, height, 0, 0, source.width, source.height);
+        const pixels = context.getImageData(0, 0, source.width, source.height).data;
+        let left = source.width, top = source.height, right = -1, bottom = -1;
+        for (let row = 0; row < source.height; row++) for (let col = 0; col < source.width; col++) {
+          const at = (row * source.width + col) * 4;
+          if (pixels[at] + pixels[at + 1] + pixels[at + 2] < 600) {
+            left = Math.min(left, col); top = Math.min(top, row); right = Math.max(right, col); bottom = Math.max(bottom, row);
+          }
+        }
+        if (right < left || bottom < top) throw new Error("PNG 비고 글자가 비어 있습니다.");
+        const normalized = document.createElement("canvas"); normalized.width = 320; normalized.height = 160;
+        const target = normalized.getContext("2d")!;
+        target.fillStyle = "white"; target.fillRect(0, 0, 320, 160); target.filter = "blur(1px)";
+        target.drawImage(source, left, top, right - left + 1, bottom - top + 1, 0, 0, 320, 160);
+        return target.getImageData(0, 0, 320, 160).data;
+      };
+      const before = ink(live, 0, 0, live.width, live.height);
       const ratio = png.width / crop.paperWidth;
-      context.drawImage(png, crop.x * ratio, crop.y * ratio, crop.width * ratio, crop.height * ratio, 0, 0, canvas.width, canvas.height);
-      const after = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const after = ink(png, crop.x * ratio, crop.y * ratio, crop.width * ratio, crop.height * ratio);
       let total = 0;
       for (let i = 0; i < before.length; i += 4) for (let channel = 0; channel < 3; channel++) total += Math.abs(before[i + channel] - after[i + channel]);
-      return total / (canvas.width * canvas.height * 3);
+      return total / (320 * 160 * 3);
     }, { reference: reference.toString("base64"), exported: exported.toString("base64"), crop: { x: noteBox.x - paperBox.x, y: noteBox.y - paperBox.y, width: noteBox.width, height: noteBox.height, paperWidth: paperBox.width } });
     console.log("FOOTER_PNG_GLYPHS", JSON.stringify({ width, size, difference }));
     if (width === 390) await page.setViewportSize({ width, height: 1000 });
