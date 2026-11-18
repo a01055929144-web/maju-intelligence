@@ -63,7 +63,9 @@ begin
     cross join lateral jsonb_array_elements(o->'lines') l
     where nullif(l->>'orderLineId', '') is null
       or nullif(l->>'shippedQuantity', '') is null
-      or (l->>'shippedQuantity')::numeric < 0
+      or jsonb_typeof(l->'shippedQuantity') <> 'number'
+      or case when (l->>'shippedQuantity') ~ '^(0|[1-9][0-9]{0,5})(\.[0-9]{1,3})?$'
+        then (l->>'shippedQuantity')::numeric not between 0 and 100000 else true end
   ) then raise exception 'partial_dispatch_line_invalid'; end if;
   if exists (
     select 1 from jsonb_array_elements(p_orders) o
