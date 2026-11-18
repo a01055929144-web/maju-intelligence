@@ -18,6 +18,39 @@ declare d business_documents%rowtype; begin
  insert into inventory_movements(company_id,source_document_id,revision,quantity_delta,product_catalog_id)
  select $1,$2,0,-quantity,product_catalog_id from business_document_lines where company_id=$1 and document_id=$2 and product_catalog_id is not null;
  return d; end $$;
+
+-- Two real connections using the partial function and the same key/payload
+-- converge on one stored result and one set of financial/inventory effects.
+select id concurrent_line from store_order_lines
+where company_id='00000000-0000-0000-0000-0000000000c1' and order_id='00000000-0000-0000-0000-0000000000f4' \gset
+select dblink_connect('partial_a',format('dbname=%L user=%L',current_database(),current_user));
+select dblink_connect('partial_b',format('dbname=%L user=%L',current_database(),current_user));
+select dblink_send_query('partial_a',format($q$select public.dispatch_store_orders_partial_final_cancel(
+  '00000000-0000-0000-0000-0000000000c1','[{"orderId":"00000000-0000-0000-0000-0000000000f4","lines":[{"orderLineId":"%s","shippedQuantity":1}]}]'::jsonb,
+  '40000000-0000-4000-8000-000000000020',null,'동시 A')$q$,:'concurrent_line'));
+select dblink_send_query('partial_b',format($q$select public.dispatch_store_orders_partial_final_cancel(
+  '00000000-0000-0000-0000-0000000000c1','[{"orderId":"00000000-0000-0000-0000-0000000000f4","lines":[{"orderLineId":"%s","shippedQuantity":1}]}]'::jsonb,
+  '40000000-0000-4000-8000-000000000020',null,'동시 B')$q$,:'concurrent_line'));
+create temporary table cx66_partial_concurrent_results as
+ select result from dblink_get_result('partial_a') as t(result jsonb)
+ union all select result from dblink_get_result('partial_b') as t(result jsonb);
+select dblink_disconnect('partial_a'),dblink_disconnect('partial_b');
+do $$ declare d uuid; begin
+  assert (select count(*)=2 and count(distinct result)=1 from cx66_partial_concurrent_results);
+  assert (select count(*) from order_dispatch_requests where idempotency_key='40000000-0000-4000-8000-000000000020')=1;
+  select id into strict d from business_documents where source_id='00000000-0000-0000-0000-0000000000f4';
+  assert (select count(*) from partner_ledger_entries where source_document_id=d)=1;
+  assert (select count(*) from inventory_movements where source_document_id=d)=1;
+end $$;
+set session_replication_role=replica;
+delete from inventory_movements where source_document_id=(select id from business_documents where source_id='00000000-0000-0000-0000-0000000000f4');
+delete from partner_ledger_entries where source_document_id=(select id from business_documents where source_id='00000000-0000-0000-0000-0000000000f4');
+delete from order_dispatch_requests where idempotency_key='40000000-0000-4000-8000-000000000020';
+update business_document_lines set source_order_line_id=null where document_id=(select id from business_documents where source_id='00000000-0000-0000-0000-0000000000f4');
+update business_documents set status='draft',confirmed_at=null,confirmed_by_user_id=null,confirmed_by_name=null where source_id='00000000-0000-0000-0000-0000000000f4';
+update store_order_lines set shipped_quantity=0,cancelled_quantity=0 where order_id='00000000-0000-0000-0000-0000000000f4';
+update store_orders set status='received',revision=2,shipped_at=null,sale_document_id=null where id='00000000-0000-0000-0000-0000000000f4';
+set session_replication_role=origin;
 begin;
 
 \set company '00000000-0000-0000-0000-0000000000c1'
