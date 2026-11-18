@@ -446,6 +446,8 @@ for (const width of [1440, 390]) test(`document editor toolbar keeps title and a
   await expect(title).toHaveValue(editedTitle);
 });
 
+test.describe("document footer PNG glyphs", () => {
+test.use({ deviceScaleFactor: 2 });
 for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive save, publication and export at ${width}px`, async ({ page }) => {
   test.setTimeout(120_000); page.setDefaultTimeout(15_000);
   const id = "10000000-0000-4000-8000-000000000001";
@@ -516,7 +518,9 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-1.png`);
     await downloaded.saveAs(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
     const paper = preview.locator(".pricing-paper").first(), printedNote = paper.locator("[data-document-footer]");
-    const reference = await printedNote.screenshot({ animations: "disabled" });
+    // Compare equal 2x rasters; the phone's horizontal A4 viewport must not clip the reference.
+    if (width === 390) await page.setViewportSize({ width: 1440, height: 1000 });
+    const reference = await printedNote.screenshot({ animations: "disabled", path: `test-results/readonly-pg17/document-footer-format/reference-${size}-${width}.png` });
     const paperBox = (await paper.boundingBox())!, noteBox = (await printedNote.boundingBox())!;
     const exported = await readFile(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
     const difference = await page.evaluate(async ({ reference, exported, crop }) => {
@@ -536,6 +540,7 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
       return total / (canvas.width * canvas.height * 3);
     }, { reference: reference.toString("base64"), exported: exported.toString("base64"), crop: { x: noteBox.x - paperBox.x, y: noteBox.y - paperBox.y, width: noteBox.width, height: noteBox.height, paperWidth: paperBox.width } });
     console.log("FOOTER_PNG_GLYPHS", JSON.stringify({ width, size, difference }));
+    if (width === 390) await page.setViewportSize({ width, height: 1000 });
     expect(difference, "PNG 한글 비고가 실제 화면 글자와 같아야 합니다.").toBeLessThan(12);
     if (width === 1440) await page.pdf({ path: `test-results/readonly-pg17/document-footer-format/print-${size}.pdf`, format: "A4", printBackground: true });
     await preview.getByRole("button", { name: "닫기", exact: true }).click();
@@ -546,4 +551,5 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
   await old.getByRole("button", { name: "닫기", exact: true }).click();
   await page.getByRole("button", { name: "← 문서 목록", exact: true }).click(); await page.getByRole("button", { name: "비고 서식 합성 문서", exact: true }).click();
   await expect(font).toHaveValue("16"); await expect(bold).toHaveAttribute("aria-pressed", "true"); await expect(noteInput).toHaveValue(note);
+});
 });
