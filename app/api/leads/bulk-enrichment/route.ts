@@ -1,15 +1,13 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { processLeadBulkJob } from "@/application/lead/run-bulk-enrichment";
-import { normalizeLeadBulkIds, parseLeadBulkAction } from "@/domains/lead/bulk-enrichment";
+import { isLeadBulkUuid, normalizeLeadBulkIds, parseLeadBulkAction } from "@/domains/lead/bulk-enrichment";
 import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { executeLeadBulkItem, leadBulkRepository } from "@/lib/lead-bulk-enrichment";
-import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs } from "@/lib/lead-bulk-enrichment-feature";
+import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs, leadBulkRunBudgetMs } from "@/lib/lead-bulk-enrichment-feature";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const uuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value);
 
 async function scope(request: NextRequest, companyId?: string) {
   const auth = await getRequestAuthScope(request, companyId);
@@ -26,7 +24,7 @@ async function scope(request: NextRequest, companyId?: string) {
 function continueJob(companyId: string, jobId: string) {
   after(() => processLeadBulkJob({
     companyId, jobId, repository: leadBulkRepository, execute: executeLeadBulkItem,
-    dailyCap: leadBulkDailyCap(), minIntervalMs: leadBulkMinIntervalMs()
+    dailyCap: leadBulkDailyCap(), minIntervalMs: leadBulkMinIntervalMs(), maxRunMs: leadBulkRunBudgetMs()
   }));
 }
 
@@ -34,7 +32,7 @@ export async function GET(request: NextRequest) {
   const checked = await scope(request, request.nextUrl.searchParams.get("companyId") || undefined);
   if ("error" in checked) return checked.error;
   const jobId = request.nextUrl.searchParams.get("jobId");
-  if (!uuid(jobId)) return NextResponse.json({ message: "작업 ID를 확인해 주세요." }, { status: 400 });
+  if (!isLeadBulkUuid(jobId)) return NextResponse.json({ message: "작업 ID를 확인해 주세요." }, { status: 400 });
   const job = await leadBulkRepository.getJob(checked.auth.companyId!, jobId);
   return job ? NextResponse.json(job) : NextResponse.json({ message: "작업을 찾을 수 없습니다." }, { status: 404 });
 }
@@ -49,8 +47,17 @@ export async function POST(request: NextRequest) {
   const operation = body?.operation || "start";
 
   try {
-    if (operation === "cancel" || operation === "retry_failed") {
-      if (!uuid(body?.jobId)) return NextResponse.json({ message: "작업 ID를 확인해 주세요." }, { status: 400 });
+    if (operation === "cancel" || operation === "retry_failed" || operation === "resume") {
+      if (!isLeadBulkUuid(body?.jobId)) return NextResponse.json({ message: "작업 ID를 확인해 주세요." }, { status: 400 });
+      if (operation === "resume") {
+        const job = await leadBulkRepository.getJob(companyId, body.jobId);
+        if (!job) return NextResponse.json({ message: "작업을 찾을 수 없습니다." }, { status: 404 });
+        if (job.status === "completed" || job.status === "cancelled" || job.status === "failed") {
+          return NextResponse.json({ message: "종료된 작업은 재개할 수 없습니다." }, { status: 409 });
+        }
+        continueJob(companyId, job.id);
+        return NextResponse.json(job, { status: 202 });
+      }
       const job = operation === "cancel"
         ? await leadBulkRepository.requestCancel(companyId, body.jobId)
         : await leadBulkRepository.retryFailed(companyId, body.jobId);
@@ -60,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     const action = parseLeadBulkAction(body?.action);
     const leadIds = normalizeLeadBulkIds(body?.leadIds);
-    if (!action || !uuid(body?.idempotencyKey) || !leadIds.length || leadIds.length > 50) {
+    if (operation !== "start" || !action || !isLeadBulkUuid(body?.idempotencyKey) || !leadIds.length || leadIds.length > 50) {
       return NextResponse.json({ message: "작업 종류, 재시도 키와 리드 1~50건을 확인해 주세요." }, { status: 400 });
     }
     const actorName = resolveLeadContactActorName([

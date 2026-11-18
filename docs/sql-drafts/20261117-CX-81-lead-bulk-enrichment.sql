@@ -70,11 +70,13 @@ declare v_job public.lead_bulk_enrichment_jobs; v_item public.lead_bulk_enrichme
 begin
   select * into v_job from public.lead_bulk_enrichment_jobs where company_id=p_company_id and id=p_job_id for update;
   if not found then raise exception 'job_not_found'; end if;
+  if p_daily_cap not between 1 and 1000 then raise exception 'invalid_daily_cap'; end if;
   if v_job.cancel_requested_at is not null then
     update public.lead_bulk_enrichment_items set status='cancelled',finished_at=now() where company_id=p_company_id and job_id=p_job_id and status='pending';
     update public.lead_bulk_enrichment_jobs set status='cancelled',finished_at=now() where company_id=p_company_id and id=p_job_id returning * into v_job; return null;
   end if;
   if v_job.status in ('completed','cancelled','failed') then return null; end if;
+  if exists (select 1 from public.lead_bulk_enrichment_items where company_id=p_company_id and job_id=p_job_id and status='running') then return null; end if;
   select coalesce(sum(attempts_today),0) into v_used from public.lead_bulk_enrichment_items where company_id=p_company_id and attempt_day=(now() at time zone 'Asia/Seoul')::date;
   if v_used >= greatest(1,p_daily_cap) then update public.lead_bulk_enrichment_jobs set status='failed',error_code='daily_limit_exceeded',finished_at=now() where id=p_job_id; return null; end if;
   select * into v_item from public.lead_bulk_enrichment_items where company_id=p_company_id and job_id=p_job_id and status='pending' order by position limit 1 for update skip locked;

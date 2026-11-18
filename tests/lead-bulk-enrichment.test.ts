@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { processLeadBulkJob, type LeadBulkRepository } from "@/application/lead/run-bulk-enrichment";
-import { normalizeLeadBulkIds, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
-import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs } from "@/lib/lead-bulk-enrichment-feature";
+import { isLeadBulkUuid, normalizeLeadBulkIds, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
+import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs, leadBulkRunBudgetMs } from "@/lib/lead-bulk-enrichment-feature";
 
 const companyId = "10000000-0000-4000-8000-000000000001";
 const jobId = "20000000-0000-4000-8000-000000000001";
@@ -16,6 +16,7 @@ afterEach(() => {
   delete process.env.FEATURE_LEAD_BULK_ENRICHMENT_COMPANY_IDS;
   delete process.env.LEAD_BULK_ENRICHMENT_DAILY_CAP;
   delete process.env.LEAD_BULK_ENRICHMENT_REQUESTS_PER_SECOND;
+  delete process.env.LEAD_BULK_ENRICHMENT_RUN_BUDGET_MS;
 });
 
 describe("lead bulk enrichment", () => {
@@ -41,6 +42,25 @@ describe("lead bulk enrichment", () => {
     expect(completed.map((row) => row.id)).toEqual(items.map((row) => row.id));
   });
 
+  it("stops at the invocation budget and resumes the remaining queue", async () => {
+    const queue = items.slice(0, 3);
+    let clock = 0;
+    const completed: string[] = [];
+    const repository = {
+      claimNext: vi.fn(async () => queue.shift() ?? null),
+      completeItem: vi.fn(async (item) => completed.push(item.id))
+    } as unknown as LeadBulkRepository;
+    const run = () => processLeadBulkJob({ companyId, jobId, dailyCap: 50, minIntervalMs: 1,
+      maxRunMs: 2, now: () => clock, repository, wait: vi.fn(async (ms: number) => { clock += ms; }),
+      execute: async (item) => { clock += 1; return item.leadId; }
+    });
+    expect(await run()).toBe(1);
+    expect(queue).toHaveLength(2);
+    expect(await run()).toBe(1);
+    expect(await run()).toBe(1);
+    expect(completed).toHaveLength(3);
+  });
+
   it("is off by default and also requires an exact company allowlist match", () => {
     expect(leadBulkEnrichmentEnabled(companyId)).toBe(false);
     process.env.LEAD_BULK_ENRICHMENT_ENABLED = "true";
@@ -53,9 +73,12 @@ describe("lead bulk enrichment", () => {
   it("caps input, daily allowance and request rate", () => {
     const ids = Array.from({ length: 51 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
     expect(normalizeLeadBulkIds([...ids, ids[0]])).toHaveLength(51);
+    expect(isLeadBulkUuid("zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz")).toBe(false);
     process.env.LEAD_BULK_ENRICHMENT_DAILY_CAP = "5000";
     process.env.LEAD_BULK_ENRICHMENT_REQUESTS_PER_SECOND = "99";
     expect(leadBulkDailyCap()).toBe(1000);
     expect(leadBulkMinIntervalMs()).toBe(500);
+    process.env.LEAD_BULK_ENRICHMENT_RUN_BUDGET_MS = "999999";
+    expect(leadBulkRunBudgetMs()).toBe(45_000);
   });
 });

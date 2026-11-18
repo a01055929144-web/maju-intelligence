@@ -1,5 +1,7 @@
 do $$ begin if current_setting('server_version_num')::int/10000 <> 17 then raise exception 'cx81_pg17_required'; end if; end $$;
-create role anon; create role authenticated; create role service_role;
+do $$ begin create role anon; exception when duplicate_object then null; end $$;
+do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
+do $$ begin create role service_role; exception when duplicate_object then null; end $$;
 create table public.companies(id uuid primary key);
 create table public.business_permit_leads(company_id uuid not null references public.companies(id), id uuid not null, merged_into_lead_id uuid, primary key(company_id,id));
 insert into public.companies values ('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002');
@@ -14,6 +16,7 @@ do $$ declare j jsonb; a jsonb; b jsonb; begin
   j:=public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000001','instagram_candidates',array(select id from public.business_permit_leads where company_id='10000000-0000-4000-8000-000000000001' order by id),'20000000-0000-4000-8000-000000000001','tester');
   if (j->>'total_items')::int<>50 then raise exception 'expected_50'; end if;
   a:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50);
+  if public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50) is not null then raise exception 'parallel_claim_allowed'; end if;
   perform public.complete_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(a->>'id')::uuid,true,'{"candidates":[{"url":"https://instagram.com/candidate"}]}'::jsonb,null);
   b:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50);
   if (b->>'position')::int<>2 then raise exception 'not_sequential'; end if;
@@ -30,6 +33,8 @@ do $$ begin
   exception when others then if sqlerrm='cross_tenant_lead' then raise; end if; end;
   if has_function_privilege('anon','public.claim_lead_bulk_enrichment_item(uuid,uuid,integer)','execute') then raise exception 'anon_rpc_access'; end if;
   if has_function_privilege('authenticated','public.claim_lead_bulk_enrichment_item(uuid,uuid,integer)','execute') then raise exception 'authenticated_rpc_access'; end if;
+  begin perform public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(select id from public.lead_bulk_enrichment_jobs limit 1),0); raise exception 'invalid_cap_accepted';
+  exception when raise_exception then if sqlerrm <> 'invalid_daily_cap' then raise; end if; end;
 end $$;
 
 do $$ declare j jsonb; a jsonb; begin

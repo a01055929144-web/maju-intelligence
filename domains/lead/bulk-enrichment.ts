@@ -21,12 +21,17 @@ export type LeadBulkJobItem = {
   action: LeadBulkAction;
 };
 
+export function isLeadBulkUuid(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function parseLeadBulkAction(value: unknown): LeadBulkAction | null {
   return LEAD_BULK_ACTIONS.includes(value as LeadBulkAction) ? value as LeadBulkAction : null;
 }
 
 export function normalizeLeadBulkIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)))).slice(0, 51);
+  return Array.from(new Set(value.filter(isLeadBulkUuid))).slice(0, 51);
 }
 

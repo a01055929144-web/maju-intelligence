@@ -13,3 +13,8 @@ export function leadBulkMinIntervalMs() {
   return Math.ceil(1000 / (Number.isFinite(perSecond) && perSecond > 0 ? Math.min(perSecond, 2) : 1));
 }
 
+export function leadBulkRunBudgetMs() {
+  const value = Number(process.env.LEAD_BULK_ENRICHMENT_RUN_BUDGET_MS || 45_000);
+  return Number.isInteger(value) && value >= 1_000 ? Math.min(value, 45_000) : 45_000;
+}
+
