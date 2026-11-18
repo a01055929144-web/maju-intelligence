@@ -13,7 +13,7 @@ for (const width of [1440, 390]) test(`draft save failures preserve revision19 a
     ["Promotion not found", "P0001"], ["Promotion not enabled for sheets", "P0001"], ["Stale document", "P0001"], ["undefined column", "42703"],
   ].map(([message, code]) => documentRequestError(new Error(`Supabase request failed: 400 ${JSON.stringify({ message, code, details: "PRIVATE_SYNTHETIC_DETAIL" })}`), true));
   const requests: unknown[] = [];
-  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z" });
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: null, needsRecalculation: false, changedProductCount: 0 } });
   await page.setViewportSize({ width, height: 1000 });
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   await page.route("**/api/pricing-documents*", async route => {
