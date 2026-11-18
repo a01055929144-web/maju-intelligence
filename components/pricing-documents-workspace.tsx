@@ -639,7 +639,7 @@ export function PricingDocumentsWorkspace({
       {extension && draft && <aside className="space-y-3 rounded border p-3" aria-label="약속가 연장 편집">
         <p>{extension.mode === "keep" ? "약속가 그대로 연장" : "최신 가격으로 연장"} · 기존 편집기에서 품목·직접 단가·순서·숨김·유효기간을 수정한 뒤 저장하고 게시 전 요약을 확인해 주세요.</p>
         <p>아래는 마지막 가격 확인 결과입니다. 편집 후 다시 확인해 주세요.</p>
-        <Button className="min-h-11" disabled={busy} onClick={() => void task(async () => {
+        <Button className="min-h-[52px]" disabled={busy} onClick={() => void task(async () => {
           const review = await reviewDocumentExtension(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode,
             validUntil: draft.content.validUntil, stage: "review", content: draft.content });
           setExtension({ ...extension, initial: review });
@@ -650,7 +650,7 @@ export function PricingDocumentsWorkspace({
         {error && <p role="alert">{error}</p>}
         <PricingDocumentExtensionReport review={extensionReview} />
         <p>새 게시본이 새 약속가가 됩니다. 같은 링크와 기존 게시 기록을 유지합니다.</p>
-        <Button className="min-h-11" disabled={busy} onClick={() => void task(async () => {
+        <Button className="min-h-[52px]" disabled={busy} onClick={() => void task(async () => {
           if (!extensionRetry.current) return;
           const version = await publishDocumentExtension(companyId, { id: draft.id, expected: draft.revision,
             mode: extension.mode, token: extensionReview.token, idempotencyKey: extensionRetry.current });

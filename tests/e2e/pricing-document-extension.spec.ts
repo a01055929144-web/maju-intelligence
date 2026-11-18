@@ -71,7 +71,10 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   await quick.fill("합성 품목 3");
   await page.getByRole("option").filter({ hasText: "합성 품목 3" }).getByRole("button").click();
   await page.getByLabel("유효기간", { exact: true }).fill("2099-03-01");
-  await page.getByRole("tab", { name: "표", exact: true }).click();
+  if (width === 390) {
+    await page.getByRole("button", { name: "더보기", exact: true }).click();
+    await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click();
+  } else await page.getByRole("tab", { name: "표", exact: true }).click();
   await page.getByRole("button", { name: "품목 2 위로", exact: true }).click();
   await page.getByRole("row").filter({ has: page.getByLabel("품목 1 선택", { exact: true }) }).getByRole("checkbox").last().uncheck();
   if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }

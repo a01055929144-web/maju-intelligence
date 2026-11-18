@@ -17,13 +17,13 @@ export function PricingDocumentExtensionChoice({ validUntil, busy, error, onClos
     <div className="space-y-4 pt-4">
       {error && <p role="alert">{error}</p>}
       <p>현재 유효기간 {validUntil}. 방법을 고른 뒤 기존 문서 편집기에서 품목·단가·순서·숨김·기간을 확인합니다.</p>
-      <label className="block">새 유효기간<input aria-label="새 유효기간" className="maju-input block min-h-11 w-full" type="date" value={day} min={validUntil > koreaDay() ? validUntil : koreaDay()} onChange={e => setDay(e.target.value)} disabled={busy} /></label>
+      <label className="block">새 유효기간<input aria-label="새 유효기간" className="maju-input block min-h-[52px] w-full" type="date" value={day} min={validUntil > koreaDay() ? validUntil : koreaDay()} onChange={e => setDay(e.target.value)} disabled={busy} /></label>
       <fieldset><legend>연장 방법 (필수)</legend>
         {([ ["keep", "약속가 그대로 연장"], ["latest", "최신 가격으로 다시 계산"] ] as const).map(([value, label]) =>
-          <label className="flex min-h-11 items-center gap-2" key={value}><input type="radio" name="extension-mode" value={value} checked={mode === value} onChange={() => setMode(value)} disabled={busy} />{label}</label>)}
+          <label className="flex min-h-[52px] items-center gap-2" key={value}><input type="radio" name="extension-mode" value={value} checked={mode === value} onChange={() => setMode(value)} disabled={busy} />{label}</label>)}
       </fieldset>
       <p>새 게시본을 확정하기 전까지 기존 약속가와 링크는 그대로입니다. 이익률 경고는 게시를 막지 않습니다.</p>
-      <Button className="min-h-11" disabled={busy || !mode || !day || day <= validUntil || day < koreaDay()} onClick={() => mode && onContinue(mode, day)}>기존 편집기에서 확인</Button>
+      <Button className="min-h-[52px]" disabled={busy || !mode || !day || day <= validUntil || day < koreaDay()} onClick={() => mode && onContinue(mode, day)}>기존 편집기에서 확인</Button>
     </div>
   </Dialog>;
 }
