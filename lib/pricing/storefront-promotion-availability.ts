@@ -10,7 +10,7 @@ export function storePromotionAvailabilityEnabled(companyId: string) {
 /** Caller supplies the company and promotion IDs from the verified storefront, never the request body. */
 export async function readStorePromotionAvailability(companyId: string, promotionIds: readonly string[]) {
   if (!storePromotionAvailabilityEnabled(companyId)) return undefined;
-  const ids = [...new Set(promotionIds.filter(isId))];
+  const ids = Array.from(new Set(promotionIds.filter(isId)));
   if (!ids.length) return undefined;
   const result: Record<string, PromotionAvailability> = Object.fromEntries(ids.map(id => [id, { state: "unavailable" } as const]));
   if (ids.length > MAX_DOCUMENT_LINES) return result;

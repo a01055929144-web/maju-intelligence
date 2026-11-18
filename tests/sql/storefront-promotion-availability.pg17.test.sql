@@ -45,10 +45,19 @@ begin
   exception when invalid_parameter_value then null; end;
   if (select count(*) from public.store_orders)<>5 or (select count(*) from public.store_order_lines)<>5 then raise exception 'read_mutated_order_data'; end if;
 end $$;
+-- A quota reduced below prior reservations must clamp at zero, also for the real caller role.
+insert into public.store_order_lines values(gen_random_uuid(),'00000000-0000-4000-8000-000000000001',
+'00000000-0000-4000-8000-000000000302','00000000-0000-4000-8000-000000000101',5.000);
+set local role service_role;
+do $$ declare q numeric; begin
+  select remaining_quantity into q from public.promotion_remaining_v1('00000000-0000-4000-8000-000000000001',array['00000000-0000-4000-8000-000000000101']::uuid[]);
+  if q<>0 then raise exception 'service_role_remaining_clamp_failed'; end if;
+end $$;
+reset role;
 \ir ../../docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.down.sql
 do $$ begin
   if to_regprocedure('public.promotion_remaining_v1(uuid,uuid[])') is not null then raise exception 'availability_down_failed'; end if;
-  if (select count(*) from public.store_orders)<>5 then raise exception 'down_removed_order_history'; end if;
+  if (select count(*) from public.store_orders)<>5 or (select count(*) from public.store_order_lines)<>6 then raise exception 'down_removed_order_history'; end if;
 end $$;
 rollback;
 select 'storefront_promotion_availability_pg17_pass';
