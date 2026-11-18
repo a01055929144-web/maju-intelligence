@@ -678,6 +678,8 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-delivery-cx71.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --set=CX75_DELIVERY_SQL="$GITHUB_WORKSPACE/.ci-cx75-delivery/docs/sql-drafts/20261108-09-order-delivery-producer.sql" --file=tests/sql/store-order-core-cx75.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-member-invitations-cx77.pg17.test.sql
+          createdb store_promotion_availability_09_test
+          psql --dbname=store_promotion_availability_09_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-promotion-availability.pg17.test.sql
 
       - name: Verify CX-68 order money safety and performance on PostgreSQL 17
         env:
