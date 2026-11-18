@@ -93,6 +93,20 @@ begin
  exception when raise_exception then rejected:=true; end;
  if not rejected then raise exception 'cx75_wrapper_account_%',e; end if;
  end if;
+ -- A valid member of another customer in the SAME company cannot use this link.
+ -- Account-only RPC has no link; keep the session user fixed for that case.
+ if e in ('place_store_member_order','place_store_catalog_member_order_v1',
+ 'place_store_catalog_order_core_v1','place_store_order_with_delivery_snapshot_09','place_store_account_order') then
+ rejected:=false;
+ begin
+ perform public.cx75_test_call(e,r||jsonb_build_object('p_idempotency_key',gen_random_uuid(),
+ 'p_store_account_id','30000000-0000-4000-8000-000000000002',
+ 'p_member_id','40000000-0000-4000-8000-000000000002',
+ 'p_auth_user_id',case when e='place_store_account_order' then '50000000-0000-4000-8000-000000000001'
+ else '50000000-0000-4000-8000-000000000002' end));
+ exception when raise_exception then rejected:=true; end;
+ if not rejected then raise exception 'cx75_wrapper_other_customer_%',e; end if;
+ end if;
  end loop;
 end $$;
 drop function public.cx75_test_call(text,jsonb);
