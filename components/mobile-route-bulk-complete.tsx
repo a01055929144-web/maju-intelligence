@@ -33,11 +33,13 @@ export function MobileRouteBulkComplete({ customerIds, onComplete, onUndo }: { c
     if (!undo) return;
     setBusy(true);
     const response = await fetchWithTimeout("/api/mobile/driver-route-actions", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completedAt: undo.completedAt, stopIds: undo.stopIds }) }, 8000).catch(() => null);
-    const payload = response ? await response.json().catch(() => null) as { message?: string } | null : null;
+    const payload = response ? await response.json().catch(() => null) as { failedStopIds?: string[]; message?: string; undoneStopIds?: string[] } | null : null;
     setBusy(false);
-    if (!response?.ok) return setMessage(payload?.message || "되돌리지 못했습니다. 배송 기록을 확인해 주세요.");
-    onUndo(undo.customerIds);
+    const undoneStopIds = payload?.undoneStopIds || [];
+    const undoneCustomerIds = undo.customerIds.filter((_, index) => undoneStopIds.includes(undo.stopIds[index]));
+    if (undoneCustomerIds.length) onUndo(undoneCustomerIds);
     setUndo(null);
+    if (!response?.ok) return setMessage(payload?.message || "되돌리지 못했습니다. 배송 기록을 확인해 주세요.");
     setMessage("방금 일괄 완료를 되돌렸습니다.");
   }
 

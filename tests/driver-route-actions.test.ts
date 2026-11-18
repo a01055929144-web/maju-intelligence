@@ -53,11 +53,28 @@ describe("driver route actions", () => {
     expect((await PATCH(request("PATCH", { customerIds: [customerA] }))).status).toBe(409);
     expect(mocks.db).toHaveBeenCalledTimes(1);
   });
+  it("rejects a customer that appears in more than one stop before writing", async () => {
+    mocks.db.mockResolvedValueOnce([
+      { customer_id: customerA, id: stopA, status: "planned", stop_type: "delivery" },
+      { customer_id: customerA, id: stopB, status: "arrived", stop_type: "delivery" },
+    ]);
+    const response = await PATCH(request("PATCH", { customerIds: [customerA] }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ message: expect.stringContaining("여러 번") });
+    expect(mocks.db).toHaveBeenCalledTimes(1);
+  });
   it("reuses the five-second undo rpc for every stop in a bulk completion", async () => {
     mocks.db.mockResolvedValue(null);
     const completedAt = "2026-11-18T10:00:00.000Z";
     expect((await DELETE(request("DELETE", { stopIds: [stopA, stopB], completedAt }))).status).toBe(200);
     expect(mocks.db).toHaveBeenCalledTimes(2);
     expect(JSON.parse(mocks.db.mock.calls[1][1].body).p_stop_id).toBe(stopB);
+  });
+  it("reports exactly which stops were undone when a later undo fails", async () => {
+    mocks.db.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("expired"));
+    const response = await DELETE(request("DELETE", { stopIds: [stopA, stopB], completedAt: "2026-11-18T10:00:00.000Z" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ undoneStopIds: [stopA], failedStopIds: [stopB] });
+    expect(mocks.db).toHaveBeenCalledTimes(2);
   });
 });

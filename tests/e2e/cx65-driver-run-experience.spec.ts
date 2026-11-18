@@ -67,7 +67,7 @@ for (const width of [1440, 390]) {
       }
       if (route.request().method() === "DELETE") {
         undone = true;
-        return route.fulfill({ json: { ok: true } });
+        return route.fulfill({ json: { ok: true, undoneStopIds: route.request().postDataJSON().stopIds } });
       }
       return route.continue();
     });
@@ -93,3 +93,27 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   });
 }
+
+test("CX-108 부분 되돌리기는 실제 성공한 정류장만 대기로 돌린다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/mobile/driver-route-actions", async (route) => {
+    if (route.request().method() === "PATCH") return route.fulfill({ json: {
+      completedAt: "2026-11-18T10:00:00.000Z",
+      customerIds: ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002", "10000000-0000-4000-8000-000000000003"],
+      ok: true,
+      stopIds: ["20000000-0000-4000-8000-000000000001", "20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"],
+    } });
+    if (route.request().method() === "DELETE") return route.fulfill({ status: 409, json: {
+      failedStopIds: ["20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"],
+      message: "일부 정류장만 되돌렸습니다. 남은 완료 기록을 확인해 주세요.",
+      undoneStopIds: ["20000000-0000-4000-8000-000000000001"],
+    } });
+    return route.continue();
+  });
+  await page.goto("/mobile/today/cx108-preview");
+  await page.getByRole("button", { name: "남은 3곳 전체 완료" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "3곳 완료" }).click();
+  await page.getByRole("button", { name: "되돌리기" }).click();
+  await expect(page.getByText("일부 정류장만 되돌렸습니다. 남은 완료 기록을 확인해 주세요.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "남은 1곳 전체 완료" })).toBeVisible();
+});
