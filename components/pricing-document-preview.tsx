@@ -256,7 +256,6 @@ export function PricingDocumentPreview({
       const url = await toPng(paper, {
         backgroundColor: "#ffffff",
         pixelRatio: 2,
-        preferredFontFormat: "woff2",
       });
       const a = document.createElement("a");
       a.download = `document-v${current.version}-${index + 1}.png`;
