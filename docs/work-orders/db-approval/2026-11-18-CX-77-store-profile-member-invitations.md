@@ -6,10 +6,10 @@
 - 적용 SQL: `docs/sql-drafts/20261118-CX-77-store-profile-member-invitations.sql`
 - 안전 down: `docs/sql-drafts/20261118-CX-77-store-profile-member-invitations.down.sql`
 - SQL 기준 커밋: `927e9ba3e0a960d4339887c75a9a0ebcb5c18069`
-- 승인 상태: **미승인 · 미적용**
+- 승인 상태: **대표 승인 · 2026-11-18 21:42 KST 1회 적용 · 읽기 검증 완료**
 - 기능 상태: `STORE_PROFILE_INVITATIONS` 기본 OFF, 회사 allowlist 미승인
 
-이 승인표는 SQL 적용 권한을 부여하지 않는다. 대표가 프로젝트와 CX-77을 명시해 별도 승인한 뒤에만 up SQL을 한 번 적용한다. down SQL은 적용 절차에 포함하지 않는다.
+대표가 프로젝트와 CX-77을 명시해 승인한 뒤 up SQL을 1회 적용했다. **재실행 금지.** down SQL은 실행하지 않았다.
 
 ## 적용 전 읽기 점검
 
@@ -112,3 +112,12 @@ order by conname;
 - up SQL이 트랜잭션에서 실패하면 오류 원문만 기록하고 임의 수정·부분 재실행을 하지 않는다.
 - 초대 이력이 한 건이라도 생기면 down은 의도적으로 거부된다.
 - down 검토는 기능 OFF와 초대 이력 0건을 별도로 확인하고 대표가 복구를 승인한 경우에만 진행한다.
+
+## 운영 적용 결과 (2026-11-18 21:42 KST)
+
+- 승인: 대표의 `fcmdvveqmcgtioelzqun` CX-77 SQL 적용 승인.
+- 원문: 위 기준 커밋과 적용 시점 main의 SQL blob SHA 일치(`9f2dd8edb668892729cea2a43b9fa334c7afadd6`).
+- 사전 조회: PostgreSQL 17.6, 선행 객체 6개 존재, 신규 테이블·함수 3개 부재. 기존 프로필·구성원은 각각 1건.
+- 1회 적용 결과: 성공. 기존 프로필·구성원 건수 변화 없음, 새 초대 0건.
+- 읽기 검증: RLS ON, 공개 역할의 테이블 SELECT/INSERT 및 세 함수 EXECUTE 모두 거부, service_role의 필요한 권한 허용, 세 함수 모두 security invoker. PK·토큰 UNIQUE·복합 FK·role CHECK·pending 인덱스 확인.
+- 기능은 OFF. 초대·수락·내보내기와 운영 데이터 변경 시험은 하지 않았다. 실패 시 임의 재실행하지 않는다.
