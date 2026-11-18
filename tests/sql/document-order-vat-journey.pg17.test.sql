@@ -9,6 +9,7 @@ do $$ begin if current_database() <> 'store_member_order_test' or current_settin
 update public.product_unit_conversions set is_confirmed=true where company_id='00000000-0000-4000-8000-000000000001';
 delete from public.customer_price_agreements where company_id='00000000-0000-4000-8000-000000000001' and customer_id='20000000-0000-4000-8000-000000000001';
 update public.store_order_settings set minimum_policy='fee',minimum_amount=999999,delivery_fee=7,self_order_enabled=true where company_id='00000000-0000-4000-8000-000000000001';
+create temporary table vat_journey_original_versions as select id,content from public.pricing_document_versions;
 do $$
 #variable_conflict use_variable
 declare
@@ -18,15 +19,15 @@ declare
  gross bigint; supply bigint; vat bigint; partial_gross bigint; partial_supply bigint;
 begin
  select content into template from public.pricing_document_versions where id='80000000-0000-4000-8000-000000000001';
- for scenario in 1..5 loop
-  unit_price:=case scenario when 1 then 1000 when 2 then 1000 when 3 then 1100 when 4 then 60 else 100 end;
+ for scenario in 1..6 loop
+  unit_price:=case scenario when 1 then 1000 when 2 then 1000 when 3 then 1100 when 4 then 60 when 6 then 60 else 100 end;
   tax:=case when scenario in(2,4) then 'exempt' else 'taxable' end;
   qty:=case when scenario=5 then 0.5 else 1.5 end; shipped:=round(qty/2,3);
   update public.product_catalog set tax_type=tax where id=p and company_id=c;
   promo:=null;
   if scenario>=3 then
    promo:=gen_random_uuid();
-   perform public.pricing_p1(c,repeat('a',64),true,'save-promotion',jsonb_build_object('id',promo,'expected',0,'content',jsonb_build_object('productId',p,'name','합성 고정가','displayName','합성 고정가','startsOn','2020-01-01','endsOn','2099-12-31','cost',unit_price,'margin',0,'stock',null,'perStoreLimit',null,'taxType',tax,'allowSheet',true,'badge',case when scenario=4 then '임박' else '행사' end)));
+   perform public.pricing_p1(c,repeat('a',64),true,'save-promotion',jsonb_build_object('id',promo,'expected',0,'content',jsonb_build_object('productId',p,'name','합성 고정가','displayName','합성 고정가','startsOn','2020-01-01','endsOn','2099-12-31','cost',unit_price,'margin',0,'stock',null,'perStoreLimit',null,'taxType',tax,'allowSheet',true,'badge',case when scenario in (4,6) then '임박' else '행사' end)));
   end if;
   line:=(template->'lines'->0)||jsonb_build_object('price',unit_price,'taxType',tax,'promotionId',promo,'visible',true);
   payload:=template||jsonb_build_object('showBrand',true,'showSpec',true,'priceContract','promotion-gross-v1','display',jsonb_build_object('priceIncludesTax',true),'lines',jsonb_build_array(line));
@@ -58,4 +59,5 @@ begin
   raise notice 'VAT journey case % PASS',scenario;
  end loop;
 end $$;
+do $$ begin assert not exists(select 1 from vat_journey_original_versions o join public.pricing_document_versions v using(id) where o.content is distinct from v.content),'existing publication changed'; end $$;
 select 'DOCUMENT_ORDER_REAL_ERP_PARTIAL_PASS';
