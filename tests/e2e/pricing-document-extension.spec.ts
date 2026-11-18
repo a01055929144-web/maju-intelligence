@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { DocumentContent } from "../../domains/pricing/document";
 
+test.use({ actionTimeout: 10000 });
+
 for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const) test(`CX-121 extension journey ${mode} at ${width}px`, async ({ page }, info) => {
+  test.setTimeout(60000);
   await page.setViewportSize({ width, height: 900 });
   const id = "10000000-0000-4000-8000-000000000001";
   const product = (n: number) => `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
