@@ -40,6 +40,18 @@ const routes: Array<{ auth: AuthKind; path: string; slug: string }> = [
 const knownLayoutDebt: Record<string, { owner: string; prefixes: string[] }> = {};
 
 for (const width of [1440, 390]) {
+  test(`admin store directory sends signed-out users to login at ${width}px`, async ({ browser }) => {
+    const context = await browser.newContext({ baseURL: "http://127.0.0.1:3100", viewport: { width, height: 844 } });
+    try {
+      const page = await context.newPage();
+      await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/admin\/login/);
+      expect(await collectLayoutProblems(page)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   test(`admin store directory fits at ${width}px`, async ({ browser }, testInfo) => {
     const context = await authenticatedContext(browser, "admin", width, 844);
     try {
