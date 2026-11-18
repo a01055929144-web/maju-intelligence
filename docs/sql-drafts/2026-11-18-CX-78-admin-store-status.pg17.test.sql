@@ -36,6 +36,24 @@ create table public.admin_audit_logs(
 
 \ir 2026-11-18-CX-78-admin-store-status.sql
 
+do $$ begin
+  assert not has_function_privilege(
+    'anon',
+    'public.admin_set_store_profile_status_v1(uuid,uuid,text,text,uuid,text)',
+    'execute'
+  );
+  assert not has_function_privilege(
+    'authenticated',
+    'public.admin_set_store_profile_status_v1(uuid,uuid,text,text,uuid,text)',
+    'execute'
+  );
+  assert has_function_privilege(
+    'service_role',
+    'public.admin_set_store_profile_status_v1(uuid,uuid,text,text,uuid,text)',
+    'execute'
+  );
+end $$;
+
 insert into companies values
   ('00000000-0000-4000-8000-000000000001'),
   ('00000000-0000-4000-8000-000000000002');
