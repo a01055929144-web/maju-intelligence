@@ -1,5 +1,63 @@
 import { expect, test } from "@playwright/test";
 import { documentOutput, printPages, lineFromCatalog, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { documentRequestError } from "../../lib/pricing/document-request-error";
+
+for (const width of [1440, 390]) test(`draft save failures preserve revision19 and edits at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 계란", displayName: "합성 계란", brand: "", spec: "30개", unit: "판", price: 1000, taxType: "exempt" as const };
+  let revision = 19, attempts = 0;
+  let content: DocumentContent = { kind: "sheet", title: "저장 오류 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    lines: [lineFromCatalog(product), ...[1, 2, 3].map(n => ({ ...lineFromCatalog(product), promotionId: `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`, badge: "행사", startsOn: "2020-01-01", endsOn: "2099-12-31" }))] };
+  const failures = [
+    ["Promotion not found", "P0001"], ["Promotion not enabled for sheets", "P0001"], ["Stale document", "P0001"], ["undefined column", "42703"],
+  ].map(([message, code]) => documentRequestError(new Error(`Supabase request failed: 400 ${JSON.stringify({ message, code, details: "PRIVATE_SYNTHETIC_DETAIL" })}`), true));
+  const requests: unknown[] = [];
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z" });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: [product], total: 1 };
+    if (action === "save") {
+      expect(body.id).toBe(id); expect(body.expected).toBe(19); expect(body.content.title).toBe("수정한 제목 보존");
+      expect(body.content.lines).toEqual(content.lines); requests.push(body);
+      const failure = failures[attempts++];
+      if (failure) { const { status, ...json } = failure; return route.fulfill({ status, json }); }
+      content = body.content; revision = 20; result = draft();
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "저장 오류 합성 문서", exact: true }).click();
+  const title = page.getByRole("textbox", { name: "문서 제목", exact: true }).first();
+  await title.fill("수정한 제목 보존");
+  async function save() {
+    if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+    else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  }
+  for (const failure of failures) {
+    await save();
+    await expect(page.getByRole("alert").filter({ hasText: failure.message })).toBeVisible();
+    await expect(title).toHaveValue("수정한 제목 보존");
+    await expect(page.getByRole("button", { name: "판매가 버전 확정", exact: true })).toBeDisabled();
+    expect(revision).toBe(19);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await expect(page.getByRole("alert")).not.toContainText("PRIVATE_");
+  }
+  await page.screenshot({ path: `test-results/readonly-pg17/document-save-errors/save-error-${width}.png`, fullPage: true });
+  await save();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  await expect(title).toHaveValue("수정한 제목 보존");
+  expect(revision).toBe(20); expect(requests).toHaveLength(5);
+  expect(new Set(requests.map(request => JSON.stringify(request))).size).toBe(1);
+});
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`${kind} wrapped specs, pinned QR and archive at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);

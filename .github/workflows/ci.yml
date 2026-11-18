@@ -585,6 +585,8 @@ jobs:
         run: |
           createdb pricing_document_archive_test
           psql --dbname=pricing_document_archive_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-archive.pg17.test.sql
+          createdb pricing_document_save_errors_test
+          psql --dbname=pricing_document_save_errors_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-save-errors.pg17.test.sql
 
       # Read-only dependency on #285's unapproved SQL contract. Never apply to an operating database.
       - name: Checkout pinned lead-share SQL draft for isolated tests
