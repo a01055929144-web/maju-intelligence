@@ -14,6 +14,7 @@ import { audienceLabel, type Audience, type AudienceSummary, type AudienceTarget
 import { formatWon } from "@/domains/shared/money";
 import { useConfirm } from "./ui/confirm-dialog";
 import { SearchInput } from "./ui/search-input";
+import { Button } from "./ui/button";
 
 // CC-20: 행사·임박 독립 화면. 데이터·명령은 기존 pricing_promotions API(documentRequest) 그대로, DB 변경 없음.
 type Kind = "행사" | "임박";
@@ -105,6 +106,25 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   const [folder, setFolder] = useState("");
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState(promo?.productId || preset);
+  const [productTax, setProductTax] = useState<CatalogChoice["taxType"] | null>(null);
+  const [taxType, setTaxType] = useState<CatalogChoice["taxType"]>(promo?.taxType || "unknown");
+  const [taxLoading, setTaxLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setProductTax(null);
+    setTaxLoading(false);
+    if (!promo) setTaxType("unknown");
+    if (!productId) return;
+    setTaxLoading(true);
+    void documentRequest<{ items: CatalogChoice[] }>(companyId, "catalog", { productIds: [productId] }).then(({ result }) => {
+      if (cancelled) return;
+      const item = result.items.find(item => item.id === productId);
+      setProductTax(item?.taxType || "unknown");
+      if (!promo) setTaxType(item?.taxType || "unknown");
+    }).catch(() => { if (!cancelled) setError("원상품 세금 구분을 불러오지 못했습니다. 창을 닫고 다시 열어 주세요."); })
+      .finally(() => { if (!cancelled) setTaxLoading(false); });
+    return () => { cancelled = true; };
+  }, [companyId, productId, promo]);
   // 고른 상품 이름을 기억한다: 고른 뒤 폴더·검색어를 바꾸면 목록에서 사라져 이름이 빈 값으로 저장되던 문제.
   const [pickedName, setPickedName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -151,6 +171,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
   async function save(form: FormData) {
     setBusy(true); setError("");
     try {
+      if (taxLoading || (taxType !== "taxable" && taxType !== "exempt")) throw new Error("원상품 과세·면세를 확인한 뒤 다시 저장해 주세요.");
       const num = (key: string) => (form.get(key) === "" ? null : Number(form.get(key)));
       const product = options.find((c) => c.id === productId) || choices.find((c) => c.id === productId);
       const savedId = promo?.id || crypto.randomUUID();
@@ -160,7 +181,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
           productId, name: promo?.name || product?.name || pickedName, displayName: String(form.get("displayName") || ""),
           startsOn: String(form.get("startsOn")), endsOn: String(form.get("endsOn")),
           cost: Number(form.get("cost")), margin: Number(form.get("margin")), stock: num("stock"), perStoreLimit: num("perStoreLimit"),
-          allowSheet: form.get("allowSheet") === "on", badge: kind, taxType: promo?.taxType || "taxable",
+          allowSheet: form.get("allowSheet") === "on", badge: kind, taxType,
         },
       }, true);
       if (audienceEnabled && (aud !== "all" || initialAudience !== "all")) {
@@ -204,6 +225,16 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         </select>
       </label>
       <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 space-y-2">
+          <label className="block text-sm font-bold">과세·면세
+            <select aria-label="행사 과세·면세" className={`${field} mt-1 min-h-[44px]`} disabled={!promo || taxLoading} onChange={e => setTaxType(e.target.value as CatalogChoice["taxType"])} value={taxType}>
+              <option value="unknown">확인 필요</option><option value="taxable">과세</option><option value="exempt">면세</option>
+            </select>
+          </label>
+          <p className="text-sm">원상품: {taxLoading ? "확인 중" : productTax === "exempt" ? "면세" : productTax === "taxable" ? "과세" : "확인 필요"}. 새 행사는 원상품 값을 사용합니다.</p>
+          {promo && productTax && productTax !== "unknown" && taxType !== productTax ? <Notice kind="error">원상품과 행사 세금 구분이 다릅니다. 반영 후 저장하면 행사 원본만 바뀌며 기존 발행본은 유지됩니다.<Button className="min-h-[44px]" onClick={() => setTaxType(productTax)} type="button" variant="outline">원상품 세금 구분 반영</Button></Notice> : null}
+          {!taxLoading && taxType === "unknown" ? <p role="status" className="text-sm">상품관리에서 과세·면세를 확인한 뒤 창을 다시 열어 주세요.</p> : null}
+        </div>
         <label className="block text-sm font-bold">{kind === "임박" ? "처분 매입가" : "행사 매입가"}<input className={`${field} mt-1 text-right`} defaultValue={promo?.cost ?? ""} min="0" name="cost" required step="0.01" type="number" /></label>
         <label className="block text-sm font-bold">마진(%)<input className={`${field} mt-1 text-right`} defaultValue={promo?.margin ?? ""} min="0" name="margin" required step="0.01" type="number" /></label>
         <label className="block text-sm font-bold">{kind === "임박" ? "시작일" : "시작일"}<input className={`${field} mt-1`} defaultValue={promo?.startsOn || today} name="startsOn" required type="date" /></label>
@@ -231,7 +262,7 @@ function PromotionDrawer({ audienceEnabled, companyId, initialAudience, kind, on
         <label className="flex items-center gap-2 text-sm font-bold"><input defaultChecked={promo?.allowSheet ?? true} name="allowSheet" type="checkbox" />단가표에도 넣기</label>
       </div>
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <button className="maju-button-primary min-h-[44px] px-4" disabled={busy || !productId || (audienceEnabled && aud !== "all" && customers.length + templateIds.length + gradeIds.length === 0)} type="submit">저장</button>
+        <button className="maju-button-primary min-h-[44px] px-4" disabled={busy || taxLoading || taxType === "unknown" || !productId || (audienceEnabled && aud !== "all" && customers.length + templateIds.length + gradeIds.length === 0)} type="submit">저장</button>
         <button className="min-h-[44px] rounded-lg border px-4" onClick={onClose} type="button">닫기</button>
         {promo ? <button className="ml-auto min-h-[44px] px-3 text-sm font-bold text-rose-700" disabled={busy} onClick={() => void remove()} type="button">삭제</button> : null}
       </div>

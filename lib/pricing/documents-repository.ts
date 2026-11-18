@@ -1,7 +1,7 @@
 import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
 import { withDocumentRecalculations } from "./document-recalculation";
-import { catalogDisplaySpec, isId, isSettlementInfoKey, koreaDay, parseDisplay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
+import { catalogDisplaySpec, isId, isSettlementInfoKey, koreaDay, parseDisplay, PricingInputError, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import type { PrepareDocumentShare } from "../../domains/pricing/document-share";
 import { prepareDocumentShare, revokeDocumentShare, recordSharedDocumentDelivery } from "./document-share";
@@ -127,6 +127,17 @@ async function recordDocumentSend(scope: DocumentScope, input: DocumentSendInput
 
 export const pricingDocumentsRepository: PricingDocumentsRepository = {
   async request<T>(scope: DocumentScope, action: string, payload: object): Promise<T> {
+    if (action === "save-promotion" && "expected" in payload && payload.expected === 0) {
+      const input = payload as { content: { productId: string; taxType: string } };
+      if (!scope.manager || !isId(input.content.productId)) throw new PricingInputError("행사 관리 권한과 상품을 확인해 주세요.");
+      const products = await supabaseRequest<Array<{ id: string; tax_type: string | null }>>(
+        `product_catalog?company_id=eq.${encodeURIComponent(scope.companyId)}&id=eq.${encodeURIComponent(input.content.productId)}&is_active=eq.true&select=id,tax_type&limit=1`,
+      );
+      const product = products[0];
+      if (products.length !== 1 || product?.id !== input.content.productId || (product.tax_type !== "taxable" && product.tax_type !== "exempt"))
+        throw new PricingInputError("원상품의 과세·면세를 확인하지 못했습니다. 상품관리에서 세금 구분을 확인한 뒤 다시 담아 주세요.");
+      payload = { ...payload, content: { ...input.content, taxType: product.tax_type } };
+    }
     if (action === "prepare-share") return prepareDocumentShare(scope, payload as PrepareDocumentShare) as Promise<T>;
     if (action === "revoke-share") return revokeDocumentShare(scope, (payload as { shareLinkId: string }).shareLinkId) as Promise<T>;
     if (action === "record-send") {
