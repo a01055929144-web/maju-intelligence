@@ -95,6 +95,7 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-38-order-sale-documents.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-order-dispatch.pg17.test.sql
 
       - name: Verify purchase date replace draft on PostgreSQL 17
         working-directory: docs/sql-drafts
