@@ -622,6 +622,7 @@ export function PricingDocumentsWorkspace({
         {draft && tab === "documents" ? (
           <>
             <Toolbar
+              className="max-sm:[&>div]:basis-full max-sm:[&>div]:w-full max-sm:[&_button]:shrink-0 max-sm:[&_button]:whitespace-nowrap"
               left={<>
                 <Button onClick={() => { if (discard()) { setView("list"); setTab("documents"); void loadList(); } }} type="button" variant="outline">← 문서 목록</Button>
                 <input aria-label="문서 제목" className="h-9 min-w-[120px] flex-1 rounded-md border border-transparent px-2 text-base font-bold hover:border-slate-200 focus:border-teal-400 sm:text-lg" disabled={!editable} maxLength={100} onChange={(e) => change({ ...draft.content, title: e.target.value })} value={draft.content.title} />
