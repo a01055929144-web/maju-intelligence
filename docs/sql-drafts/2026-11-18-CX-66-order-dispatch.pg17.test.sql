@@ -62,6 +62,31 @@ do $$ begin
   exception when raise_exception then assert sqlerrm='order_dispatch_idempotency_conflict'; end;
 end $$;
 
+-- A foreign-company order and its draft never enter the caller company's batch.
+insert into product_catalog values
+ ('00000000-0000-0000-0000-0000000000a5','00000000-0000-0000-0000-0000000000c2','OTHER',1000);
+insert into pricing_effective_source values
+ ('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000a5',1000,1000,10);
+insert into store_orders(id,company_id,customer_id,delivery_date,status,delivery_fee,known_total)
+values ('00000000-0000-0000-0000-0000000000f7','00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000a2','2026-11-18','submitted',0,1210);
+insert into store_order_lines(company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price)
+values ('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000f7','00000000-0000-0000-0000-0000000000a5','타사 상품','개',1,1100,'taxable',false);
+select receive_store_order_with_sale_document('00000000-0000-0000-0000-0000000000c2','00000000-0000-0000-0000-0000000000f7',1,null,'타사 담당');
+do $$ declare ledger_before bigint; inventory_before bigint; begin
+  select count(*) into ledger_before from partner_ledger_entries;
+  select count(*) into inventory_before from inventory_movements;
+  begin perform dispatch_store_orders('00000000-0000-0000-0000-0000000000c1',
+    array['00000000-0000-0000-0000-0000000000f7'::uuid],
+    '10000000-0000-4000-8000-000000000007',null,'회사 혼합');
+    raise exception 'cross-company order accepted';
+  exception when raise_exception then assert sqlerrm='order_dispatch_order_not_found'; end;
+  assert (select status='received' from store_orders where company_id='00000000-0000-0000-0000-0000000000c2' and id='00000000-0000-0000-0000-0000000000f7');
+  assert (select status='draft' from business_documents where company_id='00000000-0000-0000-0000-0000000000c2' and source_id='00000000-0000-0000-0000-0000000000f7');
+  assert (select count(*) from partner_ledger_entries)=ledger_before;
+  assert (select count(*) from inventory_movements)=inventory_before;
+  assert not exists(select 1 from order_dispatch_requests where idempotency_key='10000000-0000-4000-8000-000000000007');
+end $$;
+
 -- A one-won document discrepancy rejects the order before any new effect.
 insert into store_orders(id,company_id,customer_id,delivery_date,status,delivery_fee,known_total)
 values (:'order3',:'company',:'customer','2026-11-18','submitted',0,1210);
