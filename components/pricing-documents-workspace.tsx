@@ -1058,7 +1058,7 @@ export function PricingDocumentsWorkspace({
                               <option value="taxable">과세</option>
                               <option value="exempt">면세</option>
                             </select>
-                            {l.promotionId ? <Button className="mt-1 min-h-[44px]" disabled={!editable} onClick={() => window.open("/revenue/pricing/promotions", "_blank", "noopener")} type="button" variant="outline">행사 세금 수정</Button> : null}
+                            {l.promotionId ? <Button className="mt-1 min-h-[44px]" disabled={!editable || !manager} onClick={() => window.open("/revenue/pricing/promotions", "_blank", "noopener")} title={!manager ? "행사 세금 수정은 대표·관리자에게 요청해 주세요." : undefined} type="button" variant="outline">행사 세금 수정</Button> : null}
                           </td>
                           <td className="p-2">
                             <MoneyInput
