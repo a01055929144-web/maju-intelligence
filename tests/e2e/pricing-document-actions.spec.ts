@@ -269,3 +269,57 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
 });
 
 });
+
+for (const width of [1440, 390]) test(`promotion tax: inherit, explicitly correct legacy mismatch, reject unknown at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 면세 계란", displayName: "합성 면세 계란", brand: "", spec: "30개", unit: "판", price: 1100, cost: 1000, taxType: "exempt" };
+  let currentTax = "exempt";
+  const writes: Array<{ expected: number; content: { taxType: string; cost: number; margin: number } }> = [];
+  let promotions: Array<Record<string, unknown>> = [];
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/price-sheets/folder-order*", route => route.fulfill({ json: { folders: [] } }));
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [{ ...product, code: "SYN-EGG" }] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "catalog") result = { items: [{ ...product, taxType: currentTax }], total: 1 };
+    if (action === "promotions") result = promotions;
+    if (action === "save-promotion") {
+      writes.push(body);
+      result = { revision: body.expected + 1 };
+      // Synthetic legacy mismatch fixture after first creation; never auto-correct it.
+      promotions = [{ ...body.content, id: body.id, revision: 4, price: 1100, taxType: writes.length === 1 ? "taxable" : body.content.taxType }];
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto(`/revenue/pricing/promotions?new=행사&productId=${product.id}`);
+  const create = page.getByRole("dialog", { name: "행사 등록", exact: true });
+  await expect(create.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("exempt");
+  await create.getByRole("spinbutton", { name: "행사 매입가", exact: true }).fill("1000");
+  await create.getByRole("spinbutton", { name: "마진(%)", exact: true }).fill("10");
+  await create.getByLabel("종료일", { exact: true }).fill("2099-12-31");
+  await create.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(create).not.toBeVisible();
+  expect(writes[0].expected).toBe(0); expect(writes[0].content.taxType).toBe("exempt");
+  await page.getByRole("button", { name: "수정", exact: true }).first().click();
+  const edit = page.getByRole("dialog", { name: "행사 수정", exact: true });
+  await expect(edit.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("taxable");
+  const apply = edit.getByRole("button", { name: "원상품 세금 구분 반영", exact: true });
+  await expect(apply).toBeVisible(); expect(writes).toHaveLength(1);
+  expect((await apply.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/promotion-tax-source/mismatch-${width}.png`, fullPage: true });
+  await apply.click(); expect(writes).toHaveLength(1);
+  await edit.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(edit).not.toBeVisible();
+  expect(writes[1]).toMatchObject({ expected: 4, content: { taxType: "exempt", cost: 1000, margin: 10 } });
+  currentTax = "unknown";
+  await page.goto(`/revenue/pricing/promotions?new=행사&productId=${product.id}`);
+  await expect(create.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("unknown");
+  await expect(create.getByRole("button", { name: "저장", exact: true })).toBeDisabled();
+  await expect(create).toContainText("상품관리에서 과세·면세를 확인");
+  expect(writes).toHaveLength(2);
+});
