@@ -187,7 +187,10 @@ for (const scenario of [{width:1280,existing:741,held:0},{width:390,existing:741
     await page.getByLabel('정정 사유',{exact:true}).fill('격리 통합 시험 오입력 정정');
     await page.getByRole('button',{name:'정정 저장',exact:true}).click();
     await expect.poll(()=>state().corrections).toBe(1);
-    expect(state().items.map(item=>[item.id,item.cost,item.price])).toEqual(saved.items.map(item=>[item.id,item.cost,item.price]));
+    const corrected=state(), correctedId=saved.items.find(item=>item.code===code(744))!.id;
+    expect(corrected.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]))
+      .toEqual(saved.items.filter(item=>item.id!==correctedId).map(item=>[item.id,item.cost,item.price]));
+    expect(corrected.items.find(item=>item.id===correctedId)).toMatchObject({cost:'99.00',price:'120'});
     page.once('dialog',dialog=>dialog.accept());
     await page.getByRole('button',{name:'직전 날짜별 매입가·판매가 함께 되돌리기',exact:true}).click();
     await expect(page.getByRole('status').filter({hasText:'원본 거래를 함께 복구했습니다'})).toBeVisible();
