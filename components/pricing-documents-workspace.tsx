@@ -616,7 +616,12 @@ export function PricingDocumentsWorkspace({
     </div>
     <PricingDocumentSheets companyId={companyId} manager={manager}
       onCreate={(kind) => setStarting(kind)} onOpen={select}
-      onExtend={extensionEnabled ? setExtensionChoice : undefined}
+      onExtend={extensionEnabled ? document => void task(async () => {
+        const published = (await read<DocumentVersion[]>("versions", { id: document.id })).filter(v => v.documentId === document.id)
+          .sort((a, b) => b.version - a.version)[0];
+        if (!published) throw new Error("게시한 문서만 연장할 수 있습니다. 먼저 문서를 게시해 주세요.");
+        setExtensionChoice({ ...document, content: published.content });
+      }) : undefined}
       onCopy={(document) => create(document.content.kind, document.content)} />
     {extensionChoice && <PricingDocumentExtensionChoice validUntil={extensionChoice.content.validUntil} busy={busy} error={error}
       onClose={() => { if (!busy) setExtensionChoice(null); }} onContinue={(mode, validUntil) => void task(async () => {
@@ -633,7 +638,7 @@ export function PricingDocumentsWorkspace({
       {leadNotice}
       {extension && draft && <aside className="space-y-3 rounded border p-3" aria-label="약속가 연장 편집">
         <p>{extension.mode === "keep" ? "약속가 그대로 연장" : "최신 가격으로 연장"} · 기존 편집기에서 품목·직접 단가·순서·숨김·유효기간을 수정한 뒤 저장하고 게시 전 요약을 확인해 주세요.</p>
-        <p>아래는 마지막 서버 확인 결과입니다. 편집 후 다시 확인해 주세요.</p>
+        <p>아래는 마지막 가격 확인 결과입니다. 편집 후 다시 확인해 주세요.</p>
         <Button className="min-h-11" disabled={busy} onClick={() => void task(async () => {
           const review = await reviewDocumentExtension(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode,
             validUntil: draft.content.validUntil, stage: "review", content: draft.content });
