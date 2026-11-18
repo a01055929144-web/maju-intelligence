@@ -266,6 +266,7 @@ export type CustomerMasterItem = {
   deliveryTerritoryName?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
@@ -288,6 +289,7 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -323,6 +325,7 @@ export type CustomerMasterInput = {
   deliveryTerritoryId?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
@@ -339,6 +342,7 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -4977,6 +4981,7 @@ export async function getCustomerMaster(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -5447,6 +5452,7 @@ export async function upsertCustomerMaster(
       delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
+      expected_opening_date: input.expectedOpeningDate || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
       kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
@@ -5458,6 +5464,7 @@ export async function upsertCustomerMaster(
       place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
+      tax_invoice_email: input.taxInvoiceEmail || null,
       sub_business_number: businessIdentity.subBusinessNumber || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
@@ -5582,6 +5589,9 @@ export async function upsertCustomerMaster(
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
+    ...(input.expectedOpeningDate !== undefined
+      ? { expected_opening_date: toPostgresDate(input.expectedOpeningDate) }
+      : {}),
     industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
     last_order_days: input.lastOrderDays || 0,
     monthly_revenue: input.monthlyRevenue || 0,
@@ -5590,6 +5600,9 @@ export async function upsertCustomerMaster(
     phone: input.phone || resolvedPlaceLinks.enrichedPhone || null,
     region: input.region || "미분류",
     representative_name: input.representativeName || null,
+    ...(input.taxInvoiceEmail !== undefined
+      ? { tax_invoice_email: input.taxInvoiceEmail || null }
+      : {}),
     sub_business_number: businessIdentity.subBusinessNumber || null,
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
@@ -15204,6 +15217,7 @@ function toCustomerMasterItem(
     delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
+    expected_opening_date?: string | null;
     google_map_url?: string | null;
     grade_override?: string | null;
     industry: string | null;
@@ -15216,6 +15230,7 @@ function toCustomerMasterItem(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -15277,6 +15292,7 @@ function toCustomerMasterItem(
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
+    expectedOpeningDate: row.expected_opening_date || undefined,
     naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
     phone: row.phone || undefined,
@@ -15286,6 +15302,7 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    taxInvoiceEmail: row.tax_invoice_email || undefined,
     subBusinessNumber: row.sub_business_number || undefined,
     reviewSummary: row.review_summary || undefined,
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,
