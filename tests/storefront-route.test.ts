@@ -45,6 +45,30 @@ it("enables cutoff guidance only for the verified token company, never a caller-
   expect((await read("verified-company")).orderCutoffGuidance).toBeUndefined();
 });
 afterEach(() => vi.unstubAllEnvs());
+it("reads adjusted promotion stock only for the verified token company and document promotions", async () => {
+  const companyId = "00000000-0000-4000-8000-000000000001", promo = "70000000-0000-4000-8000-000000000001";
+  vi.stubEnv("STORE_PROMOTION_AVAILABILITY_ENABLED", "true");
+  vi.stubEnv("STORE_PROMOTION_AVAILABILITY_COMPANY_IDS", companyId);
+  mocks.memberEnabled = false;
+  mocks.db.mockImplementation(async (path: string) => path === "rpc/promotion_remaining_v1"
+    ? [{ promotion_id: promo, stock: 10, reserved_quantity: 3.125, remaining_quantity: 6.875, per_store_limit: 4 }] : []);
+  const read = async (verifiedCompany: string, visible = true) => {
+    mocks.read.mockResolvedValue({ companyId: verifiedCompany, customerId: "customer", priceAvailable: visible, canOrder: true,
+      lines: [{ promotionId: promo }], policy: { weekdays: [], holidays: [] } });
+    return (await POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" },
+      body: JSON.stringify({ token: "signed", companyId, promotionIds: ["forged"], promotionAvailability: { remaining: 999 } }) }))).json();
+  };
+  expect((await read("other-company")).promotionAvailability).toBeUndefined();
+  expect((await read(companyId, false)).promotionAvailability).toBeUndefined();
+  expect(mocks.db.mock.calls.some(([path]) => path === "rpc/promotion_remaining_v1")).toBe(false);
+  const result = await read(companyId);
+  expect(result.promotionAvailability).toEqual({ [promo]: { state: "known", remaining: 6.875, storeLimit: 4 } });
+  const call = mocks.db.mock.calls.find(([path]) => path === "rpc/promotion_remaining_v1")!;
+  expect(JSON.parse(call[1].body)).toEqual({ p_company: companyId, p_promotion_ids: [promo] });
+  expect(JSON.stringify(result.promotionAvailability)).not.toMatch(/reserved_quantity|stock/);
+  vi.stubEnv("STORE_PROMOTION_AVAILABILITY_ENABLED", "false");
+  expect((await read(companyId)).promotionAvailability).toBeUndefined();
+});
 const productId = "10000000-0000-4000-8000-000000000001";
 const body = {
   token: "signed-link",
