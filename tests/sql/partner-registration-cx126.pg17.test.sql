@@ -3,9 +3,11 @@ create extension if not exists pgcrypto;
 create table companies(id uuid primary key);
 create table normalized_customers(id uuid primary key default gen_random_uuid(), company_id uuid not null references companies(id), customer_name text not null);
 create table product_suppliers(id uuid primary key default gen_random_uuid(), company_id uuid not null references companies(id), name text not null, business_number text, is_active boolean not null default true);
-create role anon noinherit;
-create role authenticated noinherit;
-create role service_role noinherit;
+do $$ begin
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon noinherit; end if;
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated noinherit; end if;
+  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role noinherit; end if;
+end $$;
 \ir ../../docs/sql-drafts/2026-11-18-CX-126-partner-registration.sql
 
 insert into companies values ('00000000-0000-4000-8000-000000000001');
