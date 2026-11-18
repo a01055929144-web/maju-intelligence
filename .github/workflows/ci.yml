@@ -83,14 +83,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # CX-68: CX-62 is not merged yet; pin its atomic receipt contract in an isolated path.
-      - name: Checkout pinned CX-62 atomic receipt draft
-        uses: actions/checkout@v5
-        with:
-          ref: ab1db2df418823e8b26982a412fca3db63fff395
-          path: .ci-cx62
-          persist-credentials: false
-
       - name: Verify CX-41 order-to-return journey on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
@@ -102,16 +94,7 @@ jobs:
         run: |
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-38-order-sale-documents.pg17.test.sql
-
-      - name: Verify isolated CX-62 atomic receipt money safety on PostgreSQL 17
-        working-directory: .ci-cx62/docs/sql-drafts
-        env:
-          PGHOST: 127.0.0.1
-          PGPORT: 5432
-          PGDATABASE: cx41_order_return_test
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
 
       - name: Verify purchase date replace draft on PostgreSQL 17
         working-directory: docs/sql-drafts
