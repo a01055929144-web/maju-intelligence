@@ -116,6 +116,46 @@ select receive_store_order_with_sale_document(:'company',:'batch_a',1,null,'합�
 select receive_store_order_with_sale_document(:'company',:'batch_b',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'ambiguous_order',1,null,'합성 담당');
 
+-- CX-62 receipt creates drafts only. Dispatch is the first point that may create
+-- a ledger or inventory effect.
+do $$ begin
+  assert (select count(*) from business_documents
+    where source_id in (
+      '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
+      '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006')
+      and status='draft')=6;
+  assert not exists(select 1 from partner_ledger_entries e join business_documents d
+    on d.company_id=e.company_id and d.id=e.source_document_id
+    where d.source_id in (
+      '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
+      '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006'));
+  assert not exists(select 1 from inventory_movements m join business_documents d
+    on d.company_id=m.company_id and d.id=m.source_document_id
+    where d.source_id in (
+      '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
+      '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006'));
+end $$;
+
+do $$ begin
+  begin
+    perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1','[]','40000000-0000-4000-8000-000000000011',null,'빈 묶음');
+    raise exception 'empty orders accepted';
+  exception when raise_exception then assert sqlerrm='partial_dispatch_input_required'; end;
+  begin
+    perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1','[{"orderId":"20000000-0000-4000-8000-000000000001"}]','40000000-0000-4000-8000-000000000012',null,'줄 누락');
+    raise exception 'missing lines accepted';
+  exception when raise_exception then assert sqlerrm='partial_dispatch_input_invalid'; end;
+  begin
+    perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1','[{"orderId":"20000000-0000-4000-8000-000000000001","lines":{}}]','40000000-0000-4000-8000-000000000013',null,'줄 비배열');
+    raise exception 'non-array lines accepted';
+  exception when raise_exception then assert sqlerrm='partial_dispatch_input_invalid'; end;
+  assert not exists(select 1 from order_dispatch_requests where idempotency_key in (
+    '40000000-0000-4000-8000-000000000011','40000000-0000-4000-8000-000000000012','40000000-0000-4000-8000-000000000013'));
+end $$;
+
 do $$ declare bad jsonb; begin
   foreach bad in array array['1.2345'::jsonb,'"NaN"'::jsonb,'100001'::jsonb] loop
     begin perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1',jsonb_build_array(jsonb_build_object('orderId','20000000-0000-4000-8000-000000000001','lines',jsonb_build_array(jsonb_build_object('orderLineId','30000000-0000-4000-8000-000000000001','shippedQuantity',bad)))),'40000000-0000-4000-8000-000000000010',null,'잘못된 수량'); raise exception 'invalid precision accepted';
@@ -158,6 +198,8 @@ do $$ declare ledger_before bigint; inventory_before bigint; begin
   select count(*) into ledger_before from partner_ledger_entries; select count(*) into inventory_before from inventory_movements;
   perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1','[{"orderId":"20000000-0000-4000-8000-000000000002","lines":[]}]','40000000-0000-4000-8000-000000000002',null,'전량 취소');
   assert (select status='cancelled' from store_orders where id='20000000-0000-4000-8000-000000000002');
+  assert (select shipped_quantity=0 and cancelled_quantity=quantity
+    from store_order_lines where id='30000000-0000-4000-8000-000000000003');
   assert not exists(select 1 from business_documents where source_id='20000000-0000-4000-8000-000000000002');
   assert (select count(*) from partner_ledger_entries)=ledger_before;
   assert (select count(*) from inventory_movements)=inventory_before;
