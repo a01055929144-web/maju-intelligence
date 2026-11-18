@@ -35,7 +35,8 @@ insert into public.company_members values
  ('50000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000002','driver','active','staff','{delivery}',null),
  ('50000000-0000-4000-8000-000000000003','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000003','member','active','staff','{sales}',null),
  ('50000000-0000-4000-8000-000000000004','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000004','driver','active','staff','{delivery}',clock_timestamp()-interval '1 minute'),
- ('50000000-0000-4000-8000-000000000005','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000005','manager','inactive','manager','{}',null);
+ ('50000000-0000-4000-8000-000000000005','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000005','manager','inactive','manager','{}',null),
+ ('50000000-0000-4000-8000-000000000006','30000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000006','driver','active','staff','{delivery}',null);
 insert into public.delivery_route_stops values
  ('70000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000001','delivery',(clock_timestamp() at time zone 'Asia/Seoul')::date,'planned'),
  ('70000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000004','40000000-0000-4000-8000-000000000001','delivery',(clock_timestamp() at time zone 'Asia/Seoul')::date,'planned'),
@@ -61,6 +62,9 @@ begin
    if sqlerrm<>'store_access_password_read_forbidden' then raise; end if; end;
  begin perform public.read_store_access_password_v1(company_a,'60000000-0000-4000-8000-000000000003',profile_a,'70000000-0000-4000-8000-000000000001');
   raise exception 'sales staff accepted'; exception when raise_exception then
+   if sqlerrm<>'store_access_password_read_forbidden' then raise; end if; end;
+ begin perform public.read_store_access_password_v1(company_a,'60000000-0000-4000-8000-000000000006',profile_a,'70000000-0000-4000-8000-000000000001');
+  raise exception 'other driver stop accepted'; exception when raise_exception then
    if sqlerrm<>'store_access_password_read_forbidden' then raise; end if; end;
  begin perform public.read_store_access_password_v1(company_a,'60000000-0000-4000-8000-000000000004',profile_a,'70000000-0000-4000-8000-000000000002');
   raise exception 'expired driver accepted'; exception when raise_exception then
