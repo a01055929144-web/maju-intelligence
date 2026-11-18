@@ -7,6 +7,7 @@ import { PriceSheetsWorkspace } from "@/components/price-sheets-workspace";
 import { PricingTabs } from "@/components/pricing-tabs";
 import { companyUsesStorePrices } from "@/lib/pricing/store-price-usage";
 import { CustomerAppShell } from "@/components/customer-app-shell";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export default async function MarginGroupsPage({ searchParams }: { searchParams?
   const preview = Boolean(admin && !customer);
   const showStorePrices = await companyUsesStorePrices(companyId);
   return <CustomerAppShell headerNav={<PricingTabs active="catalog" previewCompanyId={preview ? companyId : undefined} showStorePrices={showStorePrices} />} active="revenue" companyName={customer?.companyName || "선택 고객사"} mode={preview ? "admin-preview" : "customer"} previewCompanyId={preview ? companyId : undefined} title="카탈로그" userName={customer?.name || admin?.name} workspaceRole={customer?.workspaceRole}>
-    <section className="w-full space-y-4"><PriceSheetsWorkspace companyId={companyId} marginTemplates={isFeatureEnabled("MARGIN_TEMPLATES", companyId)} /></section>
+    <section className="w-full space-y-4">
+      {isFeatureEnabled("PRICE_EXPLANATION", companyId) ? <div className="flex justify-end"><Link className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" href={`/revenue/pricing/explanation${preview ? `?companyId=${encodeURIComponent(companyId)}` : ""}`}>단가 근거 보기</Link></div> : null}
+      <PriceSheetsWorkspace companyId={companyId} marginTemplates={isFeatureEnabled("MARGIN_TEMPLATES", companyId)} />
+    </section>
   </CustomerAppShell>;
 }

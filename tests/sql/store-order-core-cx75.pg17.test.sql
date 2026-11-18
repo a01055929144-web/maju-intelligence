@@ -317,7 +317,8 @@ end $$;
 -- D4 schema is test-only here; product cutoffs use server Asia/Seoul time.
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
 do $$
-declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1;
+-- Keep the same weekday as tomorrow, but beyond the company deadline even after 22:00 KST.
+declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+8;
  r jsonb; k uuid:=gen_random_uuid();
 begin
  deadline:=(clock_timestamp() at time zone 'Asia/Seoul')-interval '1 minute';
@@ -365,6 +366,10 @@ begin
 end $$;
 drop trigger cx75_test_drift on public.store_orders;
 drop function public.cx75_test_drift();
+\ir promotion-cancelled-reservation-cx74.pg17.test.sql
+\set CX74_CURRENT_ENGINE_VARIANT true
+\ir promotion-cancelled-reservation-cx74.pg17.test.sql
+\unset CX74_CURRENT_ENGINE_VARIANT
 \set ON_ERROR_STOP off
 \ir ../../docs/sql-drafts/2026-11-18-CX-75-common-order-core.down.sql
 \set ON_ERROR_STOP on
