@@ -388,3 +388,48 @@ for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserv
   await refresh(); await expect(page.getByRole("alert").filter({ hasText: "현재 상품의 과세·면세" })).toBeVisible();
   await expect(normal).toHaveValue("exempt"); expect(writes).toHaveLength(1);
 });
+
+for (const width of [1440, 390]) test(`document editor toolbar keeps title and actions separate at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 상품", displayName: "합성 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "exempt" as const };
+  const editedTitle = "긴 문서 제목을 편집해도 돌아가기·저장·버전 확정 버튼이 겹치지 않는 합성 문서";
+  let revision = 19, saves = 0;
+  let content: DocumentContent = { kind: "sheet", title: "상단 작업 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, lines: [lineFromCatalog(product)] };
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: null, needsRecalculation: false, changedProductCount: 0 } });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: [product], total: 1 };
+    if (action === "save") { expect(body.expected).toBe(19); expect(body.content.title).toBe(editedTitle); content = body.content; revision++; saves++; result = draft(); }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "상단 작업 합성 문서", exact: true }).click();
+  const title = page.getByRole("textbox", { name: "문서 제목", exact: true }).first();
+  await title.fill(editedTitle);
+  const back = page.getByRole("button", { name: "← 문서 목록", exact: true });
+  const publish = page.getByRole("button", { name: "판매가 버전 확정", exact: true });
+  const more = page.getByRole("button", { name: "더보기", exact: true });
+  const backBox = (await back.boundingBox())!, titleBox = (await title.boundingBox())!, publishBox = (await publish.boundingBox())!, moreBox = (await more.boundingBox())!;
+  expect(backBox.x + backBox.width).toBeLessThanOrEqual(titleBox.x + 1);
+  expect(publishBox.x + publishBox.width).toBeLessThanOrEqual(moreBox.x + 1);
+  for (const box of [backBox, publishBox, moreBox]) expect(box.height).toBeGreaterThanOrEqual(44);
+  if (width === 390) expect(Math.max(backBox.y + backBox.height, titleBox.y + titleBox.height)).toBeLessThanOrEqual(publishBox.y + 1);
+  expect(await back.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/document-phone-toolbar/toolbar-${width}.png`, fullPage: true });
+  if (width === 390) { await more.click(); const save = page.getByRole("menuitem", { name: "초안 저장", exact: true }); expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44); await save.click(); }
+  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  expect(saves).toBe(1); expect(revision).toBe(20);
+  await back.click(); await page.getByRole("button", { name: editedTitle, exact: true }).click();
+  await expect(title).toHaveValue(editedTitle);
+});
