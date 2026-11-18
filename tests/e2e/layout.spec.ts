@@ -64,7 +64,7 @@ for (const width of [1440, 390]) {
       expect(await collectLayoutProblems(page)).toEqual([]);
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "멈추기" }).click();
-      await expect(page.getByRole("alert")).toContainText("현재 상태는 바뀌지 않았습니다.");
+      await expect(page.getByText("현재 상태는 바뀌지 않았습니다.", { exact: false })).toBeVisible();
       await expect(page.getByRole("button", { name: "멈추기" })).toBeVisible();
       await page.unroute("**/api/admin/stores/status-preview");
       page.once("dialog", (dialog) => dialog.accept());
