@@ -746,10 +746,14 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
       if (edited) throw new Error("파일 적용 후 직접 수정한 단가는 날짜별 원문 선택과 다릅니다. 원본 파일에서 단가를 확인하고 다시 올려 주세요.");
-      const rows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
+      const allRows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
+      // 반품(음수 수량) 행은 매입 기록 제약(quantity >= 0)에 걸려 전체 저장이 실패한다. 저장에서 빼고 몇 행인지 알린다.
+      const returnRows = allRows.filter(row => typeof row.quantity === "number" && row.quantity < 0);
+      const rows = allRows.filter(row => !(typeof row.quantity === "number" && row.quantity < 0));
+      if (!rows.length) throw new Error(`저장할 매입 행이 없습니다. 반품(수량 음수) ${returnRows.length}행은 저장하지 않습니다.`);
       const payload = { action: "save", companyId, receiptDate, fileName: fileName || "매입가 반영", rows };
       const digest = await dateRequestDigest(payload);
       let pending;
@@ -781,7 +785,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount });
       forgetDateRequest(companyId);
       setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
-      setMessage(`원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
+      setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
     finally { setBusy(false); }
@@ -793,7 +797,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     if (purchaseDateEnabled && !importedLines.length) { setError("날짜별 저장 사용 중에는 직접 원가 수정을 저장할 수 없습니다. 적용일과 단가가 있는 파일을 올려 날짜별 저장으로 진행해 주세요."); return; }
     if (importedLines.length && confirmedReview !== reviewKey) { setSaveReview(true); setError("적용 날짜와 건수를 확인하고 동의한 뒤 저장해 주세요."); return; }
     if (importedLines.some(line => !line.purchaseDate || !/^\d{4}-\d{2}-\d{2}$/.test(line.purchaseDate))) { setError("저장할 원본 거래의 적용일을 확인해 주세요."); return; }
-    const changes = selected.filter((id) => candidates[id] && candidates[id].cost !== unique.find((item) => item.id === id)?.cost &&
+    const changes = selected.filter((id) => candidates[id] && unique.some((item) => item.id === id) && candidates[id].cost !== unique.find((item) => item.id === id)?.cost &&
       !historicalPrice(id)).map((id) => {
       const product = unique.find((item) => item.id === id)!;
       return { productId: id, supplierProductId: candidates[id].supplierProductId, expectedCost: product.cost, cost: candidates[id].cost, fileName: candidates[id].source, ...(requiresDateContract && candidates[id].purchaseDate ? { priceDate: candidates[id].purchaseDate } : {}) };
@@ -976,7 +980,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">업로드 적용일<input aria-label="매입일" className="maju-input min-h-[44px] max-w-full" onChange={(event) => changeReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={`min-h-[44px] ${sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"}`} disabled={!catalogReady} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
         <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">{`② 열 정렬${historyOnlyDefaultEnabled ? ` (${updateCurrentPrices ? "현재 가격도 변경" : "이력만 저장"})` : ""}`}</button>
-        <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || unitRelinkBlockedRows.length > 0 || (!usesDateBatch && missingTotal > 0) || suspectCount > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => importedLines.length ? setSaveReview(true) : void save()} title={unitRelinkBlockedRows.length ? "단위 변경으로 달라진 상품 연결을 다시 확인해 주세요" : missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : suspectCount ? `중복 의심 ${suspectCount}개는 줄마다 연결 또는 새 상품 맞음을 골라 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
+        <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || unitRelinkBlockedRows.length > 0 || (!usesDateBatch && missingTotal > 0) || suspectCount > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => { if (!importedLines.length) { void save(); return; } setSaveReview(true); requestAnimationFrame(() => document.querySelector('[aria-label="저장 전 적용일 확인"]')?.scrollIntoView({ behavior: "smooth", block: "end" })); }} title={unitRelinkBlockedRows.length ? "단위 변경으로 달라진 상품 연결을 다시 확인해 주세요" : missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : suspectCount ? `중복 의심 ${suspectCount}개는 줄마다 연결 또는 새 상품 맞음을 골라 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
         <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
       </div>
       <p className="text-xs font-semibold text-slate-500">{sheet ? "② 표 맨 위에서 열마다 항목을 확인하고 '열 정렬'을 누르세요." : missingTotal && !usesDateBatch ? `새 상품 ${missingTotal}개에 단위가 비어 있습니다. 단위를 채운 뒤 저장할 수 있습니다.` : unmatched.length || selected.length ? "③ 확인했으면 저장하세요. 새 상품은 상품관리에 등록되고 매입 이력이 쌓입니다." : "같은 품목은 이름·규격으로 맞춰 새로 만들지 않습니다. 저장한 매입은 '매입 이력' 탭에서 날짜별로 볼 수 있습니다."}</p>
@@ -1064,7 +1068,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
           <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
         </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save()}>확인한 날짜로 저장</Button>
+        {error ? <p aria-live="assertive" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error}</p> : null}
+        {busy || message ? <p aria-live="polite" className="rounded border border-slate-200 bg-slate-50 p-3 text-slate-700">{busy ? (message || "저장 중…") : message}</p> : null}
+        <div className="flex flex-wrap gap-2"><Button className="min-h-[44px]" disabled={!catalogReady || busy || unitRelinkBlockedRows.length > 0 || confirmedReview !== reviewKey || dateSaveBlocked || (batchEnabled && !usesDateBatch && priceChangeCount > 100)} onClick={() => void save().catch((cause) => { setBusy(false); setError(`저장 중 화면 오류가 났습니다: ${cause instanceof Error ? cause.message : String(cause)}. 이 문구를 캡처해 담당자에게 보내 주세요. 아무것도 저장되지 않았습니다.`); })}>확인한 날짜로 저장</Button>
           <Button className="min-h-[44px]" variant="outline" onClick={() => setSaveReview(false)}>계속 확인하기</Button></div>
       </> : null}
     </section> : null}

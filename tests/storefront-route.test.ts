@@ -262,37 +262,30 @@ it("keeps the original RPC and skips the new address checker while OFF",async()=
   expect(eligibility).not.toHaveBeenCalled();expect(mocks.db.mock.calls[0][0]).toBe("rpc/place_store_order");
 });
 
-it.each([1, 2])("synchronizes saved order revision %i using only verified scope", async revision => {
+it.each([1, 2])("saves order revision %i without ERP writes even for an enabled company", async revision => {
   vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
   vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", "verified-company");
+  vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", "verified-company");
   mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", canOrder: true });
   mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
   const id = "30000000-0000-4000-8000-000000000001";
-  mocks.db.mockResolvedValueOnce({ id, revision }).mockResolvedValueOnce({ status: "confirmed" });
-  if (revision > 1) mocks.db.mockResolvedValueOnce({ status: "confirmed" });
-
-  const response = await PUT(request({ companyId: "forged-company", actorUserId: "forged-actor" }));
+  mocks.db.mockResolvedValueOnce({ id, revision });
+  const update = revision > 1 ? { orderId: id, expectedRevision: 1 } : {};
+  const response = await PUT(request(update));
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ result: { id, revision }, orderDocumentStatus: "confirmed" });
-  expect(mocks.db.mock.calls.map(([path]) => path)).toEqual([
-    "rpc/place_store_member_order", "rpc/confirm_order_sale_document",
-    ...(revision > 1 ? ["rpc/revise_order_sale_document"] : []),
-  ]);
-  const verified = { p_company_id: "verified-company", p_order_id: id, p_actor_user_id: "verified-user" };
-  expect(JSON.parse(mocks.db.mock.calls[1][1].body)).toMatchObject(verified);
-  if (revision > 1) {
-    expect(JSON.parse(mocks.db.mock.calls[2][1].body)).toMatchObject({ ...verified, p_expected_order_revision: revision });
-  }
+  expect(await response.json()).toEqual({ result: { id, revision } });
+  expect(mocks.db.mock.calls.map(([path]) => path)).toEqual(["rpc/place_store_member_order"]);
 });
 
-it("acknowledges the saved order when its sale document RPC fails", async () => {
+it("preserves legacy document sync on save when CX-62 is off", async () => {
   vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
   vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", "verified-company");
+  vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", "");
   mocks.read.mockResolvedValue({ companyId: "verified-company", customerId: "verified-customer", canOrder: true });
   mocks.member.mockResolvedValue({ storeAccountId: "verified-store", memberId: "verified-member", authUserId: "verified-user" });
-  const result = { id: "30000000-0000-4000-8000-000000000001", revision: 1 };
-  mocks.db.mockResolvedValueOnce(result).mockRejectedValueOnce(new Error("accounting details"));
+  const id = "30000000-0000-4000-8000-000000000001";
+  mocks.db.mockResolvedValueOnce({ id, revision: 1 }).mockResolvedValueOnce(null);
   const response = await PUT(request());
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ result, orderDocumentStatus: "failed" });
+  expect(await response.json()).toEqual({ result: { id, revision: 1 }, orderDocumentStatus: "confirmed" });
+  expect(mocks.db.mock.calls.map(([path]) => path)).toEqual(["rpc/place_store_member_order", "rpc/confirm_order_sale_document"]);
 });

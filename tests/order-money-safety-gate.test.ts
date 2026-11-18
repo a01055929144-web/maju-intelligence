@@ -5,8 +5,8 @@ import { assertOrderMoney, assertOrderMoneyPhase, ORDER_MONEY_SCENARIOS } from "
 describe("CX-68 order money safety gate", () => {
   it("tracks every mandatory scenario and names the reviewed CX-62 evidence", () => {
     expect(ORDER_MONEY_SCENARIOS.map(([number]) => number)).toEqual(Array.from({ length: 15 }, (_, index) => index + 1));
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 #1015@2893bd2"))).toHaveLength(4);
-    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 #1015@2893bd2"))
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => evidence.startsWith("CX-62 #1015@f2fd266"))).toHaveLength(4);
+    expect(ORDER_MONEY_SCENARIOS.filter(([, , evidence]) => !evidence.startsWith("CX-62 #1015@f2fd266"))
       .every(([, , evidence]) => existsSync(evidence))).toBe(true);
   });
 
@@ -18,6 +18,14 @@ describe("CX-68 order money safety gate", () => {
 
   it("allows submitted orders to be checked before CX-62 creates a document", () => {
     expect(() => assertOrderMoneyPhase("submitted", { orderKnownTotal: 1_100n, lineTotal: 1_100n })).not.toThrow();
+    expect(() => assertOrderMoneyPhase("submitted", { orderKnownTotal: 1_100n, lineTotal: 1_100n,
+      ledgerIncrease: 0n, inventoryMovementCount: 0n })).not.toThrow();
+  });
+
+  it.each([-1n, 1n])("rejects inventory movement %s before receipt", inventoryMovementCount => {
+    expect(() => assertOrderMoneyPhase("submitted", {
+      orderKnownTotal: 1_100n, lineTotal: 1_100n, ledgerIncrease: 0n, inventoryMovementCount,
+    })).toThrow("submitted_has_financial_effect");
   });
 
   it("keeps receipt draft-only and moves money only when shipped", () => {
