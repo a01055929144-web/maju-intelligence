@@ -27,6 +27,10 @@ export type DocumentInfoItem = { key: string; label: string; value: string; plac
 export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean };
 export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
+/** Bank details belong to the authenticated connected-store profile, never a document. */
+export function isSettlementInfoKey(key: unknown) {
+  return typeof key === "string" && /^settlement_(bank|account(?:_number|_holder)?)$/i.test(key.trim());
+}
 export function parseDisplay(value: unknown): DocumentDisplay {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_DISPLAY, info: [] };
   const d = value as Record<string, unknown>;
@@ -36,6 +40,7 @@ export function parseDisplay(value: unknown): DocumentDisplay {
     ? d.info.slice(0, 24).flatMap((item) => {
         if (!item || typeof item !== "object") return [];
         const i = item as Record<string, unknown>;
+        if (isSettlementInfoKey(i.key)) return [];
         const label = typeof i.label === "string" ? i.label.trim() : "";
         const text = typeof i.value === "string" ? i.value.trim() : "";
         if ((i.place !== "header" && i.place !== "footer") || !label || label.length > 30 || !text || text.length > 200) return [];
