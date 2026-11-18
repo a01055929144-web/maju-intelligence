@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { documentOutput, printPages, lineFromCatalog, parseDocument, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
 import { documentRequestError } from "../../lib/pricing/document-request-error";
 
@@ -450,7 +450,7 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
   test.setTimeout(120_000); page.setDefaultTimeout(15_000);
   const id = "10000000-0000-4000-8000-000000000001";
   const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 비고 상품", displayName: "합성 비고 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "exempt" as const };
-  const note = Array.from({ length: 7 }, (_, i) => `비고 ${i + 1} · 합성 배송 안내와 보관 조건을 확인해 주세요`).join("\n");
+  const note = Array.from({ length: 7 }, (_, i) => `비고 ${i + 1} · 가 값 배 송 · 보관 조건을 확인해 주세요`).join("\n");
   let revision = 1;
   let content: DocumentContent = { kind: "sheet", title: "비고 서식 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "기존 비고", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
     lines: Array.from({ length: 96 }, (_, i) => lineFromCatalog({ ...product, id: `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` })) };
@@ -515,6 +515,28 @@ for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive 
     const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
     const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-1.png`);
     await downloaded.saveAs(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const paper = preview.locator(".pricing-paper").first(), printedNote = paper.locator("[data-document-footer]");
+    const reference = await printedNote.screenshot({ animations: "disabled" });
+    const paperBox = (await paper.boundingBox())!, noteBox = (await printedNote.boundingBox())!;
+    const exported = await readFile(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const difference = await page.evaluate(async ({ reference, exported, crop }) => {
+      const load = async (base64: string) => { const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode(); return image; };
+      const [live, png] = await Promise.all([load(reference), load(exported)]);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(live.width / 4); canvas.height = Math.ceil(live.height / 4);
+      const context = canvas.getContext("2d")!;
+      context.drawImage(live, 0, 0, canvas.width, canvas.height);
+      const before = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      const ratio = png.width / crop.paperWidth;
+      context.drawImage(png, crop.x * ratio, crop.y * ratio, crop.width * ratio, crop.height * ratio, 0, 0, canvas.width, canvas.height);
+      const after = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let total = 0;
+      for (let i = 0; i < before.length; i += 4) for (let channel = 0; channel < 3; channel++) total += Math.abs(before[i + channel] - after[i + channel]);
+      return total / (canvas.width * canvas.height * 3);
+    }, { reference: reference.toString("base64"), exported: exported.toString("base64"), crop: { x: noteBox.x - paperBox.x, y: noteBox.y - paperBox.y, width: noteBox.width, height: noteBox.height, paperWidth: paperBox.width } });
+    console.log("FOOTER_PNG_GLYPHS", JSON.stringify({ width, size, difference }));
+    expect(difference, "PNG 한글 비고가 실제 화면 글자와 같아야 합니다.").toBeLessThan(12);
     if (width === 1440) await page.pdf({ path: `test-results/readonly-pg17/document-footer-format/print-${size}.pdf`, format: "A4", printBackground: true });
     await preview.getByRole("button", { name: "닫기", exact: true }).click();
   }

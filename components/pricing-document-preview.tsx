@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { completeDocumentFontCSS } from "@/lib/pricing/document-export-fonts";
 import {
   documentOutput,
   refreshedDocumentVersion,
@@ -252,8 +253,10 @@ export function PricingDocumentPreview({
       const paper = papers.current[index];
       if (!paper) throw new Error("페이지를 확인해 주세요.");
       await document.fonts.ready;
-      const { toPng } = await import("html-to-image");
+      const { toPng, getFontEmbedCSS } = await import("html-to-image");
+      const fontEmbedCSS = completeDocumentFontCSS(await getFontEmbedCSS(paper));
       const url = await toPng(paper, {
+        fontEmbedCSS,
         backgroundColor: "#ffffff",
         pixelRatio: 2,
       });
