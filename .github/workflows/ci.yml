@@ -170,6 +170,18 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-69-partner-payments-offset.pg17.test.sql
 
+      - name: Verify CX-126 partner registration draft on PostgreSQL 17
+        working-directory: tests/sql
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx126_partner_registration_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=partner-registration-cx126.pg17.test.sql
+
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
