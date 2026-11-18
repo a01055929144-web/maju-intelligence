@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readStorePromotionAvailability } from "@/lib/pricing/storefront-promotion-availability";
 import { storeOrderCutoffGuidanceEnabled } from "@/lib/pricing/store-order-cutoff-feature";
 import { dateField, isId } from "@/domains/pricing/document";
 import { storeMemberSessionEnabled } from "@/lib/auth";
@@ -191,9 +192,12 @@ export async function POST(request: NextRequest) {
         }),
       }).catch(() => null);
     }
+    const promotionAvailability = store.priceAvailable && store.canOrder
+      ? await readStorePromotionAvailability(store.companyId, store.lines.flatMap(line => line.promotionId ? [line.promotionId] : [])) : undefined;
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(promotionAvailability ? { promotionAvailability } : {}),
         ...(storeOrderCutoffGuidanceEnabled(store.companyId) ? { orderCutoffGuidance: { serverNow: new Date().toISOString() } } : {}),
         ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
           (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)

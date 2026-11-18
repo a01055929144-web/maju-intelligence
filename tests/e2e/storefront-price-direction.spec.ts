@@ -477,3 +477,80 @@ for (const width of [1440, 390]) test(`CX-74 confirms a lost order response afte
   await expect(page.getByText('주문을 받았습니다. 주문 내역에서 확인해 주세요.', { exact: true })).toBeVisible();
   expect(submitted).toHaveLength(2); expect(submitted[0]).toEqual(submitted[1]); expect(writes).toBe(1);
 });
+
+for (const width of [1440, 390]) test(`CX-74 adjusted promotion remaining and lost-response confirmation at ${width}px`, async ({ page }, info) => {
+  test.setTimeout(60000); page.setDefaultTimeout(10000);
+  await page.setViewportSize({ width, height: 900 });
+  const day = '2099-01-05';
+  const ids = [1,2,3,4].map(n => `70000000-0000-4000-8000-${String(n).padStart(12, '0')}`);
+  let state: 'ready' | 'unknown' | 'exhausted' = 'ready', writes = 0;
+  const submitted: Record<string, unknown>[] = [];
+  const response = (enabled: boolean) => ({ mobileCommon: true,
+    ...(enabled ? { promotionAvailability: {
+      [ids[0]]: state === 'unknown' ? { state: 'unavailable' } : { state: 'known', remaining: state === 'exhausted' ? 0 : 6.875, storeLimit: 4 },
+      [ids[1]]: { state: 'known', remaining: 0, storeLimit: 2 },
+      [ids[2]]: { state: 'known', remaining: null, storeLimit: null }, [ids[3]]: { state: 'unavailable' },
+    } } : {}),
+    store: { title: '행사 잔량 합성 문서', companyName: enabled ? '합성 유통 A' : '합성 유통 B', customerName: '합성 매장',
+      deliveryAddress: '합성 주소', version: 1, validUntil: '2099-12-31', priceAvailable: true, canOrder: true,
+      nextDeliveryDate: day, selectedDeliveryDate: day, notice: '', marketPriceNotice: '',
+      policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 0, cutoffTime: '23:59', minimumAmount: 0, minimumPolicy: 'notice', deliveryFee: 0 },
+      lines: ids.map((id, i) => ({ key: `product${i}:${id}`, productId: `product${i}`, promotionId: id, name: ['잔량 행사', '품절 행사', '무제한 행사', '미확인 행사'][i],
+        category: '합성', brand: '', spec: '1kg', unit: 'BOX', badge: '행사', taxType: 'exempt', unitPrice: 1200, priceIncludesTax: false,
+        isMarketPrice: false, remaining: 999, maximumQuantity: 999, recentDispatchPrice: null, recentDispatchDate: null })) },
+    orders: [], preferences: [], historyPage: 1, historyHasMore: false,
+  });
+  await page.route('**/api/storefront', async route => {
+    const body = route.request().postDataJSON();
+    if (route.request().method() === 'PUT') {
+      submitted.push(body);
+      if (submitted.length === 1) { writes++; state = 'exhausted'; return route.abort('failed'); }
+      expect(body).toEqual(submitted[0]);
+      return route.fulfill({ json: { result: { id: 'same-order', revision: 1 } } });
+    }
+    return route.fulfill({ json: response(body.token !== 'synthetic-promo-off') });
+  });
+  await page.goto('/store#synthetic-promo');
+  await page.getByRole('button', { name: '주문하기', exact: true }).click();
+  if (width === 1440) {
+    await expect(page.getByRole('columnheader').filter({ hasText: '행사 수량' })).toBeVisible();
+    await expect(page.getByText('행사 남은 수량 6.875BOX', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '격자형', exact: true }).click();
+  }
+  await expect(page.getByText('행사 남은 수량 6.875BOX', { exact: true })).toBeVisible();
+  await expect(page.getByText('매장당 총 한도 4BOX · 기존 주문 포함', { exact: true })).toBeVisible();
+  await expect(page.getByText('행사 수량 제한 없음', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '품절 행사 수량 늘리기', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '미확인 행사 수량 늘리기', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '무제한 행사 수량 늘리기', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '잔량 행사 수량 늘리기', exact: true }).click();
+  await page.getByRole('button', { name: '잔량 행사 수량 늘리기', exact: true }).click();
+  const refresh = page.getByRole('region', { name: '행사 잔량 확인', exact: true }).getByRole('button', { name: '행사 잔량 다시 확인', exact: true });
+  expect((await refresh.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  state = 'unknown'; await refresh.click();
+  await expect(page.getByRole('button', { name: '잔량 행사 수량 늘리기', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('잔량 행사 수량', { exact: true })).toHaveText('2');
+  if (width === 390) await page.getByRole('button', { name: '장바구니 확인 · 1개 품목', exact: true }).click();
+  await expect(page.getByRole('button', { name: '후결제로 주문 신청', exact: true })).toBeDisabled();
+  expect(submitted).toHaveLength(0);
+  if (width === 390) await page.keyboard.press('Escape');
+  state = 'ready'; await refresh.click();
+  if (width === 390) await page.getByRole('button', { name: '장바구니 확인 · 1개 품목', exact: true }).click();
+  await page.getByRole('button', { name: '후결제로 주문 신청', exact: true }).click();
+  const confirm = page.getByRole('button', { name: '이전 주문 결과 확인', exact: true });
+  await expect(confirm).toBeEnabled();
+  const cart = width === 390 ? page.getByRole('dialog', { name: '장바구니', exact: true }) : page.getByRole('complementary', { name: '장바구니', exact: true });
+  await cart.getByRole('button', { name: '행사 잔량 다시 확인', exact: true }).first().click();
+  await expect(cart.getByText('행사 남은 수량 0BOX', { exact: true })).toBeVisible();
+  await expect(confirm).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await page.screenshot({ path: info.outputPath(`promotion-remaining-${width}.png`), fullPage: true });
+  await confirm.click();
+  await expect(page.getByText('주문을 받았습니다. 주문 내역에서 확인해 주세요.', { exact: true })).toBeVisible();
+  expect(submitted).toHaveLength(2); expect(submitted[0]).toEqual(submitted[1]); expect(writes).toBe(1);
+  expect(submitted[0]).not.toHaveProperty('knownTotal'); expect(submitted[0]).not.toHaveProperty('remaining');
+  await page.goto('/store#synthetic-promo-off');
+  await page.getByRole('button', { name: '주문하기', exact: true }).click();
+  await expect(page.getByRole('region', { name: '행사 잔량 확인', exact: true })).toHaveCount(0);
+  await expect(page.getByText('행사 남은 수량 6.875BOX', { exact: true })).toHaveCount(0);
+});
