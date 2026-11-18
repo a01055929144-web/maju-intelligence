@@ -15,7 +15,13 @@ const request = (method: "POST" | "PATCH" | "DELETE", body: object) => new NextR
 describe("driver route actions", () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.feature.mockReturnValue(true);
+    process.env.FEATURE_DRIVER_BULK_COMPLETE_ATOMIC = "true";
     mocks.auth.mockResolvedValue({ ok: true, companyId, customerSession: { companyMemberId: "driver-a", duties: ["delivery"] } });
+  });
+  it("keeps bulk completion unavailable until the atomic rpc is approved", async () => {
+    process.env.FEATURE_DRIVER_BULK_COMPLETE_ATOMIC = "false";
+    expect((await PATCH(request("PATCH", { customerIds: [customerA] }))).status).toBe(404);
+    expect(mocks.db).not.toHaveBeenCalled();
   });
   it("reorders every planned delivery stop through one atomic rpc", async () => {
     mocks.db.mockResolvedValueOnce([
@@ -41,12 +47,11 @@ describe("driver route actions", () => {
     mocks.db.mockResolvedValueOnce([
       { customer_id: customerA, id: stopA, status: "planned", stop_type: "delivery" },
       { customer_id: customerB, id: stopB, status: "arrived", stop_type: "delivery" },
-    ]).mockResolvedValueOnce([{ id: stopA }, { id: stopB }]);
+    ]).mockResolvedValueOnce("2026-11-18T10:00:00.000Z");
     const response = await PATCH(request("PATCH", { customerIds: [customerA, customerB] }));
     expect(response.status).toBe(200);
-    expect(mocks.db.mock.calls[1][0]).toContain(`driver_member_id=eq.driver-a`);
-    expect(mocks.db.mock.calls[1][0]).toContain(`id=in.(${stopA},${stopB})`);
-    expect(JSON.parse(mocks.db.mock.calls[1][1].body)).toMatchObject({ status: "completed" });
+    expect(mocks.db.mock.calls[1][0]).toBe("rpc/complete_driver_delivery_stops_atomic");
+    expect(JSON.parse(mocks.db.mock.calls[1][1].body)).toMatchObject({ p_company_id: companyId, p_driver_member_id: "driver-a", p_stop_ids: [stopA, stopB] });
   });
   it("rejects bulk completion when a requested stop is no longer pending", async () => {
     mocks.db.mockResolvedValueOnce([{ customer_id: customerA, id: stopA, status: "completed", stop_type: "delivery" }]);

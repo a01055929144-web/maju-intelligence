@@ -16,7 +16,7 @@ const stops = [1, 2, 3].map((order) => ({
 export default function Cx108PreviewPage() {
   if (!isCiLayoutFixturesEnabled()) notFound();
   return <main className="min-h-screen bg-slate-100 text-slate-950"><MobileThemeShell><section className="mobile-app-frame mx-auto min-h-screen w-full max-w-[480px] space-y-3 p-3 shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-    <MobileRouteList atomicOrderEnabled driverName="정두영" initialStops={stops} routeArea="서울 강남" />
+    <MobileRouteList atomicOrderEnabled bulkCompleteEnabled driverName="정두영" initialStops={stops} routeArea="서울 강남" />
     <MobileDeliveryProofPanel companyId="00000000-0000-4000-8000-000000000001" companyName="합성 유통" customerId={stops[0].id} customerName={stops[0].name} deliveryDate="2026-11-18" driverName="정두영" driverRunExperienceEnabled />
   </section></MobileThemeShell></main>;
 }

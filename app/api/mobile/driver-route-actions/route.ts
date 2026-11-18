@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const verified = await scope(request);
   if (!verified) return NextResponse.json({ message: "기능이 열리지 않았거나 기사 권한이 없습니다." }, { status: 404 });
+  if (process.env.FEATURE_DRIVER_BULK_COMPLETE_ATOMIC !== "true") return NextResponse.json({ message: "원자적 완료 기능이 준비되지 않았습니다." }, { status: 404 });
   const body = await request.json().catch(() => null) as { customerIds?: string[] } | null;
   const customerIds = body?.customerIds;
   if (!Array.isArray(customerIds) || !customerIds.length || new Set(customerIds).size !== customerIds.length || customerIds.some((id) => !uuid.test(id))) return NextResponse.json({ message: "완료할 배송지를 확인해 주세요." }, { status: 400 });
@@ -54,13 +55,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "경로가 바뀌었습니다. 새로고침한 뒤 다시 시도해 주세요." }, { status: 409 });
   }
 
-  const completedAt = new Date().toISOString();
   const stopIds = selected.map((row) => row!.id);
-  const updated = await supabaseRequest<Array<{ id: string }>>(
-    `delivery_route_stops?company_id=eq.${company}&driver_member_id=eq.${driver}&route_date=eq.${date}&id=in.(${stopIds.map(encodeURIComponent).join(",")})&status=in.(planned,arrived)`,
-    { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ completed_at: completedAt, status: "completed", updated_at: completedAt }) },
-  );
-  if (updated.length !== stopIds.length) return NextResponse.json({ message: "일부 정류장 상태가 바뀌었습니다. 새로고침해 확인해 주세요." }, { status: 409 });
+  const completedAt = await supabaseRequest<string>("rpc/complete_driver_delivery_stops_atomic", { method: "POST", body: JSON.stringify({ p_company_id: verified.companyId, p_driver_member_id: verified.memberId, p_route_date: date, p_stop_ids: stopIds }) });
   return NextResponse.json({ completedAt, customerIds, ok: true, stopIds });
 }
 
