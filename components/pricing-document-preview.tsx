@@ -6,6 +6,7 @@ import {
   refreshedDocumentVersion,
   printPages,
   koreaDay,
+  parseDisplay,
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
@@ -38,7 +39,7 @@ export function PageContent({
       : data.theme === "green"
         ? "#047857"
         : "#1f2937";
-  const display = data.display;
+  const display = parseDisplay(data.display);
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const promos = data.lines.filter((l) => l.badge);

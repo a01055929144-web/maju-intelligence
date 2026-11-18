@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { publicDocumentLinkExpiry, documentLinkLastDay, publicDocumentOutput } from "../../domains/pricing/document-share";
-import type { DocumentContent, DocumentVersion } from "../../domains/pricing/document";
+import type { DocumentContent, DocumentVersion, DocumentOutput } from "../../domains/pricing/document";
+import { DEFAULT_DISPLAY, lineFromCatalog } from "../../domains/pricing/document";
 // CC-14: 휴대폰(≤640px)에서는 보조 버튼이 더보기 메뉴 안에 있다. PC는 툴바 버튼.
 const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1440) <= 640;
 async function toolbarAction(page: Page, name: string) {
@@ -358,4 +359,34 @@ test("CX-45 keeps mobile prices on one line and preserves print columns", async 
   await expect(order).toBeHidden();
   await expect(page.getByRole("table")).toHaveCount(2);
   await expect(page.getByRole("table").getByText("합성 완숙 토마토 15")).toBeVisible();
+});
+
+
+for (const width of [1440, 390]) test(`public document excludes legacy settlement info on screen and print at ${width}px`, async ({ page }, info) => {
+  const marker = 'PRIVATE-DOCUMENT-INFO-CANARY';
+  const content: DocumentContent = {
+    kind: 'sheet', title: 'Synthetic public document', companyName: 'Synthetic distributor', contact: '', recipient: '', footer: '',
+    validUntil: '2099-12-31', theme: 'blue', layout: 'table', showPrice: true, showBrand: true, showSpec: true,
+    display: { ...DEFAULT_DISPLAY, info: [] },
+    lines: [lineFromCatalog({ id: '10000000-0000-4000-8000-000000000001', name: 'Synthetic product', displayName: 'Synthetic product', brand: '', spec: '1L', unit: 'BOX', price: 1200, taxType: 'exempt' })],
+  };
+  const document: DocumentOutput = publicDocumentOutput({ id: '10000000-0000-4000-8000-000000000002', documentId: '10000000-0000-4000-8000-000000000003',
+    version: 1, revision: 1, publishedAt: '2026-11-18T00:00:00Z', unavailablePromotions: [], content });
+  // Deliberately emulate a legacy/unsafe response to exercise the render boundary too.
+  document.display.info = [
+    { key: 'delivery_time_window', label: 'Delivery window', value: 'SAFE-DELIVERY-CANARY', place: 'footer' },
+    ...['settlement_account', 'settlement_bank', 'settlement_account_number', 'settlement_account_holder'].map(key => ({ key, label: 'Private info', value: marker, place: 'footer' as const })),
+  ];
+  await page.route('**/api/pricing-documents/public', route => route.fulfill({ json: { document, expiresAt: '2099-12-31T15:00:00Z',
+    acceptanceAvailable: false, orderEntry: { available: true, companyName: content.companyName, title: content.title, version: 1 } } }));
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto('/pricing-document#synthetic-account-boundary');
+  await expect(page.getByText('Synthetic public document', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('body')).not.toContainText(marker);
+  await expect(page.locator('body')).toContainText('SAFE-DELIVERY-CANARY');
+  expect(await page.evaluate(() => window.document.documentElement.scrollWidth)).toBe(width);
+  await page.screenshot({ path: info.outputPath(`public-account-boundary-${width}.png`) });
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('body')).not.toContainText(marker);
+  await expect(page.getByText('SAFE-DELIVERY-CANARY', { exact: true })).toBeVisible();
 });

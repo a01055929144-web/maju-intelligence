@@ -10,7 +10,7 @@ import { PAYMENT_CYCLE_OPTIONS } from "@/domains/organization/company-profile";
 import { formatPhoneNumber } from "@/lib/phone";
 
 type Profile = { company?: { name?: string; businessRegistrationNumber?: string; originAddress?: string }; values?: Record<string, unknown>; canEdit?: boolean };
-type Editor = "text" | "phone" | "time" | "number" | "weekdays" | "cycle" | "methods" | "account" | "none";
+type Editor = "text" | "phone" | "time" | "number" | "weekdays" | "cycle" | "methods" | "none";
 type Candidate = { key: string; label: string; place: "header" | "footer"; value: string; editor: Editor; field?: string; placeholder?: string };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -28,7 +28,6 @@ export function buildInfoCandidates(profile: Profile): Candidate[] {
   const days = Array.isArray(v.delivery_weekdays) ? (v.delivery_weekdays as number[]).filter((d) => d >= 0 && d <= 6).sort().map((d) => WEEKDAYS[d]).join("·") : "";
   const cutoff = text(v.next_day_cutoff_time).slice(0, 5);
   const minimum = typeof v.first_order_minimum_won === "number" && v.first_order_minimum_won > 0 ? formatWon(v.first_order_minimum_won) : "";
-  const account = [text(v.settlement_bank), text(v.settlement_account_number), text(v.settlement_account_holder)].filter(Boolean).join(" ");
   const methods = Array.isArray(v.payment_methods) ? (v.payment_methods as string[]).join("·") : "";
   const address = [text(v.business_address), text(v.business_address_detail)].filter(Boolean).join(" ") || text(profile.company?.originAddress);
   return [
@@ -43,8 +42,7 @@ export function buildInfoCandidates(profile: Profile): Candidate[] {
     { editor: "text", field: "delivery_time_window", key: "delivery_time_window", label: "배송 시간", place: "footer", value: text(v.delivery_time_window), placeholder: "04:00~08:00" },
     { editor: "number", field: "first_order_minimum_won", key: "first_order_minimum_won", label: "최소 주문", place: "footer", value: minimum, placeholder: "원" },
     { editor: "cycle", field: "payment_cycle", key: "payment_cycle", label: "결제 조건", place: "footer", value: text(v.payment_cycle) },
-    { editor: "methods", field: "payment_methods", key: "payment_methods", label: "결제 방식", place: "footer", value: methods },
-    { editor: "account", key: "settlement_account", label: "입금 계좌", place: "footer", value: account }
+    { editor: "methods", field: "payment_methods", key: "payment_methods", label: "결제 방식", place: "footer", value: methods }
   ];
 }
 
@@ -52,7 +50,6 @@ function initialDraft(candidate: Candidate, values: Record<string, unknown>): Re
   switch (candidate.editor) {
     case "weekdays": return { delivery_weekdays: Array.isArray(values.delivery_weekdays) ? values.delivery_weekdays : [] };
     case "methods": return { payment_methods: Array.isArray(values.payment_methods) ? values.payment_methods : [] };
-    case "account": return { settlement_bank: text(values.settlement_bank), settlement_account_number: text(values.settlement_account_number), settlement_account_holder: text(values.settlement_account_holder) };
     case "number": return { first_order_minimum_won: values.first_order_minimum_won ?? "" };
     case "time": return { next_day_cutoff_time: text(values.next_day_cutoff_time).slice(0, 5) };
     case "phone": return { main_phone: formatPhoneNumber(text(values.main_phone)) };
@@ -215,9 +212,6 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
         control = <div className="flex flex-wrap gap-1">{METHODS.map((m) => <button aria-pressed={list.includes(m)} className={`rounded px-2 py-1 text-xs font-bold ${list.includes(m) ? "bg-teal-700 text-white" : "bg-slate-100"}`} key={m} onClick={() => set({ [field]: list.includes(m) ? list.filter((x) => x !== m) : [...list, m] })} type="button">{m}</button>)}</div>;
         break;
       }
-      case "account":
-        control = <div className="grid gap-1">{([["settlement_bank", "은행"], ["settlement_account_number", "계좌번호"], ["settlement_account_holder", "예금주"]] as const).map(([k, l], i) => <input aria-label={`입금 ${l}`} autoFocus={i === 0} className={input} key={k} onChange={(e) => set({ [k]: e.target.value })} onKeyDown={onKey} placeholder={l} value={String(draft[k] ?? "")} />)}</div>;
-        break;
       default: control = <input aria-label={`${candidate.label} 입력`} autoFocus className={input} onChange={(e) => set({ [field]: e.target.value })} onKeyDown={onKey} placeholder={candidate.placeholder} value={String(draft[field] ?? "")} />;
     }
     return (

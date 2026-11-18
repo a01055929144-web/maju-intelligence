@@ -4,7 +4,7 @@ import { MoneyInput } from "@/components/money-input";
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { CatalogChoice, DocumentContent, PrintLine } from "@/domains/pricing/document";
-import { DEFAULT_DISPLAY, documentDisplayPrice } from "@/domains/pricing/document";
+import { parseDisplay, documentDisplayPrice } from "@/domains/pricing/document";
 import type { DocumentOutput } from "@/domains/pricing/document";
 import { FOLDER_DRAG, PROMO_DRAG } from "./pricing-product-picker";
 import { PageContent } from "./pricing-document-preview";
@@ -43,7 +43,7 @@ function EditablePricingDocPaper({
   readonly onQuickAdd?: (item: CatalogChoice) => void;
   readonly onQuickSearch?: (query: string) => Promise<CatalogChoice[]>;
 }) {
-  const display = content.display || DEFAULT_DISPLAY;
+  const display = parseDisplay(content.display);
   const accent = content.theme === "blue" ? "#1d4ed8" : content.theme === "green" ? "#047857" : "#1f2937";
   const indexed = content.lines.map((line, index) => ({ index, line }));
   const promos = indexed.filter(({ line }) => line.promotionId);

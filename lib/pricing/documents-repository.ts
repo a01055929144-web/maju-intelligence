@@ -1,7 +1,7 @@
 import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
 import { withDocumentRecalculations } from "./document-recalculation";
-import { catalogDisplaySpec, isId, koreaDay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
+import { catalogDisplaySpec, isId, isSettlementInfoKey, koreaDay, parseDisplay, type DocumentDraft, type DocumentVersion } from "../../domains/pricing/document";
 import { DocumentSendError, type DocumentSendInput, type DocumentSendResult } from "../../domains/pricing/document-send";
 import type { PrepareDocumentShare } from "../../domains/pricing/document-share";
 import { prepareDocumentShare, revokeDocumentShare, recordSharedDocumentDelivery } from "./document-share";
@@ -73,7 +73,7 @@ async function readCompanyVersions(scope: DocumentScope, payload: object): Promi
       documentId: row.document_id,
       version: row.version,
       revision: row.revision,
-      content: row.content,
+      content: { ...row.content, ...(row.content.display ? { display: parseDisplay(row.content.display) } : {}) },
       publishedAt: row.published_at,
       promotionStock: Object.fromEntries(ids.flatMap(id => current.has(id) ? [[id, current.get(id)!.stock]] : [])),
       unavailablePromotions: ids.filter(id => { const promotion = current.get(id); return !promotion || today < promotion.starts_on || today > promotion.ends_on || promotion.stock === 0; }),
@@ -141,6 +141,17 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
     }
     if (action === "list") return withDocumentRecalculations(scope.companyId, await listCompanyDocuments(scope, payload)) as Promise<T>;
     if (action === "versions") return readCompanyVersions(scope, payload) as Promise<T>;
+    if (action === "publish") {
+      const { id } = payload as { id: string };
+      // Match the existing publishing scope; an old saved draft must be cleaned
+      // by the normal revision-checked save, never silently rewritten here.
+      const rows = await supabaseRequest<Array<{ content: DocumentDraft["content"] }>>(
+        `pricing_documents?company_id=eq.${encodeURIComponent(scope.companyId)}&id=eq.${encodeURIComponent(id)}&or=(kind.eq.sheet,owner_key.eq.${encodeURIComponent(scope.actor)})&select=content&limit=1`,
+      );
+      const info = rows[0]?.content?.display?.info;
+      if (Array.isArray(info) && info.some(item => isSettlementInfoKey(item?.key)))
+        throw new DocumentSendError("입금 계좌는 공개 문서에 넣을 수 없습니다. 문서를 저장한 뒤 다시 발행해 주세요.", 400);
+    }
     const result = await supabaseRequest<T>("rpc/pricing_p1", {
       method: "POST",
       body: JSON.stringify({
