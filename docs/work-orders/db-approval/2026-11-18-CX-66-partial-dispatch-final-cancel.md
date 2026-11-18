@@ -2,12 +2,13 @@
 
 상태: **승인 전 초안 — 운영 적용 금지**
 
-검증 기준: #1095 병합 뒤 `main` (`13e765d`)
+검증 기준: CX-62 접수 경계와 CX-66 전체 출고 #1095가 포함된 최신 `main` (`a29eb79`)
 
 대표 결정: 부분 출고 뒤 남은 수량은 취소한다. 추가로 필요하면 새 주문을 만든다.
 
 ## 적용 묶음
-- 선행: CX-62 주문 접수 + CX-66 전체 출고 1차 SQL
+- 선행: CX-62 `receive_store_order_with_sale_document` 주문 접수 + CX-66 #1095 전체 출고 1차 SQL
+- 연계: CX-62가 만든 `draft` 매출 전표의 줄을 원 주문 스냅샷으로 유일하게 확인한 뒤 실제 출고량으로 줄이고, CX-66의 기존 확정 함수를 한 번만 호출한다.
 - `docs/sql-drafts/2026-11-18-CX-66-partial-dispatch-final-cancel.sql`
 - `docs/sql-drafts/2026-11-18-CX-66-partial-dispatch-final-cancel.down.sql`
 - `docs/sql-drafts/2026-11-18-CX-66-partial-dispatch-final-cancel.pg17.test.sql`
