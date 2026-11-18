@@ -251,11 +251,12 @@ export function PricingDocumentPreview({
       await prepare();
       const paper = papers.current[index];
       if (!paper) throw new Error("페이지를 확인해 주세요.");
+      await document.fonts.ready;
       const { toPng } = await import("html-to-image");
       const url = await toPng(paper, {
         backgroundColor: "#ffffff",
         pixelRatio: 2,
-        skipFonts: true,
+        preferredFontFormat: "woff2",
       });
       const a = document.createElement("a");
       a.download = `document-v${current.version}-${index + 1}.png`;
