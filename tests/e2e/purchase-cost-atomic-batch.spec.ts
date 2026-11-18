@@ -471,7 +471,7 @@ test("현재 매입가 변경은 기준일 없는 기존가를 자동 교체한�
   const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true, undatedCurrent: true });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\nERP-1,합성 상품,1kg,봉,2026-11-04,200\n");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
-  await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("기준일 미확정 기존가 1품목");
   await expect(review.getByRole("cell", { name: "100원", exact: true })).toBeVisible();
