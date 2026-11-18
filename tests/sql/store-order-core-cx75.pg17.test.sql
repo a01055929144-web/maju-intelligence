@@ -365,6 +365,7 @@ begin
 end $$;
 drop trigger cx75_test_drift on public.store_orders;
 drop function public.cx75_test_drift();
+\ir promotion-cancelled-reservation-cx74.pg17.test.sql
 \set ON_ERROR_STOP off
 \ir ../../docs/sql-drafts/2026-11-18-CX-75-common-order-core.down.sql
 \set ON_ERROR_STOP on
