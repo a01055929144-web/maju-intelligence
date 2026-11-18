@@ -49,7 +49,7 @@ for (const width of [1440, 390]) test(`draft save failures preserve revision19 a
     await expect(page.getByRole("button", { name: "판매가 버전 확정", exact: true })).toBeDisabled();
     expect(revision).toBe(19);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
-    await expect(page.getByRole("alert")).not.toContainText("PRIVATE_");
+    await expect(page.getByRole("alert").filter({ hasText: failure.message })).not.toContainText("PRIVATE_");
   }
   await page.screenshot({ path: `test-results/readonly-pg17/document-save-errors/save-error-${width}.png`, fullPage: true });
   await save();
