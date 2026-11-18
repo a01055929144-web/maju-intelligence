@@ -53,3 +53,67 @@ test("CX-65 기사 운행 부품은 390px에서 화면과 키보드로 접근된
     await expect(page.getByText("이 기록은 금액이나 전표를 바꾸지 않습니다.")).toBeVisible();
   }
 });
+
+for (const width of [1440, 390]) {
+  test(`CX-108 남은 정류장 일괄 완료와 사진 다중 선택은 ${width}px에서 동작한다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const completedAt = "2026-11-18T10:00:00.000Z";
+    let completedIds: string[] = [];
+    let undone = false;
+    await page.route("**/api/mobile/driver-route-actions", async (route) => {
+      if (route.request().method() === "PATCH") {
+        completedIds = route.request().postDataJSON().customerIds;
+        return route.fulfill({ json: { completedAt, customerIds: completedIds, ok: true, stopIds: completedIds.map((_, index) => `20000000-0000-4000-8000-00000000000${index + 1}`) } });
+      }
+      if (route.request().method() === "DELETE") {
+        undone = true;
+        return route.fulfill({ json: { ok: true, undoneStopIds: route.request().postDataJSON().stopIds } });
+      }
+      return route.continue();
+    });
+    await page.goto("/mobile/today/cx108-preview");
+
+    await page.getByRole("button", { name: "남은 3곳 전체 완료" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("남은 정류장을 모두 완료할까요?")).toBeVisible();
+    await dialog.getByRole("button", { name: "3곳 완료" }).click();
+    await expect(page.getByText("3곳 완료 · 5초 안에 되돌릴 수 있어요.")).toBeVisible();
+    expect(completedIds).toHaveLength(3);
+    await page.getByRole("button", { name: "되돌리기" }).click();
+    expect(undone).toBe(true);
+    await expect(page.getByText("방금 일괄 완료를 되돌렸습니다.")).toBeVisible();
+
+    const photoInput = page.locator('#delivery-proof input[type="file"]');
+    await expect(photoInput).toHaveAttribute("multiple", "");
+    await photoInput.setInputFiles([
+      { name: "완료-1.jpg", mimeType: "image/jpeg", buffer: Buffer.from("fake-photo-1") },
+      { name: "완료-2.jpg", mimeType: "image/jpeg", buffer: Buffer.from("fake-photo-2") },
+    ]);
+    await expect(page.getByText("사진 2장 준비됨")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
+
+test("CX-108 부분 되돌리기는 실제 성공한 정류장만 대기로 돌린다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/mobile/driver-route-actions", async (route) => {
+    if (route.request().method() === "PATCH") return route.fulfill({ json: {
+      completedAt: "2026-11-18T10:00:00.000Z",
+      customerIds: ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002", "10000000-0000-4000-8000-000000000003"],
+      ok: true,
+      stopIds: ["20000000-0000-4000-8000-000000000001", "20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"],
+    } });
+    if (route.request().method() === "DELETE") return route.fulfill({ status: 409, json: {
+      failedStopIds: ["20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"],
+      message: "일부 정류장만 되돌렸습니다. 남은 완료 기록을 확인해 주세요.",
+      undoneStopIds: ["20000000-0000-4000-8000-000000000001"],
+    } });
+    return route.continue();
+  });
+  await page.goto("/mobile/today/cx108-preview");
+  await page.getByRole("button", { name: "남은 3곳 전체 완료" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "3곳 완료" }).click();
+  await page.getByRole("button", { name: "되돌리기" }).click();
+  await expect(page.getByText("일부 정류장만 되돌렸습니다. 남은 완료 기록을 확인해 주세요.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "남은 1곳 전체 완료" })).toBeVisible();
+});

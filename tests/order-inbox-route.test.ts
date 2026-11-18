@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), enabled: vi.fn(() => true), manage: vi.fn(() => true), notifications: vi.fn(), supabase: vi.fn() }));
-vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: mocks.enabled }));
+vi.mock("@/lib/feature-flags", async (original) => {
+  const real = await original<typeof import("../lib/feature-flags")>();
+  return { isFeatureEnabled: (name: Parameters<typeof real.isFeatureEnabled>[0], companyId: string) =>
+    name === "ERP_ORDER_DOCUMENTS" ? real.isFeatureEnabled(name, companyId) : mocks.enabled() };
+});
 vi.mock("@/lib/pricing/feature", () => ({ priceSheetsEnabled: () => true }));
 vi.mock("@/lib/pricing/store-order-feature", () => ({ storeOrderingEnabled: () => true }));
 vi.mock("@/domains/pricing/access", () => ({ canManagePriceSheets: mocks.manage }));
@@ -76,51 +80,49 @@ describe("order inbox API", () => {
   });
 
 
-  it("shows an unlinked sale document and blocks direct receipt before any write", async () => {
+  it("retains legacy ERP receipt when the old allowlist is set and the CX-62 switch is off", async () => {
     vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
     vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
-    mocks.supabase.mockImplementation(async (path: string, init?: RequestInit) => {
-      expect(init).toBeUndefined();
-      if (path.startsWith("business_documents?")) {
-        expect(path).toContain(`company_id=eq.${companyId}&document_type=eq.sale&source_type=eq.order&status=eq.confirmed`);
-        return [];
-      }
-      return routeFor(path);
-    });
-    const result = await (await GET(new NextRequest("http://localhost/api/orders"))).json();
-    expect(result.items[0].orderDocument).toEqual({ status: "unlinked" });
-    expect((await confirm()).status).toBe(409);
-    expect(mocks.notifications).not.toHaveBeenCalled();
-  });
-
-  it("retries through the order RPC without receiving, then receives only with the matching document", async () => {
-    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
-    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
-    const document = { source_id: orderId, source_key: `order:${orderId}`, customer_id: "c1", document_number: "S-001" };
-    const rows = [{ id: orderId, customer_id: "c1" }];
-    mocks.supabase.mockResolvedValueOnce(rows).mockResolvedValueOnce(document).mockResolvedValueOnce([document]);
-    expect((await confirm({ action: "retry_order_document", revision: 1 })).status).toBe(200);
-    expect(mocks.supabase.mock.calls[1][0]).toBe("rpc/confirm_order_sale_document");
-    expect(JSON.parse(mocks.supabase.mock.calls[1][1].body)).toMatchObject({ p_company_id: companyId, p_order_id: orderId });
-    expect(mocks.supabase.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
-
-    mocks.supabase.mockResolvedValueOnce(rows).mockResolvedValueOnce([document])
-      .mockResolvedValueOnce([{ id: orderId, status: "received", revision: 2 }]);
-    expect((await confirm({ revision: 1 })).status).toBe(200);
-    expect(mocks.supabase.mock.calls.at(-1)?.[1]?.method).toBe("PATCH");
-  });
-
-  it("does not receive a revised order when its document synchronization fails", async () => {
-    vi.stubEnv("ERP_ORDER_DOCUMENTS", "true");
-    vi.stubEnv("ERP_ORDER_DOCUMENTS_COMPANY_IDS", companyId);
-    const document = { source_id: orderId, source_key: `order:${orderId}`, customer_id: "c1", document_number: "S-001" };
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", "");
     mocks.supabase.mockResolvedValueOnce([{ id: orderId, customer_id: "c1" }])
-      .mockResolvedValueOnce([document]).mockResolvedValueOnce(document).mockRejectedValueOnce(new Error("revision changed"));
-    expect((await confirm()).status).toBe(409);
-    expect(mocks.supabase.mock.calls.map(([path]) => path).slice(-2)).toEqual([
-      "rpc/confirm_order_sale_document", "rpc/revise_order_sale_document",
+      .mockResolvedValueOnce([]);
+    const response = await confirm();
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ message: "전표가 연결되지 않았습니다. 전표 연결을 다시 시도한 뒤 접수해 주세요." });
+    expect(mocks.supabase.mock.calls.map(([path]) => path)).not.toContain("rpc/receive_store_order_with_sale_document");
+  });
+
+  it("shows a pending document and accepts only the atomic receipt response", async () => {
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", companyId);
+    mocks.supabase.mockImplementationOnce(async (path: string) => routeFor(path))
+      .mockImplementationOnce(async (path: string) => routeFor(path))
+      .mockImplementationOnce(async (path: string) => routeFor(path))
+      .mockResolvedValueOnce([]);
+    const listed = await (await GET(new NextRequest("http://localhost/api/orders"))).json();
+    expect(listed.items[0].orderDocument).toEqual({ status: "unlinked" });
+
+    const saved = { id: orderId, status: "received", revision: 3 };
+    mocks.supabase.mockClear().mockResolvedValue(saved);
+    for (const action of ["confirm", "retry_order_document"]) {
+      const response = await confirm({ action, actorUserId: "forged" });
+      expect(await response.json()).toEqual({ order: saved });
+    }
+    expect(mocks.supabase.mock.calls.map(([path]) => path)).toEqual([
+      "rpc/receive_store_order_with_sale_document", "rpc/receive_store_order_with_sale_document",
     ]);
-    expect(mocks.supabase.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+    expect(JSON.parse(mocks.supabase.mock.calls[0][1].body)).toMatchObject({
+      p_company_id: companyId, p_order_id: orderId, p_expected_revision: 2, p_actor_user_id: null,
+    });
+  });
+
+  it.each(["order_receipt_conflict", "order_receipt_document_unlinked", "order_receipt_amount_mismatch"])("does not patch order on RPC failure %s", async error => {
+    vi.stubEnv("FEATURE_ORDER_RECEIPT_DRAFT_COMPANY_IDS", companyId);
+    mocks.supabase.mockRejectedValueOnce(new Error(error));
+    const response = await confirm();
+    expect(response.status).toBe(409);
+    if (error !== "order_receipt_conflict") expect(await response.json()).toMatchObject({ code: "order_document_failed" });
+    expect(mocks.supabase).toHaveBeenCalledTimes(1);
+    expect(mocks.notifications).not.toHaveBeenCalled();
   });
 
   it("lets sales staff view orders but not confirm them", async () => {

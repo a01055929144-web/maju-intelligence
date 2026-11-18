@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { storeViewFrom, type StoreView } from "@/lib/store-navigation";
 import { canOrderForDelivery, summarizeOrder, type DeliveryPolicy } from "@/domains/order/order-rules";
+import { orderCutoffGuidance } from "@/domains/order/order-cutoff-guidance";
+import { Notice } from "./ui/notice";
 import { StoreCostPanel, type StoreCostAccess } from "./store-cost-panel";
 import { StoreKakaoLoginPanel, type StoreKakaoLogin } from "./store-kakao-entry";
 import { Badge } from "./ui/badge";
@@ -46,6 +48,7 @@ type Order = { id: string; deliveryDate: string | null; status: string; knownTot
 type Preference = { productId: string; isFavorite: boolean;
   isHidden: boolean; willNotOrder: boolean };
 type Response = { store: Store; orders: Order[]; preferences: Preference[];
+  orderCutoffGuidance?: { serverNow: string };
   memberLogin?: StoreKakaoLogin;
   memberManagement?: { href: string } | { message: string };
   mobileCommon?: boolean;
@@ -71,6 +74,24 @@ export function StorefrontWorkspace({ costAccess = null, storeLogin = null, port
 
 function StorefrontSession({ token, costAccess, storeLogin, portal, preview = false }: { token: string; costAccess: StoreCostAccess; storeLogin: StoreKakaoLogin | null; portal: ReactNode; preview?: boolean }) {
   const [data, setData] = useState<Response | null>(null);
+  const guidanceClock = useRef<{ serverNow: number; receivedAt: number } | null>(null);
+  const [guidanceNow, setGuidanceNow] = useState<number | null>(null);
+  useEffect(() => {
+    if (!data?.orderCutoffGuidance || !guidanceClock.current) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const update = () => {
+      clearTimeout(timer);
+      const clock = guidanceClock.current;
+      if (!clock) return;
+      const now = clock.serverNow + performance.now() - clock.receivedAt;
+      setGuidanceNow(now);
+      timer = setTimeout(update, 60000 - now % 60000);
+    };
+    update();
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => { clearTimeout(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update); };
+  }, [data?.orderCutoffGuidance]);
   const [tab, setTabState] = useState<StoreView>("home");
   // PC 사이드바(?view=)와 화면 탭을 맞춘다.
   const viewParam = useSearchParams().get("view");
@@ -172,6 +193,9 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         if (response.status === 404 || response.status === 403) { setData(null); setCart({}); setEditing(null); setMemo(""); retryKey.current = null; }
         throw new Error(result.message || "매장 링크를 열 수 없습니다.");
       }
+      const serverNow = Date.parse(result.orderCutoffGuidance?.serverNow ?? "");
+      guidanceClock.current = Number.isFinite(serverNow) ? { serverNow, receivedAt: performance.now() } : null;
+      setGuidanceNow(Number.isFinite(serverNow) ? serverNow : null);
       setData(result);
       setMemberAccessChanged(false);
       setDeliveryDate(result.store.selectedDeliveryDate);
@@ -193,6 +217,9 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const deliveryReady=Boolean(store&&(store.deliveryEligibility?.eligible??true)&&store.policy.weekdays.length>0);
   const pricesReady = !loading && !loadError && Boolean(deliveryDate) && deliveryDate === store?.selectedDeliveryDate;
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
+  const cutoff = data?.orderCutoffGuidance && store?.canOrder && deliveryReady && pricesVisible && guidanceNow !== null
+    ? orderCutoffGuidance(deliveryDate, store.policy, new Date(guidanceNow)) : null;
+  const confirmingAfterCutoff = cutoff?.open === false && Boolean(retryKey.current);
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
   const categories = Array.from(new Set(store?.lines.map((line) => line.category || "미분류") ?? [])).sort((a, b) => a.localeCompare(b, "ko"));
   const hasPriceDirections = pricesReady && Boolean(store?.priceAvailable && store.lines.some(line => publicSalesPriceDirection(line.salesPriceDirection)));
@@ -286,6 +313,12 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }
   async function submit() {
     if (submitting.current || !store || !deliveryReady || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
+    if (data?.orderCutoffGuidance && !retryKey.current) {
+      const clock = guidanceClock.current;
+      if (!clock) { setMessage("마감 정보를 다시 불러온 뒤 주문해 주세요."); return; }
+      const current = orderCutoffGuidance(deliveryDate, store.policy, new Date(clock.serverNow + performance.now() - clock.receivedAt));
+      if (!current.open) { setGuidanceNow(clock.serverNow + performance.now() - clock.receivedAt); setMessage(current.message); return; }
+    }
     submitting.current = true;
     setBusy(true); setMessage("");
     if (!retryKey.current) retryKey.current = crypto.randomUUID();
@@ -338,8 +371,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         {memberAccessChanged && <Button variant="outline" className="min-h-[44px]" disabled={busy || loading}
           onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>}
       </div>;
+  const cutoffNotice = cutoff && <section aria-label="주문 마감 안내"><Notice kind={cutoff.open ? "success" : "error"}>
+    <span className="block">{store.companyName} · {cutoff.label}</span>
+    <span className="block">{confirmingAfterCutoff ? "새 주문은 마감됐습니다. 이미 보낸 주문의 결과를 확인해 주세요." : cutoff.message}</span>
+  </Notice></section>;
   const cartContent = <>
       <p className="text-sm text-slate-600">{store.companyName}{deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
+      {mobileOrder && cartOpen && cutoffNotice}
       {selected.length ? <ul className="max-h-48 divide-y overflow-y-auto text-sm">{selected.map(line =>
         <li className="flex justify-between gap-2 py-2" key={line.key}>
           <span className="min-w-0 break-words">{line.name} · {cart[line.key]}{line.unit}</span>
@@ -356,8 +394,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit} className="min-h-[48px] w-full"
-        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
+      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
+        onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
@@ -404,6 +442,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {catalog && !catalogMode ? <SourceToggle onChange={setSource} source={source} /> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
+      {!(mobileOrder && cartOpen) && cutoffNotice}
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
         <p role="status">{deliveryEligibilityMessage(store.deliveryEligibility&&!store.deliveryEligibility.eligible?store.deliveryEligibility.reason:"weekdays_unconfigured")}</p>
         <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
