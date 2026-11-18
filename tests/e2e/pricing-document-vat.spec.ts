@@ -56,18 +56,21 @@ for (const width of [1440, 390]) test(`new document VAT contract keeps fixed pro
   await expect(page.getByRole("button", { name: "부가세 별도", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "← 문서 목록", exact: true }).click();
   await page.getByRole("button", { name: "새 가격 방식 합성", exact: true }).click();
-  for (const [index, price] of ["1,100", "1,000", "1,100", "60"].entries()) await expect(page.getByRole("textbox", { name: `품목 ${index + 1} 단가`, exact: true })).toHaveValue(price);
-  for (const index of [3, 4]) await expect(page.getByRole("textbox", { name: `품목 ${index} 단가`, exact: true })).toBeDisabled();
+  for (const [index, price] of ["1,100", "1,000"].entries()) await expect(page.getByRole("textbox", { name: `품목 ${index + 1} 단가`, exact: true })).toHaveValue(price);
+  const promos = page.locator("section").filter({ hasText: "행사·임박 2개" }).last();
+  await expect(promos).toContainText("1,100원"); await expect(promos).toContainText("60원");
+  await expect(promos.getByRole("textbox")).toHaveCount(0);
   await page.getByRole("button", { name: "부가세 별도", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "품목 1 단가", exact: true })).toHaveValue("1,000");
-  await expect(page.getByRole("textbox", { name: "품목 3 단가", exact: true })).toHaveValue("1,100");
-  await expect(page.getByRole("textbox", { name: "품목 4 단가", exact: true })).toHaveValue("60");
+  await expect(promos).toContainText("1,100원");
+  await expect(promos).toContainText("60원");
   await page.getByRole("button", { name: "부가세 포함", exact: true }).click();
   await page.getByRole("textbox", { name: "품목 1 단가", exact: true }).fill("2200");
   await page.getByRole("textbox", { name: "품목 1 단가", exact: true }).press("Enter");
   if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click(); }
   else await page.getByRole("tab", { name: "표", exact: true }).click();
   for (const [index, price] of ["2,200", "1,000", "1,100", "60"].entries()) await expect(page.getByRole("textbox", { name: `품목 ${index + 1} 판매가`, exact: true })).toHaveValue(price);
+  for (const index of [3, 4]) await expect(page.getByRole("textbox", { name: `품목 ${index} 판매가`, exact: true })).toBeDisabled();
   if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
   else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible(); expect(writes).toBe(1);
