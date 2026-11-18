@@ -1,7 +1,7 @@
 import { supabaseRequest } from "../store";
 import type { PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 
-export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number };
+export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string };
 export function purchaseDateEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
@@ -9,9 +9,9 @@ export function purchaseHistoryOnlyDefaultEnabled(companyId: string) {
   return (process.env.FEATURE_PURCHASE_HISTORY_ONLY_DEFAULT_COMPANY_IDS || "").split(",").some(id => id.trim() === companyId);
 }
 export async function getPurchaseDateBatch(companyId: string, batchId?: string): Promise<PurchaseDateBatch | null> {
-  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number }>>(
-    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
-  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count } : null;
+  const rows = await supabaseRequest<Array<{ id: string; status: PurchaseDateBatch["status"]; recalc_run_id: string | null; row_count: number; history_only_product_count: number; source_file_name: string; default_receipt_date: string }>>(
+    `purchase_cost_date_batches_v2?select=id,status,recalc_run_id,row_count,history_only_product_count,source_file_name,default_receipt_date&company_id=eq.${encodeURIComponent(companyId)}${batchId ? `&id=eq.${batchId}` : ""}&order=created_at.desc,id.desc&limit=1`);
+  return rows[0] ? { id: rows[0].id, status: rows[0].status, recalcRunId: rows[0].recalc_run_id, rowCount: rows[0].row_count, historyOnlyProductCount: rows[0].history_only_product_count, sourceFileName: rows[0].source_file_name, receiptDate: rows[0].default_receipt_date } : null;
 }
 export async function undatedPurchasePrices(companyId: string) {
   const result: Array<{ productId: string; cost: number }> = [];

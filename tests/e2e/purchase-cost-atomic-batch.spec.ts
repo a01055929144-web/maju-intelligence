@@ -86,7 +86,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
     const visibleProducts = !registration.standards && options.newProducts ? [] : !registration.standards && options.mixed ? products.slice(0, 4) : products;
     return route.fulfill({ json: { products: linkSaved ? visibleProducts.map(product => ({ ...product, supplierName: "합성 매입처", supplierProductId: "40000000-0000-4000-8000-000000000001" })) : visibleProducts, changes: [], suppliers: [], batchEnabled: true, purchaseDateEnabled: options.supported !== false, latestBatch: null } });
   });
-  let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number } | null = null;
+  let dateBatch: { id: string; status: string; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string } | null = null;
   await page.route("**/api/price-sheets/costs/date-batches*", route => {
     if (options.supported === false) return route.fulfill({ status: 404, json: {} });
     if (route.request().method() === "POST") {
@@ -115,7 +115,7 @@ async function purchaseUpload(page: Page, options: { count?: number; currentDate
           products.forEach((product, index) => Object.assign(product, beforePrices![index])); historyRows = [];
         }
       }
-      dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0, historyOnlyProductCount };
+      dateBatch = { id: body.batchId, status: body.action === "restore" ? "restored" : "completed", recalcRunId: null, rowCount: body.rows?.length || 0, historyOnlyProductCount, sourceFileName: body.fileName, receiptDate: body.receiptDate };
       if (options.loseFirstResponse && dateWrites.length === 1) return route.abort("failed");
       return route.fulfill({ json: { batchId: body.batchId, status: dateBatch.status, recalcRunId: null, rowCount: dateBatch.rowCount, historyOnlyProductCount } });
     }
@@ -584,11 +584,13 @@ for (const width of [1440, 390]) test(`Stage A mixed file preserves all transact
   await expect(productRow("합성 상품 5").getByRole("cell", { name: "90원", exact: true })).toBeVisible();
   await nav.getByRole("button", { name: "매입 이력", exact: true }).click();
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
+  await expect(history).toContainText("직전 업로드 묶음 · 2026-11-18 · 합성-구매일.csv · 원본 6행 · 저장 완료");
   await expect(history.getByRole("button", { name: "합성 상품 2", exact: true })).toBeVisible();
   await expect(history).toContainText("500g · EA"); await expect(history).toContainText("2kg · BOX");
   await page.reload();
+  await page.getByRole("button", { name: "매입 이력", exact: true }).click();
   page.once("dialog", dialog => dialog.accept());
-  await page.getByRole("button", { name: "직전 날짜별 매입가·판매가 함께 되돌리기", exact: true }).click();
+  await page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "직전 날짜별 매입가·판매가 함께 되돌리기", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "원본 거래를 함께 복구했습니다" })).toBeVisible();
   expect(dateWrites[2]).toMatchObject({ action: "restore", batchId: dateWrites[0].batchId });
   await page.getByRole("button", { name: "전체", exact: true }).click();
