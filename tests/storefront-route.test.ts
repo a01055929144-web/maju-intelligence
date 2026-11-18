@@ -4,7 +4,8 @@ vi.mock("@/lib/pricing/store-order-delivery-feature", () => import("../lib/prici
 vi.mock("@/lib/pricing/store-order-delivery-producer", () => import("../lib/pricing/store-order-delivery-producer"));
 const eligibility = vi.hoisted(() => vi.fn());
 vi.mock("../lib/pricing/store-delivery-eligibility", () => ({ getStoreDeliveryEligibility: eligibility, storeAddressVerificationEnabled: () => mocks.addressVerification }));
-const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true, addressVerification: true }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), member: vi.fn(), orderContext: vi.fn(), details: vi.fn(), db: vi.fn(), enabled: true, memberEnabled: true, memberCompany: true, addressVerification: true }));
+vi.mock("@/lib/store/07-store-portal", () => ({ listStorePortalOrders: mocks.details }));
 vi.mock("@/lib/store/07-store-member-context", () => ({ getStoreOrderMemberContext: mocks.orderContext }));
 vi.mock("@/lib/pricing/store-order-member", () => ({ getStoreOrderActor: mocks.member }));
 vi.mock("@/lib/auth", () => ({ storeMemberSessionEnabled: () => mocks.memberEnabled }));
@@ -29,6 +30,44 @@ vi.mock(
   () => import("../lib/pricing/storefront-public"),
 );
 import { POST, PUT } from "../app/api/storefront/route";
+
+it("reads order detail through the existing verified member scope without any write", async () => {
+  const companyId = "00000000-0000-4000-8000-000000000001", account = "30000000-0000-4000-8000-000000000001";
+  const id = "70000000-0000-4000-8000-000000000001";
+  vi.stubEnv("STORE_ORDER_DETAIL_ENABLED", "true"); vi.stubEnv("STORE_ORDER_DETAIL_COMPANY_IDS", companyId);
+  mocks.read.mockResolvedValue({ companyId, customerId: "verified-customer", priceAvailable: true });
+  mocks.orderContext.mockResolvedValue({ companyId, customerId: "verified-customer", storeAccountId: account, role: "staff", status: "active" });
+  const order = { id, status: "in_delivery", known_total: 7777, lines: [], document: { id: "document", totalAmount: 1501 } };
+  mocks.details.mockResolvedValue([order]);
+  const response = await POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" },
+    body: JSON.stringify({ token: "signed", orderDetailId: id, companyId: "forged", storeAccountId: "forged", knownTotal: 1 }) }));
+  expect(response.status).toBe(200); expect(await response.json()).toEqual({ orderDetail: order });
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(mocks.details).toHaveBeenCalledExactlyOnceWith({ companyId, storeAccountId: account }, true);
+  expect(mocks.db).not.toHaveBeenCalled();
+});
+
+it.each(["off", "other-company", "expired", "guest", "wrong-store", "inactive", "missing-order", "read-error"])("fails closed for order detail: %s", async mode => {
+  const companyId = "00000000-0000-4000-8000-000000000001", account = "30000000-0000-4000-8000-000000000001";
+  vi.stubEnv("STORE_ORDER_DETAIL_ENABLED", mode === "off" ? "false" : "true");
+  vi.stubEnv("STORE_ORDER_DETAIL_COMPANY_IDS", mode === "other-company" ? "other" : companyId);
+  mocks.db.mockResolvedValue([]);
+  mocks.read.mockResolvedValue({ companyId, customerId: "verified-customer", priceAvailable: mode !== "expired" });
+  mocks.orderContext.mockResolvedValue(mode === "guest" ? null : { companyId, customerId: mode === "wrong-store" ? "other" : "verified-customer",
+    storeAccountId: account, role: "staff", status: mode === "inactive" ? "inactive" : "active" });
+  if (mode === "read-error") mocks.details.mockRejectedValue(new Error("DB read unavailable")); else mocks.details.mockResolvedValue([]);
+  const response = await POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" },
+    body: JSON.stringify({ token: "signed", orderDetailId: "70000000-0000-4000-8000-000000000001", companyId, storeAccountId: account }) }));
+  expect(response.status).toBe(mode === "read-error" ? 500 : ["guest", "wrong-store", "inactive"].includes(mode) ? 403 : 404);
+  if (!["missing-order", "read-error"].includes(mode)) expect(mocks.details).not.toHaveBeenCalled();
+  expect(mocks.db.mock.calls.every(([, init]) => init === undefined)).toBe(true);
+});
+
+it("rejects malformed detail IDs before reading the signed link", async () => {
+  const response = await POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" },
+    body: JSON.stringify({ token: "signed", orderDetailId: "forged-filter" }) }));
+  expect(response.status).toBe(400); expect(mocks.read).not.toHaveBeenCalled(); expect(mocks.details).not.toHaveBeenCalled();
+});
 
 it("enables cutoff guidance only for the verified token company, never a caller-supplied company", async () => {
   vi.stubEnv("STORE_ORDER_CUTOFF_GUIDANCE_ENABLED", "true");
