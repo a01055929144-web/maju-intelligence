@@ -1,6 +1,7 @@
 import { kstToday } from "../shared/kst-date";
 import { calculatePrice } from "./price-rules";
 export type DocumentKind = "sheet" | "quote";
+export const FIXED_PROMOTION_PRICE_CONTRACT = "promotion-gross-v1";
 export type PriceSource = "store" | "grade" | "base" | "edited";
 export const PRICE_SOURCES: readonly string[] = ["store", "grade", "base", "edited"];
 export type PrintLine = {
@@ -10,6 +11,8 @@ export type PrintLine = {
   spec: string;
   unit: string;
   price: number;
+  /** Stored unit-price basis. Absent means the original, VAT-exclusive contract. */
+  priceIncludesTax?: boolean;
   taxType: "taxable" | "exempt" | "unknown";
   visible: boolean;
   promotionId: string | null;
@@ -57,11 +60,13 @@ export function documentFooterTypography(display: DocumentDisplay, fontScale = 1
   return { fontSize, bold, lineHeight: fontSize ? Math.ceil(fontSize * 1.5) : 16,
     charactersPerLine: Math.max(1, Math.floor(60 * 11 / ((fontSize || 11) * (bold ? 1.05 : 1)))) };
 }
-export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean) {
-  return includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
+export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean, storedIncludesTax = false) {
+  return !storedIncludesTax && includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
 }
 export type DocumentContent = {
   kind: DocumentKind;
+  /** New documents opt in; copies and old publications retain their original contract. */
+  priceContract?: typeof FIXED_PROMOTION_PRICE_CONTRACT;
   title: string;
   companyName: string;
   industry?: string;
@@ -220,6 +225,8 @@ export function money(value: unknown): number {
 /** A strict whitelist shared by storage and output. Never spread staff/catalog records. */
 export function parseDocument(value: unknown): DocumentContent {
   const d = object(value);
+  if (d.priceContract !== undefined && d.priceContract !== FIXED_PROMOTION_PRICE_CONTRACT)
+    throw new PricingInputError("이 문서의 가격 방식은 현재 화면에서 편집할 수 없습니다. 화면을 새로고침해 주세요.");
   if (d.kind !== "sheet" && d.kind !== "quote")
     throw new PricingInputError("문서 종류를 확인해 주세요.");
   if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
@@ -245,6 +252,7 @@ export function parseDocument(value: unknown): DocumentContent {
       spec: field(l.spec ?? "", 80, false, `${index + 1}번째 품목 규격`),
       unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
+      ...(d.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: promotional } : {}),
       ...(typeof l.priceSource === "string" && PRICE_SOURCES.includes(l.priceSource) ? { priceSource: l.priceSource as PriceSource } : {}),
       taxType: l.taxType as "taxable" | "exempt",
       visible: l.visible,
@@ -272,6 +280,7 @@ export function parseDocument(value: unknown): DocumentContent {
     throw new PricingInputError("표시 설정을 확인해 주세요.");
   return {
     kind: d.kind,
+    ...(d.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceContract: FIXED_PROMOTION_PRICE_CONTRACT } : {}),
     title: field(d.title, 100, true, "문서 제목"),
     companyName: field(d.companyName, 100, true, "회사명"),
     ...(field(d.industry ?? "", 40, false, "업종") ? { industry: field(d.industry, 40, false, "업종") } : {}),
@@ -343,7 +352,8 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
       brand: d.showBrand ? l.brand : "",
       spec: d.showSpec ? l.spec : "",
       unit: d.showSpec ? l.unit : "",
-      price: d.showPrice && !expired ? documentDisplayPrice(l.price, l.taxType, d.display?.priceIncludesTax || false) : null,
+      price: d.showPrice && !expired ? documentDisplayPrice(l.price, l.taxType, d.display?.priceIncludesTax || false, l.priceIncludesTax) : null,
+      ...(l.priceIncludesTax !== undefined ? { priceIncludesTax: l.priceIncludesTax } : {}),
       taxType: l.taxType,
       badge: l.badge,
       endsOn: l.endsOn,

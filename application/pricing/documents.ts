@@ -17,6 +17,7 @@ export type DocumentScope = {
   archiveEnabled?: boolean;
   sharingEnabled?: boolean;
   actorName?: string;
+  documentVatEnabled?: boolean;
 };
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;
@@ -58,6 +59,8 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       }
       if (action === "save") {
         const content = parseDocument(body.content);
+        if (content.priceContract && !scope.documentVatEnabled)
+          throw new PricingInputError("포함 행사 가격 문서 편집이 꺼져 있습니다. 관리자에게 설정을 확인해 주세요.");
         if (!scope.manager && content.kind !== "quote")
           throw new PricingInputError("견적서만 작성할 수 있습니다.");
         return repository.request<T>(scope, action, { id, expected, content });

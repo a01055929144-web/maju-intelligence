@@ -58,7 +58,7 @@ function EditablePricingDocPaper({
   const footerInfo = display.info.filter((item) => item.place === "footer");
   const footerType = documentFooterTypography(display);
   const draggedLine = useRef<number | null>(null);
-  const visiblePrice = (line: PrintLine) => documentDisplayPrice(line.price, line.taxType, display.priceIncludesTax);
+  const visiblePrice = (line: PrintLine) => documentDisplayPrice(line.price, line.taxType, display.priceIncludesTax, line.priceIncludesTax);
 
   function updateLine(index: number, patch: Partial<PrintLine>) {
     onContent({ ...content, lines: content.lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
@@ -169,7 +169,8 @@ function EditablePricingDocPaper({
                   </td>
                   {content.showPrice ? (
                     <td className="border-l border-slate-100 pl-2 py-1">
-                      <MoneyInput ariaLabel={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable} onCommit={(next) => { const value = next ?? 0; updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line)} />
+                      <MoneyInput ariaLabel={`품목 ${index + 1} 단가`} className={`${cell} text-right font-bold`} disabled={!editable || line.priceIncludesTax} onCommit={(next) => { const value = next ?? 0; updateLine(index, { price: display.priceIncludesTax && line.taxType === "taxable" ? Math.round(value / 1.1) : value, priceSource: "edited" }); }} value={visiblePrice(line)} />
+                      {line.priceIncludesTax ? <span className="block px-1 text-right text-xs">{line.taxType === "exempt" ? "면세 고정가" : "부가세 포함 고정가"}</span> : null}
                       {editable && line.priceSource ? <span className="block px-1 text-right text-xs text-slate-500 print:hidden" data-price-source={line.priceSource}>{SOURCE_LABEL[line.priceSource]}</span> : null}
                       {display.showTaxType ? <span className="block px-1 text-right text-xs text-slate-600">{line.taxType === "exempt" ? "면세" : "과세"}</span> : null}
                     </td>

@@ -16,6 +16,8 @@ import {
   lineFromCatalog,
   MAX_DOCUMENT_LINES,
   parseDocument,
+  parseDisplay,
+  FIXED_PROMOTION_PRICE_CONTRACT,
   withMargin,
   type CatalogChoice,
   fillBlankDocumentSpecs,
@@ -44,6 +46,7 @@ import type { LeadDocumentContext } from "@/application/pricing/document-entry";
 import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
 import { useConfirm } from "./ui/confirm-dialog";
 import { reviewDocumentTaxes } from "@/domains/pricing/document-tax";
+import { Notice } from "./ui/notice";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
   revision: number;
@@ -58,6 +61,7 @@ export function PricingDocumentsWorkspace({
   sharingEnabled = false,
   publicSharingAvailable = false,
   footerFormattingEnabled = false,
+  vatEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
@@ -67,6 +71,7 @@ export function PricingDocumentsWorkspace({
   sharingEnabled?: boolean;
   publicSharingAvailable?: boolean;
   footerFormattingEnabled?: boolean;
+  vatEnabled?: boolean;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
@@ -212,7 +217,7 @@ export function PricingDocumentsWorkspace({
       const added = missing.flatMap((p) => { const item = byId.get(p.productId); return item ? [{ p, item }] : []; });
       if (!added.length) return;
       setBaselines((previous) => ({ ...previous, ...Object.fromEntries(added.map(({ p, item }) => [p.productId, item.price])) }));
-      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType }))] });
+      change({ ...draft.content, lines: [...draft.content.lines, ...added.map(({ p, item }) => ({ ...lineFromCatalog(item), displayName: p.displayName, price: p.price, promotionId: p.id, startsOn: p.startsOn, endsOn: p.endsOn, remaining: p.stock, badge: p.badge, taxType: p.taxType, ...(draft.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: true } : {}) }))] });
     }).catch((e) => setError(e instanceof Error ? e.message : "행사·임박을 자동으로 넣지 못했습니다."));
   }, [draft, autoPromos, promotions]); // eslint-disable-line react-hooks/exhaustive-deps
   function discard() {
@@ -260,6 +265,7 @@ export function PricingDocumentsWorkspace({
       showBrand: true,
       showSpec: true,
       lines: [],
+      ...(vatEnabled ? { priceContract: FIXED_PROMOTION_PRICE_CONTRACT, display: { ...parseDisplay(undefined), priceIncludesTax: true } } : {}),
     };
   }
   function startPreset(preset: DocumentPreset, kind: DocumentKind) {
@@ -441,6 +447,7 @@ export function PricingDocumentsWorkspace({
         remaining: p.stock,
         badge: p.badge,
         taxType: p.taxType,
+        ...(draft.content.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: true } : {}),
       })),
     ]);
     setTab("documents");
@@ -594,8 +601,9 @@ export function PricingDocumentsWorkspace({
                         );
                       });
   };
+  const vatLocked = Boolean(draft?.content.priceContract && !vatEnabled);
   const editable = Boolean(
-    draft && !draft.archivedAt && (draft.content.kind === "quote" || manager),
+    draft && !draft.archivedAt && !vatLocked && (draft.content.kind === "quote" || manager),
   );
   const latestPublished = versions.reduce<DocumentVersion | null>((latest, version) =>
     !latest || version.version > latest.version ? version : latest, null);
@@ -618,6 +626,7 @@ export function PricingDocumentsWorkspace({
   return (
     <div className="min-w-0 max-w-full space-y-5 overflow-x-clip" aria-busy={busy}>
       {confirmDialog}
+      {vatLocked ? <Notice kind="error">포함 행사 가격 문서 편집이 꺼져 있습니다. 관리자에게 설정을 확인해 주세요. 기존 발행본은 미리보기에서 확인할 수 있습니다.</Notice> : null}
       {leadNotice}
       {/* 화면 고정 줄은 앱 상단 줄 하나만 둔다. 이 줄까지 top-0에 고정하면 스크롤 때 페이지 제목을 덮는다(대표 11/10). */}
       <header className="pricing-no-print -mx-1 border-b border-slate-200 bg-white px-1 py-2">
@@ -1072,8 +1081,9 @@ export function PricingDocumentsWorkspace({
                                 const shown = next ?? 0;
                                 rows(draft.content.lines.map((x, j) => (j === i ? { ...x, price: draft.content.display?.priceIncludesTax && x.taxType === "taxable" ? Math.round(shown / 1.1) : shown } : x)));
                               }}
-                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false)}
+                              value={documentDisplayPrice(l.price, l.taxType, draft.content.display?.priceIncludesTax || false, l.priceIncludesTax)}
                             />
+                            {l.priceIncludesTax ? <p className="text-xs">{l.taxType === "exempt" ? "면세 고정가" : "부가세 포함 고정가"}</p> : null}
                           </td>
                           <td className="p-2">
                             <div className="flex flex-wrap gap-1">
