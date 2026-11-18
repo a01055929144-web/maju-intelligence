@@ -323,3 +323,68 @@ for (const width of [1440, 390]) test(`promotion tax: inherit, explicitly correc
   await expect(create).toContainText("상품관리에서 과세·면세를 확인");
   expect(writes).toHaveLength(2);
 });
+
+for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserves published taxes at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001", promotionId = "30000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 계란", displayName: "합성 계란", brand: "", spec: "30개", unit: "판", price: 1000, taxType: "taxable" as const };
+  let currentTax = "exempt", offerTax = "taxable", revision = 19;
+  let content: DocumentContent = { kind: "sheet", title: "세금 갱신 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, display: { columns: 1, promoLayout: "table", info: [], showTaxType: true },
+    lines: [lineFromCatalog(product), { ...lineFromCatalog(product), promotionId, badge: "행사", startsOn: "2020-01-01", endsOn: "2099-12-31" }] };
+  const published = structuredClone(content);
+  const writes: unknown[] = [];
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: "2026-11-17T00:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
+  const offer = () => ({ id: promotionId, productId: product.id, name: product.name, displayName: product.displayName, startsOn: "2020-01-01", endsOn: "2099-12-31", price: 1000, stock: null, perStoreLimit: null, allowSheet: true, badge: "행사", revision: 1, taxType: offerTax });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") { expect((url.searchParams.get("productIds") || "").split(",").length).toBeLessThanOrEqual(100); result = { items: [{ ...product, taxType: currentTax }], total: 1 }; }
+    if (action === "promotions") result = [offer()];
+    if (action === "versions") result = [{ id: "40000000-0000-4000-8000-000000000001", documentId: id, version: 1, revision: 1, content: published, publishedAt: "2026-11-17T00:00:00Z", unavailablePromotions: [], promotionStock: {} }];
+    if (action === "save") {
+      expect(body.expected).toBe(19); expect(body.content.lines.map((line: { price: number }) => line.price)).toEqual([1000, 1000]);
+      expect(body.content.lines.map((line: { taxType: string }) => line.taxType)).toEqual(["exempt", "exempt"]);
+      writes.push(body); content = body.content; revision++; result = draft();
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "세금 갱신 합성 문서", exact: true }).click();
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click(); }
+  else await page.getByRole("tab", { name: "표", exact: true }).click();
+  const normal = page.getByRole("combobox", { name: "품목 1 과세", exact: true }), promo = page.getByRole("combobox", { name: "품목 2 과세", exact: true });
+  await expect(normal).toHaveValue("taxable"); await expect(promo).toBeDisabled();
+  expect((await page.getByRole("button", { name: "행사 세금 수정", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  async function refresh() { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "현재 세금 구분 반영", exact: true }).click(); }
+  await refresh();
+  await expect(page.getByRole("alert").filter({ hasText: "행사 원본과 상품" })).toBeVisible();
+  await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);
+  offerTax = "exempt";
+  await refresh();
+  const dialog = page.getByRole("dialog", { name: "현재 세금 구분 반영", exact: true });
+  await expect(dialog).toContainText("면세로 2개"); await dialog.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);
+  await refresh(); await dialog.getByRole("button", { name: "초안에 반영", exact: true }).click();
+  await expect(normal).toHaveValue("exempt"); await expect(promo).toHaveValue("exempt"); expect(writes).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/document-tax-refresh/reviewed-${width}.png`, fullPage: true });
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
+  await expect(preview).toContainText("과세");
+  expect(published.lines.map(line => line.taxType)).toEqual(["taxable", "taxable"]);
+  await preview.getByRole("button", { name: "닫기", exact: true }).click();
+  currentTax = "unknown";
+  await refresh(); await expect(page.getByRole("alert").filter({ hasText: "현재 상품의 과세·면세" })).toBeVisible();
+  await expect(normal).toHaveValue("exempt"); expect(writes).toHaveLength(1);
+});

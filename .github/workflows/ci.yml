@@ -591,6 +591,8 @@ jobs:
           psql --dbname=pricing_promotion_tax_source_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-promotion-tax-source.pg17.test.sql
           createdb document_display_storage_test
           psql --dbname=document_display_storage_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-display-storage.pg17.test.sql
+          createdb pricing_document_tax_refresh_test
+          psql --dbname=pricing_document_tax_refresh_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-tax-refresh.pg17.test.sql
 
       # Read-only dependency on #285's unapproved SQL contract. Never apply to an operating database.
       - name: Checkout pinned lead-share SQL draft for isolated tests
