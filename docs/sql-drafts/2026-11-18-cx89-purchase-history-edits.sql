@@ -2,6 +2,8 @@
 begin;
 set local lock_timeout = '3s';
 
+-- 운영에는 이미 E2 계약으로 존재한다. 격리 PG17처럼 선행 계약만 적재한 환경도 같은 뷰를 검증할 수 있게 보강한다.
+alter table public.purchase_receipt_lines add column if not exists invalidated_at timestamptz;
 alter table public.purchase_receipt_line_overrides
   add column if not exists quantity numeric(14,3),
   add column if not exists deleted_at timestamptz;
