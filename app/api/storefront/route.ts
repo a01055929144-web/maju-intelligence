@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listStorePortalOrders } from "@/lib/store/07-store-portal";
 import { storeOrderDetailEnabled } from "@/lib/pricing/store-order-detail-feature";
 import { readStorePromotionAvailability } from "@/lib/pricing/storefront-promotion-availability";
 import { storeOrderCutoffGuidanceEnabled } from "@/lib/pricing/store-order-cutoff-feature";
@@ -125,6 +124,7 @@ export async function POST(request: NextRequest) {
     if (body.orderDetailId !== undefined) {
       if (!detailEnabled || !store.priceAvailable) return unavailable();
       if (!orderMember) return NextResponse.json({ message: "이 매장의 구성원으로 로그인한 뒤 확인해 주세요." }, { status: 403 });
+      const { listStorePortalOrders } = await import("@/lib/store/07-store-portal");
       const orderDetail = (await listStorePortalOrders({ companyId: orderMember.companyId,
         storeAccountId: orderMember.storeAccountId }, true)).find(order => order.id === body.orderDetailId);
       if (!orderDetail) return unavailable();
