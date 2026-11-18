@@ -403,7 +403,10 @@ for (const width of [1440, 390]) test(`CX-74 server-clock cutoff closes without 
   await page.clock.fastForward(61_000);
   await expect(submit).toBeDisabled();
   expect(submissions).toHaveLength(0);
-  if (width === 390) await page.getByRole('dialog', { name: '장바구니' }).getByRole('button', { name: '닫기', exact: true }).click();
+  if (width === 390) {
+    await expect(page.getByRole('dialog', { name: '장바구니' }).getByRole('region', { name: '주문 마감 안내' })).toContainText('주문 마감이 지났습니다');
+    await page.getByRole('dialog', { name: '장바구니' }).getByRole('button', { name: '닫기', exact: true }).click();
+  }
   await expect(banner).toContainText('주문 마감이 지났습니다');
   await expect(page.getByLabel('Synthetic product 수량', { exact: true })).toHaveText('1');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);

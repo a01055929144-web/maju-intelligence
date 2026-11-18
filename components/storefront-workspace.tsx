@@ -370,8 +370,13 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         {memberAccessChanged && <Button variant="outline" className="min-h-[44px]" disabled={busy || loading}
           onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>로그인 상태 다시 확인</Button>}
       </div>;
+  const cutoffNotice = cutoff && <section aria-label="주문 마감 안내"><Notice kind={cutoff.open ? "success" : "error"}>
+    <span className="block">{store.companyName} · {cutoff.label}</span>
+    <span className="block">{cutoff.message}</span>
+  </Notice></section>;
   const cartContent = <>
       <p className="text-sm text-slate-600">{store.companyName}{deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
+      {mobileOrder && cartOpen && cutoffNotice}
       {selected.length ? <ul className="max-h-48 divide-y overflow-y-auto text-sm">{selected.map(line =>
         <li className="flex justify-between gap-2 py-2" key={line.key}>
           <span className="min-w-0 break-words">{line.name} · {cart[line.key]}{line.unit}</span>
@@ -436,10 +441,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       {catalog && !catalogMode ? <SourceToggle onChange={setSource} source={source} /> : null}
       {pricesVisible && visibleProducts.some(line => publicSalesPriceDirection(line.salesPriceDirection)) && <p className="text-xs text-slate-600">판매가 등락은 이전에 게시된 단가와 비교합니다.</p>}
       <h2 className="font-semibold">{editing ? "주문 수정" : "주문하기"}</h2>
-      {cutoff && <section aria-label="주문 마감 안내"><Notice kind={cutoff.open ? "success" : "error"}>
-        <span className="block">{store.companyName} · {cutoff.label}</span>
-        <span className="block">{cutoff.message}</span>
-      </Notice></section>}
+      {!(mobileOrder && cartOpen) && cutoffNotice}
       {!deliveryReady && <section className="space-y-2 rounded border p-3 text-sm" aria-label="배송 요일 설정 안내">
         <p role="status">{deliveryEligibilityMessage(store.deliveryEligibility&&!store.deliveryEligibility.eligible?store.deliveryEligibility.reason:"weekdays_unconfigured")}</p>
         <Button variant="outline" className="min-h-[44px]" disabled={busy || loading} onClick={() => void load(deliveryDate || undefined).catch(() => undefined)}>배송 설정 다시 확인</Button>
