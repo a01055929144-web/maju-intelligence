@@ -793,6 +793,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
       const currentCount = new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount;
       setSaveResult({ currentCount, historyOnlyCount: result.historyOnlyProductCount });
+      setTab("매입 이력");
       setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다.${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 변경 보류 ${heldCount}그룹은 현재 매입가를 바꾸지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? ` 기준일 없는 상품 ${undatedTargets.length}품목은 이번 적용일의 현재 매입가로 자동 교체했습니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재 매입가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
@@ -875,7 +876,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setUndo(null);
         notes.push(`매입가 ${changes.length}건·판매가 함께 저장`);
       }
-      setCandidates({}); setSelected([]); setTab("전체"); setHistoryKey((value) => value + 1);
+      setCandidates({}); setSelected([]); setHistoryKey((value) => value + 1);
       if ((changes.length || notes.length) && (!batchEnabled || !changes.length)) {
         const previousBatch = pricing?.lastBatch;
         try {
@@ -894,6 +895,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setError(`일부만 저장됐습니다: ${notes.join(" · ") || "매입가 변경 없음"}. ${warnings.join(" · ")}. 저장된 매입가는 다시 올리지 말고 실패 항목만 확인해 주세요.`);
       } else {
         setMessage(`${notes.join(" · ")}${receipt.note}. 표에서 품목·규격·단위·과세를 바로 고칠 수 있습니다.`);
+        setTab("매입 이력");
       }
     } catch (cause) { setMessage(""); setError(`${notes.length ? `${notes.join(" · ")} 후 멈췄습니다. ` : ""}${cause instanceof Error ? cause.message : "저장하지 못했습니다."}`); await load().catch(() => undefined); }
     finally { setBusy(false); }
@@ -978,7 +980,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   return <div className="min-w-0 space-y-4" aria-busy={busy}>
     <datalist id="purchase-unit-options">{unitOptions.map((unit) => <option key={unit} value={unit} />)}</datalist>
     {/* 11/4: 매입일·엑셀 올리기·열 정렬·저장을 한 줄에. 지금 눌러야 할 버튼을 강조합니다. */}
-    <header className="space-y-2">
+    <header className="sticky top-0 z-20 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       {historyOnlyDefaultEnabled && sheet ? <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 p-2 text-sm"><legend className="px-1 text-xs font-black text-slate-600">저장 방식</legend>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="이력만 저장" checked={!updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(false); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />이력만 저장 <span className="text-xs text-slate-500">(현재 가격은 그대로)</span></label>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="현재 매입가 변경" checked={updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(true); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />현재 매입가 변경 <span className="text-xs text-slate-500">(기본값 · 판매가도 다시 계산)</span></label>
