@@ -49,6 +49,24 @@ Ponytail: 사용함
 | 영업 성과 `/sales/performance` | 현행 영업 흐름 | 기존 페이지·API 경계 | 통계 편입 여부와 무관하게 기존 권한 유지 |
 | 관리자 미리보기 | 고객사 메뉴 역할과 별도 | 관리자 세션 + 명시적 `companyId` 요구 | 그대로 유지 |
 
+## 최신 `main` 대조 결과
+
+2026-11-18 `main`의 `lib/customer-navigation.ts`와 각 기존 페이지를 대조했다. 대표 확인 전에는 아래 현행 표시 계약을 바꾸지 않는다.
+
+| ERP 사용 여부 | 역할 | 상품 `/revenue/products` | 매출처 `/crm/timeline` | 매입처 `/purchasing/suppliers` | 확인 결과 |
+|---|---|---|---|---|---|
+| OFF | owner | 표시 | 표시 | 표시 | 세 항목은 `coreErpItems`라 hold-module 조건과 무관하게 ERP 묶음에 남음 |
+| OFF | manager | 표시 | 표시 | 표시 | owner와 동일 |
+| OFF | sales | 표시 | 표시 | 숨김 | 매입처의 현행 `workspaceRoles`는 owner·manager뿐이며 넓히지 않음 |
+| ON | owner · manager | 표시 | 표시 | 표시 | 위 세 항목에 재고·매입/매출관리·매출 자료가 추가됨 |
+| ON | sales | 표시 | 표시 | 숨김 | hold 항목과 매입처는 추가 노출하지 않음 |
+
+- 기존 주소는 최신 `main`에서도 각각 상품, 매출처, 매입처의 실제 진입점이다. CX-103은 이 주소를 삭제·변경하거나 새 대표 주소로 대체하지 않는다.
+- 메뉴 표시와 서버 접근 판정은 별개다. 상품·매입처 페이지의 현행 `manage_sales` 검사와 각 API의 회사 범위 검사를 그대로 둔다.
+- `/crm/timeline?section=partners`는 최신 `main`에 이미 존재하는 통합 화면 선택값이다. 새 URL 계약으로 간주하지 않는다.
+- ERP OFF 회사에서 상품·매출처·매입처를 함께 숨기는 구현은 현행 계약 위반이다.
+- 이 대조는 고객사 메뉴만 대상으로 했다. 08방 관리자 화면과 07방 프로필 파일은 CX-103 구현 범위에 포함하지 않는다.
+
 ## 구현 시 변경 허용 범위
 
 - `lib/customer-navigation.ts`: ERP 메뉴 묶음과 기존 URL 링크만 변경한다.
