@@ -419,7 +419,8 @@ for (const width of [1440, 390]) test(`document editor toolbar keeps title and a
   const publish = page.getByRole("button", { name: "판매가 버전 확정", exact: true });
   const more = page.getByRole("button", { name: "더보기", exact: true });
   await page.evaluate(() => window.scrollTo(0, 0));
-  for (const button of [back, publish, more]) expect(await button.evaluate(element => {
+  await expect(publish).toBeDisabled();
+  for (const button of [back, more]) expect(await button.evaluate(element => {
     const box = element.getBoundingClientRect();
     return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
   })).toBe(true);
@@ -435,6 +436,11 @@ for (const width of [1440, 390]) test(`document editor toolbar keeps title and a
   else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
   expect(saves).toBe(1); expect(revision).toBe(20);
+  await expect(publish).toBeEnabled();
+  expect(await publish.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
   await back.click(); await page.getByRole("button", { name: editedTitle, exact: true }).click();
   await expect(title).toHaveValue(editedTitle);
 });
