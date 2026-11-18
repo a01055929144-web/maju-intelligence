@@ -23,7 +23,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovCollectionOutcome, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, splitGovTasksByTimeouts, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovCollectionOutcome, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, shouldDeferBlockedGovFirstArea, splitGovTasksByTimeouts, updateGovTimeoutCounts, type GovAreaAttempt, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -9779,11 +9779,14 @@ export async function syncGovRestaurantLeads(
     if (startPage && startPage > 1 && codes[0] && !savedCursors[codes[0]]) {
       savedCursors[codes[0]] = { areaCode: codes[0], page: startPage, cutoff: startedAt, scanStartedAt: startedAt };
     }
-    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea);
+    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const deferBlockedFirst = shouldDeferBlockedGovFirstArea(dataset, previous?.metadata?.firstArea, previousTimeoutCounts);
+    const rotatePreviousFirst = dataset !== "general_restaurants" ? true : deferBlockedFirst ? "end" : false;
+    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea, rotatePreviousFirst);
     const cutoff = getGovChangeCutoff(new Date(startedAt), previousSuccess?.finished_at, days).toISOString();
     const tasks = buildGovAreaTasks(orderedCodes, savedCursors, cutoff, startedAt);
     const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
-    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const attempts: Record<string, GovAreaAttempt[]> = {};
     const loadTask = (task: (typeof tasks)[number]) => (requestLimiter || (async (load) => load()))(async () => {
       const fetchOnce = (pageSize: number) => {
         if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
@@ -9798,16 +9801,22 @@ export async function syncGovRestaurantLeads(
           retry: false
         });
       };
-      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0);
+      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0, {
+        firstPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        retryPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        onAttempt: (attempt) => (attempts[task.areaCode] ||= []).push(attempt)
+      });
     });
-    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts);
-    const soloResults = soloTasks.length ? await runGovAreaTasks({
+    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts, dataset === "general_restaurants" ? 1 : 2);
+    const runSoloTasks = () => soloTasks.length ? runGovAreaTasks({
       tasks: soloTasks, deadlineAt: requestDeadlineAt, concurrency: 1, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const regularResults = regularTasks.length ? await runGovAreaTasks({
+    }) : Promise.resolve([]);
+    const runRegularTasks = () => regularTasks.length ? runGovAreaTasks({
       tasks: regularTasks, deadlineAt: requestDeadlineAt, concurrency: fanoutConcurrency, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const taskResults = [...soloResults, ...regularResults];
+    }) : Promise.resolve([]);
+    const firstResults = deferBlockedFirst ? await runRegularTasks() : await runSoloTasks();
+    const lastResults = deferBlockedFirst ? await runSoloTasks() : await runRegularTasks();
+    const taskResults = [...firstResults, ...lastResults];
     const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
     const nextCursors: Record<string, GovAreaCursor> = { ...savedCursors };
     for (const result of taskResults) {
@@ -9823,15 +9832,7 @@ export async function syncGovRestaurantLeads(
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
     const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
     const observability = getGovSyncObservability(codes, pendingAreas, taskResults, orderedCodes[0]);
-    const timeoutCounts = { ...previousTimeoutCounts };
-    for (const areaCode of codes) {
-      const results = taskResults.filter((result) => result.areaCode === areaCode);
-      if (results.some((result) => isGovTimeoutError(result.error))) {
-        timeoutCounts[areaCode] = (timeoutCounts[areaCode] || 0) + 1;
-      } else if (results.length && results.every((result) => result.status === "success")) {
-        timeoutCounts[areaCode] = 0;
-      }
-    }
+    const timeoutCounts = updateGovTimeoutCounts(codes, previousTimeoutCounts, taskResults, attempts);
     const { status, message } = getGovCollectionOutcome(dataset, codes, rows.length, taskResults);
     await recordLeadSyncStatus(companyId, "gov", status, {
       trigger,
@@ -9865,6 +9866,7 @@ export async function syncGovRestaurantLeads(
           newRows: result.value?.rows.length || 0,
           error: result.error
         })),
+        attempts,
         updateKinds: rows.reduce<Record<string, number>>((counts, row) => {
           const kind = row.updateKind || "unknown";
           counts[kind] = (counts[kind] || 0) + 1;

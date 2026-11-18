@@ -19,6 +19,7 @@ export function OrderFulfillmentWorkspace({ companyId, preview = false }: { comp
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("summary");
   const [supplier, setSupplier] = useState("");
+  const [dispatching, setDispatching] = useState(false);
   const paperRef = useRef<HTMLDivElement>(null);
   const load = useCallback(async () => {
     setError(""); setItems(null);
@@ -32,6 +33,22 @@ export function OrderFulfillmentWorkspace({ companyId, preview = false }: { comp
   const suppliers = useMemo(() => Array.from(new Set((items || []).filter((line) => line.mode !== "inventory").map((line) => line.supplier))).sort((a, b) => a.localeCompare(b, "ko")), [items]);
   const supplierName = supplier || suppliers[0] || "";
   const supplierLines = (items || []).filter((line) => line.mode !== "inventory" && line.supplier === supplierName);
+
+  async function dispatchAll() {
+    const orderIds = Array.from(new Set((items || []).map((line) => line.orderId)));
+    if (!orderIds.length || !window.confirm(`${orderIds.length}건을 출고 확정할까요? 전표·원장·재고가 함께 반영됩니다.`)) return;
+    setDispatching(true); setError("");
+    try {
+      const response = await fetch("/api/orders/fulfillment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, orderIds, idempotencyKey: crypto.randomUUID() }),
+      });
+      const result = await response.json().catch(() => ({})) as { message?: string };
+      if (!response.ok) throw new Error(result.message || "출고를 확정하지 못했습니다.");
+      await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "출고를 확정하지 못했습니다."); }
+    finally { setDispatching(false); }
+  }
 
   async function saveImage() {
     if (!paperRef.current) return;
@@ -52,9 +69,9 @@ export function OrderFulfillmentWorkspace({ companyId, preview = false }: { comp
     <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
       <div className="flex flex-wrap items-end gap-2"><label className="text-sm font-bold text-slate-700">배송일<input className="maju-input mt-1 block h-11" onChange={(event) => setDeliveryDate(event.target.value)} type="date" value={deliveryDate} /></label>
         <Button className="min-h-11" onClick={() => void load()} variant="outline">새로고침</Button></div>
-      <div className="flex flex-wrap gap-2"><Button disabled title="대표가 출고 확정 시점을 결정한 뒤 제공합니다.">출고 확정 준비 중</Button><a className="maju-button-secondary min-h-11" href={`/orders?companyId=${encodeURIComponent(companyId)}`}>주문 확인으로</a></div>
+      <div className="flex flex-wrap gap-2"><Button disabled={preview || dispatching || !items?.length} onClick={() => void dispatchAll()}>{dispatching ? "확정 중..." : "출고 확정"}</Button><a className="maju-button-secondary min-h-11" href={`/orders?companyId=${encodeURIComponent(companyId)}`}>주문 확인으로</a></div>
     </div>
-    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">읽기·인쇄 전용입니다. 자동 발송과 출고 확정은 하지 않습니다.{preview ? " 관리자 미리보기에서는 모든 동작이 읽기 전용입니다." : ""}</p>
+    <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">출고 확정하면 작성중 전표·원장·재고가 한 번에 반영됩니다. 발주서 자동 발송은 하지 않습니다.{preview ? " 관리자 미리보기에서는 출고를 확정할 수 없습니다." : ""}</p>
     <div className="flex gap-2 overflow-x-auto pb-1 print:hidden" role="tablist">{(Object.keys(labels) as View[]).map((key) => <button aria-selected={view === key} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-bold ${view === key ? "bg-slate-900 text-white" : "border bg-white text-slate-700"}`} key={key} onClick={() => setView(key)} role="tab" type="button">{labels[key]}</button>)}</div>
     {error ? <ErrorState message={error} onRetry={() => void load()} /> : items === null ? <LoadingState label="출고 준비 자료를 불러오는 중입니다..." /> : !items.length ? <div className="maju-section-card p-6 text-center"><p className="font-bold">이 배송일에 접수 완료된 주문이 없습니다.</p><p className="mt-1 text-sm text-slate-600">주문 확인에서 접수한 뒤 다시 확인해 주세요.</p></div> : view === "summary" ? <div className="space-y-3"><div className="grid gap-3 sm:grid-cols-3">{(["inventory", "purchase", "market"] as FulfillmentMode[]).map((mode) => <div className="maju-stat-card" key={mode}><p className="maju-muted-label">{modeLabel[mode]}</p><p className="text-2xl font-black">{summary.filter((row) => row.mode === mode).length.toLocaleString("ko-KR")}품목</p></div>)}</div><CommonDataTable columns={summaryColumns} emptyMessage="집계할 주문이 없습니다." filename={`${deliveryDate}-선주문-집계.csv`} rowKey={(row) => row.key} rows={summary} settingsKey={`fulfillment:${companyId}`} /></div> : <div className="space-y-3">
       <div className="flex flex-wrap justify-between gap-2 print:hidden">{view === "supplier" ? <label className="text-sm font-bold">매입처<select className="maju-input ml-2 h-11" onChange={(event) => setSupplier(event.target.value)} value={supplierName}>{suppliers.map((name) => <option key={name}>{name}</option>)}</select></label> : <span />}

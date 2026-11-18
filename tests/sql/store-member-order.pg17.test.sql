@@ -101,6 +101,9 @@ select member_order_test_reject(null,null,null);
 select member_order_test_reject('30000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000002','50000000-0000-4000-8000-000000000002');
 select member_order_test_reject('30000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003');
 select member_order_test_reject('30000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002');
+-- Company 1's signed link/product cannot be combined with company 2's store, member, or user IDs.
+select member_order_test_reject('30000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000003','50000000-0000-4000-8000-000000000003');
+select member_order_test_reject('30000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
 do $$ declare r jsonb; role_name text; begin
  if exists(select from store_orders) or exists(select from store_order_requests) then raise exception 'unauthorized_order_written'; end if;
  foreach role_name in array array['owner','manager','staff'] loop
