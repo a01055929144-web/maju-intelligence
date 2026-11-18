@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { storeTab } from "./store-tab";
 const company = "00000000-0000-4000-8000-000000000001";
 
-for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves server amounts and clears revoked documents at ${width}px`, async ({ page }, info) => {
+for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves server amounts and clears revoked documents at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const id = "70000000-0000-4000-8000-000000000067";
   let detailReads = 0, writes = 0, mode = "error";
@@ -50,7 +50,8 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   await expect(detail).toContainText("1,499원"); await expect(detail).toContainText("배송 중");
   expect((await documentSummary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-  await page.screenshot({ path: info.outputPath(`cx67-order-detail-${width}.png`), fullPage: true });
+  // The full smoke pass clears layout output; this existing artifact folder is retained.
+  await page.screenshot({ path: `test-results/readonly-pg17/cx67-ui/cx67-order-detail-${width}.png`, fullPage: true });
   mode = "revoked"; await refresh.click();
   await expect(detail).toContainText("주문·전표를 확인하지 못했습니다");
   await expect(detail.locator("summary").filter({ hasText: "합성-전표-067" })).toHaveCount(0);
