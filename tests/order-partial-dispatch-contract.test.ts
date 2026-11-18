@@ -13,6 +13,7 @@ describe("CX-66 partial dispatch final-cancel contract", () => {
     expect(sql).not.toContain("set known_total");
     expect(sql).toContain("public.confirm_business_document(");
     expect(sql).not.toContain("apply_inventory_for_document(");
+    expect(sql).toContain("jsonb_typeof(o->'lines') is distinct from 'array'");
   });
 
   it("tests final cancellation, retry, atomic rollback, tenant isolation and safe down", () => {

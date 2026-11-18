@@ -51,7 +51,7 @@ begin
     raise exception 'partial_dispatch_input_required';
   end if;
   if exists (select 1 from jsonb_array_elements(p_orders) o
-    where nullif(o->>'orderId', '') is null or jsonb_typeof(o->'lines') <> 'array') then
+    where nullif(o->>'orderId', '') is null or jsonb_typeof(o->'lines') is distinct from 'array') then
     raise exception 'partial_dispatch_input_invalid';
   end if;
   if (select count(*) from jsonb_array_elements(p_orders)) <>
