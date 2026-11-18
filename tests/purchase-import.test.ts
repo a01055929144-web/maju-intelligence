@@ -38,6 +38,19 @@ describe("purchase import", () => {
     expect(included.cost).toBeCloseTo(4090.91, 2);
   });
 
+  it.each([0.3, 0.25, 1.5])("keeps the source unit price for decimal quantity %s", (quantity) => {
+    const unitPrice = 39000;
+    const sheet = buildPurchaseSheet([
+      ["품목명", "수량", "단가", "공급가액"],
+      ["합성 채소 [KG]", String(quantity), String(unitPrice), String(quantity * unitPrice)]
+    ]);
+    const lines = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "excluded").lines;
+    const rows = buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "decimal.xlsx", lines, receiptDate: "2026-11-18" });
+
+    expect(lines[0]).toMatchObject({ quantity, rawCost: unitPrice, cost: unitPrice });
+    expect(rows[0]).toMatchObject({ quantity, unit_price: unitPrice, unit_cost_ex_vat: unitPrice, supply_amount: quantity * unitPrice });
+  });
+
   it("keeps brand-only parentheses but splits capacity parentheses and repeated bracket specs", () => {
     expect(splitNameSpec("합성치킨스탁(가상 1.2KG*6EA)", "")).toEqual({ name: "합성치킨스탁", spec: "가상 1.2KG*6EA", unit: "" });
     expect(splitNameSpec("합성토마토소스(가상,대상)", "")).toEqual({ name: "합성토마토소스(가상,대상)", spec: "", unit: "" });
