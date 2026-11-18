@@ -11,7 +11,7 @@ type VisitRow = { created_at: string; lead_id: string; collateral_types: string[
 
 async function guard(request: NextRequest) {
   const scope = await getRequestAuthScope(request);
-  if (!scope.ok || !scope.companyId || !scope.customerSession?.companyMemberId) return { error: NextResponse.json({ message: "Unauthorized" }, { status: 401 }) };
+  if (!scope.ok || !scope.companyId || !scope.customerSession?.companyMemberId || !scope.customerSession.duties?.includes("delivery")) return { error: NextResponse.json({ message: "Unauthorized" }, { status: 401 }) };
   if (!isFeatureEnabled("LEAD_VISIT_MATERIALS", scope.companyId)) return { error: NextResponse.json({ message: "기능이 열리지 않았습니다." }, { status: 404 }) };
   return { companyId: scope.companyId, memberId: scope.customerSession.companyMemberId, actorName: scope.customerSession.name || "배송기사" };
 }

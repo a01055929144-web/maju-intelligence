@@ -20,12 +20,19 @@ const stopId = "33333333-3333-3333-3333-333333333333";
 describe("CX-85 기사 방문 자료 API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getRequestAuthScope.mockResolvedValue({ ok: true, companyId, customerSession: { companyMemberId: memberId, name: "테스트 기사" } });
+    getRequestAuthScope.mockResolvedValue({ ok: true, companyId, customerSession: { companyMemberId: memberId, duties: ["delivery"], name: "테스트 기사" } });
     isFeatureEnabled.mockReturnValue(true);
   });
 
   it("기사 member가 없으면 DB를 읽지 않는다", async () => {
     getRequestAuthScope.mockResolvedValue({ ok: true, companyId, customerSession: {} });
+    const response = await POST(request({ stopId, materials: ["명함"] }));
+    expect(response.status).toBe(401);
+    expect(supabaseRequest).not.toHaveBeenCalled();
+  });
+
+  it("배송 업무가 아닌 회사 회원은 DB를 읽지 않는다", async () => {
+    getRequestAuthScope.mockResolvedValue({ ok: true, companyId, customerSession: { companyMemberId: memberId, duties: ["sales"], name: "영업 담당" } });
     const response = await POST(request({ stopId, materials: ["명함"] }));
     expect(response.status).toBe(401);
     expect(supabaseRequest).not.toHaveBeenCalled();
