@@ -750,7 +750,7 @@ for (const width of [1280, 390]) test(`empty catalog, failed retry and forbidden
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-for (const width of [1280, 390]) test(`receipt correction keeps its audit revision separate from current costs at ${width}px`, async ({ page }) => {
+for (const width of [1440, 390]) test(`receipt correction keeps its audit revision separate from current costs at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const { dateWrites, writes, receipts, pricingCommands } = await purchaseUpload(page, { supported: false });
   const rows: PurchaseHistoryRow[] = [{ id: "60000000-0000-4000-8000-000000000001", product_catalog_id: "20000000-0000-4000-8000-000000000001",
