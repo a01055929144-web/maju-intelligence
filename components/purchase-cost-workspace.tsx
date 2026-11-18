@@ -35,6 +35,7 @@ type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatInc
 const money = formatWon;
 
 type UndatedTarget = { productId: string; name: string; previous: number; cost: number; date: string };
+type PurchaseSaveResult = { currentCount: number; historyOnlyCount: number };
 const undatedColumns: CommonTableColumn<UndatedTarget>[] = [
   { key: "name", label: "품목", value: row => row.name },
   { key: "previous", label: "이전 가격", value: row => row.previous, render: row => money(row.previous) },
@@ -60,6 +61,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const [heldCount, setHeldCount] = useState(0);
   const [historyOnlyDefaultEnabled, setHistoryOnlyDefaultEnabled] = useState(false);
   const [updateCurrentPrices, setUpdateCurrentPrices] = useState(false);
+  const [saveResult, setSaveResult] = useState<PurchaseSaveResult | null>(null);
   const [alignResult, setAlignResult] = useState<AlignResult | null>(null);
   const alignCardRef = useRef<HTMLDivElement>(null);
   const [excludedImportRows, setExcludedImportRows] = useState(0);
@@ -317,7 +319,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       if (response.status === 404) return;
       const status = await response.json();
       if (!response.ok) throw new Error(status.message || "날짜별 저장 상태를 확인하지 못했습니다.");
-      if (active) { setPurchaseDateEnabled(status.enabled === true); setHistoryOnlyDefaultEnabled(status.historyOnlyDefaultEnabled === true); setDateBatch(status.latestBatch || null); setDateUndatedPrices(Object.fromEntries((status.undatedPrices || []).map((item: { productId: string; cost: number }) => [item.productId, item.cost]))); }
+      if (active) { const historyOnlyOptionEnabled = status.historyOnlyDefaultEnabled === true; setPurchaseDateEnabled(status.enabled === true); setHistoryOnlyDefaultEnabled(historyOnlyOptionEnabled); setUpdateCurrentPrices(historyOnlyOptionEnabled); setDateBatch(status.latestBatch || null); setDateUndatedPrices(Object.fromEntries((status.undatedPrices || []).map((item: { productId: string; cost: number }) => [item.productId, item.cost]))); }
       const pending = pendingDateRequest(companyId);
       if (pending) {
         const checked = await fetch(`/api/price-sheets/costs/date-batches?${new URLSearchParams({ companyId, batchId: pending.id })}`, { cache: "no-store" });
@@ -349,6 +351,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     });
     return Array.from(targets.values());
   }, [importedLines, dateUndatedPrices, dateSelectedRows, dateHeldRows, candidates, selected]);
+  useEffect(() => {
+    if (historyOnlyDefaultEnabled) setReplaceUndatedCurrent(updateCurrentPrices && undatedTargets.length > 0);
+  }, [historyOnlyDefaultEnabled, updateCurrentPrices, undatedTargets.length]);
   useEffect(() => { if (alignResult) alignCardRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [alignResult]);
   const reviewKey = useMemo(() => JSON.stringify({ receiptDate, importedLines, candidates, selected, unmatched, newSupplier, replaceUndatedCurrent, undatedTargets, updateCurrentPrices, excludedImportRows,
     currentPrices: unique.map(product => [product.id, product.cost, product.priceDate]) }),
@@ -379,6 +384,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
 
   async function readFile(file: File) {
     setError("");
+    setSaveResult(null);
     try {
       const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
@@ -393,7 +399,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setImportUnitPick([]);
       setImportBulkUnit("");
       setUnitRelinkBlockedRows([]);
-      setConflictChoices({}); setUpdateCurrentPrices(false); setExcludedImportRows(0); setSaveReview(false); setConfirmedReview("");
+      setConflictChoices({}); setUpdateCurrentPrices(historyOnlyDefaultEnabled); setExcludedImportRows(0); setSaveReview(false); setConfirmedReview("");
       setMapping(suggestPurchaseMapping(nextSheet));
       setFileName(file.name);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "엑셀을 읽지 못했습니다."); }
@@ -785,7 +791,9 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       setDateBatch({ id, status: "completed", recalcRunId: result.recalcRunId, rowCount: result.rowCount, historyOnlyProductCount: result.historyOnlyProductCount });
       forgetDateRequest(companyId);
       setImportedLines([]); setUnmatched([]); setCandidates({}); setSelected([]); setDatePartial(""); setSaveReview(false); setConfirmedReview(""); setHistoryKey(value => value + 1);
-      setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다. 현재가 반영 ${new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount}품목 · 이력 전용 ${result.historyOnlyProductCount}품목(현재가 유지).${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 반영 보류 ${heldCount}그룹은 현재가를 올리지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? replaceUndatedCurrent ? ` 기준일 미확정 ${undatedTargets.length}품목의 현재가 교체를 요청했습니다.` : ` 현재가 교체를 선택하지 않은 기준일 미확정 ${undatedTargets.length}품목은 이력 전용 요청입니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
+      const currentCount = new Set(rows.map(row => row.productId)).size - result.historyOnlyProductCount;
+      setSaveResult({ currentCount, historyOnlyCount: result.historyOnlyProductCount });
+      setMessage(`${returnRows.length ? `반품(수량 음수) ${returnRows.length}행은 빼고 ` : ""}원본 거래 ${result.rowCount}행 저장과 판매가 재계산을 한 요청으로 완료했습니다.${result.recalcRunId ? " 판매가 변경 완료." : " 판매가 추가 변경 없음."}${heldCount ? ` 가격 변경 보류 ${heldCount}그룹은 현재 매입가를 바꾸지 않았으며 신규 상품이면 미가격 0원으로 남습니다.` : ""}${undatedTargets.length ? ` 기준일 없는 상품 ${undatedTargets.length}품목은 이번 적용일의 현재 매입가로 자동 교체했습니다.` : ""} 같은 날짜에 예전에 올린 매입 기록은 이 파일 내용으로 바뀌었습니다. 실제 현재 매입가는 날짜 보호·보류 조건에 따라 유지될 수 있으니 목록과 이력에서 확인해 주세요.`);
       await load().catch(() => setError("저장은 완료됐지만 목록을 불러오지 못했습니다. 목록을 새로고침해 주세요."));
     } catch (cause) { setError(`${cause instanceof Error ? cause.message : "저장하지 못했습니다."} 연결 미완료 원본 행: ${mappedLines.filter(line => !line.productId).map(line => line.rowNumber).join(", ") || "없음"}. 상품 등록은 별도 단계이며, 날짜별 저장 완료 전인 행은 아래에서 확인하고 같은 요청으로 다시 시도할 수 있습니다.`); }
     finally { setBusy(false); }
@@ -973,13 +981,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     <header className="space-y-2">
       {historyOnlyDefaultEnabled && sheet ? <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 p-2 text-sm"><legend className="px-1 text-xs font-black text-slate-600">저장 방식</legend>
         <label className="flex min-h-[44px] items-center gap-2"><input aria-label="이력만 저장" checked={!updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(false); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />이력만 저장 <span className="text-xs text-slate-500">(현재 가격은 그대로)</span></label>
-        <label className="flex min-h-[44px] items-center gap-2"><input aria-label="현재 가격도 변경" checked={updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(true); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />현재 가격도 변경 <span className="text-xs text-slate-500">(상품 현재 매입가·판매가가 바뀜)</span></label>
+        <label className="flex min-h-[44px] items-center gap-2"><input aria-label="현재 매입가 변경" checked={updateCurrentPrices} name="purchase-save-mode" onChange={() => { setUpdateCurrentPrices(true); setConflictChoices({}); setConfirmedReview(""); }} type="radio" />현재 매입가 변경 <span className="text-xs text-slate-500">(기본값 · 판매가도 다시 계산)</span></label>
       </fieldset> : null}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-lg font-bold">매입가 업로드</h2>
         <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">업로드 적용일<input aria-label="매입일" className="maju-input min-h-[44px] max-w-full" onChange={(event) => changeReceiptDate(event.target.value)} type="date" value={receiptDate} /></label>
         <button className={`min-h-[44px] ${sheet || importedLines.length ? "maju-button-secondary" : "maju-button-primary"}`} disabled={!catalogReady} onClick={() => fileInput.current?.click()} type="button">① 엑셀 올리기</button>
-        <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">{`② 열 정렬${historyOnlyDefaultEnabled ? ` (${updateCurrentPrices ? "현재 가격도 변경" : "이력만 저장"})` : ""}`}</button>
+        <button className={`min-h-[44px] ${sheet ? "maju-button-primary ring-2 ring-teal-300 ring-offset-1" : "maju-button-secondary"}`} disabled={!sheet || !catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} title={sheet ? "아래 표에서 열 이름을 확인한 뒤 누르세요" : "엑셀을 먼저 올려 주세요"} type="button">{`② 열 정렬${historyOnlyDefaultEnabled ? ` (${updateCurrentPrices ? "현재 매입가 변경" : "이력만 저장"})` : ""}`}</button>
         <button className={`maju-button-primary min-h-[44px] ${!sheet && (selected.length || unmatched.length) && !missingTotal ? "ring-2 ring-teal-300 ring-offset-1" : ""}`} disabled={!catalogReady || busy || Boolean(sheet) || unitRelinkBlockedRows.length > 0 || (!usesDateBatch && missingTotal > 0) || suspectCount > 0 || (!selected.length && !unmatched.length && !importedLines.length)} onClick={() => { if (!importedLines.length) { void save(); return; } setSaveReview(true); requestAnimationFrame(() => document.querySelector('[aria-label="저장 전 적용일 확인"]')?.scrollIntoView({ behavior: "smooth", block: "end" })); }} title={unitRelinkBlockedRows.length ? "단위 변경으로 달라진 상품 연결을 다시 확인해 주세요" : missingTotal && !usesDateBatch ? `단위 빈 칸 ${missingTotal}개를 먼저 채워 주세요` : suspectCount ? `중복 의심 ${suspectCount}개는 줄마다 연결 또는 새 상품 맞음을 골라 주세요` : undefined} type="button">{busy ? "저장 중…" : `③ 저장 (${saveCount}건)`}</button>
         <button className="maju-button-secondary h-9 px-2.5 text-xs" onClick={exportTemplate} type="button">엑셀 양식</button>
       </div>
@@ -992,6 +1000,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {batchEnabled ? <p className="text-xs text-slate-600">선택한 매입가 최대 100건과 판매가 계산을 함께 저장합니다. 새 상품·원문 연결·매입 기록은 별도로 저장됩니다.</p> : null}
     {recalcPending || (pricing?.pendingCount ?? 0) > 0 ? <button className="maju-button-secondary" disabled={busy} onClick={() => void retryRecalculation()} type="button">판매가 다시 계산{pricing?.pendingCount ? ` (${pricing.pendingCount}개)` : ""}</button> : null}
     {message ? <p role="status" className="rounded border border-teal-200 bg-teal-50 p-3">{message}{categoryReviewLink && !busy && message.includes("상품관리 미분류에서 확인") ? <> <Link className="font-bold text-teal-700 underline" href={`/revenue/products?category=unsorted&companyId=${encodeURIComponent(companyId)}`}>미분류 상품 보기</Link></> : null}</p> : null}
+    {saveResult ? <section aria-label="매입가 저장 결과" className={`rounded-lg border p-4 ${saveResult.currentCount ? "border-teal-300 bg-teal-50" : "border-amber-300 bg-amber-50"}`}>
+      <p className={`text-xl font-black ${saveResult.currentCount ? "text-teal-900" : "text-amber-900"}`} role={saveResult.currentCount ? "status" : "alert"}>현재 매입가 변경 {saveResult.currentCount}품목 / 이력만 {saveResult.historyOnlyCount}품목</p>
+      {!saveResult.currentCount ? <div className="mt-3 flex flex-wrap items-center gap-3"><p className="mr-auto text-sm font-semibold text-amber-900">현재 매입가가 바뀐 상품이 없습니다. 저장 방식을 확인해 다시 올려 주세요.</p><Button className="min-h-[44px]" onClick={() => { setSaveResult(null); setMessage(""); fileInput.current?.click(); }} type="button">다시 저장</Button></div> : null}
+    </section> : null}
     {sheet ? <section className="maju-section-card min-w-0 space-y-3 p-3 [&_select]:min-h-[44px]"><PurchaseSheetMapper mapping={mapping} onMapping={next => { setMapping(next); setConflictChoices({}); }} onVatMode={next => { setVatMode(next); setConflictChoices({}); }} sheet={sheet} vatMode={vatMode} /><div className="flex flex-wrap items-center gap-2"><button className="maju-button-primary" disabled={!catalogReady || busy || mapping.name === undefined || mapping.cost === undefined || Boolean(importPreview?.error) || (!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts > 0} onClick={() => void applyFile()} type="button">열 정렬</button><button className="maju-button-secondary" onClick={() => setSheet(null)} type="button">올리기 취소</button></div></section> : null}
     {importPreview ? <section aria-label="업로드 적용일과 단가 확인" className="maju-section-card min-w-0 space-y-3 p-4">
       <h3 className="font-semibold">적용 날짜·중복 단가 확인</h3>
@@ -1016,7 +1028,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         <ul className="mt-2 space-y-1">{savedExcluded.map(entry => <li className="flex items-center gap-2" key={entry.id}><span className="font-mono">{entry.code}</span><span className="text-slate-500">{entry.supplierName ? `${entry.supplierName}만` : "회사 전체"}</span>
           <button aria-label={`${entry.code} 제외 코드 지우기`} className="maju-button-secondary min-h-[44px]" onClick={() => void removeExcluded(entry.id)} type="button">지우기</button></li>)}</ul></details> : null}
       {importPreview.error ? <p role="alert">{importPreview.error}</p> : <>
-        {historyOnlyDefaultEnabled ? <p className="rounded border border-slate-200 p-3 text-sm text-slate-600">{updateCurrentPrices ? "현재 가격도 변경: 연결된 행의 현재 매입가·판매가·문서가 이번 파일로 바뀝니다." : "이력만 저장: 연결된 모든 행은 매입 이력에만 저장되고 현재 매입가·판매가·문서는 바뀌지 않습니다."} (위 선택에서 바꿀 수 있습니다)</p> : null}
+        {historyOnlyDefaultEnabled ? <p className="rounded border border-slate-200 p-3 text-sm text-slate-600">{updateCurrentPrices ? "현재 매입가 변경: 연결된 행의 현재 매입가가 바뀌고 판매가를 다시 계산합니다." : "이력만 저장: 연결된 모든 행은 매입 이력에만 저장되고 현재 매입가·판매가는 바뀌지 않습니다."} (위 선택에서 바꿀 수 있습니다)</p> : null}
         {importPreview.conflicts.length && (!historyOnlyDefaultEnabled || updateCurrentPrices) ? <><div className="flex flex-wrap items-center gap-2"><p className="mr-auto" role="status">같은 품목·같은 적용일의 상이 단가 {importPreview.conflicts.length}그룹 · 미선택 {unresolvedConflicts}그룹. 현재 가격을 바꿀 행만 선택합니다.</p>
           {unresolvedConflicts ? <button className="maju-button-secondary min-h-[44px]" onClick={() => setConflictChoices(current => ({ ...current, ...Object.fromEntries(importPreview.conflicts.filter(group => !current[group.key]).map(group => [group.key, "hold"])) }))} type="button">미선택 {unresolvedConflicts}개 모두 이번 가격 반영 보류</button> : null}</div>
           <section aria-label="상이 단가 선택" className="min-w-0"><CommonDataTable<PurchasePriceConflict> selectable={false} settingsKey="purchase-upload-conflicts" filename="매입가_충돌.csv" rowKey={group => group.key} rows={importPreview.conflicts}
@@ -1064,8 +1076,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         {usesDateBatch && undatedTargets.length ? <div>
           <p>기준일 미확정 기존가 {undatedTargets.length}품목 · 이전 가격과 선택 날짜를 확인해 주세요.</p>
           <CommonDataTable selectable={false} rows={undatedTargets} columns={undatedColumns} rowKey={row => row.productId} settingsKey={`purchase-date-undated-confirm:${companyId}`} emptyMessage="확인할 기존가가 없습니다." />
-          <label className="flex min-h-[44px] items-center gap-2"><input aria-label="기준일 없는 기존가 교체" type="checkbox" checked={replaceUndatedCurrent} onChange={event => setReplaceUndatedCurrent(event.target.checked)} />기준일 미확정 기존가를 이번 적용일로 교체합니다. 저장 직전 기존 가격이 달라지면 전체 저장을 취소합니다.</label>
-          <p>선택하지 않으면 원본 거래와 가격 이력만 남기고 현재가는 유지합니다.</p>
+          <p className="rounded border border-teal-200 bg-teal-50 p-3 font-semibold text-teal-900">현재 매입가 변경을 저장하면 기준일 없는 상품은 이번 적용일의 현재 매입가로 자동 교체합니다.</p>
         </div> : null}
         <label className="flex min-h-[44px] items-center gap-2"><input type="checkbox" checked={confirmedReview === reviewKey} onChange={event => setConfirmedReview(event.target.checked ? reviewKey : "")} />{historyOnlyDefaultEnabled ? "적용 날짜·이력 건수와 현재 가격 변경 여부를 확인했습니다." : "적용 날짜·건수와 단가 선택·보류 내용을 확인했습니다."}</label>
         {error ? <p aria-live="assertive" className="rounded border border-red-300 bg-red-50 p-3 text-red-700">{error}</p> : null}
