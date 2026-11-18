@@ -20,7 +20,7 @@ describe("new promotion inherits current server product tax", () => {
     expect(request).toMatchObject({ p_company: company, p_actor: scope.actor, p_manager: true, p_action: "save-promotion", p_payload: { expected: 0, content: { taxType: tax_type, cost: 1000, margin: 10 } } });
     expect(submitted.content.taxType).not.toBe(tax_type);
   });
-  it.each([[], [{ id: product, tax_type: null }], [{ id: product, tax_type: "unknown" }], [{ id: "other-product", tax_type: "exempt" }]])("rejects missing/unknown/foreign product before writing: %j", async rows => {
+  it.each([undefined, [], [{ id: product, tax_type: null }], [{ id: product, tax_type: "unknown" }], [{ id: "other-product", tax_type: "exempt" }]].map(rows => ({ rows })))("rejects missing/unknown/foreign product before writing: $rows", async ({ rows }) => {
     mocks.db.mockResolvedValueOnce(rows);
     await expect(service.execute(scope, input())).rejects.toThrow("원상품의 과세·면세");
     expect(mocks.db).toHaveBeenCalledTimes(1);
