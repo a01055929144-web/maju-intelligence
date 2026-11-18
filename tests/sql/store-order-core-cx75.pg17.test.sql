@@ -317,7 +317,8 @@ end $$;
 -- D4 schema is test-only here; product cutoffs use server Asia/Seoul time.
 alter table public.product_catalog add column order_cutoff_days_before smallint, add column order_cutoff_time time;
 do $$
-declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+1;
+-- Keep the same weekday as tomorrow, but beyond the company deadline even after 22:00 KST.
+declare deadline timestamp; delivery date:=(clock_timestamp() at time zone 'Asia/Seoul')::date+8;
  r jsonb; k uuid:=gen_random_uuid();
 begin
  deadline:=(clock_timestamp() at time zone 'Asia/Seoul')-interval '1 minute';
