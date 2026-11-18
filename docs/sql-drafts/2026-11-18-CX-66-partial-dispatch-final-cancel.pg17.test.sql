@@ -20,7 +20,7 @@ begin;
 \set line_b '30000000-0000-4000-8000-000000000002'
 
 insert into store_orders(id,company_id,customer_id,delivery_date,status,delivery_fee,known_total)
-values (:'partial_order',:'company',:'customer','2026-11-18','submitted',110,5610),
+values (:'partial_order',:'company',:'customer','2026-11-18','submitted',110,6160),
        (:'cancel_order',:'company',:'customer','2026-11-18','submitted',0,1210),
        (:'zero_order',:'company',:'customer','2026-11-18','submitted',0,0),
        (:'batch_a',:'company',:'customer','2026-11-18','submitted',0,1210),
@@ -49,16 +49,16 @@ select dispatch_store_orders_partial_final_cancel(:'company',:'partial_payload':
   '40000000-0000-4000-8000-000000000001',null,'재시도');
 do $$ declare d business_documents%rowtype; begin
   select * into strict d from business_documents where source_id='20000000-0000-4000-8000-000000000001';
-  assert d.status='confirmed' and d.taxable_supply_amount=1605 and d.exempt_supply_amount=0
-    and d.tax_amount=161 and d.total_amount=1766;
-  assert (select known_total=5610 and status='in_delivery' and sale_document_id=d.id
+  assert d.status='confirmed' and d.taxable_supply_amount=1756 and d.exempt_supply_amount=0
+    and d.tax_amount=176 and d.total_amount=1932;
+  assert (select known_total=6160 and status='in_delivery' and sale_document_id=d.id
     from store_orders where id='20000000-0000-4000-8000-000000000001');
   assert (select shipped_quantity=1.505 and cancelled_quantity=1.495 from store_order_lines where id='30000000-0000-4000-8000-000000000001');
   assert (select shipped_quantity=0 and cancelled_quantity=2 from store_order_lines where id='30000000-0000-4000-8000-000000000002');
   assert (select count(*) from business_document_lines where document_id=d.id)=2;
   assert (select count(*) from business_document_lines where document_id=d.id and source_order_line_id is not null)=1;
   assert (select count(*) from partner_ledger_entries where source_document_id=d.id)=1;
-  assert (select sum(amount)=1766 from partner_ledger_entries where source_document_id=d.id);
+  assert (select sum(amount)=1932 from partner_ledger_entries where source_document_id=d.id);
   assert (select count(*) from inventory_movements where source_document_id=d.id)=1;
   begin
     perform dispatch_store_orders_partial_final_cancel('00000000-0000-0000-0000-0000000000c1','[{"orderId":"20000000-0000-4000-8000-000000000001","lines":[]}]','40000000-0000-4000-8000-000000000009',null,'추가 출고');
