@@ -25,7 +25,7 @@ values (:'partial_order',:'company',:'customer','2026-11-18','submitted',110,561
        (:'zero_order',:'company',:'customer','2026-11-18','submitted',0,0),
        (:'batch_a',:'company',:'customer','2026-11-18','submitted',0,1210),
        (:'batch_b',:'company',:'customer','2026-11-18','submitted',0,1210),
-       (:'ambiguous_order',:'company',:'customer','2026-11-18','submitted',0,2200);
+       (:'ambiguous_order',:'company',:'customer','2026-11-18','submitted',0,2000);
 insert into store_order_lines(id,company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price)
 values (:'line_b',:'company',:'partial_order',:'product','동일 상품','개',2,1100,'taxable',false),
        (:'line_a',:'company',:'partial_order',:'product','동일 상품','개',3,1100,'taxable',false),
