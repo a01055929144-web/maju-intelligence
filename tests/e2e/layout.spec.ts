@@ -56,10 +56,20 @@ for (const width of [1440, 390]) {
     const context = await authenticatedContext(browser, "admin", width, 844);
     try {
       const page = await context.newPage();
+      await page.route("**/api/admin/stores/status-preview", (route) => route.fulfill({ status: 500, json: { message: "합성 감사 기록 실패" } }));
       const response = await page.goto("/admin/stores", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByRole("heading", { name: "매장 관리" })).toBeVisible();
       await expect(page.getByText("합성 중앙식당", { exact: true }).first()).toBeVisible();
+      expect(await collectLayoutProblems(page)).toEqual([]);
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "멈추기" }).click();
+      await expect(page.getByRole("alert")).toContainText("현재 상태는 바뀌지 않았습니다.");
+      await expect(page.getByRole("button", { name: "멈추기" })).toBeVisible();
+      await page.unroute("**/api/admin/stores/status-preview");
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "멈추기" }).click();
+      await expect(page.getByRole("button", { name: "풀기" })).toBeVisible();
       expect(await collectLayoutProblems(page)).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath(`admin-stores-${width}.png`), fullPage: true });
     } finally {
