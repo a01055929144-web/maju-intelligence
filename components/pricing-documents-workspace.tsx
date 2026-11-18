@@ -57,6 +57,7 @@ export function PricingDocumentsWorkspace({
   leadContext,
   sharingEnabled = false,
   publicSharingAvailable = false,
+  footerFormattingEnabled = false,
 }: {
   companyId: string;
   manager: boolean;
@@ -65,6 +66,7 @@ export function PricingDocumentsWorkspace({
   leadContext?: LeadDocumentContext;
   sharingEnabled?: boolean;
   publicSharingAvailable?: boolean;
+  footerFormattingEnabled?: boolean;
 }) {
   const { confirm, confirmDialog } = useConfirm();
   const [docs, setDocs] = useState<DocumentDraft[]>([]),
@@ -768,7 +770,7 @@ export function PricingDocumentsWorkspace({
                         />
                       ) : null}
                       <div className="min-w-0 rounded-xl bg-slate-100 p-2 sm:p-5">
-                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
+                        <PricingDocPaper baselines={baselines} content={draft.content} editable={editable} footerFormattingEnabled={footerFormattingEnabled} onContent={change} onDropProducts={(ids) => void task(() => addByIds(ids))} onDropPromotions={(ids) => void task(() => addPromotions(promotions.filter((x) => ids.includes(x.id))))} onQuickAdd={(item) => void task(async () => add([item]))} onQuickSearch={quickSearch} />
                       </div>
                     </div>
                   </>

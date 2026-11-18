@@ -24,7 +24,7 @@ export type PrintLine = {
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
 /** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
 /** autoPromos: 켜면 진행 중인 행사·임박을 문서에 자동으로 넣는다(CC-20). 꺼져 있으면 키 자체가 없다. */
-export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean };
+export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean; footerFontSize?: 12 | 14 | 16; footerBold?: boolean };
 export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
 /** Bank details belong to the authenticated connected-store profile, never a document. */
@@ -48,7 +48,14 @@ export function parseDisplay(value: unknown): DocumentDisplay {
       })
     : [];
   const productWidth = typeof d.productWidth === "number" && Number.isFinite(d.productWidth) ? Math.max(45, Math.min(80, Math.round(d.productWidth))) : DEFAULT_DISPLAY.productWidth;
-  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}) };
+  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}),
+    ...(d.footerFontSize === 12 || d.footerFontSize === 14 || d.footerFontSize === 16 ? { footerFontSize: d.footerFontSize } : {}), ...(d.footerBold === true ? { footerBold: true } : {}) };
+}
+export function documentFooterTypography(display: DocumentDisplay, fontScale = 1) {
+  const fontSize = display.footerFontSize ? Math.round(display.footerFontSize * Math.max(1, fontScale)) : null;
+  const bold = display.footerBold === true;
+  return { fontSize, bold, lineHeight: fontSize ? Math.ceil(fontSize * 1.5) : 16,
+    charactersPerLine: Math.max(1, Math.floor(60 * 11 / ((fontSize || 11) * (bold ? 1.05 : 1)))) };
 }
 export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean) {
   return includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
@@ -364,7 +371,8 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
   const header = 100 + Math.max(0, rows(output.companyName, 28) - 1) * 30 + Math.max(0, rows(output.title, 40) - 1) * 24 +
     (output.recipient ? rows(output.recipient, 45) * 18 : 0) + (output.contact ? rows(output.contact, 45) * 16 : 0) +
     (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 45) * 16 : 0);
-  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, 60) * 16 : 0);
+  const footerType = documentFooterTypography(parseDisplay(output.display), fontScale);
+  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, footerType.charactersPerLine) * footerType.lineHeight : 0);
   for (let i = 0; i < footerInfo.length; i += 2) {
     footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 26))) * 16;
   }

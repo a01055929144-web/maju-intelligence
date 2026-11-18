@@ -7,6 +7,7 @@ import {
   printPages,
   koreaDay,
   parseDisplay,
+  documentFooterTypography,
   type DocumentVersion,
   type DocumentOutput,
 } from "@/domains/pricing/document";
@@ -25,6 +26,7 @@ export function PageContent({
   start = 0,
   qr,
   online = false,
+  fontScale = 1,
 }: {
   data: DocumentOutput;
   page: number;
@@ -32,6 +34,7 @@ export function PageContent({
   start?: number;
   qr?: DocumentOrderQr | null;
   online?: boolean;
+  fontScale?: number;
 }) {
   const accent =
     data.theme === "blue"
@@ -42,6 +45,7 @@ export function PageContent({
   const display = parseDisplay(data.display);
   const headerInfo = display.info.filter((item) => item.place === "header");
   const footerInfo = display.info.filter((item) => item.place === "footer");
+  const footerType = documentFooterTypography(display, fontScale);
   const promos = data.lines.filter((l) => l.badge);
   const regular = data.lines.filter((l) => !l.badge);
   const columns = online ? 1 : Math.max(1, Math.min(3, display.columns || 1));
@@ -170,7 +174,7 @@ export function PageContent({
             {footerInfo.map((item) => <p key={`${item.label}-${item.value}`}>{item.label} · {item.value}</p>)}
           </div>
         ) : null}
-        {data.footer ? <p className="whitespace-pre-wrap">{data.footer}</p> : null}
+        {data.footer ? <p className="whitespace-pre-wrap" data-document-footer style={{ fontSize: footerType.fontSize ?? undefined, fontWeight: footerType.bold ? 700 : undefined, lineHeight: footerType.fontSize ? `${footerType.lineHeight}px` : undefined }}>{data.footer}</p> : null}
         <p className="text-right text-xs">
           {page} / {pages}쪽
         </p>
@@ -299,6 +303,7 @@ export function PricingDocumentPreview({
                   >
                     <PageContent
                       data={data}
+                      fontScale={fontScale}
                       qr={qr}
                       page={i + 1}
                       pages={pages.length}
