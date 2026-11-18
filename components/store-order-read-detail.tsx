@@ -36,7 +36,7 @@ export function StoreOrderReadDetail({ orderId, status, knownTotal, marketPriceP
     <section aria-label="연결 전표" className="min-w-0 space-y-2 text-sm">
       <h3 className="font-semibold">연결 전표</h3>
       {document ? <details id={`order-document-${orderId}`}>
-        <summary className="min-h-11 cursor-pointer break-words py-3 font-medium">확정 전표 {document.documentNumber} · {formatWon(document.totalAmount)}</summary>
+        <summary className="min-h-[52px] cursor-pointer break-words py-3 font-medium">확정 전표 {document.documentNumber} · {formatWon(document.totalAmount)}</summary>
         <p>전표 버전 {document.revision} · 확정 전표에 기록된 수량과 금액</p>
         <CommonDataTable settingsKey="cx67-order-document" columns={columns.map(column => ({ ...column, label: column.label.replace("주문", "전표") }))}
           rows={document.lines.map(line => ({ id: line.id, product_name: line.name, specification: line.specification, sales_unit: line.unit,

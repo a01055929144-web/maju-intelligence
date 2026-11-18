@@ -26,7 +26,7 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
     }
     const expired = body.token === "synthetic-cx67-expired";
     return route.fulfill({ json: { mobileCommon: true, orderDetailsEnabled: !expired,
-      store: { title: "합성 CX67", companyName: "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 배송지", version: 1,
+      store: { title: "합성 CX67", companyName: expired ? "합성 만료 유통" : "합성 유통", customerName: "합성 매장", deliveryAddress: "합성 배송지", version: 1,
         validUntil: "2099-12-31", priceAvailable: !expired, canOrder: !expired, selectedDeliveryDate: "2099-01-05", nextDeliveryDate: "2099-01-05",
         notice: "", marketPriceNotice: "", lines: [], policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 1, cutoffTime: "22:00", minimumAmount: 0, minimumPolicy: "notice", deliveryFee: 0 } },
       preferences: [], orders: expired ? [] : [{ id, status: "in_delivery", deliveryDate: "2099-01-05", knownTotal: 7777,
@@ -58,6 +58,8 @@ for (const width of [1440, 390]) test(`CX-67 read-only order detail preserves se
   await expect(detail).toContainText("주문 품목 정보가 없습니다"); await expect(detail).toContainText("출고 확인 전");
   await expect(detail).toContainText("확인 가능한 확정 전표가 없습니다");
   await page.evaluate(() => { window.location.hash = "synthetic-cx67-expired"; });
+  await expect(page.getByText("합성 만료 유통 · 합성 매장", { exact: true })).toBeVisible();
+  await storeTab(page, "내역").click();
   await expect(page.getByText("문서 유효기간이 지나 주문 금액과 내역을 숨겼습니다.", { exact: false })).toBeVisible();
   await expect(page.getByLabel(`주문 상세 ${id}`, { exact: true })).toHaveCount(0);
   expect(detailReads).toBe(4); expect(writes).toBe(0);
