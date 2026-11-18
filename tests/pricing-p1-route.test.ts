@@ -120,6 +120,7 @@ it("allows manager and sales with a server-derived opaque author", async () => {
     {
       companyId: c,
       manager: false,
+      documentVatEnabled: false,
       actor: expect.stringMatching(/^[a-f0-9]{64}$/),
     },
     "list",
