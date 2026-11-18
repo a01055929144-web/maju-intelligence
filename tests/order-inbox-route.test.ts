@@ -55,6 +55,19 @@ describe("order inbox API", () => {
     for (const [path] of mocks.supabase.mock.calls) expect(path).toContain(`company_id=eq.${companyId}`);
   });
 
+  it("loads a 500-order window only for an explicitly enabled company", async () => {
+    vi.stubEnv("ORDER_LIST_EXPORT_ENABLED", "true");
+    vi.stubEnv("FEATURE_ORDER_LIST_EXPORT_COMPANY_IDS", companyId);
+    mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
+    await GET(new NextRequest("http://localhost/api/orders?page=2"));
+    expect(mocks.supabase.mock.calls[0][0]).toContain("limit=501&offset=500");
+
+    vi.stubEnv("FEATURE_ORDER_LIST_EXPORT_COMPANY_IDS", "another-company");
+    mocks.supabase.mockClear();
+    await GET(new NextRequest("http://localhost/api/orders?page=2"));
+    expect(mocks.supabase.mock.calls[0][0]).toContain("limit=21&offset=20");
+  });
+
   it("filters by any of the five statuses or all, and rejects unknown statuses", async () => {
     mocks.supabase.mockImplementation(async (path: string) => routeFor(path));
     await GET(new NextRequest("http://localhost/api/orders?status=delivered"));

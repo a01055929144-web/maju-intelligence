@@ -42,7 +42,7 @@ export async function confirmExistingCustomerLink({
   return true;
 }
 
-export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, fulfillmentEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; fulfillmentEnabled?: boolean; preview?: boolean }) {
+export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabled = false, fulfillmentEnabled = false, listExportEnabled = false, preview = false }: { canConfirm: boolean; companyId: string; deliveryPhotosEnabled?: boolean; fulfillmentEnabled?: boolean; listExportEnabled?: boolean; preview?: boolean }) {
   const { confirm: confirmAction, confirmDialog } = useConfirm();
   const [status, setStatus] = useState("submitted");
   const [query, setQuery] = useState("");
@@ -127,6 +127,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
   }
 
   const columns: CommonTableColumn<Order>[] = [
+    ...(listExportEnabled ? [{ key: "id", label: "주문 ID", defaultHidden: true, value: (row: Order) => row.id }] : []),
     { key: "submittedAt", label: "접수 시각", sortable: true, value: (row) => row.submittedAt, render: (row) => kst(row.submittedAt) },
     { key: "customer", label: "매장", sortable: true, value: (row) => row.customerName, render: (row) => <span>{row.customerName}{row.storeAccountId ? <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-800">거래처 확인 필요</span> : null}</span> },
     { key: "deliveryDate", label: "배송일", sortable: true, value: (row) => row.deliveryDate ?? "", render: (row) => row.deliveryDate ?? "배송일 확인 대기" },
@@ -143,6 +144,15 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
       </li>)}</ul>
       {deliveryPhotosEnabled ? <OrderDeliveryPhotos audience="customer" companyId={companyId} orderId={row.id} /> : null}
     </details> },
+    ...(listExportEnabled ? [
+      { key: "deliveryAddress", label: "배송지", defaultHidden: true, value: (row: Order) => row.deliveryAddress ?? "" },
+      { key: "orderedBy", label: "주문자", defaultHidden: true, value: (row: Order) => row.orderedBy },
+      { key: "lineDetails", label: "품목 전체", defaultHidden: true, value: (row: Order) => row.lines.map((line) =>
+        `${line.name}${line.spec ? ` ${line.spec}` : ""} · ${line.quantity}${line.unit} · ${line.marketPrice || line.total === null ? "시가" : won(line.total)}`
+      ).join(" | ") },
+      { key: "marketPrice", label: "시가 포함", defaultHidden: true, value: (row: Order) => row.hasMarketPrice ? "예" : "아니오" },
+      { key: "revision", label: "수정 번호", defaultHidden: true, value: (row: Order) => row.revision },
+    ] : []),
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
     ...(orders?.some(row => row.orderDocument) ? [{
@@ -153,7 +163,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
         ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
         ? row.orderDocument.number : row.status === "submitted" ? (row.draftReceipt ? "접수 시 전표 연결" : "전표 연결 실패 또는 대기") : "미연결",
     }] : []),
-    { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
+    { key: "action", label: "처리", exportable: false, value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void openReview(row)} size="sm" variant="outline">거래처 확인</Button>
       : canConfirm && canConfirmStoreOrder(row.status) && !row.draftReceipt && row.orderDocument?.status === "unlinked"
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void retryOrderDocument(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
@@ -194,7 +204,8 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     </div> : null}
     {error ? <ErrorState message={error} onRetry={() => void load()} /> : orders === null ? <LoadingState label="주문을 불러오는 중입니다..." /> :
       <CommonDataTable columns={columns} emptyMessage={storeName ? "검색한 매장의 주문이 없습니다." : status === "submitted" ? "아직 주문이 없습니다 — 링크 관리에서 주문 링크를 보내 보세요." : "이 상태의 주문이 없습니다."}
-        filename="주문목록.csv" rowKey={(row) => row.id} rows={orders} settingsKey={`orders:${companyId}`} />}
+        exportAllColumns={listExportEnabled} filename="주문목록.csv" pageSizeMode={listExportEnabled ? "order" : "list"} phoneCards={listExportEnabled}
+        rowKey={(row) => row.id} rows={orders} settingsKey={`orders:${companyId}`} />}
     {(page > 1 || hasMore) && <div className="flex justify-center gap-2">
       <Button disabled={page === 1} onClick={() => setPage(page - 1)} variant="outline">이전</Button>
       <Button disabled={!hasMore} onClick={() => setPage(page + 1)} variant="outline">다음</Button>

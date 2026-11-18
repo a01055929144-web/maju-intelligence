@@ -10,10 +10,12 @@ import { readConfirmedOrderSaleDocuments, readOrderSaleDocuments, receiveStoreOr
 import { supabaseRequest } from "@/lib/store";
 import { isStoreOrderStatus } from "../../../domains/order/store-order-status";
 import { markNewOrderNotificationProcessed } from "@/lib/store/07-company-notifications";
+import { orderListExportEnabled } from "@/lib/order-list-export-feature";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 20;
+const LEGACY_PAGE_SIZE = 20;
+const EXPORT_PAGE_SIZE = 500;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MEMBER_ROLE: Record<string, string> = { owner: "점주", manager: "관리자", staff: "직원" };
 
@@ -82,13 +84,14 @@ export async function GET(request: NextRequest) {
       if (!matched.length) return NextResponse.json({ hasMore: false, items: [] }, { headers: { "Cache-Control": "no-store" } });
       customerFilter = `&customer_id=in.(${matched.map((row) => row.id).join(",")})`;
     }
+    const pageSize = orderListExportEnabled(scope) ? EXPORT_PAGE_SIZE : LEGACY_PAGE_SIZE;
     const orders = await supabaseRequest<OrderRow[]>(
       `store_orders?company_id=eq.${company}${status === "all" ? "" : `&status=eq.${status}`}${customerFilter}` +
       "&select=id,customer_id,delivery_date,status,known_total,has_market_price,request_memo,submitted_at,revision,ordered_by_member_id,store_account_id," +
       "store_order_lines(product_name,specification,sales_unit,quantity,total_amount,is_market_price)" +
-      `&order=submitted_at.desc,id.desc&limit=${PAGE_SIZE + 1}&offset=${(page - 1) * PAGE_SIZE}`,
+      `&order=submitted_at.desc,id.desc&limit=${pageSize + 1}&offset=${(page - 1) * pageSize}`,
     );
-    const items = orders.slice(0, PAGE_SIZE);
+    const items = orders.slice(0, pageSize);
     const customerIds = Array.from(new Set(items.map((order) => order.customer_id)));
     const memberIds = Array.from(new Set(items.map((order) => order.ordered_by_member_id).filter((id): id is string => Boolean(id))));
     const accountIds = Array.from(new Set(items.map((order) => order.store_account_id).filter((id): id is string => Boolean(id))));
@@ -112,7 +115,7 @@ export async function GET(request: NextRequest) {
     const memberLabel = new Map(members.map((member) => [member.id,
       `${member.app_users?.name?.trim().slice(0, 80) || "이름 미등록"} · ${MEMBER_ROLE[member.role] || "구성원"}`]));
     return NextResponse.json({
-      hasMore: orders.length > PAGE_SIZE,
+      hasMore: orders.length > pageSize,
       items: items.map((order) => {
         const customer = customerById.get(order.customer_id);
         const base = customer?.delivery_base_address?.trim();

@@ -6,7 +6,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Pin, Printer, RotateCcw, Settings2 } from "lucide-react";
 import { gridTsv, moveGridCell, nextEditableCell, parseEditorNumber, rangeKeys, type GridCell, type GridMoveKey } from "@/lib/common-data-table";
-import { autoHiddenKeys, BULK_BATCH_SIZE, chunk, shortenCategoryPath, COMMON_TABLE_PAGE_SIZES, countByKey, matchesQuery, COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, normalizeColumnState, PAGE_SIZE_ALL, pctsFromPx, pickPageSize, redistributePct, rowNumber, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
+import { autoHiddenKeys, BULK_BATCH_SIZE, chunk, shortenCategoryPath, COMMON_TABLE_PAGE_SIZES, countByKey, downloadableColumns, matchesQuery, COMMON_COLUMN_DRAG_MIN_PX, dragBoundary, normalizeColumnState, PAGE_SIZE_ALL, pctsFromPx, pickPageSize, redistributePct, rowNumber, setColumnWidth, VIRTUAL_THRESHOLD, visibleRange, type CommonColumnState } from "@/lib/common-data-table";
 
 const ROW_HEIGHT = 40;
 const COMPACT_ROW_HEIGHT = 32;
@@ -21,6 +21,8 @@ export type CommonTableColumn<Row> = {
   sortable?: boolean;
   align?: "left" | "center" | "right";
   defaultHidden?: boolean;
+  /** 내려받기에서 제외할 동작 버튼 같은 열. 기본은 포함한다. */
+  exportable?: boolean;
   total?: boolean;
   width?: number;
   /** 표 위 검색창이 이 열의 값에서 찾는다. 하나도 없으면 검색창이 없다. */
@@ -60,6 +62,7 @@ export function CommonDataTable<Row>({
   emptyMessage = "표시할 항목이 없습니다.",
   error,
   filename = "목록.csv",
+  exportAllColumns = false,
   loading = false,
   groupBy,
   pageSizeMode = "list",
@@ -84,6 +87,8 @@ export function CommonDataTable<Row>({
   /** 불러오기 실패 문구. 있으면 빈 상태 대신 보인다. */
   error?: string | null;
   filename?: string;
+  /** 선택 내려받기에 화면에서 숨긴 열까지 포함한다. */
+  exportAllColumns?: boolean;
   loading?: boolean;
   /** 오류 칸의 "다시 시도" 버튼. 안 주면 버튼 없이 오류 문구만. */
   onRetry?: () => void;
@@ -319,7 +324,8 @@ export function CommonDataTable<Row>({
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const numberOf = new Map(sortedRows.map((row, index) => [rowKey(row), index + 1]));
     const source = onlySelected && selection ? sortedRows.filter((row) => selection.selected.has(rowKey(row))) : sortedRows;
-    const lines = [[...(numbered ? ["번호"] : []), ...displayColumns.map((item) => item.column.label)].map(escape).join(","), ...source.map((row) => [...(numbered ? [numberOf.get(rowKey(row))] : []), ...displayColumns.map((item) => item.column.value(row))].map(escape).join(","))];
+    const exportColumns = downloadableColumns(displayColumns.map((item) => item.column), columns, onlySelected && exportAllColumns);
+    const lines = [[...(numbered ? ["번호"] : []), ...exportColumns.map((column) => column.label)].map(escape).join(","), ...source.map((row) => [...(numbered ? [numberOf.get(rowKey(row))] : []), ...exportColumns.map((column) => column.value(row))].map(escape).join(","))];
     const url = URL.createObjectURL(new Blob([`\ufeff${lines.join("\r\n")}`], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
   }
@@ -480,7 +486,7 @@ export function CommonDataTable<Row>({
     </div> : null}
     {internalSelection && selection && selection.selected.size ? <div aria-label="일괄 도구" className="common-data-table-tools flex flex-wrap items-center gap-2 border-b border-teal-300 bg-teal-50 px-3 py-2 text-sm" role="group">
       <b>선택 {selection.selected.size.toLocaleString("ko-KR")}개<span className="ml-1 text-xs font-normal text-slate-600">(걸러진 {sortedRows.length.toLocaleString("ko-KR")}줄 중)</span></b>
-      <button className="maju-button-secondary h-8 text-xs" onClick={() => downloadCsv(true)} type="button"><Download className="h-3.5 w-3.5" /> 엑셀 내려받기</button>
+      <button className="maju-button-secondary h-8 text-xs" onClick={() => downloadCsv(true)} type="button"><Download className="h-3.5 w-3.5" /> {exportAllColumns ? "선택 엑셀 · 전체 열" : "엑셀 내려받기"}</button>
       <button className="maju-button-secondary h-8 text-xs" onClick={() => window.print()} type="button"><Printer className="h-3.5 w-3.5" /> 인쇄</button>
       {(bulkActions ?? []).map((action) => <button className="maju-button-secondary h-8 text-xs" disabled={progress?.running} key={action.label} onClick={() => { const keys = Array.from(selection.selected); if (action.run) void runInBatches(action.label, keys, action.run); else action.onClick?.(keys); }} type="button">{action.label}</button>)}
       {progress ? <span aria-live="polite" className={`text-xs font-bold ${!progress.running && failedKeys.size ? "text-rose-700" : "text-slate-700"}`} role="status">{progress.label}: {progress.total.toLocaleString("ko-KR")}개 중 {progress.done.toLocaleString("ko-KR")}개 {progress.running ? "진행 중" : "완료"}{!progress.running && failedKeys.size ? ` · 실패 ${failedKeys.size.toLocaleString("ko-KR")}개(빨간 줄)` : ""}</span> : null}
