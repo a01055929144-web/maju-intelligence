@@ -66,6 +66,8 @@ import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { GovSyncOverview } from "@/components/gov-sync-overview";
 import { LeadRouteStopButton } from "@/components/lead-route-stop-button";
+import { LeadFavoriteButton, LeadFavoriteFilter } from "@/components/lead-favorite-button";
+import { useLeadFavorites } from "@/components/use-lead-favorites";
 import { PlaceLinkBadges } from "@/components/place-link-badges";
 import { PermitLeadActionItem, PermitLeadItem, PermitLeadPeriod, PermitLeadQueues } from "@/lib/store";
 import {
@@ -213,6 +215,8 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
   const [leadPage, setLeadPage] = useState(1);
   const [leadPageSize, setLeadPageSize] = useState<ListPageSize>(30);
   const [showMoreLeadColumns, setShowMoreLeadColumns] = useState(false);
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const favorites = useLeadFavorites(leads.map((lead) => lead.id));
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -655,6 +659,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
     return leads
       .filter((lead) => showClosedOrNonTarget || (lead.isActive && lead.isTargetIndustry && !isClosedLead(lead)))
       .filter((lead) => !showNearbyOnly || nearbyLeadIds.has(lead.id))
+      .filter((lead) => !favoriteOnly || favorites.favoriteIds.has(lead.id))
       .filter((lead) => leadTypeFilter === "all" || getPermitLeadType(lead) === leadTypeFilter)
       .filter((lead) => isPermitLeadInOpenDateFilter(lead, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd))
       .filter((lead) => !actionFilter || !["오늘 문자", "오늘 DM"].includes(actionFilter) || displayLeadNextAction(lead) === actionFilter)
@@ -690,7 +695,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
               return text.includes(keyword) || (normalizedKeyword && normalizeLeadSearchToken(text).includes(normalizedKeyword));
             })
       );
-  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
+  }, [actionFilter, leads, tableSearch, showNearbyOnly, nearbyLeadIds, favoriteOnly, favorites.favoriteIds, leadTypeFilter, openDateFilterMode, openDateYear, openDateMonth, openDateStart, openDateEnd, statusFilter, hasEmailOnly, hasFaxOnly, hasInstagramOnly, hasPhoneOnly, hasTalktalkOnly, uncontactedOnly, kakaoMatchFilter, showClosedOrNonTarget, businessHoursFilter, regionFilter, sizeFilter, reminderOnly]);
   const regionOptions = useMemo(() => {
     const counts = new Map<string, number>();
     leads.forEach((lead) => { const label = getLeadSigunguLabel(lead.address); if (label) counts.set(label, (counts.get(label) || 0) + 1); });
@@ -2092,6 +2097,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
+            <LeadFavoriteFilter active={favoriteOnly} count={favorites.favoriteIds.size} error={favorites.error} onChange={() => setFavoriteOnly((value) => !value)} onRetry={favorites.retry} status={favorites.status} />
             {(["table", "map"] as const).map((mode) => (
               <button
                 className={`rounded-md border px-3 py-1.5 text-xs font-black transition ${
@@ -2264,7 +2270,7 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
             </div>
           ) : !filteredLeads.length ? (
             <div className="rounded-md border border-dashed border-slate-200 bg-white p-8 text-center">
-              <p className="text-sm font-bold text-slate-600">{leads.length ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
+              <p className="text-sm font-bold text-slate-600">{favoriteOnly ? "즐겨찾기한 리드가 없습니다." : leads.length ? "현재 조건에 맞는 리드가 없습니다." : "아직 등록된 신규 리드가 없습니다."}</p>
               <p className="mt-1 text-xs font-semibold text-slate-400">
                 {leads.length && hasActiveLeadFilters
                   ? openDateFilterMode !== "all"
@@ -2641,6 +2647,12 @@ export function PermitLeadsView({ detailMode = "drawer", initialLeadId, onOpenQu
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-nowrap items-center justify-end gap-1">
+                            {favorites.status === "ready" ? <LeadFavoriteButton
+                              busy={favorites.busyLeadId === lead.id}
+                              leadName={lead.businessName}
+                              onToggle={() => void favorites.toggle(lead.id)}
+                              starred={favorites.favoriteIds.has(lead.id)}
+                            /> : null}
                             <button
                               aria-label={`${lead.businessName} 관심 없음 · 숨김 처리`}
                               className="maju-icon-btn grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
