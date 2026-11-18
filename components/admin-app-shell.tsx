@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { Building2, CreditCard, FileSpreadsheet, Home, MapPinned, ServerCog, ShieldCheck } from "lucide-react";
+import { Building2, CreditCard, FileSpreadsheet, Home, MapPinned, ServerCog, ShieldCheck, Store } from "lucide-react";
 import { AppSidebar, type AppSidebarGroup } from "@/components/app-sidebar";
 import type { AdminSession } from "@/lib/auth";
 import { AdminLogoutButton } from "@/app/admin/logout-button";
@@ -13,6 +13,7 @@ const adminNavigation: AppSidebarGroup[] = [
     items: [
       { active: "overview", href: "/admin", icon: Home, label: "관리자 홈" },
       { active: "companies", href: "/admin/companies", icon: Building2, label: "고객사 관리" },
+      { active: "stores", href: "/admin/stores", icon: Store, label: "매장 관리" },
       { active: "map", href: "/admin/map", icon: MapPinned, label: "지도·현황" },
       { active: "billing", href: "/admin/billing", icon: CreditCard, label: "결제 관리" },
       { active: "uploads", href: "/admin/uploads", icon: FileSpreadsheet, label: "가져오기 이력" },
@@ -22,10 +23,11 @@ const adminNavigation: AppSidebarGroup[] = [
   }
 ];
 
-export function AdminAppShell({ adminMapEnabled, children, session }: { readonly adminMapEnabled: boolean; readonly children: ReactNode; readonly session: AdminSession }) {
+export function AdminAppShell({ adminMapEnabled, adminStoresEnabled, children, session }: { readonly adminMapEnabled: boolean; readonly adminStoresEnabled: boolean; readonly children: ReactNode; readonly session: AdminSession }) {
   const pathname = usePathname();
   if (pathname === "/admin/login") return children;
-  const navigation = adminMapEnabled ? adminNavigation : adminNavigation.map((group) => ({ ...group, items: group.items.filter((item) => item.active !== "map") }));
+  const navigation = adminNavigation.map((group) => ({ ...group, items: group.items.filter((item) =>
+    (adminMapEnabled || item.active !== "map") && (adminStoresEnabled || item.active !== "stores")) }));
 
   return (
     <div className="maju-app-bg flex min-h-screen flex-col lg:flex-row">

@@ -29,15 +29,33 @@ export type GovAreaTaskResult<T> = GovAreaTask & {
   error?: string;
 };
 
+export type GovAreaAttempt = {
+  pageSize: number;
+  ms: number;
+  result: "timeout" | "deferred" | "success" | "error";
+};
+
 export function prioritizeGovAreaCodes(
   areaCodes: readonly string[],
   pendingAreas: readonly string[],
-  previousFirstArea?: string
+  previousFirstArea?: string,
+  rotatePreviousFirst: boolean | "end" = true
 ) {
   const pending = Array.from(new Set(pendingAreas.filter((areaCode) => areaCodes.includes(areaCode))));
   const ordered = [...pending, ...areaCodes.filter((areaCode) => !pending.includes(areaCode))];
-  if (ordered.length > 1 && ordered[0] === previousFirstArea) [ordered[0], ordered[1]] = [ordered[1], ordered[0]];
+  if (rotatePreviousFirst && ordered.length > 1 && ordered[0] === previousFirstArea) {
+    if (rotatePreviousFirst === "end") ordered.push(ordered.shift() as string);
+    else [ordered[0], ordered[1]] = [ordered[1], ordered[0]];
+  }
   return ordered;
+}
+
+export function shouldDeferBlockedGovFirstArea(
+  dataset: string,
+  previousFirstArea: string | undefined,
+  timeoutCounts: Readonly<Record<string, number | undefined>>
+) {
+  return dataset === "general_restaurants" && Boolean(previousFirstArea) && (timeoutCounts[previousFirstArea || ""] || 0) >= 2;
 }
 
 export function getGovSyncObservability(
@@ -66,15 +84,35 @@ export function isGovSyncStale(lastSuccessAt?: string | null, now = Date.now()) 
 
 export async function loadGovAreaWithTimeoutRetry<T>(
   load: (pageSize: number) => Promise<T>,
-  previousTimeoutCount = 0
+  previousTimeoutCount = 0,
+  options: {
+    firstPageSize?: number;
+    retryPageSize?: number;
+    now?: () => number;
+    onAttempt?: (attempt: GovAreaAttempt) => void;
+  } = {}
 ) {
-  const firstPageSize = previousTimeoutCount >= 2 ? 20 : 100;
+  const now = options.now || Date.now;
+  const record = async (pageSize: number) => {
+    const startedAt = now();
+    try {
+      const value = await load(pageSize);
+      options.onAttempt?.({ pageSize, ms: Math.max(0, now() - startedAt), result: "success" });
+      return value;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const result = error instanceof GovBudgetDeferredError ? "deferred" : isGovTimeoutError(message) ? "timeout" : "error";
+      options.onAttempt?.({ pageSize, ms: Math.max(0, now() - startedAt), result });
+      throw error;
+    }
+  };
+  const firstPageSize = options.firstPageSize ?? (previousTimeoutCount >= 2 ? 20 : 100);
   try {
-    return await load(firstPageSize);
+    return await record(firstPageSize);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isGovTimeoutError(message)) throw error;
-    return load(previousTimeoutCount >= 2 ? 20 : 50);
+    return record(options.retryPageSize ?? (previousTimeoutCount >= 2 ? 20 : 50));
   }
 }
 
@@ -99,13 +137,29 @@ export function buildGovAreaTasks(
  */
 export function splitGovTasksByTimeouts<T extends { areaCode: string }>(
   tasks: readonly T[],
-  timeoutCounts: Readonly<Record<string, number | undefined>>
+  timeoutCounts: Readonly<Record<string, number | undefined>>,
+  soloAfter = 2
 ): { solo: T[]; regular: T[] } {
   const count = (areaCode: string) => timeoutCounts[areaCode] || 0;
   return {
-    solo: tasks.filter((task) => count(task.areaCode) >= 2),
-    regular: tasks.filter((task) => count(task.areaCode) < 2)
+    solo: tasks.filter((task) => count(task.areaCode) >= soloAfter),
+    regular: tasks.filter((task) => count(task.areaCode) < soloAfter)
   };
+}
+
+export function updateGovTimeoutCounts(
+  areaCodes: readonly string[],
+  previous: Readonly<Record<string, number | undefined>>,
+  results: readonly Pick<GovAreaTaskResult<unknown>, "areaCode" | "status">[],
+  attempts: Readonly<Record<string, readonly GovAreaAttempt[]>>
+) {
+  const next: Record<string, number> = Object.fromEntries(Object.entries(previous).map(([areaCode, count]) => [areaCode, count || 0]));
+  for (const areaCode of areaCodes) {
+    const areaResults = results.filter((result) => result.areaCode === areaCode);
+    if (areaResults.length && areaResults.every((result) => result.status === "success")) next[areaCode] = 0;
+    else if ((attempts[areaCode] || []).some((attempt) => attempt.result === "timeout")) next[areaCode] = (next[areaCode] || 0) + 1;
+  }
+  return next;
 }
 
 export function dedupeGovRows<T extends { sourceRecordKey?: string }>(rows: readonly T[]): T[] {

@@ -16,7 +16,8 @@ type Order = {
   id: string; storeAccountId: string | null; customerName: string; deliveryAddress: string | null; orderedBy: string;
   deliveryDate: string | null; status: string; knownTotal: number; hasMarketPrice: boolean;
   requestMemo: string; submittedAt: string; revision: number; lines: Line[];
-  orderDocument?: { status: "confirmed"; number: string } | { status: "unlinked" };
+  draftReceipt?: boolean;
+  orderDocument?: { status: "draft" | "confirmed"; number: string } | { status: "unlinked" };
 };
 
 type Candidate = { customerId: string; name: string; address: string | null; reason: "business_number" | "name_address" };
@@ -52,6 +53,7 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [failedDocumentOrder, setFailedDocumentOrder] = useState("");
   const [review, setReview] = useState<{ order: Order; candidates: Candidate[] | null } | null>(null);
 
   const load = useCallback(async () => {
@@ -68,15 +70,21 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
 
   async function confirm(order: Order) {
     setBusyId(order.id); setNotice("");
-    const response = await fetch("/api/orders", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "confirm", companyId, orderId: order.id, revision: order.revision }),
-    });
-    const result = await response.json().catch(() => ({})) as { message?: string };
-    setBusyId("");
-    setNotice(response.ok ? `${order.customerName} 주문을 확인했습니다.` : result.message || "확인 처리하지 못했습니다.");
-    if (response.ok) window.dispatchEvent(new Event("company-notifications:reload"));
-    await load();
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm", companyId, orderId: order.id, revision: order.revision }),
+      });
+      const result = await response.json().catch(() => ({})) as { message?: string; code?: string };
+      setFailedDocumentOrder(result.code === "order_document_failed" ? order.id : "");
+      setNotice(response.ok ? `${order.customerName} 주문을 확인했습니다.` : result.message || "확인 처리하지 못했습니다.");
+      if (response.ok) window.dispatchEvent(new Event("company-notifications:reload"));
+      await load();
+    } catch {
+      setNotice("확인 결과를 불러오지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   // CC-08: 첫 거래 거래처 확인 — 후보 보기, 새 거래처로 확인, 기존 거래처에 연결. 규칙은 서버(DB 함수)가 정한다.
@@ -138,13 +146,19 @@ export function OrderInboxWorkspace({ canConfirm, companyId, deliveryPhotosEnabl
     { key: "memo", label: "요청사항", value: (row) => row.requestMemo, render: (row) => row.requestMemo || "-" },
     { key: "status", label: "상태", sortable: true, value: (row) => storeOrderStatusLabel(row.status) },
     ...(orders?.some(row => row.orderDocument) ? [{
-      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "confirmed"
-        ? row.orderDocument.number : row.status === "submitted" ? "전표 연결 실패 또는 대기" : "미연결",
+      key: "orderDocument", label: "매출 전표", value: (row: Order) => row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
+        ? row.orderDocument.number : row.status === "submitted" ? (row.draftReceipt ? "접수 시 전표 연결" : "전표 연결 실패 또는 대기") : "미연결",
+      render: (row: Order) => failedDocumentOrder === row.id ? "전표 연결 실패" : row.orderDocument?.status === "draft"
+        ? `작성중 · ${row.orderDocument.number}` : row.orderDocument?.status === "confirmed"
+        ? row.orderDocument.number : row.status === "submitted" ? (row.draftReceipt ? "접수 시 전표 연결" : "전표 연결 실패 또는 대기") : "미연결",
     }] : []),
     { key: "action", label: "처리", value: () => "", render: (row) => canConfirm && row.storeAccountId && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void openReview(row)} size="sm" variant="outline">거래처 확인</Button>
-      : canConfirm && canConfirmStoreOrder(row.status) && row.orderDocument?.status === "unlinked"
+      : canConfirm && canConfirmStoreOrder(row.status) && !row.draftReceipt && row.orderDocument?.status === "unlinked"
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void retryOrderDocument(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
+      : canConfirm && canConfirmStoreOrder(row.status) && failedDocumentOrder === row.id
+      ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm" variant="outline">전표 연결 다시 시도</Button>
       : canConfirm && canConfirmStoreOrder(row.status)
       ? <Button className="min-h-11" disabled={busyId !== ""} onClick={() => void confirm(row)} size="sm">{busyId === row.id ? "확인 중…" : "확인"}</Button>
       : null },

@@ -23,7 +23,7 @@ import { findDuplicateCompanyByBusinessNumber } from "./store/08-company-identit
 import { BusinessStatusResult, checkBusinessRegistrationStatusesWithHealth, isBusinessStatusApiConfigured } from "./business-status";
 import { fetchGovAreaRows, isGovRestaurantApiConfigured } from "./gov-restaurant";
 import { getGovAreaCodes, getGovAreaCoverageStatus, getGovChangeCutoff, type GovAreaCursor, type GovDataset } from "./gov-area-scan";
-import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovCollectionOutcome, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, isGovTimeoutError, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, splitGovTasksByTimeouts, type GovRequestLimiter } from "./gov-area-fanout";
+import { buildGovAreaTasks, createGovRequestLimiter, dedupeGovRows, getGovCollectionOutcome, getGovSyncObservability, GovBudgetDeferredError, GOV_COLLECTION_BUDGET_MS, GOV_FANOUT_CONCURRENCY, GOV_POSTPROCESS_RESERVE_MS, GOV_REQUEST_TIMEOUT_MS, isGovSyncStale, loadGovAreaWithTimeoutRetry, prioritizeGovAreaCodes, runGovAreaTasks, shouldDeferBlockedGovFirstArea, splitGovTasksByTimeouts, updateGovTimeoutCounts, type GovAreaAttempt, type GovRequestLimiter } from "./gov-area-fanout";
 import { exposeManagedCompanyCredentialState } from "../application/admin/managed-company-credentials";
 import { fetchRecentSeoulRestaurantRows, isSeoulOpenDataConfigured } from "./seoul-restaurant";
 import { geocodeRegionLabel, isKakaoKeywordLeadSearchConfigured, searchKakaoKeywordLeads } from "./kakao-keyword-leads";
@@ -266,6 +266,7 @@ export type CustomerMasterItem = {
   deliveryTerritoryName?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   grade: "A" | "B" | "C";
   industry: string;
   lastOrderDays: number;
@@ -288,6 +289,7 @@ export type CustomerMasterItem = {
   relationshipStatusNote?: string;
   relationshipStatusUpdatedAt?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -323,6 +325,7 @@ export type CustomerMasterInput = {
   deliveryTerritoryId?: string;
   deliveryZone?: string;
   email?: string;
+  expectedOpeningDate?: string;
   industry?: string;
   lastOrderDays?: number;
   loadingPosition?: string;
@@ -339,6 +342,7 @@ export type CustomerMasterInput = {
   phone?: string;
   region?: string;
   representativeName?: string;
+  taxInvoiceEmail?: string;
   subBusinessNumber?: string;
   reviewSummary?: string;
   reviewKeywords?: string[];
@@ -4977,6 +4981,7 @@ export async function getCustomerMaster(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -5447,6 +5452,7 @@ export async function upsertCustomerMaster(
       delivery_vehicle: deliveryVehicle || null,
       delivery_zone: input.deliveryZone || null,
       email: input.email || null,
+      expected_opening_date: input.expectedOpeningDate || null,
       industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
       kakao_place_url: resolvedPlaceLinks.kakaoPlaceUrl || null,
       last_order_days: input.lastOrderDays || 0,
@@ -5458,6 +5464,7 @@ export async function upsertCustomerMaster(
       place_links_checked_at: resolvedPlaceLinks.checkedAt,
       region: input.region || "미분류",
       representative_name: input.representativeName || null,
+      tax_invoice_email: input.taxInvoiceEmail || null,
       sub_business_number: businessIdentity.subBusinessNumber || null,
       visit_count: input.visitCount || 0,
       loading_position: input.loadingPosition || null,
@@ -5582,6 +5589,9 @@ export async function upsertCustomerMaster(
     delivery_minutes: input.deliveryMinutes || null,
     delivery_zone: input.deliveryZone || null,
     email: input.email || null,
+    ...(input.expectedOpeningDate !== undefined
+      ? { expected_opening_date: toPostgresDate(input.expectedOpeningDate) }
+      : {}),
     industry: input.industry || resolvedPlaceLinks.enrichedIndustry || "미분류",
     last_order_days: input.lastOrderDays || 0,
     monthly_revenue: input.monthlyRevenue || 0,
@@ -5590,6 +5600,9 @@ export async function upsertCustomerMaster(
     phone: input.phone || resolvedPlaceLinks.enrichedPhone || null,
     region: input.region || "미분류",
     representative_name: input.representativeName || null,
+    ...(input.taxInvoiceEmail !== undefined
+      ? { tax_invoice_email: input.taxInvoiceEmail || null }
+      : {}),
     sub_business_number: businessIdentity.subBusinessNumber || null,
     visit_count: input.visitCount || 0,
     loading_position: input.loadingPosition || null
@@ -9779,11 +9792,14 @@ export async function syncGovRestaurantLeads(
     if (startPage && startPage > 1 && codes[0] && !savedCursors[codes[0]]) {
       savedCursors[codes[0]] = { areaCode: codes[0], page: startPage, cutoff: startedAt, scanStartedAt: startedAt };
     }
-    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea);
+    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const deferBlockedFirst = shouldDeferBlockedGovFirstArea(dataset, previous?.metadata?.firstArea, previousTimeoutCounts);
+    const rotatePreviousFirst = dataset !== "general_restaurants" ? true : deferBlockedFirst ? "end" : false;
+    const orderedCodes = prioritizeGovAreaCodes(codes, previous?.metadata?.pendingAreas || [], previous?.metadata?.firstArea, rotatePreviousFirst);
     const cutoff = getGovChangeCutoff(new Date(startedAt), previousSuccess?.finished_at, days).toISOString();
     const tasks = buildGovAreaTasks(orderedCodes, savedCursors, cutoff, startedAt);
     const requestDeadlineAt = deadlineAt - GOV_POSTPROCESS_RESERVE_MS;
-    const previousTimeoutCounts = previous?.metadata?.timeoutCounts || {};
+    const attempts: Record<string, GovAreaAttempt[]> = {};
     const loadTask = (task: (typeof tasks)[number]) => (requestLimiter || (async (load) => load()))(async () => {
       const fetchOnce = (pageSize: number) => {
         if (Date.now() + GOV_REQUEST_TIMEOUT_MS > requestDeadlineAt) throw new GovBudgetDeferredError();
@@ -9798,16 +9814,22 @@ export async function syncGovRestaurantLeads(
           retry: false
         });
       };
-      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0);
+      return loadGovAreaWithTimeoutRetry(fetchOnce, previousTimeoutCounts[task.areaCode] || 0, {
+        firstPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        retryPageSize: dataset === "general_restaurants" ? 20 : undefined,
+        onAttempt: (attempt) => (attempts[task.areaCode] ||= []).push(attempt)
+      });
     });
-    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts);
-    const soloResults = soloTasks.length ? await runGovAreaTasks({
+    const { solo: soloTasks, regular: regularTasks } = splitGovTasksByTimeouts(tasks, previousTimeoutCounts, dataset === "general_restaurants" ? 1 : 2);
+    const runSoloTasks = () => soloTasks.length ? runGovAreaTasks({
       tasks: soloTasks, deadlineAt: requestDeadlineAt, concurrency: 1, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const regularResults = regularTasks.length ? await runGovAreaTasks({
+    }) : Promise.resolve([]);
+    const runRegularTasks = () => regularTasks.length ? runGovAreaTasks({
       tasks: regularTasks, deadlineAt: requestDeadlineAt, concurrency: fanoutConcurrency, requestTimeoutMs: GOV_REQUEST_TIMEOUT_MS, load: loadTask
-    }) : [];
-    const taskResults = [...soloResults, ...regularResults];
+    }) : Promise.resolve([]);
+    const firstResults = deferBlockedFirst ? await runRegularTasks() : await runSoloTasks();
+    const lastResults = deferBlockedFirst ? await runSoloTasks() : await runRegularTasks();
+    const taskResults = [...firstResults, ...lastResults];
     const rows = dedupeGovRows(taskResults.flatMap((result) => result.status === "success" ? result.value?.rows || [] : []));
     const nextCursors: Record<string, GovAreaCursor> = { ...savedCursors };
     for (const result of taskResults) {
@@ -9823,15 +9845,7 @@ export async function syncGovRestaurantLeads(
     const ingest = await ingestPermitLeadRows(companyId, rows, { source: "gov_restaurant_api" });
     const pendingAreas = Array.from(new Set(taskResults.filter((result) => result.status !== "success").map((result) => result.areaCode)));
     const observability = getGovSyncObservability(codes, pendingAreas, taskResults, orderedCodes[0]);
-    const timeoutCounts = { ...previousTimeoutCounts };
-    for (const areaCode of codes) {
-      const results = taskResults.filter((result) => result.areaCode === areaCode);
-      if (results.some((result) => isGovTimeoutError(result.error))) {
-        timeoutCounts[areaCode] = (timeoutCounts[areaCode] || 0) + 1;
-      } else if (results.length && results.every((result) => result.status === "success")) {
-        timeoutCounts[areaCode] = 0;
-      }
-    }
+    const timeoutCounts = updateGovTimeoutCounts(codes, previousTimeoutCounts, taskResults, attempts);
     const { status, message } = getGovCollectionOutcome(dataset, codes, rows.length, taskResults);
     await recordLeadSyncStatus(companyId, "gov", status, {
       trigger,
@@ -9865,6 +9879,7 @@ export async function syncGovRestaurantLeads(
           newRows: result.value?.rows.length || 0,
           error: result.error
         })),
+        attempts,
         updateKinds: rows.reduce<Record<string, number>>((counts, row) => {
           const kind = row.updateKind || "unknown";
           counts[kind] = (counts[kind] || 0) + 1;
@@ -15202,6 +15217,7 @@ function toCustomerMasterItem(
     delivery_territory_name?: string | null;
     delivery_zone: string | null;
     email: string | null;
+    expected_opening_date?: string | null;
     google_map_url?: string | null;
     grade_override?: string | null;
     industry: string | null;
@@ -15214,6 +15230,7 @@ function toCustomerMasterItem(
     place_links_checked_at?: string | null;
     region: string | null;
     representative_name: string | null;
+    tax_invoice_email?: string | null;
     sub_business_number?: string | null;
     visit_count: number | null;
     loading_position: string | null;
@@ -15275,6 +15292,7 @@ function toCustomerMasterItem(
     kakaoPlaceUrl: row.kakao_place_url || undefined,
     memoCount: 2 + (index % 4),
     monthlyRevenue,
+    expectedOpeningDate: row.expected_opening_date || undefined,
     naverPlaceUrl: row.naver_place_url || undefined,
     openingDate: row.opening_date || undefined,
     phone: row.phone || undefined,
@@ -15284,6 +15302,7 @@ function toCustomerMasterItem(
     relationshipStatusNote: row.relationship_status_note || undefined,
     relationshipStatusUpdatedAt: row.relationship_status_updated_at || undefined,
     representativeName: row.representative_name || undefined,
+    taxInvoiceEmail: row.tax_invoice_email || undefined,
     subBusinessNumber: row.sub_business_number || undefined,
     reviewSummary: row.review_summary || undefined,
     reviewKeywords: row.review_keywords && row.review_keywords.length ? row.review_keywords : undefined,

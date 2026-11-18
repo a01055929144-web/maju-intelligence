@@ -83,14 +83,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # CX-68: CX-62 is not merged yet; pin its atomic receipt contract in an isolated path.
-      - name: Checkout pinned CX-62 atomic receipt draft
-        uses: actions/checkout@v5
-        with:
-          ref: ab1db2df418823e8b26982a412fca3db63fff395
-          path: .ci-cx62
-          persist-credentials: false
-
       - name: Verify CX-41 order-to-return journey on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
@@ -102,16 +94,9 @@ jobs:
         run: |
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-38-order-sale-documents.pg17.test.sql
-
-      - name: Verify isolated CX-62 atomic receipt money safety on PostgreSQL 17
-        working-directory: .ci-cx62/docs/sql-drafts
-        env:
-          PGHOST: 127.0.0.1
-          PGPORT: 5432
-          PGDATABASE: cx41_order_return_test
-          PGUSER: postgres
-          PGPASSWORD: postgres
-        run: psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-62-order-receipt.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-order-dispatch.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-66-partial-dispatch-final-cancel.pg17.test.sql
 
       - name: Verify purchase date replace draft on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -184,6 +169,18 @@ jobs:
         run: |
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-17-CX-69-partner-payments-offset.pg17.test.sql
+
+      - name: Verify CX-126 partner registration draft on PostgreSQL 17
+        working-directory: tests/sql
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx126_partner_registration_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=partner-registration-cx126.pg17.test.sql
 
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -645,6 +642,13 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Checkout pinned delivery producer for CX-75 isolated tests
+        uses: actions/checkout@v5
+        with:
+          ref: 220b9c1011368570873f61be467e651cf22a6cec
+          path: .ci-cx75-delivery
+          persist-credentials: false
+
       - name: Verify compatible member ordering on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -672,6 +676,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-account-order-s2a.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-cx60-identity-settings.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-delivery-cx71.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --set=CX75_DELIVERY_SQL="$GITHUB_WORKSPACE/.ci-cx75-delivery/docs/sql-drafts/20261108-09-order-delivery-producer.sql" --file=tests/sql/store-order-core-cx75.pg17.test.sql
 
       - name: Verify CX-68 order money safety and performance on PostgreSQL 17
         env:
@@ -792,7 +797,7 @@ jobs:
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/partner-directory.spec.ts tests/e2e/customer-business-identity.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts tests/e2e/cx65-driver-run-experience.spec.ts tests/e2e/cx79-lead-status-sync.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/order-fulfillment.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/partner-directory.spec.ts tests/e2e/customer-business-identity.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts tests/e2e/cx65-driver-run-experience.spec.ts tests/e2e/cx79-lead-status-sync.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001

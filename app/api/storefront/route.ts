@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storeOrderCutoffGuidanceEnabled } from "@/lib/pricing/store-order-cutoff-feature";
 import { dateField, isId } from "@/domains/pricing/document";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
 import { storeOrderingEnabled } from "@/lib/pricing/store-order-feature";
 import { storeOrderDeliverySnapshotEnabled } from "@/lib/pricing/store-order-delivery-feature";
+import { orderReceiptDraftEnabled } from "@/lib/erp-order-documents-feature";
 import { syncStoreOrderSaleDocument } from "@/lib/pricing/store-order-sale-document";
 import { placeStoreOrderWithDelivery } from "@/lib/pricing/store-order-delivery-producer";
 import { readStorefront } from "@/lib/pricing/storefront";
@@ -192,6 +194,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(storeOrderCutoffGuidanceEnabled(store.companyId) ? { orderCutoffGuidance: { serverNow: new Date().toISOString() } } : {}),
         ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
           (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)
             ? { mobileCommon: true } : {}),
@@ -394,7 +397,7 @@ export async function PUT(request: NextRequest) {
       const placed = await placeStoreOrderWithDelivery(eligibility
         ? {scope:{...store,deliveryAddress:`${eligibility.baseAddress} ${eligibility.addressDetail}`},payload}
         : {scope:store,payload,snapshot:body.deliverySnapshot});
-      const orderDocumentStatus = await syncStoreOrderSaleDocument(store.companyId, placed.result, member?.authUserId ?? null);
+      const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, placed.result, member?.authUserId ?? null);
       return NextResponse.json({ ...placed, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },
         { headers: { "Cache-Control": "no-store" } });
     }
@@ -403,7 +406,7 @@ export async function PUT(request: NextRequest) {
         ? (memberOrdering ? "rpc/place_store_catalog_member_order_v1" : "rpc/place_store_catalog_order_v1")
         : (memberOrdering ? "rpc/place_store_member_order" : "rpc/place_store_order"),
       { method: "POST", body: JSON.stringify(payload) });
-    const orderDocumentStatus = await syncStoreOrderSaleDocument(store.companyId, result, member?.authUserId ?? null);
+    const orderDocumentStatus = orderReceiptDraftEnabled(store.companyId) ? undefined : await syncStoreOrderSaleDocument(store.companyId, result, member?.authUserId ?? null);
     return NextResponse.json(
       { result, ...(orderDocumentStatus ? { orderDocumentStatus } : {}) },
       { headers: { "Cache-Control": "no-store" } },

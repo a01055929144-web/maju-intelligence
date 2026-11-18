@@ -72,7 +72,7 @@ export function ProductSupplierWorkspace({ companyId = "", data, loadError = "" 
         <Metric label="매입 상품" value={`${data.products.length.toLocaleString()}개`} />
         <Metric label="원가 비교 가능" value={`${data.comparisons.length.toLocaleString()}개 품목`} />
       </div>
-      <PartnerDirectory companyId={companyId} extraTabs={extraTabs} loadError={loadError} partnerType="supplier" registerHref={uploadHref} rows={rows} tabs={tabs} uploadHref={uploadHref} />
+      <PartnerDirectory companyId={companyId} extraTabs={extraTabs} loadError={loadError} partnerType="supplier" registerHref={`/partners/register?type=supplier${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}`} rows={rows} tabs={tabs} uploadHref={uploadHref} />
     </div>
   );
 }
