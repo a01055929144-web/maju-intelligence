@@ -25,7 +25,7 @@ Ponytail: 사용함
 | 거래처 | 공용 틀 | `/crm/timeline?section=partners` | 목록·기본 정보·품목/단가·전표·원장·메모 | 별도 세 번째 화면이 아니라 두 거래처 화면이 공유할 탭 구조를 뜻함 |
 | 전표 | 매출 | `/operations/documents` | 현재 한 화면의 전표 유형 필터 | 탭 선택 상태의 URL 표현은 대표 확인 뒤 결정 |
 | 전표 | 매입 | `/operations/documents` | 현재 한 화면의 전표 유형 필터 | 위와 같음 |
-| 전표 | 반품 | `/operations/documents` | 매출 반품·매입 반품 | CX-98은 매입 이력·정산 확인용 기록만 남기며 단가·단가표·판매가 계산에서 제외 |
+| 전표 | 반품 | `/operations/documents` | 매출 반품·매입 반품 | 기존 반품 유형 필터와 저장 흐름 유지 |
 | 정산 | 입출금 | `/operations/documents` | 현재 거래처원장 안 입금·지급 등록 | 기존 원장 트랜잭션 재사용 |
 | 정산 | 미수 | `/operations/documents` | 별도 화면 계약 없음 | CX-97 범위에서 확정 전 새 탭·링크 생성 금지 |
 | 정산 | 상계 | `/operations/documents` | CX-69 권한 경계가 선행 | CX-69 계약 재사용, 독립 권한 신설 금지 |
