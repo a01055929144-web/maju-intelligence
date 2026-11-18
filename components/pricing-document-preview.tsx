@@ -90,7 +90,7 @@ export function PageContent({
       </header>
       {promos.length ? (
         <section className="my-3 rounded border border-amber-300 bg-amber-50 p-2">
-          <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품</p>
+          <p className="mb-1.5 text-xs font-bold text-amber-900">행사·임박 상품{promos.some(line => line.priceIncludesTax) ? " · 고정가(과세 품목 부가세 포함)" : ""}</p>
           {display.promoLayout === "table" ? (
             <table className="pricing-output-table w-full table-fixed border-collapse text-left">
               <tbody>

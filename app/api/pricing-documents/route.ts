@@ -12,6 +12,7 @@ import { PricingInputError } from "../../../domains/pricing/document";
 import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
 import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
 import { documentRequestError } from "../../../lib/pricing/document-request-error";
+import { documentVatEnabled } from "../../../lib/pricing/document-vat-feature";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -73,6 +74,7 @@ async function handle(request: NextRequest, write: boolean) {
       )
       .digest("hex"),
     manager,
+    documentVatEnabled: documentVatEnabled(auth.companyId),
     ...(documentSharingEnabled(auth.companyId) ? { sharingEnabled: true, actorName: resolveLeadContactActorName([getCustomerOperationalName(auth.customerSession), auth.customerSession?.name, auth.adminSession?.name]) } : {}),
     ...(documentArchiveEnabled() ? { archiveEnabled: true } : {}),
   };

@@ -15,6 +15,7 @@ import { resolveDocumentEntry } from "@/application/pricing/document-entry";
 import { findDocumentEntryLead } from "@/lib/pricing/document-entry";
 import { documentSharingEnabled } from "@/lib/pricing/document-share-feature";
 import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-order-feature";
+import { documentVatEnabled } from "@/lib/pricing/document-vat-feature";
 import { documentFooterFormattingEnabled } from "@/lib/pricing/document-footer-format";
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
@@ -58,6 +59,7 @@ export default async function DocumentsPage({
           publicSharingAvailable={publicDocumentOrderEntryEnabled(companyId)}
           storeLinksEnabled={storeOrderingEnabled() && isFeatureEnabled("STORE_ORDERING", companyId)}
           manager={manager}
+          vatEnabled={documentVatEnabled(companyId)}
         />
       </Suspense>
     </main>

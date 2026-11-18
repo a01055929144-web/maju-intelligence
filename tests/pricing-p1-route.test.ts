@@ -120,6 +120,7 @@ it("allows manager and sales with a server-derived opaque author", async () => {
     {
       companyId: c,
       manager: false,
+      documentVatEnabled: false,
       actor: expect.stringMatching(/^[a-f0-9]{64}$/),
     },
     "list",
@@ -188,4 +189,20 @@ it("HOLD allowlisting alone cannot grant pricing access",async()=>{
  expect((await GET(new NextRequest("http://localhost/api/pricing-documents"))).status).toBe(404);
  expect(mocks.request).not.toHaveBeenCalled();
  }finally{if(previous===undefined)delete process.env.HOLD_MODULES_ENABLED_COMPANY_IDS;else process.env.HOLD_MODULES_ENABLED_COMPANY_IDS=previous;}
+});
+
+it("gates the new VAT contract on the authenticated company before any write", async () => {
+  const enabled = process.env.PRICING_DOCUMENT_VAT_ENABLED, allowed = process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS;
+  const input = { action: "save", id: "10000000-0000-4000-8000-000000000001", expected: 0, content: { ...documentContent, priceContract: "promotion-gross-v1" } };
+  const request = () => new NextRequest("http://localhost/api/pricing-documents?companyId=other-company", { method: "POST", body: JSON.stringify(input) });
+  try {
+    process.env.PRICING_DOCUMENT_VAT_ENABLED = "true"; process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS = "other-company";
+    expect((await POST(request())).status).toBe(400); expect(mocks.request).not.toHaveBeenCalled();
+    process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS = c;
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c, documentVatEnabled: true }), "save", expect.objectContaining({ content: expect.objectContaining({ priceContract: "promotion-gross-v1" }) }));
+  } finally {
+    if (enabled === undefined) delete process.env.PRICING_DOCUMENT_VAT_ENABLED; else process.env.PRICING_DOCUMENT_VAT_ENABLED = enabled;
+    if (allowed === undefined) delete process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS; else process.env.PRICING_DOCUMENT_VAT_COMPANY_IDS = allowed;
+  }
 });
