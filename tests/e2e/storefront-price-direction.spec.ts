@@ -432,3 +432,48 @@ for (const width of [1440, 390]) test(`CX-74 server-clock cutoff closes without 
   await page.getByRole('button', { name: '주문하기', exact: true }).click();
   await expect(page.getByRole('region', { name: '주문 마감 안내' })).toHaveCount(0);
 });
+
+
+for (const width of [1440, 390]) test(`CX-74 confirms a lost order response after cutoff without another order at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.clock.install({ time: new Date('2026-11-18T12:59:00Z') });
+  const day = '2026-11-19';
+  const submitted: Record<string, unknown>[] = [];
+  let stored: Record<string, unknown> | null = null, writes = 0;
+  await page.route('**/api/storefront', async route => {
+    const body = route.request().postDataJSON();
+    if (route.request().method() === 'PUT') {
+      submitted.push(body);
+      if (!stored) { stored = body; writes++; return route.abort('failed'); }
+      expect(body).toEqual(stored);
+      return route.fulfill({ json: { id: 'stored-order', revision: 1, knownTotal: 1200 } });
+    }
+    return route.fulfill({ json: {
+      orderCutoffGuidance: { serverNow: '2026-11-18T12:59:00Z' }, mobileCommon: true,
+      store: { title: 'Synthetic confirmation sheet', companyName: 'Synthetic distributor', customerName: 'Synthetic store', deliveryAddress: 'Synthetic address',
+        version: 1, validUntil: '2099-12-31', priceAvailable: true, canOrder: true, nextDeliveryDate: day, selectedDeliveryDate: day, notice: '', marketPriceNotice: '',
+        policy: { weekdays: [0,1,2,3,4,5,6], holidays: [], cutoffDaysBefore: 1, cutoffTime: '22:00', minimumAmount: 0, minimumPolicy: 'notice', deliveryFee: 0 },
+        lines: [{ key: 'product:', productId: 'product', promotionId: null, name: 'Retry product', category: 'Test', brand: '', spec: '1kg', unit: 'BOX', badge: '',
+          taxType: 'exempt', unitPrice: 1200, priceIncludesTax: false, isMarketPrice: false, remaining: null, maximumQuantity: null, recentDispatchPrice: null, recentDispatchDate: null }] },
+      orders: stored ? [{ id: 'stored-order', deliveryDate: day, status: 'submitted', knownTotal: 1200, requestMemo: '', marketPricePending: false,
+        submittedAt: '2026-11-18T12:59:00Z', revision: 1, lines: [{ product_id: 'product', promotion_id: null, product_name: 'Retry product', quantity: 1, unit_price: 1200, total_amount: 1200 }] }] : [],
+      preferences: [], historyPage: 1, historyHasMore: false,
+    } });
+  });
+  await page.goto('/store#synthetic-cutoff-confirmation');
+  await page.getByRole('button', { name: '주문하기', exact: true }).click();
+  if (width === 1440) await page.getByRole('button', { name: '격자형', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry product 수량 늘리기', exact: true }).click();
+  if (width === 390) await page.getByRole('button', { name: '장바구니 확인 · 1개 품목', exact: true }).click();
+  const submit = page.getByRole('button', { name: '후결제로 주문 신청', exact: true });
+  await expect(submit).toBeEnabled(); await submit.click();
+  await expect.poll(() => submitted.length).toBe(1);
+  await expect(submit).toBeEnabled();
+  await page.clock.fastForward(61_000);
+  const confirm = page.getByRole('button', { name: '이전 주문 결과 확인', exact: true });
+  await expect(confirm).toBeEnabled();
+  await expect(page.getByRole('region', { name: '주문 마감 안내' })).toContainText('이미 보낸 주문의 결과');
+  await confirm.click();
+  await expect(page.getByText('주문을 받았습니다. 주문 내역에서 확인해 주세요.', { exact: true })).toBeVisible();
+  expect(submitted).toHaveLength(2); expect(submitted[0]).toEqual(submitted[1]); expect(writes).toBe(1);
+});

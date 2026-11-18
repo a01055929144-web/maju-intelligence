@@ -219,6 +219,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   const pricesVisible = pricesReady && Boolean(store?.priceAvailable);
   const cutoff = data?.orderCutoffGuidance && store?.canOrder && deliveryReady && pricesVisible && guidanceNow !== null
     ? orderCutoffGuidance(deliveryDate, store.policy, new Date(guidanceNow)) : null;
+  const confirmingAfterCutoff = cutoff?.open === false && Boolean(retryKey.current);
   const preferences = new Map(data?.preferences.map((item) => [item.productId, item]) ?? []);
   const categories = Array.from(new Set(store?.lines.map((line) => line.category || "미분류") ?? [])).sort((a, b) => a.localeCompare(b, "ko"));
   const hasPriceDirections = pricesReady && Boolean(store?.priceAvailable && store.lines.some(line => publicSalesPriceDirection(line.salesPriceDirection)));
@@ -312,7 +313,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
   }
   async function submit() {
     if (submitting.current || !store || !deliveryReady || !pricesReady || !summary?.canSubmit || !deliveryDate || !store.canOrder) return;
-    if (data?.orderCutoffGuidance) {
+    if (data?.orderCutoffGuidance && !retryKey.current) {
       const clock = guidanceClock.current;
       if (!clock) { setMessage("마감 정보를 다시 불러온 뒤 주문해 주세요."); return; }
       const current = orderCutoffGuidance(deliveryDate, store.policy, new Date(clock.serverNow + performance.now() - clock.receivedAt));
@@ -372,7 +373,7 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
       </div>;
   const cutoffNotice = cutoff && <section aria-label="주문 마감 안내"><Notice kind={cutoff.open ? "success" : "error"}>
     <span className="block">{store.companyName} · {cutoff.label}</span>
-    <span className="block">{cutoff.message}</span>
+    <span className="block">{confirmingAfterCutoff ? "새 주문은 마감됐습니다. 이미 보낸 주문의 결과를 확인해 주세요." : cutoff.message}</span>
   </Notice></section>;
   const cartContent = <>
       <p className="text-sm text-slate-600">{store.companyName}{deliveryDate ? ` · 배송 ${deliveryDate}` : ""}</p>
@@ -393,8 +394,8 @@ function StorefrontSession({ token, costAccess, storeLogin, portal, preview = fa
         {summary.marketCount > 0 && <p className="text-amber-800">시세 품목 {summary.marketCount}개는 가격 확정 후 합계가 달라집니다.</p>}
         {summary.belowMinimum && <p className="text-amber-800">최소 주문금액 {won(store.policy.minimumAmount)} 미달</p>}
       </div>}
-      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || cutoff?.open === false} className="min-h-[48px] w-full"
-        onClick={() => void submit()}>{busy ? "저장 중" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
+      <Button disabled={!deliveryReady || !pricesReady || !store.canOrder || busy || !summary?.canSubmit || (cutoff?.open === false && !confirmingAfterCutoff)} className="min-h-[48px] w-full"
+        onClick={() => void submit()}>{busy ? "저장 중" : confirmingAfterCutoff ? "이전 주문 결과 확인" : editing ? "수정 저장" : "후결제로 주문 신청"}</Button>
   </>;
   return <main className="mx-auto min-h-dvh max-w-6xl bg-white pb-24 text-slate-900 md:pb-8">
     <header className="sticky top-0 z-10 border-b bg-white p-4 md:px-6">
