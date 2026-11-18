@@ -29,6 +29,21 @@ vi.mock(
   () => import("../lib/pricing/storefront-public"),
 );
 import { POST, PUT } from "../app/api/storefront/route";
+
+it("enables cutoff guidance only for the verified token company, never a caller-supplied company", async () => {
+  vi.stubEnv("STORE_ORDER_CUTOFF_GUIDANCE_ENABLED", "true");
+  vi.stubEnv("STORE_ORDER_CUTOFF_GUIDANCE_COMPANY_IDS", "verified-company");
+  mocks.memberEnabled = false; mocks.db.mockResolvedValue([]);
+  const read = async (companyId: string) => {
+    mocks.read.mockResolvedValue({ companyId, customerId: "customer", priceAvailable: false, lines: [], policy: { weekdays: [], holidays: [] } });
+    return (await POST(new NextRequest("https://store.example.test/api/storefront", { method: "POST", headers: { origin: "https://store.example.test" },
+      body: JSON.stringify({ token: "signed", companyId: "verified-company", orderCutoffGuidance: true }) }))).json();
+  };
+  expect((await read("other-company")).orderCutoffGuidance).toBeUndefined();
+  expect((await read("verified-company")).orderCutoffGuidance.serverNow).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  vi.stubEnv("STORE_ORDER_CUTOFF_GUIDANCE_ENABLED", "false");
+  expect((await read("verified-company")).orderCutoffGuidance).toBeUndefined();
+});
 afterEach(() => vi.unstubAllEnvs());
 const productId = "10000000-0000-4000-8000-000000000001";
 const body = {

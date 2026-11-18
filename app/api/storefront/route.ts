@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { storeOrderCutoffGuidanceEnabled } from "@/lib/pricing/store-order-cutoff-feature";
 import { dateField, isId } from "@/domains/pricing/document";
 import { storeMemberSessionEnabled } from "@/lib/auth";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
@@ -193,6 +194,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         store: toPublicStorefront(store),
+        ...(storeOrderCutoffGuidanceEnabled(store.companyId) ? { orderCutoffGuidance: { serverNow: new Date().toISOString() } } : {}),
         ...(process.env.STORE_MOBILE_COMMON_ENABLED === "true" &&
           (process.env.FEATURE_STORE_MOBILE_COMMON_COMPANY_IDS ?? "").split(",").some(id => id.trim() === store.companyId)
             ? { mobileCommon: true } : {}),
