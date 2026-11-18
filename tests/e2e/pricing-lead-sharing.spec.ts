@@ -381,12 +381,13 @@ for (const width of [1440, 390]) test(`public document excludes legacy settlemen
     acceptanceAvailable: false, orderEntry: { available: true, companyName: content.companyName, title: content.title, version: 1 } } }));
   await page.setViewportSize({ width, height: 900 });
   await page.goto('/pricing-document#synthetic-account-boundary');
-  await expect(page.getByText('Synthetic public document', { exact: true }).first()).toBeVisible();
+  const title = page.getByText('Synthetic public document', { exact: true });
+  await expect(width === 390 ? title.first() : title.last()).toBeVisible();
   await expect(page.locator('body')).not.toContainText(marker);
   await expect(page.locator('body')).toContainText('SAFE-DELIVERY-CANARY');
   expect(await page.evaluate(() => window.document.documentElement.scrollWidth)).toBe(width);
   await page.screenshot({ path: info.outputPath(`public-account-boundary-${width}.png`) });
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('body')).not.toContainText(marker);
-  await expect(page.getByText('SAFE-DELIVERY-CANARY', { exact: true })).toBeVisible();
+  await expect(page.getByText('Delivery window · SAFE-DELIVERY-CANARY', { exact: true })).toBeVisible();
 });
