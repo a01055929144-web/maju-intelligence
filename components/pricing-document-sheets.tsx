@@ -18,11 +18,12 @@ type Props = {
   onCreate: (kind: DocumentKind) => void;
   onOpen: (document: DocumentDraft) => Promise<void>;
   onCopy: (document: DocumentDraft) => void;
+  onExtend?: (document: DocumentDraft) => void;
 };
 const day = (value: string) => value.slice(0, 10);
 const addDays = (value: string, days: number) => koreaDay(new Date(new Date(`${value}T12:00:00+09:00`).getTime() + days * 86400000));
 
-export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, onCopy }: Props) {
+export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, onCopy, onExtend }: Props) {
   const { confirm, confirmDialog } = useConfirm();
   const today = koreaDay();
   const [showArchived, setShowArchived] = useState(false);
@@ -131,6 +132,11 @@ export function PricingDocumentSheets({ companyId, manager, onCreate, onOpen, on
     setMessage(`${done}개 문서 초안을 현재 판매가로 갱신했습니다. 공개하려면 각 문서에서 버전을 확정해 주세요.`);
   }
   async function extend() {
+    if (onExtend) {
+      if (selectedRows.length !== 1) throw new Error("연장할 문서를 한 개 선택해 주세요.");
+      onExtend(selectedRows[0]);
+      return;
+    }
     let done = 0;
     for (const document of selectedRows) {
       try {
