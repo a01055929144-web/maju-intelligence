@@ -756,11 +756,14 @@ for (const width of [1280, 390]) test(`receipt correction keeps its audit revisi
   const rows: PurchaseHistoryRow[] = [{ id: "60000000-0000-4000-8000-000000000001", product_catalog_id: "20000000-0000-4000-8000-000000000001",
     receipt_date: "2026-11-07", line_key: "synthetic", product_name: "합성 상품", spec: "1kg", unit: "봉", supplier_name: "합성 매입처",
     quantity: 2, unit_cost_ex_vat: 100, total_amount: 220, correctionRevision: 0, correctable: true }];
-  const corrections: Array<{ id: string; cost: number; reason: string; expectedRevision: number }> = [];
+  const corrections: Array<{ action: "correct" | "delete" | "add"; id?: string; receiptDate?: string; productName?: string; cost?: number; reason: string; expectedRevision: number }> = [];
   await page.route("**/api/price-sheets/receipts*", route => {
     if (route.request().method() === "PATCH") {
       const body = route.request().postDataJSON(); corrections.push(body);
-      rows[0] = { ...rows[0], unit_cost_ex_vat: body.cost, corrected: true, correctionRevision: 1 };
+      if (body.action === "delete") rows.splice(rows.findIndex((row) => row.id === body.id), 1);
+      else if (body.action === "add") rows.push({ id: "60000000-0000-4000-8000-000000000002", receipt_date: body.receiptDate, line_key: "manual", product_name: body.productName,
+        spec: body.spec, unit: body.unit, supplier_name: body.supplier, quantity: body.quantity, unit_cost_ex_vat: body.cost, correctionRevision: 0, correctable: true });
+      else rows[0] = { ...rows[0], unit_cost_ex_vat: body.cost, corrected: true, correctionRevision: 1 };
       return route.fulfill({ json: { ok: true } });
     }
     const params = new URL(route.request().url()).searchParams;
@@ -770,14 +773,29 @@ for (const width of [1280, 390]) test(`receipt correction keeps its audit revisi
   const history = page.getByRole("heading", { name: "매입 이력", exact: true }).locator("xpath=ancestor::section[1]");
   await history.getByRole("button", { name: "합성 상품", exact: true }).click();
   await history.getByRole("button", { name: "2026-11-07 합성 상품 매입 기록 정정", exact: true }).click();
-  await expect(page.getByText("엑셀 원본과 청구 금액은 유지합니다.", { exact: false })).toBeVisible();
+  await expect(page.getByText("원본과 감사 기록은 보존합니다.", { exact: false })).toBeVisible();
   await page.getByLabel("정정 단가", { exact: true }).fill("110");
   await page.getByLabel("정정 사유", { exact: true }).fill("합성 오입력 정정");
   await page.getByRole("button", { name: "정정 저장", exact: true }).click();
   await expect.poll(() => corrections.length).toBe(1);
-  expect(corrections[0]).toMatchObject({ id: rows[0].id, cost: 110, expectedRevision: 0, reason: "합성 오입력 정정" });
+  expect(corrections[0]).toMatchObject({ action: "correct", id: rows[0].id, cost: 110, expectedRevision: 0, reason: "합성 오입력 정정" });
   expect(rows[0]).toMatchObject({ quantity: 2, total_amount: 220, correctionRevision: 1, corrected: true });
   await expect(history.getByRole("cell", { name: "110원", exact: true }).first()).toBeVisible();
+  await history.getByRole("button", { name: "매입 줄 직접 추가", exact: true }).click();
+  await page.getByLabel("직접 추가 매입일", { exact: true }).fill("2026-11-08");
+  await page.getByLabel("직접 추가 품목명", { exact: true }).fill("수동 상품");
+  await page.getByLabel("정정 수량", { exact: true }).fill("0.3");
+  await page.getByLabel("정정 단가", { exact: true }).fill("120");
+  await page.getByLabel("정정 사유", { exact: true }).fill("누락 매입 직접 추가");
+  await page.getByRole("button", { name: "직접 추가", exact: true }).click();
+  await expect.poll(() => corrections.length).toBe(2);
+  expect(corrections[1]).toMatchObject({ action: "add", productName: "수동 상품", receiptDate: "2026-11-08", cost: 120 });
+  await history.getByRole("button", { name: "수동 상품", exact: true }).click();
+  await history.getByRole("button", { name: "2026-11-08 수동 상품 매입 기록 삭제", exact: true }).click();
+  await page.getByLabel("정정 사유", { exact: true }).fill("잘못 추가한 줄 삭제");
+  await page.getByRole("button", { name: "삭제 기록 저장", exact: true }).click();
+  await expect.poll(() => corrections.length).toBe(3);
+  expect(corrections[2]).toMatchObject({ action: "delete", reason: "잘못 추가한 줄 삭제" });
   await page.getByRole("button", { name: "전체", exact: true }).click();
   await expect(page.getByRole("cell", { name: "100원", exact: true }).first()).toBeVisible();
   expect(dateWrites).toEqual([]); expect(writes).toEqual([]); expect(receipts).toEqual([]); expect(pricingCommands).toEqual([]);
