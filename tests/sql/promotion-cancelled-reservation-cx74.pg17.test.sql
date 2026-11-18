@@ -4,6 +4,23 @@ do $$ begin
   assert current_database()='store_member_order_test';
   assert current_setting('server_version_num')::int/10000=17;
 end $$;
+\if :{?CX74_CURRENT_ENGINE_VARIANT}
+-- Isolated row/definition fixture of the read-verified operating contract:
+-- document engines already use non-cancelled states, pending entry is absent.
+create temporary table cx74_fixture_restore as
+select pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace
+  and proname in ('cx75_place_store_order_impl','cx75_place_store_member_order_impl');
+do $$ declare f record; signature text; begin
+  for f in select definition from cx74_fixture_restore loop
+    assert position('and so.status = ''submitted'' and so.id <> v_order.id' in f.definition)>0;
+    execute replace(f.definition,'and so.status = ''submitted'' and so.id <> v_order.id',
+      'and so.status <> ''cancelled'' and so.id <> v_order.id');
+  end loop;
+  select oid::regprocedure::text into strict signature from pg_proc
+    where pronamespace='public'::regnamespace and proname='place_store_pending_delivery_order';
+  execute format('alter function %s rename to cx74_test_pending_original',signature);
+end $$;
+\endif
 -- Mirror CX-66's final-cancel row contract, without replacing its dispatch engine.
 alter table public.store_order_lines
   add column shipped_quantity numeric(14,3) not null default 0 check(shipped_quantity>=0),
@@ -17,9 +34,14 @@ where pronamespace='public'::regnamespace and proname in
  'cx75_place_store_catalog_order_core_v1_impl','cx75_place_store_account_order_impl',
  'place_store_pending_delivery_order','promotion_remaining_v1');
 create temporary table cx74_before_overlay as select pg_temp.cx75_effects() effects;
+\if :{?CX74_CURRENT_ENGINE_VARIANT}
+\ir ../../docs/sql-drafts/2026-11-18-CX-74-current-engine-reservation.sql
+\else
 \ir ../../docs/sql-drafts/2026-11-18-CX-74-promotion-cancelled-reservation.sql
+\endif
 do $$ begin
-  assert (select count(*) from cx74_original_functions)=6;
+  assert (select count(*) from cx74_original_functions)=case when exists(select 1 from pg_proc
+    where pronamespace='public'::regnamespace and proname='cx74_test_pending_original') then 5 else 6 end;
   assert pg_temp.cx75_effects()=(select effects from cx74_before_overlay);
   assert not exists(select 1 from cx74_original_functions f join pg_proc p on p.oid=f.oid
     where p.proacl is distinct from f.proacl or p.proowner<>f.proowner);
@@ -86,12 +108,26 @@ begin
  end loop;
 end $$;
 rollback;
+\if :{?CX74_CURRENT_ENGINE_VARIANT}
+\ir ../../docs/sql-drafts/2026-11-18-CX-74-current-engine-reservation.down.sql
+\else
 \ir ../../docs/sql-drafts/2026-11-18-CX-74-promotion-cancelled-reservation.down.sql
+\endif
 do $$ begin
   assert pg_temp.cx75_effects()=(select effects from cx74_before_overlay);
   assert not exists(select 1 from cx74_original_functions f join pg_proc p on p.oid=f.oid
     where pg_get_functiondef(p.oid)<>f.definition or p.proacl is distinct from f.proacl or p.proowner<>f.proowner);
 end $$;
+\if :{?CX74_CURRENT_ENGINE_VARIANT}
+do $$ declare f record; signature text; begin
+  for f in select definition from cx74_fixture_restore loop execute f.definition; end loop;
+  select oid::regprocedure::text into strict signature from pg_proc
+    where pronamespace='public'::regnamespace and proname='cx74_test_pending_original';
+  execute format('alter function %s rename to place_store_pending_delivery_order',signature);
+end $$;
+drop table cx74_fixture_restore;
+\endif
 \ir ../../docs/sql-drafts/2026-11-18-D4-S-3bc-order-cutoff-promotion-remaining.down.sql
 alter table public.store_order_lines drop constraint cx74_dispatch_quantity_test,drop column shipped_quantity,drop column cancelled_quantity;
+drop table cx74_original_functions,cx74_before_overlay;
 select 'cx74_partial_cancel_reservation_pg17_pass';

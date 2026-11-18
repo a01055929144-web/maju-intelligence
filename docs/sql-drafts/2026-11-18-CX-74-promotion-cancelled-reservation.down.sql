@@ -1,4 +1,5 @@
 -- DRAFT ONLY. Roll back this overlay BEFORE CX-66 partial columns / D4 / CX-75.
+-- LEGACY FIXTURE VARIANT: pair only with its matching up, never with the current-engine variant.
 -- Restores the old conservative reservation calculation; never deletes order history.
 begin;
 set local lock_timeout = '3s';

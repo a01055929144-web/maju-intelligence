@@ -1,4 +1,5 @@
 -- DRAFT ONLY. Prerequisites: CX-75, D4 remaining RPC, CX-66 partial-final-cancel.
+-- LEGACY FIXTURE VARIANT: not the current operating target. See CX-74-current-engine-reservation.sql.
 -- No historical row updates. Keep shipped units consumed; release only final cancellations.
 begin;
 set local lock_timeout = '3s';
