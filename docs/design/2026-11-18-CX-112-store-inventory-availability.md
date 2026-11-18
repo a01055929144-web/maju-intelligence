@@ -1,7 +1,7 @@
 # CX-112 매장 재고 확인 설계
 
-> 상태: 설계 전용. 코드·SQL·환경값·운영 DB 변경 없음  
-> Owner Domain: `inventory` / Related: `order`, `product`, `pricing`  
+> 상태: 설계 전용. 코드·SQL·환경값·운영 DB 변경 없음
+> Owner Domain: `inventory` / Related: `order`, `product`, `pricing`
 > 목표: 매장 품목 옆에 재고 상태를 보여 주고, 확실한 품절만 담기를 막으며 대체 품목을 안내한다.
 
 ## 1. 전제와 범위
