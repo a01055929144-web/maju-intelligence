@@ -127,8 +127,8 @@ for (const width of [1440, 390]) for (const role of ["owner", "manager", "staff"
   await expect(page.getByText(`작성자: ${author}`, { exact: true })).toBeVisible();
   expect(accepted).toBe(1); expect(orderAttempts).toBe(3); expect(saved.size).toBe(1);
   expect(requests[0]).toEqual(requests[1]); expect(requests[1]).toEqual(requests[2]);
-  await expect(page.locator("table tbody tr")).toHaveCount(1);
-  const history = page.locator("table tbody tr").first();
+  await expect(page.locator("tr[data-store-order-id]")).toHaveCount(1);
+  const history = page.locator("tr[data-store-order-id]").first();
   await expect(history).toContainText("합성 품목 1봉");
   await expect(history).toContainText("1kg");
   await expect(history).toContainText(taxType === "exempt" ? "면세" : "과세");
