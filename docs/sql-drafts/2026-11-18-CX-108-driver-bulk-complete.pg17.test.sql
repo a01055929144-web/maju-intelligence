@@ -27,6 +27,18 @@ do $$ begin
  then raise exception 'atomic completion failed'; end if;
 end $$;
 
+do $$ begin
+ perform public.complete_driver_delivery_stops_atomic(
+  '20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','2026-11-18',
+  array['10000000-0000-4000-8000-000000000001'::uuid,'10000000-0000-4000-8000-000000000002'::uuid]);
+ raise exception 'completed batch replay accepted';
+exception when serialization_failure then null;
+end $$;
+do $$ begin
+ if (select count(*) from delivery_route_stops where status='completed') <> 2
+ then raise exception 'completed batch replay changed state'; end if;
+end $$;
+
 update delivery_route_stops set status='planned',completed_at=null where company_id='20000000-0000-4000-8000-000000000001';
 update delivery_route_stops set status='completed',completed_at=clock_timestamp() where id='10000000-0000-4000-8000-000000000002';
 do $$ begin
@@ -34,6 +46,14 @@ do $$ begin
   '20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','2026-11-18',
   array['10000000-0000-4000-8000-000000000001'::uuid,'10000000-0000-4000-8000-000000000002'::uuid]);
  raise exception 'partial completion accepted';
+exception when serialization_failure then null;
+end $$;
+
+do $$ begin
+ perform public.complete_driver_delivery_stops_atomic(
+  '20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000099','2026-11-18',
+  array['10000000-0000-4000-8000-000000000001'::uuid]);
+ raise exception 'cross-driver stop accepted';
 exception when serialization_failure then null;
 end $$;
 do $$ begin
