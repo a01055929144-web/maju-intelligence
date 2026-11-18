@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { DEFAULT_DISPLAY, documentOutput, lineFromCatalog, parseDocument, type DocumentContent, type DocumentVersion } from "../domains/pricing/document";
 import { publicDocumentOutput } from "../domains/pricing/document-share";
-import { buildInfoCandidates } from "../components/pricing-info-panel";
+import { buildInfoCandidates, PricingInfoPanel } from "../components/pricing-info-panel";
 
 const mocks = vi.hoisted(() => ({ db: vi.fn() }));
 vi.mock("../lib/store", () => ({ supabaseRequest: mocks.db, getSupabaseConfig: () => ({ url: "https://synthetic.test", serviceRoleKey: "synthetic-test-only" }) }));
@@ -40,6 +42,12 @@ it.each(privateKeys)("blocks an old saved draft containing %s before publication
   const path = new URL(mocks.db.mock.calls[0][0], "https://synthetic.test");
   expect(path.searchParams.get("company_id")).toBe(`eq.${company}`);
   expect(path.searchParams.get("or")).toBe(`(kind.eq.sheet,owner_key.eq.${scope.actor})`);
+});
+
+it("does not render old selected bank rows in the document info editor, preserving other rows", () => {
+  const html = renderToStaticMarkup(createElement(PricingInfoPanel, { companyId: company, content: content(), editable: false, onContent: () => undefined }));
+  expect(html).not.toContain(marker);
+  expect(html).toContain(safe.value);
 });
 
 it("publishes cleaned drafts through the original revision-checked RPC with unchanged payload", async () => {

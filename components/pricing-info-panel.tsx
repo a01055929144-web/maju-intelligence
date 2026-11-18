@@ -5,7 +5,7 @@ import { Notice } from "@/components/ui/notice";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DocumentContent, DocumentInfoItem, PriceSource } from "@/domains/pricing/document";
-import { DEFAULT_DISPLAY } from "@/domains/pricing/document";
+import { parseDisplay } from "@/domains/pricing/document";
 import { PAYMENT_CYCLE_OPTIONS } from "@/domains/organization/company-profile";
 import { formatPhoneNumber } from "@/lib/phone";
 
@@ -75,7 +75,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const [message, setMessage] = useState("");
   const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
   const [basisBusy, setBasisBusy] = useState(false);
-  const display = content.display || DEFAULT_DISPLAY;
+  const display = parseDisplay(content.display);
   const latest = useRef(content);
   latest.current = content;
 
@@ -162,7 +162,7 @@ export function PricingInfoPanel({ companyId, content, editable, onContent }: {
   const isOn = (key: string) => display.info.some((item) => item.key === key);
 
   function toggle(candidate: Candidate, on: boolean, base = content) {
-    const disp = base.display || DEFAULT_DISPLAY;
+    const disp = parseDisplay(base.display);
     const rest = disp.info.filter((item) => item.key !== candidate.key);
     const item: DocumentInfoItem = { key: candidate.key, label: candidate.label, place: candidate.place, value: candidate.value };
     onContent({ ...base, display: { ...disp, info: on ? [...rest, item] : rest } });
