@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setLeadFavorite } from "@/application/lead/set-lead-favorite";
-import { getCustomerOperationalName, getRequestAuthScope } from "@/lib/auth";
+import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { leadFavoriteRepository, leadFavoritesEnabled } from "@/lib/lead-favorites";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   }
   const scope = await getRequestAuthScope(request, body.companyId);
   if (!scope.ok || !scope.companyId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  if (!scopeHasCapability(scope, "manage_customers")) return NextResponse.json({ message: "리드 즐겨찾기를 바꿀 권한이 없습니다." }, { status: 403 });
   if (!leadFavoritesEnabled(scope.companyId)) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
   const { id: leadId } = await context.params;

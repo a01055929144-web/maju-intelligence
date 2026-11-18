@@ -66,6 +66,23 @@ do $$ begin
   if exists(select 1 from public.company_lead_favorites) then raise exception 'favorite not removed'; end if;
   if has_table_privilege('authenticated', 'public.company_lead_favorites', 'select') then raise exception 'authenticated can read'; end if;
   if not has_table_privilege('service_role', 'public.company_lead_favorites', 'select') then raise exception 'service role cannot read'; end if;
+  if has_function_privilege('anon', 'public.set_company_lead_favorite_v1(uuid,uuid,boolean,uuid,text)', 'execute') then raise exception 'anon can execute'; end if;
+  if has_function_privilege('authenticated', 'public.set_company_lead_favorite_v1(uuid,uuid,boolean,uuid,text)', 'execute') then raise exception 'authenticated can execute'; end if;
+  if not has_function_privilege('service_role', 'public.set_company_lead_favorite_v1(uuid,uuid,boolean,uuid,text)', 'execute') then raise exception 'service role cannot execute'; end if;
 end $$;
+
+insert into public.company_lead_favorites(company_id, lead_id, starred_by_name)
+values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 'rollback guard');
+savepoint down_guard;
+\set ON_ERROR_STOP off
+\ir ../../docs/sql-drafts/2026-11-17-CX-83-company-lead-favorites.down.sql
+\set ON_ERROR_STOP on
+rollback to savepoint down_guard;
+do $$ begin
+  if to_regclass('public.company_lead_favorites') is null then raise exception 'down dropped table with history'; end if;
+  if not exists(select 1 from public.company_lead_favorites) then raise exception 'down deleted favorite history'; end if;
+end $$;
+delete from public.company_lead_favorites;
+\ir ../../docs/sql-drafts/2026-11-17-CX-83-company-lead-favorites.down.sql
 
 rollback;

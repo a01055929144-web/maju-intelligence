@@ -10,6 +10,16 @@ type RpcRow = {
 };
 
 export const leadFavoriteRepository: LeadFavoriteRepository = {
+  async getMany(companyId, leadIds) {
+    const rows = await supabaseRequest<RpcRow[]>(`company_lead_favorites?company_id=eq.${encodeURIComponent(companyId)}&lead_id=in.(${leadIds.map((id) => encodeURIComponent(id)).join(",")})&select=lead_id,starred_at,starred_by_name,starred_by_user_id`);
+    return rows.map((row) => ({
+      leadId: row.lead_id,
+      starred: true,
+      starredAt: row.starred_at,
+      starredByName: row.starred_by_name,
+      starredByUserId: row.starred_by_user_id
+    }));
+  },
   async set(input) {
     const rows = await supabaseRequest<RpcRow[]>("rpc/set_company_lead_favorite_v1", {
       method: "POST",

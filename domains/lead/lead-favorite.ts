@@ -15,7 +15,14 @@ export type SetLeadFavoriteInput = {
 };
 
 export interface LeadFavoriteRepository {
+  getMany(companyId: string, leadIds: string[]): Promise<LeadFavorite[]>;
   set(input: SetLeadFavoriteInput): Promise<LeadFavorite>;
+}
+
+export function parseLeadFavoriteIds(values: string[], limit = 100) {
+  const ids = Array.from(new Set(values.map((value) => value.trim()).filter((value) => /^[0-9a-f-]{36}$/i.test(value))));
+  if (!ids.length || ids.length > limit) throw new Error(`리드 ID를 1~${limit}개 입력해 주세요.`);
+  return ids;
 }
 
 export function validateLeadFavoriteInput(input: SetLeadFavoriteInput) {

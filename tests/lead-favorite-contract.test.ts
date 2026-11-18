@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLeadFavorite } from "../application/lead/set-lead-favorite";
+import { parseLeadFavoriteIds } from "../domains/lead/lead-favorite";
 import { leadFavoritesEnabled } from "../lib/lead-favorites";
 
 afterEach(() => {
@@ -24,5 +25,12 @@ describe("lead favorite contract", () => {
     expect(() => setLeadFavorite(repository, {
       actorName: " ", actorUserId: null, companyId: "company", leadId: "lead", starred: true
     })).toThrow("사용자의 이름");
+  });
+
+  it("normalizes and caps favorite read ids", () => {
+    const id = "00000000-0000-4000-8000-000000000011";
+    expect(parseLeadFavoriteIds([` ${id} `, id])).toEqual([id]);
+    expect(() => parseLeadFavoriteIds(["bad"])).toThrow("리드 ID");
+    expect(() => parseLeadFavoriteIds(Array.from({ length: 101 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`))).toThrow("1~100");
   });
 });

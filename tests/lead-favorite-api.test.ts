@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), enabled: vi.fn(), operationalName: vi.fn(), set: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), capability: vi.fn(), enabled: vi.fn(), operationalName: vi.fn(), set: vi.fn() }));
 vi.mock("@/lib/auth", () => ({
   getCustomerOperationalName: mocks.operationalName,
-  getRequestAuthScope: mocks.auth
+  getRequestAuthScope: mocks.auth,
+  scopeHasCapability: mocks.capability
 }));
 vi.mock("@/lib/lead-favorites", () => ({
   leadFavoriteRepository: { set: mocks.set },
@@ -23,6 +24,7 @@ const context = { params: Promise.resolve({ id: leadId }) };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.enabled.mockReturnValue(true);
+  mocks.capability.mockReturnValue(true);
   mocks.operationalName.mockReturnValue("현장 담당자");
   mocks.set.mockResolvedValue({ leadId, starred: true, starredAt: "2026-11-17T00:00:00Z", starredByName: "현장 담당자", starredByUserId: "user-1" });
 });
@@ -61,6 +63,13 @@ describe("PUT /api/leads/:id/favorite", () => {
   it("rejects malformed state without authentication or persistence", async () => {
     expect((await PUT(request({ starred: "yes" }), context)).status).toBe(400);
     expect(mocks.auth).not.toHaveBeenCalled();
+    expect(mocks.set).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 without customer management permission", async () => {
+    mocks.auth.mockResolvedValue({ ok: true, companyId: "company-1", customerSession: {}, role: "customer" });
+    mocks.capability.mockReturnValue(false);
+    expect((await PUT(request({ starred: true }), context)).status).toBe(403);
     expect(mocks.set).not.toHaveBeenCalled();
   });
 });
