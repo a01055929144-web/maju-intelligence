@@ -357,7 +357,8 @@ for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserv
   });
   await page.goto("/revenue/pricing/documents");
   await page.getByRole("button", { name: "세금 갱신 합성 문서", exact: true }).click();
-  await page.getByRole("tab", { name: "표", exact: true }).click();
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click(); }
+  else await page.getByRole("tab", { name: "표", exact: true }).click();
   const normal = page.getByRole("combobox", { name: "품목 1 과세", exact: true }), promo = page.getByRole("combobox", { name: "품목 2 과세", exact: true });
   await expect(normal).toHaveValue("taxable"); await expect(promo).toBeDisabled();
   expect((await page.getByRole("button", { name: "행사 세금 수정", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
