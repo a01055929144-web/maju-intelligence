@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { documentOutput, printPages, lineFromCatalog, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { mkdir, readFile } from "node:fs/promises";
+import { documentOutput, printPages, lineFromCatalog, parseDocument, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
 import { documentRequestError } from "../../lib/pricing/document-request-error";
 
 for (const width of [1440, 390]) test(`draft save failures preserve revision19 and edits at ${width}px`, async ({ page }) => {
@@ -443,4 +444,128 @@ for (const width of [1440, 390]) test(`document editor toolbar keeps title and a
   })).toBe(true);
   await back.click(); await page.getByRole("button", { name: editedTitle, exact: true }).click();
   await expect(title).toHaveValue(editedTitle);
+});
+
+test.describe("document footer PNG glyphs", () => {
+test.use({ deviceScaleFactor: 2 });
+for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive save, publication and export at ${width}px`, async ({ page }) => {
+  test.setTimeout(120_000); page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 비고 상품", displayName: "합성 비고 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "exempt" as const };
+  const note = Array.from({ length: 7 }, (_, i) => `비고 ${i + 1} · 가 값 배 송 · 보관 조건을 확인해 주세요`).join("\n");
+  let revision = 1;
+  let content: DocumentContent = { kind: "sheet", title: "비고 서식 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "기존 비고", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    lines: Array.from({ length: 96 }, (_, i) => lineFromCatalog({ ...product, id: `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` })) };
+  const publications: DocumentVersion[] = [{ id: "40000000-0000-4000-8000-000000000001", documentId: id, version: 1, revision: 1, content: structuredClone(content), publishedAt: "2026-11-18T00:00:00Z", unavailablePromotions: [], promotionStock: {} }];
+  const original = JSON.stringify(publications[0]);
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-19T00:00:00Z", recalculation: { publishedAt: "2026-11-18T00:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: content.lines.map(line => ({ ...product, id: line.productId })), total: 96 };
+    if (action === "versions") result = [...publications].reverse();
+    if (action === "save") { expect(body.expected).toBe(revision); content = parseDocument(body.content); revision++; result = draft(); }
+    if (action === "publish") { expect(body.expected).toBe(revision); const version = publications.length + 1; const published: DocumentVersion = { id: `40000000-0000-4000-8000-${String(version).padStart(12, "0")}`, documentId: id, version, revision, content: structuredClone(content), publishedAt: "2026-11-19T00:00:00Z", unavailablePromotions: [], promotionStock: {} }; publications.push(published); result = published; }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents"); await page.getByRole("button", { name: "비고 서식 합성 문서", exact: true }).click();
+  const noteInput = page.getByRole("textbox", { name: "하단 안내", exact: true });
+  const font = page.getByRole("combobox", { name: "비고 글자 크기", exact: true });
+  const bold = page.getByRole("button", { name: "굵게", exact: true });
+  await expect(font).toHaveValue(""); await noteInput.fill(note); await bold.click();
+  expect((await bold.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await mkdir("test-results/readonly-pg17/document-footer-format", { recursive: true });
+  for (const [index, size] of [12, 14, 16].entries()) {
+    await font.selectOption(String(size)); await page.getByRole("button", { name: `${index + 1}열`, exact: true }).click();
+    await expect(noteInput).toHaveValue(note); await expect(bold).toHaveAttribute("aria-pressed", "true");
+    expect(await noteInput.evaluate(element => getComputedStyle(element).fontSize)).toBe(`${size}px`);
+    if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+    else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+    expect(content.display).toMatchObject({ footerFontSize: size, footerBold: true }); expect(content.footer).toBe(note);
+    await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+    const version = index + 2;
+    await page.getByRole("button", { name: new RegExp(`^버전 ${version} 미리보기`) }).click();
+    const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
+    const notes = preview.locator("[data-document-footer]");
+    await expect(notes.first()).toBeVisible(); expect(await notes.count()).toBeGreaterThan(1);
+    expect(await notes.evaluateAll((elements, expected) => elements.every(element => getComputedStyle(element).fontSize === `${expected}px` && getComputedStyle(element).fontWeight === "700"), size)).toBe(true);
+    for (const element of await notes.all()) await expect(element).toHaveText(note);
+    const overflow = await preview.locator(".pricing-paper").evaluateAll(papers => papers.some(paper => { const content = paper.querySelector(".pricing-output-content")!; const style = getComputedStyle(paper); return content.getBoundingClientRect().height > paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + 2; }));
+    expect(overflow).toBe(false);
+    const spacing = await preview.locator(".pricing-paper").evaluateAll(papers => papers.map(paper => {
+      const rows = Array.from(paper.querySelectorAll(".pricing-output-table tbody tr"));
+      const note = paper.querySelector("[data-document-footer]")!;
+      const pageNumber = paper.querySelector("footer")!.lastElementChild!;
+      return { rows: rows.length, gap: note.getBoundingClientRect().top - Math.max(...rows.map(row => row.getBoundingClientRect().bottom)), pageNumber: pageNumber.textContent, bottom: pageNumber.getBoundingClientRect().bottom, pageBottom: paper.getBoundingClientRect().bottom };
+    }));
+    for (const metric of spacing) {
+      expect(metric.rows).toBeGreaterThan(0);
+      expect(metric.gap).toBeGreaterThanOrEqual(0);
+      expect(metric.pageNumber).toMatch(/\d+ \/ \d+쪽/);
+      expect(metric.bottom).toBeLessThanOrEqual(metric.pageBottom);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await page.screenshot({ path: `test-results/readonly-pg17/document-footer-format/preview-${size}-${width}.png`, fullPage: true });
+    const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
+    const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-1.png`);
+    await downloaded.saveAs(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const paper = preview.locator(".pricing-paper").first(), printedNote = paper.locator("[data-document-footer]");
+    // Compare equal 2x rasters; the phone's horizontal A4 viewport must not clip the reference.
+    if (width === 390) await page.setViewportSize({ width: 1440, height: 1000 });
+    const reference = await printedNote.screenshot({ animations: "disabled", path: `test-results/readonly-pg17/document-footer-format/reference-${size}-${width}.png` });
+    const paperBox = (await paper.boundingBox())!, noteBox = (await printedNote.boundingBox())!;
+    const exported = await readFile(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const difference = await page.evaluate(async ({ reference, exported, crop }) => {
+      const load = async (base64: string) => { const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode(); return image; };
+      const [live, png] = await Promise.all([load(reference), load(exported)]);
+      // Geometry is checked separately above. Compare ink, tolerating html-to-image's
+      // documented 0.1px font reduction and the two rasterizers' subpixel placement.
+      const ink = (image: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+        const source = document.createElement("canvas"); source.width = Math.ceil(width); source.height = Math.ceil(height);
+        const context = source.getContext("2d")!;
+        context.fillStyle = "white"; context.fillRect(0, 0, source.width, source.height);
+        context.drawImage(image, x, y, width, height, 0, 0, source.width, source.height);
+        const pixels = context.getImageData(0, 0, source.width, source.height).data;
+        let left = source.width, top = source.height, right = -1, bottom = -1;
+        for (let row = 0; row < source.height; row++) for (let col = 0; col < source.width; col++) {
+          const at = (row * source.width + col) * 4;
+          if (pixels[at] + pixels[at + 1] + pixels[at + 2] < 600) {
+            left = Math.min(left, col); top = Math.min(top, row); right = Math.max(right, col); bottom = Math.max(bottom, row);
+          }
+        }
+        if (right < left || bottom < top) throw new Error("PNG 비고 글자가 비어 있습니다.");
+        const normalized = document.createElement("canvas"); normalized.width = 320; normalized.height = 160;
+        const target = normalized.getContext("2d")!;
+        target.fillStyle = "white"; target.fillRect(0, 0, 320, 160); target.filter = "blur(1px)";
+        target.drawImage(source, left, top, right - left + 1, bottom - top + 1, 0, 0, 320, 160);
+        return target.getImageData(0, 0, 320, 160).data;
+      };
+      const before = ink(live, 0, 0, live.width, live.height);
+      const ratio = png.width / crop.paperWidth;
+      const after = ink(png, crop.x * ratio, crop.y * ratio, crop.width * ratio, crop.height * ratio);
+      let total = 0;
+      for (let i = 0; i < before.length; i += 4) for (let channel = 0; channel < 3; channel++) total += Math.abs(before[i + channel] - after[i + channel]);
+      return total / (320 * 160 * 3);
+    }, { reference: reference.toString("base64"), exported: exported.toString("base64"), crop: { x: noteBox.x - paperBox.x, y: noteBox.y - paperBox.y, width: noteBox.width, height: noteBox.height, paperWidth: paperBox.width } });
+    console.log("FOOTER_PNG_GLYPHS", JSON.stringify({ width, size, difference }));
+    if (width === 390) await page.setViewportSize({ width, height: 1000 });
+    expect(difference, "PNG 한글 비고가 실제 화면 글자와 같아야 합니다.").toBeLessThan(12);
+    if (width === 1440) await page.pdf({ path: `test-results/readonly-pg17/document-footer-format/print-${size}.pdf`, format: "A4", printBackground: true });
+    await preview.getByRole("button", { name: "닫기", exact: true }).click();
+  }
+  expect(JSON.stringify(publications[0])).toBe(original);
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  const old = page.getByRole("dialog", { name: "미리보기", exact: true }); await expect(old.locator("[data-document-footer]").first()).toHaveText("기존 비고");
+  await old.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.getByRole("button", { name: "← 문서 목록", exact: true }).click(); await page.getByRole("button", { name: "비고 서식 합성 문서", exact: true }).click();
+  await expect(font).toHaveValue("16"); await expect(bold).toHaveAttribute("aria-pressed", "true"); await expect(noteInput).toHaveValue(note);
+});
 });

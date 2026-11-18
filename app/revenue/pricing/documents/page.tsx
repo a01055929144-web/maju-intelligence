@@ -15,6 +15,7 @@ import { resolveDocumentEntry } from "@/application/pricing/document-entry";
 import { findDocumentEntryLead } from "@/lib/pricing/document-entry";
 import { documentSharingEnabled } from "@/lib/pricing/document-share-feature";
 import { publicDocumentOrderEntryEnabled } from "@/lib/pricing/public-document-order-feature";
+import { documentFooterFormattingEnabled } from "@/lib/pricing/document-footer-format";
 export const dynamic = "force-dynamic";
 export default async function DocumentsPage({
   searchParams,
@@ -50,6 +51,7 @@ export default async function DocumentsPage({
         <PricingDocumentsWorkspace
           key={`${companyId}:${entry.leadContext?.id || ""}:${entry.initialStartKind || ""}`}
           companyId={companyId}
+          footerFormattingEnabled={documentFooterFormattingEnabled(companyId)}
           initialStartKind={entry.initialStartKind}
           leadContext={entry.leadContext}
           sharingEnabled={documentSharingEnabled(companyId)}
