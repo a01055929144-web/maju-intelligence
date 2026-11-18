@@ -5,16 +5,25 @@ do $$ begin
 end $$;
 \ir ../../docs/sql-drafts/20261111-CC-19a-margin-templates.sql
 \ir ../../docs/sql-drafts/20261112-CC-29a-promotion-audience.sql
+-- Real pinned delivery producer SQL, supplied by CI from commit 220b9c1.
+create schema if not exists storage;
+create table if not exists storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+\ir ../../supabase/migrations/20260709_customer_operations.sql
+alter table public.customer_notes add constraint cx75_notes_scope_uq unique(company_id,customer_id,id);
+\ir ../../docs/sql-drafts/20261108-stage-d-delivery-snapshot-02.sql
+update public.normalized_customers set address='cx75 synthetic address' where id='20000000-0000-4000-8000-000000000001';
+\i :CX75_DELIVERY_SQL
 create temporary table cx75_original_functions as
 select oid original_oid,proname,pg_get_function_identity_arguments(oid) args,pg_get_functiondef(oid) definition,proacl
 from pg_proc where pronamespace='public'::regnamespace and proname in
 ('place_store_order','place_store_member_order','place_store_catalog_order_core_v1',
- 'place_store_catalog_order_v1','place_store_catalog_member_order_v1','place_store_account_order','place_store_account_orders');
+ 'place_store_catalog_order_v1','place_store_catalog_member_order_v1','place_store_account_order','place_store_account_orders',
+ 'place_store_order_with_delivery_snapshot_09');
 \ir ../../docs/sql-drafts/2026-11-18-CX-75-common-order-core.sql
 do $$ begin
   if exists(select 1 from public.store_order_settings where unified_order_core_enabled)
     then raise exception 'cx75_default_not_off'; end if;
-  if (select count(*) from cx75_original_functions)<>7 then raise exception 'cx75_missing_entry'; end if;
+  if (select count(*) from cx75_original_functions)<>8 then raise exception 'cx75_missing_entry'; end if;
   if exists(select 1 from cx75_original_functions f where position('place_store_order_core_v2' in
     pg_get_functiondef((select oid from pg_proc where pronamespace='public'::regnamespace and proname=f.proname)))=0)
     then raise exception 'cx75_wrapper_missing'; end if;
@@ -54,9 +63,11 @@ do $$
 declare e text; r jsonb; result jsonb; rejected boolean; member_entry boolean; kind int;
 begin
  foreach e in array array['place_store_order','place_store_member_order','place_store_catalog_order_core_v1',
- 'place_store_catalog_order_v1','place_store_catalog_member_order_v1','place_store_account_order'] loop
+ 'place_store_catalog_order_v1','place_store_catalog_member_order_v1','place_store_account_order','place_store_order_with_delivery_snapshot_09'] loop
  member_entry:=e in ('place_store_member_order','place_store_catalog_member_order_v1','place_store_account_order');
  r:=jsonb_build_object('p_company','00000000-0000-4000-8000-000000000001','p_token_hash',repeat(case when e like '%catalog%' then 'c' else 'a' end,64),
+ 'p_snapshot',(select jsonb_build_object('deliveryCustomerNameSnapshot',customer_name,'deliveryAddressSnapshot',address)
+ from public.normalized_customers where id='20000000-0000-4000-8000-000000000001'),
  'p_delivery_date','2099-01-05','p_lines','[{"productId":"60000000-0000-4000-8000-000000000001","quantity":1}]'::jsonb,
  'p_idempotency_key',gen_random_uuid(),'p_order_id',null,'p_expected_revision',null,'p_memo','cx75-wrapper',
  'p_store_account_id',case when member_entry then '30000000-0000-4000-8000-000000000001' end,
@@ -212,6 +223,33 @@ begin
  perform dblink_disconnect('cx75a'); perform dblink_disconnect('cx75b');
 end $$;
 drop function public.cx75_test_promotion(boolean,uuid);
+
+-- Actual public RPCs with 5,000 extra products spread across three companies.
+insert into public.companies(id) values('00000000-0000-4000-8000-000000000075');
+with added as (
+ insert into public.product_catalog(id,company_id,purchase_product_name,purchase_price,sales_unit,tax_type)
+ select gen_random_uuid(),case n%3 when 0 then '00000000-0000-4000-8000-000000000001'::uuid
+ when 1 then '00000000-0000-4000-8000-000000000002'::uuid else '00000000-0000-4000-8000-000000000075'::uuid end,
+ 'CX75 performance '||n,800,'BOX','exempt' from generate_series(1,5000) n returning company_id,id
+) insert into public.pricing_items(company_id,product_id,price) select company_id,id,1200 from added;
+do $$
+declare started timestamptz; elapsed numeric; p uuid; r jsonb; rows bigint;
+begin
+ select id into p from public.product_catalog where company_id='00000000-0000-4000-8000-000000000001' and purchase_product_name like 'CX75 performance %' limit 1;
+ started:=clock_timestamp();
+ r:=public.place_store_account_order('00000000-0000-4000-8000-000000000001','2099-01-05',
+ jsonb_build_array(jsonb_build_object('productId',p,'quantity',1)),gen_random_uuid(),null,null,'cx75-performance',
+ '30000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001');
+ elapsed:=extract(epoch from clock_timestamp()-started);
+ if elapsed>=5 or r->>'knownTotal'<>'1200' then raise exception 'cx75_order_performance_%_%',elapsed,r; end if;
+ raise notice 'cx75_actual_common_order_seconds=%',elapsed;
+ started:=clock_timestamp();
+ select count(*) into rows from public.store_member_order_catalog('30000000-0000-4000-8000-000000000001',
+ '50000000-0000-4000-8000-000000000001','2099-01-05');
+ elapsed:=extract(epoch from clock_timestamp()-started);
+ if elapsed>=10 or rows<1666 then raise exception 'cx75_catalog_performance_%_%',elapsed,rows; end if;
+ raise notice 'cx75_actual_catalog_seconds=%, rows=%',elapsed,rows;
+end $$;
 
 -- Market-price rows remain unknown, with no implicit receipt/financial confirmation.
 do $$

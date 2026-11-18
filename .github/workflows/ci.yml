@@ -628,6 +628,13 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Checkout pinned delivery producer for CX-75 isolated tests
+        uses: actions/checkout@v5
+        with:
+          ref: 220b9c1011368570873f61be467e651cf22a6cec
+          path: .ci-cx75-delivery
+          persist-credentials: false
+
       - name: Verify compatible member ordering on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
@@ -655,7 +662,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-account-order-s2a.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-cx60-identity-settings.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-delivery-cx71.pg17.test.sql
-          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-core-cx75.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --set=CX75_DELIVERY_SQL="$GITHUB_WORKSPACE/.ci-cx75-delivery/docs/sql-drafts/20261108-09-order-delivery-producer.sql" --file=tests/sql/store-order-core-cx75.pg17.test.sql
 
       - name: Verify CX-68 order money safety and performance on PostgreSQL 17
         env:
