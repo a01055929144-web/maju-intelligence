@@ -89,4 +89,8 @@ begin
 end $$;
 
 \ir 2026-11-18-CX-120-store-price-v2.down.sql
-select case when to_regprocedure('public.self_order_price_v2(uuid,uuid,uuid,date,boolean)') is null then 1 else 1/0 end;
+do $$ begin
+  if to_regprocedure('public.self_order_price_v2(uuid,uuid,uuid,date,boolean)') is not null then
+    raise exception 'down failed';
+  end if;
+end $$;
