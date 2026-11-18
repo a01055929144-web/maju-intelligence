@@ -54,6 +54,20 @@ describe("price explanation reads the existing server decision", () => {
     expect((await readPriceExplanation(company, customer, product, "2099-01-01"))?.current).toEqual({ price: 9800, source: "grade" });
   });
 
+  it("uses the base price when no agreement or grade price exists", async () => {
+    db.mockImplementation(async (path?: string) => {
+      if (!path) return [];
+      if (path.startsWith("normalized_customers?")) return [{ id: customer, customer_name: "한결식당", address: null }];
+      if (path.startsWith("product_catalog?")) return [{ id: product, canonical_name: "양파", sales_unit: "BOX", order_pricing_mode: "fixed" }];
+      if (path.startsWith("customer_price_agreements?")) return [];
+      if (path === "rpc/margin_template_price_v1") return null;
+      if (path.startsWith("pricing_p0_effective?")) return [{ price: 10500 }];
+      if (path.startsWith("pricing_promotions?")) return [];
+      return [];
+    });
+    expect((await readPriceExplanation(company, customer, product, "2099-01-01"))?.current).toEqual({ price: 10500, source: "base" });
+  });
+
   it("does not read fixed prices for a market-priced product", async () => {
     db.mockImplementation(async (path?: string) => path?.startsWith("normalized_customers?")
       ? [{ id: customer, customer_name: "한결식당", address: null }]
