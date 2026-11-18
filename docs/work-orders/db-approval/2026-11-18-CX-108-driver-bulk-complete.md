@@ -1,4 +1,6 @@
-# CX-108 기사 정류장 일괄 완료 — DB 승인 대기
+# CX-108 기사 정류장 일괄 완료 — 운영 적용 완료
+
+> 2026-11-18 21:46 KST 대표 승인으로 원문 SQL을 1회 적용하고 읽기 검증을 완료했습니다. **재실행 금지. 기능은 OFF입니다.** 적용 근거는 [운영 적용 기록](./2026-11-18-CX-108-applied.md)을 따릅니다.
 
 Ponytail: 사용함
 
@@ -6,26 +8,26 @@ Ponytail: 사용함
 
 | 항목 | 상태 | 확인 내용 |
 |---|---|---|
-| 신규 객체 | 승인 대기 | `complete_driver_delivery_stops_atomic(uuid,uuid,date,uuid[])` 함수 1개 |
+| 신규 객체 | 적용 완료 | `complete_driver_delivery_stops_atomic(uuid,uuid,date,uuid[])` 함수 1개 |
 | 기존 단건 완료 | 유지 | 기존 단건 완료 API·테이블 계약을 변경하지 않음 |
 | 5초 되돌리기 | 유지 | 모든 정류장에 동일한 `completed_at` 토큰을 기록하며 기존 `undo_driver_route_stop`을 변경하지 않음 |
 | 회사·기사 격리 | PG17 통과 | 회사·기사·당일·배송 종류·상태를 잠금 후 같은 트랜잭션에서 재검증 |
 | 경쟁·부분 실패 | PG17 통과 | 한 정류장이 먼저 바뀐 경우 나머지 정류장도 수정하지 않고 `40001`로 전체 실패 |
 | 재호출 안전성 | PG17 통과 | 이미 완료된 묶음의 재호출은 `40001`로 거절하며 완료 상태와 토큰을 추가 변경하지 않음 |
 | 기사 격리 | PG17 통과 | 다른 기사 ID로 회사 정류장을 완료할 수 없음 |
-| 함수 ACL | 확인 | `public`, `anon`, `authenticated` 실행 권한 제거, `service_role`만 허용 |
+| 함수 ACL | 운영 읽기 확인 | `public`, `anon`, `authenticated` 실행 권한 없음, `service_role`만 허용 |
 | 원복 | 확인 | down SQL이 함수의 정확한 시그니처만 제거 |
 | RLS | 영향 없음 | 신규 테이블·정책 없음. `security invoker`이며 서비스 역할 전용 RPC |
 
-## 운영 적용 전 필수
+## 적용 완료 확인
 
-- [ ] 대표의 운영 DB 적용 승인 문구 확보
-- [ ] 적용 대상이 PostgreSQL 17인지 재확인
-- [ ] SQL, down, PG17 시험 파일의 동일 커밋 해시 확인
-- [ ] 기존 CX-65 단건 완료·5초 되돌리기 회귀 시험 통과
-- [ ] 앱의 REST 일괄 `PATCH`를 이 RPC 호출로 교체한 뒤 부분 완료 경쟁 시험 통과
-- [ ] `DRIVER_RUN_EXPERIENCE` 기본 OFF와 회사 allowlist 유지 확인
-- [ ] Stage A 및 390px E2E 통과 후에만 기능 활성화 검토
-- [ ] 운영 적용 뒤 함수 ACL과 시그니처를 읽기 전용으로 재확인
+- [x] 대표 승인 원문으로 운영 SQL 1회 적용
+- [x] PostgreSQL 17.6 확인
+- [x] 승인된 SQL head와 blob 확인
+- [x] 앱 REST 일괄 `PATCH`를 원자 RPC 호출로 교체
+- [x] PG17 원자성·경쟁·재호출·타사·타기사 격리 통과
+- [x] 함수 시그니처·반환형·ACL 읽기 검증
+- [x] 적용 전후 정류장 0건으로 기존 데이터 무변경 확인
+- [x] 기능 플래그와 회사 allowlist OFF 확인
 
-운영 DB 적용, 기능 ON, 배포 및 기존 #1091 병합은 이 문서의 승인이 아니다.
+SQL 원문과 down SQL은 기록 보존용입니다. 운영 SQL과 down SQL을 다시 실행하지 않습니다. 기능 ON은 별도 검증·승인 대상입니다.
