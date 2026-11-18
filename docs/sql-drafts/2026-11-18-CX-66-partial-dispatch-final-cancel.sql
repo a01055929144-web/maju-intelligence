@@ -190,7 +190,7 @@ begin
       continue;
     end if;
 
-    update public.business_document_lines d set quantity=l.shipped_quantity,updated_at=clock_timestamp()
+    update public.business_document_lines d set quantity=l.shipped_quantity
     from public.store_order_lines l where d.company_id=p_company_id and d.document_id=v_document.id
       and d.source_order_line_id=l.id and l.shipped_quantity>0;
     delete from public.business_document_lines d using public.store_order_lines l

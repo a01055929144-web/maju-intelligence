@@ -4,8 +4,6 @@ do $$ begin
   assert current_setting('server_version_num')::int/10000=17;
 end $$;
 \ir 2026-11-18-CX-66-order-dispatch.sql
--- The compact CX-38 fixture predates this production column.
-alter table business_document_lines add column updated_at timestamptz not null default now();
 \ir 2026-11-18-CX-66-partial-dispatch-final-cancel.sql
 alter table inventory_movements drop constraint inventory_movements_company_id_source_document_id_revision_key;
 alter table inventory_movements add column product_catalog_id uuid;
