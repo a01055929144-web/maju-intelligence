@@ -15,7 +15,7 @@ Ponytail: 사용함
 - PG17: `tests/sql/promotion-tax-private-backup.pg17.sh`, 기존 P0/P1 정의를 쓰는 합성 fixture.
 - 백업 스키마가 이미 있으면 재사용하지 않고 중단한다. 3개 전체 행을 백업한 뒤 정확한 전값과 일치하는 행만 갱신한다.
 - 선별은 승인된 회사·문서·행사3개 조합의 비공개 지문과 정확히 일치하는 유일 단가표이다. revision과 품목 수는 문서의 고유 식별 조건으로 쓰지 않는다. 현재 revision과 내용 해시를 지문 후보 조회 시 함께 캡처하고 문서 잠금 시 둘 다 같아야 한다. 달라졌거나 지문 후보가 없거나 여러 건이면 중단한다. 같은 회사·행사/원상품 잠금과 면세/계란/가격/수정 번호 검증도 유지한다. 같은 모양의 다른 문서는 지문이 달라 대상에서 제외된다.
-- 오인 방지를 위해 `maju.promotion_tax_scope_hash`에 승인된 회사·문서·정확한 행사3개 조합의 SHA256 지문을 반드시 전달해야 한다. 없거나 다르면 중단한다. 컨트롤타워가 원래 승인 대상과 식별자를 비공개로 대조한 뒤, 같은 SQL 요청/연결에서 `SET SESSION maju.promotion_tax_scope_hash = '<비공개 64자리 지문>';`을 up 앞에 붙이고 요청 종료 시 RESET한다. 연결 풀을 사이에 둔 별도 호출의 설정에 의존하지 않는다. 지문은 `encode(sha256(convert_to(jsonb_build_object('company_id',회사UUID,'document_id',문서UUID,'promotion_ids',정렬된3개UUID의JSON배열)::text,'UTF8')),'hex')` 형식이다. 실제 식별자·지문은 Git/채팅에 넣지 않는다. 조건에 맞는 현재 후보로 지문을 자동 생성해 승인 대상 대조 없이 바로 적용하지 않는다.
+- 오인 방지를 위해 `maju.promotion_tax_scope_hash`에 승인된 회사·문서·정확한 행사3개 조합의 SHA256 지문을 반드시 전달해야 한다. 없거나 다르면 중단한다. 컨트롤타워가 원래 승인 대상과 식별자를 비공개로 대조한 뒤 아래의 단일 요청 래퍼로 `BEGIN` 직후 `SET LOCAL`을 주입한다. `SET SESSION`·별도 설정 호출·수동 RESET에 의존하지 않는다. 실제 식별자·지문은 Git/채팅에 넣지 않는다. 조건에 맞는 현재 후보로 지문을 자동 생성해 승인 대상 대조 없이 바로 적용하지 않는다.
 - 금액 재계산은 검증에만 사용하고 원가·마진·가격을 갱신하지 않는다. 변경 허용 필드는 세금·수정 번호와 기존 트리거의 수정 시각뿐이다. 백업 전후 전체 필드를 대조한다.
 - 원문을 클라이언트 도구 인자/출력으로 내보내지 않는다. 결과는 백업·정정·가격 변경 건수만 반환한다.
 - 복구 시 다른 사용자의 후속 수정이나 초안/발행본 변경이 있으면 거부한다. 과거 전체 행으로 덮어쓰지 않는다. 가격은 그대로이고 수정 번호는 단조 증가한다.
@@ -53,3 +53,71 @@ Ponytail: 사용함
 행사 원본 정정 뒤에도 **기존 초안은 자동 갱신하지 않는다.** 사용자가 화면에서 ‘현재 세금 구분 반영’ → 초안 저장 → 버전 확정 순서로 확인해야 한다. SQL은 초안·발행본 해시가 변하면 롤백하며 이 사용자 행동을 대신하지 않는다. 안전 조건과 최신 CI 완료 및 컨트롤타워 지시 전 운영 재실행 금지.
 
 행 수 고정 제거 뒤 격리 PG17 12개 시나리오 모두 PASS: revision22·28행 전체 정정/복구/가격0/권한/초안·발행본 보존, revision20·20행 호환, revision19 호환, 지문 누락/불일치, 같은3건 중 행사 교체 거부, 같은 구조의 다른 문서 제외, 잠금 직전 문서 변경 롤백, 대상수/가격 불일치 롤백, 정정 뒤 강제 오류 롤백, 후속 수정 복구 거부. 운영 쓰기는 하지 않았다.
+
+## 지문 계산 — 읽기 전용, 실제 값 출력 금지
+
+아래 쿼리는 행 원문/ID/가격을 반환하지 않고 후보별 비공개 지문과 건수만 계산한다. 결과를 채팅/PR/실행 로그에 출력하지 않는다. 컨트롤타워가 기존 승인 기록의 문서/행사 조합과 독립적으로 대조해 정확히 한 후보를 선택해야 한다. 단순히 결과의 첫 행을 자동 승인하지 않는다. 대조 근거가 없거나 후보가 없으면 실행을 중단한다. revision/품목 수는 참고값이며 승인 지문에 포함하지 않는다.
+
+```sql
+with eligible as (
+  select d.id,d.company_id,d.revision,d.content,
+    jsonb_agg(distinct p.id order by p.id) filter(where p.id is not null) promotion_ids
+  from public.pricing_documents d
+  cross join lateral jsonb_array_elements(d.content->'lines') l
+  left join public.pricing_promotions p
+    on p.company_id=d.company_id and p.id=nullif(l->>'promotionId','')::uuid
+  left join public.product_catalog x on x.company_id=p.company_id and x.id=p.product_id
+  where d.archived_at is null and d.kind='sheet'
+  group by d.id,d.company_id,d.revision,d.content
+  having count(distinct nullif(l->>'promotionId','')::uuid)=3
+    and count(distinct p.id)=3
+    and count(distinct p.id) filter(where p.tax_type='taxable' and x.tax_type='exempt'
+      and x.is_active and p.allow_sheet and p.revision>=1 and p.stock is distinct from 0
+      and p.starts_on<=(clock_timestamp() at time zone 'Asia/Seoul')::date
+      and p.ends_on>=(clock_timestamp() at time zone 'Asia/Seoul')::date
+      and coalesce(x.purchase_product_name,'') ~ '(계란|달걀|특란|대란|중란|왕란)'
+      and p.price=public.pricing_p0_price(p.purchase_cost,p.margin_bp,10))=3
+)
+select encode(sha256(convert_to(jsonb_build_object(
+    'company_id',company_id,'document_id',id)::text,'UTF8')),'hex') document_identity_hash,
+  encode(sha256(convert_to(promotion_ids::text,'UTF8')),'hex') promotion_set_hash,
+  encode(sha256(convert_to(jsonb_build_object(
+    'company_id',company_id,'document_id',id,'promotion_ids',promotion_ids)::text,'UTF8')),'hex') scope_hash,
+  revision as current_revision,jsonb_array_length(content->'lines') as current_line_count,
+  3 as target_count,0 as price_change_expected_count,
+  to_regnamespace('promotion_tax_backup_20261119') is null as backup_schema_absent
+from eligible;
+```
+
+## 같은 연결·트랜잭션의 런타임 주입 — 아직 실행 금지
+
+검토한 up 원문에는 이미 `BEGIN`/`COMMIT`이 있다. 운영 도구는 원문을 승인 커밋과 대조한 뒤, `BEGIN` 바로 다음의 `-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT` 주석 **한 줄만** 아래의 트랜잭션 한정 설정으로 치환한다. 밖에 새 BEGIN/COMMIT을 덧붙이거나, 별도 SQL 호출로 설정하거나, SQL의 선별/백업/정정 로직을 수정하지 않는다.
+
+```sql
+SET LOCAL maju.promotion_tax_scope_hash = '<검증한 비공개 64자리 지문>';
+```
+
+다음은 실제 값 없이 주입 위치와 변경 범위를 검사하는 래퍼이다. 설정은 결과 행을 반환하지 않는다. 실제 지문이 들어간 런타임 문자열은 파일·PR·채팅에 저장/출력하지 않는다.
+
+```js
+function withPrivateScope(approvedSqlText, verifiedPrivateScopeHash) {
+  if (!/^[0-9a-f]{64}$/.test(verifiedPrivateScopeHash)) throw Error('Invalid private scope');
+  const marker = '-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT';
+  if (approvedSqlText.split(marker).length !== 2) throw Error('Unexpected SQL marker');
+  const at = approvedSqlText.indexOf(marker);
+  if (!/begin;\r?\n$/.test(approvedSqlText.slice(0, at))) throw Error('Marker must follow BEGIN');
+  const setting = `SET LOCAL maju.promotion_tax_scope_hash = '${verifiedPrivateScopeHash}';`;
+  const runtimeSql = approvedSqlText.replace(marker, setting);
+  if (runtimeSql.replace(setting, marker) !== approvedSqlText) throw Error('Unexpected SQL change');
+  return runtimeSql;
+}
+// Future approved execution only: exactly one tool request, not two pooled requests.
+await tools.mcp__codex_apps__supabase_execute_sql({
+  project_id: 'fcmdvveqmcgtioelzqun',
+  query: withPrivateScope(approvedSqlText, verifiedPrivateScopeHash),
+});
+```
+
+이 단일 SQL 요청의 BEGIN → SET LOCAL → 백업/정정 → COMMIT은 같은 연결·트랜잭션 안에서 실행된다. 성공 시 COMMIT, 실패 시 해당 트랜잭션의 ROLLBACK으로 설정이 자동 해제된다. SET SESSION과 수동 RESET에 의존하거나 연결 풀을 사이에 둔 별도 호출의 설정값을 재사용하지 않는다. 설정 주입·해제의 격리 검증과 최신 CI, 총괄방의 안전 확인이 끝날 때까지 운영 재실행은 금지한다.
+
+격리 PG17 재검증 결과: 승인표에서 읽기 계산 쿼리를 그대로 추출·실행해 고정된 합성 승인 대상의 독립 기대 지문과 일치를 확인했다. 원문에서 주입한 설정 한 줄을 다시 표시 주석으로 치환한 결과가 원문과 바이트 단위로 같음도 검사했다. 같은 psql 연결에서 COMMIT 뒤 설정이 비고정 상태로 돌아오는지, 전체 작업을 명시적으로 ROLLBACK한 뒤 설정/백업 스키마/행 변경이 모두 남지 않는지 확인했다. 정정·복구·충돌/거부 13개 시나리오 전체 PASS. 테스트의 커밋 후 설정 검사만 검증용으로 덧붙였으며 실제 운영 래퍼는 원문 대비 설정 한 줄 외에는 달라지지 않는다. 실제 운영 지문/ID 사용이나 운영 실행은 없었다.

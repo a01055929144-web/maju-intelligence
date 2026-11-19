@@ -8,9 +8,25 @@ initdb -A trust >/tmp/init.log
 pg_ctl -D "$PGDATA" -o '-k /tmp' -l /tmp/postgres.log start >/tmp/start.log
 trap 'pg_ctl -D "$PGDATA" -m immediate stop >/dev/null' EXIT
 cd /repo
-up=docs/sql-drafts/2026-11-19-promotion-tax-private-backup.sql
+awk '/^```sql$/{inside=1;next} inside && /^```/{exit} inside{print}' \
+ docs/work-orders/db-approval/2026-11-19-promotion-tax-private-backup.md >/tmp/read-scope.sql
+test -s /tmp/read-scope.sql
+source_up=docs/sql-drafts/2026-11-19-promotion-tax-private-backup.sql
+up=/tmp/configured-up.sql
 down=docs/sql-drafts/2026-11-19-promotion-tax-private-backup.down.sql
 run() { psql -d "$db" -v ON_ERROR_STOP=1 "$@" >/tmp/test.log 2>&1 || { tail -20 /tmp/test.log; exit 1; }; }
+configure_up() {
+ [[ "$1" =~ ^[0-9a-f]{64}$ ]]
+ test "$(grep -c '^-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT$' "$source_up")" = 1
+ sed "s/-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT/SET LOCAL maju.promotion_tax_scope_hash = '$1';/" "$source_up" >"$up"
+ sed "s/^SET LOCAL maju\.promotion_tax_scope_hash = '$1';$/-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT/" "$up" | cmp -s "$source_up" -
+ # Verify reset after COMMIT in the same psql connection, not a separate request.
+ cat >>"$up" <<'SQL'
+do $$ begin
+ assert nullif(current_setting('maju.promotion_tax_scope_hash',true),'') is null;
+end $$;
+SQL
+}
 setup() {
  unset PGOPTIONS
  db="promotion_tax_backup_test_$1"; createdb "$db"; run -f tests/sql/fixtures/promotion-tax-private-backup.sql
@@ -19,7 +35,9 @@ setup() {
   'company_id',md5('synthetic-company-1')::uuid,'document_id',md5('synthetic-document')::uuid,
   'promotion_ids',(select jsonb_agg(id order by id) from (select md5('synthetic-promotion-'||n)::uuid id from generate_series(1,3) n) ids)
  )::text,'UTF8')),'hex');")
- export PGOPTIONS="-c maju.promotion_tax_scope_hash=$guard"
+ read_guard=$(psql -d "$db" -At -v ON_ERROR_STOP=1 -f /tmp/read-scope.sql | cut -d '|' -f 3)
+ test "$read_guard" = "$guard"
+ configure_up "$guard"
 }
 reject() { if psql -d "$db" -v ON_ERROR_STOP=1 -f "$1" >/tmp/expected.log 2>&1; then echo 'unexpected_success'; exit 1; fi; }
 assert_untouched() {
@@ -50,6 +68,13 @@ run -c "do \$\$ begin
  assert (select count(*) from public.pricing_promotions where revision=3)=3;
  end \$\$;"
 echo 'revision22_28_lines_three_rows_price_zero_publications_acl_restore_PASS'
+echo 'single_request_transaction_local_injection_and_reset_PASS'
+
+setup configured_rollback
+sed 's/^commit;$/rollback;/' "$up" >/tmp/configured-rollback.sql
+run -f /tmp/configured-rollback.sql
+assert_untouched
+echo 'same_connection_explicit_rollback_resets_scope_and_rows_PASS'
 
 setup revision20
 run -c "update public.pricing_documents set revision=20,content=jsonb_set(content,'{lines}',(select jsonb_agg(l order by n) from jsonb_array_elements(content->'lines') with ordinality a(l,n) where n<=20));"
@@ -65,13 +90,12 @@ run -f "$down"
 echo 'revision19_compatibility_PASS'
 
 setup missing_guard
-unset PGOPTIONS
-reject "$up"; assert_untouched
+reject "$source_up"; assert_untouched
 grep -q 'promotion_tax_private_scope_guard_required' /tmp/expected.log
 echo 'missing_private_scope_guard_rollback_PASS'
 
 setup wrong_guard
-export PGOPTIONS="-c maju.promotion_tax_scope_hash=$(printf '%064d' 0)"
+configure_up "$(printf '%064d' 0)"
 reject "$up"; assert_untouched
 grep -q 'promotion_tax_candidate_count_mismatch' /tmp/expected.log
 echo 'wrong_private_scope_guard_rollback_PASS'

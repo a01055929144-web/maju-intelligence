@@ -1,6 +1,7 @@
 -- DRAFT ONLY. New schema/table + three operating row corrections require separate approval.
 -- Backup remains outside Git, inside this same operating database; not disaster recovery.
 begin;
+-- PRIVATE_SCOPE_CONFIG_INJECTION_POINT
 set local lock_timeout = '3s';
 set local statement_timeout = '30s';
 
