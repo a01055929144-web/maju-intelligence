@@ -127,9 +127,8 @@ begin
            and d.unit_snapshot is not distinct from coalesce(nullif(l.sales_unit,''),'EA')
            and d.tax_type_snapshot is not distinct from l.tax_type
            and d.quantity is not distinct from l.quantity
-           and ((not l.is_market_price and d.unit_price is not distinct from
-             case when l.price_includes_tax and l.tax_type='taxable'
-               then round(l.unit_price/1.1)::bigint else l.unit_price end)
+           and ((not l.is_market_price and d.unit_price is not distinct from l.unit_price
+             and d.price_includes_tax_snapshot is not distinct from l.price_includes_tax)
              or (l.is_market_price and d.unit_price>0))) <> 1
     ) or exists (
       select 1 from public.business_document_lines d
@@ -142,9 +141,8 @@ begin
            and d.unit_snapshot is not distinct from coalesce(nullif(l.sales_unit,''),'EA')
            and d.tax_type_snapshot is not distinct from l.tax_type
            and d.quantity is not distinct from l.quantity
-           and ((not l.is_market_price and d.unit_price is not distinct from
-             case when l.price_includes_tax and l.tax_type='taxable'
-               then round(l.unit_price/1.1)::bigint else l.unit_price end)
+           and ((not l.is_market_price and d.unit_price is not distinct from l.unit_price
+             and d.price_includes_tax_snapshot is not distinct from l.price_includes_tax)
              or (l.is_market_price and d.unit_price>0))) <> 1
     ) then raise exception 'partial_dispatch_snapshot_ambiguous'; end if;
 
@@ -157,9 +155,8 @@ begin
       and d.unit_snapshot is not distinct from coalesce(nullif(l.sales_unit,''),'EA')
       and d.tax_type_snapshot is not distinct from l.tax_type
       and d.quantity is not distinct from l.quantity
-      and ((not l.is_market_price and d.unit_price is not distinct from
-        case when l.price_includes_tax and l.tax_type='taxable'
-          then round(l.unit_price/1.1)::bigint else l.unit_price end)
+      and ((not l.is_market_price and d.unit_price is not distinct from l.unit_price
+        and d.price_includes_tax_snapshot is not distinct from l.price_includes_tax)
         or (l.is_market_price and d.unit_price>0));
 
     if exists (

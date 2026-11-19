@@ -26,10 +26,6 @@ describe("CC-34 promotion save", () => {
     const docs = pricingDocuments({ request: vi.fn() });
     expect(() => docs.execute(scope, body({ displayName: "가".repeat(121) }))).toThrow("'노출 이름' 칸은 120자까지");
   });
-  it("the API maps input errors to 400 with the original message and keeps 409 for conflicts only", async () => {
-    const { readFileSync } = await import("node:fs");
-    const src = readFileSync("app/api/pricing-documents/route.ts", "utf8");
-    expect(src).toContain("error instanceof PricingInputError) return NextResponse.json({ message: error.message }, { status: 400 })");
-    expect(src).toContain("다른 화면에서 바뀌었을 수 있어요");
-  });
+  // API status/message behavior is exercised through real POST calls in
+  // pricing-p1-route.test.ts; do not assert obsolete generic conflict copy here.
 });

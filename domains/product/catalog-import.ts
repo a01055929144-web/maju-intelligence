@@ -86,14 +86,10 @@ const aliases: Record<CatalogField | SupplierExtraField, string[]> = {
   extra5: ["추가5", "추가항목5"],
 };
 
-export function inferTaxType(vat?: number, supplyAmount?: number) {
+export function inferTaxType(vat?: number) {
   if (vat == null || vat < 0) return undefined;
   if (vat === 0) return "exempt" as const;
-  if (supplyAmount && supplyAmount > 0) {
-    const rate = vat / supplyAmount;
-    if (rate >= 0.08 && rate <= 0.12) return "taxable" as const;
-  }
-  return undefined;
+  return "taxable" as const;
 }
 
 export function convertedUnitCost(
@@ -115,6 +111,7 @@ const text = (v: unknown) =>
     .replace(/\s+/g, " ");
 const num = (v: unknown) => {
   const raw = String(v ?? "").trim();
+  if (!raw) return undefined;
   const accountingNegative = /^\(.*\)$/.test(raw);
   const n = Number(raw.replace(/[(),원%\s]/g, ""));
   return Number.isFinite(n) ? (accountingNegative ? -n : n) : undefined;
@@ -295,10 +292,7 @@ export function buildCatalogPreview(
           .map((field) => [field, text(val(latest, mapping, field))])
           .filter(([, value]) => value),
       ),
-      parsedTaxType: inferTaxType(
-        num(val(latest, mapping, "vat")),
-        num(val(latest, mapping, "supplyAmount")),
-      ),
+      parsedTaxType: inferTaxType(num(val(latest, mapping, "vat"))),
       salesMin: sales.length ? Math.min(...sales) : undefined,
       salesMedian: median(sales),
       observations: rs.map((r, i) => ({
