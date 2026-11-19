@@ -122,6 +122,17 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-46c-delivery-route-stops.pg17.test.sql
 
+      - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx81_lead_bulk_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/lead-bulk-enrichment-cx81.pg17.test.sql
+
       - name: Verify CX-65 driver route actions draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
