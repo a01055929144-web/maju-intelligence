@@ -26,6 +26,8 @@ revoke all on promotion_tax_backup_20261119.promotion_rows from public, anon, au
 do $correction$
 declare
   document_ids uuid[];
+  document_revisions integer[];
+  document_hashes text[];
   document_id uuid;
   company uuid;
   promotion_ids uuid[];
@@ -33,31 +35,48 @@ declare
   publications_before text;
   drafts_before text;
   others_before text;
+  expected_scope text := current_setting('maju.promotion_tax_scope_hash',true);
   changed integer;
 begin
+  -- Caller supplies a privately verified company/document/exact-three-promotion fingerprint.
+  -- No revision number, actual identifier or operating fingerprint is embedded in Git.
+  if coalesce(expected_scope,'') !~ '^[0-9a-f]{64}$' then
+    raise exception 'promotion_tax_private_scope_guard_required';
+  end if;
   -- Report-specific selector, not a company/name-wide correction. No actual IDs in Git.
-  select array_agg(candidate.id order by candidate.id) into document_ids from (
-    select d.id
+  select array_agg(candidate.id order by candidate.id),
+    array_agg(candidate.revision order by candidate.id),array_agg(candidate.content_hash order by candidate.id)
+    into document_ids,document_revisions,document_hashes from (
+    select d.id,d.revision,md5(d.content::text) content_hash
     from public.pricing_documents d
     cross join lateral jsonb_array_elements(d.content->'lines') l
     left join public.pricing_promotions p
       on p.company_id=d.company_id and p.id=nullif(l->>'promotionId','')::uuid
     left join public.product_catalog x on x.company_id=p.company_id and x.id=p.product_id
-    where d.revision=19 and d.archived_at is null and jsonb_array_length(d.content->'lines')=20
-    group by d.id
+    where d.archived_at is null and jsonb_array_length(d.content->'lines')=20
+    group by d.id,d.revision,d.content
     having count(distinct p.id)=3
       and count(*) filter(where p.tax_type='taxable' and x.tax_type='exempt')=3
   ) candidate;
   if coalesce(cardinality(document_ids),0)<>1 then raise exception 'promotion_tax_candidate_count_mismatch'; end if;
   document_id:=document_ids[1];
-  select d.company_id into strict company from public.pricing_documents d
-    where d.id=document_id and d.revision=19 and d.archived_at is null
+  -- SYNTHETIC_DOCUMENT_LOCK_INJECTION_POINT.
+  select d.company_id into company from public.pricing_documents d
+    where d.id=document_id and d.revision=document_revisions[1]
+      and md5(d.content::text)=document_hashes[1] and d.archived_at is null
       and jsonb_array_length(d.content->'lines')=20 for update;
+  if not found then raise exception 'promotion_tax_document_changed_while_locking'; end if;
   select array_agg(distinct nullif(l->>'promotionId','')::uuid) filter(where l->>'promotionId' is not null)
     into promotion_ids from public.pricing_documents d
     cross join lateral jsonb_array_elements(d.content->'lines') l
     where d.company_id=company and d.id=document_id;
   if coalesce(cardinality(promotion_ids),0)<>3 then raise exception 'promotion_tax_target_count_mismatch'; end if;
+  if expected_scope is distinct from encode(sha256(convert_to(jsonb_build_object(
+      'company_id',company,'document_id',document_id,
+      'promotion_ids',(select jsonb_agg(id order by id) from unnest(promotion_ids) id)
+    )::text,'UTF8')),'hex') then
+    raise exception 'promotion_tax_private_scope_mismatch';
+  end if;
   perform 1 from public.pricing_promotions p where p.company_id=company and p.id=any(promotion_ids)
     order by p.id for update;
   perform 1 from public.product_catalog x where x.company_id=company and x.id in
