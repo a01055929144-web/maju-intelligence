@@ -234,7 +234,7 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
     const totalAmount = toNumber(read(row.cells, "totalAmount"));
     const vatIncluded = vatMode === "auto" ? inferVatIncluded({ cost: rawCost, quantity, supplyAmount, totalAmount, vatAmount }) : vatMode === "included";
-    const taxType = mapping.vatAmount === undefined || vatAmount === undefined
+    const taxType = mapping.vatAmount === undefined || vatAmount === undefined || vatAmount < 0
       ? undefined
       : vatAmount > 0 ? "taxable" as const : "exempt" as const;
     lines.push({
