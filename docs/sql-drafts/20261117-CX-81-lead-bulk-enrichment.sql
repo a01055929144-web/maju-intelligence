@@ -5,8 +5,8 @@ create table if not exists public.lead_bulk_enrichment_jobs (
   action text not null check (action in ('external_info','place_links','instagram_candidates')),
   status text not null default 'queued' check (status in ('queued','running','completed','cancelled','failed')),
   idempotency_key uuid not null,
-  lead_ids uuid[] not null check (cardinality(lead_ids) between 1 and 50),
-  total_items smallint not null check (total_items between 1 and 50),
+  lead_ids uuid[] not null check (cardinality(lead_ids) between 1 and 5000),
+  total_items smallint not null check (total_items between 1 and 5000),
   succeeded_items smallint not null default 0,
   failed_items smallint not null default 0,
   actor_name text not null,
@@ -25,7 +25,7 @@ create table if not exists public.lead_bulk_enrichment_items (
   job_id uuid not null,
   lead_id uuid not null,
   action text not null,
-  position smallint not null check (position between 1 and 50),
+  position smallint not null check (position between 1 and 5000),
   status text not null default 'pending' check (status in ('pending','running','succeeded','failed','cancelled')),
   attempts_today smallint not null default 0,
   attempt_day date,
@@ -50,7 +50,7 @@ create or replace function public.create_lead_bulk_enrichment_job(p_company_id u
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_job public.lead_bulk_enrichment_jobs; v_count int; v_ids uuid[];
 begin
-  if p_action not in ('external_info','place_links','instagram_candidates') or cardinality(p_lead_ids) not between 1 and 50 then raise exception 'invalid_bulk_request'; end if;
+  if p_action not in ('external_info','place_links','instagram_candidates') or cardinality(p_lead_ids) not between 1 and 5000 then raise exception 'invalid_bulk_request'; end if;
   select array_agg(id order by ord), count(*) into v_ids, v_count
   from (select distinct on (l.id) l.id, u.ord from unnest(p_lead_ids) with ordinality u(id,ord)
         join public.business_permit_leads l on l.id=u.id and l.company_id=p_company_id and l.merged_into_lead_id is null order by l.id,u.ord) s;

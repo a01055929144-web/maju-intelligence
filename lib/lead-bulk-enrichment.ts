@@ -1,4 +1,4 @@
-import type { LeadBulkJob, LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
+import { LEAD_BULK_MAX_ITEMS, type LeadBulkJob, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
 import type { LeadBulkRepository } from "@/application/lead/run-bulk-enrichment";
 import { discoverInstagramCandidates } from "@/lib/instagram-discovery";
 import { enrichPermitLeadExternalInfo, getPermitLeadIdentityForCompany, supabaseRequest } from "@/lib/store";
@@ -13,7 +13,8 @@ type ItemRow = { id: string; job_id: string; company_id: string; lead_id: string
 const job = (row: JobRow): LeadBulkJob => ({
   id: row.id, companyId: row.company_id, action: row.action, status: row.status, totalItems: row.total_items,
   succeededItems: row.succeeded_items, failedItems: row.failed_items, cancelRequestedAt: row.cancel_requested_at,
-  errorCode: row.error_code
+  errorCode: row.error_code, maxItems: LEAD_BULK_MAX_ITEMS,
+  remainingItems: Math.max(0, row.total_items - row.succeeded_items - row.failed_items)
 });
 const item = (row: ItemRow): LeadBulkJobItem => ({
   id: row.id, jobId: row.job_id, companyId: row.company_id, leadId: row.lead_id, action: row.action

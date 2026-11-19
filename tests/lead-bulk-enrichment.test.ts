@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { processLeadBulkJob, type LeadBulkRepository } from "@/application/lead/run-bulk-enrichment";
-import { isLeadBulkUuid, normalizeLeadBulkIds, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
+import { isLeadBulkUuid, LEAD_BULK_MAX_ITEMS, normalizeLeadBulkIds, type LeadBulkJobItem } from "@/domains/lead/bulk-enrichment";
 import { leadBulkDailyCap, leadBulkEnrichmentEnabled, leadBulkMinIntervalMs, leadBulkRunBudgetMs } from "@/lib/lead-bulk-enrichment-feature";
 
 const companyId = "10000000-0000-4000-8000-000000000001";
@@ -71,8 +71,8 @@ describe("lead bulk enrichment", () => {
   });
 
   it("caps input, daily allowance and request rate", () => {
-    const ids = Array.from({ length: 51 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
-    expect(normalizeLeadBulkIds([...ids, ids[0]])).toHaveLength(51);
+    const ids = Array.from({ length: LEAD_BULK_MAX_ITEMS + 1 }, (_, index) => `50000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+    expect(normalizeLeadBulkIds([...ids, ids[0]])).toHaveLength(LEAD_BULK_MAX_ITEMS + 1);
     expect(isLeadBulkUuid("zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz")).toBe(false);
     process.env.LEAD_BULK_ENRICHMENT_DAILY_CAP = "5000";
     process.env.LEAD_BULK_ENRICHMENT_REQUESTS_PER_SECOND = "99";

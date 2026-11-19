@@ -1,4 +1,5 @@
 export const LEAD_BULK_ACTIONS = ["external_info", "place_links", "instagram_candidates"] as const;
+export const LEAD_BULK_MAX_ITEMS = 5_000;
 export type LeadBulkAction = (typeof LEAD_BULK_ACTIONS)[number];
 export type LeadBulkJobStatus = "queued" | "running" | "completed" | "cancelled" | "failed";
 
@@ -12,6 +13,8 @@ export type LeadBulkJob = {
   failedItems: number;
   cancelRequestedAt: string | null;
   errorCode: string | null;
+  maxItems: number;
+  remainingItems: number;
 };
 
 export type LeadBulkJobItem = {
@@ -33,6 +36,6 @@ export function parseLeadBulkAction(value: unknown): LeadBulkAction | null {
 
 export function normalizeLeadBulkIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value.filter(isLeadBulkUuid))).slice(0, 51);
+  return Array.from(new Set(value.filter(isLeadBulkUuid))).slice(0, LEAD_BULK_MAX_ITEMS + 1);
 }
 

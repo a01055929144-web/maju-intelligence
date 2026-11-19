@@ -6,7 +6,7 @@ create table public.companies(id uuid primary key);
 create table public.business_permit_leads(company_id uuid not null references public.companies(id), id uuid not null, merged_into_lead_id uuid, primary key(company_id,id));
 insert into public.companies values ('10000000-0000-4000-8000-000000000001'),('10000000-0000-4000-8000-000000000002');
 insert into public.business_permit_leads
-select '10000000-0000-4000-8000-000000000001', ('40000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid, null from generate_series(1,50)n;
+select '10000000-0000-4000-8000-000000000001', ('40000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid, null from generate_series(1,5000)n;
 insert into public.business_permit_leads values
 ('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000051',null),
 ('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000052',null);
@@ -14,7 +14,7 @@ insert into public.business_permit_leads values
 
 do $$ declare j jsonb; a jsonb; b jsonb; begin
   j:=public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000001','instagram_candidates',array(select id from public.business_permit_leads where company_id='10000000-0000-4000-8000-000000000001' order by id),'20000000-0000-4000-8000-000000000001','tester');
-  if (j->>'total_items')::int<>50 then raise exception 'expected_50'; end if;
+  if (j->>'total_items')::int<>5000 then raise exception 'expected_5000'; end if;
   a:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50);
   if public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50) is not null then raise exception 'parallel_claim_allowed'; end if;
   perform public.complete_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(a->>'id')::uuid,true,'{"candidates":[{"url":"https://instagram.com/candidate"}]}'::jsonb,null);

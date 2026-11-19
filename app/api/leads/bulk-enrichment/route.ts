@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { processLeadBulkJob } from "@/application/lead/run-bulk-enrichment";
-import { isLeadBulkUuid, normalizeLeadBulkIds, parseLeadBulkAction } from "@/domains/lead/bulk-enrichment";
+import { isLeadBulkUuid, LEAD_BULK_MAX_ITEMS, normalizeLeadBulkIds, parseLeadBulkAction } from "@/domains/lead/bulk-enrichment";
 import { resolveLeadContactActorName } from "@/domains/lead/lead-action";
 import { getCustomerOperationalName, getRequestAuthScope, scopeHasCapability } from "@/lib/auth";
 import { executeLeadBulkItem, leadBulkRepository } from "@/lib/lead-bulk-enrichment";
@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
 
     const action = parseLeadBulkAction(body?.action);
     const leadIds = normalizeLeadBulkIds(body?.leadIds);
-    if (operation !== "start" || !action || !isLeadBulkUuid(body?.idempotencyKey) || !leadIds.length || leadIds.length > 50) {
-      return NextResponse.json({ message: "작업 종류, 재시도 키와 리드 1~50건을 확인해 주세요." }, { status: 400 });
+    if (operation !== "start" || !action || !isLeadBulkUuid(body?.idempotencyKey) || !leadIds.length || leadIds.length > LEAD_BULK_MAX_ITEMS) {
+      return NextResponse.json({ message: `작업 종류, 재시도 키와 리드 1~${LEAD_BULK_MAX_ITEMS.toLocaleString()}건을 확인해 주세요.` }, { status: 400 });
     }
     const actorName = resolveLeadContactActorName([
       getCustomerOperationalName(checked.auth.customerSession),
