@@ -55,6 +55,7 @@ export type InstagramSearchDocument = { title: string; description: string; link
 
 export type InstagramCandidate = {
   handle: string;
+  confidence: "strong" | "candidate";
   score: number;
   mentions: number;
   nameMatched: boolean;
@@ -73,7 +74,7 @@ function compact(text: string) {
 export function rankInstagramCandidates(lead: InstagramDiscoveryLead, documents: InstagramSearchDocument[], limit = 5): InstagramCandidate[] {
   const nameKey = compact(lead.businessName.replace(/\(.*?\)/g, ""));
   const regions = regionTokens(lead.address).map((token) => compact(token));
-  const byHandle = new Map<string, InstagramCandidate & { profileLink: boolean }>();
+  const byHandle = new Map<string, Omit<InstagramCandidate, "confidence"> & { profileLink: boolean }>();
   for (const document of documents) {
     const text = `${document.title} ${document.description} ${document.link}`;
     const handles = extractInstagramHandlesFromText(text);
@@ -97,9 +98,10 @@ export function rankInstagramCandidates(lead: InstagramDiscoveryLead, documents:
   return Array.from(byHandle.values())
     .map(({ profileLink, ...candidate }) => ({
       ...candidate,
+      confidence: candidate.nameMatched && candidate.regionMatched && profileLink ? "strong" as const : "candidate" as const,
       score: Math.min(40, candidate.mentions * 10) + (candidate.nameMatched ? 30 : 0) + (candidate.regionMatched ? 15 : 0) + (profileLink ? 15 : 0)
     }))
     .filter((candidate) => candidate.nameMatched)
-    .sort((a, b) => b.score - a.score || b.mentions - a.mentions)
+    .sort((a, b) => Number(b.confidence === "strong") - Number(a.confidence === "strong") || b.score - a.score || b.mentions - a.mentions)
     .slice(0, limit);
 }

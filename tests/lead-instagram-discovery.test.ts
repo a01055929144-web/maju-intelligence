@@ -24,6 +24,7 @@ describe("instagram discovery", () => {
       { title: "맛집 모음", description: "인스타 @random_food", link: "https://blog.naver.com/b/2", source: "blog" }
     ]);
     expect(ranked[0].handle).toBe("hwadeok_gc");
+    expect(ranked[0].confidence).toBe("strong");
     expect(ranked[0].nameMatched).toBe(true);
     expect(ranked.find((item) => item.handle === "random_food")).toBeUndefined();
   });
@@ -35,5 +36,18 @@ describe("instagram discovery", () => {
       { title: "화덕황소곱창 공식", description: "프로필", link: "https://www.instagram.com/hwadeok_gc/?igsh=example", source: "web" }
     ]);
     expect(ranked.map((item) => item.handle)).toEqual(["hwadeok_gc"]);
+  });
+
+  it("keeps same-name profiles without local evidence as candidates", () => {
+    const ranked = rankInstagramCandidates({ businessName: "도야집", address: "서울 강남구" }, [
+      { title: "도야집 공식 인스타그램", description: "부산 해운대 매장", link: "https://www.instagram.com/doyajip_busan/", source: "web" },
+      { title: "도야집 강남구", description: "인스타 @doyajip_gangnam", link: "https://blog.naver.com/gangnam", source: "blog" },
+      { title: "도야집 강남구", description: "프로필", link: "https://www.instagram.com/doyajip_gangnam/", source: "web" }
+    ]);
+
+    expect(ranked.map(({ handle, confidence }) => ({ handle, confidence }))).toEqual([
+      { handle: "doyajip_gangnam", confidence: "strong" },
+      { handle: "doyajip_busan", confidence: "candidate" }
+    ]);
   });
 });
