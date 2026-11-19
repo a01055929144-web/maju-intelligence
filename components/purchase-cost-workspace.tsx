@@ -815,9 +815,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     // 11/4: 바뀐 매입가가 없어도 새 상품 등록·매입 기록 보관은 진행합니다(예전에는 버튼이 반응하지 않았음).
     if (!changes.length && !unmatched.length && !importedLines.length) { setMessage("저장할 변경이 없습니다."); return; }
     if (unmatched.some((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length)) { setError(`중복 의심 새 상품 ${unmatched.filter((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length).length}개는 줄마다 '이 상품으로 연결' 또는 '새 상품 맞음'을 골라야 저장할 수 있습니다.`); openFilter("suspect", unmatched); return; }
-    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가·과세 구분을 채워 주세요."); openFilter("unit", unmatched); return; }
+    if (unmatched.some((row) => !row.taxType)) { setError("새 상품의 과세 구분을 골라 주세요."); openFilter("unit", unmatched); return; }
     if (usesDateBatch) { await saveDateBatch(); return; }
     if (batchEnabled && changes.length > 100) { setError(`가격 변경 ${changes.length}건은 한 번에 저장할 수 없습니다. 최대 100건씩 선택해 주세요. 새 상품·원본 이력도 아직 저장하지 않았습니다.`); return; }
+    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가·과세 구분을 채워 주세요."); openFilter("unit", unmatched); return; }
     if (dateSaveBlocked) { setError("구매일 기준 저장은 아직 준비 중입니다. 날짜 보호와 원본 이력 저장을 지원하는 저장 경로가 준비된 뒤 다시 시도해 주세요."); return; }
     setSaveReview(false); setConfirmedReview("");
     setBusy(true); setError(""); setMessage(""); setCategoryReviewLink(false);
