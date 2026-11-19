@@ -29,6 +29,7 @@ export function documentRequestError(error: unknown, write: boolean) {
     "No available lines": [400, "no_available_lines", "발행 가능한 품목이 없습니다. 행사 기간·재고와 표시할 품목을 확인해 주세요."],
     "Manager required": [403, "manager_required", "관리 권한이 필요합니다. 대표·관리자에게 요청해 주세요."],
     "Invalid printable line": [400, "invalid_document_line", "품목 이름·단가·과세 구분을 확인한 뒤 다시 저장해 주세요."],
+    "published_tax_unconfirmed": [400, "published_tax_unconfirmed", "행사 세금 구분이 상품과 다릅니다. ‘현재 세금 구분 반영’ 후 초안을 저장하고 판매가 버전을 다시 확정해 주세요."],
     "Invalid document fields": [400, "invalid_document_fields", "문서 품목 수와 표시 설정을 확인한 뒤 다시 저장해 주세요."],
     "Invalid header": [400, "invalid_document_header", "문서 제목·회사명·연락처·비고의 입력 길이를 확인해 주세요."],
     "Invalid expiry": [400, "invalid_document_expiry", "문서 유효기간을 확인한 뒤 다시 저장해 주세요."],
