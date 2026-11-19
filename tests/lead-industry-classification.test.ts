@@ -6,9 +6,9 @@ describe("permit lead industry classification", () => {
     ["말쑤기반찬 말쑤기식당", "한식"],
     ["봉래닭갈비", "한식"],
     ["어나더 도넛", "카페/디저트"],
-    ["우형민 빠띠시에", "카페/디저트"],
+    ["우형민 빠띠시에", "베이커리"],
     ["오혜린 출장부페", "뷔페/단체급식"],
-    ["갤러리 타코8", "양식"]
+    ["갤러리 타코8", "멕시코 음식"]
   ])("uses the business name when the government raw category is 기타: %s", (name, expected) => {
     expect(classifyPermitLeadIndustry("기타", name).primary).toBe(expected);
   });
@@ -31,5 +31,14 @@ describe("permit lead industry classification", () => {
 
   it("still excludes clearly non-food businesses", () => {
     expect(classifyPermitLeadIndustry("기타", "테스트 공인중개사").isTarget).toBe(false);
+  });
+
+  it.each([
+    ["일반음식점(양식)", "동네 카페", "카페/디저트"],
+    ["일반음식점(양식)", "동네 베이커리", "베이커리"],
+    ["외국음식전문점", "브라질 슈하스코", "브라질 음식"],
+    ["외국음식전문점", "멕시칸 타코", "멕시코 음식"]
+  ])("prefers a verified specialty over the broad permit category", (raw, name, expected) => {
+    expect(classifyPermitLeadIndustry(raw, name).primary).toBe(expected);
   });
 });

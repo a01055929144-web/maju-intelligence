@@ -11,7 +11,9 @@ describe("normalizeKakaoCategoryIndustry", () => {
   it("maps detailed Kakao categories to MAJU industry buckets", () => {
     expect(normalizeKakaoCategoryIndustry("곱창전골")).toBe("한식");
     expect(normalizeKakaoCategoryIndustry("맥주,호프")).toBe("주점");
-    expect(normalizeKakaoCategoryIndustry("베이커리")).toBe("카페/디저트");
+    expect(normalizeKakaoCategoryIndustry("베이커리")).toBe("베이커리");
+    expect(normalizeKakaoCategoryIndustry("음식점 > 양식 > 멕시칸")).toBe("멕시코 음식");
+    expect(normalizeKakaoCategoryIndustry("음식점 > 양식 > 브라질")).toBe("브라질 음식");
     expect(normalizeKakaoCategoryIndustry("")).toBe("미분류");
   });
 });
