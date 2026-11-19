@@ -195,7 +195,7 @@ export type PurchaseImportLine = {
   vatAmount?: number;
   totalAmount?: number;
   vatIncluded: boolean;
-  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 0·빈칸=면세. 부가세가 따로 적힌 파일은 단가가 '별도' 금액입니다. */
+  /** 부가세 열을 골랐을 때만: 금액 있음=과세, 명시적 0=면세, 빈칸=미정. */
   taxType?: "taxable" | "exempt";
   cost: number;
   lineKey: string;
@@ -205,6 +205,10 @@ export type PurchaseImportLine = {
   /** 파일에 구매일 열이 있을 때만 설정됩니다. 없으면 업로드 화면의 날짜를 사용합니다. */
   purchaseDate?: string;
 };
+
+export function catalogTaxEvidence(taxType: "taxable" | "exempt") {
+  return { supplyAmount: 100, vat: taxType === "taxable" ? 10 : 0 };
+}
 
 export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImportMapping, vatMode: VatMode): { lines: PurchaseImportLine[]; skipped: number[]; dateIssues: number[] } {
   if (mapping.name === undefined || mapping.cost === undefined) throw new Error("필수 열(품목·단가)을 골라 주세요.");
@@ -230,7 +234,9 @@ export function parsePurchaseLines(sheet: PurchaseSheet, mapping: PurchaseImport
     const vatAmount = toNumber(read(row.cells, "vatAmount"));
     const totalAmount = toNumber(read(row.cells, "totalAmount"));
     const vatIncluded = vatMode === "auto" ? inferVatIncluded({ cost: rawCost, quantity, supplyAmount, totalAmount, vatAmount }) : vatMode === "included";
-    const taxType = mapping.vatAmount === undefined ? undefined : vatAmount && vatAmount > 0 ? "taxable" as const : "exempt" as const;
+    const taxType = mapping.vatAmount === undefined || vatAmount === undefined
+      ? undefined
+      : vatAmount > 0 ? "taxable" as const : "exempt" as const;
     lines.push({
       code: read(row.cells, "code"),
       cost: costExcludingVat(rawCost, vatIncluded),
