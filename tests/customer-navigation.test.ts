@@ -26,11 +26,12 @@ describe("customer navigation", () => {
   it("exposes held destinations only through the explicit module switch", () => {
     const focused = getCustomerNavigationGroups(false);
     expect(focused.map((group) => group.label)).toEqual(["홈", "영업", "물류", "ERP"]);
-    expect(focused.find((group) => group.label === "ERP")?.items).toHaveLength(3);
+    expect(focused.find((group) => group.label === "ERP")?.items).toHaveLength(4);
     const expanded = getCustomerNavigationGroups(true);
     expect(expanded.map((group) => group.label)).toEqual(["홈", "영업", "물류", "ERP"]);
     expect(flattenCustomerNavigationItems(expanded)).toEqual(expect.arrayContaining(flattenCustomerNavigationItems(holdNavigationGroups)));
-    expect(expanded.find((group) => group.label === "ERP")?.items.slice(0, 3).map((item) => item.label)).toEqual(["상품관리", "매출처", "매입처"]);
+    expect(expanded.find((group) => group.label === "ERP")?.items.map((item) => item.label))
+      .toEqual(expect.arrayContaining(["상품관리", "매출처", "새 매장 확인", "매입처"]));
   });
 
   it("shows only approved pricing links without opening other held modules", () => {
@@ -51,9 +52,11 @@ describe("customer navigation", () => {
     expect(getCustomerNavigationGroups(false, "driver", true, true).map((group) => group.label)).not.toContain("판매");
   });
 
-  it("keeps the three core ERP directories visible without the hold switch", () => {
+  it("keeps the core ERP directories visible without the hold switch", () => {
     const erp = getCustomerNavigationGroups(false, "owner", false, false).find((group) => group.label === "ERP");
-    expect(erp?.items.map((item) => item.href)).toEqual(["/revenue/products", "/crm/timeline", "/purchasing/suppliers"]);
+    expect(erp?.items.map((item) => item.href)).toEqual(["/revenue/products", "/crm/timeline", "/customers/stores", "/purchasing/suppliers"]);
+    expect(flattenCustomerNavigationItems(getCustomerNavigationGroups(false, "staff", false, false))
+      .map((item) => item.href)).not.toContain("/customers/stores");
   });
 
   it("moves performance into the home tabs instead of a separate sales menu", () => {
