@@ -57,6 +57,20 @@ it.each([
     expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c }), "save", expect.objectContaining({ expected: 19 }));
   } finally { log.mockRestore(); }
 });
+it("explains a published tax mismatch without changing the requested revision", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    mocks.request.mockRejectedValueOnce(new Error(`Supabase request failed: 400 ${JSON.stringify({ code: "P0001", message: "published_tax_unconfirmed", details: "PRIVATE_DOCUMENT_CONTENT" })}`));
+    const request = new NextRequest("http://localhost/api/pricing-documents", { method: "POST", body: JSON.stringify({ action: "publish", id: "10000000-0000-4000-8000-000000000001", expected: 22 }) });
+    const response = await POST(request), body = await response.json();
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({ code: "published_tax_unconfirmed", databaseCode: "P0001", message: expect.stringContaining("현재 세금 구분 반영") });
+    expect(body.message).toContain("초안을 저장");
+    expect(body.message).toContain("판매가 버전");
+    expect(mocks.request).toHaveBeenCalledWith(expect.objectContaining({ companyId: c }), "publish", { id: "10000000-0000-4000-8000-000000000001", expected: 22 });
+    expect(JSON.stringify([body, log.mock.calls])).not.toContain("PRIVATE_DOCUMENT_CONTENT");
+  } finally { log.mockRestore(); }
+});
 it("unknown save failure keeps revision and permits same-content retry", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
