@@ -4,6 +4,7 @@ export type CustomerWorkspaceKey =
   | "dashboard"
   | "customers-summary"
   | "customers"
+  | "customer-stores"
   | "routes"
   | "routes-today"
   | "delivery-history"
@@ -99,6 +100,7 @@ export const holdNavigationGroups: CustomerNavigationGroup[] = [
 const coreErpItems: CustomerNavigationItem[] = [
   { active: "product-catalog", description: "전체 상품과 가져오기 이력", href: "/revenue/products", icon: PackageSearch, label: "상품관리", workspaceRoles: ["owner", "manager", "sales"] },
   { active: "customers", description: "매출처 정보와 계약 단가", href: "/crm/timeline", icon: Store, label: "매출처", workspaceRoles: ["owner", "manager", "sales"] },
+  { active: "customer-stores", description: "새 매장을 매출처로 확인", href: "/customers/stores", icon: Building2, label: "새 매장 확인", workspaceRoles: ["owner", "manager"] },
   { active: "suppliers", description: "매입처와 원가", href: "/purchasing/suppliers", icon: Truck, label: "매입처", workspaceRoles: ["owner", "manager"] }
 ];
 
