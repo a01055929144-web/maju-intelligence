@@ -38,39 +38,33 @@ import { businessStatusClass, displayIndustry, getBusinessStatusLabel, getLeadCo
 import { deliveryResultParts } from "@/domains/lead/delivery-result";
 import { useLeadDeliveryResults } from "@/components/map/use-lead-delivery-results";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
-
-const LEAD_BULK_ENRICHMENT_FAKE = process.env.NEXT_PUBLIC_FEATURE_LEAD_BULK_ENRICHMENT_FAKE === "true";
+import type { LeadBulkJob } from "@/domains/lead/bulk-enrichment";
 
 type LeadEnrichmentProgress = {
+  batchIds: string[];
   failed: number;
-  failedIds: string[];
+  jobId: string | null;
   processed: number;
   remainingIds: string[];
   status: "running" | "completed" | "cancelled";
   succeeded: number;
   total: number;
 };
-type LeadEnrichmentRunProgress = Omit<LeadEnrichmentProgress, "failedIds" | "remainingIds">;
 
-async function runFakeLeadEnrichment(
-  leadIds: readonly string[],
-  retry: boolean,
-  cancelled: () => boolean,
-  onProgress: (progress: LeadEnrichmentRunProgress, failedIds: string[]) => void
-) {
-  const failedIds: string[] = [];
-  let succeeded = 0;
-  for (let index = 0; index < leadIds.length; index += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 120));
-    if (cancelled()) {
-      onProgress({ failed: failedIds.length, processed: index, status: "cancelled", succeeded, total: leadIds.length }, failedIds);
-      return;
-    }
-    if (!retry && (index + 1) % 7 === 0) failedIds.push(leadIds[index]);
-    else succeeded += 1;
-    onProgress({ failed: failedIds.length, processed: index + 1, status: "running", succeeded, total: leadIds.length }, failedIds);
-  }
-  onProgress({ failed: failedIds.length, processed: leadIds.length, status: "completed", succeeded, total: leadIds.length }, failedIds);
+async function leadBulkResponse(response: Response): Promise<LeadBulkJob> {
+  const payload = await response.json().catch(() => null) as (LeadBulkJob & { message?: string }) | null;
+  if (!response.ok || !payload) throw new Error(payload?.message || "외부 정보 작업을 처리하지 못했습니다.");
+  return payload;
+}
+
+async function postLeadBulk(body: Record<string, unknown>) {
+  return leadBulkResponse(await fetch("/api/leads/bulk-enrichment", {
+    body: JSON.stringify(body), headers: { "Content-Type": "application/json" }, method: "POST"
+  }));
+}
+
+async function getLeadBulk(jobId: string) {
+  return leadBulkResponse(await fetch(`/api/leads/bulk-enrichment?jobId=${encodeURIComponent(jobId)}`, { cache: "no-store" }));
 }
 
 export function StoreManagementPanel({
@@ -285,7 +279,7 @@ export function LeadListPanel({
   const [enrichmentError, setEnrichmentError] = useState("");
   const [enrichmentProgress, setEnrichmentProgress] = useState<LeadEnrichmentProgress | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-  const enrichmentCancelRef = useRef(false);
+  const enrichmentPollRef = useRef(0);
   // 대표 요청(10-29): 상호명·업종·개업일·등급 오름차순/내림차순 정렬. "기본"은 지도 필터 결과 순서.
   const [sortKey, setSortKey] = useState<LeadListSortKey>("default");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -303,6 +297,7 @@ export function LeadListPanel({
     const visibleIds = new Set(leads.map((lead) => lead.id));
     setSelectedLeadIds((current) => new Set(Array.from(current).filter((id) => visibleIds.has(id))));
   }, [leads]);
+  useEffect(() => () => { enrichmentPollRef.current += 1; }, []);
 
   const allSelected = leads.length > 0 && selectedLeadIds.size === leads.length;
   const toggleLeadSelection = (leadId: string) => {
@@ -329,22 +324,77 @@ export function LeadListPanel({
     setRowErrors(Object.fromEntries(failed.map((result) => [result.leadId, result.message || "단계 변경에 실패했습니다."])));
     setBulkBusy(false);
   };
-  const runLeadEnrichment = async (retry = false, retryIds?: readonly string[]) => {
+  const applyLeadJob = (job: LeadBulkJob, batchIds: string[], remainingIds: string[]) => {
+    const terminal = job.status === "completed" || job.status === "cancelled" || job.status === "failed";
+    setEnrichmentProgress({
+      batchIds, failed: job.failedItems, jobId: job.id,
+      processed: Math.max(0, job.totalItems - job.remainingItems), remainingIds,
+      status: job.status === "cancelled" ? "cancelled" : terminal ? "completed" : "running",
+      succeeded: job.succeededItems, total: job.totalItems
+    });
+    if (job.status === "completed" && !job.failedItems) setSelectedLeadIds(new Set(remainingIds));
+    if (job.status === "failed") setEnrichmentError(job.errorCode || "외부 정보 작업을 완료하지 못했습니다.");
+    return terminal;
+  };
+  const pollLeadJob = async (jobId: string, batchIds: string[], remainingIds: string[], token: number) => {
+    let unchanged = 0;
+    let previousRemaining = -1;
+    while (enrichmentPollRef.current === token) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      if (enrichmentPollRef.current !== token) return;
+      const job = await getLeadBulk(jobId);
+      if (applyLeadJob(job, batchIds, remainingIds)) return;
+      unchanged = job.remainingItems === previousRemaining ? unchanged + 1 : 0;
+      previousRemaining = job.remainingItems;
+      if (unchanged >= 4) {
+        await postLeadBulk({ jobId, operation: "resume" });
+        unchanged = 0;
+      }
+    }
+  };
+  const runLeadEnrichment = async () => {
     const selectedIds = Array.from(selectedLeadIds);
-    const requestedIds = retryIds?.length ? Array.from(retryIds) : selectedIds.slice(0, 50);
-    const remainingIds = retryIds?.length ? (enrichmentProgress?.remainingIds ?? []) : selectedIds.slice(50);
-    if (!requestedIds.length) {
+    const batchIds = selectedIds.slice(0, 50);
+    const remainingIds = selectedIds.slice(50);
+    if (!batchIds.length) {
       setEnrichmentError("외부 정보를 불러올 리드를 선택해 주세요.");
       return;
     }
-    enrichmentCancelRef.current = false;
     setEnrichmentError("");
-    setEnrichmentProgress({ failed: 0, failedIds: [], processed: 0, remainingIds, status: "running", succeeded: 0, total: requestedIds.length });
-    await runFakeLeadEnrichment(requestedIds, retry, () => enrichmentCancelRef.current, (progress, failedIds) => {
-      const nextRemainingIds = progress.status === "cancelled" ? [...requestedIds.slice(progress.processed), ...remainingIds] : remainingIds;
-      setEnrichmentProgress({ ...progress, failedIds: [...failedIds], remainingIds: nextRemainingIds });
-      if (progress.status === "completed" || progress.status === "cancelled") setSelectedLeadIds(new Set([...failedIds, ...nextRemainingIds]));
-    });
+    setEnrichmentProgress({ batchIds, failed: 0, jobId: null, processed: 0, remainingIds, status: "running", succeeded: 0, total: batchIds.length });
+    try {
+      const job = await postLeadBulk({ action: "external_info", idempotencyKey: crypto.randomUUID(), leadIds: batchIds, operation: "start" });
+      const token = enrichmentPollRef.current + 1;
+      enrichmentPollRef.current = token;
+      if (!applyLeadJob(job, batchIds, remainingIds)) await pollLeadJob(job.id, batchIds, remainingIds, token);
+    } catch (error) {
+      setEnrichmentProgress(null);
+      setEnrichmentError(error instanceof Error ? error.message : "외부 정보 작업을 시작하지 못했습니다.");
+    }
+  };
+  const cancelLeadEnrichment = async () => {
+    if (!enrichmentProgress?.jobId) return;
+    enrichmentPollRef.current += 1;
+    try {
+      const job = await postLeadBulk({ jobId: enrichmentProgress.jobId, operation: "cancel" });
+      applyLeadJob(job, enrichmentProgress.batchIds, enrichmentProgress.remainingIds);
+    } catch (error) {
+      setEnrichmentError(error instanceof Error ? error.message : "작업을 취소하지 못했습니다.");
+    }
+  };
+  const retryLeadEnrichment = async () => {
+    if (!enrichmentProgress?.jobId) return;
+    setEnrichmentError("");
+    try {
+      const job = await postLeadBulk({ jobId: enrichmentProgress.jobId, operation: "retry_failed" });
+      const token = enrichmentPollRef.current + 1;
+      enrichmentPollRef.current = token;
+      if (!applyLeadJob(job, enrichmentProgress.batchIds, enrichmentProgress.remainingIds)) {
+        await pollLeadJob(job.id, enrichmentProgress.batchIds, enrichmentProgress.remainingIds, token);
+      }
+    } catch (error) {
+      setEnrichmentError(error instanceof Error ? error.message : "실패 항목을 다시 처리하지 못했습니다.");
+    }
   };
   if (collapsed) {
     return (
@@ -436,21 +486,19 @@ export function LeadListPanel({
                   {bulkBusy ? "변경 중" : "적용"}
                 </button>
               </div>
-              {LEAD_BULK_ENRICHMENT_FAKE ? (
-                <button
-                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
-                  disabled={enrichmentProgress?.status === "running"}
-                  onClick={() => void runLeadEnrichment(false)}
-                  type="button"
-                >
-                  {enrichmentProgress?.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                  {selectedLeadIds.size > 50 ? `외부 정보 불러오기 · 먼저 50곳 (남음 ${selectedLeadIds.size - 50}곳)` : `외부 정보 불러오기 · ${selectedLeadIds.size}곳`}
-                </button>
-              ) : null}
+              <button
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+                disabled={enrichmentProgress?.status === "running"}
+                onClick={() => void runLeadEnrichment()}
+                type="button"
+              >
+                {enrichmentProgress?.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                {selectedLeadIds.size > 50 ? `외부 정보 불러오기 · 먼저 50곳 (남음 ${selectedLeadIds.size - 50}곳)` : `외부 정보 불러오기 · ${selectedLeadIds.size}곳`}
+              </button>
             </div>
           ) : null}
           {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
-          {LEAD_BULK_ENRICHMENT_FAKE && enrichmentProgress ? (
+          {enrichmentProgress ? (
             <div className="rounded-lg border border-slate-200 bg-white p-2" role="status">
               <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700">
                 <span>{enrichmentProgress.status === "running" ? "외부 정보를 확인하고 있습니다" : enrichmentProgress.status === "cancelled" ? "작업을 취소했습니다" : enrichmentProgress.failed ? "일부 정보를 불러오지 못했습니다" : "외부 정보를 모두 불러왔습니다"}</span>
@@ -460,13 +508,13 @@ export function LeadListPanel({
                 <div className="h-full rounded-full bg-teal-600 transition-[width] duration-300" style={{ width: `${enrichmentProgress.total ? Math.round((enrichmentProgress.processed / enrichmentProgress.total) * 100) : 0}%` }} />
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
-                <span className="text-[11px] font-medium text-slate-500">성공 {enrichmentProgress.succeeded} · 실패 {enrichmentProgress.failed} · 남음 {enrichmentProgress.remainingIds.length}</span>
+                <span className="text-[11px] font-medium text-slate-500">성공 {enrichmentProgress.succeeded} · 실패 {enrichmentProgress.failed} · 남음 {Math.max(0, enrichmentProgress.total - enrichmentProgress.processed) + enrichmentProgress.remainingIds.length}</span>
                 {enrichmentProgress.status === "running" ? (
-                  <button className="h-7 rounded-md border border-slate-300 px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => { enrichmentCancelRef.current = true; }} type="button">취소</button>
+                  <button className="h-7 rounded-md border border-slate-300 px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" disabled={!enrichmentProgress.jobId} onClick={() => void cancelLeadEnrichment()} type="button">취소</button>
                 ) : (
                   <span className="flex flex-wrap justify-end gap-1">
-                    {enrichmentProgress.failed ? <button className="h-7 rounded-md border border-rose-200 bg-rose-50 px-2 text-[11px] font-bold text-rose-700 hover:bg-rose-100" onClick={() => void runLeadEnrichment(true, enrichmentProgress.failedIds)} type="button">실패 {enrichmentProgress.failed}곳 다시 시도</button> : null}
-                    {!enrichmentProgress.failed && enrichmentProgress.remainingIds.length ? <button className="h-7 rounded-md border border-teal-200 bg-teal-50 px-2 text-[11px] font-bold text-teal-800 hover:bg-teal-100" onClick={() => void runLeadEnrichment(false)} type="button">남은 {enrichmentProgress.remainingIds.length}곳 이어서</button> : null}
+                    {enrichmentProgress.failed ? <button className="h-7 rounded-md border border-rose-200 bg-rose-50 px-2 text-[11px] font-bold text-rose-700 hover:bg-rose-100" onClick={() => void retryLeadEnrichment()} type="button">실패 {enrichmentProgress.failed}곳 다시 시도</button> : null}
+                    {!enrichmentProgress.failed && enrichmentProgress.remainingIds.length ? <button className="h-7 rounded-md border border-teal-200 bg-teal-50 px-2 text-[11px] font-bold text-teal-800 hover:bg-teal-100" onClick={() => void runLeadEnrichment()} type="button">남은 {enrichmentProgress.remainingIds.length}곳 이어서</button> : null}
                   </span>
                 )}
               </div>
