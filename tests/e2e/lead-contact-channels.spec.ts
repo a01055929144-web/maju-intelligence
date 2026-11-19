@@ -61,9 +61,15 @@ test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채
     await expect(shortcuts.locator("button").filter({ hasText: channel }).first()).toBeVisible();
   }
   const talktalkShortcut = shortcuts.locator("button").filter({ hasText: "네이버 톡톡" });
+  const instagramShortcut = shortcuts.locator("button").filter({ hasText: "인스타 DM" });
+  await expect(shortcuts.locator("button").filter({ hasText: "연락처" })).not.toContainText("[입력]");
+  await expect(shortcuts.locator("button").filter({ hasText: "카톡" })).not.toContainText("[입력]");
+  await expect(instagramShortcut).toContainText("[입력]");
+  await instagramShortcut.click();
+  const panel = page.getByRole("region", { name: "영업 채널" });
+  await expect(panel.getByRole("textbox", { name: "인스타그램" })).toBeVisible();
   await expect(talktalkShortcut).toContainText("[입력]");
   await talktalkShortcut.click();
-  const panel = page.getByRole("region", { name: "영업 채널" });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("textbox", { name: "톡톡 주소" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);

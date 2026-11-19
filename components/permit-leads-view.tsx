@@ -3505,26 +3505,37 @@ function PermitLeadDetailPanel({
           <div aria-label="연락 채널 바로가기" className="flex flex-wrap items-stretch justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2">
             <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
               {([
-                ["visit", "방문", lead.address],
-                ["contact", "연락처", lead.phone ? formatKoreanPhoneNumber(lead.phone) : ""],
-                ["kakao", "카톡", lead.phone ? formatKoreanPhoneNumber(lead.phone) : ""],
-                ["instagram", "인스타 DM", lead.instagramUrl || ""],
-                ["talktalk", "네이버 톡톡", lead.naverTalktalkUrl || ""],
-                ["email", "이메일", lead.email || ""],
-                ["fax", "팩스", lead.fax ? formatKoreanPhoneNumber(lead.fax) : ""]
-              ] as Array<[LeadContactChannelTarget, string, string]>).map(([channel, label, value]) => (
-                <button
-                  className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left hover:border-teal-400 hover:bg-teal-50"
-                  key={channel}
-                  onClick={() => setRequestedContactChannel({ channel, requestId: Date.now() })}
-                  type="button"
-                >
-                  <span className="block text-[11px] font-black text-slate-900">{label}</span>
-                  <span className={`block max-w-32 truncate text-[10px] font-bold ${value ? "text-slate-600" : "text-teal-700"}`}>
-                    {value || <><span aria-hidden="true">&nbsp;</span><span>[입력]</span></>}
-                  </span>
-                </button>
-              ))}
+                ["visit", "방문", lead.address, Boolean(lead.address), false],
+                ["contact", "연락처", isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : "", isMobilePhoneNumber(lead.phone), false],
+                ["kakao", "카톡", lead.phone ? formatKoreanPhoneNumber(lead.phone) : "", true, false],
+                ["instagram", "인스타 DM", lead.instagramUrl || "", true, true],
+                ["talktalk", "네이버 톡톡", lead.naverTalktalkUrl || "", true, true],
+                ["email", "이메일", lead.email || "", true, true],
+                ["fax", "팩스", lead.fax ? formatKoreanPhoneNumber(lead.fax) : "", true, true]
+              ] as Array<[LeadContactChannelTarget, string, string, boolean, boolean]>).map(([channel, label, value, available, editable]) => {
+                const content = (
+                  <>
+                    <span className="block text-[11px] font-black text-slate-900">{label}</span>
+                    <span className={`block max-w-32 truncate text-[10px] font-bold ${value ? "text-slate-600" : editable ? "text-teal-700" : "text-slate-400"}`}>
+                      {value || (editable ? "[입력]" : <span aria-hidden="true">&nbsp;</span>)}
+                    </span>
+                  </>
+                );
+                return available ? (
+                  <button
+                    className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left hover:border-teal-400 hover:bg-teal-50"
+                    key={channel}
+                    onClick={() => setRequestedContactChannel({ channel, requestId: Date.now() })}
+                    type="button"
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div aria-disabled="true" className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left opacity-60" key={channel}>
+                    {content}
+                  </div>
+                );
+              })}
             </div>
             <div className="grid shrink-0 grid-cols-2 gap-1.5 sm:flex">
               <PermitLeadActionRailButton

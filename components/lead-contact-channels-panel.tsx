@@ -48,7 +48,7 @@ import {
   withPermitLeadCompanyQuery
 } from "@/components/sales-route-map-workspace";
 
-type EditableChannel = "fax" | "email" | "naverTalktalkUrl";
+type EditableChannel = "fax" | "email" | "instagramUrl" | "naverTalktalkUrl";
 
 export type LeadContactChannelTarget = "visit" | "contact" | "kakao" | "instagram" | "talktalk" | "email" | "fax";
 
@@ -62,6 +62,7 @@ const CHANNEL_ACTION: Record<LeadContactChannel, { actionType: PermitLeadActionK
 };
 
 const INPUT_LABEL: Record<EditableChannel, { label: string; placeholder: string }> = {
+  instagramUrl: { label: "인스타그램", placeholder: "instagram.com/매장계정 또는 @매장계정" },
   naverTalktalkUrl: { label: "톡톡 주소", placeholder: "talk.naver.com/… (네이버 지도에서 톡톡 누른 뒤 주소 복사)" },
   email: { label: "이메일", placeholder: "owner@example.com" },
   fax: { label: "팩스", placeholder: "02-555-1234" }
@@ -83,6 +84,7 @@ export function LeadContactChannelsPanel({
   const [drafts, setDrafts] = useState<Record<EditableChannel, string>>({
     fax: lead.fax || "",
     email: lead.email || "",
+    instagramUrl: lead.instagramUrl || "",
     naverTalktalkUrl: lead.naverTalktalkUrl || ""
   });
   const [editing, setEditing] = useState<EditableChannel | null>(null);
@@ -200,7 +202,7 @@ export function LeadContactChannelsPanel({
   useEffect(() => {
     setMessage(buildLeadDmScript(lead, dmSettings || undefined));
     setMessageEdited(false);
-    setDrafts({ fax: lead.fax || "", email: lead.email || "", naverTalktalkUrl: lead.naverTalktalkUrl || "" });
+    setDrafts({ fax: lead.fax || "", email: lead.email || "", instagramUrl: lead.instagramUrl || "", naverTalktalkUrl: lead.naverTalktalkUrl || "" });
     setEditing(null);
     setNotice(null);
     setSentChannels([]);
@@ -212,7 +214,7 @@ export function LeadContactChannelsPanel({
   useEffect(() => {
     if (!requestedChannel) return;
     const { channel } = requestedChannel;
-    const editable = channel === "talktalk" ? "naverTalktalkUrl" : channel === "email" || channel === "fax" ? channel : null;
+    const editable = channel === "talktalk" ? "naverTalktalkUrl" : channel === "instagram" ? "instagramUrl" : channel === "email" || channel === "fax" ? channel : null;
     if (editable) setEditing(editable);
     requestAnimationFrame(() => {
       document.getElementById(`lead-contact-channel-${channel}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -695,8 +697,8 @@ export function LeadContactChannelsPanel({
             </div>
             <div className="flex min-w-0 items-center gap-1 px-2">
               <span className={`min-w-0 truncate text-xs font-semibold ${value ? "text-slate-700" : "text-slate-400"}`}>{value || "연락처 없음"}</span>
-              {channel === "talktalk" || channel === "email" || channel === "fax" ? (
-                <button className="min-h-11 shrink-0 px-2 text-xs font-black text-teal-700" onClick={() => setEditing(channel === "talktalk" ? "naverTalktalkUrl" : channel)} type="button">{value ? "수정" : "입력"}</button>
+              {channel === "instagram" || channel === "talktalk" || channel === "email" || channel === "fax" ? (
+                <button className="min-h-11 shrink-0 px-2 text-xs font-black text-teal-700" onClick={() => setEditing(channel === "talktalk" ? "naverTalktalkUrl" : channel === "instagram" ? "instagramUrl" : channel)} type="button">{value ? "수정" : "입력"}</button>
               ) : null}
             </div>
             <div className="flex flex-wrap gap-1.5 px-2">
@@ -709,8 +711,8 @@ export function LeadContactChannelsPanel({
               <button className="maju-button-secondary min-h-11 px-3 text-xs" onClick={() => void copyMessage(channel === "fax" ? `[팩스] ${lead.businessName} 대표님께\n\n${outgoing}` : outgoing)} type="button"><Copy className="h-3.5 w-3.5" />문구 복사</button>
               {sentButton(channel)}
             </div>
-            {editing === (channel === "talktalk" ? "naverTalktalkUrl" : channel) && (channel === "talktalk" || channel === "email" || channel === "fax") ? (
-              <div className="sm:col-span-3">{renderEditor(channel === "talktalk" ? "naverTalktalkUrl" : channel)}</div>
+            {editing === (channel === "talktalk" ? "naverTalktalkUrl" : channel === "instagram" ? "instagramUrl" : channel) && (channel === "instagram" || channel === "talktalk" || channel === "email" || channel === "fax") ? (
+              <div className="sm:col-span-3">{renderEditor(channel === "talktalk" ? "naverTalktalkUrl" : channel === "instagram" ? "instagramUrl" : channel)}</div>
             ) : null}
           </div>
         ))}
