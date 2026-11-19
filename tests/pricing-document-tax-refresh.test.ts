@@ -1,8 +1,12 @@
 import { expect, it } from "vitest";
 import { lineFromCatalog } from "../domains/pricing/document";
-import { reviewDocumentTaxes } from "../domains/pricing/document-tax";
+import { countDocumentTaxMismatches, reviewDocumentTaxes } from "../domains/pricing/document-tax";
 const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 상품", displayName: "합성 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "taxable" as const };
 const promotion = { id: "30000000-0000-4000-8000-000000000001", productId: product.id, taxType: "exempt" as const };
+it("counts only draft lines whose known catalog tax differs", () => {
+  const lines = [lineFromCatalog(product), { ...lineFromCatalog(product), taxType: "exempt" as const }, { ...lineFromCatalog(product), productId: "missing" }];
+  expect(countDocumentTaxMismatches(lines, [product])).toBe(1);
+});
 it("changes only draft taxes after current product and promotion agree; no price/snapshot mutation", () => {
   const source = Object.freeze([Object.freeze(lineFromCatalog(product)), Object.freeze({ ...lineFromCatalog(product), promotionId: promotion.id, badge: "행사" as const })]);
   const before = JSON.stringify(source);

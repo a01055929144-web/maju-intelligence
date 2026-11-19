@@ -45,7 +45,7 @@ import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { LeadDocumentContext } from "@/application/pricing/document-entry";
 import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
 import { useConfirm } from "./ui/confirm-dialog";
-import { reviewDocumentTaxes } from "@/domains/pricing/document-tax";
+import { countDocumentTaxMismatches, reviewDocumentTaxes } from "@/domains/pricing/document-tax";
 import { Notice } from "./ui/notice";
 const box = "rounded border border-slate-300 px-3 py-2";
 type Profile = {
@@ -101,6 +101,7 @@ export function PricingDocumentsWorkspace({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("documents");
   const [view, setView] = useState<"list" | "editor">("list");
+  const [taxMismatchCount, setTaxMismatchCount] = useState(0);
   /* 11/4: 같은 데이터를 문서(A4 종이)로 보거나 표로 봅니다. 기본은 문서 보기. */
   const [docView, setDocView] = useState<"doc" | "table">("doc"),
     [autoPrint, setAutoPrint] = useState(false),
@@ -192,6 +193,17 @@ export function PricingDocumentsWorkspace({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+  const taxReviewKey = draft?.content.lines.map(line => `${line.productId}:${line.taxType}`).join("|") ?? "";
+  useEffect(() => {
+    if (!draft || draft.archivedAt || !taxReviewKey) { setTaxMismatchCount(0); return; }
+    let active = true;
+    const ids = Array.from(new Set(draft.content.lines.map(line => line.productId)));
+    const batches = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, index * 100 + 100));
+    void Promise.all(batches.map(productIds => read<{ items: CatalogChoice[] }>("catalog", { productIds })))
+      .then(results => { if (active) setTaxMismatchCount(countDocumentTaxMismatches(draft.content.lines, results.flatMap(result => result.items))); })
+      .catch(() => { if (active) setTaxMismatchCount(0); });
+    return () => { active = false; };
+  }, [draft?.id, read, taxReviewKey]);
   function change(content: DocumentContent) {
     if (draft && !draft.archivedAt) {
       setDraft({ ...draft, content });
@@ -681,6 +693,12 @@ export function PricingDocumentsWorkspace({
           </div>
         )}
       </header>
+      {draft && taxMismatchCount > 0 ? <Notice kind="error">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="mr-auto">상품 원장과 세금 구분이 다른 품목이 {taxMismatchCount}개 있습니다. 확인 후 초안에 반영하고 저장해 주세요.</p>
+          <Button className="min-h-[44px]" disabled={busy || !editable} onClick={() => void task(refreshTaxes)} type="button" variant="outline">현재 세금 구분 반영</Button>
+        </div>
+      </Notice> : null}
       {draft?.archivedAt ? <p role="status" className="rounded border p-3 text-sm">보관된 문서입니다. 내용을 바꾸거나 새 버전을 발행하려면 문서 보관함에서 먼저 복원해 주세요. 기존 발행본과 주문 링크는 유지됩니다.</p> : null}
       {error && (
         <p

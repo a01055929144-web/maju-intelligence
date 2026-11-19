@@ -358,12 +358,16 @@ for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserv
   });
   await page.goto("/revenue/pricing/documents");
   await page.getByRole("button", { name: "세금 갱신 합성 문서", exact: true }).click();
+  const taxMismatch = page.getByText("상품 원장과 세금 구분이 다른 품목이 2개 있습니다.", { exact: false });
+  await expect(taxMismatch).toBeVisible();
+  const directRefresh = page.getByRole("button", { name: "현재 세금 구분 반영", exact: true });
+  expect((await directRefresh.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click(); }
   else await page.getByRole("tab", { name: "표", exact: true }).click();
   const normal = page.getByRole("combobox", { name: "품목 1 과세", exact: true }), promo = page.getByRole("combobox", { name: "품목 2 과세", exact: true });
   await expect(normal).toHaveValue("taxable"); await expect(promo).toBeDisabled();
   expect((await page.getByRole("button", { name: "행사 세금 수정", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  async function refresh() { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "현재 세금 구분 반영", exact: true }).click(); }
+  async function refresh() { await directRefresh.click(); }
   await refresh();
   await expect(page.getByRole("alert").filter({ hasText: "행사 원본과 상품" })).toBeVisible();
   await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);

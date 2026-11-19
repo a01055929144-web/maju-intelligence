@@ -1,5 +1,13 @@
 import { PricingInputError, type CatalogChoice, type PrintLine, type Promotion } from "./document";
 
+export function countDocumentTaxMismatches(lines: readonly PrintLine[], catalog: readonly Pick<CatalogChoice, "id" | "taxType">[]) {
+  const products = new Map(catalog.map(item => [item.id, item.taxType]));
+  return lines.filter(line => {
+    const taxType = products.get(line.productId);
+    return (taxType === "taxable" || taxType === "exempt") && line.taxType !== taxType;
+  }).length;
+}
+
 /** Explicit draft review only. Never mutate catalog, promotions or publications. */
 export function reviewDocumentTaxes(lines: readonly PrintLine[], catalog: readonly Pick<CatalogChoice, "id" | "taxType">[], promotions: readonly Pick<Promotion, "id" | "productId" | "taxType">[]) {
   const products = new Map(catalog.map(item => [item.id, item]));
