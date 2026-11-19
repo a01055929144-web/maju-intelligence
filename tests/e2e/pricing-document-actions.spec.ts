@@ -367,7 +367,10 @@ for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserv
   const normal = page.getByRole("combobox", { name: "품목 1 과세", exact: true }), promo = page.getByRole("combobox", { name: "품목 2 과세", exact: true });
   await expect(normal).toHaveValue("taxable"); await expect(promo).toBeDisabled();
   expect((await page.getByRole("button", { name: "행사 세금 수정", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  async function refresh() { await directRefresh.click(); }
+  async function refresh() {
+    if (await directRefresh.isVisible()) await directRefresh.click();
+    else { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "현재 세금 구분 반영", exact: true }).click(); }
+  }
   await refresh();
   await expect(page.getByRole("alert").filter({ hasText: "행사 원본과 상품" })).toBeVisible();
   await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);
