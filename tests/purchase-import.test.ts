@@ -181,10 +181,11 @@ describe("purchase import vat column", () => {
       ["품목명", "수량", "단가", "공급가액", "부가세", "합계"],
       ["간장 [1.8L]", "2", "10000", "20000", "2000", "22000"],
       ["양파 [10kg]", "1", "15000", "15000", "0", "15000"],
-      ["두부 [1kg]", "1", "3000", "3000", "", "3000"]
+      ["두부 [1kg]", "1", "3000", "3000", "", "3000"],
+      ["반품 조정 [1kg]", "1", "1000", "1000", "-100", "900"]
     ]);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
-    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000], [undefined, false, 3000]]);
+    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000], [undefined, false, 3000], [undefined, false, 1000]]);
     expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
   });
 });
