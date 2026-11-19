@@ -25,7 +25,7 @@ for (const width of [1440, 390]) test(`새 매장 확인: 새 매출처·기존 
   await page.goto("/customers/stores");
   await expect(page.getByRole("heading", { name: "새 매장 확인" })).toBeVisible();
   await expect(page.getByText("합성 신촌점").first()).toBeVisible();
-  await expect(page.getByText("123-45-67890")).toBeVisible();
+  await expect(page.getByRole("definition").filter({ hasText: /^123-45-67890$/ })).toBeVisible();
   await page.getByRole("button", { name: "기존 매출처에 연결" }).click();
   await expect(page.getByLabel("연결할 기존 매출처")).toHaveValue("30000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: "선택한 매출처에 연결" }).click();
