@@ -6,12 +6,14 @@ import { enrichPermitLeadExternalInfo, getPermitLeadIdentityForCompany, supabase
 type JobRow = {
   id: string; company_id: string; action: LeadBulkJob["action"]; status: LeadBulkJob["status"];
   total_items: number; succeeded_items: number; failed_items: number; cancel_requested_at: string | null;
+  error_code: string | null;
 };
 type ItemRow = { id: string; job_id: string; company_id: string; lead_id: string; action: LeadBulkJob["action"] };
 
 const job = (row: JobRow): LeadBulkJob => ({
   id: row.id, companyId: row.company_id, action: row.action, status: row.status, totalItems: row.total_items,
-  succeededItems: row.succeeded_items, failedItems: row.failed_items, cancelRequestedAt: row.cancel_requested_at
+  succeededItems: row.succeeded_items, failedItems: row.failed_items, cancelRequestedAt: row.cancel_requested_at,
+  errorCode: row.error_code
 });
 const item = (row: ItemRow): LeadBulkJobItem => ({
   id: row.id, jobId: row.job_id, companyId: row.company_id, leadId: row.lead_id, action: row.action

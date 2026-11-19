@@ -11,6 +11,7 @@ export type LeadBulkJob = {
   succeededItems: number;
   failedItems: number;
   cancelRequestedAt: string | null;
+  errorCode: string | null;
 };
 
 export type LeadBulkJobItem = {

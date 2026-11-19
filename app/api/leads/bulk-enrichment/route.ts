@@ -80,7 +80,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(job, { status: 202 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "일괄 작업을 시작하지 못했습니다.";
-    const status = /daily_limit_exceeded/.test(message) ? 429 : /lead_not_found|job_not_found/.test(message) ? 404 : 500;
+    const status = /daily_limit_exceeded/.test(message) ? 429
+      : /lead_not_found|job_not_found/.test(message) ? 404
+      : /job_cancelled|no_failed_items/.test(message) ? 409
+      : 500;
     return NextResponse.json({ message: status === 429 ? "회사 일일 외부 조회 한도를 모두 사용했습니다." : message }, { status });
   }
 }

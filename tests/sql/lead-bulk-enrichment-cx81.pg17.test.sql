@@ -25,6 +25,8 @@ do $$ declare j jsonb; a jsonb; b jsonb; begin
   if not exists(select 1 from public.lead_bulk_enrichment_items where job_id=(j->>'id')::uuid and status='pending' and attempts_today=1) then raise exception 'retry_failed'; end if;
   perform public.cancel_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid);
   if public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid,50) is not null then raise exception 'cancel_failed'; end if;
+  begin perform public.retry_lead_bulk_enrichment_failures('10000000-0000-4000-8000-000000000001',(j->>'id')::uuid); raise exception 'cancelled_retry_accepted';
+  exception when raise_exception then if sqlerrm <> 'job_cancelled' then raise; end if; end;
   begin perform public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,50); raise exception 'tenant_leak'; exception when others then if sqlerrm='tenant_leak' then raise; end if; end;
 end $$;
 
@@ -42,6 +44,10 @@ do $$ declare j jsonb; a jsonb; begin
   a:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,1);
   perform public.complete_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(a->>'id')::uuid,true,'{}',null);
   if public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,1) is not null then raise exception 'daily_cap_failed'; end if;
-  if (select error_code from public.lead_bulk_enrichment_jobs where id=(j->>'id')::uuid) <> 'daily_limit_exceeded' then raise exception 'daily_cap_not_recorded'; end if;
+  if not exists(select 1 from public.lead_bulk_enrichment_jobs where id=(j->>'id')::uuid and status='queued' and error_code='daily_limit_exceeded') then raise exception 'daily_cap_not_resumable'; end if;
+  update public.lead_bulk_enrichment_items set attempt_day=current_date-1 where company_id='10000000-0000-4000-8000-000000000002' and job_id=(j->>'id')::uuid;
+  a:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,1);
+  if a is null or (a->>'position')::int<>2 then raise exception 'next_day_resume_failed'; end if;
+  if (select error_code from public.lead_bulk_enrichment_jobs where id=(j->>'id')::uuid) is not null then raise exception 'daily_cap_error_not_cleared'; end if;
 end $$;
 select 'cx81_lead_bulk_enrichment_pg17_pass';

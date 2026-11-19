@@ -78,12 +78,15 @@ begin
   if v_job.status in ('completed','cancelled','failed') then return null; end if;
   if exists (select 1 from public.lead_bulk_enrichment_items where company_id=p_company_id and job_id=p_job_id and status='running') then return null; end if;
   select coalesce(sum(attempts_today),0) into v_used from public.lead_bulk_enrichment_items where company_id=p_company_id and attempt_day=(now() at time zone 'Asia/Seoul')::date;
-  if v_used >= greatest(1,p_daily_cap) then update public.lead_bulk_enrichment_jobs set status='failed',error_code='daily_limit_exceeded',finished_at=now() where id=p_job_id; return null; end if;
+  if v_used >= greatest(1,p_daily_cap) then
+    update public.lead_bulk_enrichment_jobs set status='queued',error_code='daily_limit_exceeded',finished_at=null where id=p_job_id;
+    return null;
+  end if;
   select * into v_item from public.lead_bulk_enrichment_items where company_id=p_company_id and job_id=p_job_id and status='pending' order by position limit 1 for update skip locked;
   if not found then return null; end if;
   update public.lead_bulk_enrichment_items set status='running',attempts_today=case when attempt_day=(now() at time zone 'Asia/Seoul')::date then attempts_today+1 else 1 end,
     attempt_day=(now() at time zone 'Asia/Seoul')::date,started_at=now(),finished_at=null where id=v_item.id returning * into v_item;
-  update public.lead_bulk_enrichment_jobs set status='running',started_at=coalesce(started_at,now()) where id=p_job_id;
+  update public.lead_bulk_enrichment_jobs set status='running',started_at=coalesce(started_at,now()),finished_at=null,error_code=null where id=p_job_id;
   return to_jsonb(v_item);
 end $$;
 
@@ -106,11 +109,14 @@ declare v_job public.lead_bulk_enrichment_jobs; begin update public.lead_bulk_en
 if not found then raise exception 'job_not_found'; end if; return to_jsonb(v_job); end $$;
 
 create or replace function public.retry_lead_bulk_enrichment_failures(p_company_id uuid,p_job_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_job public.lead_bulk_enrichment_jobs; begin
+ declare v_job public.lead_bulk_enrichment_jobs; begin
+ select * into v_job from public.lead_bulk_enrichment_jobs where company_id=p_company_id and id=p_job_id for update;
+ if not found then raise exception 'job_not_found'; end if;
+ if v_job.status='cancelled' or v_job.cancel_requested_at is not null then raise exception 'job_cancelled'; end if;
 update public.lead_bulk_enrichment_items set status='pending',result=null,error_message=null,started_at=null,finished_at=null where company_id=p_company_id and job_id=p_job_id and status='failed';
 if not found then raise exception 'no_failed_items'; end if;
 update public.lead_bulk_enrichment_jobs set status='queued',failed_items=0,finished_at=null,error_code=null,cancel_requested_at=null where company_id=p_company_id and id=p_job_id returning * into v_job;
-if not found then raise exception 'job_not_found'; end if; return to_jsonb(v_job); end $$;
+ return to_jsonb(v_job); end $$;
 
 revoke all on function public.create_lead_bulk_enrichment_job(uuid,text,uuid[],uuid,text), public.claim_lead_bulk_enrichment_item(uuid,uuid,int), public.complete_lead_bulk_enrichment_item(uuid,uuid,boolean,jsonb,text), public.cancel_lead_bulk_enrichment_job(uuid,uuid), public.retry_lead_bulk_enrichment_failures(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.create_lead_bulk_enrichment_job(uuid,text,uuid[],uuid,text), public.claim_lead_bulk_enrichment_item(uuid,uuid,int), public.complete_lead_bulk_enrichment_item(uuid,uuid,boolean,jsonb,text), public.cancel_lead_bulk_enrichment_job(uuid,uuid), public.retry_lead_bulk_enrichment_failures(uuid,uuid) to service_role;
