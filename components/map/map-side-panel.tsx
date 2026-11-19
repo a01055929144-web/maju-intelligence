@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   Clock,
+  Download,
   Loader2,
   Navigation,
   PanelLeftClose,
@@ -37,6 +38,40 @@ import { businessStatusClass, displayIndustry, getBusinessStatusLabel, getLeadCo
 import { deliveryResultParts } from "@/domains/lead/delivery-result";
 import { useLeadDeliveryResults } from "@/components/map/use-lead-delivery-results";
 import { LEAD_LIST_SORT_OPTIONS, sortLeadList, type LeadListSortKey } from "@/components/map/lead-list-sort";
+
+const LEAD_BULK_ENRICHMENT_FAKE = process.env.NEXT_PUBLIC_FEATURE_LEAD_BULK_ENRICHMENT_FAKE === "true";
+
+type LeadEnrichmentProgress = {
+  failed: number;
+  failedIds: string[];
+  processed: number;
+  remainingIds: string[];
+  status: "running" | "completed" | "cancelled";
+  succeeded: number;
+  total: number;
+};
+type LeadEnrichmentRunProgress = Omit<LeadEnrichmentProgress, "failedIds" | "remainingIds">;
+
+async function runFakeLeadEnrichment(
+  leadIds: readonly string[],
+  retry: boolean,
+  cancelled: () => boolean,
+  onProgress: (progress: LeadEnrichmentRunProgress, failedIds: string[]) => void
+) {
+  const failedIds: string[] = [];
+  let succeeded = 0;
+  for (let index = 0; index < leadIds.length; index += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    if (cancelled()) {
+      onProgress({ failed: failedIds.length, processed: index, status: "cancelled", succeeded, total: leadIds.length }, failedIds);
+      return;
+    }
+    if (!retry && (index + 1) % 7 === 0) failedIds.push(leadIds[index]);
+    else succeeded += 1;
+    onProgress({ failed: failedIds.length, processed: index + 1, status: "running", succeeded, total: leadIds.length }, failedIds);
+  }
+  onProgress({ failed: failedIds.length, processed: leadIds.length, status: "completed", succeeded, total: leadIds.length }, failedIds);
+}
 
 export function StoreManagementPanel({
   collapsed,
@@ -247,7 +282,10 @@ export function LeadListPanel({
   const [bulkReason, setBulkReason] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
+  const [enrichmentError, setEnrichmentError] = useState("");
+  const [enrichmentProgress, setEnrichmentProgress] = useState<LeadEnrichmentProgress | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const enrichmentCancelRef = useRef(false);
   // 대표 요청(10-29): 상호명·업종·개업일·등급 오름차순/내림차순 정렬. "기본"은 지도 필터 결과 순서.
   const [sortKey, setSortKey] = useState<LeadListSortKey>("default");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -290,6 +328,23 @@ export function LeadListPanel({
     setSelectedLeadIds(new Set(failed.map((result) => result.leadId)));
     setRowErrors(Object.fromEntries(failed.map((result) => [result.leadId, result.message || "단계 변경에 실패했습니다."])));
     setBulkBusy(false);
+  };
+  const runLeadEnrichment = async (retry = false, retryIds?: readonly string[]) => {
+    const selectedIds = Array.from(selectedLeadIds);
+    const requestedIds = retryIds?.length ? Array.from(retryIds) : selectedIds.slice(0, 50);
+    const remainingIds = retryIds?.length ? (enrichmentProgress?.remainingIds ?? []) : selectedIds.slice(50);
+    if (!requestedIds.length) {
+      setEnrichmentError("외부 정보를 불러올 리드를 선택해 주세요.");
+      return;
+    }
+    enrichmentCancelRef.current = false;
+    setEnrichmentError("");
+    setEnrichmentProgress({ failed: 0, failedIds: [], processed: 0, remainingIds, status: "running", succeeded: 0, total: requestedIds.length });
+    await runFakeLeadEnrichment(requestedIds, retry, () => enrichmentCancelRef.current, (progress, failedIds) => {
+      const nextRemainingIds = progress.status === "cancelled" ? [...requestedIds.slice(progress.processed), ...remainingIds] : remainingIds;
+      setEnrichmentProgress({ ...progress, failedIds: [...failedIds], remainingIds: nextRemainingIds });
+      if (progress.status === "completed" || progress.status === "cancelled") setSelectedLeadIds(new Set([...failedIds, ...nextRemainingIds]));
+    });
   };
   if (collapsed) {
     return (
@@ -367,21 +422,57 @@ export function LeadListPanel({
             </span>
           </div>
           {selectedLeadIds.size ? (
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
-              <select aria-label="바꿀 단계" className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs" onChange={(event) => setBulkStage(event.target.value)} value={bulkStage}>
-                <option value="">단계 바꾸기</option>
-                {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-              <select aria-label="변경 사유" className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs" onChange={(event) => setBulkReason(event.target.value)} value={bulkReason}>
-                <option value="">사유</option>
-                {["단가 안 맞음", "기존 거래처 유지", "폐업", "이전", "미수", "결제 문제", "기타"].map((reason) => <option key={reason}>{reason}</option>)}
-              </select>
-              <button className="h-8 shrink-0 whitespace-nowrap rounded-md bg-teal-700 px-3 text-xs font-bold text-white disabled:opacity-50" disabled={!bulkStage || bulkBusy} onClick={() => void applyBulkStage()} type="button">
-                {bulkBusy ? "변경 중" : "적용"}
-              </button>
+            <div className="space-y-1.5">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
+                <select aria-label="바꿀 단계" className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs" onChange={(event) => setBulkStage(event.target.value)} value={bulkStage}>
+                  <option value="">단계 바꾸기</option>
+                  {LEAD_STAGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select aria-label="변경 사유" className="h-8 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs" onChange={(event) => setBulkReason(event.target.value)} value={bulkReason}>
+                  <option value="">사유</option>
+                  {["단가 안 맞음", "기존 거래처 유지", "폐업", "이전", "미수", "결제 문제", "기타"].map((reason) => <option key={reason}>{reason}</option>)}
+                </select>
+                <button className="h-8 shrink-0 whitespace-nowrap rounded-md bg-teal-700 px-3 text-xs font-bold text-white disabled:opacity-50" disabled={!bulkStage || bulkBusy} onClick={() => void applyBulkStage()} type="button">
+                  {bulkBusy ? "변경 중" : "적용"}
+                </button>
+              </div>
+              {LEAD_BULK_ENRICHMENT_FAKE ? (
+                <button
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 text-xs font-black text-teal-900 hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+                  disabled={enrichmentProgress?.status === "running"}
+                  onClick={() => void runLeadEnrichment(false)}
+                  type="button"
+                >
+                  {enrichmentProgress?.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  {selectedLeadIds.size > 50 ? `외부 정보 불러오기 · 먼저 50곳 (남음 ${selectedLeadIds.size - 50}곳)` : `외부 정보 불러오기 · ${selectedLeadIds.size}곳`}
+                </button>
+              ) : null}
             </div>
           ) : null}
           {bulkMessage ? <p className="text-[11px] font-bold text-slate-600" role="status">{bulkMessage}</p> : null}
+          {LEAD_BULK_ENRICHMENT_FAKE && enrichmentProgress ? (
+            <div className="rounded-lg border border-slate-200 bg-white p-2" role="status">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700">
+                <span>{enrichmentProgress.status === "running" ? "외부 정보를 확인하고 있습니다" : enrichmentProgress.status === "cancelled" ? "작업을 취소했습니다" : enrichmentProgress.failed ? "일부 정보를 불러오지 못했습니다" : "외부 정보를 모두 불러왔습니다"}</span>
+                <span className="shrink-0 tabular-nums">{enrichmentProgress.processed}/{enrichmentProgress.total}</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-teal-600 transition-[width] duration-300" style={{ width: `${enrichmentProgress.total ? Math.round((enrichmentProgress.processed / enrichmentProgress.total) * 100) : 0}%` }} />
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-slate-500">성공 {enrichmentProgress.succeeded} · 실패 {enrichmentProgress.failed} · 남음 {enrichmentProgress.remainingIds.length}</span>
+                {enrichmentProgress.status === "running" ? (
+                  <button className="h-7 rounded-md border border-slate-300 px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => { enrichmentCancelRef.current = true; }} type="button">취소</button>
+                ) : (
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {enrichmentProgress.failed ? <button className="h-7 rounded-md border border-rose-200 bg-rose-50 px-2 text-[11px] font-bold text-rose-700 hover:bg-rose-100" onClick={() => void runLeadEnrichment(true, enrichmentProgress.failedIds)} type="button">실패 {enrichmentProgress.failed}곳 다시 시도</button> : null}
+                    {!enrichmentProgress.failed && enrichmentProgress.remainingIds.length ? <button className="h-7 rounded-md border border-teal-200 bg-teal-50 px-2 text-[11px] font-bold text-teal-800 hover:bg-teal-100" onClick={() => void runLeadEnrichment(false)} type="button">남은 {enrichmentProgress.remainingIds.length}곳 이어서</button> : null}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : null}
+          {enrichmentError ? <p className="text-[11px] font-bold text-rose-700" role="alert">{enrichmentError}</p> : null}
         </div>
         <div className="max-h-[calc(100vh-260px)] min-h-0 flex-1 overflow-auto xl:max-h-none">
           {sortedLeads.length ? (
