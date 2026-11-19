@@ -8631,6 +8631,8 @@ export type PermitLeadItem = {
   openDate?: string;
   address?: string;
   phone?: string;
+  ownerMobilePhone?: string;
+  storePhone?: string;
   jurisdiction?: string;
   latitude?: number;
   longitude?: number;
@@ -8711,6 +8713,8 @@ type PermitLeadRow = {
   administrative_area: string | null;
   administrative_subarea: string | null;
   phone: string | null;
+  owner_mobile_phone?: string | null;
+  store_phone?: string | null;
   jurisdiction: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -8869,6 +8873,8 @@ function toPermitLeadItem(row: PermitLeadRow): PermitLeadItem {
     openDate: row.open_date || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,
+    ownerMobilePhone: row.owner_mobile_phone || undefined,
+    storePhone: row.store_phone || undefined,
     jurisdiction: row.jurisdiction || undefined,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
@@ -11292,6 +11298,84 @@ export type PermitLeadProfileInput = {
   email?: string | null;
   naverTalktalkUrl?: string | null;
 };
+
+export type PermitLeadContactPhoneInput = {
+  ownerMobilePhone?: string | null;
+  storePhone?: string | null;
+};
+
+export function isPermitLeadContactPhoneWriteEnabled(companyId: string) {
+  if (process.env.FEATURE_LEAD_CONTACT_PHONES !== "true") return false;
+  return (process.env.FEATURE_LEAD_CONTACT_PHONES_COMPANY_IDS || "")
+    .split(",")
+    .some((id) => id.trim() === companyId);
+}
+
+export function buildPermitLeadContactPhoneChanges(input: PermitLeadContactPhoneInput) {
+  const changes: PermitLeadContactPhoneInput = {};
+  if ("ownerMobilePhone" in input) {
+    const value = (input.ownerMobilePhone || "").replace(/[ -]/g, "");
+    if (value && !/^010[0-9]{8}$/.test(value)) {
+      return { ok: false as const, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    }
+    changes.ownerMobilePhone = value || null;
+  }
+  if ("storePhone" in input) {
+    const value = (input.storePhone || "").replace(/[ -]/g, "");
+    if (value && !/^(02[0-9]{7,8}|070[0-9]{8}|0(3[1-3]|4[1-4]|5[1-5]|6[1-4])[0-9]{7,8})$/.test(value)) {
+      return { ok: false as const, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    }
+    changes.storePhone = value || null;
+  }
+  if (!Object.keys(changes).length) return { ok: false as const, message: "바꿀 전화번호가 없습니다." };
+  return { changes, ok: true as const };
+}
+
+export async function updatePermitLeadContactPhones(
+  companyId: string,
+  leadId: string,
+  actorCompanyMemberId: string,
+  input: PermitLeadContactPhoneInput
+): Promise<{ ok: boolean; message?: string; ownerMobilePhone?: string; storePhone?: string }> {
+  if (!isProductionStoreConfigured()) return { ok: false, message: "데이터베이스가 연결되어 있지 않습니다." };
+  if (!isPermitLeadContactPhoneWriteEnabled(companyId)) {
+    return { ok: false, message: "점주 휴대폰·매장 전화 저장 기능이 아직 이 회사에 활성화되지 않았습니다." };
+  }
+  const normalized = buildPermitLeadContactPhoneChanges(input);
+  if (!normalized.ok) return normalized;
+
+  try {
+    const rows = await supabaseRequest<Array<{ owner_mobile_phone: string | null; store_phone: string | null }>>(
+      "rpc/update_lead_contact_phones_v1",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          p_actor_company_member_id: actorCompanyMemberId,
+          p_changes: normalized.changes,
+          p_company_id: companyId,
+          p_lead_id: leadId
+        })
+      }
+    );
+    const row = rows[0];
+    if (!row) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    return {
+      ok: true,
+      ownerMobilePhone: row.owner_mobile_phone || undefined,
+      storePhone: row.store_phone || undefined
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (/lead_contact_phone_not_found/i.test(message)) return { ok: false, message: "리드를 찾을 수 없습니다." };
+    if (/lead_contact_phone_forbidden/i.test(message)) return { ok: false, message: "이 회사 리드의 전화번호를 수정할 권한이 없습니다." };
+    if (/lead_owner_mobile_phone_invalid/i.test(message)) return { ok: false, message: "점주 휴대폰은 010으로 시작하는 11자리 번호를 입력해주세요." };
+    if (/lead_store_phone_invalid/i.test(message)) return { ok: false, message: "매장 전화는 02, 070 또는 국내 지역번호를 입력해주세요." };
+    if (/PGRST202|42883|does not exist|schema cache/i.test(message)) {
+      return { ok: false, message: "점주 휴대폰·매장 전화 저장 계약이 아직 DB에 적용되지 않았습니다." };
+    }
+    throw error;
+  }
+}
 
 const PERMIT_LEAD_CONTACT_CHANNEL_COLUMNS = ["fax", "email", "naver_talktalk_url", "contact_channels_updated_at"];
 
