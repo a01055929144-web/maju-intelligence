@@ -27,4 +27,13 @@ describe("instagram discovery", () => {
     expect(ranked[0].nameMatched).toBe(true);
     expect(ranked.find((item) => item.handle === "random_food")).toBeUndefined();
   });
+
+  it("does not credit every account in a multi-store roundup to one business", () => {
+    const ranked = rankInstagramCandidates({ businessName: "화덕황소곱창", address: "서울 강남구" }, [
+      { title: "강남구 화덕황소곱창 등 맛집 모음", description: "인스타 @other_grill 인스타 @another_cafe", link: "https://blog.naver.com/roundup", source: "blog" },
+      { title: "강남구 맛집", description: "인스타 @other_grill", link: "https://blog.naver.com/other", source: "blog" },
+      { title: "화덕황소곱창 공식", description: "프로필", link: "https://www.instagram.com/hwadeok_gc/?igsh=example", source: "web" }
+    ]);
+    expect(ranked.map((item) => item.handle)).toEqual(["hwadeok_gc"]);
+  });
 });

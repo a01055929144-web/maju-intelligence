@@ -79,16 +79,17 @@ export function rankInstagramCandidates(lead: InstagramDiscoveryLead, documents:
     const handles = extractInstagramHandlesFromText(text);
     if (!handles.length) continue;
     const docKey = compact(`${document.title} ${document.description}`);
-    const nameMatched = Boolean(nameKey) && docKey.includes(nameKey);
+    const nameMatched = nameKey.length >= 3 && docKey.includes(nameKey);
     const regionMatched = regions.some((region) => region && docKey.includes(region));
-    const isProfileLink = /instagram\.com\/[A-Za-z0-9._]+\/?$/i.test(document.link);
+    const profileHandle = document.link.match(/^https?:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9._]{2,30})\/?(?:[?#].*)?$/i)?.[1]?.toLowerCase();
     for (const handle of handles) {
       const key = handle.toLowerCase();
       const current = byHandle.get(key) || { handle, score: 0, mentions: 0, nameMatched: false, regionMatched: false, evidence: [], profileLink: false };
       current.mentions += 1;
-      current.nameMatched ||= nameMatched;
+      // 여러 계정을 나열한 글의 상호명을 모든 계정의 근거로 돌리지 않습니다.
+      current.nameMatched ||= nameMatched && (handles.length === 1 || profileHandle === key);
       current.regionMatched ||= regionMatched;
-      current.profileLink ||= isProfileLink;
+      current.profileLink ||= profileHandle === key;
       if (current.evidence.length < 3) current.evidence.push({ title: document.title.replace(/<[^>]+>/g, "").slice(0, 80), link: document.link, source: document.source });
       byHandle.set(key, current);
     }
@@ -98,7 +99,7 @@ export function rankInstagramCandidates(lead: InstagramDiscoveryLead, documents:
       ...candidate,
       score: Math.min(40, candidate.mentions * 10) + (candidate.nameMatched ? 30 : 0) + (candidate.regionMatched ? 15 : 0) + (profileLink ? 15 : 0)
     }))
-    .filter((candidate) => candidate.nameMatched || candidate.mentions >= 2)
+    .filter((candidate) => candidate.nameMatched)
     .sort((a, b) => b.score - a.score || b.mentions - a.mentions)
     .slice(0, limit);
 }
