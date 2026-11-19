@@ -20,12 +20,12 @@ select md5('synthetic-promotion-'||n)::uuid,md5('synthetic-company-'||case when 
   1000+n*10,0,1000+n*10,'taxable',true,'행사',1
 from generate_series(1,5) n;
 insert into public.pricing_documents(id,company_id,owner_key,kind,revision,content)
-select md5('synthetic-document')::uuid,md5('synthetic-company-1')::uuid,repeat('a',64),'sheet',20,
+select md5('synthetic-document')::uuid,md5('synthetic-company-1')::uuid,repeat('a',64),'sheet',22,
   jsonb_build_object('kind','sheet','lines',jsonb_agg(jsonb_build_object(
     'productId',md5('synthetic-product-'||case when n<=3 then n else 4 end)::uuid,
     'promotionId',case when n<=3 then md5('synthetic-promotion-'||n)::uuid end,
     'price',1000,'taxType','taxable','visible',true) order by n))
-from generate_series(1,20) n;
+from generate_series(1,28) n;
 insert into public.pricing_document_versions(company_id,document_id,version,revision,content)
 select company_id,id,1,18,content from public.pricing_documents;
 create table public.test_before_rows as

@@ -43,7 +43,7 @@ begin
   if coalesce(expected_scope,'') !~ '^[0-9a-f]{64}$' then
     raise exception 'promotion_tax_private_scope_guard_required';
   end if;
-  -- Report-specific selector, not a company/name-wide correction. No actual IDs in Git.
+  -- Select only the privately approved identity; mutable revision/line count are not identity.
   select array_agg(candidate.id order by candidate.id),
     array_agg(candidate.revision order by candidate.id),array_agg(candidate.content_hash order by candidate.id)
     into document_ids,document_revisions,document_hashes from (
@@ -53,18 +53,21 @@ begin
     left join public.pricing_promotions p
       on p.company_id=d.company_id and p.id=nullif(l->>'promotionId','')::uuid
     left join public.product_catalog x on x.company_id=p.company_id and x.id=p.product_id
-    where d.archived_at is null and jsonb_array_length(d.content->'lines')=20
-    group by d.id,d.revision,d.content
+    where d.archived_at is null and d.kind='sheet'
+    group by d.id,d.company_id,d.revision,d.content
     having count(distinct p.id)=3
-      and count(*) filter(where p.tax_type='taxable' and x.tax_type='exempt')=3
+      and count(distinct p.id) filter(where p.tax_type='taxable' and x.tax_type='exempt')=3
+      and encode(sha256(convert_to(jsonb_build_object(
+        'company_id',d.company_id,'document_id',d.id,
+        'promotion_ids',jsonb_agg(distinct p.id order by p.id) filter(where p.id is not null)
+      )::text,'UTF8')),'hex')=expected_scope
   ) candidate;
   if coalesce(cardinality(document_ids),0)<>1 then raise exception 'promotion_tax_candidate_count_mismatch'; end if;
   document_id:=document_ids[1];
   -- SYNTHETIC_DOCUMENT_LOCK_INJECTION_POINT.
   select d.company_id into company from public.pricing_documents d
     where d.id=document_id and d.revision=document_revisions[1]
-      and md5(d.content::text)=document_hashes[1] and d.archived_at is null
-      and jsonb_array_length(d.content->'lines')=20 for update;
+      and md5(d.content::text)=document_hashes[1] and d.archived_at is null and d.kind='sheet' for update;
   if not found then raise exception 'promotion_tax_document_changed_while_locking'; end if;
   select array_agg(distinct nullif(l->>'promotionId','')::uuid) filter(where l->>'promotionId' is not null)
     into promotion_ids from public.pricing_documents d

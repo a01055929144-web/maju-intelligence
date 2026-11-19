@@ -49,7 +49,13 @@ run -c "do \$\$ begin
  assert not exists(select 1 from public.test_before_rows b join public.pricing_promotions p using(id) where b.kind='promotion' and b.body-array['revision','updated_at']<>to_jsonb(p)-array['revision','updated_at']);
  assert (select count(*) from public.pricing_promotions where revision=3)=3;
  end \$\$;"
-echo 'revision20_three_rows_price_zero_publications_acl_restore_PASS'
+echo 'revision22_28_lines_three_rows_price_zero_publications_acl_restore_PASS'
+
+setup revision20
+run -c "update public.pricing_documents set revision=20,content=jsonb_set(content,'{lines}',(select jsonb_agg(l order by n) from jsonb_array_elements(content->'lines') with ordinality a(l,n) where n<=20));"
+run -f "$up"
+run -f "$down"
+echo 'revision20_20_lines_compatibility_PASS'
 
 setup revision19
 run -c "update public.pricing_documents set revision=19;"
@@ -67,26 +73,27 @@ echo 'missing_private_scope_guard_rollback_PASS'
 setup wrong_guard
 export PGOPTIONS="-c maju.promotion_tax_scope_hash=$(printf '%064d' 0)"
 reject "$up"; assert_untouched
-grep -q 'promotion_tax_private_scope_mismatch' /tmp/expected.log
+grep -q 'promotion_tax_candidate_count_mismatch' /tmp/expected.log
 echo 'wrong_private_scope_guard_rollback_PASS'
 
 setup swapped_target
 run -c "insert into public.pricing_promotions select md5('synthetic-swapped-promotion')::uuid,company_id,product_id,name,display_name,starts_on,ends_on,purchase_cost,margin_bp,price,stock,per_store_limit,tax_type,allow_sheet,badge,revision from public.pricing_promotions where id=md5('synthetic-promotion-1')::uuid; update public.pricing_documents set content=jsonb_set(content,'{lines,2,promotionId}',to_jsonb(md5('synthetic-swapped-promotion')::uuid));"
 reject "$up"; assert_untouched
-grep -q 'promotion_tax_private_scope_mismatch' /tmp/expected.log
+grep -q 'promotion_tax_candidate_count_mismatch' /tmp/expected.log
 echo 'same_count_swapped_target_scope_rollback_PASS'
 
 setup ambiguous
 run -c "insert into public.pricing_documents(id,company_id,owner_key,kind,revision,content) select md5('synthetic-other-document')::uuid,company_id,owner_key,kind,21,content from public.pricing_documents;"
-reject "$up"; assert_untouched
-grep -q 'promotion_tax_candidate_count_mismatch' /tmp/expected.log
-echo 'ambiguous_document_rollback_PASS'
+run -f "$up"
+run -c "do \$\$ begin assert (select count(*) from promotion_tax_backup_20261119.promotion_rows)=3; assert (select revision from public.pricing_documents where id=md5('synthetic-other-document')::uuid)=21; end \$\$;"
+run -f "$down"
+echo 'private_scope_excludes_other_matching_document_PASS'
 
 setup changed_while_locking
 sed "s/-- SYNTHETIC_DOCUMENT_LOCK_INJECTION_POINT./update public.pricing_documents set revision=revision+1 where id=document_id;/" "$up" >/tmp/document-changed.sql
 reject /tmp/document-changed.sql; assert_untouched
 grep -q 'promotion_tax_document_changed_while_locking' /tmp/expected.log
-run -c "do \$\$ begin assert (select revision from public.pricing_documents)=20; end \$\$;"
+run -c "do \$\$ begin assert (select revision from public.pricing_documents)=22; end \$\$;"
 echo 'document_change_before_lock_atomic_rollback_PASS'
 
 setup count
