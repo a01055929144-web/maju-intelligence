@@ -11,8 +11,10 @@ do $$ begin
 end $$;
 
 alter table public.business_permit_leads
-  add column owner_mobile_phone text,
-  add column store_phone text,
+  add column owner_mobile_phone text;
+alter table public.business_permit_leads
+  add column store_phone text;
+alter table public.business_permit_leads
   add constraint business_permit_leads_owner_mobile_phone_check
     check (owner_mobile_phone is null or owner_mobile_phone ~ '^010[0-9]{8}$'),
   add constraint business_permit_leads_store_phone_check
