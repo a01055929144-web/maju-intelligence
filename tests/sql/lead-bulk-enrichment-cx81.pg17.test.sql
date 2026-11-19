@@ -8,8 +8,8 @@ insert into public.companies values ('10000000-0000-4000-8000-000000000001'),('1
 insert into public.business_permit_leads
 select '10000000-0000-4000-8000-000000000001', ('40000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid, null from generate_series(1,5000)n;
 insert into public.business_permit_leads values
-('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000051',null),
-('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000052',null);
+('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000006001',null),
+('10000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000006002',null);
 \ir ../../docs/sql-drafts/20261117-CX-81-lead-bulk-enrichment.sql
 
 do $$ declare j jsonb; a jsonb; b jsonb; begin
@@ -31,7 +31,7 @@ do $$ declare j jsonb; a jsonb; b jsonb; begin
 end $$;
 
 do $$ begin
-  begin perform public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000001','external_info',array['40000000-0000-4000-8000-000000000051'::uuid],'20000000-0000-4000-8000-000000000002','tester'); raise exception 'cross_tenant_lead';
+  begin perform public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000001','external_info',array['40000000-0000-4000-8000-000000006001'::uuid],'20000000-0000-4000-8000-000000000002','tester'); raise exception 'cross_tenant_lead';
   exception when others then if sqlerrm='cross_tenant_lead' then raise; end if; end;
   if has_function_privilege('anon','public.claim_lead_bulk_enrichment_item(uuid,uuid,integer)','execute') then raise exception 'anon_rpc_access'; end if;
   if has_function_privilege('authenticated','public.claim_lead_bulk_enrichment_item(uuid,uuid,integer)','execute') then raise exception 'authenticated_rpc_access'; end if;
@@ -40,7 +40,7 @@ do $$ begin
 end $$;
 
 do $$ declare j jsonb; a jsonb; begin
-  j:=public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000002','external_info',array['40000000-0000-4000-8000-000000000051'::uuid,'40000000-0000-4000-8000-000000000052'::uuid],'20000000-0000-4000-8000-000000000003','tester');
+  j:=public.create_lead_bulk_enrichment_job('10000000-0000-4000-8000-000000000002','external_info',array['40000000-0000-4000-8000-000000006001'::uuid,'40000000-0000-4000-8000-000000006002'::uuid],'20000000-0000-4000-8000-000000000003','tester');
   a:=public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,1);
   perform public.complete_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(a->>'id')::uuid,true,'{}',null);
   if public.claim_lead_bulk_enrichment_item('10000000-0000-4000-8000-000000000002',(j->>'id')::uuid,1) is not null then raise exception 'daily_cap_failed'; end if;
