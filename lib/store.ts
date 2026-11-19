@@ -10362,6 +10362,20 @@ function normalizeLeadNameForDedupe(value: string) {
   return value.toLowerCase().replace(/\s/g, "").replace(/[^0-9a-z가-힣]/g, "");
 }
 
+export function resolveKakaoKeywordLeadIndustry(
+  kakaoCategoryName: string,
+  queryIndustry: string,
+  businessName: string
+) {
+  const categoryName = kakaoCategoryName.trim();
+  if (!categoryName) return queryIndustry;
+
+  const categoryClassification = classifyPermitLeadIndustry(categoryName, businessName);
+  return categoryClassification.tags.length > 0 || !categoryClassification.isTarget
+    ? categoryName
+    : queryIndustry;
+}
+
 /**
  * "영업리드(신규리드, 개업일자 아님)" — 2026-08-31 피드백: 개업일자와 무관하게 이미 운영 중인
  * 매장까지 카카오 로컬 키워드 검색으로 찾아 business_permit_leads에 채워 넣습니다.
@@ -10480,7 +10494,11 @@ export async function runKakaoKeywordLeadSweep(
             businessName: candidate.businessName,
             address: candidate.address,
             phone: candidate.phone || undefined,
-            industry: rule.primary,
+            industry: resolveKakaoKeywordLeadIndustry(
+              candidate.kakaoCategoryName,
+              rule.primary,
+              candidate.businessName
+            ),
             kakaoCategoryName: candidate.kakaoCategoryName,
             latitude: candidate.latitude,
             longitude: candidate.longitude,
