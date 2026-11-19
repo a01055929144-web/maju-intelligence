@@ -284,7 +284,7 @@ test("undated conflict-free uploads for today keep the existing save path withou
 
 test("purchase rows older than the current price remain history-only", async ({ page }) => {
   const { writes, receipts, dateWrites } = await purchaseUpload(page, { currentDate: "2026-11-08" });
-  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\nERP-1,합성 상품,1kg,봉,2026-11-04,200\n");
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가,부가세\nERP-1,합성 상품,1kg,봉,2026-11-07,300,30\nERP-1,합성 상품,1kg,봉,2026-11-04,200,20\n");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   await page.getByRole("button", { name: "③ 저장 (0건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
@@ -445,7 +445,7 @@ for (const width of [1280, 390]) test(`new-product mapping survives failed v2 sa
 
 test("unresolved catalog mapping reports source rows and never guesses an ID", async ({ page }) => {
   const { dateWrites } = await purchaseUpload(page, { newProducts: true, unresolvedMapping: true });
-  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-07,300\n");
+  await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가,부가세\nERP-1,합성 상품,1kg,봉,2026-11-07,300,30\n");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   await page.getByRole("button", { name: /③ 저장/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
