@@ -122,6 +122,17 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-46c-delivery-route-stops.pg17.test.sql
 
+      - name: Verify CX-120 store price v2 draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx120_store_price_v2_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-120-store-price-v2.pg17.test.sql
+
       - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
