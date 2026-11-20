@@ -3675,7 +3675,7 @@ function MapExplorerTabs({
           style={active === tab.value ? { color: listTabColor(tab.color) } : undefined}
           type="button"
         >
-          <span className="block truncate">{tab.label}</span>
+          <span className="block truncate">{tab.label}{" "}</span>
           <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
         </button>
       ))}
