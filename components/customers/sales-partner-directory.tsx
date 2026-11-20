@@ -68,5 +68,5 @@ export function SalesPartnerDirectory({ companyId = "", customers, query }: { co
     { id: "sales", label: "영업 기록", render: (row: Row) => <Link className="maju-button-secondary inline-flex min-h-11 px-3 text-xs sm:min-h-9" href={query("/crm/timeline?section=history", row.id)}>영업 타임라인 열기</Link> },
     { id: "map", label: "지도", render: () => <Link className="maju-button-secondary inline-flex min-h-11 px-3 text-xs sm:min-h-9" href={query("/map")}>지도에서 보기</Link> }
   ], [query]);
-  return <PartnerDirectory companyId={companyId} extraColumns={extraColumns} extraTabs={extraTabs} partnerType="customer" registerHref={query("/partners/register?type=customer")} rows={rows} tabs={tabs} uploadHref={query("/")} />;
+  return <><div className="mb-3 flex justify-end"><Link className="maju-button-secondary inline-flex min-h-11 items-center px-3 text-sm" href={query("/partners/new-stores")}>새 매장 확인</Link></div><PartnerDirectory companyId={companyId} extraColumns={extraColumns} extraTabs={extraTabs} partnerType="customer" registerHref={query("/partners/register?type=customer")} rows={rows} tabs={tabs} uploadHref={query("/")} /></>;
 }

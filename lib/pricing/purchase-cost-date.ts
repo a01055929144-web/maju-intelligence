@@ -1,5 +1,5 @@
 import { supabaseRequest } from "../store";
-import type { PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
+import { holdUnitMismatchedPrices, type PurchaseDateRow } from "../../domains/pricing/purchase-cost-date";
 
 export type PurchaseDateBatch = { id: string; status: "completed" | "restored" | "processing"; recalcRunId: string | null; rowCount: number; historyOnlyProductCount: number; sourceFileName?: string; receiptDate?: string };
 export function purchaseDateEnabled(companyId: string) {
@@ -24,7 +24,7 @@ export async function undatedPurchasePrices(companyId: string) {
   throw new Error("purchase_catalog_limit");
 }
 export async function savePurchaseDateBatch(companyId: string, batchId: string, date: string, fileName: string, actor: string, rows: PurchaseDateRow[]) {
-  // Until SQL validates conversion under the same locks, mismatched units remain blocked.
+  // Until SQL validates conversion under the same locks, keep the receipt and hold only its current-price change.
   const ids = Array.from(new Set(rows.map(row => row.productId)));
   const units = new Map<string, string>();
   const unconfirmedPacks = new Set<string>();
@@ -36,10 +36,12 @@ export async function savePurchaseDateBatch(companyId: string, batchId: string, 
       if (!product.sales_unit && Number(product.purchase_to_sales_ratio) > 1) unconfirmedPacks.add(product.id);
     });
   }
-  if (rows.some(row => row.priceSelected && (unconfirmedPacks.has(row.productId) || (row.unit.trim() && units.get(row.productId) && units.get(row.productId) !== row.unit.trim().toLowerCase())))) throw new Error("purchase_date_unit_conversion_pending");
+  const safeRows = holdUnitMismatchedPrices(rows, units).map(row => unconfirmedPacks.has(row.productId) && row.priceSelected
+    ? { ...row, priceSelected: false, priceHeld: true, replaceUndatedCurrent: undefined, expectedPurchasePrice: undefined }
+    : row);
   const result = await supabaseRequest<{ batchId: string; recalcRunId: string | null; status: "completed" | "restored"; rowCount: number; historyOnlyProductCount: number }>("rpc/save_purchase_cost_date_batch_v2", {
     method: "POST", body: JSON.stringify({ p_company: companyId, p_batch: batchId, p_default_receipt_date: date,
-      p_rows: rows, p_actor_name: actor, p_source_file_name: fileName })
+      p_rows: safeRows, p_actor_name: actor, p_source_file_name: fileName })
   });
   return result;
 }
