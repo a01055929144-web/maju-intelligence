@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
   const body = await request.json().catch(() => null) as { materials?: string[]; memo?: string; photoStoragePath?: string; stopId?: string } | null;
   const materials = normalizeVisitMaterials(body?.materials ?? []);
-  if (!body || !/^[0-9a-f-]{36}$/i.test(body.stopId ?? "") || !materials.length || materials.length !== new Set(body.materials ?? []).size || (body.memo?.length ?? 0) > 1000 || !isVisitPhotoStoragePath(auth.companyId, body.photoStoragePath)) {
+  if (!body || !/^[0-9a-f-]{36}$/i.test(body.stopId ?? "") || !materials.length || materials.length !== new Set(body.materials ?? []).size || (body.memo?.length ?? 0) > 1000 || !isVisitPhotoStoragePath(auth.companyId, body.photoStoragePath, body.stopId)) {
     return NextResponse.json({ message: "방문 기록 값을 확인해 주세요." }, { status: 400 });
   }
   try {

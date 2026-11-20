@@ -39,6 +39,7 @@ export function visitRevisitCandidates(
     .sort((a, b) => (a.extraMinutes ?? Number.POSITIVE_INFINITY) - (b.extraMinutes ?? Number.POSITIVE_INFINITY) || a.revisitAt.localeCompare(b.revisitAt));
 }
 
-export function isVisitPhotoStoragePath(companyId: string, value?: string | null) {
-  return !value || (value.startsWith(`lead-visits/${companyId}/`) && !value.includes("..") && value.length <= 500);
+export function isVisitPhotoStoragePath(companyId: string, value?: string | null, stopId?: string) {
+  const prefix = `lead-visits/${companyId}/${stopId ? `${stopId}/` : ""}`;
+  return !value || (value.startsWith(prefix) && !value.includes("..") && !value.includes("\\") && value.length <= 500);
 }

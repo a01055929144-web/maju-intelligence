@@ -35,8 +35,10 @@ describe("CX-85 방문 자료 기록", () => {
   });
 
   it("사진은 해당 회사의 저장 경로만 받는다", () => {
-    expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-a/photo.jpg")).toBe(true);
+    expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-a/stop-a/photo.jpg", "stop-a")).toBe(true);
+    expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-a/stop-b/photo.jpg", "stop-a")).toBe(false);
     expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-b/photo.jpg")).toBe(false);
     expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-a/../secret")).toBe(false);
+    expect(isVisitPhotoStoragePath("company-a", "lead-visits/company-a/stop-a\\secret", "stop-a")).toBe(false);
   });
 });
