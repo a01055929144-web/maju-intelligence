@@ -185,7 +185,7 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   await expect(conflicts).toContainText("B매입처");
   await expect(conflicts).toContainText("6,000원");
   await expect(conflicts).toContainText("5,800원");
-  await expect(page.getByRole("status")).toContainText("적용할 행을 선택하거나 보류");
+  await expect(page.getByRole("status").filter({ hasText: "연결 후 같은 상품·적용일" })).toContainText("적용할 행을 선택하거나 보류");
   const choice = page.getByLabel("합성 상품 2026-11-19 적용 단가", { exact: true });
   expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await choice.selectOption("3");
