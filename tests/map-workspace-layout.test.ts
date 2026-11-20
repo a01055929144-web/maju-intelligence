@@ -155,7 +155,10 @@ describe("시안 ⑫ 지도 기본 배치", () => {
     const source = readFileSync("components/sales-route-map-workspace.tsx", "utf8");
     expect(source).toContain('useState<MapPanelMode>("split")');
     expect(source).toContain('const MAP_PANEL_MODE_STORAGE_KEY = "maju:map-panel-mode:v2"');
-    expect(source).toContain("function SplitListTabs(");
+    expect(source).toContain("function MapExplorerTabs(");
+    expect(source).toContain('{ count: counts.drivers, label: "담당자"');
+    expect(source).toContain('${store.deliveryDriver || ""}');
+    expect(source).toContain('gradeFilter === "all" || lead.grade === gradeFilter');
     expect(source).toContain('label: "코스"');
     expect(source).toContain('workspaceViews.filter((item) => item.value !== "leads")');
   });
@@ -168,7 +171,8 @@ describe("시안 ⑫ 지도 기본 배치", () => {
 
 describe("시안 ⑫ 필터 줄 · 격자", () => {
   it("uses chip popovers, a static full-width filter row and flush side panels", () => {
-    expect(workspaceSource).toContain('placeholder="상호·주소·전화"');
+    expect(workspaceSource).toContain('placeholder="거래처·리드·담당자·주소 검색"');
+    expect(workspaceSource).toContain('label: gradeFilter === "all" ? "우선순위" : `${gradeFilter}등급`');
     expect(workspaceSource).toContain("data-map-filter-chip");
     expect(workspaceSource).toContain('muted: !LEAD_STORE_AREA_FEATURE_ENABLED');
     expect(workspaceSource).toContain('title: LEAD_STORE_AREA_FEATURE_ENABLED ? "매장 규모(평)" : "매장 규모(평) · 준비 중"');
