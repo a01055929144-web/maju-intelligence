@@ -5,6 +5,7 @@ import { isStoreAreaRange } from "@/domains/lead/store-area";
 import { leadDocumentEntryAccess } from "@/domains/lead/document-entry";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { priceSheetsEnabled } from "@/lib/pricing/feature";
+import { isLeadContactFilterChannel } from "@/domains/lead/contact-channels";
 
 export const dynamic = "force-dynamic";
 // 리드가 많은 회사는 목록 + 액션 큐 조회가 10초 기본값을 넘겼다(11/11 시간 초과 6건). 조회를 줄인 뒤에도 안전 여유로 30초.
@@ -24,6 +25,26 @@ export async function GET(request: NextRequest) {
   const action = params.get("action") || undefined;
   const grade = params.get("grade") || undefined;
   const hasPhone = params.get("hasPhone") === "true";
+  const requestedContactChannel = params.get("contactChannel");
+  if (requestedContactChannel && !isLeadContactFilterChannel(requestedContactChannel)) {
+    return NextResponse.json({ message: "지원하지 않는 연락 채널입니다." }, { status: 400 });
+  }
+  const contactChannel = isLeadContactFilterChannel(requestedContactChannel) ? requestedContactChannel : undefined;
+  const pageSizeParam = params.get("pageSize");
+  const requestedPageSize = Number(pageSizeParam);
+  if (pageSizeParam && (!Number.isInteger(requestedPageSize) || requestedPageSize < 1)) {
+    return NextResponse.json({ message: "페이지 크기는 1 이상의 정수여야 합니다." }, { status: 400 });
+  }
+  const pageSize = pageSizeParam ? Math.min(500, requestedPageSize) : undefined;
+  const pageParam = params.get("page");
+  const requestedPage = Number(pageParam);
+  if (pageParam && !pageSizeParam) {
+    return NextResponse.json({ message: "페이지 번호를 사용할 때는 페이지 크기도 필요합니다." }, { status: 400 });
+  }
+  if (pageParam && (!Number.isInteger(requestedPage) || requestedPage < 1)) {
+    return NextResponse.json({ message: "페이지 번호는 1 이상의 정수여야 합니다." }, { status: 400 });
+  }
+  const page = pageSize && Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const excludeExcluded = params.get("excludeExcluded") !== "false";
   const includeOutsideSalesArea = params.get("includeOutsideSalesArea") === "true";
   const includeExistingCustomers = params.get("includeExistingCustomers") === "true";
@@ -44,6 +65,9 @@ export async function GET(request: NextRequest) {
       action,
       grade,
       hasPhone,
+      contactChannel,
+      limit: pageSize,
+      offset: pageSize ? (page - 1) * pageSize : undefined,
       excludeExcluded: leadId ? false : excludeExcluded,
       includeOutsideSalesArea: Boolean(leadId) || includeOutsideSalesArea,
       includeExistingCustomers: Boolean(leadId) || includeExistingCustomers,
@@ -61,7 +85,7 @@ export async function GET(request: NextRequest) {
     pricingEnabled: priceSheetsEnabled() && isFeatureEnabled("PRICING", scope.companyId),
     workspaceRole: scope.customerSession?.workspaceRole,
   });
-  return NextResponse.json({ leads, total, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry, distributorSales, targetType });
+  return NextResponse.json({ leads, total, page, pageSize: pageSize || leads.length, queues, salesAreas, salesRegionsConfigured: salesAreas.length > 0, documentEntry, distributorSales, targetType });
 }
 
 // POST: 사업자 인허가 데이터 업로드(엑셀/CSV를 클라이언트에서 미리 파싱한 행 배열)를 일괄 적재합니다.

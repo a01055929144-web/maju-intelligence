@@ -122,6 +122,17 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-16-CX-46c-delivery-route-stops.pg17.test.sql
 
+      - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx81_lead_bulk_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/lead-bulk-enrichment-cx81.pg17.test.sql
+
       - name: Verify CX-65 driver route actions draft on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
@@ -260,6 +271,18 @@ jobs:
         run: |
           psql --set=ON_ERROR_STOP=1 --command='create database cc46_enrichment_targets_test'
           PGDATABASE=cc46_enrichment_targets_test psql --set=ON_ERROR_STOP=1 --file=20261114-CC-46-enrichment-targets.pg17.test.sql
+
+      - name: Verify lead contact phone separation draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: maju_continuity_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          psql --set=ON_ERROR_STOP=1 --command='create database lead_contact_phones_test'
+          PGDATABASE=lead_contact_phones_test psql --set=ON_ERROR_STOP=1 --file=20261119-lead-contact-phones.pg17.test.sql
 
       - name: Verify WO-03 MAJU category match draft on PostgreSQL 17
         working-directory: docs/sql-drafts
@@ -585,6 +608,18 @@ jobs:
         run: |
           createdb pricing_document_archive_test
           psql --dbname=pricing_document_archive_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-archive.pg17.test.sql
+          createdb pricing_document_save_errors_test
+          psql --dbname=pricing_document_save_errors_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-save-errors.pg17.test.sql
+          createdb pricing_promotion_tax_source_test
+          psql --dbname=pricing_promotion_tax_source_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-promotion-tax-source.pg17.test.sql
+          createdb document_display_storage_test
+          psql --dbname=document_display_storage_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-display-storage.pg17.test.sql
+          createdb pricing_document_tax_refresh_test
+          psql --dbname=pricing_document_tax_refresh_test --set=ON_ERROR_STOP=1 --file=tests/sql/pricing-document-tax-refresh.pg17.test.sql
+          createdb document_footer_format_test
+          psql --dbname=document_footer_format_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-footer-format.pg17.test.sql
+          createdb document_vat_contract_test
+          psql --dbname=document_vat_contract_test --set=ON_ERROR_STOP=1 --file=tests/sql/document-vat-contract.pg17.test.sql
 
       # Read-only dependency on #285's unapproved SQL contract. Never apply to an operating database.
       - name: Checkout pinned lead-share SQL draft for isolated tests
@@ -677,6 +712,7 @@ jobs:
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-cx60-identity-settings.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-delivery-cx71.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --set=CX75_DELIVERY_SQL="$GITHUB_WORKSPACE/.ci-cx75-delivery/docs/sql-drafts/20261108-09-order-delivery-producer.sql" --file=tests/sql/store-order-core-cx75.pg17.test.sql
+          psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-order-vat-consistency.pg17.test.sql
           psql --set=ON_ERROR_STOP=1 --file=tests/sql/store-profile-member-invitations-cx77.pg17.test.sql
           createdb store_promotion_availability_09_test
           psql --dbname=store_promotion_availability_09_test --set=ON_ERROR_STOP=1 --file=tests/sql/storefront-promotion-availability.pg17.test.sql
@@ -800,9 +836,13 @@ jobs:
           FEATURE_PRICING_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
 
       - name: Responsive layout and route smoke checks
-        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/order-fulfillment.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/partner-directory.spec.ts tests/e2e/customer-business-identity.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts tests/e2e/cx65-driver-run-experience.spec.ts tests/e2e/cx79-lead-status-sync.spec.ts
+        run: npm run test:e2e:layout -- tests/e2e/customer-items-import.spec.ts tests/e2e/document-recalculation.spec.ts tests/e2e/pricing-spec-flow.spec.ts tests/e2e/store-member-management.spec.ts tests/e2e/store-member-management-entry.spec.ts tests/e2e/store-shell.spec.ts tests/e2e/store-direct-signup.spec.ts tests/e2e/pricing-document-actions.spec.ts tests/e2e/pricing-document-vat.spec.ts tests/e2e/shared-pricing-acceptance.spec.ts tests/e2e/store-member-journey.spec.ts tests/e2e/store-cost-panel.spec.ts tests/e2e/store-cost-upload.spec.ts tests/e2e/store-kakao-entry.spec.ts tests/e2e/supplier-conversion-review.spec.ts tests/e2e/purchase-cost-atomic-batch.spec.ts tests/e2e/store-delivery-eligibility.spec.ts tests/e2e/pricing-paper-columns.spec.ts tests/e2e/order-inbox.spec.ts tests/e2e/order-fulfillment.spec.ts tests/e2e/map-search-panel.spec.ts tests/e2e/search-input-clear.spec.ts tests/e2e/confirm-dialog.spec.ts tests/e2e/map-baseline.spec.ts tests/e2e/lead-contact-channels.spec.ts tests/e2e/lead-favorites.spec.ts tests/e2e/lead-reject-flow.spec.ts tests/e2e/delivery-proof-photos.spec.ts tests/e2e/mobile-bottom-nav.spec.ts tests/e2e/gov-sync-overview.spec.ts tests/e2e/lead-route-stop.spec.ts tests/e2e/route-stops-history.spec.ts tests/e2e/partner-directory.spec.ts tests/e2e/customer-business-identity.spec.ts tests/e2e/store-connection.spec.ts tests/e2e/cx56-new-screen-regression.spec.ts tests/e2e/cx65-driver-run-experience.spec.ts tests/e2e/cx79-lead-status-sync.spec.ts
         env:
           CI_LAYOUT_FIXTURES: enabled
+          PRICING_DOCUMENT_FOOTER_FORMAT_ENABLED: "true"
+          PRICING_DOCUMENT_FOOTER_FORMAT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
+          PRICING_DOCUMENT_VAT_ENABLED: "true"
+          PRICING_DOCUMENT_VAT_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           HOLD_MODULES_ENABLED_COMPANY_IDS: 00000000-0000-4000-8000-000000000001
           PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED: "true"
           LEAD_DOCUMENT_SHARING_ENABLED: "true"

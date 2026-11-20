@@ -5,6 +5,7 @@ do $$ begin
 end $$;
 \ir 2026-11-18-CX-66-order-dispatch.sql
 \ir 2026-11-18-CX-66-partial-dispatch-final-cancel.sql
+\ir 2026-11-19-CX-38b-order-document-money-snapshot.sql
 alter table inventory_movements drop constraint inventory_movements_company_id_source_document_id_revision_key;
 alter table inventory_movements add column product_catalog_id uuid;
 create or replace function confirm_business_document(uuid,uuid,uuid,text)
@@ -89,6 +90,7 @@ begin;
 \set batch_a '20000000-0000-4000-8000-000000000004'
 \set batch_b '20000000-0000-4000-8000-000000000005'
 \set ambiguous_order '20000000-0000-4000-8000-000000000006'
+\set included_order '20000000-0000-4000-8000-000000000007'
 \set line_a '30000000-0000-4000-8000-000000000001'
 \set line_b '30000000-0000-4000-8000-000000000002'
 
@@ -98,23 +100,26 @@ values (:'partial_order',:'company',:'customer','2026-11-18','submitted',110,736
        (:'zero_order',:'company',:'customer','2026-11-18','submitted',0,0),
        (:'batch_a',:'company',:'customer','2026-11-18','submitted',0,1210),
        (:'batch_b',:'company',:'customer','2026-11-18','submitted',0,1210),
-       (:'ambiguous_order',:'company',:'customer','2026-11-18','submitted',0,2000);
-insert into store_order_lines(id,company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price)
-values (:'line_b',:'company',:'partial_order',:'product','동일 상품','개',2,1100,'taxable',false),
-       (:'line_a',:'company',:'partial_order',:'product','동일 상품','개',3,1100,'taxable',false),
-       ('30000000-0000-4000-8000-000000000009',:'company',:'partial_order','00000000-0000-0000-0000-0000000000a4','면세 혼합','개',2,600,'exempt',false),
-       ('30000000-0000-4000-8000-000000000003',:'company',:'cancel_order',:'product','전량 취소','개',1,1100,'taxable',false),
-       ('30000000-0000-4000-8000-000000000004',:'company',:'zero_order',:'product','0원 거부','개',1,0,'exempt',false),
-       ('30000000-0000-4000-8000-000000000005',:'company',:'batch_a',:'product','묶음 정상','개',1,1100,'taxable',false),
-       ('30000000-0000-4000-8000-000000000006',:'company',:'batch_b',:'product','묶음 실패','개',1,1100,'taxable',false),
-       ('30000000-0000-4000-8000-000000000007',:'company',:'ambiguous_order',:'product','완전 동일','개',1,1000,'exempt',false),
-       ('30000000-0000-4000-8000-000000000008',:'company',:'ambiguous_order',:'product','완전 동일','개',1,1000,'exempt',false);
+       (:'ambiguous_order',:'company',:'customer','2026-11-18','submitted',0,2000),
+       (:'included_order',:'company',:'customer','2026-11-18','submitted',0,100);
+insert into store_order_lines(id,company_id,order_id,product_id,product_name,sales_unit,quantity,unit_price,tax_type,is_market_price,price_includes_tax)
+values (:'line_b',:'company',:'partial_order',:'product','동일 상품','개',2,1100,'taxable',false,false),
+       (:'line_a',:'company',:'partial_order',:'product','동일 상품','개',3,1100,'taxable',false,false),
+       ('30000000-0000-4000-8000-000000000009',:'company',:'partial_order','00000000-0000-0000-0000-0000000000a4','면세 혼합','개',2,600,'exempt',false,false),
+       ('30000000-0000-4000-8000-000000000003',:'company',:'cancel_order',:'product','전량 취소','개',1,1100,'taxable',false,false),
+       ('30000000-0000-4000-8000-000000000004',:'company',:'zero_order',:'product','0원 거부','개',1,0,'exempt',false,false),
+       ('30000000-0000-4000-8000-000000000005',:'company',:'batch_a',:'product','묶음 정상','개',1,1100,'taxable',false,false),
+       ('30000000-0000-4000-8000-000000000006',:'company',:'batch_b',:'product','묶음 실패','개',1,1100,'taxable',false,false),
+       ('30000000-0000-4000-8000-000000000007',:'company',:'ambiguous_order',:'product','완전 동일','개',1,1000,'exempt',false,false),
+       ('30000000-0000-4000-8000-000000000008',:'company',:'ambiguous_order',:'product','완전 동일','개',1,1000,'exempt',false,false),
+       ('30000000-0000-4000-8000-000000000010',:'company',:'included_order',:'product','포함가 부분출고','개',1,100,'taxable',false,true);
 select receive_store_order_with_sale_document(:'company',:'partial_order',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'cancel_order',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'zero_order',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'batch_a',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'batch_b',1,null,'합성 담당');
 select receive_store_order_with_sale_document(:'company',:'ambiguous_order',1,null,'합성 담당');
+select receive_store_order_with_sale_document(:'company',:'included_order',1,null,'합성 담당');
 
 -- CX-62 receipt creates drafts only. Dispatch is the first point that may create
 -- a ledger or inventory effect.
@@ -123,20 +128,23 @@ do $$ begin
     where source_id in (
       '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
       '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
-      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006')
-      and status='draft')=6;
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006',
+      '20000000-0000-4000-8000-000000000007')
+      and status='draft')=7;
   assert not exists(select 1 from partner_ledger_entries e join business_documents d
     on d.company_id=e.company_id and d.id=e.source_document_id
     where d.source_id in (
       '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
       '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
-      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006'));
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006',
+      '20000000-0000-4000-8000-000000000007'));
   assert not exists(select 1 from inventory_movements m join business_documents d
     on d.company_id=m.company_id and d.id=m.source_document_id
     where d.source_id in (
       '20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002',
       '20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004',
-      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006'));
+      '20000000-0000-4000-8000-000000000005','20000000-0000-4000-8000-000000000006',
+      '20000000-0000-4000-8000-000000000007'));
 end $$;
 
 do $$ begin
@@ -154,6 +162,22 @@ do $$ begin
   exception when raise_exception then assert sqlerrm='partial_dispatch_input_invalid'; end;
   assert not exists(select 1 from order_dispatch_requests where idempotency_key in (
     '40000000-0000-4000-8000-000000000011','40000000-0000-4000-8000-000000000012','40000000-0000-4000-8000-000000000013'));
+end $$;
+
+-- Tax-included partial dispatch keeps the order snapshot money and cancels the remainder.
+select dispatch_store_orders_partial_final_cancel(:'company',
+  '[{"orderId":"20000000-0000-4000-8000-000000000007","lines":[{"orderLineId":"30000000-0000-4000-8000-000000000010","shippedQuantity":0.5}]}]'::jsonb,
+  '40000000-0000-4000-8000-000000000007',null,'포함가 부분 출고');
+do $$ declare d business_documents%rowtype; begin
+  select * into strict d from business_documents where source_id='20000000-0000-4000-8000-000000000007';
+  assert d.status='confirmed' and d.taxable_supply_amount=45 and d.tax_amount=5 and d.total_amount=50;
+  assert (select price_includes_tax_snapshot and quantity=0.5 and supply_amount=45 and tax_amount=5 and total_amount=50
+    from business_document_lines where document_id=d.id and source_order_line_id='30000000-0000-4000-8000-000000000010');
+  assert (select shipped_quantity=0.5 and cancelled_quantity=0.5 from store_order_lines
+    where id='30000000-0000-4000-8000-000000000010');
+  assert (select amount=50 and supply_amount=45 and tax_amount=5 from partner_ledger_entries where source_document_id=d.id);
+  assert (select quantity_delta=-0.5 from inventory_movements where source_document_id=d.id
+    and product_catalog_id='00000000-0000-0000-0000-0000000000a3');
 end $$;
 
 do $$ declare bad jsonb; begin
@@ -241,7 +265,6 @@ do $$ begin
   exception when raise_exception then assert sqlerrm='partial_dispatch_snapshot_ambiguous'; end;
   assert (select status='received' from store_orders where id='20000000-0000-4000-8000-000000000006');
 end $$;
-
 \set ON_ERROR_STOP off
 \ir 2026-11-18-CX-66-partial-dispatch-final-cancel.down.sql
 \set ON_ERROR_STOP on
@@ -250,5 +273,7 @@ do $$ begin
   assert not exists(select 1 from public.order_dispatch_requests where request_payload is not null);
 end $$;
 \ir 2026-11-18-CX-66-partial-dispatch-final-cancel.down.sql
+update business_document_lines set price_includes_tax_snapshot=false where price_includes_tax_snapshot;
+\ir 2026-11-19-CX-38b-order-document-money-snapshot.down.sql
 \ir 2026-11-18-CX-66-order-dispatch.down.sql
 select 'CX-66 partial dispatch final-cancel PG17 checks passed' result;

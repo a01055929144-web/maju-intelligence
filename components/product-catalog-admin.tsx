@@ -380,6 +380,7 @@ export function ProductCatalogAdmin({
                 ? cur.map((i) => (i.id === saved.id ? saved : i))
                 : [saved, ...cur],
             );
+            setMoveMessage(`${saved.name} 상품을 저장했습니다.`);
             setEditing(keepOpen ? { ...blank } : null);
           }}
         />

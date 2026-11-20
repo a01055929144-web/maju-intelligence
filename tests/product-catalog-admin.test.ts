@@ -40,6 +40,7 @@ describe("product catalog admin presentation", () => {
     expect(adminSource).toContain('aria-modal="true"');
     expect(adminSource).toContain('event.ctrlKey && event.key === "Enter"');
     expect(adminSource).not.toContain('max-w-[440px]');
+    expect(adminSource).toContain('setMoveMessage(`${saved.name} 상품을 저장했습니다.`)');
   });
 
   it("requires preview, selection and explicit confirmation before batch category save", () => {

@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식된 문의 번호를 보여 준다", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
+for (const viewport of [{ width: 390, height: 900 }, { width: 1440, height: 1000 }]) {
+test(`리드 상세 연락 채널은 ${viewport.width}px에서 하단 영업 채널과 연결된다`, async ({ page }) => {
+  await page.setViewportSize(viewport);
   expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
   const now = "2026-11-15T00:00:00.000Z";
   const lead = {
@@ -31,7 +32,7 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { (window as Window & { copiedText?: string }).copiedText = text; } } });
   });
-  await page.route(/\/api\/leads\/permits\?excludeExcluded=true/, (route) => route.fulfill({ json: { leads: [lead] } }));
+  await page.route(/\/api\/leads\/permits(?:\?.*)?$/, (route) => route.fulfill({ json: { leads: [lead] } }));
   await page.route(/\/api\/leads\/permits\/[^/]+\/actions/, (route) => route.fulfill({ json: { actions: [] } }));
   await page.route(/\/api\/leads\/permits\/[^/]+\/(?:do-not-contact|source-disclosure)/, (route) => route.fulfill({ json: route.request().url().includes("do-not-contact") ? { enabled: false, entries: [] } : { sources: [] } }));
   await page.route(/\/api\/leads\/dm-template/, (route) => route.fulfill({ json: { canEdit: false, excluded: "", template: "안녕하세요. 가짜 제안입니다." } }));
@@ -53,10 +54,25 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
     return route.fulfill({ json: { acknowledged: false } });
   });
 
-  await page.goto("/mobile/sales");
-  await page.getByText("가짜분식", { exact: true }).last().click();
+  await page.goto(`/leads?type=permit&lead=${lead.id}`);
+  const shortcuts = page.locator('[aria-label="연락 채널 바로가기"]');
+  await expect(shortcuts).toBeVisible();
+  for (const channel of ["방문", "연락처", "카톡", "인스타 DM", "네이버 톡톡", "이메일", "팩스"]) {
+    await expect(shortcuts.locator("button").filter({ hasText: channel }).first()).toBeVisible();
+  }
+  const talktalkShortcut = shortcuts.locator("button").filter({ hasText: "네이버 톡톡" });
+  const instagramShortcut = shortcuts.locator("button").filter({ hasText: "인스타 DM" });
+  await expect(shortcuts.locator("button").filter({ hasText: "연락처" })).not.toContainText("[입력]");
+  await expect(shortcuts.locator("button").filter({ hasText: "카톡" })).not.toContainText("[입력]");
+  await expect(instagramShortcut).toContainText("[입력]");
+  await instagramShortcut.click();
   const panel = page.getByRole("region", { name: "영업 채널" });
+  await expect(panel.getByRole("textbox", { name: "인스타그램" })).toBeVisible();
+  await expect(talktalkShortcut).toContainText("[입력]");
+  await talktalkShortcut.click();
   await expect(panel).toBeVisible();
+  await expect(panel.getByRole("textbox", { name: "톡톡 주소" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   await expect(page.getByRole("dialog", { name: "영업 연락 수칙" })).toHaveCount(0);
   acknowledge?.();
   await expect(panel.getByText("영업 연락 수칙을 확인해 주세요", { exact: true })).toBeVisible();
@@ -73,6 +89,7 @@ test("리드 상세은 팝업 없이 문구 바로 아래 채널 표와 서식�
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 문의 가짜유통 010-0000-0000");
   await expect.poll(() => page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toContain("▶ 단가표 https://example.test/pricing-document#fake-token");
 });
+}
 
 // CC-47-9: 모바일 일괄 "제외"는 확인 창을 거친다 — 취소하면 요청이 없고, 확인하면 한 번 간다. 가짜 API만 쓴다.
 test("모바일 일괄 제외는 확인 창에서 취소하면 그대로, 확인하면 요청한다", async ({ page }) => {

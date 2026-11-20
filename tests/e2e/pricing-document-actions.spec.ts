@@ -1,5 +1,64 @@
 import { expect, test } from "@playwright/test";
-import { documentOutput, printPages, lineFromCatalog, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { mkdir, readFile } from "node:fs/promises";
+import { documentOutput, printPages, lineFromCatalog, parseDocument, type DocumentContent, type DocumentVersion } from "../../domains/pricing/document";
+import { documentRequestError } from "../../lib/pricing/document-request-error";
+
+for (const width of [1440, 390]) test(`draft save failures preserve revision19 and edits at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 계란", displayName: "합성 계란", brand: "", spec: "30개", unit: "판", price: 1000, taxType: "exempt" as const };
+  let revision = 19, attempts = 0;
+  let content: DocumentContent = { kind: "sheet", title: "저장 오류 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    lines: [lineFromCatalog(product), ...[1, 2, 3].map(n => ({ ...lineFromCatalog(product), promotionId: `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`, badge: "행사", startsOn: "2020-01-01", endsOn: "2099-12-31" }))] };
+  const failures = [
+    ["Promotion not found", "P0001"], ["Promotion not enabled for sheets", "P0001"], ["Stale document", "P0001"], ["undefined column", "42703"],
+  ].map(([message, code]) => documentRequestError(new Error(`Supabase request failed: 400 ${JSON.stringify({ message, code, details: "PRIVATE_SYNTHETIC_DETAIL" })}`), true));
+  const requests: unknown[] = [];
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: null, needsRecalculation: false, changedProductCount: 0 } });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: [product], total: 1 };
+    if (action === "save") {
+      expect(body.id).toBe(id); expect(body.expected).toBe(19); expect(body.content.title).toBe("수정한 제목 보존");
+      expect(body.content.lines).toEqual(content.lines); requests.push(body);
+      const failure = failures[attempts++];
+      if (failure) { const { status, ...json } = failure; return route.fulfill({ status, json }); }
+      content = body.content; revision = 20; result = draft();
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "저장 오류 합성 문서", exact: true }).click();
+  const title = page.getByRole("textbox", { name: "문서 제목", exact: true }).first();
+  await title.fill("수정한 제목 보존");
+  async function save() {
+    if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+    else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  }
+  for (const failure of failures) {
+    await save();
+    await expect(page.getByRole("alert").filter({ hasText: failure.message })).toBeVisible();
+    await expect(title).toHaveValue("수정한 제목 보존");
+    await expect(page.getByRole("button", { name: "판매가 버전 확정", exact: true })).toBeDisabled();
+    expect(revision).toBe(19);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await expect(page.getByRole("alert").filter({ hasText: failure.message })).not.toContainText("PRIVATE_");
+  }
+  await page.screenshot({ path: `test-results/readonly-pg17/document-save-errors/save-error-${width}.png`, fullPage: true });
+  await save();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  await expect(title).toHaveValue("수정한 제목 보존");
+  expect(revision).toBe(20); expect(requests).toHaveLength(5);
+  expect(new Set(requests.map(request => JSON.stringify(request))).size).toBe(1);
+});
 
 for (const width of [1440, 390]) for (const kind of ["sheet", "quote"] as const) test(`${kind} wrapped specs, pinned QR and archive at ${width}px`, async ({ page }, info) => {
   page.setDefaultTimeout(15_000);
@@ -210,4 +269,310 @@ for(const count of [18,96]) for(const columns of [1,2,3] as const)test(`CX-05 A4
   await info.attach(`CX-05-${count}items-${columns}col-capacity.json`,{body:JSON.stringify(comparison,null,2),contentType:"application/json"});
 });
 
+});
+
+for (const width of [1440, 390]) test(`promotion tax: inherit, explicitly correct legacy mismatch, reject unknown at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 면세 계란", displayName: "합성 면세 계란", brand: "", spec: "30개", unit: "판", price: 1100, cost: 1000, taxType: "exempt" };
+  let currentTax = "exempt";
+  const writes: Array<{ expected: number; content: { taxType: string; cost: number; margin: number } }> = [];
+  let promotions: Array<Record<string, unknown>> = [];
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/price-sheets/folder-order*", route => route.fulfill({ json: { folders: [] } }));
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [{ ...product, code: "SYN-EGG" }] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "catalog") result = { items: [{ ...product, taxType: currentTax }], total: 1 };
+    if (action === "promotions") result = promotions;
+    if (action === "save-promotion") {
+      writes.push(body);
+      result = { revision: body.expected + 1 };
+      // Synthetic legacy mismatch fixture after first creation; never auto-correct it.
+      promotions = [{ ...body.content, id: body.id, revision: 4, price: 1100, taxType: writes.length === 1 ? "taxable" : body.content.taxType }];
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto(`/revenue/pricing/promotions?new=행사&productId=${product.id}`);
+  const create = page.getByRole("dialog", { name: "행사 등록", exact: true });
+  await expect(create.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("exempt");
+  await create.getByRole("spinbutton", { name: "행사 매입가", exact: true }).fill("1000");
+  await create.getByRole("spinbutton", { name: "마진(%)", exact: true }).fill("10");
+  await create.getByLabel("종료일", { exact: true }).fill("2099-12-31");
+  await create.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(create).not.toBeVisible();
+  expect(writes[0].expected).toBe(0); expect(writes[0].content.taxType).toBe("exempt");
+  await page.getByRole("button", { name: "수정", exact: true }).first().click();
+  const edit = page.getByRole("dialog", { name: "행사 수정", exact: true });
+  await expect(edit.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("taxable");
+  const apply = edit.getByRole("button", { name: "원상품 세금 구분 반영", exact: true });
+  await expect(apply).toBeVisible(); expect(writes).toHaveLength(1);
+  expect((await apply.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/promotion-tax-source/mismatch-${width}.png`, fullPage: true });
+  await apply.click(); expect(writes).toHaveLength(1);
+  await edit.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(edit).not.toBeVisible();
+  expect(writes[1]).toMatchObject({ expected: 4, content: { taxType: "exempt", cost: 1000, margin: 10 } });
+  currentTax = "unknown";
+  await page.goto(`/revenue/pricing/promotions?new=행사&productId=${product.id}`);
+  await expect(create.getByRole("combobox", { name: "행사 과세·면세", exact: true })).toHaveValue("unknown");
+  await expect(create.getByRole("button", { name: "저장", exact: true })).toBeDisabled();
+  await expect(create).toContainText("상품관리에서 과세·면세를 확인");
+  expect(writes).toHaveLength(2);
+});
+
+for (const width of [1440, 390]) test(`draft tax refresh is explicit and preserves published taxes at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001", promotionId = "30000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 계란", displayName: "합성 계란", brand: "", spec: "30개", unit: "판", price: 1000, taxType: "taxable" as const };
+  let currentTax = "exempt", offerTax = "taxable", revision = 19;
+  let content: DocumentContent = { kind: "sheet", title: "세금 갱신 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, display: { columns: 1, promoLayout: "table", info: [], showTaxType: true },
+    lines: [lineFromCatalog(product), { ...lineFromCatalog(product), promotionId, badge: "행사", startsOn: "2020-01-01", endsOn: "2099-12-31" }] };
+  const published = structuredClone(content);
+  const writes: unknown[] = [];
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: "2026-11-17T00:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
+  const offer = () => ({ id: promotionId, productId: product.id, name: product.name, displayName: product.displayName, startsOn: "2020-01-01", endsOn: "2099-12-31", price: 1000, stock: null, perStoreLimit: null, allowSheet: true, badge: "행사", revision: 1, taxType: offerTax });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") { expect((url.searchParams.get("productIds") || "").split(",").length).toBeLessThanOrEqual(100); result = { items: [{ ...product, taxType: currentTax }], total: 1 }; }
+    if (action === "promotions") result = [offer()];
+    if (action === "versions") result = [{ id: "40000000-0000-4000-8000-000000000001", documentId: id, version: 1, revision: 1, content: published, publishedAt: "2026-11-17T00:00:00Z", unavailablePromotions: [], promotionStock: {} }];
+    if (action === "save") {
+      expect(body.expected).toBe(19); expect(body.content.lines.map((line: { price: number }) => line.price)).toEqual([1000, 1000]);
+      expect(body.content.lines.map((line: { taxType: string }) => line.taxType)).toEqual(["exempt", "exempt"]);
+      writes.push(body); content = body.content; revision++; result = draft();
+    }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "세금 갱신 합성 문서", exact: true }).click();
+  const taxMismatch = page.getByText("상품 원장과 세금 구분이 다른 품목이 2개 있습니다.", { exact: false });
+  await expect(taxMismatch).toBeVisible();
+  const directRefresh = page.getByRole("button", { name: "현재 세금 구분 반영", exact: true });
+  expect((await directRefresh.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "표로 보기", exact: true }).click(); }
+  else await page.getByRole("tab", { name: "표", exact: true }).click();
+  const normal = page.getByRole("combobox", { name: "품목 1 과세", exact: true }), promo = page.getByRole("combobox", { name: "품목 2 과세", exact: true });
+  await expect(normal).toHaveValue("taxable"); await expect(promo).toBeDisabled();
+  expect((await page.getByRole("button", { name: "행사 세금 수정", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  async function refresh() {
+    if (await directRefresh.isVisible()) await directRefresh.click();
+    else { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "현재 세금 구분 반영", exact: true }).click(); }
+  }
+  await refresh();
+  await expect(page.getByRole("alert").filter({ hasText: "행사 원본과 상품" })).toBeVisible();
+  await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);
+  offerTax = "exempt";
+  await refresh();
+  const dialog = page.getByRole("dialog", { name: "현재 세금 구분 반영", exact: true });
+  await expect(dialog).toContainText("면세로 2개"); await dialog.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(normal).toHaveValue("taxable"); expect(writes).toHaveLength(0);
+  await refresh(); await dialog.getByRole("button", { name: "초안에 반영", exact: true }).click();
+  await expect(normal).toHaveValue("exempt"); await expect(promo).toHaveValue("exempt"); expect(writes).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/document-tax-refresh/reviewed-${width}.png`, fullPage: true });
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
+  await expect(preview).toContainText("과세");
+  expect(published.lines.map(line => line.taxType)).toEqual(["taxable", "taxable"]);
+  await preview.getByRole("button", { name: "닫기", exact: true }).click();
+  currentTax = "unknown";
+  await refresh(); await expect(page.getByRole("alert").filter({ hasText: "현재 상품의 과세·면세" })).toBeVisible();
+  await expect(normal).toHaveValue("exempt"); expect(writes).toHaveLength(1);
+});
+
+for (const width of [1440, 390]) test(`document editor toolbar keeps title and actions separate at ${width}px`, async ({ page }) => {
+  page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 상품", displayName: "합성 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "exempt" as const };
+  const editedTitle = "긴 문서 제목을 편집해도 돌아가기·저장·버전 확정 버튼이 겹치지 않는 합성 문서";
+  let revision = 19, saves = 0;
+  let content: DocumentContent = { kind: "sheet", title: "상단 작업 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true, lines: [lineFromCatalog(product)] };
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-18T00:00:00Z", recalculation: { publishedAt: null, needsRecalculation: false, changedProductCount: 0 } });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: [product], total: 1 };
+    if (action === "save") { expect(body.expected).toBe(19); expect(body.content.title).toBe(editedTitle); content = body.content; revision++; saves++; result = draft(); }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents");
+  await page.getByRole("button", { name: "상단 작업 합성 문서", exact: true }).click();
+  const title = page.getByRole("textbox", { name: "문서 제목", exact: true }).first();
+  await title.fill(editedTitle);
+  const back = page.getByRole("button", { name: "← 문서 목록", exact: true });
+  const publish = page.getByRole("button", { name: "판매가 버전 확정", exact: true });
+  const more = page.getByRole("button", { name: "더보기", exact: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(publish).toBeDisabled();
+  for (const button of [back, more]) expect(await button.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+  const backBox = (await back.boundingBox())!, titleBox = (await title.boundingBox())!, publishBox = (await publish.boundingBox())!, moreBox = (await more.boundingBox())!;
+  expect(backBox.x + backBox.width).toBeLessThanOrEqual(titleBox.x + 1);
+  expect(publishBox.x + publishBox.width).toBeLessThanOrEqual(moreBox.x + 1);
+  for (const box of [backBox, publishBox, moreBox]) expect(box.height).toBeGreaterThanOrEqual(44);
+  if (width === 390) expect(Math.max(backBox.y + backBox.height, titleBox.y + titleBox.height)).toBeLessThanOrEqual(publishBox.y + 1);
+  expect(await back.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+  await page.screenshot({ path: `test-results/readonly-pg17/document-phone-toolbar/toolbar-${width}.png`, fullPage: true });
+  if (width === 390) { await more.click(); const save = page.getByRole("menuitem", { name: "초안 저장", exact: true }); expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44); await save.click(); }
+  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+  expect(saves).toBe(1); expect(revision).toBe(20);
+  await expect(publish).toBeEnabled();
+  expect(await publish.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+  await back.click(); await page.getByRole("button", { name: editedTitle, exact: true }).click();
+  await expect(title).toHaveValue(editedTitle);
+});
+
+test.describe("document footer PNG glyphs", () => {
+test.use({ deviceScaleFactor: 2 });
+for (const width of [1440, 390]) test(`footer size, bold and linebreaks survive save, publication and export at ${width}px`, async ({ page }) => {
+  test.setTimeout(120_000); page.setDefaultTimeout(15_000);
+  const id = "10000000-0000-4000-8000-000000000001";
+  const product = { id: "20000000-0000-4000-8000-000000000001", name: "합성 비고 상품", displayName: "합성 비고 상품", brand: "", spec: "1kg", unit: "개", price: 1000, taxType: "exempt" as const };
+  const note = Array.from({ length: 7 }, (_, i) => `비고 ${i + 1} · 가 값 배 송 · 보관 조건을 확인해 주세요`).join("\n");
+  let revision = 1;
+  let content: DocumentContent = { kind: "sheet", title: "비고 서식 합성 문서", companyName: "합성 회사", contact: "", recipient: "", footer: "기존 비고", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    lines: Array.from({ length: 96 }, (_, i) => lineFromCatalog({ ...product, id: `20000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}` })) };
+  const publications: DocumentVersion[] = [{ id: "40000000-0000-4000-8000-000000000001", documentId: id, version: 1, revision: 1, content: structuredClone(content), publishedAt: "2026-11-18T00:00:00Z", unavailablePromotions: [], promotionStock: {} }];
+  const original = JSON.stringify(publications[0]);
+  const draft = () => ({ id, revision, content, updatedAt: "2026-11-19T00:00:00Z", recalculation: { publishedAt: "2026-11-18T00:00:00Z", needsRecalculation: false, changedProductCount: 0 } });
+  await page.setViewportSize({ width, height: 1000 });
+  expect((await page.request.post("/api/customer/login", { data: { email: "ci-owner@example.test", password: "ci-owner-layout-password-2026" } })).ok()).toBeTruthy();
+  await page.route("**/api/pricing-documents*", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/catalog-index")) return route.fulfill({ json: { items: [product] } });
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
+    const action = body.action || url.searchParams.get("action") || "list";
+    let result: unknown = [];
+    if (action === "list") result = { items: [draft()], total: 1 };
+    if (action === "profile") result = { revision: 0, content: { companyName: "합성 회사", contact: "", footer: "" } };
+    if (action === "catalog") result = { items: content.lines.map(line => ({ ...product, id: line.productId })), total: 96 };
+    if (action === "versions") result = [...publications].reverse();
+    if (action === "save") { expect(body.expected).toBe(revision); content = parseDocument(body.content); revision++; result = draft(); }
+    if (action === "publish") { expect(body.expected).toBe(revision); const version = publications.length + 1; const published: DocumentVersion = { id: `40000000-0000-4000-8000-${String(version).padStart(12, "0")}`, documentId: id, version, revision, content: structuredClone(content), publishedAt: "2026-11-19T00:00:00Z", unavailablePromotions: [], promotionStock: {} }; publications.push(published); result = published; }
+    return route.fulfill({ json: { result, manager: true } });
+  });
+  await page.goto("/revenue/pricing/documents"); await page.getByRole("button", { name: "비고 서식 합성 문서", exact: true }).click();
+  const noteInput = page.getByRole("textbox", { name: "하단 안내", exact: true });
+  const font = page.getByRole("combobox", { name: "비고 글자 크기", exact: true });
+  const bold = page.getByRole("button", { name: "굵게", exact: true });
+  await expect(font).toHaveValue(""); await noteInput.fill(note); await bold.click();
+  expect((await bold.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await mkdir("test-results/readonly-pg17/document-footer-format", { recursive: true });
+  for (const [index, size] of [12, 14, 16].entries()) {
+    await font.selectOption(String(size)); await page.getByRole("button", { name: `${index + 1}열`, exact: true }).click();
+    await expect(noteInput).toHaveValue(note); await expect(bold).toHaveAttribute("aria-pressed", "true");
+    expect(await noteInput.evaluate(element => getComputedStyle(element).fontSize)).toBe(`${size}px`);
+    if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+    else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "초안을 저장했습니다." })).toBeVisible();
+    expect(content.display).toMatchObject({ footerFontSize: size, footerBold: true }); expect(content.footer).toBe(note);
+    await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+    const version = index + 2;
+    await page.getByRole("button", { name: new RegExp(`^버전 ${version} 미리보기`) }).click();
+    const preview = page.getByRole("dialog", { name: "미리보기", exact: true });
+    const notes = preview.locator("[data-document-footer]");
+    await expect(notes.first()).toBeVisible(); expect(await notes.count()).toBeGreaterThan(1);
+    expect(await notes.evaluateAll((elements, expected) => elements.every(element => getComputedStyle(element).fontSize === `${expected}px` && getComputedStyle(element).fontWeight === "700"), size)).toBe(true);
+    for (const element of await notes.all()) await expect(element).toHaveText(note);
+    const overflow = await preview.locator(".pricing-paper").evaluateAll(papers => papers.some(paper => { const content = paper.querySelector(".pricing-output-content")!; const style = getComputedStyle(paper); return content.getBoundingClientRect().height > paper.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) + 2; }));
+    expect(overflow).toBe(false);
+    const spacing = await preview.locator(".pricing-paper").evaluateAll(papers => papers.map(paper => {
+      const rows = Array.from(paper.querySelectorAll(".pricing-output-table tbody tr"));
+      const note = paper.querySelector("[data-document-footer]")!;
+      const pageNumber = paper.querySelector("footer")!.lastElementChild!;
+      return { rows: rows.length, gap: note.getBoundingClientRect().top - Math.max(...rows.map(row => row.getBoundingClientRect().bottom)), pageNumber: pageNumber.textContent, bottom: pageNumber.getBoundingClientRect().bottom, pageBottom: paper.getBoundingClientRect().bottom };
+    }));
+    for (const metric of spacing) {
+      expect(metric.rows).toBeGreaterThan(0);
+      expect(metric.gap).toBeGreaterThanOrEqual(0);
+      expect(metric.pageNumber).toMatch(/\d+ \/ \d+쪽/);
+      expect(metric.bottom).toBeLessThanOrEqual(metric.pageBottom);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 3)).toBe(true);
+    await page.screenshot({ path: `test-results/readonly-pg17/document-footer-format/preview-${size}-${width}.png`, fullPage: true });
+    const pending = page.waitForEvent("download"); await preview.getByRole("button", { name: "1쪽 PNG 저장", exact: true }).click();
+    const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe(`document-v${version}-1.png`);
+    await downloaded.saveAs(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const paper = preview.locator(".pricing-paper").first(), printedNote = paper.locator("[data-document-footer]");
+    // Compare equal 2x rasters; the phone's horizontal A4 viewport must not clip the reference.
+    if (width === 390) await page.setViewportSize({ width: 1440, height: 1000 });
+    const reference = await printedNote.screenshot({ animations: "disabled", path: `test-results/readonly-pg17/document-footer-format/reference-${size}-${width}.png` });
+    const paperBox = (await paper.boundingBox())!, noteBox = (await printedNote.boundingBox())!;
+    const exported = await readFile(`test-results/readonly-pg17/document-footer-format/export-${size}-${width}.png`);
+    const difference = await page.evaluate(async ({ reference, exported, crop }) => {
+      const load = async (base64: string) => { const image = new Image(); image.src = `data:image/png;base64,${base64}`; await image.decode(); return image; };
+      const [live, png] = await Promise.all([load(reference), load(exported)]);
+      // Geometry is checked separately above. Compare ink, tolerating html-to-image's
+      // documented 0.1px font reduction and the two rasterizers' subpixel placement.
+      const ink = (image: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+        const source = document.createElement("canvas"); source.width = Math.ceil(width); source.height = Math.ceil(height);
+        const context = source.getContext("2d")!;
+        context.fillStyle = "white"; context.fillRect(0, 0, source.width, source.height);
+        context.drawImage(image, x, y, width, height, 0, 0, source.width, source.height);
+        const pixels = context.getImageData(0, 0, source.width, source.height).data;
+        let left = source.width, top = source.height, right = -1, bottom = -1;
+        for (let row = 0; row < source.height; row++) for (let col = 0; col < source.width; col++) {
+          const at = (row * source.width + col) * 4;
+          if (pixels[at] + pixels[at + 1] + pixels[at + 2] < 600) {
+            left = Math.min(left, col); top = Math.min(top, row); right = Math.max(right, col); bottom = Math.max(bottom, row);
+          }
+        }
+        if (right < left || bottom < top) throw new Error("PNG 비고 글자가 비어 있습니다.");
+        const normalized = document.createElement("canvas"); normalized.width = 320; normalized.height = 160;
+        const target = normalized.getContext("2d")!;
+        target.fillStyle = "white"; target.fillRect(0, 0, 320, 160); target.filter = "blur(1px)";
+        target.drawImage(source, left, top, right - left + 1, bottom - top + 1, 0, 0, 320, 160);
+        return target.getImageData(0, 0, 320, 160).data;
+      };
+      const before = ink(live, 0, 0, live.width, live.height);
+      const ratio = png.width / crop.paperWidth;
+      const after = ink(png, crop.x * ratio, crop.y * ratio, crop.width * ratio, crop.height * ratio);
+      let total = 0;
+      for (let i = 0; i < before.length; i += 4) for (let channel = 0; channel < 3; channel++) total += Math.abs(before[i + channel] - after[i + channel]);
+      return total / (320 * 160 * 3);
+    }, { reference: reference.toString("base64"), exported: exported.toString("base64"), crop: { x: noteBox.x - paperBox.x, y: noteBox.y - paperBox.y, width: noteBox.width, height: noteBox.height, paperWidth: paperBox.width } });
+    console.log("FOOTER_PNG_GLYPHS", JSON.stringify({ width, size, difference }));
+    if (width === 390) await page.setViewportSize({ width, height: 1000 });
+    expect(difference, "PNG 한글 비고가 실제 화면 글자와 같아야 합니다.").toBeLessThan(12);
+    if (width === 1440) await page.pdf({ path: `test-results/readonly-pg17/document-footer-format/print-${size}.pdf`, format: "A4", printBackground: true });
+    await preview.getByRole("button", { name: "닫기", exact: true }).click();
+  }
+  expect(JSON.stringify(publications[0])).toBe(original);
+  await page.getByRole("button", { name: /버전 1 미리보기/ }).click();
+  const old = page.getByRole("dialog", { name: "미리보기", exact: true }); await expect(old.locator("[data-document-footer]").first()).toHaveText("기존 비고");
+  await old.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.getByRole("button", { name: "← 문서 목록", exact: true }).click(); await page.getByRole("button", { name: "비고 서식 합성 문서", exact: true }).click();
+  await expect(font).toHaveValue("16"); await expect(bold).toHaveAttribute("aria-pressed", "true"); await expect(noteInput).toHaveValue(note);
+});
 });

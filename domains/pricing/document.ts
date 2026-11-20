@@ -1,6 +1,7 @@
 import { kstToday } from "../shared/kst-date";
 import { calculatePrice } from "./price-rules";
 export type DocumentKind = "sheet" | "quote";
+export const FIXED_PROMOTION_PRICE_CONTRACT = "promotion-gross-v1";
 export type PriceSource = "store" | "grade" | "base" | "edited";
 export const PRICE_SOURCES: readonly string[] = ["store", "grade", "base", "edited"];
 export type PrintLine = {
@@ -10,6 +11,8 @@ export type PrintLine = {
   spec: string;
   unit: string;
   price: number;
+  /** Stored unit-price basis. Absent means the original, VAT-exclusive contract. */
+  priceIncludesTax?: boolean;
   taxType: "taxable" | "exempt" | "unknown";
   visible: boolean;
   promotionId: string | null;
@@ -24,7 +27,7 @@ export type PrintLine = {
 export type DocumentInfoItem = { key: string; label: string; value: string; place: "header" | "footer" };
 /** 11/4: 문서 보기 표시 — 품목 격자 열 수, 행사 블록 모양, 회사 정보 줄 */
 /** autoPromos: 켜면 진행 중인 행사·임박을 문서에 자동으로 넣는다(CC-20). 꺼져 있으면 키 자체가 없다. */
-export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean };
+export type DocumentDisplay = { columns: 1 | 2 | 3; promoLayout: "cards" | "table"; info: DocumentInfoItem[]; productWidth: number; priceIncludesTax: boolean; showTaxType: boolean; autoPromos?: boolean; footerFontSize?: 12 | 14 | 16; footerBold?: boolean };
 export const DEFAULT_DISPLAY: DocumentDisplay = { columns: 1, promoLayout: "cards", info: [], productWidth: 65, priceIncludesTax: false, showTaxType: false };
 export const MAX_DOCUMENT_LINES = 300;
 /** Bank details belong to the authenticated connected-store profile, never a document. */
@@ -48,13 +51,22 @@ export function parseDisplay(value: unknown): DocumentDisplay {
       })
     : [];
   const productWidth = typeof d.productWidth === "number" && Number.isFinite(d.productWidth) ? Math.max(45, Math.min(80, Math.round(d.productWidth))) : DEFAULT_DISPLAY.productWidth;
-  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}) };
+  return { columns, promoLayout, info, productWidth, priceIncludesTax: d.priceIncludesTax === true, showTaxType: d.showTaxType === true, ...(d.autoPromos === true ? { autoPromos: true } : {}),
+    ...(d.footerFontSize === 12 || d.footerFontSize === 14 || d.footerFontSize === 16 ? { footerFontSize: d.footerFontSize } : {}), ...(d.footerBold === true ? { footerBold: true } : {}) };
 }
-export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean) {
-  return includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
+export function documentFooterTypography(display: DocumentDisplay, fontScale = 1) {
+  const fontSize = display.footerFontSize ? Math.round(display.footerFontSize * Math.max(1, fontScale)) : null;
+  const bold = display.footerBold === true;
+  return { fontSize, bold, lineHeight: fontSize ? Math.ceil(fontSize * 1.5) : 16,
+    charactersPerLine: Math.max(1, Math.floor(60 * 11 / ((fontSize || 11) * (bold ? 1.05 : 1)))) };
+}
+export function documentDisplayPrice(price: number, taxType: PrintLine["taxType"], includesTax: boolean, storedIncludesTax = false) {
+  return !storedIncludesTax && includesTax && taxType === "taxable" ? Math.round(price * 1.1) : price;
 }
 export type DocumentContent = {
   kind: DocumentKind;
+  /** New documents opt in; copies and old publications retain their original contract. */
+  priceContract?: typeof FIXED_PROMOTION_PRICE_CONTRACT;
   title: string;
   companyName: string;
   industry?: string;
@@ -213,6 +225,8 @@ export function money(value: unknown): number {
 /** A strict whitelist shared by storage and output. Never spread staff/catalog records. */
 export function parseDocument(value: unknown): DocumentContent {
   const d = object(value);
+  if (d.priceContract !== undefined && d.priceContract !== FIXED_PROMOTION_PRICE_CONTRACT)
+    throw new PricingInputError("이 문서의 가격 방식은 현재 화면에서 편집할 수 없습니다. 화면을 새로고침해 주세요.");
   if (d.kind !== "sheet" && d.kind !== "quote")
     throw new PricingInputError("문서 종류를 확인해 주세요.");
   if (!Array.isArray(d.lines) || d.lines.length < 1 || d.lines.length > MAX_DOCUMENT_LINES)
@@ -238,6 +252,7 @@ export function parseDocument(value: unknown): DocumentContent {
       spec: field(l.spec ?? "", 80, false, `${index + 1}번째 품목 규격`),
       unit: field(l.unit, 20, false, `${index + 1}번째 품목 단위`),
       price: money(l.price),
+      ...(d.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceIncludesTax: promotional } : {}),
       ...(typeof l.priceSource === "string" && PRICE_SOURCES.includes(l.priceSource) ? { priceSource: l.priceSource as PriceSource } : {}),
       taxType: l.taxType as "taxable" | "exempt",
       visible: l.visible,
@@ -265,6 +280,7 @@ export function parseDocument(value: unknown): DocumentContent {
     throw new PricingInputError("표시 설정을 확인해 주세요.");
   return {
     kind: d.kind,
+    ...(d.priceContract === FIXED_PROMOTION_PRICE_CONTRACT ? { priceContract: FIXED_PROMOTION_PRICE_CONTRACT } : {}),
     title: field(d.title, 100, true, "문서 제목"),
     companyName: field(d.companyName, 100, true, "회사명"),
     ...(field(d.industry ?? "", 40, false, "업종") ? { industry: field(d.industry, 40, false, "업종") } : {}),
@@ -336,7 +352,8 @@ export function documentOutput(version: DocumentVersion, day = koreaDay()) {
       brand: d.showBrand ? l.brand : "",
       spec: d.showSpec ? l.spec : "",
       unit: d.showSpec ? l.unit : "",
-      price: d.showPrice && !expired ? documentDisplayPrice(l.price, l.taxType, d.display?.priceIncludesTax || false) : null,
+      price: d.showPrice && !expired ? documentDisplayPrice(l.price, l.taxType, d.display?.priceIncludesTax || false, l.priceIncludesTax) : null,
+      ...(l.priceIncludesTax !== undefined ? { priceIncludesTax: l.priceIncludesTax } : {}),
       taxType: l.taxType,
       badge: l.badge,
       endsOn: l.endsOn,
@@ -364,7 +381,8 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
   const header = 100 + Math.max(0, rows(output.companyName, 28) - 1) * 30 + Math.max(0, rows(output.title, 40) - 1) * 24 +
     (output.recipient ? rows(output.recipient, 45) * 18 : 0) + (output.contact ? rows(output.contact, 45) * 16 : 0) +
     (headerInfo.length ? rows(headerInfo.map(item => `${item.label} ${item.value}`).join(" · "), 45) * 16 : 0);
-  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, 60) * 16 : 0);
+  const footerType = documentFooterTypography(parseDisplay(output.display), fontScale);
+  let footer = 44 + (hasOrderQr ? 144 : 0) + (output.footer ? rows(output.footer, footerType.charactersPerLine) * footerType.lineHeight : 0);
   for (let i = 0; i < footerInfo.length; i += 2) {
     footer += Math.max(...footerInfo.slice(i, i + 2).map(item => rows(`${item.label} ${item.value}`, 26))) * 16;
   }
@@ -375,7 +393,7 @@ export function printPages(output: DocumentOutput, fontScale = 1, hasOrderQr = f
     const mainChars = Math.max(4, Math.floor(width / Math.round(12 * scale)));
     const textHeight = rows(line.displayName, mainChars) * mainHeight + (line.brand ? rows(line.brand, mainChars) * mainHeight : 0) +
       (line.spec || line.unit ? rows([line.spec, line.unit].filter(Boolean).join(" · "), mainChars) * mainHeight : 0) +
-      (count > 1 ? mainHeight : 0);
+      (count > 1 && output.display.showTaxType ? mainHeight : 0);
     const priceWidth = ((190 * 96 / 25.4 - (count - 1) * 12) / count) *
       (1 - output.display.productWidth / 100) * (count === 1 ? 0.83 : 1) - 8;
     const priceChars = Math.max(1, Math.floor(priceWidth / Math.round(11 * scale)));

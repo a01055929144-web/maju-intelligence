@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { buildPurchaseSheet, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
+import { buildPurchaseSheet, catalogTaxEvidence, mergeDuplicateLines, parsePurchaseLines, purchaseSpecification, splitNameSpec, suggestPurchaseMapping } from "../domains/pricing/purchase-import";
 import { matchCostImportRow, supplierLinkTargets } from "../domains/pricing/purchase-cost";
 import { buildPurchaseReceiptRows } from "../domains/pricing/purchase-receipt";
 
@@ -171,14 +171,21 @@ describe("purchase import", () => {
 });
 
 describe("purchase import vat column", () => {
+  it("preserves an explicit tax choice when a new catalog product is created", () => {
+    expect(catalogTaxEvidence("taxable")).toEqual({ supplyAmount: 100, vat: 10 });
+    expect(catalogTaxEvidence("exempt")).toEqual({ supplyAmount: 100, vat: 0 });
+  });
+
   it("treats prices as VAT-excluded and records taxable/exempt from a separate VAT column", () => {
     const sheet = buildPurchaseSheet([
       ["품목명", "수량", "단가", "공급가액", "부가세", "합계"],
       ["간장 [1.8L]", "2", "10000", "20000", "2000", "22000"],
-      ["양파 [10kg]", "1", "15000", "15000", "", "15000"]
+      ["양파 [10kg]", "1", "15000", "15000", "0", "15000"],
+      ["두부 [1kg]", "1", "3000", "3000", "", "3000"],
+      ["반품 조정 [1kg]", "1", "1000", "1000", "-100", "900"]
     ]);
     const { lines } = parsePurchaseLines(sheet, suggestPurchaseMapping(sheet), "auto");
-    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000]]);
+    expect(lines.map((line) => [line.taxType, line.vatIncluded, line.cost])).toEqual([["taxable", false, 10000], ["exempt", false, 15000], [undefined, false, 3000], [undefined, false, 1000]]);
     expect(buildPurchaseReceiptRows({ actorName: "대표", companyId: "c", fileName: "a", lines, receiptDate: "2026-11-04" })[0]).toMatchObject({ tax_type: "taxable", vat_amount: 2000 });
   });
 });
