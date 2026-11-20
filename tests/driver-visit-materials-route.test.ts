@@ -1,17 +1,19 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getRequestAuthScope, isFeatureEnabled, supabaseRequest } = vi.hoisted(() => ({
+const { getRequestAuthScope, isFeatureEnabled, supabaseRequest, uploadLeadVisitPhoto } = vi.hoisted(() => ({
   getRequestAuthScope: vi.fn(),
   isFeatureEnabled: vi.fn(),
-  supabaseRequest: vi.fn()
+  supabaseRequest: vi.fn(),
+  uploadLeadVisitPhoto: vi.fn()
 }));
 
 vi.mock("@/lib/auth", () => ({ getRequestAuthScope }));
 vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled }));
-vi.mock("@/lib/store", () => ({ supabaseRequest }));
+vi.mock("@/lib/store", () => ({ supabaseRequest, uploadLeadVisitPhoto }));
 
 import { GET, POST } from "../app/api/mobile/driver-visit-materials/route";
+import { POST as POST_PHOTO } from "../app/api/mobile/driver-visit-materials/photo/route";
 
 const companyId = "11111111-1111-1111-1111-111111111111";
 const memberId = "22222222-2222-2222-2222-222222222222";
@@ -50,7 +52,7 @@ describe("CX-85 기사 방문 자료 API", () => {
       .mockResolvedValueOnce([{ id: stopId, lead_id: "44444444-4444-4444-4444-444444444444" }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "55555555-5555-5555-5555-555555555555" }]);
-    const response = await POST(request({ stopId, materials: ["단가표", "명함"], memo: "반응 좋음", photoStoragePath: `${`lead-visits/${companyId}`}/photo.jpg` }));
+    const response = await POST(request({ stopId, materials: ["단가표", "명함"], memo: "반응 좋음", photoStoragePath: `lead-visits/${companyId}/${stopId}/photo.jpg` }));
     expect(response.status).toBe(200);
     expect(String(supabaseRequest.mock.calls[0][0])).toContain(`company_id=eq.${companyId}`);
     expect(String(supabaseRequest.mock.calls[0][0])).toContain(`driver_member_id=eq.${memberId}`);
@@ -77,6 +79,39 @@ describe("CX-85 기사 방문 자료 API", () => {
     expect(String(supabaseRequest.mock.calls[0][0])).toContain(`company_id=eq.${companyId}`);
     expect(String(supabaseRequest.mock.calls[0][0])).toContain(`driver_member_id=eq.${memberId}`);
     expect(String(supabaseRequest.mock.calls[1][0])).toContain("lead_id=in.(44444444-4444-4444-4444-444444444444)");
+  });
+
+  it("배정된 영업 정류장의 허용 사진만 회사 경로에 업로드한다", async () => {
+    supabaseRequest.mockResolvedValueOnce([{ id: stopId }]);
+    uploadLeadVisitPhoto.mockResolvedValue(`lead-visits/${companyId}/${stopId}/photo.jpg`);
+    const form = new FormData();
+    form.set("stopId", stopId);
+    form.set("photo", new File(["photo"], "visit.jpg", { type: "image/jpeg" }));
+    const response = await POST_PHOTO(new NextRequest("https://example.test/api/mobile/driver-visit-materials/photo", { method: "POST", body: form }));
+    expect(response.status).toBe(200);
+    expect(String(supabaseRequest.mock.calls[0][0])).toContain(`company_id=eq.${companyId}`);
+    expect(String(supabaseRequest.mock.calls[0][0])).toContain(`driver_member_id=eq.${memberId}`);
+    expect(uploadLeadVisitPhoto).toHaveBeenCalledWith(expect.objectContaining({ companyId, stopId, contentType: "image/jpeg" }));
+  });
+
+  it("다른 기사 정류장에는 사진을 올리지 않는다", async () => {
+    supabaseRequest.mockResolvedValueOnce([]);
+    const form = new FormData();
+    form.set("stopId", stopId);
+    form.set("photo", new File(["photo"], "visit.jpg", { type: "image/jpeg" }));
+    const response = await POST_PHOTO(new NextRequest("https://example.test/api/mobile/driver-visit-materials/photo", { method: "POST", body: form }));
+    expect(response.status).toBe(404);
+    expect(uploadLeadVisitPhoto).not.toHaveBeenCalled();
+  });
+
+  it("허용하지 않은 파일 형식은 정류장 조회 전에 거절한다", async () => {
+    const form = new FormData();
+    form.set("stopId", stopId);
+    form.set("photo", new File(["not-photo"], "visit.txt", { type: "text/plain" }));
+    const response = await POST_PHOTO(new NextRequest("https://example.test/api/mobile/driver-visit-materials/photo", { method: "POST", body: form }));
+    expect(response.status).toBe(415);
+    expect(supabaseRequest).not.toHaveBeenCalled();
+    expect(uploadLeadVisitPhoto).not.toHaveBeenCalled();
   });
 });
 

@@ -7111,6 +7111,23 @@ export async function uploadSalesQuotePhoto(input: {
   return storagePath;
 }
 
+export async function uploadLeadVisitPhoto(input: {
+  bytes: ArrayBuffer;
+  companyId: string;
+  contentType: string;
+  filename: string;
+  stopId: string;
+}) {
+  if (!isProductionStoreConfigured()) throw new Error("방문 사진 저장 환경이 준비되지 않았습니다.");
+  const storagePath = `lead-visits/${input.companyId}/${input.stopId}/${randomUUID()}-${sanitizeStorageFilename(input.filename)}`;
+  await supabaseStorageRequest(`object/${CUSTOMER_ATTACHMENT_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: { "Content-Type": input.contentType, "x-upsert": "false" },
+    body: input.bytes
+  });
+  return storagePath;
+}
+
 function isCompanySalesQuotePhotoPath(companyId: string, path: string) {
   const cleanPath = path.replace(/^\/+/, "");
   return cleanPath.startsWith(`${companyId}/sales-quotes/`) && !cleanPath.includes("..") && !cleanPath.includes("\\");
