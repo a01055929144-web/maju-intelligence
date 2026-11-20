@@ -11,6 +11,7 @@ describe("CX-126 거래처 공통 등록", () => {
   });
   it("사업자 확인 상태는 번호·형태·계산서 이메일이 모두 필요하다", () => {
     expect(() => normalizePartnerRegistration({ ...pending, businessStatus: "active" })).toThrow(/사업자번호/);
+    expect(() => normalizePartnerRegistration({ ...pending, partnerType: "supplier", businessStatus: "active", businessNumber: "123-45-67890" })).toThrow(/사업자 형태와 계산서 이메일/);
     expect(normalizePartnerRegistration({ ...pending, businessStatus: "active", businessNumber: "123-45-67890", businessEntityType: "individual", taxInvoiceEmail: "tax@example.test" }).businessNumber).toBe("1234567890");
   });
   it("세금계산서는 사업자 확인 뒤에만 허용한다", () => {
