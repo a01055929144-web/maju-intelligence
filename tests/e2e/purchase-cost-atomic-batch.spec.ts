@@ -171,6 +171,30 @@ async function selectPurchaseCsv(page: Page, text: string) {
   await page.locator('input[type="file"]').setInputFiles({ name: "합성-구매일.csv", mimeType: "text/csv", buffer: Buffer.from(text, "utf8") });
 }
 
+async function selectErpPurchaseWorkbook(page: Page) {
+  const rows: Array<Array<string | number>> = [
+    ["회사명 : 합성회사 / 2026/11/18 ~ 2026/11/20"],
+    ["일자-No.", "품목명(규격)", "수량", "단가", "공급가액", "부가세", "합계", "거래처명"]
+  ];
+  rows.push(["2026/11/20 -4", "합성 상품 [1kg]", 1, 600, 600, "", 600, "합성 매입처"]);
+  rows.push(["2026/11/20 -4", "합성 상품 [1kg]", 1, 50000, 50000, "", 50000, "합성 매입처"]);
+  for (let index = 2; index < 350; index++) {
+    const product = index;
+    const day = 18 + (index % 3);
+    rows.push([`2026/11/${day} -${index}`, `합성 상품 ${product} [1kg]`, 1, 100 + index, 100 + index, "", 100 + index, "합성 매입처"]);
+  }
+  rows.push(["2026/11 계", "합계", "", "", "", "", "", ""]);
+  rows.push(["2026/11 소계", "합계", "", "", "", "", "", ""]);
+  rows.push(["총계", "합계", "", "", "", "", "", ""]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "구매현황내역");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "UI0Q1ZMNJ7SUVZJ.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: XLSX.write(workbook, { bookType: "xlsx", type: "buffer" })
+  });
+}
+
 for (const width of [1440, 390]) test(`supplier links reveal current-price choices without dropping purchase history at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const { writes, receipts, dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true, linkedSupplierConflict: true });
@@ -201,6 +225,25 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   expect(dateWrites[0].rows.filter(row => row.priceSelected)).toMatchObject([{ unitPrice: 5800, supplierName: "B매입처" }]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(writes).toHaveLength(0); expect(receipts).toHaveLength(0);
+});
+
+for (const width of [1440, 390]) test(`ERP 353-row headers preserve dates and suppliers before current-price choice at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await purchaseUpload(page, { count: 349, historyOnlyDefault: true });
+  await selectErpPurchaseWorkbook(page);
+  const preview = page.getByRole("region", { name: "업로드 적용일과 단가 확인" });
+  await expect(preview).toContainText("행별 적용일");
+  await expect(preview.getByRole("cell", { name: "2026-11-18", exact: true }).first()).toBeVisible();
+  await expect(preview.getByRole("cell", { name: "2026-11-20", exact: true }).first()).toBeVisible();
+  const choice = page.getByLabel("합성 상품 2026-11-20 적용 단가", { exact: true });
+  await expect(choice).toBeVisible();
+  await choice.selectOption("3");
+  const align = page.getByRole("button", { name: /^② 열 정렬/ });
+  await expect(align).toBeEnabled();
+  await align.click();
+  await expect(page.getByText(/서로 다른 원문이 같은 상품·적용일로 연결됩니다/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "③ 저장 (350건)", exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 for (const width of [1280, 390]) {

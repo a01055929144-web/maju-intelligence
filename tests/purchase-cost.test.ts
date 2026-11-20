@@ -19,6 +19,15 @@ describe("purchase cost import", () => {
     expect(result.conflicts).toHaveLength(1);
     expect(result.conflicts[0].candidates.map(item => item.cost)).toEqual([6000, 5800]);
   });
+  it("keeps same-supplier same-date prices as a current-price choice", () => {
+    const linked = [{ ...products[0], name: "딜", spec: "", unit: "kg", supplierName: "(유)로즈마리향기", supplierProductId: "supplier-a" }];
+    const line = (rowNumber: number, cost: number) => ({ code: "", cost, lineKey: "딜|kg", name: "딜", purchaseDate: "2026-11-20", quantity: 1, rawName: "딜 [kg]", rowNumber, spec: "", supplier: "(유)로즈마리향기", unit: "kg" });
+    const result = mergePurchaseLinesForCatalog([line(266, 600), line(273, 50000)], linked);
+    expect(result.merged).toHaveLength(0);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].supplier).toBe("(유)로즈마리향기");
+    expect(result.conflicts[0].candidates.map(item => item.cost)).toEqual([600, 50000]);
+  });
   it("matches ERP code first, then exact name and spec", () => {
     expect(matchCostImportRow({ code: "ERP-1", name: "다른 이름", spec: "", unit: "", supplier: "유통사 A", cost: 9000 }, products)?.id).toBe("a");
     expect(matchCostImportRow({ code: "", name: "양파", spec: "5kg", unit: "", supplier: "유통사 A", cost: 4000 }, products)?.id).toBe("b");
