@@ -56,3 +56,29 @@ it("keeps the link's published selling price and compares only its preceding ver
   }
   expect(line.price).toBe(1200);
 });
+
+it.each([true, false])("preserves fixed gross promotions on the public link with document included=%s", async (included) => {
+  let legacy = false;
+  const base = { productId: "product", displayName: "합성", unit: "BOX", visible: true, taxType: "taxable" };
+  const lines = [
+    { ...base, price: 1000, promotionId: null, priceIncludesTax: false },
+    { ...base, price: 1100, promotionId: "promo", priceIncludesTax: true },
+    { ...base, price: 60, promotionId: "near", priceIncludesTax: true },
+    { ...base, productId: "exempt", price: 60, taxType: "exempt", promotionId: null, priceIncludesTax: false },
+  ];
+  db.mockImplementation(async (path: string) => {
+    if (path.startsWith("storefront_links?")) return [{ id: "link", company_id: "company", customer_id: "customer", document_version_id: "version", expires_at: "2099-12-31", revoked_at: null, can_order: true }];
+    if (path.startsWith("pricing_document_versions?")) return [{ id: "version", version: 1, content: { showPrice: true, validUntil: "2099-12-31", display: { priceIncludesTax: included }, ...(legacy ? {} : { priceContract: "promotion-gross-v1" }), lines } }];
+    if (path.startsWith("normalized_customers?")) return [{ id: "customer", customer_name: "합성", delivery_territory_id: null }];
+    if (path.startsWith("product_catalog?")) return ["product", "exempt"].map(id => ({ id, is_active: true, order_pricing_mode: "fixed" }));
+    if (path.startsWith("pricing_promotions?")) return ["promo", "near"].map(id => ({ id, starts_on: "2020-01-01", ends_on: "2099-12-31", stock: null, per_store_limit: null }));
+    if (path.startsWith("customer_price_agreements?")) return [{ product_catalog_id: "product", sales_unit: "BOX", unit_price: 9999, tax_type: "taxable", price_includes_tax: false }];
+    if (path.startsWith("store_order_settings?")) return [{ cutoff_days_before: 1, cutoff_time: "22:00", minimum_amount: 0, minimum_policy: "notice", delivery_fee: 0 }];
+    return [];
+  });
+  const result = await readStorefront("token", "2099-01-01");
+  expect(result?.lines.map(line => [line.unitPrice, line.priceIncludesTax])).toEqual([[9999, false], [1100, true], [60, true], [60, included]]);
+  legacy = true;
+  expect((await readStorefront("token", "2099-01-01"))?.lines.map(line => line.unitPrice)).toEqual([9999, 9999, 9999, 60]);
+  expect(lines.map(line => line.price)).toEqual([1000, 1100, 60, 60]);
+});

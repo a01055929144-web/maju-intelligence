@@ -12,7 +12,7 @@ import { PurchaseHistoryPanel } from "@/components/purchase-history-panel";
 import type { PurchaseHistoryItem } from "@/domains/pricing/purchase-receipt";
 import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
 import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, mergePurchaseLinesForCatalog, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
-import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
+import { buildPurchaseSheet, catalogTaxEvidence, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
 import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
@@ -28,8 +28,8 @@ import { useUnsavedChangesWarning } from "@/lib/use-unsaved-changes-warning";
 // rawName·fileSpec·fileUnit 은 엑셀 원문 그대로(원문 연결용), name·spec·unit 은 고친 값(상품관리에 저장).
 type DatedProduct = CostProduct & { priceDate?: string };
 type NewRow = CostImportRow & { purchaseDate?: string; rowId: string; quantity?: number; rawCost?: number; taxType?: "taxable" | "exempt"; vatIncluded?: boolean; rawName: string; fileSpec: string; fileUnit: string; notDuplicate?: boolean };
-/** 11/4: 단가·견적·주문에는 단위가 꼭 필요합니다. 규격은 비워도 됩니다. */
-const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : ""].filter(Boolean);
+/** 신규 상품은 단위와 과세 구분을 확정해야 합니다. 규격은 비워도 됩니다. */
+const missingFields = (row: NewRow) => [!row.unit.trim() ? "단위" : "", !row.name.trim() ? "품목" : "", !row.taxType ? "과세 구분" : ""].filter(Boolean);
 type LinkInput = { productId: string; rawName: string; spec: string; unit: string; cost: number; supplierName: string };
 type Candidate = { purchaseDate?: string; cost: number; rawCost?: number; vatIncluded?: boolean; taxType?: "taxable" | "exempt"; quantity?: number; supplierProductId?: string; method: "직접" | "엑셀" | "매입처"; source: string; reviewOnly?: boolean; fileNote?: string; link?: LinkInput; updateFields?: { name: string; spec: string; unit: string } };
 const money = formatWon;
@@ -544,7 +544,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const list = groups.get(name) || [];
       list.push(row); groups.set(name, list);
     }
-    const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량" };
+    const catalogMapping: CatalogMapping = { productName: "상품명", spec: "규격", unit: "단위", cost: "매입가", productCode: "기본코드", quantity: "수량", supplyAmount: "공급가액", vat: "부가세" };
     for (const [supplierName, items] of Array.from(groups.entries())) {
       // Registration may reuse an explicit, unambiguous unit for the same ERP identity.
       // Original receipt units and callback keys stay untouched, including blank cells.
@@ -559,8 +559,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const raw = items.map((row) => {
         const known = sourceUnits.get(identity(row));
         const unit = row.rawName ? row.fileUnit : row.unit;
+        const tax = catalogTaxEvidence(row.taxType!);
         return { 상품명: row.rawName || row.name, 규격: row.rawName ? row.fileSpec : row.spec,
-          단위: unit || (known?.size === 1 ? Array.from(known)[0] : ""), 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "" };
+          단위: unit || (known?.size === 1 ? Array.from(known)[0] : ""), 매입가: row.cost, 기본코드: row.code, 수량: row.quantity ?? "",
+          공급가액: tax.supplyAmount, 부가세: tax.vat };
       });
       const preview = buildCatalogPreview(raw, catalogMapping, supplierName);
       const response = await fetch("/api/product-catalog/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save-import", companyId, fileName: fileName || "매입가 반영", supplierName, mapping: catalogMapping, products: preview.products, excludedCount: preview.excludedCount, warnings: preview.warnings }) });
@@ -802,9 +804,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     // 11/4: 바뀐 매입가가 없어도 새 상품 등록·매입 기록 보관은 진행합니다(예전에는 버튼이 반응하지 않았음).
     if (!changes.length && !unmatched.length && !importedLines.length) { setMessage("저장할 변경이 없습니다."); return; }
     if (unmatched.some((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length)) { setError(`중복 의심 새 상품 ${unmatched.filter((row) => !row.notDuplicate && findDuplicateSuspects(row, unique, 1).length).length}개는 줄마다 '이 상품으로 연결' 또는 '새 상품 맞음'을 골라야 저장할 수 있습니다.`); openFilter("suspect", unmatched); return; }
+    if (unmatched.some((row) => !row.taxType)) { setError("새 상품의 과세 구분을 골라 주세요."); openFilter("unit", unmatched); return; }
     if (usesDateBatch) { await saveDateBatch(); return; }
     if (batchEnabled && changes.length > 100) { setError(`가격 변경 ${changes.length}건은 한 번에 저장할 수 없습니다. 최대 100건씩 선택해 주세요. 새 상품·원본 이력도 아직 저장하지 않았습니다.`); return; }
-    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가를 채워 주세요."); openFilter("unit", unmatched); return; }
+    if (unmatched.some((row) => missingFields(row).length || !Number.isFinite(row.cost) || row.cost < 0)) { setError("새 상품의 품목·단위·단가·과세 구분을 채워 주세요."); openFilter("unit", unmatched); return; }
     if (dateSaveBlocked) { setError("구매일 기준 저장은 아직 준비 중입니다. 날짜 보호와 원본 이력 저장을 지원하는 저장 경로가 준비된 뒤 다시 시도해 주세요."); return; }
     setSaveReview(false); setConfirmedReview("");
     setBusy(true); setError(""); setMessage(""); setCategoryReviewLink(false);
@@ -1084,8 +1087,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     {tab === "매입 이력" ? <PurchaseHistoryPanel batch={dateBatch ? { fileName: dateBatch.sourceFileName, receiptDate: dateBatch.receiptDate, rowCount: dateBatch.rowCount, status: dateBatch.status } : undefined} companyId={companyId} refreshKey={historyKey} restore={{ disabled: busy || (purchaseDateEnabled ? dateBatch?.status !== "completed" : !(batchEnabled && latestBatch && !latestBatch.restoredAt) && !undo), label: purchaseDateEnabled && dateBatch?.status === "completed" ? "직전 날짜별 매입가·판매가 함께 되돌리기" : batchEnabled && latestBatch && !latestBatch.restoredAt ? "직전 매입가·판매가 함께 되돌리기" : "직전 저장 되돌리기 (현재 화면)", run: () => void restore() }} /> : tab === "신규" && unmatched.length ? <section className="maju-section-card min-w-0 space-y-3 p-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">단위 빈 칸 {missingTotal}개</span> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
-          <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위는 꼭 채우고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
+          <h2 className="font-semibold">새 상품 {unmatched.length}개{missingTotal ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-black text-amber-800">필수값 미입력 {missingTotal}개</span> : null}{suspectCount ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-black text-rose-700">중복 의심 {suspectCount}개</span> : null}</h2>
+          <p className="text-sm text-slate-600">상품명 옆에 섞인 규격·단위를 나눠 두었습니다. 단위와 과세 구분은 꼭 고르고(규격은 비워도 됨), <b>중복 의심</b>은 기존 상품에 연결하거나 &lsquo;새 상품&rsquo;으로 확정하세요.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
 
@@ -1093,7 +1096,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="새 상품 필터">
-        {([["all", `전체 ${unmatched.length}`], ["unit", `단위 빈 칸 ${missingTotal}`], ["suspect", `중복 의심 ${suspectCount}`]] as const).map(([kind, label]) => (
+        {([["all", `전체 ${unmatched.length}`], ["unit", `필수값 미입력 ${missingTotal}`], ["suspect", `중복 의심 ${suspectCount}`]] as const).map(([kind, label]) => (
           <button aria-selected={newFilter === kind} className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-inset ${newFilter === kind ? (kind === "unit" ? "bg-amber-500 text-white ring-amber-500" : kind === "suspect" ? "bg-rose-600 text-white ring-rose-600" : "bg-teal-700 text-white ring-teal-700") : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"}`} key={kind} onClick={() => openFilter(kind)} role="tab" type="button">{label}</button>
         ))}
         {newFilter === "unit" && filterIds ? <span className="text-xs font-semibold text-slate-500">엔터를 누르면 다음 빈 칸으로 이동합니다 · {unmatched.filter((row) => filterIds.includes(row.rowId) && !missingFields(row).length).length}/{filterIds.length} 완료{missingTotal ? "" : " · 모두 채웠습니다. 위 ③ 저장을 누르세요"}</span> : null}
