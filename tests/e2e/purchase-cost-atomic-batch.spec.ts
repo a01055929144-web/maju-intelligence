@@ -191,7 +191,7 @@ for (const width of [1440, 390]) test(`supplier links reveal current-price choic
   await choice.selectOption("3");
   await align.click();
 
-  await page.getByRole("button", { name: "③ 저장 (1건)", exact: true }).click();
+  await page.getByRole("button", { name: "③ 저장 (2건)", exact: true }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await expect(review).toContainText("2026-11-19 · 2행");
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
