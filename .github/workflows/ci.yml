@@ -908,6 +908,17 @@ jobs:
           psql --dbname=readonly_storefront_browser_test --set=ON_ERROR_STOP=1 --file=tests/sql/readonly-storefront-browser.pg17.fixture.sql
           node scripts/test-pricing-p2-browser.mjs
 
+      - name: CX-121 real API handler and isolated PG17 connection
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx121_api_connection_test
+          CX121_API_PG17: "true"
+        run: |
+          createdb cx121_api_connection_test
+          npx vitest run tests/pricing-document-extension-api-pg17.test.ts --maxWorkers=1
+
       - name: Upload responsive layout report
         if: always()
         uses: actions/upload-artifact@v4
