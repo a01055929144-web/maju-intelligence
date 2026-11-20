@@ -520,7 +520,7 @@ for (const committed of [false, true]) test(`refresh recovers the exact persiste
   await expect.poll(() => page.evaluate(() => localStorage.getItem("maju:purchase-date-pending:00000000-0000-4000-8000-000000000001"))).toBeNull();
 });
 
-for (const width of [1280, 390]) test(`Stage A mixed file preserves all transactions through retry, history and reload restore at ${width}px`, async ({ page }) => {
+for (const width of [1440, 390]) test(`Stage A mixed file preserves all transactions through retry, history and reload restore at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   const { dateWrites, writes, receipts, registration, pricingCommands } = await purchaseUpload(page, { mixed: true, failFirstSave: true });
   const csv = ["ERP 코드,품목,규격,단위,구매일,단가,수량,공급가액,부가세,합계",
@@ -531,6 +531,11 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
     "ERP-4,합성 상품 4,1kg,봉,2026-11-07,130,5,650,65,715",
     "ERP-5,합성 상품 5,750ml,병,2026-11-07,90,6,540,54,594"].join("\n");
   await selectPurchaseCsv(page, csv);
+  const stageBar = page.getByRole("button", { name: "① 엑셀 올리기", exact: true }).locator("xpath=ancestor::header[1]");
+  await expect(stageBar).toHaveCSS("position", "sticky");
+  await expect(stageBar.getByRole("button", { name: "① 엑셀 올리기", exact: true })).toBeVisible();
+  await expect(stageBar.getByRole("button", { name: /^② 열 정렬/ })).toBeVisible();
+  await expect(stageBar.getByRole("button", { name: /^③ 저장/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^② 열 정렬/ })).toBeDisabled();
   await page.getByLabel("합성 상품 4 2026-11-07 적용 단가", { exact: true }).selectOption("hold");
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
@@ -563,6 +568,7 @@ for (const width of [1280, 390]) test(`Stage A mixed file preserves all transact
   await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
   await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
   await expect(page.getByRole("region", { name: "매입가 저장 결과" })).toContainText("현재 매입가 변경 4품목 / 이력만 1품목");
+  await expect(nav.getByRole("button", { name: "매입 이력", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect(dateWrites).toHaveLength(2); expect(dateWrites[1]).toEqual(dateWrites[0]);
   const rows = dateWrites[1].rows;
   expect(rows.map(row => [row.selectedSourceRowNumber, row.cost, row.quantity, row.supplyAmount, row.vatAmount, row.totalAmount])).toEqual([
