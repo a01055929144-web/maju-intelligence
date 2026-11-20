@@ -33,6 +33,17 @@ export function documentRequestError(error: unknown, write: boolean) {
     "Invalid document fields": [400, "invalid_document_fields", "문서 품목 수와 표시 설정을 확인한 뒤 다시 저장해 주세요."],
     "Invalid header": [400, "invalid_document_header", "문서 제목·회사명·연락처·비고의 입력 길이를 확인해 주세요."],
     "Invalid expiry": [400, "invalid_document_expiry", "문서 유효기간을 확인한 뒤 다시 저장해 주세요."],
+    "extension_stale": [409, "extension_conflict", "다른 화면에서 문서가 변경됐습니다. 문서를 다시 열고 연장을 처음부터 확인해 주세요."],
+    "extension_state_stale": [409, "extension_conflict", "연장 기준이 변경됐습니다. 문서를 다시 열고 연장을 처음부터 확인해 주세요."],
+    "extension_review_stale": [409, "extension_review_stale", "게시 전 확인 결과가 오래됐습니다. 최신 가격과 문서를 다시 확인해 주세요."],
+    "extension_idempotency_conflict": [409, "extension_idempotency_conflict", "같은 재시도 키에 다른 게시 내용이 있습니다. 기존 게시 결과를 확인해 주세요."],
+    "extension_not_found": [404, "document_not_found", "문서를 찾을 수 없거나 접근할 수 없습니다. 문서 목록을 확인해 주세요."],
+    "extension_expiry_invalid": [400, "extension_expiry_invalid", "새 유효기간은 최신 게시본보다 뒤로 선택해 주세요."],
+    "extension_customer_required": [400, "extension_customer_required", "받는 매출처가 연결된 문서만 약속가를 연장할 수 있습니다."],
+    "extension_product_unavailable": [400, "product_unavailable", "연장 문서에 삭제되었거나 비활성인 상품이 있습니다."],
+    "extension_promotion_unavailable": [400, "promotion_unavailable", "끝났거나 품절된 행사가 있습니다. 해당 행사를 빼고 다시 확인해 주세요."],
+    "extension_price_unavailable": [400, "extension_price_unavailable", "최신 단가를 확인할 수 없는 품목이 있습니다. 시가·카탈로그·기본가를 확인해 주세요."],
+    "extension_invalid": [400, "extension_invalid", "연장 요청 내용을 확인해 주세요."],
   };
   const match = Object.hasOwn(known, reason) ? known[reason] : undefined;
   const [status, code, message]: [number, string, string] = match ?? [write ? 503 : 500, "document_storage_failed",

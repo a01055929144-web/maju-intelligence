@@ -13,6 +13,7 @@ import { resolveLeadContactActorName } from "../../../domains/lead/lead-action";
 import { documentSharingEnabled } from "../../../lib/pricing/document-share-feature";
 import { documentRequestError } from "../../../lib/pricing/document-request-error";
 import { documentVatEnabled } from "../../../lib/pricing/document-vat-feature";
+import { documentExtensionServerEnabled } from "../../../lib/pricing/document-extension-server";
 export const dynamic = "force-dynamic";
 const documents = pricingDocuments(pricingDocumentsRepository);
 async function handle(request: NextRequest, write: boolean) {
@@ -96,6 +97,9 @@ async function handle(request: NextRequest, write: boolean) {
         { status: 400 },
       );
     const input: unknown = write ? await request.json() : null;
+    if (write && input && typeof input === "object" && "action" in input && typeof input.action === "string" &&
+      input.action.startsWith("extension-") && !documentExtensionServerEnabled(auth.companyId))
+      return NextResponse.json({ message: "문서 연장 기능을 사용할 수 없습니다." }, { status: 404 });
     recordSend = Boolean(input && typeof input === "object" && "action" in input && input.action === "record-send");
     sharingAction = Boolean(input && typeof input === "object" && "action" in input &&
       (input.action === "prepare-share" || input.action === "revoke-share" || (recordSend && "shareLinkId" in input)));
