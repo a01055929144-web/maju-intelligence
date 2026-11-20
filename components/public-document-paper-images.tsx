@@ -41,9 +41,16 @@ export function PublicDocumentPaperImages({ document }: { document: DocumentOutp
           start={pages.slice(0, index).reduce((count, prior) => count + prior.lines.length, 0)} />
       </div>)}
     </div>
-    {images.length ? images.map((src, index) => <Image unoptimized key={index}
-      src={src} alt={`A4 문서 ${index + 1}쪽`} width={1588} height={2246} className="h-auto w-full border bg-white" />) :
-      failed ? <div role="status">문서 이미지를 만들지 못했습니다. <Button variant="outline" onClick={() => { setFailed(false); setRetry(value => value + 1); }}>다시 시도</Button></div>
+    {images.length ? images.map((src, index) => <div key={index} className="space-y-2">
+      {!document.expired && <Button type="button" variant="outline" className="min-h-[44px]" onClick={() => {
+        const link = window.document.createElement("a");
+        link.href = src;
+        link.download = `document-v${document.version}-${index + 1}.png`;
+        link.click();
+      }}>{index + 1}쪽 PNG 저장</Button>}
+      <Image unoptimized src={src} alt={`A4 문서 ${index + 1}쪽`} width={1588} height={2246} className="h-auto w-full border bg-white" />
+    </div>) :
+      failed ? <div role="status">문서 이미지를 만들지 못했습니다. <Button className="min-h-[44px]" variant="outline" onClick={() => { setFailed(false); setRetry(value => value + 1); }}>다시 시도</Button></div>
         : <p role="status">A4 문서 이미지를 만들고 있습니다.</p>}
   </section>;
 }

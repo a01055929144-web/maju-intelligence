@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
@@ -81,6 +82,20 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
   await tabs.getByRole("button", { name: "문서 이미지" }).click();
   const image = page.getByRole("img", { name: "A4 문서 1쪽" });
   await expect(image).toHaveAttribute("src", /^data:image\/png;base64,/, { timeout: 25000 });
+  const saveImage = page.getByRole("button", { name: "1쪽 PNG 저장", exact: true });
+  await expect(saveImage).toBeVisible();
+  expect((await saveImage.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const imageSource = await image.getAttribute("src");
+  const pendingDownload = page.waitForEvent("download");
+  await saveImage.click();
+  const downloaded = await pendingDownload;
+  expect(downloaded.suggestedFilename()).toBe("document-v1-1.png");
+  const artifactDir = "test-results/readonly-pg17/cx70-download";
+  await mkdir(artifactDir, { recursive: true });
+  const filePath = `${artifactDir}/document-${width}.png`;
+  await downloaded.saveAs(filePath);
+  expect(await readFile(filePath)).toEqual(Buffer.from(imageSource!.split(",")[1], "base64"));
+  await page.screenshot({ path: `${artifactDir}/screen-${width}.png`, fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   await page.route("**/api/pricing-documents/shopping-catalog", route => {
     catalogReads++;
@@ -128,6 +143,10 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
   await expect(notice.getByRole("link", { name: "받은 단가표로 돌아가기" })).toHaveAttribute("href", "/store?view=home");
   await expect(page.getByRole("button", { name: "주문 기간 종료" })).toBeDisabled();
   await expect(page.getByText("29,700원", { exact: true })).toHaveCount(0);
+  await tabs.getByRole("button", { name: "문서 이미지", exact: true }).click();
+  await expect(image).toHaveAttribute("src", /^data:image\/png;base64,/, { timeout: 25000 });
+  await expect(page.getByRole("button", { name: /쪽 PNG 저장/ })).toHaveCount(0);
+  await writeFile(`${artifactDir}/expired-${width}.png`, Buffer.from((await image.getAttribute("src"))!.split(",")[1], "base64"));
 
   enabled = false;
   expired = false;
@@ -135,4 +154,32 @@ for (const width of [1440, 390]) test(`CX-70 switches public document views at $
   await page.reload();
   await expect(page.getByRole("button", { name: "이 단가로 주문 시작", exact: true })).toBeVisible();
   await expect(tabs).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /쪽 PNG 저장/ })).toHaveCount(0);
+});
+
+test("CX-70 saves the selected page from a multi-page public A4 document", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/pricing-documents/public", route => route.fulfill({ json: {
+    expiresAt: "2099-12-31T15:00:00Z",
+    document: { title: "합성 여러 쪽 단가표", companyName: "합성 유통", kind: "sheet", layout: "table", theme: "blue",
+      contact: "", recipient: "", footer: "", expired: false, version: 2, validUntil: "2099-12-31", publishedAt: "2026-11-20T00:00:00Z",
+      display: { columns: 1, info: [], productWidth: 65, promoLayout: "table", priceIncludesTax: false },
+      lines: Array.from({ length: 80 }, (_, index) => ({ displayName: "합성 품목 " + (index + 1), spec: "1kg", unit: "봉", brand: "", taxType: "exempt", price: 1000 + index, badge: "" })) },
+    orderEntry: { available: false, shopping: true, itemKeys: [], cartScope: "cx70-multipage" },
+  } }));
+  await page.goto("/pricing-document#cx70-multipage");
+  await page.getByRole("navigation", { name: "공개 문서 보기" }).getByRole("button", { name: "문서 이미지", exact: true }).click();
+  const secondImage = page.getByRole("img", { name: "A4 문서 2쪽", exact: true });
+  await expect(secondImage).toHaveAttribute("src", /^data:image\/png;base64,/, { timeout: 60000 });
+  const source = await secondImage.getAttribute("src");
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "2쪽 PNG 저장", exact: true }).click();
+  const saved = await pending;
+  expect(saved.suggestedFilename()).toBe("document-v2-2.png");
+  await mkdir("test-results/readonly-pg17/cx70-download", { recursive: true });
+  const path = "test-results/readonly-pg17/cx70-download/second-page.png";
+  await saved.saveAs(path);
+  expect(await readFile(path)).toEqual(Buffer.from(source!.split(",")[1], "base64"));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
