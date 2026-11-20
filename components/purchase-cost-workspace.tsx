@@ -14,7 +14,7 @@ import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
 import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, mergePurchaseLinesForCatalog, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
 import { buildPurchaseSheet, catalogTaxEvidence, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
-import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
+import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, holdUnitMismatchedPrices, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
 import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
 import type { PurchaseDateBatch } from "@/lib/pricing/purchase-cost-date";
 import { customerErpCode } from "@/domains/product/customer-erp-code";
@@ -321,6 +321,15 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
   const dateSaveBlocked = requiresDateContract && !purchaseDateEnabled;
   const priceChangeCount = selected.filter(id => candidates[id] && candidates[id].cost !== unique.find(product => product.id === id)?.cost &&
     !historicalPrice(id)).length;
+  const unitConversionHolds = useMemo(() => {
+    const salesUnits = new Map(unique.map(product => [product.id, product.unit]));
+    return importedLines.filter(line => updateCurrentPrices && line.productId && selected.includes(line.productId) && dateSelectedRows.includes(line.rowNumber) && line.unit.trim() && salesUnits.get(line.productId)?.trim()
+      && line.unit.trim().toLocaleLowerCase("ko") !== salesUnits.get(line.productId)!.trim().toLocaleLowerCase("ko"))
+      .map(line => ({ rowNumber: line.rowNumber, productId: line.productId!, name: line.rawName, purchaseUnit: line.unit, salesUnit: salesUnits.get(line.productId!)! }));
+  }, [dateSelectedRows, importedLines, selected, unique, updateCurrentPrices]);
+  const unitConversionHoldProducts = new Set(unitConversionHolds.map(row => row.productId));
+  const effectivePriceChangeCount = selected.filter(id => !unitConversionHoldProducts.has(id) && candidates[id]
+    && candidates[id].cost !== unique.find(product => product.id === id)?.cost && !historicalPrice(id)).length;
   const undatedTargets = useMemo(() => {
     const latest = new Map<string, string>();
     importedLines.forEach(line => { if (line.productId && (line.purchaseDate || "") > (latest.get(line.productId) || "")) latest.set(line.productId, line.purchaseDate || ""); });
@@ -742,7 +751,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
       if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
-      const allRows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
+      const salesUnits = new Map(unique.map(product => [product.id, product.unit]));
+      const allRows = holdUnitMismatchedPrices(buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]), salesUnits).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;
       });
@@ -1035,7 +1045,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       </>}
     </section> : null}
     {importedLines.length ? <section aria-label="저장 전 적용일 확인" className="maju-section-card space-y-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2"><p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {priceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
+      <div className="flex flex-wrap items-start justify-between gap-2"><p>{historyOnlyDefaultEnabled ? <>매입 이력 {importedLines.length}행 · 현재 가격 변경 {effectivePriceChangeCount}품목{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}.</> : <>원본 거래 {importedLines.length}행 · 가격 반영 보류 {heldCount + unitConversionHolds.length}그룹. 원본 거래는 선택·보류와 별도로 저장합니다.</>} 완료 전에는 원본 파일을 보관해 주세요.</p>
         <button className="maju-button-secondary min-h-[44px]" onClick={resetCurrentImport} type="button">이번 업로드 초기화</button>
       </div>
       {importedLines.some(line => !line.unit.trim()) ? <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -1047,6 +1057,10 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         </div>
       </div> : null}
       {unitRelinkBlockedRows.length ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">단위 변경으로 상품 연결을 다시 확인해야 하는 원본 행: {unitRelinkBlockedRows.join(", ")}행. 잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다. 단위 열을 채운 원본 파일을 다시 올려 열 정렬해 주세요.</p> : null}
+      {unitConversionHolds.length ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+        <p className="font-semibold">단위 환산 검증 대기 {unitConversionHolds.length}행은 원본 이력만 저장하고 현재 매입가는 바꾸지 않습니다.</p>
+        <ul>{unitConversionHolds.map(row => <li key={row.rowNumber}>원본 {row.rowNumber}행 · {row.name} · 매입 {row.purchaseUnit} → 판매 {row.salesUnit} · 환산 검증 대기(현재가 보류)</li>)}</ul>
+      </div> : null}
       <CommonDataTable<DatedPurchaseLine> selectable={false} settingsKey={`purchase-save-review:${companyId}`} filename="매입가_저장전확인.csv" rowKey={line => String(line.rowNumber)} rows={importedLines}
         columns={[
           { key: "pick", label: "선택", width: 56, value: line => importUnitPick.includes(line.rowNumber) ? "선택" : "", render: line => <input aria-label={`${line.rowNumber}행 단위 입력 선택`} checked={importUnitPick.includes(line.rowNumber)} className="h-5 w-5" onChange={event => setImportUnitPick(current => event.target.checked ? Array.from(new Set([...current, line.rowNumber])) : current.filter(rowNumber => rowNumber !== line.rowNumber))} type="checkbox" /> },
@@ -1065,7 +1079,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       {saveReview ? <>
         {usesDateBatch && reviewDates.length ? <p>파일에 있는 날짜({reviewDates.length === 1 ? reviewDates[0][0] : `${reviewDates[0][0]} ~ ${reviewDates[reviewDates.length - 1][0]}`})에 예전에 올린 매입 기록이 있으면 이 파일을 최신본으로 보고 바꿔 넣습니다. 날짜 없이 업로드한 날로 저장된 기록은 그대로 둡니다. 저장 뒤 [되돌리기]로 원래대로 돌릴 수 있습니다.</p> : null}
         {usesDateBatch && importedLines.some(line => !line.productId) ? <p>연결 미완료 원문 {importedLines.filter(line => !line.productId).length}행은 먼저 상품 연결을 확정합니다. 가격 반영을 보류한 품목도 원문 연결에 필요한 새 미가격 상품이 등록될 수 있습니다.</p> : null}
-        <h3 className="font-semibold">최종 저장 확인</h3><p>{historyOnlyDefaultEnabled ? <>현재 가격 변경 {priceChangeCount}건 · 매입 이력 {importedLines.length}행{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}. 적용 날짜를 확인해 주세요. 새 상품 {unmatched.length}개가 상품관리에 등록됩니다.</> : <>가격 변경 {priceChangeCount}건 · 새 상품 {unmatched.length}건 · 원본 거래 {importedLines.length}행의 적용 날짜를 확인해 주세요. 새 상품 {unmatched.length}개가 상품관리에 등록됩니다.</>}</p>
+        <h3 className="font-semibold">최종 저장 확인</h3><p>{historyOnlyDefaultEnabled ? <>현재 가격 변경 {effectivePriceChangeCount}건 · 매입 이력 {importedLines.length}행{excludedImportRows ? ` · 연결되지 않은 원문 ${excludedImportRows}행 제외` : ""}. 적용 날짜를 확인해 주세요. 새 상품 {unmatched.length}개가 상품관리에 등록됩니다.</> : <>가격 변경 {effectivePriceChangeCount}건 · 새 상품 {unmatched.length}건 · 원본 거래 {importedLines.length}행의 적용 날짜를 확인해 주세요. 새 상품 {unmatched.length}개가 상품관리에 등록됩니다.</>}</p>
         {usesDateBatch && undatedTargets.length ? <div>
           <p>기준일 미확정 기존가 {undatedTargets.length}품목 · 이전 가격과 선택 날짜를 확인해 주세요.</p>
           <CommonDataTable selectable={false} rows={undatedTargets} columns={undatedColumns} rowKey={row => row.productId} settingsKey={`purchase-date-undated-confirm:${companyId}`} emptyMessage="확인할 기존가가 없습니다." />

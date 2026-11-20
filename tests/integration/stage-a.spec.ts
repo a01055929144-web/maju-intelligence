@@ -265,7 +265,7 @@ for (const width of [1280,390]) test(`history-only default retries, reloads and 
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
-test('real dated multipack registration stays unpriced until conversion is confirmed', async ({page})=>{
+test('real dated multipack receipt saves while current price stays held until conversion is confirmed', async ({page})=>{
   db('seed',0);
   expect((await page.request.post('/api/customer/login',{data:{email:'ci-owner@example.test',password:process.env.STAGE_A_OWNER_PASSWORD!}})).status()).toBe(200);
   const preview=buildCatalogPreview([{상품명:'검증 다입수 제트',규격:'100g*10EA',단위:'BOX',매입가:100}],{productName:'상품명',spec:'규격',unit:'단위',cost:'매입가'},'합성 매입처');
@@ -281,7 +281,7 @@ test('real dated multipack registration stays unpriced until conversion is confi
     selectedSourceRowNumber:2,priceSelected:true,priceHeld:false,lineKey:'multipack',productName:'검증 다입수 제트',spec:'100g*10EA',unit:'BOX',supplierName:'합성 매입처',erpCode:'',
     unitPrice:100,priceIncludesVat:false,rawValues:['synthetic']
   }]}});
-  expect(result.status()).toBe(409); expect((await result.json()).message).toContain('환산을 먼저 확인');
+  expect(result.status()).toBe(200);
   const current=state(); expect(current.products_count).toBe(1); expect(current.unpriced).toBe(1);
-  expect(current.items[0].sales_unit).toBeNull(); expect(current.receipts).toBe(0); expect(current.batches).toBe(0);
+  expect(current.items[0].sales_unit).toBeNull(); expect(current.receipts).toBe(1); expect(current.batches).toBe(1);
 });
