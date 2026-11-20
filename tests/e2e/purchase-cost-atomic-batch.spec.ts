@@ -241,6 +241,9 @@ for (const width of [1440, 390]) test(`ERP 353-row headers preserve dates and su
   const align = page.getByRole("button", { name: /^② 열 정렬/ });
   await expect(align).toBeEnabled();
   await align.click();
+  const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
+  await review.getByLabel("3행 단위", { exact: true }).fill("BOX");
+  await expect(review.getByRole("alert")).toHaveCount(0);
   await expect(page.getByText(/서로 다른 원문이 같은 상품·적용일로 연결됩니다/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "③ 저장 (350건)", exact: true })).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -805,7 +808,7 @@ for (const mode of ["이력만 저장", "현재 매입가 변경"] as const) tes
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("현재가 충돌 선택 뒤 단위를 바꾸면 이전 선택으로 저장하지 않는다 at 390px", async ({ page }) => {
+test("현재가 충돌 선택 뒤 같은 상품으로 다시 매칭되는 단위 변경은 저장한다 at 390px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   const { dateWrites } = await purchaseUpload(page, { historyOnlyDefault: true });
   await selectPurchaseCsv(page, "ERP 코드,품목,규격,단위,구매일,단가\nERP-1,합성 상품,1kg,봉,2026-11-01,150\nERP-1,합성 상품,1kg,봉,2026-11-01,220\n");
@@ -814,9 +817,14 @@ test("현재가 충돌 선택 뒤 단위를 바꾸면 이전 선택으로 저장
   await page.getByRole("button", { name: /^② 열 정렬/ }).click();
   const review = page.getByRole("region", { name: "저장 전 적용일 확인" });
   await review.getByLabel("2행 단위", { exact: true }).fill("BOX");
-  await expect(review.getByRole("alert")).toContainText("잘못된 상품에 가격이 반영되지 않도록 저장을 막았습니다");
-  await expect(page.getByRole("button", { name: /^③ 저장/ })).toBeDisabled();
-  expect(dateWrites).toEqual([]);
+  await expect(review.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("button", { name: /^③ 저장/ }).click();
+  await review.getByRole("checkbox", { name: /확인했습니다/ }).check();
+  await review.getByRole("button", { name: "확인한 날짜로 저장", exact: true }).click();
+  await expect.poll(() => dateWrites.length).toBe(1);
+  expect(dateWrites[0].rows).toHaveLength(2);
+  expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 2)).toMatchObject({ unit: "BOX", priceSelected: false, unitPrice: 150 });
+  expect(dateWrites[0].rows.find(row => row.selectedSourceRowNumber === 3)).toMatchObject({ priceSelected: true, unitPrice: 220 });
 });
 
 test("이번 업로드 초기화 뒤 같은 파일을 다시 골라도 단위 선택이 남지 않는다 at 390px", async ({ page }) => {

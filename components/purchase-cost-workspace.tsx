@@ -637,7 +637,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const matched = matchByAlias(aliasKey(line.rawName, line.spec, unit), line.supplier, products)
         || matchCostImportRow(edited, products)
         || matchCostImportRow({ ...edited, supplier: "" }, unique);
-      const identityChanged = matched?.id !== line.productId || (fileHadConflicts && updateCurrentPrices);
+      const identityChanged = matched?.id !== line.productId;
       if (identityChanged) blocked.add(line.rowNumber); else blocked.delete(line.rowNumber);
       return { ...edited, productId: matched?.id, supplierProductId: matched?.supplierProductId };
     });
