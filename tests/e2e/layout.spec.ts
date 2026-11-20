@@ -77,7 +77,7 @@ for (const width of [1440, 390]) {
       const priceState = { groups: [], categories: [], items: [product], defaultMargin: 20, defaultRounding: 10, pendingCount: 0, total: 1, page: 1, pageSize: 50, lastBatch: null, restored: false };
       const catalog = { id: "60000000-0000-4000-8000-000000000001", name: "양식", margin: 32, rounding: 10, categories: [], storeCount: 0 };
       await page.route("**/api/price-sheets?*", (route) => route.fulfill({ json: priceState }));
-      await page.route("**/api/margin-templates?*", (route) => route.fulfill({ json: { templates: [catalog] } }));
+      await page.route("**/api/margin-templates?*", (route) => route.fulfill({ json: { defaultStoreCount: 7, templates: [catalog] } }));
       const response = await page.goto("/revenue/pricing/catalog", { waitUntil: "domcontentloaded" });
       expect(response?.ok()).toBeTruthy();
       await expect(page.getByRole("tab", { name: "판매가" })).toHaveAttribute("aria-selected", "true");
@@ -89,6 +89,11 @@ for (const width of [1440, 390]) {
       expect(await collectLayoutProblems(page)).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath(`pricing-catalog-tabs-${width}.png`), fullPage: false });
       await page.getByRole("tab", { name: "카탈로그" }).click();
+      const catalogCards = page.getByRole("group", { name: "카탈로그 선택" });
+      await expect(catalogCards.getByRole("button").first()).toContainText("기본 카탈로그");
+      await expect(catalogCards.getByText("매장 7곳", { exact: false })).toBeVisible();
+      await expect(catalogCards.getByText("새 매장은 항상 기본 카탈로그로 시작합니다.", { exact: true })).toBeVisible();
+      expect(await collectLayoutProblems(page)).toEqual([]);
       await page.getByRole("button", { name: "판매가 보기" }).click();
       await expect(page).toHaveURL(new RegExp(`view=prices.*catalog=${catalog.id}`));
       await expect(page.getByRole("combobox", { name: "카탈로그로 보기" })).toHaveValue(catalog.id);

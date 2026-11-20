@@ -13,12 +13,16 @@ async function list(companyId: string) {
   const [templates, categories, customers] = await Promise.all([
     supabaseRequest<Row[]>(`margin_templates?select=id,name,margin_bp,rounding,sort_order&company_id=eq.${companyId}&archived_at=is.null&order=sort_order,name`),
     supabaseRequest<CatRow[]>(`margin_template_categories?select=template_id,category,margin_bp&company_id=eq.${companyId}`),
-    // CC-32b: 카드에 "매장 N". 한 회사 매장이 2만 곳을 넘으면 앞쪽만 센다(shortcut).
-    supabaseRequest<Array<{ margin_template_id: string }>>(`normalized_customers?select=margin_template_id&company_id=eq.${companyId}&margin_template_id=not.is.null&limit=20000`).catch(() => []),
+    // CC-32b/CX-125: 카드에 "매장 N". 기본 카탈로그는 별도 지정이 없는 매장을 센다.
+    supabaseRequest<Array<{ margin_template_id: string | null }>>(`normalized_customers?select=margin_template_id&company_id=eq.${companyId}&limit=20000`).catch(() => []),
   ]);
   const storeCount = new Map<string, number>();
-  for (const c of customers) storeCount.set(c.margin_template_id, (storeCount.get(c.margin_template_id) ?? 0) + 1);
-  return { templates: templates.map((t) => ({ id: t.id, storeCount: storeCount.get(t.id) ?? 0, name: t.name, margin: t.margin_bp / 100, rounding: t.rounding, categories: categories.filter((c) => c.template_id === t.id).map((c) => ({ category: c.category, margin: c.margin_bp / 100 })) })) };
+  let defaultStoreCount = 0;
+  for (const c of customers) {
+    if (!c.margin_template_id) defaultStoreCount += 1;
+    else storeCount.set(c.margin_template_id, (storeCount.get(c.margin_template_id) ?? 0) + 1);
+  }
+  return { defaultStoreCount, templates: templates.map((t) => ({ id: t.id, storeCount: storeCount.get(t.id) ?? 0, name: t.name, margin: t.margin_bp / 100, rounding: t.rounding, categories: categories.filter((c) => c.template_id === t.id).map((c) => ({ category: c.category, margin: c.margin_bp / 100 })) })) };
 }
 
 export async function GET(request: NextRequest) {
