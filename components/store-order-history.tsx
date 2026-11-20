@@ -4,6 +4,8 @@ import { storeOrderStatusLabel, type StoreOrderStatus } from "@/domains/order/st
 import type { StorePortalOrder } from "@/lib/store/07-store-portal";
 import { StoreOrderReceiptAction } from "./store-order-receipt-action";
 import { OrderDeliveryPhotos } from "./order-delivery-photos";
+import type { StoreSettlementAccount } from "@/lib/store/07-store-settlement-account";
+import { StoreSettlementAccountCard } from "./store-settlement-account-card";
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium" });
 const dateTimeFormat = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" });
@@ -14,9 +16,10 @@ const steps: Array<{ status: StoreOrderStatus; label: string }> = [
   { status: "delivered", label: "배송 완료" },
 ];
 
-export function StoreOrderHistory({ companyId, deliveryPhotosEnabled = false, orders, reorderHref, storeAccountId }: { companyId: string; deliveryPhotosEnabled?: boolean; orders: StorePortalOrder[]; reorderHref?: string; storeAccountId: string }) {
+export function StoreOrderHistory({ companyId, deliveryPhotosEnabled = false, orders, reorderHref, settlementAccount, storeAccountId }: { companyId: string; deliveryPhotosEnabled?: boolean; orders: StorePortalOrder[]; reorderHref?: string; settlementAccount?: StoreSettlementAccount; storeAccountId: string }) {
   return (
     <div className="space-y-3">
+      <StoreSettlementAccountCard account={settlementAccount} compact />
       {reorderHref && (
         <Link href={reorderHref} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-medium">
           주문 링크에서 다시 담기

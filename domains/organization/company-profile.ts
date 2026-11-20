@@ -80,7 +80,9 @@ export const COMPANY_PROFILE_SECTIONS: readonly CompanyProfileSection[] = [
       { key: "payment_comment", label: "결제 코멘트", type: "textarea" },
       { key: "settlement_bank", label: "입금 은행", type: "text", locked: true },
       { key: "settlement_account_number", label: "입금 계좌번호", type: "text", locked: true },
-      { key: "settlement_account_holder", label: "예금주", type: "text", locked: true }
+      { key: "settlement_account_holder", label: "예금주", type: "text", locked: true },
+      { key: "show_settlement_account_to_stores", label: "매장에 계좌 보이기", type: "boolean", locked: true,
+        hint: "켜면 로그인한 연결 매장에만 입금 계좌가 보입니다." }
     ]
   },
   {

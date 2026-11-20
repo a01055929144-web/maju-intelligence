@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { StorePortalAccount } from "@/lib/store/07-store-portal";
 import { EmptyState } from "./ui/state";
+import { StoreSettlementAccountCard } from "./store-settlement-account-card";
 
 type Document = StorePortalAccount["documents"][number];
 
@@ -57,6 +58,7 @@ export function StoreReceivedDocuments({ account, industry, today, cutoff, cartH
         ) : <EmptyState bare message="받은 단가표가 없습니다." description="유통사 담당자에게 단가표 공유를 요청해 주세요." />}
       </section>
       <aside aria-label="다음 주문" className="space-y-3 rounded-lg border bg-white p-4">
+        <StoreSettlementAccountCard account={account.settlementAccount} compact />
         <div className="space-y-1">
           <h3 className="font-semibold">다음 주문 마감</h3>
           <p className="text-sm tabular-nums text-slate-700">{cutoff ?? "확인 가능한 마감이 없습니다."}</p>

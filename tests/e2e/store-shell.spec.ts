@@ -242,6 +242,17 @@ test("S-4 leaves the mobile member home available", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
 });
 
+for (const width of [1440, 390]) test(`CX-101 shows the account only in signed-in store views at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  await page.goto("/store?fixture=s1-single");
+  await expect(page.getByRole("region", { name: "입금 계좌" })).toBeVisible();
+  await expect(page.getByText("합성은행 · 123-456-7890 · 합성 유통")).toBeVisible();
+  await expect(page.getByRole("button", { name: "계좌 복사" })).toBeVisible();
+  await page.goto("/store?fixture=s6-history&view=history");
+  await expect(page.getByRole("region", { name: "입금 계좌" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+});
+
 for (const width of [1440, 390]) test(`CX-63 searches prices and handles access at ${width}px`, async ({ page }) => {
   page.setDefaultTimeout(15_000);
   await page.setViewportSize({ width, height: 844 });
