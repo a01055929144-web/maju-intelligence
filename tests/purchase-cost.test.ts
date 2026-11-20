@@ -25,6 +25,7 @@ describe("purchase cost import", () => {
     const result = mergePurchaseLinesForCatalog([line(266, 600), line(273, 50000)], linked);
     expect(result.merged).toHaveLength(0);
     expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].supplier).toBe("(유)로즈마리향기");
     expect(result.conflicts[0].candidates.map(item => item.cost)).toEqual([600, 50000]);
   });
   it("matches ERP code first, then exact name and spec", () => {
