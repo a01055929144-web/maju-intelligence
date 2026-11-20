@@ -235,11 +235,11 @@ for (const width of [1440, 390]) test(`ERP 353-row headers preserve dates and su
   await expect(preview).toContainText("행별 적용일");
   await expect(preview.getByRole("cell", { name: "2026-11-18", exact: true }).first()).toBeVisible();
   await expect(preview.getByRole("cell", { name: "2026-11-20", exact: true }).first()).toBeVisible();
-  const align = page.getByRole("button", { name: /^② 열 정렬/ });
-  await align.click();
   const choice = page.getByLabel("합성 상품 2026-11-20 적용 단가", { exact: true });
   await expect(choice).toBeVisible();
   await choice.selectOption("3");
+  const align = page.getByRole("button", { name: /^② 열 정렬/ });
+  await expect(align).toBeEnabled();
   await align.click();
   await expect(page.getByText(/서로 다른 원문이 같은 상품·적용일로 연결됩니다/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "③ 저장 (350건)", exact: true })).toBeEnabled();
