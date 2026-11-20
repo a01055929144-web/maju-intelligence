@@ -204,6 +204,18 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=partner-registration-cx126.pg17.test.sql
 
+      - name: Verify CX-124 new store customer review draft on PostgreSQL 17
+        working-directory: tests/sql
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx124_new_store_customer_review_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=new-store-customer-review-cx124.pg17.test.sql
+
       - name: Verify lead-customer continuity on PostgreSQL 17
         working-directory: docs/sql-drafts
         env:
