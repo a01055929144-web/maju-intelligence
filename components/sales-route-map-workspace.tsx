@@ -987,7 +987,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
     const keyword = query.trim().toLowerCase();
     if (keyword.length < 2) return [];
     return allStores
-      .filter((store) => `${store.name} ${store.region} ${store.address || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(store.phone, keyword))
+      .filter((store) => `${store.name} ${store.region} ${store.address || ""} ${store.deliveryDriver || ""}`.toLowerCase().includes(keyword) || phoneDigitsMatch(store.phone, keyword))
       .slice(0, 30);
   }, [allStores, query]);
   // 신규 리드도 같은 검색창에서 함께 찾을 수 있게 합니다(2026-08-24 피드백). 이미 "제외" 처리한 리드는
@@ -1332,6 +1332,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapFilterChips: Array<{ active: boolean; icon: LucideIcon; key: MapFilterPopKey; label: string; muted?: boolean; title: string }> = [
     { active: Boolean(mapLeadRegionSigungu), icon: MapPin, key: "region", label: summarizeMultiFilter(mapLeadRegionSigungu, "영업 지역"), title: "영업 지역" },
     { active: Boolean(mapLeadIndustryFilter), icon: Utensils, key: "industry", label: summarizeMultiFilter(mapLeadIndustryFilter, "업종"), title: "업종" },
+    { active: gradeFilter !== "all", icon: Star, key: "more", label: gradeFilter === "all" ? "우선순위" : `${gradeFilter}등급`, title: "우선순위 등급" },
     {
       active: LEAD_STORE_AREA_FEATURE_ENABLED && Boolean(mapLeadAreaRange),
       icon: Ruler,
@@ -1398,8 +1399,8 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
       reminderOnly: mapLeadReminderOnly,
       stage: mapLeadStageFilter,
       typeFilter: mapLeadTypeFilter
-    }),
-    [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong]
+    }).filter((lead) => gradeFilter === "all" || lead.grade === gradeFilter),
+    [statusScopedLeadsForMap, mapLeadTypeFilter, mapTargetType, mapLeadIndustryFilter, mapLeadStageFilter, mapLeadAreaRange, mapLeadReminderOnly, mapLeadOpenDateStart, mapLeadOpenDateEnd, mapLeadRegionSigungu, mapLeadRegionDong, gradeFilter]
   );
   // "전체 리드 보기"는 반경 검색 결과와 별개입니다 — 둘 다 켜져 있으면 중복 마커를 피하려고
   // 반경 검색 결과에 이미 있는 id는 걸러냅니다.
@@ -1489,35 +1490,30 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
   const mapRightInsetClass = mapLeftPanelMini ? "lg:right-14" : !mapLeftPanelVisible ? "lg:right-0" : mapPanelMode === "split" ? "lg:right-[250px]" : "lg:right-[320px] xl:right-[360px]";
   // 레이어 바·조건 요약은 지도 칸(패널 사이) 안에 있으므로 패널 폭과 무관하게 지도 칸 기준 왼쪽 12px입니다.
   const mapOverlayLeftClass = "lg:left-3";
-  // 시안 ⑫ 오른쪽 목록 탭(신규 · 영업 · 거래처). 3분할이든 지도+목록이든 같은 탭을 씁니다.
+  const activeExplorerMode: MapPanelMode = mapPanelMode === "driver"
+    ? "driver"
+    : activeRightPanelTab === "stores"
+      ? "customer"
+      : mapLeadTypeFilter === "sales"
+        ? "salesLead"
+        : "newLead";
+  // 담당자·거래처·신규·영업을 어느 목록에서도 같은 탭으로 전환합니다.
   const rightListTabs = (
-    <SplitListTabs
-      active={activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new"}
+    <MapExplorerTabs
+      active={activeExplorerMode}
       counts={{
         customers: allStores.length,
+        drivers: deliveryVehicles.filter((vehicle) => !vehicle.isUnassigned).length,
         newLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "new").length,
         salesLeads: statusScopedLeadsForMap.filter((lead) => getPermitLeadType(lead) === "sales").length
       }}
-      leadsLoading={allLeadsLoadState === "loading" || allLeadsLoadState === "idle"}
       onSelect={(tab) => {
-        // 이미 선택된 탭을 다시 누르면 오른쪽 목록 패널을 접는다(패널의 접기 버튼과 같은 동작).
-        const activeTab = activeRightPanelTab === "stores" ? "customers" : mapLeadTypeFilter === "sales" ? "sales" : "new";
+        const activeTab = activeExplorerMode;
         if (tab === activeTab && !rightCollapsed) {
           setMapPanelMode("map");
           return;
         }
-        if (mapPanelMode !== "split") {
-          setMapPanelMode(tab === "customers" ? "customer" : tab === "sales" ? "salesLead" : "newLead");
-          return;
-        }
-        if (tab === "customers") {
-          setRightPanelTab("stores");
-          return;
-        }
-        setRightPanelTab("leads");
-        resetLeadView();
-        setMapLeadTypeFilter(tab === "sales" ? "sales" : "new");
-        setMapLeadsVisible(true);
+        setMapPanelMode(tab);
       }}
     />
   );
@@ -2542,7 +2538,7 @@ export function SalesRouteMapWorkspace({ canManageStaff = false, churnRiskCompan
             }}
             onChange={(value) => { setQuery(value); setSearchOpen(value.trim().length >= 2); }}
             onClear={closeSearch}
-            placeholder="상호·주소·전화"
+            placeholder="거래처·리드·담당자·주소 검색"
             value={query}
           >
             {showExternalResults && query.trim().length < 2 && recentQueries.length ? (
@@ -3661,10 +3657,10 @@ function MapExplorerTabs({
   readonly onSelect: (mode: MapPanelMode) => void;
 }) {
   const tabs = [
-    { count: counts.drivers, label: "담당자·차량", value: "driver" as const },
-    { count: counts.customers, label: "거래처", value: "customer" as const },
-    { count: counts.newLeads, label: "신규", value: "newLead" as const },
-    { count: counts.salesLeads, label: "영업", value: "salesLead" as const }
+    { count: counts.drivers, label: "담당자", color: "drivers" as const, value: "driver" as const },
+    { count: counts.customers, label: "거래처", color: "customers" as const, value: "customer" as const },
+    { count: counts.newLeads, label: "신규", color: "new" as const, value: "newLead" as const },
+    { count: counts.salesLeads, label: "영업", color: "sales" as const, value: "salesLead" as const }
   ];
   return (
     <nav aria-label="지도 통합 탐색" className="grid shrink-0 grid-cols-4 gap-1 border-b border-slate-200 bg-slate-50 p-1.5">
@@ -3676,48 +3672,11 @@ function MapExplorerTabs({
           }`}
           key={tab.value}
           onClick={() => onSelect(tab.value)}
+          style={active === tab.value ? { color: listTabColor(tab.color) } : undefined}
           type="button"
         >
           <span className="block truncate">{tab.label}</span>
           <span className="mt-0.5 block text-xs font-semibold tabular-nums opacity-70">{tab.count.toLocaleString()}</span>
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-// 시안 ⑫ 3분할 오른쪽 목록 탭: 신규 / 영업 / 거래처 (담당자·차량은 왼쪽 패널 전용).
-function SplitListTabs({
-  active,
-  counts,
-  leadsLoading,
-  onSelect
-}: {
-  readonly active: "new" | "sales" | "customers";
-  readonly counts: { customers: number; newLeads: number; salesLeads: number };
-  readonly leadsLoading: boolean;
-  readonly onSelect: (tab: "new" | "sales" | "customers") => void;
-}) {
-  const tabs = [
-    { count: counts.newLeads, label: "신규", lead: true, value: "new" as const },
-    { count: counts.salesLeads, label: "영업", lead: true, value: "sales" as const },
-    { count: counts.customers, label: "거래처", lead: false, value: "customers" as const }
-  ];
-  return (
-    <nav aria-label="오른쪽 목록" className="flex shrink-0 gap-1 border-b border-slate-200 bg-white px-3 py-2.5">
-      {tabs.map((tab) => (
-        <button
-          aria-current={active === tab.value ? "page" : undefined}
-          className={`h-[30px] min-w-0 whitespace-nowrap rounded-lg px-3 text-[13px] transition ${
-            active === tab.value ? "font-bold text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-          }`}
-          key={tab.value}
-          onClick={() => onSelect(tab.value)}
-          style={active === tab.value ? { backgroundColor: listTabColor(tab.value) } : undefined}
-          type="button"
-        >
-          <span className="whitespace-nowrap">{tab.label}</span>{" "}
-          <span className="tabular-nums">{tab.lead && leadsLoading ? "…" : tab.count.toLocaleString()}</span>
         </button>
       ))}
     </nav>
