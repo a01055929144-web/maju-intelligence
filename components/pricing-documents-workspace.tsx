@@ -44,7 +44,7 @@ import { importDocumentExcelRows, parseDocumentExcelRows } from "@/domains/prici
 import { customerErpCode } from "@/domains/product/customer-erp-code";
 import type { LeadDocumentContext } from "@/application/pricing/document-entry";
 import { PricingLeadDocumentShare } from "./pricing-lead-document-share";
-import { reviewDocumentExtension, publishDocumentExtension, type ExtensionMode, type ExtensionReview } from "@/lib/pricing/document-extension-client";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog, type ExtensionMode, type ExtensionReview } from "@/lib/pricing/document-extension-client";
 import { PricingDocumentExtensionChoice, PricingDocumentExtensionReport } from "./pricing-document-extension";
 import { Dialog } from "./ui/dialog";
 import { useConfirm } from "./ui/confirm-dialog";
@@ -129,9 +129,13 @@ export function PricingDocumentsWorkspace({
   const excelInput = useRef<HTMLInputElement>(null);
   const draggedLine = useRef<number | null>(null);
   const read = useCallback(
-    <T,>(action: string, payload: Record<string, unknown> = {}) =>
-      documentRequest<T>(companyId, extension && action === "catalog" ? "extension-catalog" : action,
-        extension && action === "catalog" ? { ...payload, id: draft?.id, expected: draft?.revision } : payload).then((r) => r.result),
+    <T,>(action: string, payload: Record<string, unknown> = {}) => {
+      if (extension && action === "catalog") {
+        if (!draft) return Promise.reject(new Error("연장할 문서를 다시 선택해 주세요."));
+        return readDocumentExtensionCatalog(companyId, { id: draft.id, expected: draft.revision, mode: extension.mode }, payload).then(result => result as T);
+      }
+      return documentRequest<T>(companyId, action, payload).then(r => r.result);
+    },
     [companyId, extension?.mode, draft?.id, draft?.revision],
   );
   const loadList = useCallback(async () => {
@@ -498,6 +502,7 @@ export function PricingDocumentsWorkspace({
   }
   async function applyMargin(index?: number, only?: Set<string>) {
     if (!draft || !draft.content.lines.length) return;
+    if (extension) throw new Error("연장 중 마진 변경은 아직 지원하지 않습니다. 단가를 직접 수정한 뒤 서버 가격을 다시 확인해 주세요.");
     const ids = Array.from(
       new Set(
         draft.content.lines
@@ -515,14 +520,6 @@ export function PricingDocumentsWorkspace({
         : window.prompt("마진율(매입가 대비) 0~1000%", bulkMargin);
     if (entered === null) return;
     const rate = Number(entered);
-    if (extension) {
-      const response = await documentRequest<DocumentContent>(companyId, "extension-margin", {
-        id: draft.id, expected: draft.revision, content: draft.content, rate, index,
-        ...(only ? { keys: Array.from(only) } : {}),
-      }, true);
-      change(parseDocument(response.result));
-      return;
-    }
     rows(
       draft.content.lines.map((l, i) => {
         if (l.promotionId || (index !== undefined && i !== index) || (only && !only.has(lineKey(l)))) return l;

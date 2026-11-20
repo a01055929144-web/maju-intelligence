@@ -26,15 +26,21 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
     if (action === "list") result = { items: [draft()], total: 1 };
     if (action === "versions") result = [version()];
     if (action === "profile") result = { revision: 0, content: { companyName: "합성 유통", contact: "", footer: "" } };
-    if (action === "catalog" || action === "extension-catalog") result = { items: [1, 2, 3].map(n => ({ ...line(n), id: product(n), name: `합성 품목 ${n}`, cost: 110, price: 130 })), total: 3 };
+    if (action === "catalog") result = { items: [1, 2, 3].map(n => ({ ...line(n), id: product(n), name: `합성 품목 ${n}`, cost: 110, price: 9999 })), total: 3 };
+    if (action === "extension-catalog") {
+      expect(request.method()).toBe("POST");
+      expect(body).toMatchObject({ id, expected: revision, mode });
+      expect(Array.isArray(body.productIds) && body.productIds.length > 0).toBe(true);
+      result = { items: [1, 2, 3].filter(n => body.productIds.includes(product(n))).map(n => ({ ...line(n), id: product(n), name: `합성 품목 ${n}`, source: "base", price: 130 })) };
+    }
     if (action === "extension-review") {
       if (failReview) { failReview = false; return route.fulfill({ status: 503, json: { message: "최신 가격 확인 실패 · 다시 시도해 주세요." } }); }
       const next: DocumentContent = body.stage === "start" ? { ...structuredClone(original), validUntil: body.validUntil,
         lines: original.lines.map(l => ({ ...l, price: mode === "latest" ? 130 : l.price })) } : body.content;
       const old = new Map(original.lines.map(l => [l.productId, l]));
-      result = { documentId: id, revision: body.expected, mode, token: "synthetic-server-bound-quote", content: next,
-        summary: { unchanged: next.lines.filter(l => l.visible).filter(l => l.visible).filter(l => old.get(l.productId)?.price === l.price).length,
-          changed: next.lines.filter(l => old.has(l.productId) && old.get(l.productId)!.price !== l.price).length,
+      result = { documentId: id, revision: body.expected, mode, token: "q".repeat(43), content: { ...next, lines: next.lines.filter(l => l.visible) },
+        summary: { unchanged: next.lines.filter(l => l.visible).filter(l => old.get(l.productId)?.price === l.price).length,
+          changed: next.lines.filter(l => l.visible).filter(l => old.has(l.productId) && old.get(l.productId)!.price !== l.price).length,
           added: next.lines.filter(l => l.visible).filter(l => !old.has(l.productId)).length, removed: original.lines.filter(l => !next.lines.some(n => n.visible && n.productId === l.productId)).length },
         loweredProfitCount: 1, minimumProfitRate: -10,
         lines: next.lines.filter(l => l.visible).map(l => ({ key: `${l.productId}:${l.promotionId}`, name: l.displayName, source: "base", promiseUntil: original.validUntil,
@@ -44,7 +50,8 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
     if (action === "extension-save") { revision++; content = body.content; result = draft(); }
     if (action === "save" || action === "publish") throw new Error("ordinary write bypassed extension server");
     if (action === "extension-publish") {
-      expect(body.token).toBe("synthetic-server-bound-quote");
+      expect(body.token).toBe("q".repeat(43));
+      expect(body.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
       if (!lastPublish) { lastPublish = body; writes++; published = true; } else expect(body).toEqual(lastPublish);
       if (losePublish) { losePublish = false; return route.abort("failed"); }
       result = version();
@@ -85,10 +92,18 @@ for (const width of [1440, 390]) for (const mode of ["keep", "latest"] as const)
   expect(content.lines[0].price).toBe(130);
   expect(content.validUntil).toBe("2099-03-01");
   await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "문서 변경과 가격 확인 결과가 일치하지 않습니다" })).toBeVisible();
+  expect(writes).toBe(0);
+  // The pinned server drops hidden lines during review. Keep the editor content intact and fail closed.
+  await page.getByRole("row").filter({ has: page.getByLabel("품목 1 선택", { exact: true }) }).getByRole("checkbox").last().check();
+  if (width === 390) { await page.getByRole("button", { name: "더보기", exact: true }).click(); await page.getByRole("menuitem", { name: "초안 저장", exact: true }).click(); }
+  else await page.getByRole("button", { name: "초안 저장", exact: true }).click();
+  await expect(page.getByText("초안을 저장했습니다.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "판매가 버전 확정", exact: true }).click();
   const review = page.getByRole("dialog", { name: "연장 게시 확인", exact: true });
-  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 0 · 삭제 1", { exact: true })).toBeVisible();
+  await expect(review.getByText("그대로 0 · 가격 바뀜 1 · 추가 1 · 삭제 1", { exact: true })).toBeVisible();
   await expect(review.getByText(/직접 수정/)).toBeVisible();
-  await expect(review.getByText("가격 출처 기준 판매가 · 기존 약속 종료일 2099-01-01", { exact: true })).toBeVisible();
+  await expect(review.getByText("가격 출처 기준 판매가 · 기존 약속 종료일 2099-01-01", { exact: true }).first()).toBeVisible();
   await expect(review.getByText(/계산가와 차이 -40원/)).toBeVisible();
   await expect(review.getByText(/기준 미만 경고/)).toBeVisible();
   const publish = review.getByRole("button", { name: "새 약속가로 게시", exact: true });

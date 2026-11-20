@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { reviewDocumentExtension, publishDocumentExtension } from "../lib/pricing/document-extension-client";
+import { reviewDocumentExtension, publishDocumentExtension, readDocumentExtensionCatalog } from "../lib/pricing/document-extension-client";
 import { documentExtensionEnabled } from "../lib/pricing/document-extension-feature";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -39,4 +39,24 @@ it("retries a failed extension publication with the identical token, revision an
 it("rejects a publication result for another document", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ result: { documentId: "other", version: 2 } })));
   await expect(publishDocumentExtension("company", { id: "document", expected: 2, mode: "keep", token: "token", idempotencyKey: "same-key" })).rejects.toThrow("게시본");
+});
+
+it("uses lookup IDs only and posts mode and revision to the extension price contract", async () => {
+  const id = "30000000-0000-4000-8000-000000000001";
+  const fetch = vi.fn().mockResolvedValueOnce(Response.json({ result: { items: [{ id, price: 9999, cost: 800 }], total: 1 } }))
+    .mockResolvedValueOnce(Response.json({ result: { items: [{ id, name: "합성", displayName: "합성", brand: "", spec: "1kg", unit: "봉", price: 1200, taxType: "exempt", source: "base" }] } }));
+  vi.stubGlobal("fetch", fetch);
+  const result = await readDocumentExtensionCatalog("company", { id: "document", expected: 2, mode: "latest" }, { search: "합성", page: 1 });
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ action: "extension-catalog", id: "document", expected: 2, mode: "latest", productIds: [id] });
+  expect(fetch.mock.calls[1][1].method).toBe("POST");
+  expect(result.items[0].price).toBe(1200);
+  expect(result.items[0]).not.toHaveProperty("cost");
+});
+
+it("never returns lookup prices when the extension catalog POST fails", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(Response.json({ result: { items: [{ id: "product", price: 9999 }], total: 1 } }))
+    .mockResolvedValueOnce(Response.json({ message: "연장 가격 조회 실패" }, { status: 503 }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(readDocumentExtensionCatalog("company", { id: "document", expected: 2, mode: "keep" }, { search: "합성" })).rejects.toThrow("연장 가격 조회 실패");
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

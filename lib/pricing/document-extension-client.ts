@@ -1,4 +1,4 @@
-import { parseDocument, type DocumentContent, type DocumentVersion } from "@/domains/pricing/document";
+import { parseDocument, type DocumentContent, type DocumentVersion, type CatalogChoice } from "@/domains/pricing/document";
 import { documentRequest } from "./document-client";
 
 export type ExtensionMode = "keep" | "latest";
@@ -44,4 +44,19 @@ export async function publishDocumentExtension(companyId: string, input: {
   if (!result || result.documentId !== input.id || !Number.isSafeInteger(result.version) || result.version < 1)
     throw new Error("연장 게시본을 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.");
   return result;
+}
+
+/** Ordinary catalog is used only to find IDs; all returned prices come from the extension POST. */
+export async function readDocumentExtensionCatalog(companyId: string, scope: { id: string; expected: number; mode: ExtensionMode }, lookup: Record<string, unknown> = {}) {
+  const identified = Array.isArray(lookup.productIds)
+    ? { items: lookup.productIds.map(id => ({ id: String(id) })), total: lookup.productIds.length }
+    : (await documentRequest<{ items: { id: string }[]; total: number }>(companyId, "catalog", lookup)).result;
+  const productIds = identified.items.map(item => item.id);
+  if (!productIds.length) return { items: [], total: identified.total };
+  const { result } = await documentRequest<{ items: (CatalogChoice & { source: string })[] }>(companyId, "extension-catalog", { ...scope, productIds }, true);
+  if (!result || !Array.isArray(result.items) || result.items.some(item => !productIds.includes(item.id) ||
+    !Number.isSafeInteger(item.price) || item.price < 0 || !["catalog", "base"].includes(item.source)))
+    throw new Error("연장할 품목의 서버 가격을 확인하지 못했습니다. 다시 시도해 주세요.");
+  return { items: result.items.map(({ id, name, displayName, brand, spec, unit, price, taxType }) =>
+    ({ id, name, displayName, brand, spec, unit, price, taxType })), total: identified.total };
 }
