@@ -22,6 +22,14 @@ export type DocumentScope = {
 export interface PricingDocumentsRepository {
   request<T>(scope: DocumentScope, action: string, payload: object): Promise<T>;
 }
+function extensionMode(value: unknown) {
+  if (value !== "keep" && value !== "latest") throw new PricingInputError("연장 방법을 확인해 주세요.");
+  return value;
+}
+function extensionToken(value: unknown) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value)) throw new PricingInputError("연장 확인을 다시 진행해 주세요.");
+  return value;
+}
 export function pricingDocuments(repository: PricingDocumentsRepository) {
   return {
     read<T>(scope: DocumentScope, action: string, payload: object) {
@@ -56,6 +64,27 @@ export function pricingDocuments(repository: PricingDocumentsRepository) {
       if (action === "archive") {
         if (!scope.archiveEnabled || expected < 1 || typeof body.archived !== "boolean") throw new PricingInputError("문서 보관을 사용할 수 없습니다.");
         return repository.request<T>(scope, action, { id, expected, archived: body.archived });
+      }
+      if (action === "extension-review") {
+        const mode = extensionMode(body.mode), validUntil = dateField(body.validUntil);
+        if (body.stage !== "start" && body.stage !== "review") throw new PricingInputError("연장 확인 단계를 확인해 주세요.");
+        return repository.request<T>(scope, action, { id, expected, mode, validUntil, stage: body.stage,
+          ...(body.stage === "review" ? { content: parseDocument(body.content) } : {}) });
+      }
+      if (action === "extension-catalog") {
+        const mode = extensionMode(body.mode);
+        if (!Array.isArray(body.productIds) || body.productIds.length < 1 || body.productIds.length > 100 || body.productIds.some(value => !isId(value)))
+          throw new PricingInputError("연장할 품목을 확인해 주세요.");
+        return repository.request<T>(scope, action, { id, expected, mode, productIds: Array.from(new Set(body.productIds)) });
+      }
+      if (action === "extension-save") {
+        const content = parseDocument(body.content), mode = extensionMode(body.mode);
+        if (!scope.manager && content.kind !== "quote") throw new PricingInputError("견적서만 작성할 수 있습니다.");
+        return repository.request<T>(scope, action, { id, expected, mode, content });
+      }
+      if (action === "extension-publish") {
+        if (!isId(body.idempotencyKey)) throw new PricingInputError("게시 재시도 키를 확인해 주세요.");
+        return repository.request<T>(scope, action, { id, expected, mode: extensionMode(body.mode), token: extensionToken(body.token), idempotencyKey: body.idempotencyKey });
       }
       if (action === "save") {
         const content = parseDocument(body.content);

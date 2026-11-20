@@ -11,6 +11,7 @@ import { publicDocumentOrderEntryEnabled, publicDocumentShoppingEnabled, publicD
 import { equalShareHash, issueDocumentShareToken, shareRequesterHash, verifyDocumentShareToken } from "./document-share-token";
 import { industryBasketsEnabled } from "./industry-basket-feature";
 import { documentSharePreview } from "../../domains/pricing/industry-basket";
+import { documentExtensionServerEnabled } from "./document-extension-server";
 
 type ShareRow = {
   id: string; company_id: string; document_id: string; document_version_id: string; lead_id: string | null;
@@ -146,9 +147,9 @@ export async function recordSharedDocumentDelivery(scope: DocumentScope, input: 
     documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
 export async function readPublicDocument(token: string, requester: string) {
-  const { row, output, orderable, items } = await resolvePublicDocument(token, requester);
+  const { row, issuedVersionId, output, orderable, items } = await resolvePublicDocument(token, requester);
   if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
-    `id=eq.${row.send_id}&document_version_id=eq.${row.document_version_id}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
+    `id=eq.${row.send_id}&document_version_id=eq.${issuedVersionId}&lead_id=eq.${row.lead_id}&acceptance_status=eq.sent&viewed_at=is.null`), {
     method: "PATCH", body: JSON.stringify({ viewed_at: new Date().toISOString(), acceptance_status: "viewed" }),
   });
   // A session for a different distributor cannot change this document's signup flow.
@@ -174,7 +175,7 @@ async function resolvePublicDocument(token: string, requester: string) {
   const decoded = verifyDocumentShareToken(token);
   if (!decoded) missing();
   const rows = await supabaseRequest<ShareRow[]>(`pricing_document_share_links?id=eq.${decoded.id}&token_hash=eq.${decoded.hash}&select=${shareFields}&limit=1`);
-  const row = rows[0];
+  let row = rows[0];
   if (!row || !documentSharingEnabled(row.company_id) || row.revoked_at || !equalShareHash(row.token_hash, decoded.hash) ||
     row.token_nonce !== decoded.nonce || !Number.isFinite(Date.parse(row.expires_at))) missing();
   if (Date.parse(row.expires_at) <= Date.now()) {
@@ -183,9 +184,16 @@ async function resolvePublicDocument(token: string, requester: string) {
     missing();
   }
   await limitDocumentShare(row.company_id, requester, "read", row.id);
+  const issuedVersionId = row.document_version_id;
   if (row.lead_id === null) {
     if (!publicDocumentOrderEntryEnabled(row.company_id) || row.send_id) missing();
   } else await assertLead(row.company_id, row.lead_id);
+  if (documentExtensionServerEnabled(row.company_id)) {
+    const currentVersionId = await supabaseRequest<string | null>("rpc/resolve_pricing_document_link_head_v1", {
+      method: "POST", body: JSON.stringify({ p_share_link: row.id }),
+    });
+    if (currentVersionId && isId(currentVersionId)) row = { ...row, document_version_id: currentVersionId };
+  }
   const version = await published(row.company_id, row.document_version_id, row.created_by_key);
   if (version.documentId !== row.document_id) missing();
   const ids = Array.from(new Set(version.content.lines.flatMap(l => l.promotionId ? [l.promotionId] : [])));
@@ -204,7 +212,7 @@ async function resolvePublicDocument(token: string, requester: string) {
         key: createHash("sha256").update(`${row.id}:${line.productId}:${line.promotionId ?? ""}`).digest("hex").slice(0, 32),
         productId: line.productId, promotionId: line.promotionId ?? null,
       } : null) : [];
-  return { row, output, items, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
+  return { row, issuedVersionId, output, items, orderable: version.content.showPrice && !output.expired && output.lines.length > 0 };
 }
 
 /** 07 server-only handoff: caller-supplied company/customer IDs are never used. */
