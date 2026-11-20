@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "crypto";
 import { getSupabaseConfig, supabaseRequest } from "../store";
 import type { DocumentScope, PricingDocumentsRepository } from "../../application/pricing/documents";
 import { withDocumentRecalculations } from "./document-recalculation";
@@ -145,6 +146,37 @@ export const pricingDocumentsRepository: PricingDocumentsRepository = {
       const input = payload as DocumentSendInput;
       if (input.shareLinkId) return recordSharedDocumentDelivery(scope, input) as Promise<T>;
       return recordDocumentSend(scope, input) as Promise<T>;
+    }
+    if (action === "extension-review") {
+      const token = randomBytes(32).toString("base64url"), input = payload as Record<string, unknown>;
+      const result = await supabaseRequest<Record<string, unknown>>("rpc/pricing_document_extension_review_v1", {
+        method: "POST", body: JSON.stringify({ p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager,
+          p_document: input.id, p_expected: input.expected, p_mode: input.mode, p_valid_until: input.validUntil,
+          p_stage: input.stage, p_content: input.content ?? null, p_token_hash: createHash("sha256").update(token).digest("hex") }),
+      });
+      return { ...result, token } as T;
+    }
+    if (action === "extension-catalog") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_catalog_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_product_ids: input.productIds,
+      }) });
+    }
+    if (action === "extension-save") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_save_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_content: input.content,
+      }) });
+    }
+    if (action === "extension-publish") {
+      const input = payload as Record<string, unknown>;
+      return supabaseRequest<T>("rpc/pricing_document_extension_publish_v1", { method: "POST", body: JSON.stringify({
+        p_company: scope.companyId, p_actor: scope.actor, p_manager: scope.manager, p_document: input.id,
+        p_expected: input.expected, p_mode: input.mode, p_token_hash: createHash("sha256").update(String(input.token)).digest("hex"),
+        p_idempotency_key: input.idempotencyKey,
+      }) });
     }
     if (action === "archive") {
       if (!scope.archiveEnabled) throw new Error("문서 보관을 사용할 수 없습니다.");

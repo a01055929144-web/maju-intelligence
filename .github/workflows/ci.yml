@@ -133,6 +133,29 @@ jobs:
           createdb "$PGDATABASE"
           psql --set=ON_ERROR_STOP=1 --file=2026-11-18-CX-120-store-price-v2.pg17.test.sql
 
+      - name: Verify CX-73 store access password read boundary on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGDATABASE: cx73_store_access_password_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=20261118-CX-73-store-access-password-read.pg17.test.sql
+
+      - name: Verify CX-121 document extension draft on PostgreSQL 17
+        working-directory: docs/sql-drafts
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: cx121_document_extension_test
+        run: |
+          createdb "$PGDATABASE"
+          psql --set=ON_ERROR_STOP=1 --file=2026-11-20-CX-121-document-extension.pg17.test.sql
+
       - name: Verify CX-81 lead bulk jobs on PostgreSQL 17
         env:
           PGHOST: 127.0.0.1
