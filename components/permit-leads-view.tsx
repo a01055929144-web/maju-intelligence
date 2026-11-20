@@ -61,7 +61,7 @@ import { LoadingState } from "@/components/ui/state";
 import { CustomerAttachmentUploadPanel } from "@/components/customer-attachment-upload-panel";
 import { KakaoAddressMap, KakaoMapMarker } from "@/components/kakao-address-map";
 import { SalesAreaSelector } from "@/components/sales-area-selector";
-import { LeadContactChannelsPanel } from "@/components/lead-contact-channels-panel";
+import { LeadContactChannelsPanel, type LeadContactChannelTarget } from "@/components/lead-contact-channels-panel";
 import { LeadStageSelect } from "@/components/lead-stage-select";
 import { InstagramCandidateFinder } from "@/components/instagram-candidate-finder";
 import { GovSyncOverview } from "@/components/gov-sync-overview";
@@ -2969,6 +2969,7 @@ function PermitLeadDetailPanel({
   const [historyVisibleCount, setHistoryVisibleCount] = useState(5);
   const [savingAction, setSavingAction] = useState("");
   const [detailActionMessage, setDetailActionMessage] = useState("");
+  const [requestedContactChannel, setRequestedContactChannel] = useState<{ channel: LeadContactChannelTarget; requestId: number } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(Boolean(intent));
   const [detailTab, setDetailTab] = useState<"overview" | "delivery" | "sales" | "files" | "changes">("overview");
@@ -3501,27 +3502,63 @@ function PermitLeadDetailPanel({
               {detailActionMessage}
             </p>
           ) : null}
-          <div className="grid grid-cols-4 gap-2">
-            <PermitLeadActionRailButton
-              disabled={!lead.phone || Boolean(savingAction)}
-              icon={Phone}
-              label="전화"
-              loading={savingAction === "통화 성공"}
-              onClick={() => void recordAction("call", "통화 성공")}
-              primary={intent === "call"}
-            />
-            <PermitLeadActionRailButton icon={Instagram} label="DM 문구" onClick={() => void copyDmScript()} primary={intent === "dm"} />
-            {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : <span />}
-            <PermitLeadActionRailButton
-              disabled={converting || Boolean(convertedCustomerId)}
-              icon={UserCheck}
-              label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "거래처 연결 다시 시도" : "거래처 전환"}
-              loading={converting}
-              onClick={() => void convertLeadToCustomer()}
-            />
+          <div aria-label="연락 채널 바로가기" className="flex flex-wrap items-stretch justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+              {([
+                ["visit", "방문", lead.address, Boolean(lead.address), false],
+                ["contact", "연락처", isMobilePhoneNumber(lead.phone) ? formatKoreanPhoneNumber(lead.phone) : "", isMobilePhoneNumber(lead.phone), false],
+                ["kakao", "카톡", lead.phone ? formatKoreanPhoneNumber(lead.phone) : "", true, false],
+                ["instagram", "인스타 DM", lead.instagramUrl || "", true, true],
+                ["talktalk", "네이버 톡톡", lead.naverTalktalkUrl || "", true, true],
+                ["email", "이메일", lead.email || "", true, true],
+                ["fax", "팩스", lead.fax ? formatKoreanPhoneNumber(lead.fax) : "", true, true]
+              ] as Array<[LeadContactChannelTarget, string, string, boolean, boolean]>).map(([channel, label, value, available, editable]) => {
+                const content = (
+                  <>
+                    <span className="block text-[11px] font-black text-slate-900">{label}</span>
+                    <span className={`block max-w-32 truncate text-[10px] font-bold ${value ? "text-slate-600" : editable ? "text-teal-700" : "text-slate-400"}`}>
+                      {value || (editable ? "[입력]" : <span aria-hidden="true">&nbsp;</span>)}
+                    </span>
+                  </>
+                );
+                return available ? (
+                  <button
+                    className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left hover:border-teal-400 hover:bg-teal-50"
+                    key={channel}
+                    onClick={() => setRequestedContactChannel({ channel, requestId: Date.now() })}
+                    type="button"
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div aria-disabled="true" className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left opacity-60" key={channel}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-1.5 sm:flex">
+              <PermitLeadActionRailButton
+                disabled={!lead.phone || Boolean(savingAction)}
+                icon={Phone}
+                label="전화"
+                loading={savingAction === "통화 성공"}
+                onClick={() => void recordAction("call", "통화 성공")}
+                primary={intent === "call"}
+              />
+              <PermitLeadActionRailButton icon={Instagram} label="DM 문구" onClick={() => void copyDmScript()} primary={intent === "dm"} />
+              {onOpenQuote ? <PermitLeadActionRailButton icon={FileImage} label="견적" onClick={openQuoteDraft} primary={intent === "followup"} /> : null}
+              <PermitLeadActionRailButton
+                disabled={converting || Boolean(convertedCustomerId)}
+                icon={UserCheck}
+                label={convertedCustomerId ? (matchedExistingCustomer ? "기존 거래처" : "전환 완료") : conversionFailed ? "거래처 연결 다시 시도" : "거래처 전환"}
+                loading={converting}
+                onClick={() => void convertLeadToCustomer()}
+              />
+            </div>
           </div>
 
-          <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} />
+          <LeadContactChannelsPanel lead={lead} onAction={onAction} onLeadUpdated={onLeadUpdated} requestedChannel={requestedContactChannel} />
 
           {convertedCustomerId ? (
             <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-3">
