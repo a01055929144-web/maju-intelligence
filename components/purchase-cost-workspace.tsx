@@ -11,8 +11,8 @@ import { CommonDataTable, type CommonTableColumn } from "@/components/common-dat
 import { PurchaseHistoryPanel } from "@/components/purchase-history-panel";
 import type { PurchaseHistoryItem } from "@/domains/pricing/purchase-receipt";
 import { PurchaseSheetMapper } from "@/components/purchase-sheet-mapper";
-import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
-import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, mergeDuplicateLines, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
+import { aliasKey, findDuplicateSuspects, matchByAlias, matchCostImportRow, mergePurchaseLinesForCatalog, supplierLinkTargets, type CostImportRow, type CostProduct, type PurchaseCostCandidate } from "@/domains/pricing/purchase-cost";
+import { buildPurchaseSheet, COMMON_UNITS, costExcludingVat, parsePurchaseLines, suggestPurchaseMapping, type PurchaseImportLine, type PurchasePriceConflict, type PurchaseImportMapping, type PurchaseSheet, type VatMode } from "@/domains/pricing/purchase-import";
 import { buildCatalogPreview, type CatalogMapping } from "@/domains/product/catalog-import";
 import { MAX_PURCHASE_DATE_BODY_BYTES, buildPurchaseDateRows, type DatedPurchaseLine } from "@/domains/pricing/purchase-cost-date";
 import { dateRequestDigest, pendingDateRequest, rememberDateRequest, forgetDateRequest } from "@/lib/pricing/purchase-cost-date-client";
@@ -279,30 +279,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         }
         return { ...line, purchaseDate: date };
       });
-      const merged = mergeDuplicateLines(lines);
-      const catalogGroups = new Map<string, { product: CostProduct; lines: PurchaseImportLine[] }>();
-      for (const line of lines) {
-        const product = matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, products) || matchCostImportRow(line, products)
-          || matchCostImportRow({ ...line, supplier: "" }, unique);
-        if (!product) continue;
-        const key = `${product.id}|${line.purchaseDate}`;
-        const group = catalogGroups.get(key) || { product, lines: [] };
-        group.lines.push(line); catalogGroups.set(key, group);
-      }
-      const supplierConflicts: PurchasePriceConflict[] = [], covered = new Set<number>();
-      for (const [key, group] of Array.from(catalogGroups.entries())) {
-        if (new Set(group.lines.map(line => line.supplier)).size < 2 || new Set(group.lines.map(line => line.cost)).size < 2) continue;
-        supplierConflicts.push({ key: `product:${key}`, name: group.product.name, spec: group.product.spec, unit: group.product.unit,
-          supplier: "여러 매입처", purchaseDate: group.lines[0].purchaseDate, candidates: group.lines });
-        group.lines.forEach(line => covered.add(line.rowNumber));
-      }
-      return { lines, merged: merged.filter(line => !covered.has(line.rowNumber)),
-        conflicts: [...merged.conflicts.filter(group => !group.candidates.some(line => covered.has(line.rowNumber))), ...supplierConflicts],
+      const merged = mergePurchaseLinesForCatalog(lines, products);
+      return { lines, merged: merged.merged, conflicts: merged.conflicts,
         skipped: parsed.skipped, hasDates, all, savedSkipped, error: "" };
     } catch (cause) {
       return { lines: [], merged: [], conflicts: [], skipped: [], hasDates: false, all: [] as PurchaseImportLine[], savedSkipped: 0, error: cause instanceof Error ? cause.message : "파일과 열 연결을 확인해 주세요." };
     }
-  }, [sheet, mapping, vatMode, receiptDate, products, unique, skipRows, savedExcluded]);
+  }, [sheet, mapping, vatMode, receiptDate, products, skipRows, savedExcluded]);
   const unresolvedConflicts = importPreview?.conflicts.filter(group => !conflictChoices[group.key]).length || 0;
   const reviewDates = Array.from(importedLines.reduce((dates, line) => {
     const date = line.purchaseDate || receiptDate;
@@ -463,8 +446,13 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
     try {
       if (!sheet) return;
       if (!importPreview || importPreview.error) throw new Error(importPreview?.error || "파일을 확인해 주세요.");
-      if ((!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolvedConflicts) throw new Error("현재 가격을 변경하려면 서로 다른 단가가 있는 그룹마다 적용할 행을 선택해 주세요.");
       const { lines, skipped } = importPreview;
+      const reconciled = mergePurchaseLinesForCatalog(lines, catalogProducts);
+      const unresolved = reconciled.conflicts.filter(group => !conflictChoices[group.key]).length;
+      if ((!historyOnlyDefaultEnabled || updateCurrentPrices) && unresolved) {
+        setMessage(`${notePrefix}연결 후 같은 상품·적용일의 상이 단가 ${reconciled.conflicts.length}그룹을 확인했습니다. 현재 가격을 바꿀 행을 선택하거나 보류해 주세요.`);
+        return;
+      }
       void saveRememberedCodes();
       const matchedRows = new Map(lines.map(line => [line.rowNumber,
         matchByAlias(aliasKey(line.rawName, line.spec, line.unit), line.supplier, catalogProducts) || matchCostImportRow(line, catalogProducts)]));
@@ -489,8 +477,8 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
         setMessage(`${notePrefix}과거 매입 이력 ${matchedLines.length}행 · 현재 가격 변경 0품목 · 연결되지 않은 ${lines.length - matchedLines.length}행 제외. 같은 품목·날짜의 서로 다른 단가도 원문 이력으로 모두 보존합니다.`);
         return;
       }
-      const held = importPreview.conflicts.filter(group => conflictChoices[group.key] === "hold");
-      const merged = [...importPreview.merged, ...importPreview.conflicts.flatMap(group =>
+      const held = reconciled.conflicts.filter(group => conflictChoices[group.key] === "hold");
+      const merged = [...reconciled.merged, ...reconciled.conflicts.flatMap(group =>
         group.candidates.filter(line => String(line.rowNumber) === conflictChoices[group.key]))]
         .sort((a, b) => (b.purchaseDate || "").localeCompare(a.purchaseDate || ""));
       setDateSelectedRows(merged.map(line => line.rowNumber)); setDateHeldRows(held.map(group => group.candidates[0].rowNumber)); setDatePartial(""); setDateMappedIds([]); setDateCreatedCount(0); setReplaceUndatedCurrent(false);
@@ -751,7 +739,7 @@ export function PurchaseCostWorkspace({ companyId }: { companyId: string }) {
       const excludedRows = mappedLines.filter(line => line.productId && candidates[line.productId] && !selected.includes(line.productId));
       const excluded = new Set(excludedRows.map(line => line.rowNumber));
       const edited = selected.some(id => candidates[id]?.method !== "엑셀" || !mappedLines.some(line => line.productId === id && line.cost === candidates[id]?.cost));
-      if (edited) throw new Error("파일 적용 후 직접 수정한 단가는 날짜별 원문 선택과 다릅니다. 원본 파일에서 단가를 확인하고 다시 올려 주세요.");
+      if (edited) throw new Error("같은 상품·적용일의 현재 매입가 후보가 여러 개입니다. 적용할 행을 선택하거나 이번 가격 반영을 보류해 주세요.");
       const allRows = buildPurchaseDateRows(mappedLines, dateSelectedRows.filter(row => !excluded.has(row)), [...dateHeldRows, ...Array.from(excluded)]).map(row => {
         const target = undatedTargets.find(item => item.productId === row.productId && item.date === row.priceDate);
         return replaceUndatedCurrent && row.priceSelected && target ? { ...row, replaceUndatedCurrent: true, expectedPurchasePrice: target.previous } : row;

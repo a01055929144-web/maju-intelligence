@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDuplicateSuspects, matchCostImportRow, parseCostImportRows, type CostProduct } from "../domains/pricing/purchase-cost";
+import { findDuplicateSuspects, matchCostImportRow, mergePurchaseLinesForCatalog, parseCostImportRows, type CostProduct } from "../domains/pricing/purchase-cost";
 import { updatePurchaseCosts } from "../application/pricing/update-purchase-cost";
 
 const products: CostProduct[] = [
@@ -8,6 +8,17 @@ const products: CostProduct[] = [
 ];
 
 describe("purchase cost import", () => {
+  it("rebuilds same-product date conflicts after suppliers are linked", () => {
+    const linked = [
+      { ...products[0], supplierName: "유통사 A", supplierProductId: "supplier-a", supplierRawKey: "계란특란||판" },
+      { ...products[0], supplierName: "유통사 B", supplierProductId: "supplier-b", supplierRawKey: "계란특란||판" },
+    ];
+    const line = (rowNumber: number, supplier: string, cost: number) => ({ code: "", cost, lineKey: "계란특란||판", name: "계란(특란)", purchaseDate: "2026-11-19", quantity: 1, rawName: "계란(특란)", rowNumber, spec: "", supplier, unit: "판" });
+    const result = mergePurchaseLinesForCatalog([line(2, "유통사 A", 6000), line(3, "유통사 B", 5800)], linked);
+    expect(result.merged).toHaveLength(0);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].candidates.map(item => item.cost)).toEqual([6000, 5800]);
+  });
   it("matches ERP code first, then exact name and spec", () => {
     expect(matchCostImportRow({ code: "ERP-1", name: "다른 이름", spec: "", unit: "", supplier: "유통사 A", cost: 9000 }, products)?.id).toBe("a");
     expect(matchCostImportRow({ code: "", name: "양파", spec: "5kg", unit: "", supplier: "유통사 A", cost: 4000 }, products)?.id).toBe("b");
