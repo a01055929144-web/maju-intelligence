@@ -105,11 +105,12 @@ it("rejects wrong company, staff, cross-origin and malformed rows before DB acce
   for (const body of [{ ...input, rows: [...input.rows, ...input.rows] }, { ...input, rows: Array(5001).fill(input.rows[0]) }, { ...input, rows: [{ ...input.rows[0], priceSelected: false }] }, { ...input, receiptDate: "2026-02-30" }, { ...input, rows: [{ ...input.rows[0], companyId: "other" }] }]) expect((await post(body)).status).toBe(400);
   expect(mocks.db).not.toHaveBeenCalled();
 });
-it("blocks unresolved unit conversion before the atomic write", async () => {
+it("holds only the mismatched-unit current price and preserves the receipt in the atomic write", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
-  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }]);
-  expect((await post(payload())).status).toBe(409);
-  expect(mocks.db.mock.calls.some(([path]) => path.startsWith("rpc/"))).toBe(false);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: "BOX" }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
+  expect((await post(payload())).status).toBe(200);
+  const write = mocks.db.mock.calls.find(([path]) => path.startsWith("rpc/"));
+  expect(JSON.parse(write?.[1].body).p_rows[0]).toMatchObject({ selectedSourceRowNumber: 2, unit: "봉", priceSelected: false, priceHeld: true });
 });
 
 it("normalizes equal-price selections to one marker and preserves blank source units", () => {
@@ -167,12 +168,12 @@ it("recovers the exact pending batch in company scope even if a newer batch exis
   expect(mocks.db.mock.calls[0][0]).toContain(`company_id=eq.${companyId}&id=eq.${batchId}`);
 });
 
-it("blocks an unconfirmed multipack price while allowing held receipt history", async () => {
+it("automatically holds an unconfirmed multipack price while preserving receipt history", async () => {
   vi.stubEnv("FEATURE_PURCHASE_COST_DATE_V2_COMPANY_IDS", companyId);
-  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]);
+  mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]).mockResolvedValueOnce({ batchId, recalcRunId: null, status: "completed", rowCount: 1, historyOnlyProductCount: 1 });
   const response = await post(payload());
-  expect(response.status).toBe(409); expect((await response.json()).message).toContain("환산을 먼저 확인");
-  expect(mocks.db.mock.calls.some(([path]) => path.startsWith("rpc/"))).toBe(false);
+  expect(response.status).toBe(200);
+  expect(JSON.parse(mocks.db.mock.calls.at(-1)?.[1].body).p_rows[0]).toMatchObject({ priceSelected: false, priceHeld: true });
   mocks.db.mockResolvedValueOnce([{ id: productId(0), sales_unit: null, purchase_to_sales_ratio: 10 }]);
   const input = payload();
   expect((await post({ ...input, rows: [{ ...input.rows[0], priceSelected: false, priceHeld: true }] })).status).toBe(200);
