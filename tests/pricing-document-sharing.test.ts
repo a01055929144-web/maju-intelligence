@@ -27,10 +27,12 @@ const prepare = { action: "prepare-share", documentId: doc, documentVersionId: v
 type Row = Record<string, string | number | null>;
 let links: Row[], sends: Row[], actions: Row[], content: DocumentContent, owner: string, merged: boolean, archived: boolean;
 let failInsert: boolean, failBinding: boolean, limit: string, stock: number;
+let inquiryBody: string | null, inquiryFailure: boolean;
 const seen: string[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks(); links = []; sends = []; actions = []; seen.length = 0; owner = actor; merged = archived = failInsert = failBinding = false; limit = "allowed"; stock = 2;
+  inquiryBody = null; inquiryFailure = false;
   mocks.connection.mockResolvedValue(null);
   vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_PUBLIC_OWNER_ONBOARDING_COMPANY_IDS", company);
   vi.stubEnv("STORE_MEMBER_SESSION_ENABLED", "true"); vi.stubEnv("FEATURE_STORE_MEMBER_SESSION_COMPANY_IDS", company);
@@ -92,6 +94,11 @@ beforeEach(() => {
       return rows.filter(matches);
     }
     if (p.get("company_id") !== `eq.${company}`) return [];
+    if (table === "company_message_templates") {
+      expect(p.get("template_key")).toBe("eq.lead_dm_kit"); expect(p.get("is_active")).toBe("eq.true"); expect(p.get("select")).toBe("body");
+      if (inquiryFailure) throw new Error("PRIVATE-INQUIRY-FAILURE-CANARY");
+      return inquiryBody === null ? [] : [{ body: inquiryBody }];
+    }
     if (table === "pricing_document_versions") return p.get("id") === `eq.${version}` ? [{ id: version, document_id: doc, version: 2, revision: 3, published_at: "2026-11-06T00:00:00Z", content: { ...content, cost: "COST-CANARY", supplier: "SUPPLIER-CANARY" } }] : [];
     if (table === "pricing_documents") return [{ id: doc, kind: content.kind, owner_key: owner, archived_at: archived ? "2026-11-06" : null }];
     if (table === "business_permit_leads") return merged ? [] : [{ id: lead }];
@@ -315,6 +322,57 @@ it("creates a recipient-free public document without lead lookup, delivery or cu
   expect(await getPublicDocumentOrderContext(token(result.publicUrl), "fixture")).toMatchObject({ companyId: company, documentId: doc, documentVersionId: version, shareLinkId: result.shareLinkId });
   expect(await service.execute(scope, input)).toEqual(result);
   expect(links).toHaveLength(1); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it.each([
+  null, "{broken", "null", "[]", JSON.stringify({ contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: "true", contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: false, contactPhone: "010-0000-0000" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "tel:01000000000" }),
+  JSON.stringify({ publicContactEnabled: true, contactPhone: "123" }),
+])("never substitutes a representative or document contact for an unconfigured inquiry (%s)", async raw => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); inquiryBody = raw;
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  const response = await publicPost(request({ token: token(p.publicUrl) }));
+  expect(response.status).toBe(200); const body = await response.json();
+  expect(body.inquiry).toEqual({ status: "not_configured" });
+  expect(seen.some(url => /company_profiles|app_users/.test(url))).toBe(false);
+  expect(JSON.stringify(body)).not.toContain("CANARY");
+});
+it("returns only an opted-in issuer inquiry, refreshes withdrawal, and keeps price expiry separate", async () => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true"); vi.stubEnv("STORE_PUBLIC_OWNER_ONBOARDING_ENABLED", "false");
+  inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "010-0000-0000", contactLabel: "합성 문의",
+    main_phone: "PRIVATE-PHONE-CANARY", settlement_account: "PRIVATE-ACCOUNT-CANARY" });
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  // Another company's authenticated scope cannot override the public token's issuer.
+  mocks.auth.mockResolvedValue({ ok: true, companyId: other });
+  const read = async () => (await publicPost(request({ token: token(p.publicUrl) }))).json();
+  const body = await read();
+  expect(body.inquiry).toEqual({ status: "available", phone: "01000000000", label: "합성 문의" });
+  expect(body.orderEntry.available).toBe(false); expect(JSON.stringify(body)).not.toContain("CANARY");
+  expect(seen.filter(url => url.startsWith("company_message_templates?")).every(url => url.includes(`company_id=eq.${company}`))).toBe(true);
+  content.validUntil = "2020-01-01";
+  expect((await read()).inquiry).toEqual(body.inquiry); expect((await read()).document.expired).toBe(true);
+  inquiryBody = JSON.stringify({ publicContactEnabled: false, contactPhone: "01000000000" });
+  expect((await read()).inquiry).toEqual({ status: "not_configured" });
+  inquiryFailure = true;
+  const failed = await read(); expect(failed.inquiry).toEqual({ status: "unavailable" }); expect(failed.document).toBeTruthy();
+  expect(JSON.stringify(failed)).not.toContain("CANARY"); expect(sends).toHaveLength(0); expect(actions).toHaveLength(0);
+});
+it.each(["revoked", "expired", "tampered", "company-override", "targeted"])("does not read or disclose inquiry on %s links", async state => {
+  vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");
+  inquiryBody = JSON.stringify({ publicContactEnabled: true, contactPhone: "01000000000" });
+  const p = await service.execute<import("../domains/pricing/document-share").PreparedDocumentShare>(scope, { ...prepare, leadId: null });
+  if (state === "revoked") links[0].revoked_at = new Date().toISOString();
+  if (state === "expired") links[0].expires_at = "2000-01-01T00:00:00Z";
+  if (state === "targeted") links[0].lead_id = lead;
+  seen.length = 0;
+  const response = await publicPost(request({ token: state === "tampered" ? "invalid" : token(p.publicUrl),
+    ...(state === "company-override" ? { companyId: other } : {}) }));
+  if (state !== "targeted") expect(response.status).toBe(404);
+  const body = await response.json(); expect(body).not.toHaveProperty("inquiry");
+  expect(JSON.stringify(body)).not.toContain("01000000000");
+  expect(seen.some(url => url.startsWith("company_message_templates?"))).toBe(false);
 });
 it("recovers a public link committed before a lost API response and logs only safe failure metadata", async () => {
   vi.stubEnv("PUBLIC_DOCUMENT_ORDER_ENTRY_ENABLED", "true");

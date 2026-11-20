@@ -146,6 +146,23 @@ export async function recordSharedDocumentDelivery(scope: DocumentScope, input: 
   return { sendId: result.sendId, leadActionId: result.leadActionId, documentId: result.documentId,
     documentVersionId: result.documentVersionId, publicUrl: publicUrl(row) };
 }
+/** Read only the issuer's explicit public opt-in; never use the sales-kit phone fallback. */
+async function readPublicInquiry(companyId: string) {
+  try {
+    const rows = await supabaseRequest<Array<{ body: string }>>(path("company_message_templates", companyId,
+      "template_key=eq.lead_dm_kit&is_active=eq.true&select=body&limit=1"));
+    let settings: Record<string, unknown>;
+    try { settings = JSON.parse(rows[0]?.body || "{}"); }
+    catch { return { status: "not_configured" as const }; }
+    if (!settings || settings.publicContactEnabled !== true || typeof settings.contactPhone !== "string" ||
+      !/^[0-9 -]{8,20}$/.test(settings.contactPhone)) return { status: "not_configured" as const };
+    const phone = settings.contactPhone.replace(/[ -]/g, "");
+    if (!/^0\d{8,10}$/.test(phone) && !/^1[568]\d{6}$/.test(phone)) return { status: "not_configured" as const };
+    return { status: "available" as const, phone,
+      label: typeof settings.contactLabel === "string" ? settings.contactLabel.trim().slice(0, 30) : "" };
+  } catch { return { status: "unavailable" as const }; }
+}
+
 export async function readPublicDocument(token: string, requester: string) {
   const { row, issuedVersionId, output, orderable, items } = await resolvePublicDocument(token, requester);
   if (row.send_id) await supabaseRequest(path("pricing_document_sends", row.company_id,
@@ -162,6 +179,7 @@ export async function readPublicDocument(token: string, requester: string) {
     } catch { return false; }
   })();
   return { document: output, expiresAt: row.expires_at,
+    ...(row.lead_id === null ? { inquiry: await readPublicInquiry(row.company_id) } : {}),
     acceptanceAvailable: Boolean(row.lead_id && row.send_id && !output.expired && quoteAcceptanceEnabled(row.company_id)),
     ...(row.lead_id === null ? { orderEntry: { available: publicDocumentSignupEnabled(row.company_id) && orderable,
       message: !orderable ? "이 문서에는 현재 주문할 품목이나 판매가가 없습니다. 발행 회사에 주문 가능한 새 문서를 요청해 주세요." : "카카오 점주 가입·주문 연결을 준비 중입니다. 발행 회사 담당자에게 문의해 주세요.",

@@ -3,6 +3,58 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { publicDocumentOutput } from "../../domains/pricing/document-share";
 import { lineFromCatalog, type DocumentContent } from "../../domains/pricing/document";
 
+for (const width of [1440, 390]) test(`public inquiry requires explicit contact and survives only a readable link at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.clock.install({ time: new Date("2026-11-21T00:00:00Z") });
+  const content: DocumentContent = { kind: "sheet", title: "합성 문의 단가표", companyName: "합성 발행 회사",
+    contact: "PRIVATE-CONTACT-CANARY", recipient: "PRIVATE-RECIPIENT-CANARY", footer: "PRIVATE-FOOTER-CANARY",
+    validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
+    display: { columns: 1, promoLayout: "table", info: [], productWidth: 65, priceIncludesTax: true },
+    lines: [lineFromCatalog({ id: "50000000-0000-4000-8000-000000000001", name: "합성 품목", displayName: "합성 품목", brand: "", spec: "1kg", unit: "봉", price: 1000, taxType: "exempt" })] };
+  let inquiry: { status: string; phone?: string; label?: string } = { status: "not_configured" };
+  let expiresAt = "2099-12-31T15:00:00Z", revoked = false, intents = 0;
+  await page.route("**/api/pricing-documents/order-intent", route => { intents++; return route.fulfill({ status: 503, json: {} }); });
+  await page.route("**/api/pricing-documents/public", route => {
+    expect(route.request().postDataJSON()).toEqual({ token: "synthetic-inquiry" });
+    return revoked ? route.fulfill({ status: 404, json: { message: "공유 문서를 사용할 수 없습니다." } }) : route.fulfill({ json: {
+      document: publicDocumentOutput({ id: "version", documentId: "document", version: 1, revision: 1, publishedAt: "2026-11-21T00:00:00Z", content, unavailablePromotions: [] }),
+      expiresAt, inquiry, orderEntry: { available: false },
+    } });
+  });
+  await page.goto("/pricing-document#synthetic-inquiry");
+  const region = page.getByRole("region", { name: "발행 회사 문의" });
+  const call = region.getByRole("link", { name: "발행 회사에 전화 문의", exact: true });
+  await expect(region).toContainText("공개 문의 연락처가 등록되지 않았습니다"); await expect(call).toHaveCount(0);
+  inquiry = { status: "available", phone: "01000000000", label: "합성 문의 담당" };
+  await page.reload();
+  await expect(call).toHaveAttribute("href", "tel:01000000000");
+  await expect(region).toContainText("합성 발행 회사 · 합성 문의 담당 · 010-0000-0000");
+  expect((await call.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 3)).toBe(false);
+  await expect(page.locator("body")).not.toContainText("CANARY");
+  await page.screenshot({ path: info.outputPath(`public-inquiry-${width}.png`), fullPage: true });
+  await page.emulateMedia({ media: "print" }); await expect(region).toBeHidden();
+  await page.emulateMedia({ media: "screen" });
+  content.validUntil = "2020-01-01"; await page.reload();
+  await expect(call).toBeVisible(); await expect(page.getByRole("button", { name: "주문 기간 종료" })).toBeDisabled();
+  inquiry = { status: "unavailable" }; await page.reload();
+  await expect(region).toContainText("문의 연락처를 확인하지 못했습니다"); await expect(call).toHaveCount(0);
+  inquiry = { status: "available", phone: "javascript:alert(1)", label: "unsafe" };
+  await region.getByRole("button", { name: "문의 연락처 다시 확인" }).click();
+  await expect(region).toContainText("문의 연락처를 확인하지 못했습니다"); await expect(call).toHaveCount(0);
+  inquiry = { status: "available", phone: "020000000", label: "" };
+  await region.getByRole("button", { name: "문의 연락처 다시 확인" }).click();
+  await expect(call).toHaveAttribute("href", "tel:020000000"); await expect(region).toContainText("발행 회사");
+  inquiry = { status: "not_configured" }; await page.reload(); await expect(call).toHaveCount(0);
+  inquiry = { status: "available", phone: "01000000000", label: "합성 문의" };
+  expiresAt = "2026-11-21T00:01:00Z"; await page.reload(); await expect(call).toBeVisible();
+  await page.clock.fastForward(61_000); await expect(region).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("링크 열람기간이 끝났습니다");
+  revoked = true; await page.reload(); await expect(region).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("공유 문서를 사용할 수 없습니다");
+  expect(intents).toBe(0);
+});
+
 for (const width of [1440, 390]) test(`explicit acceptance preserves retry and link boundaries at ${width}px`, async ({ page }, info) => {
   await page.setViewportSize({ width, height: 900 });
   const content: DocumentContent = { kind: "quote", title: "합성 수락 견적", companyName: "합성 유통", contact: "", recipient: "", footer: "", validUntil: "2099-12-31", theme: "blue", layout: "table", showPrice: true, showBrand: true, showSpec: true,
