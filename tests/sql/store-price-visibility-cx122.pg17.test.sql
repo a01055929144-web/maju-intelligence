@@ -24,6 +24,7 @@ insert into public.company_members values
   ('11000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','owner','active'),
   ('12000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','manager','manager','active'),
   ('13000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','member','staff','active'),
+  ('13500000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','owner','inactive'),
   ('21000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','owner','owner','active');
 insert into public.store_accounts(id,company_id,customer_id,business_status,status) values
   ('14000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','15000000-0000-4000-8000-000000000001','active','active'),
@@ -48,6 +49,13 @@ do $$ begin
     perform public.set_store_price_visibility_v1('10000000-0000-4000-8000-000000000001','16000000-0000-4000-8000-000000000001',
       '13000000-0000-4000-8000-000000000001','confirm',null,'{}');
     raise exception 'cx122_staff_confirmed';
+  exception when raise_exception then
+    if sqlerrm<>'store_price_visibility_forbidden' then raise; end if;
+  end;
+  begin
+    perform public.set_store_price_visibility_v1('10000000-0000-4000-8000-000000000001','16000000-0000-4000-8000-000000000001',
+      '13500000-0000-4000-8000-000000000001','confirm',null,'{}');
+    raise exception 'cx122_inactive_owner_confirmed';
   exception when raise_exception then
     if sqlerrm<>'store_price_visibility_forbidden' then raise; end if;
   end;
