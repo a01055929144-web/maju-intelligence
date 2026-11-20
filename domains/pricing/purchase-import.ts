@@ -15,8 +15,8 @@ export const PURCHASE_IMPORT_FIELDS = [
   { key: "vatAmount", label: "부가세", aliases: ["부가세", "세액", "vat"] },
   { key: "totalAmount", label: "합계", aliases: ["합계", "합계금액", "총액", "금액"] },
   { key: "code", label: "ERP 코드", aliases: ["erp코드", "기본코드", "상품코드", "품목코드", "코드"] },
-  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처"] },
-  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "날짜"] }
+  { key: "supplier", label: "매입처", aliases: ["매입처", "유통사", "공급처", "거래처", "거래처명"] },
+  { key: "purchaseDate", label: "구매일", aliases: ["구매일", "매입일", "입고일", "거래일", "일자", "일자-No.", "날짜"] }
 ] as const;
 export type PurchaseImportFieldKey = (typeof PURCHASE_IMPORT_FIELDS)[number]["key"];
 export type PurchaseImportMapping = Partial<Record<PurchaseImportFieldKey, number>>;

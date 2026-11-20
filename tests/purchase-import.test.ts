@@ -164,6 +164,19 @@ describe("purchase import", () => {
     expect(parsed.lines[0]).toMatchObject({ rawName: "콘센트치킨스타 [1.2KG*6EA]", name: "콘센트치킨스타", spec: "1.2KG*6EA" });
   });
 
+  it("automatically maps ERP 일자-No. and 거래처명 headers", () => {
+    const sheet = buildPurchaseSheet([
+      ["회사명 : 제이에스리테일 / 2026/11/18 ~ 2026/11/20"],
+      ["일자-No.", "품목명(규격)", "수량", "단가", "공급가액", "부가세", "합계", "거래처명"],
+      ["2026/11/18 -1", "딜 [kg]", "1", "50000", "50000", "", "50000", "(유)로즈마리향기"]
+    ]);
+    const mapping = suggestPurchaseMapping(sheet);
+    expect(mapping).toMatchObject({ purchaseDate: 0, name: 1, cost: 3, supplier: 7 });
+    expect(parsePurchaseLines(sheet, mapping, "excluded").lines[0]).toMatchObject({
+      purchaseDate: "2026-11-18", supplier: "(유)로즈마리향기"
+    });
+  });
+
   it("matches existing products ignoring spaces and brackets so daily uploads do not create duplicates", () => {
     const products = [{ id: "p1", code: "", name: "냉동 오징어", spec: "EA", unit: "", cost: 4000 }];
     expect(matchCostImportRow({ code: "", name: "냉동오징어", spec: "[EA]", unit: "", supplier: "", cost: 4500 }, products)?.id).toBe("p1");

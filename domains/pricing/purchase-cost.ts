@@ -138,7 +138,7 @@ export function mergePurchaseLinesForCatalog(lines: readonly PurchaseImportLine[
   }
   const conflicts: PurchasePriceConflict[] = [], covered = new Set<number>();
   for (const [key, group] of Array.from(groups.entries())) {
-    if (new Set(group.lines.map(line => line.supplier)).size < 2 || new Set(group.lines.map(line => line.cost)).size < 2) continue;
+    if (new Set(group.lines.map(line => line.cost)).size < 2) continue;
     conflicts.push({ key: `product:${key}`, name: group.product.name, spec: group.product.spec, unit: group.product.unit,
       supplier: "여러 매입처", purchaseDate: group.lines[0].purchaseDate, candidates: group.lines });
     group.lines.forEach(line => covered.add(line.rowNumber));
